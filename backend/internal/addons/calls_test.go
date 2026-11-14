@@ -19,7 +19,7 @@ import (
 // backend sends and reads them.
 
 // inventoryAddon stands up an add-on whose manifest is the inventory fixture
-// (features operations, results, calls; item.checkout declared), with
+// (features operations and calls; item.checkout declared), with
 // features overriding the fixture's when given, answering every request with
 // h. It returns how many requests arrived.
 func inventoryAddon(t *testing.T, h http.HandlerFunc, features ...string) *atomic.Int64 {
@@ -96,7 +96,7 @@ func TestTheWireOutcomeIsReadNotTheStatus(t *testing.T) {
 	}{
 		{"succeeded", `{"operation":"item.checkout","subject":"s","outcome":"succeeded"}`, nil, OutcomeSucceeded, false},
 		{"no_change from a calls add-on", string(contractFixture(t, "operation_response_no_change.json")), nil, OutcomeSucceeded, true},
-		{"no_change from an add-on without calls", `{"outcome":"no_change"}`, []string{"operations", "results"}, OutcomeIndeterminate, false},
+		{"no_change from an add-on without calls", `{"outcome":"no_change"}`, []string{"operations"}, OutcomeIndeterminate, false},
 		{"no outcome", `{"operation":"item.checkout","subject":"s"}`, nil, OutcomeIndeterminate, false},
 		{"an outcome outside the vocabulary", `{"outcome":"conflict"}`, nil, OutcomeIndeterminate, false},
 		{"not JSON", `ok`, nil, OutcomeIndeterminate, false},
@@ -236,7 +236,7 @@ func TestAPreviewCarriesNoCallIDAndLeavesNoRow(t *testing.T) {
 // Without calls the operation is unavailable, so a preview is never sent (the
 // request field would reach an add-on that does not know it).
 func TestAPreviewIsNeverSentToAnAddonWithoutCalls(t *testing.T) {
-	hits := inventoryAddon(t, reply(200, `{}`), "operations", "results")
+	hits := inventoryAddon(t, reply(200, `{}`), "operations")
 	r := Preview(context.Background(), "inventory", "item.checkout", "s", "s", map[string]any{"item_id": "item-2207"})
 	var unavailable *ErrOperationUnavailable
 	if !errors.As(r.Err, &unavailable) || hits.Load() != 0 {
@@ -306,7 +306,7 @@ func TestCallAnswerReadsTheThreeAnswersStrictly(t *testing.T) {
 	})
 
 	t.Run("an add-on without calls is never asked", func(t *testing.T) {
-		hits := inventoryAddon(t, reply(200, recorded), "operations", "results")
+		hits := inventoryAddon(t, reply(200, recorded), "operations")
 		if _, err := CallAnswer(context.Background(), "inventory", "item.checkout", id); !errors.Is(err, ErrFeatureNotDeclared) || hits.Load() != 0 {
 			t.Fatalf("err %v, %d requests", err, hits.Load())
 		}

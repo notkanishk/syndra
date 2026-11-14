@@ -2,8 +2,9 @@
 // openspec/changes/addon-contract): it drives an add-on black-box over the real
 // transport and says, check by check, whether it may be connected to Syndra.
 //
-// Without Mutate it sends reads only (GET routes and /plan, which mutates
-// nothing). With Mutate it creates and converges one throwaway subject named
+// Without Mutate it sends reads only (GET routes, /plan, and signed
+// POST /operations/{id} for each operation the registry gives effect: read,
+// all of which mutate nothing by contract). With Mutate it creates and converges one throwaway subject named
 // conformance-..., and leaves exactly one disabled, labelled account, which
 // Report.Left names. MutateSettings also writes a target-wide setting back.
 package conformance
@@ -340,7 +341,9 @@ func (k *kit) report() *Report {
 		case c.notJudged != "":
 			res.Status, res.Detail = "skip", []string{c.notJudged}
 		case c.ran:
-			res.Status = "pass"
+			// What it skipped rides beside the pass, so a partial run never
+			// reads as a whole one.
+			res.Status, res.Detail = "pass", c.skips
 		case len(c.skips) > 0:
 			res.Status, res.Detail = "skip", c.skips
 		case k.halted != "":
@@ -356,7 +359,7 @@ func (k *kit) report() *Report {
 		for _, f := range k.m.features {
 			id := "feature." + f
 			switch _, known := k.c.features[f]; {
-			case f == "operations" || f == "settings" || f == "freshness" || f == "calls" || f == "results" || f == "stats":
+			case f == "operations" || f == "settings" || f == "freshness" || f == "calls" || f == "stats":
 				continue // a row of its own above
 			case known:
 				add(Result{ID: id, Status: "skip", Level: "MUST", Must: "feature " + f, Detail: []string{"declared; this kit checks the core and does not check this feature yet"}})
@@ -514,8 +517,7 @@ func (k *kit) prepare(r request) (ex *exchange, _ *http.Request, write bool) {
 		ex.err = err
 		return ex, nil, false
 	}
-	path, _, _ := strings.Cut(r.target, "?")
-	write = r.method != http.MethodGet && path != "/plan"
+	write = k.c.writes(r.method, r.target)
 	k.wrote = k.wrote || write // before it is sent: a write that never answers may still have landed
 	if r.body != nil {
 		req.Header.Set("Content-Type", "application/json")

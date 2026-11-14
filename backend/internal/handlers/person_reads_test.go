@@ -33,7 +33,7 @@ func TestAnAdminsReadOfHoldingsWritesNoOperationsRow(t *testing.T) {
 		if op == "storage.status" {
 			return storageReply(addons.StorageStatus{Outcome: addons.OutcomeSucceeded, Usable: true})
 		}
-		return addons.ReadReply{Operation: op, Schema: "common/records.json", Results: true,
+		return addons.ReadReply{Operation: op, Schema: "common/records.json",
 			Outcome: addons.OutcomeSucceeded, Status: 200, Body: records}
 	}
 
@@ -41,8 +41,9 @@ func TestAnAdminsReadOfHoldingsWritesNoOperationsRow(t *testing.T) {
 	if len(asked) != 2 || asked[0] != "holdings.list u1/op-1" || asked[1] != "storage.status u1/op-1" {
 		t.Fatalf("asked %v; want each read once, about u1, with the operator as actor", asked)
 	}
-	// A pocket (no results) feeds the storage block and is not a generic read.
-	if view.Storage == nil || !view.Storage.Usable || len(view.Reads) != 1 {
+	// storage.status feeds the storage block and is a generic read too, each
+	// read once.
+	if view.Storage == nil || !view.Storage.Usable || len(view.Reads) != 2 || view.Reads[1].Operation != "storage.status" {
 		t.Fatalf("storage %+v, reads %+v", view.Storage, view.Reads)
 	}
 	r := view.Reads[0]

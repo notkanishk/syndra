@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	contractfiles "syndra/addons/contract"
 	"syndra/addons/reference"
 )
 
@@ -123,7 +124,14 @@ func failures(r *Report) []Result {
 }
 
 func writes(seen []string) []string {
-	return slices.DeleteFunc(seen, func(s string) bool { return strings.HasPrefix(s, "GET ") || s == "POST /plan" })
+	c, err := loadContract(contractfiles.FS())
+	if err != nil {
+		panic(err)
+	}
+	return slices.DeleteFunc(seen, func(s string) bool {
+		method, target, _ := strings.Cut(s, " ")
+		return !c.writes(method, target)
+	})
 }
 
 // subjects reads /subjects through a kit of its own: what the run left.
@@ -157,7 +165,7 @@ func TestTheCleanReferencePassesEveryCheck(t *testing.T) {
 			skipped = append(skipped, res.ID)
 		}
 	}
-	want := []string{"subjects.paged", "replay.29d", "results", "calls.unknown", "calls.recorded", "operations.physical", "calls.unsettled", "calls.serialised",
+	want := []string{"subjects.paged", "replay.29d", "calls.unknown", "calls.recorded", "operations.physical", "calls.unsettled", "calls.serialised",
 		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable"}
 	want = append(append(want, statsChecks...), "dangerous-scopes")
 	if !slices.Equal(skipped, want) {
@@ -239,8 +247,8 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.LogHeadEmpty:              "health",
 		reference.ReadsTakeCallID:           "operations.reads",
 		reference.StateShowsUnlisted:        "unlisted-hidden",
-		reference.ResultOffSchema:           "results",
-		reference.ResultInPocket:            "results",
+		reference.ResultOffSchema:           "operations.result",
+		reference.ResultInPocket:            "operations.result",
 		reference.CachedAsCurrent:           "freshness.cached",
 		reference.ReadsPerRequest:           "freshness.coalesce",
 		reference.CooldownIgnored:           "freshness.cooldown",
@@ -266,9 +274,9 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.CheckoutUnserialised: "(reference TestAConcurrentPairPassesTheLimitOnce)",
 	}
 	// A defect in a feature's half is served with that feature declared.
-	features := map[reference.Defect][]string{reference.ResultOffSchema: {"results"}, reference.ResultInPocket: {"results"},
+	features := map[reference.Defect][]string{
 		reference.CachedAsCurrent: {"freshness"}, reference.ReadsPerRequest: {"freshness"}, reference.CooldownIgnored: {"freshness"},
-		reference.PreviewRecorded: {"results", "calls"}, reference.NoChangeAsSucceeded: {"results", "calls"}, reference.CallsEchoParams: {"calls"}}
+		reference.PreviewRecorded: {"calls"}, reference.NoChangeAsSucceeded: {"calls"}, reference.CallsEchoParams: {"calls"}}
 	for _, d := range reference.Defects {
 		if strings.HasPrefix(string(d), "stats-") {
 			features[d] = []string{"stats"}
@@ -1652,38 +1660,75 @@ func TestANonEnumerableMembershipFailsTheValuesCheck(t *testing.T) {
 	}
 }
 
-// The results check (feature results) is a skip, with the reason, when the
-// feature is not declared, and a pass against the reference serving it, every
-// read's result held to its registry schema. A read with no pocket declared
-// without results fails: it has no shape to answer in.
-func TestTheResultsCheckJudgesOnlyWhatIsDeclared(t *testing.T) {
-	url, _ := serve(t, testSecret, nil)
-	r := run(t, config(url, true))
-	if got := r.Status("results"); got != "skip" {
-		t.Errorf("results says %s against a reference without the feature, want skip", got)
+// The result check is core: against the reference with no feature it passes,
+// every read's result held to its registry schema, in a reads-only run too (a
+// read writes nothing): there health.get is judged and holdings.list, about a
+// subject with no account yet, answers 422 and is skipped. A read answered
+// under the key it had before contract 2 made result core (health.get's
+// `health`) and no result fails in either mode: that reply carries no reading.
+func TestEveryReadIsHeldToItsResult(t *testing.T) {
+	url, seen := serve(t, testSecret, nil)
+	r := run(t, config(url, false))
+	if got := r.Status("operations.result"); got != "pass" || r.Failed() {
+		t.Errorf("reads-only: operations.result says %s against the reference (failed %v): %v", got, r.Failed(), failures(r))
+	}
+	if !slices.Contains(seen(), "POST /operations/health.get") || slices.ContainsFunc(seen(), func(s string) bool {
+		return strings.HasPrefix(s, "POST /apply") || strings.HasPrefix(s, "POST /lifecycle") || strings.HasPrefix(s, "PUT ")
+	}) {
+		t.Errorf("reads-only sent %v: want health.get read and nothing written", seen())
+	}
+	// A partial verdict says so: judged and skipped ids ride beside the pass.
+	if d := result(r, "operations.result").Detail; len(d) != 1 || !strings.HasPrefix(d[0], "judged health.get; skipped holdings.list: no account") {
+		t.Errorf("reads-only: operations.result's detail %q, want what it judged and skipped", d)
+	}
+	r = run(t, config(url, true))
+	if got := r.Status("operations.result"); got != "pass" || r.Failed() {
+		t.Errorf("-mutate: operations.result says %s against the reference (failed %v): %v", got, r.Failed(), failures(r))
+	}
+	for _, read := range []string{"POST /operations/health.get", "POST /operations/holdings.list"} {
+		if !slices.Contains(seen(), read) {
+			t.Errorf("%s was never sent", read)
+		}
 	}
 
-	url, seen := serveRewriting(t, testSecret, nil, nil, []string{"results"})
-	r = run(t, config(url, true))
-	if got := r.Status("results"); got != "pass" || r.Failed() {
-		t.Errorf("results says %s against the reference serving it (failed %v): %v", got, r.Failed(), failures(r))
-	}
-	if !slices.Contains(seen(), "POST /operations/holdings.list") {
-		t.Error("holdings.list was never read")
+	// Only a read about a subject, refused OPERATION_FAILED, is excused: the
+	// read about the target refused, or any other 422, fails reads-only.
+	for _, tc := range []struct{ path, code string }{
+		{"/operations/health.get", "OPERATION_FAILED"},
+		{"/operations/holdings.list", "TARGET_VERSION_UNSUPPORTED"},
+	} {
+		url, _ := wrapped(t, func(w http.ResponseWriter, r *http.Request, _ http.Handler) bool {
+			if r.URL.Path != tc.path {
+				return false
+			}
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = fmt.Fprintf(w, `{"type":"urn:syndra:addon:error:%s","title":"Refused","status":422,"detail":"Refused.","code":%q,"retry":"never"}`, tc.code, tc.code)
+			return true
+		})
+		r, err := Run(context.Background(), config(url, false))
+		if err != nil && !errors.Is(err, ErrReadsFailed) {
+			t.Fatal(err)
+		}
+		if got := r.Status("operations.result"); got != "fail" {
+			t.Errorf("reads-only: %s refused 422 %s: operations.result says %s, want fail", tc.path, tc.code, got)
+		}
 	}
 
 	url, _ = serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
-		if r.URL.Path != "/capabilities" {
+		if r.URL.Path != "/operations/health.get" {
 			return reply
 		}
-		return bytes.Replace(reply, []byte(`,"results"]`), []byte(`]`), 1)
-	}, []string{"results"})
-	r, err := Run(context.Background(), config(url, true))
-	if err != nil && !errors.Is(err, ErrReadsFailed) {
-		t.Fatal(err)
-	}
-	if got := r.Status("results"); got != "fail" {
-		t.Errorf("holdings.list declared without results: results says %s, want fail", got)
+		return bytes.Replace(reply, []byte(`"result":`), []byte(`"health":`), 1)
+	}, nil)
+	for _, mutate := range []bool{false, true} {
+		r, err := Run(context.Background(), config(url, mutate))
+		if err != nil && !errors.Is(err, ErrReadsFailed) {
+			t.Fatal(err)
+		}
+		if got := r.Status("operations.result"); got != "fail" {
+			t.Errorf("mutate %v: health.get answered under the old health key: operations.result says %s, want fail", mutate, got)
+		}
 	}
 }
 
@@ -1907,7 +1952,7 @@ func TestTheCallsChecksJudgeOnlyWhatIsDeclared(t *testing.T) {
 		}
 	}
 
-	features := []string{"results", "calls"}
+	features := []string{"calls"}
 	url, seen := serveRewriting(t, testSecret, nil, nil, features)
 	if r := run(t, config(url, false)); r.Status("calls.unknown") != "pass" || r.Failed() {
 		t.Errorf("reads-only: calls.unknown says %s (failed %v): %v", r.Status("calls.unknown"), r.Failed(), failures(r))
@@ -1959,7 +2004,7 @@ func TestALostConfirmStillNamesTheItemLeft(t *testing.T) {
 			return []byte("<html>bad gateway</html>")
 		}
 		return reply
-	}, []string{"results", "calls"})
+	}, []string{"calls"})
 	cfg := config(url, true)
 	cfg.Item = "item-0001"
 	r, err := Run(context.Background(), cfg)
@@ -1970,7 +2015,7 @@ func TestALostConfirmStillNamesTheItemLeft(t *testing.T) {
 		t.Errorf("a lost confirm: operations.physical %s, left %q", r.Status("operations.physical"), r.Left)
 	}
 
-	url, _ = serveRewriting(t, testSecret, nil, nil, []string{"results", "calls"})
+	url, _ = serveRewriting(t, testSecret, nil, nil, []string{"calls"})
 	cfg = config(url, true)
 	cfg.Item = "item-none-such"
 	if r, _ = Run(context.Background(), cfg); strings.Contains(r.Left, "item-none-such") {
@@ -1994,7 +2039,7 @@ func TestAPhysicalOperationDeclaredWithoutCallsOrConfirmFails(t *testing.T) {
 					t.Errorf("the rewrite %q found nothing in %s", edit[0], reply)
 				}
 				return out
-			}, []string{"results", "calls"})
+			}, []string{"calls"})
 			cfg := config(url, true)
 			cfg.Item = "item-0001"
 			r, err := Run(context.Background(), cfg)
@@ -2030,7 +2075,7 @@ func TestCallsAnswersAreHeldToWhatWasSent(t *testing.T) {
 					return reply
 				}
 				return bytes.Replace(reply, []byte(edit[0]), []byte(edit[1]), 1)
-			}, []string{"results", "calls"})
+			}, []string{"calls"})
 			r, err := Run(context.Background(), config(url, true))
 			if err != nil && !errors.Is(err, ErrReadsFailed) {
 				t.Fatal(err)
@@ -2075,7 +2120,7 @@ func TestThePhysicalCheckHoldsTheLogAndTheReplay(t *testing.T) {
 				i := n
 				mu.Unlock()
 				return tc.rewrite(i, reply)
-			}, []string{"results", "calls"}, tc.defects...)
+			}, []string{"calls"}, tc.defects...)
 			cfg := config(url, true)
 			cfg.Item = "item-0001"
 			r, err := Run(context.Background(), cfg)

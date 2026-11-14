@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -291,7 +293,7 @@ func TestEveryReplyDecodesIntoAWireTypeOfContractFields(t *testing.T) {
 		{TargetSetting{}, "setting.json", nil},
 		{Standing{}, "common/standing.json", nil},
 		{placeWire{}, "profiles/storage/reach.json", []string{"$defs", "Place"}},
-		{storageWire{}, "operation_response.json", []string{"$defs", "StorageStatus"}},
+		{storageWire{}, "profiles/storage/status.json", nil},
 	} {
 		var doc map[string]any
 		if err := json.Unmarshal(mustRead(t, "schema", p.schema), &doc); err != nil {
@@ -302,6 +304,23 @@ func TestEveryReplyDecodesIntoAWireTypeOfContractFields(t *testing.T) {
 			node, _ = node[k].(map[string]any)
 		}
 		props, _ := node["properties"].(map[string]any)
+		// A profile is its base plus its own (allOf naming a whole schema):
+		// the base's properties are the profile's too. A ref into a $defs
+		// (an invariant) adds no property.
+		allOf, _ := node["allOf"].([]any)
+		for _, sub := range allOf {
+			ref, _ := sub.(map[string]any)["$ref"].(string)
+			if ref == "" || strings.Contains(ref, "#") {
+				continue
+			}
+			var base map[string]any
+			if err := json.Unmarshal(mustRead(t, "schema", path.Join(path.Dir(p.schema), ref)), &base); err != nil {
+				t.Fatal(err)
+			}
+			baseProps, _ := base["properties"].(map[string]any)
+			props = maps.Clone(props)
+			maps.Copy(props, baseProps)
+		}
 		rt := reflect.TypeOf(p.v)
 		for i := range rt.NumField() {
 			f := rt.Field(i)

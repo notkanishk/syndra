@@ -403,7 +403,7 @@ and nothing becomes a major 3 later (owner decisions 18, 20):
   declaring `results` answers one `result` object validated against the JSON
   Schema the registry names for that id, and the backend reads `result` only
   from such an add-on; the pockets stay readable until the next major and
-  TrueNAS moves off them in slice 6. Three shapes are generic and have a
+  TrueNAS moves off them in slice 6. *Superseded 14 Nov 2026 (slice 7h, owner ruling: "We currently only have TrueNAS as the sole add-on on production, and the backend and the add-on are updated together, so the backwards compatibility is not needed"):* `result` is core in major 2, not a feature; the pockets and feature `results` are gone before release, and a reply without `result` is no reading. Three shapes are generic and have a
   generic renderer: `common/records.json` (a list of things the subject
   holds or did: `{id, label, category?, since?, due?, standing?, x-*}`),
   `common/activity.json` (what `activity.get` answers today, with
@@ -906,7 +906,7 @@ keep, and it does not pretend to.
 | unlisted hidden | a membership in `state` or `observed` holds only the managed set (no value `/values` leaves out); that such a value survives an apply is invisible from outside, so it is the add-on's own test (5.3) |
 | limit combine | two mappings, `"0"` and `"5368709120"` → observed limit is `unlimited` (unlimited dominates, §3) |
 | lifecycle | `read_only` → apply answers `LIFECYCLE_REFUSAL` (503, `Retry-After`), reads still answer; no reason → `REASON_REQUIRED`; unknown → `UNKNOWN_LIFECYCLE_STATE`; back to `active` |
-| results (feature `results`) | every available `effect: read` operation answers one `result` valid against the schema `registry/operations.json` names for it (which holds `current: false` ⇔ `stale`), or an object for an id that declares its own; without the feature, a read with no registry `pocket` (`holdings.list`) declared available is a `fail`, and otherwise `skip` |
+| operations.result (core; `results` under feature `results` until slice 7h) | every available `effect: read` operation answers one `result` valid against the schema `registry/operations.json` names for it (which holds `current: false` ⇔ `stale`), or an object for an id that declares its own; a read answered without `result` is a `fail` (extra keys are ignored); a reads-only run judges it too, skipping a member read about a subject with no account (422) |
 | operations | unknown → 404; missing required param → 400; a canary secret value never appears in any later byte of any reply, health, error, replay or `/calls` answer (`secret_result` redaction included); a `physical` operation refuses without `confirm`, answers `preview: true` with no effect and no record (`log_records` unchanged; a preview sends nothing to `/calls`, and `/calls` on a never-used id → `unknown`), and `GET /calls/{call_id}` answers `recorded` after the confirm; a second call while the first is `in_doubt` → 409 `CALL_UNSETTLED` |
 | calls (feature `calls`, built in slice 6c) | `calls.unknown` (a never-used id → `unknown`, valid against `call.json`); `calls.recorded` (the `password.set` call's id → `recorded`, its reply equal by JSON value to the first; the canary scan covers it); `operations.physical`, with `-item` naming an item the run checks out to its subject and leaves so: a physical op declared without `calls` or without `confirm` fails, the preview's `result` validates and writes nothing, the confirm with a fresh id → `succeeded`, `log_records` +1, `/calls` → `recorded`, the same item under a new id → `no_change` with `log_records` unchanged, and the replay byte for byte. `calls.unsettled` and `calls.serialised` always skip: a black-box kit cannot lose a reply or know the limit, and the reference add-on's own tests hold both (decided while building 6c, as `freshness.unreachable`) |
 | transport | unsigned → 401; stale timestamp → 401; wrong key → 401 without saying which half; a signed request with its query reordered or altered → 401; the served key equals the derived one; the three query vectors in `transport_derivation.json` reproduce |
@@ -1669,7 +1669,8 @@ says".
 **The core keeps no product payload type.** After slice 6 the backend
 compiles no struct shaped like one target's report: `OperationResult`'s
 typed pockets are read only from an add-on without `results` and go at the
-next major, the `smb://` builder is in the storage kind's view, and the
+next major (superseded by slice 7h: gone before release, so the core reads
+`result` alone), the `smb://` builder is in the storage kind's view, and the
 product words are in `addons/truenas` only. Two guard tests keep it so: the
 literal guard of slice 2, scoped to `services/`, `handlers/`, `addons/` and
 `drift/` at manifest-lookup sites (`"group"` and `"enabled"` are legitimate
@@ -1937,6 +1938,7 @@ Statistics, records and the fourth target (10 Nov 2026):
     `activity` and `status` as the common shapes. Recommend yes; it is the
     last product type the core compiles, and as a feature it can wait for
     the inventory target without ever forcing a major 3. **Accepted 10 Nov 2026.**
+    *Superseded 14 Nov 2026 (slice 7h, owner ruling: "We currently only have TrueNAS as the sole add-on on production, and the backend and the add-on are updated together, so the backwards compatibility is not needed"):* `result` is core in major 2, not a feature; the pockets and feature `results` are gone before release, and a reply without `result` is no reading.
 21. **Freshness as `fresh: true`, under feature `freshness`** (§4),
     *revised*: on `GET /subjects`, `GET /values/{field}`, the storage
     profile's reads and `effect: read` operations; never on `/plan`

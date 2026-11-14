@@ -107,7 +107,7 @@ func TestALiveReadIsDatedWhenItWasAsked(t *testing.T) {
 func TestAResultShapeIsDatedByItsAgeToo(t *testing.T) {
 	now := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
 	withClock(t, now)
-	r := ReadReply{Target: "shapes", Schema: "common/records.json", Results: true, Outcome: OutcomeSucceeded,
+	r := ReadReply{Target: "shapes", Schema: "common/records.json", Outcome: OutcomeSucceeded,
 		Clock: Clock{Date: now.Add(10 * time.Minute), Sent: now},
 		Body:  []byte(`{"result":{"records":[],"taken_at":"2026-11-10T09:07:00Z","current":true}}`)}
 	v := r.View()

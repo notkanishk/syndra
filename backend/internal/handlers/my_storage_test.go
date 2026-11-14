@@ -50,15 +50,33 @@ type storageHarness struct {
 	dispatchErr error     // returned beside a result that HAS an operation id
 }
 
-// storageReply is a storage.status answer as the one read path returns it from
-// an add-on without results (the legacy pocket), so a test states the status
-// as Syndra's own view and the reader decodes it for real.
+// storageReply is a storage.status answer as the one read path returns it, the
+// storage profile's result, so a test states the status as Syndra's own view
+// and the reader decodes it for real. What the view leaves unsaid the profile
+// still requires: a standing (the status's usability), meters (none) and an
+// observation (a read now).
 func storageReply(st addons.StorageStatus) addons.ReadReply {
 	if st.Outcome != addons.OutcomeSucceeded {
 		return addons.ReadReply{Operation: "storage.status", Outcome: st.Outcome}
 	}
-	body, _ := json.Marshal(map[string]any{"operation": "storage.status", "outcome": "succeeded", "storage": st})
-	return addons.ReadReply{Operation: "storage.status", Pocket: "storage", Outcome: addons.OutcomeSucceeded, Status: http.StatusOK, Body: body}
+	if st.Standing == nil {
+		st.Standing = &addons.Standing{Usable: st.Usable, WaitingOn: "none"}
+		if !st.Usable {
+			st.Standing.WaitingOn = "member"
+		}
+	}
+	if st.Observation == nil {
+		st.Observation = &addons.Observation{TakenAt: time.Now().UTC(), Current: true}
+	}
+	if st.Places == nil {
+		st.Places = []addons.Place{}
+	}
+	result, _ := json.Marshal(st)
+	var doc map[string]any
+	_ = json.Unmarshal(result, &doc)
+	doc["meters"] = []any{}
+	body, _ := json.Marshal(map[string]any{"operation": "storage.status", "outcome": "succeeded", "result": doc})
+	return addons.ReadReply{Operation: "storage.status", Schema: "profiles/storage/status.json", Outcome: addons.OutcomeSucceeded, Status: http.StatusOK, Body: body}
 }
 
 // answerStorage stands the target up offering one member read, storage.status,

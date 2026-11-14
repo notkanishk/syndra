@@ -89,6 +89,9 @@ func (k *kit) reads() {
 	ex := k.send(request{method: http.MethodGet, target: "/conformance/no-such-route"})
 	k.refused(k.at("error-envelope"), ex, 404, "UNKNOWN_ROUTE", "an unknown route")
 
+	if !k.cfg.Mutate { // -mutate judges it after the create, about its own account
+		k.results(k.at("operations.result"), false)
+	}
 	k.callsRead(k.at("calls.unknown"))
 	k.freshness()
 	k.stats()

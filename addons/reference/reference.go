@@ -1,13 +1,12 @@
 // Package reference is a complete contract-2 add-on over an in-memory target:
 // the conformance kit's self-test and the author's guide's worked example
 // (openspec/changes/addon-contract, design §7 and §8). It implements the core
+// (with the reads health.get and holdings.list, each answering under result)
 // and the features operations and settings, and, when Config.Features names
-// them, results (holdings.list, and health.get answering under result),
-// freshness (/subjects from a mirror, fresh reads with a cooldown and request
-// collapsing, health.target_reads), calls (GET /calls/{call_id}, and with
-// results the physical operation item.checkout over a lending shelf,
-// checkout.go) and stats (GET /stats over the print queue's job log,
-// stats.go).
+// them, freshness (/subjects from a mirror, fresh reads with a cooldown and
+// request collapsing, health.target_reads), calls (GET /calls/{call_id}, and
+// the physical operation item.checkout over a lending shelf, checkout.go) and
+// stats (GET /stats over the print queue's job log, stats.go).
 //
 // The target is a print queue: member accounts, the printers each may use, an
 // after-hours flag, a longest-job limit. Every behaviour below is derived from
@@ -127,7 +126,7 @@ type Config struct {
 }
 
 // OptionalFeatures is every feature Config.Features may name.
-var OptionalFeatures = []string{"results", "freshness", "calls", "stats"}
+var OptionalFeatures = []string{"freshness", "calls", "stats"}
 
 func (a *Addon) serves(feature string) bool { return slices.Contains(a.cfg.Features, feature) }
 
@@ -223,13 +222,9 @@ func (a *Addon) Handler() http.Handler {
 func (a *Addon) capabilities(*http.Request, []byte) reply {
 	ops := []map[string]any{
 		{"id": "health.get", "scope": "admin", "confirm": false, "available": true},
-		{"id": "password.set", "scope": "member", "confirm": false, "secret_params": []string{"password"}, "available": true}}
-	if a.serves("results") {
-		// holdings.list has no pocket to answer under, so it is declared only
-		// with results.
-		ops = append(ops, map[string]any{"id": "holdings.list", "scope": "member", "confirm": false, "available": true})
-	}
-	if a.serves("results") && a.serves("calls") {
+		{"id": "password.set", "scope": "member", "confirm": false, "secret_params": []string{"password"}, "available": true},
+		{"id": "holdings.list", "scope": "member", "confirm": false, "available": true}}
+	if a.serves("calls") {
 		// A physical operation needs calls (its preview and its settling)
 		// and answers its record under result.
 		ops = append(ops, map[string]any{"id": "item.checkout", "scope": "member", "confirm": true, "available": true,
@@ -647,8 +642,8 @@ type operationRequest struct {
 
 func (a *Addon) operation(r *http.Request, body []byte) reply {
 	name := r.PathValue("name")
-	checkout := name == "item.checkout" && a.serves("results") && a.serves("calls")
-	if name != "password.set" && name != "health.get" && (name != "holdings.list" || !a.serves("results")) && !checkout {
+	checkout := name == "item.checkout" && a.serves("calls")
+	if name != "password.set" && name != "health.get" && name != "holdings.list" && !checkout {
 		return problem(404, "OPERATION_FAILED", "This add-on has no such operation.", nil)
 	}
 	var req operationRequest
@@ -712,18 +707,12 @@ func (a *Addon) operation(r *http.Request, body []byte) reply {
 // healthGet is an effect: read operation. Its call_id is ignored: never
 // recorded, held or checked for reuse, because Syndra sends one call_id for
 // every read. Not lifecycle-gated either: reads answer in every state.
-// With results it answers under `result`, without it under the `health`
-// pocket a contract-2 add-on wrote before results.
 func (a *Addon) healthGet(req operationRequest) reply {
 	if len(req.Params) != 0 {
 		return problem(400, "OPERATION_FAILED", "health.get takes no parameters.", nil)
 	}
-	key := "health"
-	if a.serves("results") {
-		key = "result"
-	}
 	return ok(map[string]any{"operation": req.Operation, "subject": req.Subject, "outcome": "succeeded",
-		"detail": "The print queue is up.", key: map[string]any{"system": map[string]any{"hostname": "reference", "version": "1.0.0"}}})
+		"detail": "The print queue is up.", "result": map[string]any{"system": map[string]any{"hostname": "reference", "version": "1.0.0"}}})
 }
 
 // record is common/records.json's Record.
@@ -735,7 +724,7 @@ type record struct {
 	Due      string `json:"due,omitempty"`
 }
 
-// holdingsList is the subject's holdings (feature results): a read like
+// holdingsList is the subject's holdings: a read like
 // healthGet, so call_id is ignored and every lifecycle answers. Here what an
 // account holds is the printers it may use and, with calls, the items it has
 // borrowed, read now from the target, so the answer is current.

@@ -46,7 +46,7 @@ export interface StoragePlace {
 }
 
 /**
- * One read answered through the add-on contract's `results` feature: what the
+ * One read answered under the add-on contract's `result`: what the
  * add-on said about this person, in one of three shapes the core knows or
  * raw. Syndra shows it; it never decides on it, and `also_says` is whatever
  * else the add-on added, already quoted.
@@ -131,7 +131,7 @@ export interface MyTargetView {
    * that store just now, which is not "no data".
    */
   usage?: Usage;
-  /** Every member-scope read the add-on answered under `results`, in the add-on's order. */
+  /** Every member-scope read the add-on offers, each through the one read path (unreadable ones included), in the add-on's order. */
   reads?: ReadView[];
   /** Whether the account can be used yet, and who is waited on, in the add-on's words. */
   standing?: Standing;

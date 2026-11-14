@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"path"
 	"strings"
 
@@ -37,10 +38,13 @@ type contract struct {
 		} `json:"params"`
 		SecretParams []string `json:"secret_params"`
 		Effect       string   `json:"effect"`
-		// Result is the schema a results add-on answers under; Pocket the
-		// key a read was answered under before results ("" for none).
+		// Subject is whether the operation is about the member the request's
+		// subject names (true) or about the target itself (false). Required:
+		// the loader refuses a registry entry that does not say.
+		Subject *bool `json:"subject"`
+		// Result is the schema a read answers under `result` ("" for an id
+		// that declares its own).
 		Result string `json:"result"`
-		Pocket string `json:"pocket"`
 	}
 	features map[string]struct {
 		RequiresKind string `json:"requires_kind"`
@@ -52,6 +56,15 @@ type contract struct {
 	// cooldownDefault is constants.cooldown_default: limits.fresh_read_cooldown when undeclared.
 	cooldownDefault string
 	vectors         []byte // transport_derivation.json, raw
+}
+
+// writes is whether a request may change the add-on or its app: anything but
+// a GET, /plan, and an effect: read operation, which write nothing by
+// contract (the kit's operations.reads holds them to it under -mutate).
+func (c *contract) writes(method, target string) bool {
+	path, _, _ := strings.Cut(target, "?")
+	op, isOp := strings.CutPrefix(path, "/operations/")
+	return method != http.MethodGet && path != "/plan" && !(isOp && c.operations[op].Effect == "read")
 }
 
 type offline struct{}
@@ -115,6 +128,11 @@ func loadContract(files fs.FS) (*contract, error) {
 		}
 		if err != nil {
 			return nil, fmt.Errorf("registry %s: %w", file, err)
+		}
+	}
+	for id, op := range c.operations {
+		if op.Subject == nil {
+			return nil, fmt.Errorf("registry operations.json: %s does not say whether it is about a subject", id)
 		}
 	}
 	c.cooldownDefault = constants.Constants.CooldownDefault.Value

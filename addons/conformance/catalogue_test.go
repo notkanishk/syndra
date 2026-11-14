@@ -1,10 +1,15 @@
 package conformance
 
 import (
+	"bytes"
+	"io/fs"
 	"os"
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	contractfiles "syndra/addons/contract"
 )
 
 // The author has the guide, not the design: every check cites a section of
@@ -43,5 +48,33 @@ func TestEveryCheckCitesAGuideSection(t *testing.T) {
 				t.Errorf("%s prints %s, which cites the design", f, lit)
 			}
 		}
+	}
+}
+
+// Every registry operation says whether it is about a member (`subject`):
+// the kit reads it to excuse a reads-only 422 only for a read about a
+// subject, so an entry that does not say is refused at load, never read as
+// either.
+func TestTheRegistryMustSayWhetherAnOperationIsAboutASubject(t *testing.T) {
+	if _, err := loadContract(contractfiles.FS()); err != nil {
+		t.Fatalf("the embedded contract: %v", err)
+	}
+	files := fstest.MapFS{}
+	err := fs.WalkDir(contractfiles.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		raw, err := fs.ReadFile(contractfiles.FS(), p)
+		if p == "v2/registry/operations.json" {
+			raw = bytes.Replace(raw, []byte(`"subject": false,`), nil, 1)
+		}
+		files[p] = &fstest.MapFile{Data: raw}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadContract(files); err == nil || !strings.Contains(err.Error(), "health.get does not say") {
+		t.Errorf("a registry entry without subject loaded: %v", err)
 	}
 }

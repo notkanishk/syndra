@@ -16,7 +16,7 @@ import (
 // mid-call, two checkouts racing, the defects that break each. Every request
 // goes through deviate, so a defect acts as it would on the wire.
 
-// lender is the reference serving results and calls, with two members who may
+// lender is the reference serving calls, with two members who may
 // use mk4-a (so items 0001 and 0002) and a lost-reply hook.
 func lender(t *testing.T, down func() bool, lose func(string) bool, defects ...Defect) *Addon {
 	t.Helper()
@@ -24,7 +24,7 @@ func lender(t *testing.T, down func() bool, lose func(string) bool, defects ...D
 	for _, d := range defects {
 		set[d] = true
 	}
-	a, err := New(Config{Target: "reference", Secret: []byte("s"), Features: []string{"results", "calls"},
+	a, err := New(Config{Target: "reference", Secret: []byte("s"), Features: []string{"calls"},
 		Defects: set, Down: down, LoseReply: lose})
 	if err != nil {
 		t.Fatal(err)

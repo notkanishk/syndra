@@ -1,9 +1,10 @@
 {
-  "$comment": "Every operation id in the backend's operationPolicy. scope is the broadest scope it may be offered at; confirm is whether the backend requires it; effect is read (served through Syndra's one read path: never dispatched, logged or confirmed), account, credential or physical; result names the schema a feature-results add-on answers under result (health.get declares its own and is shown raw). pocket is the reply key a read was answered under before feature results, read only from an add-on without results and removed at major 3; a read with no pocket (holdings.list) needs feature results. secret_result marks an operation whose reply carries a secret: the add-on records it redacted, and a replay and GET /calls answer recorded without it; none does yet. A physical operation is confirmed, needs feature calls (and results when it names a result), and is never resent; a param's format target_id is an id typed or scanned on the target (a UI hint; the add-on answers UNKNOWN_RESOURCE for one that names nothing).",
+  "$comment": "Every operation id in the backend's operationPolicy. scope is the broadest scope it may be offered at; subject, required, is true when the operation is about the member the request's subject names and false when it is about the target itself (the request's subject is then empty); confirm is whether the backend requires it; effect is read (served through Syndra's one read path: never dispatched, logged or confirmed), account, credential or physical; result names the schema the add-on answers under result, the one key every read answers under (health.get declares its own and is shown raw). secret_result marks an operation whose reply carries a secret: the add-on records it redacted, and a replay and GET /calls answer recorded without it; none does yet. A physical operation is confirmed, needs feature calls, and is never resent; a param's format target_id is an id typed or scanned on the target (a UI hint; the add-on answers UNKNOWN_RESOURCE for one that names nothing).",
   "operations": {
     "account.adopt": {
       "meaning": "Bind an existing unbound target account to the subject.",
       "scope": "admin",
+      "subject": true,
       "confirm": true,
       "params": [
         {
@@ -20,6 +21,7 @@
     "account.purge": {
       "meaning": "Remove a disabled account from the target, with an elevated credential.",
       "scope": "admin",
+      "subject": true,
       "confirm": true,
       "params": [
         {
@@ -38,6 +40,7 @@
     "account.release": {
       "meaning": "Forget the binding without touching the account.",
       "scope": "admin",
+      "subject": true,
       "confirm": true,
       "params": [],
       "secret_params": [],
@@ -47,6 +50,7 @@
     "activity.get": {
       "meaning": "What the subject did on the target, read live.",
       "scope": "admin",
+      "subject": true,
       "confirm": false,
       "params": [
         {
@@ -59,22 +63,22 @@
       "secret_params": [],
       "effect": "read",
       "result": "common/activity.json",
-      "pocket": "activity",
       "secret_result": false
     },
     "health.get": {
       "meaning": "The target's own health, read live.",
       "scope": "admin",
+      "subject": false,
       "confirm": false,
       "params": [],
       "secret_params": [],
       "effect": "read",
-      "pocket": "health",
       "secret_result": false
     },
     "holdings.list": {
       "meaning": "What the subject holds on the target, read live.",
       "scope": "member",
+      "subject": true,
       "confirm": false,
       "params": [],
       "secret_params": [],
@@ -85,6 +89,7 @@
     "item.checkout": {
       "meaning": "The member takes an item: the add-on records a loan of item_id to the subject.",
       "scope": "member",
+      "subject": true,
       "confirm": true,
       "params": [
         {
@@ -103,6 +108,7 @@
     "password.rotate": {
       "meaning": "Replace the subject's password with a generated one the member never sees.",
       "scope": "admin",
+      "subject": true,
       "confirm": true,
       "params": [],
       "secret_params": [],
@@ -112,6 +118,7 @@
     "password.set": {
       "meaning": "The member sets their own password.",
       "scope": "member",
+      "subject": true,
       "confirm": false,
       "params": [
         {
@@ -130,12 +137,12 @@
     "storage.status": {
       "meaning": "Whether the member can use the storage and how much room is left, read live.",
       "scope": "member",
+      "subject": true,
       "confirm": false,
       "params": [],
       "secret_params": [],
       "effect": "read",
       "result": "profiles/storage/status.json",
-      "pocket": "storage",
       "secret_result": false
     }
   }

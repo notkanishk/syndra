@@ -41,7 +41,6 @@ func TestFreshReachesTheWireOnlyForAnAddOnDeclaringIt(t *testing.T) {
 		}
 
 		got = addonAnswering(t, "operation_response_result.json")
-		declare(t, "results")
 		if declared {
 			declare(t, "freshness")
 		}
@@ -102,7 +101,6 @@ func TestFreshIsRefusedOutsideTheReadsInScope(t *testing.T) {
 // The backend's read body with fresh is the contract's fixture.
 func TestAFreshReadOperationSendsTheFixture(t *testing.T) {
 	got := addonAnswering(t, "operation_response_result.json")
-	declare(t, "results")
 	declare(t, "freshness")
 	Read(context.Background(), "truenas", "storage.status", "289471021834760193", "289471021834760193", nil, true)
 	sameJSON(t, got.body, contractFixture(t, "operation_request_fresh.json"), "a fresh read operation")
@@ -189,7 +187,6 @@ func TestAReplyBreakingTheStaleInvariantIsNotAReading(t *testing.T) {
 			t.Errorf("homes, %s: read", name)
 		}
 		addonServing(t, withJSON(t, contractFixture(t, "operation_response_result.json"), func(d map[string]any) { edit(d["result"].(map[string]any)) }))
-		declare(t, "results")
 		if v := Read(context.Background(), "truenas", "storage.status", "s", "s", nil, false).View(); v.Readable {
 			t.Errorf("storage.status, %s: readable", name)
 		}
@@ -205,7 +202,6 @@ func TestAReplyBreakingTheStaleInvariantIsNotAReading(t *testing.T) {
 func TestACooldownWithNothingToServeReachesEveryView(t *testing.T) {
 	addonServingStatus(t, http.StatusTooManyRequests, contractFixture(t, "error_fresh_read_cooldown.json"))
 	declare(t, "freshness")
-	declare(t, "results")
 	// No Retry-After header from this server: still a cooldown, at least 1 s.
 	if r := ReadReach(context.Background(), "truenas", true); r.RetryAfter != 1 || r.Read {
 		t.Errorf("reach: %+v", r)

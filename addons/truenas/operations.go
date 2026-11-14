@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -68,7 +69,7 @@ type OperationResult struct {
 	// here and is nowhere else either: rotation is the credential half of a
 	// revocation, and returning what it minted would defeat the point.
 	Rotated bool `json:"rotated,omitempty"`
-	// Result is a read operation's answer (feature results), in the shape
+	// Result is a read operation's answer, in the shape
 	// registry/operations.json names for it: *ActivityReport
 	// (common/activity.json), *StorageStatus (profiles/storage/status.json),
 	// *TargetHealth (health.get's own).
@@ -175,6 +176,10 @@ func (s *server) operateNow(w http.ResponseWriter, name string, req OperationReq
 		// The same answer an apply gives (applyNow).
 		writeError(w, http.StatusInternalServerError, CodeOperationFailed, notLoggedDetail, nil)
 		return
+	case errors.Is(err, errStoreUnreadable):
+		// The add-on's own store (boundAccount): nothing was sent.
+		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, err.Error(), nil)
+		return
 	case err != nil:
 		// The error's text is this add-on's own, never the target's response
 		// body: that body is where a submitted password comes back.
@@ -206,6 +211,10 @@ func (s *server) readNow(w http.ResponseWriter, name string, req OperationReques
 	}
 	if of := (opFailure{}); errors.As(err, &of) {
 		// The error's text is this add-on's own (operateNow).
+		if errors.Is(of.err, errStoreUnreadable) {
+			writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, of.err.Error(), nil)
+			return
+		}
 		writeError(w, of.status, CodeOperationFailed, of.err.Error(), nil)
 		return
 	}
@@ -310,15 +319,22 @@ func (s *server) runOperation(name string, req OperationRequest) (OperationResul
 // An operation that could not find its subject must not fall back to
 // derivation: derivation names an account that may not exist, and setting a
 // password on the wrong one is the whole hazard.
-func (s *server) boundAccount(subject string) (Binding, error) {
+func (s *server) boundAccount(subject string) (Binding, int, error) {
 	b, bound, err := s.store.GetBinding(subject)
 	if err != nil {
-		return Binding{}, err
+		// The add-on's own store, read before anything is sent to the NAS:
+		// its fault, never the subject's, so 500 STORE_UNREADABLE (as /plan
+		// answers it), never the 422 that means "no account". On a write,
+		// Syndra reads any 5xx as possibly acted (indeterminate), which
+		// overstates it and is safe: a refusal is never recorded, so GET
+		// /calls answers unknown and a re-send runs it once.
+		log.Printf("[STORE] binding for an operation could not be read: %v", err)
+		return Binding{}, http.StatusInternalServerError, errStoreUnreadable
 	}
 	if !bound {
-		return Binding{}, fmt.Errorf("no account is bound to this subject yet")
+		return Binding{}, http.StatusUnprocessableEntity, fmt.Errorf("no account is bound to this subject yet")
 	}
-	return b, nil
+	return b, 0, nil
 }
 
 // setPassword forwards a member's credential and keeps nothing.
@@ -336,9 +352,9 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 	if err != nil {
 		return OperationResult{}, http.StatusBadRequest, err
 	}
-	binding, err := s.boundAccount(req.Subject)
+	binding, status, err := s.boundAccount(req.Subject)
 	if err != nil {
-		return OperationResult{}, http.StatusUnprocessableEntity, err
+		return OperationResult{}, status, err
 	}
 	id, err := s.recordID(binding)
 	if err != nil {
@@ -488,9 +504,9 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 // they reconnect — TrueNAS exposes no session-close method at all — which is
 // why the operator surface must say so rather than implying immediacy.
 func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, error) {
-	binding, err := s.boundAccount(req.Subject)
+	binding, status, err := s.boundAccount(req.Subject)
 	if err != nil {
-		return OperationResult{}, http.StatusUnprocessableEntity, err
+		return OperationResult{}, status, err
 	}
 	minted, err := mintCredential()
 	if err != nil {
@@ -547,9 +563,9 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	if err != nil {
 		return OperationResult{}, http.StatusBadRequest, err
 	}
-	binding, err := s.boundAccount(req.Subject)
+	binding, status, err := s.boundAccount(req.Subject)
 	if err != nil {
-		return OperationResult{}, http.StatusUnprocessableEntity, err
+		return OperationResult{}, status, err
 	}
 	// Checked again here and not only at adoption. A binding can predate this
 	// guard, or predate a key reissued against a different account, and this is
@@ -678,9 +694,9 @@ func statusToken(s string) string {
 
 // smbActivity reads the audit log and says what it could not see.
 func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error) {
-	binding, err := s.boundAccount(req.Subject)
+	binding, status, err := s.boundAccount(req.Subject)
 	if err != nil {
-		return OperationResult{}, http.StatusUnprocessableEntity, err
+		return OperationResult{}, status, err
 	}
 
 	// `message_timestamp` is an INTEGER — unix seconds — and this decoded it as

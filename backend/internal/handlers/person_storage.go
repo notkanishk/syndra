@@ -75,9 +75,9 @@ const adoptionWindow = 10 * time.Minute
 var lastStorage sync.Map // target + "\x00" + subject -> lastKnownStorage
 
 // rememberStorage keeps a read dated by the add-on's taken_at: a copy it read
-// four minutes ago is remembered as four minutes old. A reply that does not
-// date itself (the legacy pocket) is dated by when the backend received it,
-// the closest the backend can say.
+// four minutes ago is remembered as four minutes old. A status with no
+// observation (one not read from a reply) is dated by when the backend
+// received it, the closest the backend can say.
 func rememberStorage(target, subject string, status addons.StorageStatus) {
 	readAt := time.Now()
 	if status.Observation != nil {

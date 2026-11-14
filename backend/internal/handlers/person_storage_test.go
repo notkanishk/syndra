@@ -216,7 +216,7 @@ func TestPersonTargets_TheLastReadKeepsTheAddOnsDate(t *testing.T) {
 		if h.unreachable {
 			return addons.ReadReply{Operation: "storage.status", Outcome: addons.OutcomeUnreached}
 		}
-		return addons.ReadReply{Operation: "storage.status", Schema: "profiles/storage/status.json", Results: true,
+		return addons.ReadReply{Operation: "storage.status", Schema: "profiles/storage/status.json",
 			Outcome: addons.OutcomeSucceeded, Status: 200, Body: []byte(body)}
 	}
 	if view := getPersonTargets(t); view.Storage == nil || view.Storage.Observation == nil || view.Storage.Current {

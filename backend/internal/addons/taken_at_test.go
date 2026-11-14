@@ -94,7 +94,7 @@ func TestEveryResultShapeIsClampedAlike(t *testing.T) {
 	// read is the reply's taken_at as this backend reads it, through the
 	// reader each shape is read by; ok false is "not a reading".
 	read := func(schema, body, takenAt string) (at time.Time, ok bool) {
-		r := ReadReply{Target: "shapes", Schema: schema, Results: true, Outcome: OutcomeSucceeded,
+		r := ReadReply{Target: "shapes", Schema: schema, Outcome: OutcomeSucceeded,
 			Body: []byte(`{"result":{` + body + `,"taken_at":"` + takenAt + `","current":true}}`)}
 		switch schema {
 		case "common/activity.json":
