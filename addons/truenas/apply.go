@@ -264,7 +264,7 @@ func (s *server) leftByCrashedCreate(subject, derived string, account *Subject, 
 		account.PasswordSet || account.SMBEnabled {
 		return false, nil
 	}
-	if bound, err := s.store.UIDBound(account.UID); err != nil || bound {
+	if bound, err := s.accountBound(account); err != nil || bound {
 		return false, err
 	}
 	return s.log.CreateInDoubt(subject, accountID(account.UID))
@@ -361,11 +361,6 @@ func (d desiredState) offWish() *bool {
 		return w
 	}
 	return nil
-}
-
-// offOnly is d naming nothing but an off wish: what is recorded before a lock is written.
-func (d desiredState) offOnly() desiredState {
-	return desiredState{enabled: d.enabled, managed: map[string]bool{FieldEnabled: d.managed[FieldEnabled] && !d.enabled}}
 }
 
 // desiredState is the request's fields, decoded once into the shapes this
@@ -704,7 +699,7 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 	}
 	// An off wish is on the binding before the lock is written: a lock left in doubt must not read
 	// as an account somebody else switched off.
-	s.rememberWishes(req, desired.offOnly(), ApplyOutcome{Effect: EffectApplied}, nil)
+	s.rememberOffWish(req, desired)
 	out, status, err := s.converge(req, desired, current)
 	s.rememberWishes(req, desired, out, err)
 	return out, status, err
@@ -730,13 +725,30 @@ func noAccountToSwitchOffOutcome(subject string) ApplyOutcome {
 	}
 }
 
+// rememberOffWish records an off wish before the lock that makes it is written: it never accuses
+// anybody, and a lock left in doubt must not read as an account somebody else switched off.
+func (s *server) rememberOffWish(req ApplyRequest, desired desiredState) {
+	if desired.offWish() == nil {
+		return
+	}
+	b, found, err := s.store.GetBinding(req.Subject)
+	if err != nil || !found || (b.WantsEnabled != nil && !*b.WantsEnabled) {
+		return
+	}
+	off := false
+	b.WantsEnabled = &off
+	if err := s.mutate(applyCaller(req).on(b.UID), "store.bind", func() error { return s.store.PutBinding(b) }); err != nil {
+		logStoreFailure("binding", req.Subject, err)
+	}
+}
+
 // rememberWishes keeps what this apply asked for SMB and for the account on or off on the
 // subject's binding: the first so the member's first password can turn SMB on (see
 // Binding.WantsSMB), the second so a standing can tell an account Syndra holds off from one
 // switched off on TrueNAS (Binding.WantsEnabled).
 //
 // Asymmetric on purpose, so a record is never false against the account. An off wish never accuses
-// anybody and is also written BEFORE the lock (apply, offOnly). An on wish is written only once an
+// anybody and is also written BEFORE the lock (rememberOffWish). An on wish is written only once an
 // enable has landed: applied or no change, not blocked, and not in doubt (Unverified), because a
 // blocked or doubtful enable leaves the account off and the record would then call that drift. The
 // SMB wish is what the member's first password turns on later, so it is kept whenever the apply was

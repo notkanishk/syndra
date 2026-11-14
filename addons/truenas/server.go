@@ -359,8 +359,9 @@ func standingOf(s *Subject) *Standing {
 		// The add-on's own service account, used through its API key.
 		return &Standing{Usable: true, WaitingOn: "none"}
 	case !s.Enabled && s.unbound:
-		// Nobody in Syndra asked for this and nothing in Syndra will change it: said as what it is,
-		// not as Syndra's doing (AUTHORING: `none` is for an account Syndra holds off).
+		// Nobody in Syndra is assigned to it, so nothing in Syndra waits on anyone for it: `none`, as
+		// AUTHORING's standing rule allows for an unassigned off account, but said as what it is and
+		// never as Syndra's doing.
 		return &Standing{WaitingOn: "none", Note: "Switched off on TrueNAS. No one in Syndra is assigned to it.",
 			Next: "Nothing for you to do unless you assign it to a person."}
 	case !s.Enabled && s.wantsEnabled != nil && *s.wantsEnabled:
@@ -439,17 +440,6 @@ func subjectViews(subjects []Subject, limits map[int64]string, wishes map[int64]
 // feature freshness). Only the literal true asks.
 func wantsFresh(r *http.Request) bool { return r.URL.Query().Get("fresh") == "true" }
 
-// wishes is the bindings' wishes, or nil when the store cannot be read: the
-// standing then says what the NAS shows, as it always could.
-func (s *server) wishes() map[int64]Wish {
-	wishes, err := s.store.Wishes()
-	if err != nil {
-		logStoreFailure("binding", "subjects", err)
-		return nil
-	}
-	return wishes
-}
-
 // subjectsRead is one read of every account, as served.
 type subjectsRead struct {
 	views     []SubjectView
@@ -473,7 +463,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 			log.Printf("[STORE] could not persist snapshot: %v", putErr)
 		}
 		live = &snap
-		return subjectsRead{subjectViews(snap.Subjects, s.homeLimits(snap.Subjects), s.wishes()), snap.Truncated}, snap.TakenAt, nil
+		return subjectsRead{subjectViews(snap.Subjects, s.homeLimits(snap.Subjects), s.wishesFor(snap.Subjects)), snap.Truncated}, snap.TakenAt, nil
 	})
 	if writeCooldown(w, err) {
 		return
@@ -481,9 +471,10 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 	if err == nil {
 		read := val.(subjectsRead)
 		writeJSON(w, http.StatusOK, SubjectsResponse{Subjects: read.views, Truncated: read.truncated, Observed: obs})
-		if live != nil {
+		if live != nil && s.fresh.keeps("subjects", live.TakenAt) {
 			// After the answer, not inside the read: its writes make every copy a read of the past
-			// (mutate), which would stop this very read being kept. The next read has the wishes.
+			// (mutate), which would stop this very read being kept. Only a read the fresher did keep (a write
+			// that began during it makes it a read of the past); the next read has the wishes.
 			s.deriveWishes(*live)
 		}
 		return
@@ -507,7 +498,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 	}
 	// The mirror holds no limits: they are read live or not reported.
 	writeJSON(w, http.StatusOK, SubjectsResponse{
-		Subjects: subjectViews(cached.Subjects, nil, s.wishes()), Truncated: cached.Truncated,
+		Subjects: subjectViews(cached.Subjects, nil, s.wishesFor(cached.Subjects)), Truncated: cached.Truncated,
 		Observed: Observed{TakenAt: rfc3339(cached.TakenAt), Stale: unreachableSince(cached.TakenAt)},
 	})
 }

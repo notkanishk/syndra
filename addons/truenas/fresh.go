@@ -229,6 +229,15 @@ func (f *fresher) read(key string, fresh bool, live func() (any, time.Time, erro
 	return fl.val, Observed{TakenAt: rfc3339(fl.at), Current: true}, nil
 }
 
+// keeps says whether the copy held for key is the read taken at at: a read a write began during is
+// never kept (gen), so what was read then is a read of the past and is not acted on.
+func (f *fresher) keeps(key string, at time.Time) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	k, ok := f.kept[key]
+	return ok && k.at.Equal(at)
+}
+
 // fallback answers a failed read: the copy, labelled unreachable (a slow or
 // failing app yields stale, never an error), unless the failure is a decision
 // about the request (an operation's 4xx: no bound account) rather than the NAS

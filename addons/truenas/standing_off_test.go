@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -71,9 +70,8 @@ func TestAnApplyKeepsWhetherItWantedTheAccountOn(t *testing.T) {
 	if !bound || b.WantsEnabled == nil || !*b.WantsEnabled {
 		t.Fatalf("a create wanting the account on keeps that wish: %+v", b)
 	}
-	w, err := s.store.Wishes()
-	if err != nil || w[b.UID].Enabled == nil || !*w[b.UID].Enabled {
-		t.Fatalf("Wishes: %v %+v", err, w)
+	if w := s.wishesFor([]Subject{{Username: b.Username, UID: b.UID}}); w[b.UID].Enabled == nil || !*w[b.UID].Enabled {
+		t.Fatalf("wishesFor: %+v", w)
 	}
 	rr := postApply(t, s, `{"call_id":"c2","subject":"sub-1","email":"charlotte@example.edu",
 		"desired":{"group":["lab_makers"],"enabled":false,"smb_enabled":false}}`)
@@ -84,15 +82,11 @@ func TestAnApplyKeepsWhetherItWantedTheAccountOn(t *testing.T) {
 }
 
 func TestWishesOnlyListsBoundAccounts(t *testing.T) {
-	store, err := OpenStore(filepath.Join(t.TempDir(), "state.db"))
-	if err != nil {
+	s, _ := applyServer(t, `[]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { store.Close() })
-	if err := store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001}); err != nil {
-		t.Fatal(err)
-	}
-	w, _ := store.Wishes()
+	w := s.wishesFor([]Subject{{Username: "charlotte", UID: 300001}, {Username: "root", UID: 0}})
 	if _, ok := w[300001]; !ok || len(w) != 1 || w[300001].Enabled != nil {
 		t.Fatalf("want the one bound account, with no wish yet: %+v", w)
 	}
@@ -227,7 +221,7 @@ func TestLegacyBindingsGetTheirWishesOnceFromTheFirstCompleteRead(t *testing.T) 
 	}
 
 	s.deriveWishes(snap)
-	w, _ := s.store.Wishes()
+	w := s.wishesFor(snap.Subjects)
 	if e := w[300001].Enabled; e == nil || !*e || !w[300001].SMB {
 		t.Errorf("an account that is on: want an on wish and SMB, got %+v", w[300001])
 	}
@@ -262,7 +256,7 @@ func TestLegacyBindingsGetTheirWishesOnceFromTheFirstCompleteRead(t *testing.T) 
 		t.Fatal("the marker stops a second pass")
 	}
 	standing := map[string]*Standing{}
-	for _, v := range subjectViews(snap.Subjects, nil, s.wishes()) {
+	for _, v := range subjectViews(snap.Subjects, nil, s.wishesFor(snap.Subjects)) {
 		standing[v.Username] = v.Standing
 	}
 	if st := standing["on_acct"]; st.WaitingOn != "operator" || !strings.Contains(st.Note, "outside Syndra") {
@@ -273,39 +267,6 @@ func TestLegacyBindingsGetTheirWishesOnceFromTheFirstCompleteRead(t *testing.T) 
 	}
 }
 
-// One reading of a binding's account: a binding that kept account_id alone (or whose uid is zero) is
-// bound, for the wishes as for every other "is this account bound".
-func TestOneMatcherSaysWhichAccountABindingNames(t *testing.T) {
-	s, _ := applyServer(t, `[]`)
-	raw, _ := json.Marshal(Binding{SubjectID: "sub-old", Username: "old", AccountID: accountID(300003)})
-	if err := s.store.db.Update(func(tx *bolt.Tx) error { return tx.Bucket(bucketBindings).Put([]byte("sub-old"), raw) }); err != nil {
-		t.Fatal(err)
-	}
-	if bound, _ := s.store.UIDBound(300003); !bound {
-		t.Error("UIDBound reads the legacy binding as bound")
-	}
-	if w, _ := s.store.Wishes(); len(w) != 1 || func() bool { _, ok := w[300003]; return !ok }() {
-		t.Errorf("Wishes reads it the same way, got %+v", w)
-	}
-	if u, _ := s.store.BoundUIDs(); u[300003] != "sub-old" {
-		t.Errorf("BoundUIDs reads it the same way, got %+v", u)
-	}
-	for _, v := range subjectViews([]Subject{{Username: "old", UID: 300003, Enabled: false}}, nil, mustWishes(t, s)) {
-		if strings.Contains(v.Standing.Note, "No one in Syndra") {
-			t.Errorf("a bound account must not read as unassigned: %+v", v.Standing)
-		}
-	}
-}
-
-func mustWishes(t *testing.T, s *server) map[int64]Wish {
-	t.Helper()
-	w, err := s.store.Wishes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return w
-}
-
 // The derivation runs from the first live read of the NAS a request makes, after it has answered; the
 // next read then carries the wish.
 func TestTheFirstLiveSubjectsReadDerivesTheWishes(t *testing.T) {
@@ -314,7 +275,7 @@ func TestTheFirstLiveSubjectsReadDerivesTheWishes(t *testing.T) {
 		t.Fatal(err)
 	}
 	getSubjects(t, s, true)
-	if w := mustWishes(t, s)[3001]; w.Enabled == nil || *w.Enabled {
+	if w := s.wishesFor([]Subject{{Username: "charlotte", UID: 3001}})[3001]; w.Enabled == nil || *w.Enabled {
 		t.Fatalf("an account left off gets an off wish from the first live read, got %+v", w)
 	}
 	if _, done, _ := s.store.GetSetting(settingWishesDerived); !done {

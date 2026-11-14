@@ -67,12 +67,12 @@ func collectStats(ctx context.Context, s *server, every time.Duration) {
 // collectStatsOnce is one run of the collector.
 func (s *server) collectStatsOnce() {
 	now := s.stats.clock()
-	bound, err := s.store.BoundUIDs()
+	snap, errAccounts := s.readSubjects()
+	bound, err := s.boundUIDs(snap.Subjects)
 	if err != nil {
 		log.Printf("[STATS] the bindings could not be read, nothing collected: %v", err)
 		return
 	}
-	snap, errAccounts := s.readSubjects()
 	shares, errShares := s.enabledShares()
 	failed := errors.Join(errAccounts, errShares)
 	s.collectSessions(now, snap, shares, bound, failed)

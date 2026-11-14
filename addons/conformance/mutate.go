@@ -302,6 +302,12 @@ func (k *kit) offStanding(c *check) {
 		if k.owner(s, false) != ours {
 			continue
 		}
+		// The off state and the standing are judged from this one document, never a state read
+		// before it: a standing is only wrong for an account that is off in the same read.
+		state, _ := s["state"].(map[string]any)
+		if !c.expect(state[k.m.account] == false, "the account was off a read ago and is %v in this one (state.%s)", state[k.m.account], k.m.account) {
+			return
+		}
 		st, _ := s["standing"].(map[string]any)
 		c.expect(st["usable"] == false && st["waiting_on"] == "none",
 			"the kit's account was asked off by an apply and is off, and its standing is %v, not usable: false, waiting_on: none", st)
@@ -733,6 +739,8 @@ func (k *kit) withdrawExisting(c, channel, standing *check) {
 	k.created.off = after[k.m.account] == false
 	if after[k.m.account] == false {
 		k.offStanding(standing)
+	} else {
+		standing.skip("the account was not off after the withdraw-only apply (see withdraw-only.existing)")
 	}
 	observed, _ := out["observed"].(map[string]any)
 	for _, name := range k.m.withRole("channel") {

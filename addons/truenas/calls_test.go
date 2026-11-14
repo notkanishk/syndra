@@ -292,7 +292,7 @@ func TestAStoreWrittenByContractOneOpensWhole(t *testing.T) {
 			!b.BoundAt.Equal(written) || (b.WantsSMB == nil) != (want.WantsSMB == nil) || (b.WantsSMB != nil && *b.WantsSMB != *want.WantsSMB) {
 			t.Errorf("binding %s: %+v found %t %v, want %+v", want.SubjectID, b, found, err, want)
 		}
-		if bound, err := s.store.UIDBound(want.UID); err != nil || !bound {
+		if bound, err := s.accountBound(&Subject{Username: want.Username, UID: want.UID}); err != nil || !bound {
 			t.Errorf("uid %d is not bound: %v", want.UID, err)
 		}
 	}

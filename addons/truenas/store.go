@@ -464,23 +464,6 @@ func (s *Store) GetBinding(subjectID string) (Binding, bool, error) {
 	return b, found, err
 }
 
-// UIDBound says whether any subject's binding holds this uid, under whatever
-// name it last recorded: BoundUsernames sees a name, and an account renamed
-// since its binding was written is still bound.
-func (s *Store) UIDBound(uid int64) (bool, error) {
-	bound := false
-	err := s.db.View(func(tx *bolt.Tx) error {
-		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
-			var b Binding
-			if json.Unmarshal(v, &b) == nil && b.uid() == uid {
-				bound = true
-			}
-			return nil
-		})
-	})
-	return bound, err
-}
-
 // Wish is what Syndra last asked of a bound account, kept on its binding: SMB wanted on (which a
 // new password waits on) and the account on or off. A standing built from a read of the NAS alone
 // cannot see either (Subject.needsNewPassword, standingOf).
@@ -489,18 +472,71 @@ type Wish struct {
 	Enabled *bool
 }
 
-// Wishes is every binding's Wish by uid. Presence is what "bound" means: an account absent from it
-// is one no subject is bound to.
-func (s *Store) Wishes() (map[int64]Wish, error) {
-	out := map[int64]Wish{}
+// Bindings is every binding, as stored, each with its uid read from account_id when that is all it
+// kept. Which NAS account one names is the server's rule, not this list's (resolveBinding).
+func (s *Store) Bindings() ([]Binding, error) {
+	var out []Binding
 	err := s.db.View(func(tx *bolt.Tx) error {
 		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
 			var b Binding
-			if json.Unmarshal(v, &b) == nil && b.uid() != 0 {
-				out[b.uid()] = Wish{SMB: b.WantsSMB != nil && *b.WantsSMB, Enabled: b.WantsEnabled}
+			if json.Unmarshal(v, &b) == nil {
+				b.UID = b.uid()
+				out = append(out, b)
 			}
 			return nil
 		})
+	})
+	return out, err
+}
+
+// wishOutcome is what DeriveWish did.
+type wishOutcome int
+
+const (
+	wishWritten wishOutcome = iota
+	wishGone                // the binding is no longer there (released, purged): nothing to write
+	wishSet                 // somebody has set the wish since: not overwritten
+	wishChanged             // the binding names another account or name since it was read
+)
+
+// DeriveWish sets a binding's unset wishes to enabled and smb, in one transaction that first checks
+// the binding is still what it was read as (same account, same name) and that each wish is still
+// unset. A binding released, purged, renamed or given a wish since is left exactly as it is. Called
+// while holding the subject's lock (the writers of a binding hold it), so it also serialises against
+// rememberWishes; the check here is what keeps a writer that does not hold it from being overwritten.
+func (s *Store) DeriveWish(was Binding, enabled, smb bool) (wishOutcome, error) {
+	out := wishGone
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(bucketBindings)
+		raw := bucket.Get([]byte(was.SubjectID))
+		if raw == nil {
+			return nil
+		}
+		var now Binding
+		if err := json.Unmarshal(raw, &now); err != nil {
+			return err
+		}
+		now.UID = now.uid()
+		if now.UID != was.UID || now.Username != was.Username {
+			out = wishChanged
+			return nil
+		}
+		if now.WantsEnabled != nil && now.WantsSMB != nil {
+			out = wishSet
+			return nil
+		}
+		if now.WantsEnabled == nil {
+			now.WantsEnabled = &enabled
+		}
+		if now.WantsSMB == nil {
+			now.WantsSMB = &smb
+		}
+		encoded, err := s.encodeBinding(now)
+		if err != nil {
+			return err
+		}
+		out = wishWritten
+		return bucket.Put([]byte(was.SubjectID), encoded)
 	})
 	return out, err
 }

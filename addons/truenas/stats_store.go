@@ -217,23 +217,3 @@ func nextDayKey(day string) string {
 	t, _ := time.Parse(time.DateOnly, day)
 	return t.AddDate(0, 0, 1).Format(time.DateOnly)
 }
-
-// BoundUIDs is every bound account's uid with its subject: how usage on the
-// NAS, recorded by account, finds its person. By uid, never by name: a name
-// can change out of band, a uid is the account.
-func (s *Store) BoundUIDs() (map[int64]string, error) {
-	out := map[int64]string{}
-	err := s.db.View(func(tx *bolt.Tx) error {
-		return tx.Bucket(bucketBindings).ForEach(func(k, v []byte) error {
-			var b Binding
-			if json.Unmarshal(v, &b) != nil {
-				return nil
-			}
-			if uid := b.uid(); uid != 0 {
-				out[uid] = string(k)
-			}
-			return nil
-		})
-	})
-	return out, err
-}

@@ -836,15 +836,16 @@ mirror holds no limits: absent in `state` is "not known".
   who is waited on (`waiting_on`, from the schema).
   - An account the `account` field holds off MUST be `usable: false`,
     `waiting_on: none`: nobody is waited on, because off is what Syndra
-    asked for (`standing` in `addons/reference/reference.go`). `none` is
-    for that case only. An account the app has off while Syndra wants it
-    on is a difference made outside Syndra: report it `waiting_on:
-    operator` with a note that says so and a next step that stays in
-    Syndra. An account no subject is bound to, and that is off, is not
-    Syndra's doing: say so in `note`, and never `waiting_on: target` or a
-    next step that asks the operator to change it in the app. Syndra shows
-    `note` and `next` as written, so it cannot know which of the three
-    this is. The TrueNAS add-on keeps what each apply asked
+    asked for (`standing` in `addons/reference/reference.go`). `none` also
+    covers an off account no subject is bound to: nothing in Syndra waits
+    on anyone for it, but it is not Syndra's doing, so say so in `note`
+    ("no one in Syndra is assigned to it") and in `next`, never as an
+    account Syndra holds off. An account the app has off while Syndra
+    wants it on is a difference made outside Syndra: report it
+    `waiting_on: operator` with a note that says so and a next step that
+    stays in Syndra, never `waiting_on: target` or a next step that asks
+    the operator to change it in the app. Syndra shows `note` and `next`
+    as written, so it cannot know which of the three this is. The TrueNAS add-on keeps what each apply asked
     (`Binding.WantsEnabled`) to tell them apart (`standingOf` in
     `addons/truenas/server.go`).
   - A difference the app imposes and Syndra cannot change (an invitation not
