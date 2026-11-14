@@ -136,9 +136,14 @@ func EndAfterDays(t time.Time, n int) time.Time {
 	return end
 }
 
-// EndAfterMonths is the last second of the day n calendar months after t's own,
-// as time.AddDate counts them (31 Aug + 6 months is 3 Mar): a review interval.
+// EndAfterMonths is the last second of the day n calendar months after t's own.
+// A day that does not exist in the target month is clamped to that month's last
+// day, as Postgres (+ interval 'N months') and most date libraries do: 31 Aug +
+// 6 months is 28 Feb (29 in a leap year), not Go's AddDate overflow into March.
 func EndAfterMonths(t time.Time, n int) time.Time {
-	end, _ := EndOfDay(AddDate(Day(t), 0, n, 0))
+	y, m, d := t.In(Loc).Date()
+	first := time.Date(y, m+time.Month(n), 1, 0, 0, 0, 0, time.UTC) // normalises the year
+	last := first.AddDate(0, 1, -1).Day()
+	end, _ := EndOfDay(time.Date(first.Year(), first.Month(), min(d, last), 0, 0, 0, 0, time.UTC).Format(time.DateOnly))
 	return end
 }

@@ -167,11 +167,31 @@ func TestEndAfterDaysEndsTheDayEvenWhenTheNextMidnightIsSkipped(t *testing.T) {
 	}
 }
 
-func TestEndAfterMonthsIsTheEndOfThatCalendarDay(t *testing.T) {
+// A month count clamps to the target month's last day (Postgres' interval
+// arithmetic), never overflows into the next month as Go's AddDate does.
+func TestEndAfterMonthsClampsToTheLastDayOfTheTargetMonth(t *testing.T) {
 	old := Loc
 	t.Cleanup(func() { Loc = old })
-	Loc = zone(t, "Asia/Kolkata")
-	if got := EndAfterMonths(time.Date(2026, 11, 14, 3, 0, 0, 0, Loc), 6).Format(time.RFC3339); got != "2027-05-14T23:59:59+05:30" {
-		t.Errorf("got %s", got)
+	for _, tc := range []struct {
+		zone, from string
+		n          int
+		want       string
+	}{
+		{"Asia/Kolkata", "2026-08-31", 6, "2027-02-28T23:59:59+05:30"},
+		{"Asia/Kolkata", "2027-08-31", 6, "2028-02-29T23:59:59+05:30"}, // leap year
+		{"Asia/Kolkata", "2028-02-29", 12, "2029-02-28T23:59:59+05:30"},
+		{"Asia/Kolkata", "2026-03-15", 6, "2026-09-15T23:59:59+05:30"},
+		{"Asia/Kolkata", "2026-11-14", 6, "2027-05-14T23:59:59+05:30"}, // across a year
+		{"America/Santiago", "2026-03-31", 6, "2026-09-30T23:59:59-03:00"},
+		{"America/Santiago", "2026-03-06", 6, "2026-09-06T23:59:59-03:00"}, // 00:00 of 6 Sep is skipped
+	} {
+		Loc = zone(t, tc.zone)
+		from, err := time.ParseInLocation(time.DateOnly, tc.from, Loc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := EndAfterMonths(from.Add(10*time.Hour), tc.n).Format(time.RFC3339); got != tc.want {
+			t.Errorf("%s %s + %d months: %s, want %s", tc.zone, tc.from, tc.n, got, tc.want)
+		}
 	}
 }
