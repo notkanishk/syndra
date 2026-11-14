@@ -806,7 +806,7 @@ The dialog is one dialog: the form, the preview, the camera and the result are i
 
 An add-on that reports statistics (feature `stats`) gets the same four surfaces with no code of its own: the member's card **What I have used**, the same card on a person's page, the target overview's totals, and Insights, Usage. `components/usage/copy.ts` holds every sentence; `usageCopyGuide.test.ts` fails when this table and that file disagree, and the lint guard refuses an inline sentence in `components/usage/*.tsx` (as in sections 12 and 14). Syndra's own sentences only: what the add-on wrote (a metric's label, a breakdown's name and value, a gap's reason) is escaped, capped (label 60, value 40, reason 120 characters) and, inside a sentence, put in quotes; this table never holds it. `{value}` is a number in its unit's words ("18.4 GiB", "3 items"), `{day}` a makerspace day ("9 Nov", with the year when it is not this year's; never "UTC"), `{range}` days ("8–9 Nov"), `{where}` a breakdown (`Area: “ring”`). Every card ends on a next step or "Nothing for you to do."
 
-**A day nobody could count is not a zero.** It is hatched in the chart, the line breaks there, its hover says "couldn't count", and the card footnotes it with the add-on's reason. A counter's day with nothing in an observed window is a real 0 and is drawn as one; a day after the last one counted (`counted_through`) is not yet counted and is left blank, never 0. Each window is named from the day the backend read it from (`window_30d_from`, `window_12m_from`): the window's own first day, or the first day Syndra keeps for a person (`kept_from`, the operator's retention of N days counting today, so today − (N − 1)) when that is later. A window retention starts later is "in the last {n} days", n counted from its start to today, today included; a 12-month window it does not cut is "in the last 12 months"; when both start on one day the year line is not said twice. Only the drawn days before the 30-day start are hatched, with Syndra's own reason, and "Kept for only {n} days" is said only when such a day is drawn. A line joins only adjacent days that have a value: a gauge is never interpolated, and a value standing alone is a dot. **Nothing ranks.** No sentence here, and no word in the renderers, says top, most, worst, best, highest, lowest, leader or rank, of people or of systems; Insights shows how many people and a spread, never who (`usageCopyGuide.test.ts` reads the files for those words). A series is never added to another.
+**A day nobody could count is not a zero.** It is hatched in the chart, the line breaks there, its hover says "couldn't count", and the card footnotes it with the add-on's reason. A counter's day with nothing in an observed window is a real 0 and is drawn as one; a day after the last one counted (`counted_through`) is not yet counted and is left blank, never 0. Each window is named from the day the backend read it from (`window_30d_from`, `window_12m_from`): the window's own first day, or the first day Syndra keeps for a person (`kept_from`, the operator's retention of N days counting today, so today − (N − 1)) when that is later. A window retention starts later is "in the last {n} days", n counted from its start to today, today included; a 12-month window it does not cut is "in the last 12 months"; when both start on one day the year line is not said twice. Only the drawn days before the 30-day start are hatched, with Syndra's own reason, and "Kept for only {n} days" is said only when such a day is drawn. A line joins only adjacent days that have a value: a gauge is never interpolated, and a value standing alone is a dot. **Ordered, never ranked** (the owner's ruling of 14 Nov 2026, superseding "Insights shows how many people and a spread, never who"). For operators, Insights shows each breakdown's spread and then **who**: every person with a value in the last 12 months, by the directory's name (never the id), linking to their page, in a table ordered by the last 30 days, largest first, whose headings re-sort (Person, Last 30 days, Last 12 months; a number's first press is largest first, as Operations' time is newest first). The spread has no floor: one person is still a spread. No sentence here, and no word in the renderers, says top, most, worst, best, highest, lowest, leader or rank, of people or of systems: the table is ordered, never labelled by place (`usageCopyGuide.test.ts` reads the files for those words). A member never sees another person's name, and their own hides nothing of theirs: on their own card a line whose breakdown the add-on wrote with someone else's name in it is left out and counted, and a gap that names someone else reads "The add-on's reason named a person." (the backend's sentence, quoted like any reason), on its own line. A series is never added to another.
 
 | When | Says |
 |---|---|
@@ -816,6 +816,8 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | The same, over the year | {value} in the last 12 months |
 | The same, when retention starts either window later (n: its start to today, today included) | {value} in the last {n} days |
 | A counted metric with no series | Nothing counted in the last 30 days |
+| A member's own card: a line left out because the add-on named a person in it, one | 1 more line is not shown here, as the add-on named a person in it. |
+| The same, several | {n} more lines are not shown here, as the add-on named a person in them. |
 | A gauge's latest value | {value} on {day} |
 | A gauge with no value in the window | No value in the last 30 days |
 | A meter's ceiling (the limit Syndra observed) | of {limit} |
@@ -859,19 +861,24 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | a value for an account Syndra does not manage, several | {n} values for accounts Syndra does not manage |
 | a value with a breakdown the add-on did not declare, one | {n} value with a breakdown the add-on did not declare |
 | a value with a breakdown the add-on did not declare, several | {n} values with a breakdown the add-on did not declare |
-| a value broken down by a person (never says who), one | {n} value broken down by a person |
-| a value broken down by a person, several | {n} values broken down by a person |
 | a value older than Syndra keeps, one | {n} value older than Syndra keeps |
 | a value older than Syndra keeps, several | {n} values older than Syndra keeps |
 | a value from more series than Syndra keeps, one | {n} value from more series than Syndra keeps |
 | a value from more series than Syndra keeps, several | {n} values from more series than Syndra keeps |
 | Insights: tab | Usage |
-| Insights: lede | How much of each thing is used across the makerspace, as spreads over the people who used it. No names are shown. |
+| Insights: lede | How much of each thing is used across the makerspace: how it spreads over the people who used it, and what each of them used. Only operators see this. |
 | Insights: the window | The last 30 days, from {day} |
 | Insights: how many people, one | 1 person |
 | Insights: how many people, several | {n} people |
 | Insights: a system that keeps fewer days than the window | Over the last {n} days only, as that is how long this system keeps per-person numbers. |
-| Insights: fewer than 5 people (no spread, no bar) | Too few people to show a spread without pointing at one of them. |
+| Insights: a system that keeps fewer days than the 12 months | The 12-month numbers are over the last {n} days only, as that is how long this system keeps per-person numbers. |
+| Insights: a breakdown with people from the 12 months only (no spread, no bar) | Nobody used it in the last 30 days. |
+| Insights: each breakdown's people, the table's name for a screen reader | {what}: each person's numbers |
+| Insights: the people table's headings | Person |
+| The same | Last 30 days |
+| The same | Last 12 months |
+| Insights: a gauge with no value in the last 30 days, in its cell | No value |
+| Insights: what the id beside a person the directory could not name is (its copy control's name; the label is "Unknown account", never the id) | account id |
 | Insights: the spread | Half are at {p50} or under; nine in ten are at {p90} or under. |
 | Insights: nothing reports | No system reports per-person statistics yet. Nothing for you to do. |
 | Insights: its step | Nothing for you to do. One person's numbers are on their page in People. |

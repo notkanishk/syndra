@@ -144,6 +144,25 @@ describe("What I have used: not read yet", () => {
   });
 });
 
+describe("What I have used: lines left out because they name a person", () => {
+  it("says how many beside the lines it shows", () => {
+    render(<UsageCard title="t" windows={windows()} metrics={[sessions({ left_out: 2 })]} />);
+    expect(screen.getByText(copy.leftOut(2))).toBeInTheDocument();
+    expect(copy.leftOut(1)).toBe("1 more line is not shown here, as the add-on named a person in it.");
+  });
+
+  it("never says nothing was counted when every line was left out: that would not be true", () => {
+    render(<UsageCard title="t" windows={windows()} metrics={[sessions({ series: [], left_out: 1 })]} />);
+    expect(screen.getByText(copy.leftOut(1))).toBeInTheDocument();
+    expect(screen.queryByText(copy.NOTHING_COUNTED)).toBeNull();
+  });
+
+  it("says nothing when nothing was left out", () => {
+    render(<UsageCard title="t" windows={windows()} metrics={[sessions()]} />);
+    expect(screen.queryByText(/not shown here/)).toBeNull();
+  });
+});
+
 describe("a person's view of a system", () => {
   it("titles the member's card as theirs and the operator's by the person's name", () => {
     const usage = { reported: true as const, metrics: [sessions()], ...windows() };
@@ -383,7 +402,7 @@ describe("what the last count did not keep, in words", () => {
   });
 
   it("has words for every reason the backend sends, none of them a person's name", () => {
-    const sent = ["not_a_day", "bad_value", "not_per_subject", "unbound_subject", "undeclared_dimension", "person_in_dimension", "past_retention", "series"];
+    const sent = ["not_a_day", "bad_value", "not_per_subject", "unbound_subject", "undeclared_dimension", "past_retention", "series"];
     for (const reason of sent) {
       expect(copy.DROPPED[reason], reason).toBeTypeOf("function");
       expect(copy.DROPPED[reason](2)).toMatch(/^2 /);
@@ -392,7 +411,7 @@ describe("what the last count did not keep, in words", () => {
 
   it("joins several reasons into one sentence that ends in 'and'", async () => {
     const t = targetStats();
-    if (t.usage.reported) t.usage.metrics[0].collected = { at: null, dropped: { not_a_day: 1, past_retention: 4, series: 2, person_in_dimension: 0, mystery: 9 } };
+    if (t.usage.reported) t.usage.metrics[0].collected = { at: null, dropped: { not_a_day: 1, past_retention: 4, series: 2, undeclared_dimension: 0, mystery: 9 } };
     const stub = makeProxyFetch();
     stub.register("GET", "/api/proxy/targets/gym/stats", () => t);
     vi.stubGlobal("fetch", stub.fetchImpl);

@@ -130,7 +130,7 @@ export function MetricBlock({ metric, limits, windows }: { metric: StatsMetric; 
         <CardRow>
           <span className="text-[14px] text-muted">{copy.NOT_COUNTED}</span>
         </CardRow>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && !metric.left_out ? (
         <CardRow>
           <span className="text-[14px] text-muted">{metric.instrument === "counter" ? copy.NOTHING_COUNTED : copy.NO_RECENT_VALUE}</span>
         </CardRow>
@@ -142,6 +142,12 @@ export function MetricBlock({ metric, limits, windows }: { metric: StatsMetric; 
           <span className="text-[13px] text-faint">{copy.noMoreLines(metric.series.length - rows.length)}</span>
         </CardRow>
       )}
+      {/* A member's own card: what the backend left out because it names a person, said so the rest never reads as all of it. */}
+      {metric.watermark !== null && metric.left_out ? (
+        <CardRow>
+          <span className="text-[13px] text-faint">{copy.leftOut(metric.left_out)}</span>
+        </CardRow>
+      ) : null}
       <Gaps metric={metric} kept={keptShort ? daysSince(kept_from, windows.today) : undefined} />
       <Collected metric={metric} />
     </section>

@@ -161,8 +161,8 @@ function OperatorQueue({ userId }: { userId?: string }) {
   const resolver = useNameResolver();
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
-  // The read comes newest first, so "When" ascending is that order; Who is A to Z.
-  const [sort, setSort, view] = useSort<RequestSort>("when", { list: "requests", keys: ["who", "when"] });
+  // When is newest first (descending, and said so); Who is A to Z.
+  const [sort, setSort, view] = useSort<RequestSort>("when", { list: "requests", keys: ["who", "when"] }, ["when"]);
 
   // What the read holds, narrowed by the search. A decided row is in it until
   // the refetch lands, and then it is not: the open list is a list of requests
@@ -171,7 +171,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
   const rows = useMemo(() => {
     const read = orderBy(requests.data ?? [], view.sort, {
       who: (entry) => resolver.resolveUser(entry.requester_id).value?.display_name ?? "",
-      when: (entry) => -new Date(entry.created_at).getTime(),
+      when: (entry) => new Date(entry.created_at).getTime(),
     });
     if (!needle) return read;
     return read.filter((entry) => {

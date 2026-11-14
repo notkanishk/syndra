@@ -10,8 +10,9 @@ import type { StatsUnit } from "@/lib/queries/useStats";
  * words. Syndra's own sentences only: what the add-on wrote (a metric's label,
  * a dimension, a gap's reason) is quoted and capped in the renderer, never here.
  *
- * Every card ends on a next step or "Nothing for you to do.". Nothing ranks
- * people or systems (a guard reads this file for the words that would).
+ * Every card ends on a next step or "Nothing for you to do.". Insights names
+ * the people for operators, in an order and never with a word that ranks them
+ * (a guard reads this file for the words that would).
  */
 
 export { NO_LIMIT, noMoreLines, ofLimit, NOTHING_TO_DO };
@@ -26,6 +27,9 @@ export const inDays = (value: string) => `${value} in the last 30 days`;
 export const inLastDays = (value: string, n: number) => `${value} in the last ${n === 1 ? "day" : `${n} days`}`;
 export const inMonths = (value: string) => `${value} in the last 12 months`;
 export const NOTHING_COUNTED = "Nothing counted in the last 30 days";
+/** A member's own card: series the backend left out because the add-on named a person in them (`left_out`). */
+export const leftOut = (n: number) =>
+  n === 1 ? "1 more line is not shown here, as the add-on named a person in it." : `${n} more lines are not shown here, as the add-on named a person in them.`;
 
 /** A gauge: its latest value and the day it was taken. */
 export const latestOn = (value: string, day: string) => `${value} on ${day}`;
@@ -76,7 +80,6 @@ export const DROPPED: Record<string, (n: number) => string> = {
   not_per_subject: (n) => `${n} per-person ${n === 1 ? "value" : "values"} for a number that is not per person`,
   unbound_subject: (n) => `${n} ${n === 1 ? "value" : "values"} for accounts Syndra does not manage`,
   undeclared_dimension: (n) => `${n} ${n === 1 ? "value" : "values"} with a breakdown the add-on did not declare`,
-  person_in_dimension: (n) => `${n} ${n === 1 ? "value" : "values"} broken down by a person`,
   past_retention: (n) => `${n} ${n === 1 ? "value" : "values"} older than Syndra keeps`,
   series: (n) => `${n} ${n === 1 ? "value" : "values"} from more series than Syndra keeps`,
 };
@@ -84,12 +87,23 @@ export const droppedLine = (parts: string[]) => `The last count did not keep ${f
 
 /** Insights (operators, Advanced view). */
 export const INSIGHTS_TAB = "Usage";
-export const INSIGHTS_LEDE = "How much of each thing is used across the makerspace, as spreads over the people who used it. No names are shown.";
+export const INSIGHTS_LEDE = "How much of each thing is used across the makerspace: how it spreads over the people who used it, and what each of them used. Only operators see this.";
 export const windowFrom = (day: string) => `The last 30 days, from ${day}`;
 export const members = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
 /** A system that keeps per-person numbers for fewer days than the window: the spread is over those days only. */
 export const spreadDays = (n: number) => `Over the last ${n === 1 ? "day" : `${n} days`} only, as that is how long this system keeps per-person numbers.`;
-export const FEW_PEOPLE = "Too few people to show a spread without pointing at one of them.";
+export const NOBODY_RECENTLY = "Nobody used it in the last 30 days.";
+/** A system that keeps per-person numbers for fewer days than the 12 months: that column is over those days only. */
+export const yearDays = (n: number) => `The 12-month numbers are over the last ${n === 1 ? "day" : `${n} days`} only, as that is how long this system keeps per-person numbers.`;
+/** Each breakdown's people: a table, ordered by the last 30 days, largest first, with headings that sort. */
+export const peopleLabel = (what: string) => `${what}: each person's numbers`;
+export const PERSON_COLUMN = "Person";
+export const LAST_30_COLUMN = "Last 30 days";
+export const LAST_12_COLUMN = "Last 12 months";
+/** What the id beside a name the directory could not give is, for its copy control. */
+export const ACCOUNT_ID = "account id";
+/** A gauge with no sample in the 30 days, in its cell. */
+export const NO_VALUE = "No value";
 export const spread = (p50: string, p90: string) => `Half are at ${p50} or under; nine in ten are at ${p90} or under.`;
 export const INSIGHTS_EMPTY = `No system reports per-person statistics yet. ${NOTHING_TO_DO}`;
 export const INSIGHTS_NEXT = `${NOTHING_TO_DO} One person's numbers are on their page in People.`;

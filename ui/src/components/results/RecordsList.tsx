@@ -17,7 +17,7 @@ type RecordSort = "record" | "since" | "due";
  * for the column in force sits last whichever way the column runs: `orderBy`
  * multiplies by the direction, so the stand-in flips with it.
  */
-const when = (iso: string | undefined, dir: 1 | -1) => (iso ? Date.parse(iso) : dir * Number.MAX_SAFE_INTEGER);
+const when = (iso: string | undefined) => (iso ? Date.parse(iso) : null);
 
 /**
  * What a person holds, one row each: its label, its category, the two dates it
@@ -34,11 +34,10 @@ export function RecordsList({ result, name, reader }: { result: RecordsResult; n
   const again = useReadAgainPress();
   const since = useReadAgainSince();
   const [sort, setSort, view] = useSort<RecordSort>("due");
-  const dir = view.sort.dir;
-  const by: Record<RecordSort, (r: Held) => string | number> = {
+  const by: Record<RecordSort, (r: Held) => string | number | null> = {
     record: (r) => r.label,
-    since: (r) => when(r.since, dir),
-    due: (r) => when(r.due, dir),
+    since: (r) => when(r.since),
+    due: (r) => when(r.due),
   };
   // Name first, then the stable sort: equal dates fall back to the name order.
   const rows = orderBy(sortByName(result.records, (r) => r.label), view.sort, by);

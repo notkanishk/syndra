@@ -10,7 +10,9 @@ import { compareNames } from "@/lib/sort";
  * Sorting by a column heading (RULES: sort lives on the headings).
  *
  * `useSort` holds which heading is in force and which way; pressing the one in
- * force reverses it, pressing another starts it ascending. `SortHead` is the
+ * force reverses it, pressing another starts it in its first order: ascending,
+ * or descending for a heading listed in `descending` (a time newest first, an
+ * amount largest first), so the arrow and `aria-sort` say what the rows do. `SortHead` is the
  * heading itself, carrying the arrow only while it is the one in force. And
  * where a sort gathers equal values, `runStarts` says which rows begin a run
  * and how big the run is, and `RunLabel` is the quiet counted label above it.
@@ -35,22 +37,32 @@ const isSortOf =
     return typeof v === "object" && v !== null && keys.includes(v.key) && (v.dir === 1 || v.dir === -1);
   };
 
-export function useSort<K extends string>(initial: K, remember?: RememberSort<K>) {
+/**
+ * Where a list keeps its sort. A list with a heading that starts descending
+ * keeps it apart ("sort.v2"): before those headings descended, the same lists
+ * stored a newest-first time as ascending, and that value read now would open
+ * oldest first. Read once and dropped, it costs one press.
+ */
+const sortSlot = (descending: readonly string[]) => (descending.length > 0 ? "sort.v2" : "sort");
+
+export function useSort<K extends string>(initial: K, remember?: RememberSort<K>, descending: readonly K[] = []) {
+  const first = (key: K): 1 | -1 => (descending.includes(key) ? -1 : 1);
+  const slot = sortSlot(descending);
   const [sort, setSort] = useState<Sort<K>>(() => {
     const kept =
-      remember && remember.when !== false ? recallView(remember.list, "sort", isSortOf(remember.keys)) : undefined;
-    return kept ?? { key: initial, dir: 1 };
+      remember && remember.when !== false ? recallView(remember.list, slot, isSortOf(remember.keys)) : undefined;
+    return kept ?? { key: initial, dir: first(initial) };
   });
   // Only the reader's own press is a preference; the starting order is not.
   const pressed = useRef(false);
   const flip = (key: K) => {
     pressed.current = true;
-    setSort((cur) => ({ key, dir: cur.key === key ? (-cur.dir as 1 | -1) : 1 }));
+    setSort((cur) => ({ key, dir: cur.key === key ? (-cur.dir as 1 | -1) : first(key) }));
   };
   const list = remember?.list;
   useEffect(() => {
-    if (list && pressed.current) keepView(list, "sort", sort);
-  }, [list, sort]);
+    if (list && pressed.current) keepView(list, slot, sort);
+  }, [list, slot, sort]);
 
   // A re-sort (A-05 §2.10): the heading turns at once, but the list fades out,
   // re-orders while nobody can see it, and fades back in. Rows never travel.
@@ -88,18 +100,19 @@ export function useSort<K extends string>(initial: K, remember?: RememberSort<K>
 /**
  * The rows in the order a sort asks for, for a list that sorts as a whole.
  * Text compares as a person reads it (case and accents aside, "Lab 2" before
- * "Lab 10"); ties keep the order the list already had, so a re-sort never
- * shuffles equals.
+ * "Lab 10"); a row with no value (null) sits last whichever way; ties keep
+ * the order the list already had, so a re-sort never shuffles equals.
  */
 export function orderBy<T, K extends string>(
   rows: readonly T[],
   sort: Sort<K>,
-  by: Record<K, (row: T) => string | number>,
+  by: Record<K, (row: T) => string | number | null>,
 ): T[] {
   const get = by[sort.key];
   return [...rows].sort((a, b) => {
     const x = get(a);
     const y = get(b);
+    if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
     const order =
       typeof x === "number" && typeof y === "number"
         ? x - y

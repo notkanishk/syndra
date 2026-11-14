@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -68,18 +69,24 @@ func SaveStatsDescriptors(ctx context.Context, target string, descriptors map[st
 }
 
 // StatsPoint is one point as stored: Subject "" is the total, Day the bucket.
+// NamedSubjects is who the collector found a dimension value names, as
+// subject ids (migration 000094): shown to admins, left out of the view of a
+// member it names anyone else to.
 type StatsPoint struct {
-	Subject string
-	Dims    map[string]string
-	Day     string
-	Value   float64
+	Subject       string
+	Dims          map[string]string
+	Day           string
+	Value         float64
+	NamedSubjects []string
 }
 
 // StatsGap is one unobserved window [Start, End) of a metric's series.
+// NamedSubjects: who a dimension value or the reason names.
 type StatsGap struct {
-	Dims       map[string]string
-	Start, End string
-	Reason     string
+	Dims          map[string]string
+	Start, End    string
+	Reason        string
+	NamedSubjects []string
 }
 
 // StatsTx is one metric's collection, inside one transaction (design §9.6):
@@ -139,23 +146,28 @@ func (c *StatsTx) UpsertPoints(ctx context.Context, today string, observedAt tim
 	if len(points) == 0 {
 		return 0, nil
 	}
-	subjects, dims, days, values := make([]string, len(points)), make([]string, len(points)), make([]string, len(points)), make([]float64, len(points))
+	subjects, dims, days, values, named := make([]string, len(points)), make([]string, len(points)), make([]string, len(points)), make([]float64, len(points)), make([]string, len(points))
 	for i, p := range points {
 		raw, err := json.Marshal(nonNilDims(p.Dims))
 		if err != nil {
 			return 0, err
 		}
-		subjects[i], dims[i], days[i], values[i] = p.Subject, string(raw), p.Day, p.Value
+		// A list per row travels as JSON: unnest flattens a text[][].
+		who, err := json.Marshal(nonNil(p.NamedSubjects))
+		if err != nil {
+			return 0, err
+		}
+		subjects[i], dims[i], days[i], values[i], named[i] = p.Subject, string(raw), p.Day, p.Value, string(who)
 	}
 	tag, err := c.tx.Exec(ctx, `
-		INSERT INTO addon_metric_points (target_id, metric, subject, dims, bucket_start, value, observed_at)
-		SELECT $2, $3, x.s, x.d::jsonb, x.b, x.v, $8
-		  FROM unnest($4::text[], $5::text[], $6::date[], $7::numeric[]) AS x(s, d, b, v)
+		INSERT INTO addon_metric_points (target_id, metric, subject, dims, bucket_start, value, observed_at, named_subjects)
+		SELECT $2, $3, x.s, x.d::jsonb, x.b, x.v, $8, ARRAY(SELECT jsonb_array_elements_text(x.n::jsonb))
+		  FROM unnest($4::text[], $5::text[], $6::date[], $7::numeric[], $9::text[]) AS x(s, d, b, v, n)
 		  JOIN targets t ON t.target = $2
 		 WHERE x.b >= `+statsKeptFrom("x.s")+`
 		ON CONFLICT (target_id, metric, subject, dims, bucket_start)
-		DO UPDATE SET value = EXCLUDED.value, observed_at = EXCLUDED.observed_at`,
-		today, c.target, c.metric, subjects, dims, days, values, observedAt)
+		DO UPDATE SET value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, named_subjects = EXCLUDED.named_subjects`,
+		today, c.target, c.metric, subjects, dims, days, values, observedAt, named)
 	if err != nil {
 		return 0, fmt.Errorf("store points: %w", err)
 	}
@@ -172,12 +184,12 @@ func (c *StatsTx) UpsertGaps(ctx context.Context, today string, gaps []StatsGap)
 			return 0, err
 		}
 		tag, err := c.tx.Exec(ctx, `
-			INSERT INTO addon_metric_gaps (target_id, metric, dims, gap_start, gap_end, reason)
-			SELECT $2, $3, $4::jsonb, $5::date, $6::date, $7
+			INSERT INTO addon_metric_gaps (target_id, metric, dims, gap_start, gap_end, reason, named_subjects)
+			SELECT $2, $3, $4::jsonb, $5::date, $6::date, $7, $8
 			 WHERE $6::date > `+statsTotalKeptFrom+`
 			ON CONFLICT (target_id, metric, dims, gap_start)
-			DO UPDATE SET gap_end = EXCLUDED.gap_end, reason = EXCLUDED.reason`,
-			today, c.target, c.metric, string(raw), g.Start, g.End, g.Reason)
+			DO UPDATE SET gap_end = EXCLUDED.gap_end, reason = EXCLUDED.reason, named_subjects = EXCLUDED.named_subjects`,
+			today, c.target, c.metric, string(raw), g.Start, g.End, g.Reason, nonNil(g.NamedSubjects))
 		if err != nil {
 			return 0, fmt.Errorf("store gap: %w", err)
 		}
@@ -203,6 +215,14 @@ func (c *StatsTx) Finish(ctx context.Context, watermark, at time.Time, unbound i
 		return fmt.Errorf("write watermark: %w", err)
 	}
 	return nil
+}
+
+// nonNil is a list never NULL: the column is NOT NULL, and nobody named is {}.
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 func nonNilDims(d map[string]string) map[string]string {
@@ -323,18 +343,20 @@ func StatsMetrics(ctx context.Context, target string) ([]StatsMetric, error) {
 }
 
 // StatsValue is one series' value for a day (YYYY-MM-DD) or, summed, a
-// month (YYYY-MM).
+// month (YYYY-MM). NamedSubjects: whom the point's dimension values, or any
+// point's of the month, were found at collection to name, sorted, once each.
 type StatsValue struct {
-	Metric string
-	Dims   map[string]string
-	When   string
-	Value  float64
+	Metric        string
+	Dims          map[string]string
+	When          string
+	Value         float64
+	NamedSubjects []string
 }
 
 // StatsDays is one subject's points ("" the totals) on a target from a day on.
 func StatsDays(ctx context.Context, target, subject, from string) ([]StatsValue, error) {
 	return statsValues(ctx, `
-		SELECT metric, dims, to_char(bucket_start, 'YYYY-MM-DD'), value
+		SELECT metric, dims, to_char(bucket_start, 'YYYY-MM-DD'), value, jsonb_build_array(named_subjects)
 		  FROM addon_metric_points
 		 WHERE bucket_start >= $1::date AND target_id = $2 AND subject = $3
 		 ORDER BY metric, bucket_start`, from, target, subject)
@@ -344,7 +366,7 @@ func StatsDays(ctx context.Context, target, subject, from string) ([]StatsValue,
 // a temporal sum, meaningful for a counter alone (the caller's to choose).
 func StatsMonths(ctx context.Context, target, subject, from string) ([]StatsValue, error) {
 	return statsValues(ctx, `
-		SELECT metric, dims, to_char(bucket_start, 'YYYY-MM') AS month, SUM(value)
+		SELECT metric, dims, to_char(bucket_start, 'YYYY-MM') AS month, SUM(value), jsonb_agg(named_subjects)
 		  FROM addon_metric_points
 		 WHERE bucket_start >= $1::date AND target_id = $2 AND subject = $3
 		 GROUP BY metric, dims, month
@@ -360,9 +382,14 @@ func statsValues(ctx context.Context, q string, args ...any) ([]StatsValue, erro
 	var out []StatsValue
 	for rows.Next() {
 		var v StatsValue
-		if err := rows.Scan(&v.Metric, &v.Dims, &v.When, &v.Value); err != nil {
+		// Each read gives its rows' lists as one JSON list of lists (a
+		// month's are its days'; jsonb, as array_agg cannot stack lists of
+		// different lengths): one set here.
+		var named [][]string
+		if err := rows.Scan(&v.Metric, &v.Dims, &v.When, &v.Value, &named); err != nil {
 			return nil, err
 		}
+		v.NamedSubjects = slices.Compact(slices.Sorted(slices.Values(slices.Concat(named...))))
 		out = append(out, v)
 	}
 	return out, rows.Err()
@@ -377,7 +404,7 @@ type StatsGapRow struct {
 // StatsGaps is every gap on a target that ends after a day.
 func StatsGaps(ctx context.Context, target, after string) ([]StatsGapRow, error) {
 	rows, err := querier(ctx).Query(ctx, `
-		SELECT metric, dims, to_char(gap_start, 'YYYY-MM-DD'), to_char(gap_end, 'YYYY-MM-DD'), reason
+		SELECT metric, dims, to_char(gap_start, 'YYYY-MM-DD'), to_char(gap_end, 'YYYY-MM-DD'), reason, named_subjects
 		  FROM addon_metric_gaps
 		 WHERE gap_end > $1::date AND target_id = $2
 		 ORDER BY metric, gap_start`, after, target)
@@ -388,7 +415,7 @@ func StatsGaps(ctx context.Context, target, after string) ([]StatsGapRow, error)
 	var out []StatsGapRow
 	for rows.Next() {
 		var g StatsGapRow
-		if err := rows.Scan(&g.Metric, &g.Dims, &g.Start, &g.End, &g.Reason); err != nil {
+		if err := rows.Scan(&g.Metric, &g.Dims, &g.Start, &g.End, &g.Reason, &g.NamedSubjects); err != nil {
 			return nil, err
 		}
 		out = append(out, g)
@@ -396,50 +423,87 @@ func StatsGaps(ctx context.Context, target, after string) ([]StatsGapRow, error)
 	return out, rows.Err()
 }
 
-// StatsDistribution is how one per-person series spreads over members from a
-// day on: each member's sum of a counter's days, or a gauge's latest value,
-// counted and its median and 90th percentile. Never which member. From is the
-// day the spread starts: the window's, or its target's first kept day when
-// retention is shorter.
+// StatsPersonValue is one person's value of a per-person series in each
+// window: a counter's sum of their days, a gauge's latest value. Last30d is
+// nil when they have no point in the 30-day window; Last12m never is, as a
+// person is listed for having a point in the 12-month one.
+type StatsPersonValue struct {
+	Subject string
+	Last30d *float64
+	Last12m float64
+}
+
+// StatsDistribution is one per-person series (an admin's read, the owner's
+// ruling of 14 Nov 2026): how it spreads over the members with a value in the
+// 30-day window, counted with its median and 90th percentile, and every person
+// with a value in the 12-month window, with each window's value. From and
+// From12m are the days each window starts: the window's own, or its target's
+// first kept day when retention is shorter.
 type StatsDistribution struct {
 	Target, Metric string
 	Dims           map[string]string
-	From           string
+	From, From12m  string
 	Members        int
 	P50, P90       float64
+	People         []StatsPersonValue
 }
 
-// StatsDistributions is every per-person series' distribution, every target,
-// over the days from `from` that its target still keeps on `today` (the
-// prune's own line, so a day it has yet to delete is never counted).
-func StatsDistributions(ctx context.Context, today, from string) ([]StatsDistribution, error) {
-	start := `GREATEST($2::date, ` + statsSubjectKeptFrom + `)`
+// StatsDistributions is every per-person series, every target, over the days
+// from `from30` and from `from12m` that its target still keeps on `today` (the
+// prune's own line, so a day it has yet to delete is never counted). One query
+// is the one definition of "a person's value": the spread is over the same
+// per-person values the list names.
+func StatsDistributions(ctx context.Context, today, from30, from12m string) ([]StatsDistribution, error) {
+	start30 := `GREATEST($2::date, ` + statsSubjectKeptFrom + `)`
+	start12 := `GREATEST($3::date, ` + statsSubjectKeptFrom + `)`
+	// A person's value, over the points `since` keeps: a counter's sum, a gauge's latest.
+	value := func(since string) string {
+		in := ` FILTER (WHERE p.bucket_start >= ` + since + `)`
+		return `CASE WHEN m.descriptor->>'instrument' = 'counter' THEN SUM(p.value)` + in + `
+			            ELSE (array_agg(p.value ORDER BY p.bucket_start DESC)` + in + `)[1] END`
+	}
 	rows, err := querier(ctx).Query(ctx, `
 		WITH per AS (
-			SELECT p.target_id, p.metric, p.dims, p.subject, `+start+` AS start,
-			       CASE WHEN m.descriptor->>'instrument' = 'counter' THEN SUM(p.value)
-			            ELSE (array_agg(p.value ORDER BY p.bucket_start DESC))[1] END AS v
+			SELECT p.target_id, p.metric, p.dims, p.subject, `+start30+` AS start30, `+start12+` AS start12,
+			       `+value(start30)+` AS v30, `+value(start12)+` AS v12
 			  FROM addon_metric_points p
 			  JOIN addon_metrics m ON m.target_id = p.target_id AND m.metric = p.metric
 			  JOIN targets t ON t.target = p.target_id
-			 WHERE p.bucket_start >= `+start+` AND p.subject <> ''
-			 GROUP BY p.target_id, p.metric, p.dims, p.subject, m.descriptor->>'instrument', t.stats_subject_retention_days)
-		SELECT target_id, metric, dims, to_char(start, 'YYYY-MM-DD'), count(*),
-		       percentile_cont(0.5) WITHIN GROUP (ORDER BY v), percentile_cont(0.9) WITHIN GROUP (ORDER BY v)
+			 WHERE p.bucket_start >= `+start12+` AND p.subject <> ''
+			 GROUP BY p.target_id, p.metric, p.dims, p.subject, m.descriptor->>'instrument', t.stats_subject_retention_days),
+		spread AS (
+			-- An ordered-set aggregate ignores NULL input: the spread is over
+			-- the people with a value in the 30-day window, as before.
+			SELECT target_id, metric, dims, count(v30) AS members,
+			       COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY v30), 0) AS p50,
+			       COALESCE(percentile_cont(0.9) WITHIN GROUP (ORDER BY v30), 0) AS p90
+			  FROM per
+			 GROUP BY target_id, metric, dims)
+		SELECT per.target_id, per.metric, per.dims, to_char(per.start30, 'YYYY-MM-DD'), to_char(per.start12, 'YYYY-MM-DD'),
+		       s.members, s.p50, s.p90, per.subject, per.v30, per.v12
 		  FROM per
-		 GROUP BY target_id, metric, dims, start
-		 ORDER BY target_id, metric`, today, from)
+		  JOIN spread s ON s.target_id = per.target_id AND s.metric = per.metric AND s.dims = per.dims
+		 ORDER BY per.target_id, per.metric, per.dims, per.subject`, today, from30, from12m)
 	if err != nil {
 		return nil, fmt.Errorf("read distributions: %w", err)
 	}
 	defer rows.Close()
 	var out []StatsDistribution
+	at := map[string]int{}
 	for rows.Next() {
 		var d StatsDistribution
-		if err := rows.Scan(&d.Target, &d.Metric, &d.Dims, &d.From, &d.Members, &d.P50, &d.P90); err != nil {
+		var p StatsPersonValue
+		if err := rows.Scan(&d.Target, &d.Metric, &d.Dims, &d.From, &d.From12m, &d.Members, &d.P50, &d.P90, &p.Subject, &p.Last30d, &p.Last12m); err != nil {
 			return nil, err
 		}
-		out = append(out, d)
+		raw, _ := json.Marshal(d.Dims)
+		key := d.Target + "\x00" + d.Metric + "\x00" + string(raw)
+		i, seen := at[key]
+		if !seen {
+			i, at[key] = len(out), len(out)
+			out = append(out, d)
+		}
+		out[i].People = append(out[i].People, p)
 	}
 	return out, rows.Err()
 }

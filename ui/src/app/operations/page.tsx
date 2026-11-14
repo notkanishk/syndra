@@ -68,7 +68,7 @@ export default function EventActivityPage() {
   const [source, setSource] = useState<Source>("all");
   const [outcome, setOutcome] = useState<EventOutcome>("all");
   const [query, setQuery] = useState("");
-  const [sort, flipOrSet, view] = useSort<SortKey>("time", { list: "operations", keys: ["time", "event", "outcome"] });
+  const [sort, flipOrSet, view] = useSort<SortKey>("time", { list: "operations", keys: ["time", "event", "outcome"] }, ["time"]);
   const events = useWebhookEvents();
   const triggers = useOnboardingTriggers();
   const resolver = useNameResolver();
@@ -108,7 +108,7 @@ export default function EventActivityPage() {
       .sort((a, b) => {
         let order =
           view.sort.key === "time"
-            ? b.ts - a.ts
+            ? a.ts - b.ts
             : compareNames(runOf(a, view.sort.key), runOf(b, view.sort.key));
         if (view.sort.dir < 0) order = -order;
         return order || b.ts - a.ts;

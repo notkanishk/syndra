@@ -2,7 +2,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RunLabel, SortHead, runStarts, useSort } from "@/components/ui/SortHead";
+import { RunLabel, SortHead, orderBy, runStarts, useSort } from "@/components/ui/SortHead";
+import { keepView } from "@/lib/place";
 import { motionInTests } from "@/test-utils/motion";
 
 type Key = "who" | "ends";
@@ -19,6 +20,19 @@ function Heads() {
 }
 
 const arrow = (name: string) => screen.getByRole("button", { name }).querySelector("span")!;
+
+/** A table whose numbers start largest first, as Insights' people and Requests' newest. */
+function Amounts({ list }: { list?: string }) {
+  const [sort, flip, view] = useSort<"who" | "used">("used", list ? { list, keys: ["who", "used"] } : undefined, ["used"]);
+  const rows = orderBy([{ who: "Edge", used: 3 }, { who: "Lita", used: null }, { who: "Kane", used: 9 }], view.sort, { who: (r) => r.who, used: (r) => r.used });
+  return (
+    <>
+      <SortHead label="Who" name="who" sort={sort} onSort={flip} />
+      <SortHead label="Used" name="used" sort={sort} onSort={flip} />
+      <output>{rows.map((r) => r.who).join(" ")}</output>
+    </>
+  );
+}
 
 describe("sorting by a heading", () => {
   it("starts on the one asked for, ascending, with the arrow only there", () => {
@@ -54,6 +68,37 @@ describe("sorting by a heading", () => {
     expect(cell("Sort by the clock")).toHaveAttribute("aria-sort", "descending");
     // Never on the button itself, where it is not valid.
     expect(screen.getByRole("button", { name: "Sort by the clock" })).not.toHaveAttribute("aria-sort");
+  });
+
+  it("starts a heading listed as descending largest first, and says descending, with the arrow turned", () => {
+    render(<Amounts />);
+    const cell = (name: string) => screen.getByRole("button", { name }).closest("[role=columnheader]")!;
+    expect(screen.getByRole("status")).toHaveTextContent("Kane Edge Lita");
+    expect(cell("Sort by used")).toHaveAttribute("aria-sort", "descending");
+    expect(arrow("Sort by used")).toHaveClass("rotate-180");
+    fireEvent.click(screen.getByRole("button", { name: "Sort by who" }));
+    expect(cell("Sort by who")).toHaveAttribute("aria-sort", "ascending");
+    fireEvent.click(screen.getByRole("button", { name: "Sort by used" }));
+    expect(cell("Sort by used")).toHaveAttribute("aria-sort", "descending");
+  });
+
+  it("never reopens a list on a sort it kept before its heading descended, and keeps the new one", () => {
+    // What such a list stored before: newest first was ascending then.
+    keepView("amounts", "sort", { key: "used", dir: 1 });
+    const { unmount } = render(<Amounts list="amounts" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Kane Edge Lita");
+    fireEvent.click(screen.getByRole("button", { name: "Sort by used" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Edge Kane Lita");
+    unmount();
+    render(<Amounts list="amounts" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Edge Kane Lita");
+    localStorage.clear();
+  });
+
+  it("puts a row with no value last whichever way", () => {
+    render(<Amounts />);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by used" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Edge Kane Lita");
   });
 
   it("names itself for a screen reader by its label unless told otherwise", () => {

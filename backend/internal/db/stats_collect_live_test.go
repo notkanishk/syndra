@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -308,8 +310,8 @@ func TestLiveTheWatermarkIsAMidnightThatNeverGoesBack(t *testing.T) {
 // What the add-on may not say is dropped and counted, by reason, and the
 // rest is kept: a point that is not one makerspace day, no value or a
 // negative one, a subject on a metric not per person or with no binding here,
-// an undeclared dimension, a dimension naming a bound person (their subject
-// id, account name or account id), and a late point past retention.
+// an undeclared dimension, and a late point past retention. A dimension naming
+// a person is not a drop (TestLiveWhatNamesAPersonIsKeptAndRecorded).
 func TestLiveEachDropIsCountedByReason(t *testing.T) {
 	ctx := collectLive(t)
 	utcMidnight := pt(t, day(3), "", share("makers"), 1)
@@ -324,12 +326,11 @@ func TestLiveEachDropIsCountedByReason(t *testing.T) {
 		pt(t, day(3), "", share("lab"), -1),
 		pt(t, day(3), "sub-orton", share("makers"), 1),
 		pt(t, day(3), "", map[string]string{"printer": "xl-1"}, 1),
-		pt(t, day(3), "", share("john_cena"), 1), pt(t, day(3), "", share("1001"), 1), pt(t, day(3), "", share("sub-cena"), 1),
 		pt(t, day(401), "sub-cena", share("makers"), 1), pt(t, day(401), "", share("makers"), 1),
-	}, gp(t, day(3), day(2), share("john_cena"), "Off"), gp(t, day(3), day(2), share("lab"), ""))}}}
+	}, gp(t, day(3), day(2), share("lab"), ""))}}}
 	dropped := collect(t, ctx, sessions, s)
 	want := map[string]int{stats.DropNotADay: 2, stats.DropBadValue: 3, stats.DropUnboundSubject: 1,
-		stats.DropUndeclaredDimension: 1, stats.DropPersonInDimension: 4, stats.DropPastRetention: 1}
+		stats.DropUndeclaredDimension: 1, stats.DropPastRetention: 1}
 	if !reflect.DeepEqual(dropped, want) {
 		t.Errorf("dropped %v, want %v", dropped, want)
 	}
@@ -346,6 +347,90 @@ func TestLiveEachDropIsCountedByReason(t *testing.T) {
 	totals := &script{replies: [][]any{{page(t, day(1), []addons.StatPoint{pt(t, day(3), "sub-cena", nil, 1), pt(t, day(3), "", nil, 4)})}}}
 	if dropped := collect(t, ctx, doors, totals); !reflect.DeepEqual(dropped, map[string]int{stats.DropNotPerSubject: 1}) {
 		t.Errorf("a subject on a metric not per person: dropped %v", dropped)
+	}
+}
+
+// What names a person is kept as the add-on sent it, and whom it names is
+// recorded in the row at collection (named_subjects, the subject ids): a
+// bound person by their subject id, account name or account id, anyone in the
+// directory by their id or display name, as a whole token in any case; a
+// point by its dimension value, a gap by its value or its reason. Nothing is
+// counted as dropped (the owner's ruling of 14 Nov 2026). The directory here
+// is the demo one: rey_student ("Rey Mysterio") is not bound on this target.
+func TestLiveWhatNamesAPersonIsKeptAndRecorded(t *testing.T) {
+	ctx := collectLive(t)
+	s := &script{replies: [][]any{{page(t, day(1), []addons.StatPoint{
+		pt(t, day(3), "", share("makers"), 7), pt(t, day(3), "sub-cena", share("home-JOHN_CENA"), 2),
+		pt(t, day(3), "", share("1001"), 1), pt(t, day(3), "", share("sub-cena"), 1),
+		pt(t, day(3), "", share("rey mysterio home"), 1), pt(t, day(3), "sub-cena", share("john_cena and Rey Mysterio"), 1),
+	}, gp(t, day(3), day(2), share("john_cena"), "Off"), gp(t, day(3), day(2), share("makers"), "account 1001 is locked"),
+		gp(t, day(3), day(2), share("lab"), "Auditing is off"), gp(t, day(3), day(2), share("scratch"), "rey_student's disk is full"))}}}
+	if dropped := collect(t, ctx, sessions, s); len(dropped) != 0 {
+		t.Errorf("dropped %v: naming a person is not a drop", dropped)
+	}
+	rowsOf := func(q string) []string {
+		t.Helper()
+		rows, err := db.PG.Query(ctx, q, collectTarget, sessions.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	points := rowsOf(`SELECT subject || ' ' || dims::text || ' ' || named_subjects::text FROM addon_metric_points WHERE target_id = $1 AND metric = $2 ORDER BY 1`)
+	if want := []string{
+		` {"share": "1001"} {sub-cena}`, ` {"share": "makers"} {}`, ` {"share": "rey mysterio home"} {rey_student}`, ` {"share": "sub-cena"} {sub-cena}`,
+		`sub-cena {"share": "home-JOHN_CENA"} {sub-cena}`, `sub-cena {"share": "john_cena and Rey Mysterio"} {rey_student,sub-cena}`,
+	}; !reflect.DeepEqual(points, want) {
+		t.Errorf("points %q, want %q", points, want)
+	}
+	gaps := rowsOf(`SELECT dims::text || ' ' || reason || ' ' || named_subjects::text FROM addon_metric_gaps WHERE target_id = $1 AND metric = $2 ORDER BY 1`)
+	if want := []string{`{"share": "john_cena"} Off {sub-cena}`, `{"share": "lab"} Auditing is off {}`, `{"share": "makers"} account 1001 is locked {sub-cena}`,
+		`{"share": "scratch"} rey_student's disk is full {rey_student}`}; !reflect.DeepEqual(gaps, want) {
+		t.Errorf("gaps %q, want %q", gaps, want)
+	}
+
+	// The reads a page is built from carry whom a row names: a day, its month (every day's, once each), a gap.
+	vals, err := db.StatsDays(ctx, collectTarget, "sub-cena", day(30))
+	var named []string
+	for _, v := range vals {
+		named = append(named, v.Dims["share"]+"="+strings.Join(v.NamedSubjects, ","))
+	}
+	slices.Sort(named)
+	if want := []string{"home-JOHN_CENA=sub-cena", "john_cena and Rey Mysterio=rey_student,sub-cena"}; err != nil || !slices.Equal(named, want) {
+		t.Errorf("days %q (%v), want %q", named, err, want)
+	}
+	// Another day of the same line and month, read when the directory knew
+	// someone else by that name too: the month names both.
+	other := day(4)
+	if other[:7] != day(3)[:7] {
+		other = day(2)
+	}
+	if err := db.CollectStats(ctx, collectTarget, sessions.Name, func(c *db.StatsTx) error {
+		_, err := c.UpsertPoints(ctx, day(0), time.Now(), []db.StatsPoint{{Subject: "sub-cena", Dims: share("home-JOHN_CENA"), Day: other, Value: 1, NamedSubjects: []string{"sub-cena", "sub-later"}}})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if vals, err = db.StatsMonths(ctx, collectTarget, "sub-cena", day(30)); err != nil || len(vals) != 2 {
+		t.Fatalf("months %+v (%v)", vals, err)
+	}
+	for _, v := range vals {
+		if want := map[string]string{"home-JOHN_CENA": "sub-cena,sub-later", "john_cena and Rey Mysterio": "rey_student,sub-cena"}[v.Dims["share"]]; strings.Join(v.NamedSubjects, ",") != want {
+			t.Errorf("month of %s names %v, want %s", v.Dims["share"], v.NamedSubjects, want)
+		}
+	}
+	read, err := db.StatsGaps(ctx, collectTarget, day(30))
+	named = nil
+	for _, g := range read {
+		named = append(named, g.Dims["share"]+"="+strings.Join(g.NamedSubjects, ","))
+	}
+	slices.Sort(named)
+	if want := []string{"john_cena=sub-cena", "lab=", "makers=sub-cena", "scratch=rey_student"}; err != nil || !slices.Equal(named, want) {
+		t.Errorf("gaps read %q (%v), want %q", named, err, want)
 	}
 }
 

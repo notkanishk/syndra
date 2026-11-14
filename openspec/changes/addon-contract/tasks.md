@@ -2117,7 +2117,7 @@ per-person only) applied there.
         (`TestOnlyTheViewsReadUsage`).
     - Decided while building (6d-2 fix round 2, 12 Nov 2026), one line each:
       - A name is matched as a whole token, not contained: one RE2 pattern per collection, `(?i)(?:^|[^\pL\pN])(?:` + the `QuoteMeta`d non-empty names joined by `|` + `)(?:[^\pL\pN]|$)`, an empty class when there is none; not `\b`, ASCII-only and `_`-blind (`TestANameIsAWholeToken`).
-      - A gap whose reason names a person is kept with the fixed reason "The add-on's reason named a person." and counted `person_in_dimension`; one whose dimensions name a person is dropped, as its series is (`TestNoValueOrReasonNamesABoundPerson`).
+      - A gap whose reason names a person is kept with the fixed reason "The add-on's reason named a person." and counted `person_in_dimension`; one whose dimensions name a person is dropped, as its series is (`TestNoValueOrReasonNamesABoundPerson`). *Superseded by 7i (14 Nov 2026): kept as sent with whom it names (`named_subjects`); see "Owner's ruling of 14 Nov 2026".*
       - A person's page keeps a gap whose dimensions are `{}` or a subset of one of their series (every key=value of the gap in it), so `{"share":"makers"}` reaches their makers/smb series (`TestAGapOnPartOfASeriesIsOnThatSeries`).
       - Every breaker counting rule lives in `breaker.record`: `send` only marks a coded `/stats` answer `CallResponse.StatsRefusal`, and `record` neither counts nor clears it (`TestACodedStatsAnswerDoesNotClearTheBreaker`).
 - [x] 6.9 UI, from descriptors only: the member card "What I have used"
@@ -2141,7 +2141,7 @@ per-person only) applied there.
   - Spark: any day without a value breaks the line; single-day runs are dots (gauges are never interpolated).
   - Dropped sentence uses the shared `formatList` (format.ts); `joinNames` in MyStorage removed.
   - storageLimits: exactly one bytes limit field, gated on drawnUsage(home, offline).
-  - Insights: fewer than 5 people shows the count and no spread or bar (MIN_SPREAD_MEMBERS; the backend has no floor for this read, insights.go's 5 is the single-route holder count).
+  - Insights: fewer than 5 people shows the count and no spread or bar (MIN_SPREAD_MEMBERS; the backend has no floor for this read, insights.go's 5 is the single-route holder count). *Superseded by 7i (14 Nov 2026): no floor; the spread is always shown, and the people are named for operators.*
   - capText strips Cf and turns Cc into a space.
   - Open: handoff said kept days are "not hatched like a gap"; built as the same hatch with its own reason per the brief. Say if a distinct treatment is wanted.
   Decided while building (6e fix round 3):
@@ -2337,6 +2337,87 @@ per-person only) applied there.
 - **The live activity-share fix** (`service_data.service`) ships with contract
   2; no hotfix on main.
 - **5.3c confirmed:** a membership must be enumerable.
+
+## Owner's ruling of 14 Nov 2026
+
+Verbatim: "those statistics would need to be able to identify individuals.
+visible only to the admins. under the required situations, admin should be
+able to trace down the individual." Approved: Insights names who, what
+names a person is kept with whom it names, members unchanged. Declined: an audit
+record of each view.
+
+- [x] 7i Admins can trace usage to a person (design §9.6, §9.7, §9.8
+  annotated; copy guide §15).
+  *Done (14 Nov 2026, slice 7i; PR 180 with its review round):*
+  - Ingestion keeps what names a person, with whom it names: migration
+    000094 (`named_subjects text[] NOT NULL DEFAULT '{}'` on
+    `addon_metric_points` and `addon_metric_gaps`, expand-only; its down
+    deletes points that name anyone and keeps every gap that does, window
+    and all, with 000093's withheld reason, so a 000093 backend never shows
+    what names someone and no uncounted day turns into a counted one).
+    `stats.keep` records a point's from its values and `keepGaps` a gap's
+    from its values or reason (`people.names`, `people.namesIn`; the rule
+    of a match unchanged). The name set is everyone in the directory (id,
+    display name, username; a binding's account name and id too; never a
+    machine user), not only who is bound on the target; whom is asked per person, so overlapping
+    names are both found. `DropPersonInDimension`, the collector's
+    `reasonWithheld` and the UI's `person_in_dimension` line are gone
+    (`TestWhatNamesAPersonIsKeptWithWhomItNames`,
+    `TestADisplayNameIsCheckedLikeAnyOtherName`,
+    `TestEveryoneInTheDirectoryIsAName`, `BenchmarkNames`,
+    `TestLiveWhatNamesAPersonIsKeptAndRecorded`,
+    `TestLiveEachDropIsCountedByReason`).
+  - Member view, in the backend: `statsUsageFor(…, memberView)`; `/me/targets`
+    passes true, `/users/{id}/targets` and the target overview false. What
+    names someone other than the member (`namesOther`) is hidden; their
+    own name hides nothing of theirs. Such a series (any point read, days
+    or months) is left out and counted in `left_out`; such a gap keeps its
+    window and dimensions (inside a displayed series, so nothing new) with
+    "The add-on's reason named a person."; a gap on a series left out is on
+    none of theirs
+    (`TestAMemberNeverSeesWhatNamesAPerson`,
+    `TestAMembersOwnNameHidesNothingOfTheirs`,
+    `TestOnlyTheMembersOwnPageIsMasked`). The card says "{n} more lines are
+    not shown here, as the add-on named a person in them." and never
+    "Nothing counted" when lines were left out (`UsageCard.test.tsx`).
+  - Insights: `db.StatsDistributions(today, from30, from12m)` is one query:
+    per person a counter's sum or gauge's latest over each window's
+    `GREATEST(window, kept_from)`, the spread over the 30-day values
+    (`count(v30)`, `percentile_cont` ignoring NULL), joined back so each
+    row carries its people. `GET /insights/stats` adds `people` per series
+    (user id, directory name or "", `last_30d`, `last_12m`),
+    `window_12m_from` per metric and `from_12m`
+    (`TestInsightsStatsNameThePeopleForAdmins`,
+    `TestLiveDistributionsNameThePeople`,
+    `TestLiveDistributionsKeepToRetention`). The UI table (`People` in
+    `InsightsUsage.tsx`, `SortHead`) opens on Last 30 days, largest first,
+    re-sorts by Person, Last 30 days, Last 12 months, links each name to
+    `/users/{id}`, says an unreadable name with `Unresolved`, and keeps a
+    gauge's missing value last either way. `MIN_SPREAD_MEMBERS` and
+    `FEW_PEOPLE` are gone (`InsightsUsage.test.tsx`).
+  - Sorting says what it does: `useSort(initial, remember, descending)`
+    starts a listed heading descending (a time newest first, an amount
+    largest first), so `aria-sort` and the arrow match the rows, and
+    `orderBy` puts a null last whichever way. Moved off the negated-key
+    trick: Insights' people, Requests' When, Operations' Time, Withdrawn's
+    When, Drift's Found (`sortDrift`), People's Joined, Records' dates
+    (`SortHead.test.tsx`, `drift-filters.test.ts`). A list with a heading
+    that starts descending keeps its sort in `sort.v2`, so a sort stored
+    before (newest first stored as ascending) is never read back the wrong
+    way round; those lists open on their default once.
+  - Migration round trip on the live engine
+    (`TestLiveMigration94RunsUpDownUp`, `TestMigration94IsExpandOnly`).
+  - Decided while building: people are per series, not per metric (a
+    counter is never summed across series); a person with a value in the
+    12 months but none in the 30 days is listed and not in the spread
+    (a breakdown with only such people says "Nobody used it in the last 30
+    days."); a member's series naming someone else is left out rather than
+    relabelled (design §9.7), and such a gap keeps its window and
+    dimensions and loses only its reason (review round 2 reversed blanking
+    the dimensions, which hatched every line); whom a row names is recorded at collection, so a name
+    added later is recorded from its next collection on, and a series
+    counts as naming someone when any point read for it does.
+  - Not built: paging of a long people table (every person is listed).
 
 ## Out of scope, stated so nobody builds it here
 

@@ -186,7 +186,7 @@ export function UnexplainedAccess() {
   const projects = useProjects();
   // Search is not a filter in the URL: it finds a row, it does not make a view.
   const [query, setQuery] = useState("");
-  const [sort, flipSort, view] = useSort<DriftSortKey>("found", { list: "drift", keys: ["who", "what", "why", "found"] });
+  const [sort, flipSort, view] = useSort<DriftSortKey>("found", { list: "drift", keys: ["who", "what", "why", "found"] }, ["found"]);
   const [open, setOpen] = useState<Record<SectionKind, boolean>>({
     target_only: true,
     syndra_only: true,

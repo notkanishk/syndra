@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"syndra/internal/addons"
@@ -19,16 +20,20 @@ import (
 // Statistics, read (addon-contract 6.8, design §9.7, §9.8). Who sees what:
 //
 //   - a member, their own per-person points, on /me/targets (usage), the
-//     subject always the actor and never a parameter;
-//   - an admin, the same for one person on GET /users/{id}/targets (the same
-//     view, personalUsage), the target-wide series on GET
-//     /targets/{target}/stats and distributions over members on GET
-//     /insights/stats; never a member.
+//     subject always the actor and never a parameter, less what names anyone
+//     but them (named_subjects): such a series is left out and counted, such
+//     a gap's reason replaced (memberView);
+//   - an admin, everything as stored: one person on GET /users/{id}/targets
+//     (the same view, personalUsage), the target-wide series on GET
+//     /targets/{target}/stats, and on GET /insights/stats each per-person
+//     series' spread and the people in it with their values; never a member.
 //
-// No view audit and no suppression (decision 14); no ranking (insights says
-// how usage spreads, never whose). Every day is a makerspace day; a counter's
-// sums are over days (temporal), never across series. Pages render from the
-// stored descriptors, so this holds while the add-on is down.
+// Usage is traceable to a person, for admins only (the owner's ruling of 14
+// Nov 2026, superseding design §9.7's "never whose"). No view audit (decision
+// 14; the owner declined one again with this ruling). Every day is a
+// makerspace day; a counter's sums are over days (temporal), never across
+// series. Pages render from the stored descriptors, so this holds while the
+// add-on is down.
 
 // statsUsage is a target's statistics as one page shows them. Reported false
 // is "this add-on does not report statistics", said rather than implied.
@@ -64,6 +69,10 @@ type statsMetricView struct {
 	Series         []statsSeries   `json:"series"`
 	Gaps           []statsGapView  `json:"gaps"`
 	Collected      *statsCollected `json:"collected,omitempty"`
+	// LeftOut, on a member's own view, is how many of their series are left
+	// out because a dimension value names a person: said, so the rest never
+	// reads as all of their usage.
+	LeftOut int `json:"left_out,omitempty"`
 }
 
 // statsSeries is one dimension set's days. A counter carries its 30-day and
@@ -113,11 +122,34 @@ func statsWindows(now time.Time) (today, from30, from12m string) {
 	return today, clock.AddDate(today, 0, 0, -29), clock.AddDate(today[:8]+"01", 0, -11, 0)
 }
 
+// reasonWithheld is a gap's reason, on a member's own view, in place of one
+// that names someone else.
+const reasonWithheld = "The add-on's reason named a person."
+
+// namesOther reports whether a row's named_subjects name anyone but subject:
+// what a member's own view never shows. Their own name hides nothing of theirs.
+func namesOther(named []string, subject string) bool {
+	return slices.ContainsFunc(named, func(s string) bool { return s != subject })
+}
+
 // statsUsageFor is one target's statistics for a person (subject), or its
 // totals (subject ""): a person's page carries per-person metrics only, and
 // only that person's points; the totals page every metric and the collection
-// line.
-func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (statsUsage, error) {
+// line. memberView is the member's own page: a series with a point that names
+// anyone but them is left out (and counted in LeftOut), and such a gap's
+// reason is replaced; an admin's page shows everything as stored.
+//
+// A series left out, not relabelled: what is named is the series', not one
+// dimension's, so a relabelled row would be a number under a label that is
+// neither the add-on's nor true, and two would be indistinguishable. Leaving
+// it out and saying how many keeps every word on the page true.
+//
+// A gap that names someone else keeps its window and its dimensions: a member
+// is shown only a gap whose dimensions sit inside one of their displayed
+// series, which itself names nobody else, so they say nothing new; dropped,
+// its days would read as counted, and without dimensions it would cover the
+// member's whole metric. Only its reason, which may name someone, is withheld.
+func statsUsageFor(ctx context.Context, target, subject string, memberView bool, now time.Time) (statsUsage, error) {
 	stored, err := dbStatsMetrics(ctx, target)
 	if err != nil || len(stored) == 0 {
 		return statsUsage{}, err
@@ -144,6 +176,15 @@ func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (
 	if err != nil {
 		return statsUsage{}, err
 	}
+	// A member's series is left out when any of its points read names someone else.
+	leftOut := map[string]bool{}
+	if memberView {
+		for _, v := range slices.Concat(days, months) {
+			if namesOther(v.NamedSubjects, subject) {
+				leftOut[v.Metric+"\x00"+dimsText(v.Dims)] = true
+			}
+		}
+	}
 	for _, s := range stored {
 		var m addons.Metric
 		if err := json.Unmarshal(s.Descriptor, &m); err != nil {
@@ -161,8 +202,13 @@ func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (
 			view.Collected = &statsCollected{At: s.LastCollectedAt, UnboundAccounts: s.UnboundAccounts, Dropped: s.Dropped}
 		}
 		bySeries := map[string]*statsSeries{}
+		left := map[string]bool{}
 		series := func(dims map[string]string) *statsSeries {
 			key := dimsText(dims)
+			if leftOut[m.Name+"\x00"+key] {
+				left[key] = true
+				return &statsSeries{} // read, never shown
+			}
 			if bySeries[key] == nil {
 				bySeries[key] = &statsSeries{Dimensions: dims, Days: []statsDay{}}
 			}
@@ -207,8 +253,13 @@ func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (
 			if g.Metric != m.Name || subject != "" && len(g.Dims) > 0 && !slices.ContainsFunc(view.Series, func(s statsSeries) bool { return within(g.Dims, s.Dimensions) }) {
 				continue
 			}
-			view.Gaps = append(view.Gaps, statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Reason: g.Reason})
+			gap := statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Reason: g.Reason}
+			if memberView && namesOther(g.NamedSubjects, subject) {
+				gap.Reason = reasonWithheld
+			}
+			view.Gaps = append(view.Gaps, gap)
 		}
+		view.LeftOut = len(left)
 		out.Metrics = append(out.Metrics, view)
 	}
 	textsort.ByName(out.Metrics, func(m statsMetricView) string { return m.Label }, func(m statsMetricView) string { return m.Name })
@@ -240,14 +291,14 @@ func dimsText(dims map[string]string) string {
 }
 
 // personalUsage is the usage block on a person's view of a target: the actor's
-// own on /me/targets, one person's on an admin's person page. Filled by those
+// own on /me/targets (memberView), one person's on an admin's person page. Filled by those
 // two views alone, never by describeTargetFor, which the password and
 // member-action paths also call for their state checks and which must not pay
 // four statistics queries for a page nobody renders. Syndra's own store,
 // never the add-on, so a target that is down still shows its history.
 // Best-effort: a page that cannot read it says less rather than failing.
-func personalUsage(ctx context.Context, target, subject string) *statsUsage {
-	usage, err := statsUsageFor(ctx, target, subject, clock.Now())
+func personalUsage(ctx context.Context, target, subject string, memberView bool) *statsUsage {
+	usage, err := statsUsageFor(ctx, target, subject, memberView, clock.Now())
 	if err != nil {
 		log.Printf("[STATS] could not read %s's usage on %s: %v (non-fatal)", subject, target, err)
 		return nil
@@ -264,7 +315,7 @@ func handleTargetStats(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusNotFound, "TARGET_NOT_FOUND", target+" is not a connected system.")
 		return
 	}
-	usage, err := statsUsageFor(r.Context(), target, "", clock.Now())
+	usage, err := statsUsageFor(r.Context(), target, "", false, clock.Now())
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -337,36 +388,68 @@ func retentionText(days *int) string {
 	return strconv.Itoa(*days) + " days"
 }
 
-// insightsStatsRow is one per-person series of one metric, as a spread over
-// members: how many have a value, the median and the 90th percentile. Never
-// which member (no ranking, design §9.7).
+// insightsStatsRow is one per-person series of one metric: its spread over
+// the members with a value in the last 30 days (how many, the median, the
+// 90th percentile; no floor, an admin's read) and every person with a value
+// in the last 12 months (the owner's ruling of 14 Nov 2026: an admin can trace
+// usage to a person). One series' people only: a counter is never summed
+// across series, nor a gauge's values.
 type insightsStatsRow struct {
 	Dimensions map[string]string `json:"dimensions"`
 	Members    int               `json:"members"`
 	P50        float64           `json:"p50"`
 	P90        float64           `json:"p90"`
+	People     []insightsPerson  `json:"people"`
+}
+
+// insightsPerson is one person's value of a series: a counter's sum of their
+// days or a gauge's latest value, in each window, read from the days the
+// spread reads (StatsDistributions, the one definition). Last30d is a counter's
+// 0 when they counted none there, a gauge's null when there was no sample.
+// Name is the directory's display name, "" when it cannot be read; the id is
+// never the label.
+type insightsPerson struct {
+	UserID  string   `json:"user_id"`
+	Name    string   `json:"name"`
+	Last30d *float64 `json:"last_30d"`
+	Last12m float64  `json:"last_12m"`
 }
 
 type insightsStatsMetric struct {
 	Target string `json:"target"`
 	System string `json:"system"`
-	// Window30dFrom is the first day the spread covers: the window's `from`,
-	// or later when this target's retention is shorter (the read's own clamp).
+	// Window30dFrom and Window12mFrom are the first day each window covers:
+	// the window's `from`, or later when this target's retention is shorter
+	// (the read's own clamp).
 	Window30dFrom string `json:"window_30d_from"`
+	Window12mFrom string `json:"window_12m_from"`
 	addons.Metric
 	Series []insightsStatsRow `json:"series"`
 }
 
 // handleInsightsStats is GET /api/v1/insights/stats (admin): every per-person
-// metric of every target over the last 30 days (or the days its target keeps,
-// when fewer), a counter's sum or a gauge's
-// latest value per member, as distributions; the UI groups them by unit.
+// metric of every target, each series' spread over the last 30 days and its
+// people over the last 30 days and 12 months (or the days its target keeps,
+// when fewer): a counter's sum or a gauge's latest value per person. The UI
+// groups them by unit.
 func handleInsightsStats(w http.ResponseWriter, r *http.Request) {
-	today, from30, _ := statsWindows(clock.Now())
-	rows, err := dbStatsDistributions(r.Context(), today, from30)
+	today, from30, from12m := statsWindows(clock.Now())
+	rows, err := dbStatsDistributions(r.Context(), today, from30, from12m)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
+	}
+	names := map[string]string{}
+	if len(rows) > 0 {
+		// The directory the person pages name people from. Unreadable, every
+		// name is "" and the page says it could not name them; never an id.
+		users, err := directoryUsers(r.Context())
+		if err != nil {
+			log.Printf("[STATS] insights could not read the directory for names: %v (non-fatal)", err)
+		}
+		for _, u := range users {
+			names[u.ID] = strings.TrimSpace(u.Name)
+		}
 	}
 	out := []insightsStatsMetric{}
 	at := map[string]int{}
@@ -394,11 +477,19 @@ func handleInsightsStats(w http.ResponseWriter, r *http.Request) {
 		if _, seen := at[key]; !seen {
 			system, _ := systemName(r.Context(), row.Target)
 			at[key] = len(out)
-			out = append(out, insightsStatsMetric{Target: row.Target, System: system, Window30dFrom: row.From, Metric: m, Series: []insightsStatsRow{}})
+			out = append(out, insightsStatsMetric{Target: row.Target, System: system, Window30dFrom: row.From, Window12mFrom: row.From12m, Metric: m, Series: []insightsStatsRow{}})
+		}
+		people := make([]insightsPerson, 0, len(row.People))
+		for _, p := range row.People {
+			last30 := p.Last30d
+			if last30 == nil && m.Instrument == addons.InstrumentCounter { // a counter with no day in the window counted none there
+				last30 = addTo(nil, 0)
+			}
+			people = append(people, insightsPerson{UserID: p.Subject, Name: names[p.Subject], Last30d: last30, Last12m: p.Last12m})
 		}
 		i := at[key]
-		out[i].Series = append(out[i].Series, insightsStatsRow{Dimensions: row.Dims, Members: row.Members, P50: row.P50, P90: row.P90})
+		out[i].Series = append(out[i].Series, insightsStatsRow{Dimensions: row.Dims, Members: row.Members, P50: row.P50, P90: row.P90, People: people})
 	}
 	textsort.ByName(out, func(m insightsStatsMetric) string { return m.System + " " + m.Label }, func(m insightsStatsMetric) string { return m.Target + m.Name })
-	jsonResponse(w, http.StatusOK, map[string]any{"window_days": 30, "from": from30, "metrics": out})
+	jsonResponse(w, http.StatusOK, map[string]any{"window_days": 30, "from": from30, "from_12m": from12m, "metrics": out})
 }
