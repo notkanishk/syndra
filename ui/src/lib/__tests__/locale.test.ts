@@ -27,6 +27,7 @@ describe("the display locale", () => {
     expect(validLocale("not a tag")).toBeUndefined();
     expect(validLocale("")).toBeUndefined();
     expect(validLocale(5)).toBeUndefined();
+    for (const t of ["und", "und-US", "root", "x-private"]) expect(validLocale(t)).toBeUndefined(); // as the backend refuses
   });
 
   it("falls back to the server's runtime default, validated; never to a literal", () => {

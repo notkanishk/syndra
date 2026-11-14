@@ -206,7 +206,7 @@ export function sortDrift(
   names: DriftNames,
 ): DriftTriageItem[] {
   const newest = (a: DriftTriageItem, b: DriftTriageItem) =>
-    compareInstants(b.detected_at, a.detected_at);
+    compareInstants(a.detected_at, b.detected_at, -1);
   const text = (item: DriftTriageItem) =>
     key === "who" ? names.who(item) : key === "what" ? names.what(item) : REASON_LABELS[driftReason(item)];
   return [...items].sort((a, b) => {

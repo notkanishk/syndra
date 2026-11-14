@@ -91,7 +91,7 @@ export function endingRead(d: InsightsLens, days: number, m: Model): LensRead {
   const open = { label: "Open Expiring access", href: `/review/expiring-access?within=${days}` };
   if (!d.holders_observed) return sentence(eyebrow, "Not read yet", `${NOT_READ} Ends appear here once it has.`, "warn");
   if (d.roles.length === 0) return sentence(eyebrow, `Nothing ends in the next ${days} days`, "No access has an end date in this time.");
-  const rows = [...d.roles].sort((a, b) => compareInstants(a.earliest_end ?? "", b.earliest_end ?? "") || b.people - a.people);
+  const rows = [...d.roles].sort((a, b) => compareInstants(a.earliest_end, b.earliest_end) || b.people - a.people);
   const first = rows.find((r) => r.earliest_end)?.earliest_end;
   return {
     counts: tally(m, rows),

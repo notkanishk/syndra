@@ -13,9 +13,10 @@
  *    layout passed down: the server runtime's own default, validated on the
  *    server. It is never learned: a failed first read does not make it the
  *    deployment's locale, and a later good read still takes effect. If even
- *    that is not a valid tag it is undefined, and Intl then uses its own
- *    default (server and browser alike); that is the one deterministic case
- *    left, and it needs a broken runtime.
+ *    that is not a usable tag (not well formed, or the root `und`) it is
+ *    undefined, and then each side formats in ITS OWN default, which may differ
+ *    (a hydration mismatch). That is not deterministic; it needs a runtime that
+ *    reports no usable default, and production's Bun never does.
  */
 let held: string | undefined;
 let fallback: string | undefined;
@@ -25,7 +26,9 @@ let warned = false;
 export function validLocale(tag: unknown): string | undefined {
   if (typeof tag !== "string" || !tag) return undefined;
   try {
-    return Intl.getCanonicalLocales(tag)[0]; // RangeError on a malformed tag
+    const canonical = Intl.getCanonicalLocales(tag)[0]; // RangeError on a malformed tag
+    // The root and private-use-only tags name no language: refused, as the backend does.
+    return /^(und|x)(-|$)/i.test(canonical) ? undefined : canonical;
   } catch {
     return undefined;
   }

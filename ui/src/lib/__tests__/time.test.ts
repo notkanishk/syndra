@@ -7,6 +7,7 @@ import { formatClock, formatClockSeconds, formatShortDate, formatWeekday } from 
 import { effectiveZone } from "@/lib/zone-effective";
 import {
   addDays,
+  compareInstants,
   civilDay,
   daysBetween,
   daysFromToday,
@@ -18,6 +19,24 @@ import {
   setMakerspaceZone,
   zoneTag,
 } from "@/lib/time";
+
+describe("compareInstants orders by the moment, not the characters", () => {
+  it("reads offsets and fraction digits", () => {
+    expect(compareInstants("2026-11-05T15:30:00+05:30", "2026-11-05T10:00:00Z")).toBe(0);
+    expect(compareInstants("2026-11-05T10:00:00Z", "2026-11-05T10:00:00.5Z")).toBeLessThan(0);
+    expect(compareInstants("2026-11-05T10:00:00.12Z", "2026-11-05T10:00:00.1Z")).toBeGreaterThan(0);
+    expect(compareInstants("2026-11-05T10:00:00+05:30", "2026-11-05T10:00:00Z")).toBeLessThan(0); // 04:30Z is earlier
+  });
+  it("takes a direction, and sorts a missing or unreadable one last in either", () => {
+    expect(compareInstants("2026-11-05T10:00:00Z", "2026-11-06T10:00:00Z", -1)).toBeGreaterThan(0);
+    for (const dir of [1, -1] as const) {
+      expect(compareInstants(undefined, "2026-11-05T10:00:00Z", dir)).toBeGreaterThan(0);
+      expect(compareInstants("2026-11-05T10:00:00Z", null, dir)).toBeLessThan(0);
+      expect(compareInstants("nonsense", "2026-11-05T10:00:00Z", dir)).toBeGreaterThan(0);
+      expect(compareInstants("", undefined, dir)).toBe(0);
+    }
+  });
+});
 
 describe("the makerspace's day", () => {
   it("is the IST day, not the UTC one: 23:00 UTC is 04:30 the next morning", () => {

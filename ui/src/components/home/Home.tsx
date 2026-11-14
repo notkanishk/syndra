@@ -155,7 +155,7 @@ export function Home({ session }: { session: SessionUser }) {
   // read drops the person and the row fades where it was.
   const missed = useMemo(
     () =>
-      [...(onboarding.data?.missed ?? [])].sort((a, b) => compareInstants(b.joined ?? "", a.joined ?? "")),
+      [...(onboarding.data?.missed ?? [])].sort((a, b) => compareInstants(a.joined, b.joined, -1)),
     [onboarding.data?.missed],
   );
   const gaps = useLeavingRows(missed, (person) => person.user_id, !onboarding.isLoading && !onboarding.error);
@@ -621,7 +621,7 @@ function OpenRequests({
   // A decided row keeps its seat and its outcome through the beat, so the count
   // is what is still open.
   const open = rows.filter((entry) => !resolved.has(entry.id)).length;
-  const newestFirst = [...rows].sort((a, b) => compareInstants(b.created_at, a.created_at));
+  const newestFirst = [...rows].sort((a, b) => compareInstants(a.created_at, b.created_at, -1));
 
   return (
     <Card {...queue.listProps}>
@@ -694,7 +694,7 @@ function ExpiringSoon({
 }) {
   // No end date is the furthest end there is, so it goes last.
   const soonestFirst = [...grants].sort((a, b) =>
-    compareInstants(a.expires_at ?? "￿", b.expires_at ?? "￿"),
+    compareInstants(a.expires_at, b.expires_at),
   );
   return (
     <Card>
