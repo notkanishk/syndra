@@ -3,6 +3,7 @@ package strictjson
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -79,9 +80,50 @@ func TestNamesAreMatchedExactly(t *testing.T) {
 			t.Errorf("%s: got %v, want unknown member %q in %q", tc.why, err, tc.name, tc.object)
 			continue
 		}
-		if !strings.Contains(err.Error(), `"`+tc.name+`"`) {
+		if !strings.Contains(err.Error(), strconv.QuoteToASCII(tc.name)) {
 			t.Errorf("%s: the error %q does not name the member", tc.why, err)
 		}
+	}
+}
+
+// An error names the member in ASCII, so a look-alike shows as what it is,
+// and repeats at most 64 bytes of anything the caller sent.
+func TestAnErrorShowsTheNameAsItIsAndNoMore(t *testing.T) {
+	_, err := decode("{\"\u212a\":\"x\"}")
+	if err == nil || err.Error() != `unknown member "\u212a"` {
+		t.Errorf("the Kelvin sign is shown as %v, want its escape", err)
+	}
+	long := strings.Repeat("a", 63) + "ſ" + strings.Repeat("b", 1000)
+	_, err = decode(`{"free":{"` + long + `":{"` + long + `":1}}}`)
+	want := `unknown member "` + strings.Repeat("a", 63) + `"... in "/free/` + strings.Repeat("a", 58) + `"...` // "/free/" is 6 of the 64 bytes; the name stops before ſ, which byte 64 is inside
+	if err == nil || err.Error() != want {
+		t.Errorf("got %v, want %s", err, want)
+	}
+}
+
+// A diamond (A1 and A2 both embed B, B embeds C) keeps C's field, as
+// encoding/json does: B's own fields cancel, the types it embeds do not.
+func TestADiamondKeepsTheSharedFieldAsEncodingJSONDoes(t *testing.T) {
+	type C struct{ Z string }
+	type B struct {
+		C
+		Y string
+	}
+	type A1 struct{ B }
+	type A2 struct{ B }
+	var v struct {
+		A1
+		A2
+	}
+	if err := Decode([]byte(`{"Z":"z"}`), &v); err != nil || v.A1.Z != "z" {
+		t.Errorf("Z: %v, decoded %+v", err, v)
+	}
+	var unknown *UnknownMemberError
+	if err := Decode([]byte(`{"Y":"y"}`), &v); !errors.As(err, &unknown) {
+		t.Errorf("Y, B's own field reached twice at one depth, got %v, want unknown", err)
+	}
+	if json.Unmarshal([]byte(`{"Z":"z"}`), &v) != nil || v.A1.Z != "z" {
+		t.Error("encoding/json no longer keeps Z: this test's premise moved")
 	}
 }
 

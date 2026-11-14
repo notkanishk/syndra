@@ -196,6 +196,42 @@ func TestSettingsAreWrittenOnlyWithMutateSettings(t *testing.T) {
 	}
 }
 
+// Under -mutate-settings, requests.exact-names also probes the setting write,
+// each probe carrying the value the setting already holds, so an add-on that
+// took one would write back what it has.
+func TestExactNamesProbesTheSettingWithItsCurrentValue(t *testing.T) {
+	var mu sync.Mutex
+	probes := map[string][]string{} // the extra member → the values of value sent
+	url, _ := serve(t, testSecret, func(r *http.Request, body []byte, answered bool) {
+		if r.Method != http.MethodPut || answered {
+			return
+		}
+		dec := json.NewDecoder(bytes.NewReader(body))
+		_, _ = dec.Token()
+		first, _ := dec.Token()
+		var doc struct {
+			Value string `json:"value"`
+		}
+		_ = json.Unmarshal(body, &doc)
+		if name, _ := first.(string); name != "actor" { // the kit sorts its keys, actor first
+			mu.Lock()
+			probes[name] = append(probes[name], doc.Value)
+			mu.Unlock()
+		}
+	})
+	cfg := config(url, true)
+	cfg.MutateSettings = true
+	r := run(t, cfg)
+	if r.Status("requests.exact-names") != "pass" {
+		t.Errorf("requests.exact-names %s", r.Status("requests.exact-names"))
+	}
+	// The reference's home_printer holds mk4-a, which the kit writes back.
+	want := map[string][]string{"Value": {"mk4-a"}, "value": {"mk4-a"}}
+	if fmt.Sprint(probes) != fmt.Sprint(want) {
+		t.Errorf("the setting probes led with %v, want %v", probes, want)
+	}
+}
+
 // Without -mutate the kit sends nothing but reads: the GET routes, and /plan,
 // which mutates nothing by contract.
 func TestWithoutMutateTheKitSendsReadsOnly(t *testing.T) {
@@ -353,9 +389,9 @@ func TestExactNamesProbesTheApplyUnderAWrongFingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	k.exactNames(k.at("requests.exact-names"), "/apply", func() map[string]any {
+	k.exactNames(k.at("requests.exact-names"), http.MethodPost, "/apply", "subject", "BAD_REQUEST", func() map[string]any {
 		return k.applyBody(k.callID(), "conformance-wrong-fingerprint", map[string]any{"enabled": false})
-	}, func(body json.RawMessage) any { return body })
+	}, nil)
 	for _, ex := range k.log {
 		r := request{method: ex.method, target: ex.target, body: json.RawMessage(ex.request)}
 		if about, write := k.about(r); !about || !write || summary(r) != `apply {"enabled":false}` {

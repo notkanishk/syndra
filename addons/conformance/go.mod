@@ -8,9 +8,14 @@ require (
 	syndra/addons/reference v0.0.0-00010101000000-000000000000
 )
 
-require golang.org/x/text v0.14.0 // indirect
+require (
+	golang.org/x/text v0.14.0 // indirect
+	syndra/addons/strictjson v0.0.0 // indirect
+)
 
 replace (
 	syndra/addons/contract => ../contract
 	syndra/addons/reference => ../reference
 )
+
+replace syndra/addons/strictjson => ../strictjson

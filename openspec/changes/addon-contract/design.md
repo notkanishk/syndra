@@ -111,18 +111,6 @@ for the one benefit, less typing, that a fixture already pays for. A
 `replace ../contract` directive would make both ends build against the working
 tree and hide skew exactly where it starts.
 
-**One exception, not a type: `addons/contract/strictjson` (slice 7o, 14 Nov
-2026).** The owner ruled that contract 2 decodes requests with exact-case
-names and no duplicates (RFC 8259 §4, RFC 7493 §2.3), which Go's
-`encoding/json` does not. The decoder lives once, as a subpackage of the
-contract module, imported by both Go add-ons (TrueNAS and the reference)
-through `replace ../contract`, rather than once per add-on. It carries no
-contract type, constant or fact, only the RFCs' decoding rule, so it cannot
-hide skew between the two ends; the guide states the rule for every
-language and the kit's `requests.exact-names` holds every add-on to it. The
-backend does not import it. The TrueNAS image is built from `addons/` so
-the replaced module is in its context.
-
 **Rejected: Go types as truth with schemas emitted.** Truth would live in one
 compiler, the add-on author would read Go to learn JSON, and emitted schemas
 cannot carry what the manifest needs most (`role`, feature gates, `x-`

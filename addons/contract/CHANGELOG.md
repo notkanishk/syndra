@@ -10,7 +10,9 @@ A change to major 2 before its release, not a new major (owner ruling, 14 Nov
 code point for code point, one its schema gives (RFC 8259 §4): a case or
 fold variant (`Subject`, `ſubject`) is an unknown field, 400
 `UNKNOWN_REQUEST_FIELD`. It MUST refuse a name given twice in one object
-(RFC 7493 §2.3) with 400 `BAD_REQUEST`. The schemas already said so
+(RFC 7493 §2.3) with 400 and the route's malformed-body code
+(`BAD_REQUEST`; `INVALID_BODY` on `PUT /settings/{name}`, which the
+reference now answers too). The schemas already said so
 (2020-12 property names are exact; `additionalProperties: false`); Go's
 `encoding/json` did not, so a signed caller could send
 `{"subject":"conformance-x","ſubject":"wwe-the-rock"}` and have the second
@@ -19,9 +21,11 @@ obeyed (found in the 7n review).
 - Schema files, registries, fixtures: unchanged; no new code.
 - Guide: "Names exactly, and once" under "Every request and every reply".
 - Kit: new core check `requests.exact-names` (`/plan`; with `-mutate`,
-  `/apply` under a wrong fingerprint).
-- Go: both add-ons decode with `addons/contract/strictjson`. The TrueNAS
-  image now builds from `addons/` (Compose and CI), for its `replace`.
+  `/apply` under a wrong fingerprint; with `-mutate-settings`,
+  `PUT /settings/{name}` carrying the current value).
+- Go: both add-ons decode with `addons/strictjson`, a module of its own
+  (no dependency; the contract module stays files only). The TrueNAS image
+  now builds from `addons/` (Compose and CI), for its `replace`.
 - Deploy and rollback: unchanged; Syndra already sends exact names, once.
 
 ## `result` is core; the per-read keys and feature `results` go (slice 7h, 14 Nov 2026)

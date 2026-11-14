@@ -7,16 +7,16 @@
 
 FROM golang:1.25-alpine AS build
 # The context is addons/, not addons/truenas: go.mod replaces
-# syndra/addons/contract with ../contract (the request decoder both add-ons
-# share), so the build needs that module beside this one.
+# syndra/addons/strictjson with ../strictjson (the request decoder both
+# add-ons share), so the build needs that module beside this one.
 WORKDIR /src/truenas
 
 # Dependencies first, so a source edit does not re-download the module graph.
-COPY contract/go.mod /src/contract/go.mod
+COPY strictjson/go.mod /src/strictjson/go.mod
 COPY truenas/go.mod truenas/go.sum ./
 RUN go mod download
 
-COPY contract /src/contract
+COPY strictjson /src/strictjson
 COPY truenas .
 # CGO off for a static binary the scratch stage can run; trimpath so the image
 # carries no build-host paths.

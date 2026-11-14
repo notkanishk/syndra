@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"syndra/addons/contract/strictjson"
+	"syndra/addons/strictjson"
 )
 
 // Defect switches on one deliberate violation of the contract, so that the

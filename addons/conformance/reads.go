@@ -86,7 +86,7 @@ func (k *kit) reads() {
 	}
 	k.plan(k.at("plan"))
 	k.strictPlan(k.at("strict-requests"))
-	k.exactNames(k.at("requests.exact-names"), "/plan",
+	k.exactNames(k.at("requests.exact-names"), http.MethodPost, "/plan", "subject", "BAD_REQUEST",
 		func() map[string]any {
 			return map[string]any{"subject": k.cfg.Subject, "email": k.cfg.Email, "desired": map[string]any{}}
 		},
@@ -500,26 +500,35 @@ func (k *kit) strict(c *check, target, method string, valid map[string]any, via 
 	}
 }
 
-// exactNames sends, to POST route, the object obj builds (wrap places it in
-// the body) with one more member before its own: `Subject`, then `ſubject`
-// (a long s, which Unicode simple folding makes an s), each 400
-// UNKNOWN_REQUEST_FIELD, since a member name is compared code point for code
-// point (RFC 8259 §4) and no schema names them; then `subject` again, 400
-// BAD_REQUEST, since a name may appear once (RFC 7493 §2.3). The extra member
-// repeats subject's own value, so an add-on that folds or keeps the last of two
-// still acts on the kit's own subject: a wrong answer, never a wrong target.
-func (k *kit) exactNames(c *check, route string, obj func() map[string]any, wrap func(json.RawMessage) any) {
-	for _, p := range []struct{ name, code, why string }{
-		{"Subject", "UNKNOWN_REQUEST_FIELD", "Subject beside subject"},
-		{"\u017fubject", "UNKNOWN_REQUEST_FIELD", "\u017fubject (a long s) beside subject"},
-		{"subject", "BAD_REQUEST", "subject twice"},
-	} {
+// exactNames sends to route the object obj builds (wrap, when given, places
+// it in the body) with one more member before its own: member with its first
+// letter capitalised, and, when member has an s, with a long s (ſ, which
+// Unicode simple folding makes an s), each 400 UNKNOWN_REQUEST_FIELD, since a
+// member name is compared code point for code point (RFC 8259 §4) and no
+// schema names them; then member again, 400 and the route's malformed-body
+// code, since a name may appear once (RFC 7493 §2.3). The extra member repeats
+// member's own value, so an add-on that folds, or keeps the last of two, still
+// does exactly what the body without it asks: a wrong answer, never a
+// different act.
+func (k *kit) exactNames(c *check, method, route, member, malformed string, obj func() map[string]any, wrap func(json.RawMessage) any) {
+	variants := []struct{ name, code, why string }{
+		{strings.ToUpper(member[:1]) + member[1:], "UNKNOWN_REQUEST_FIELD", "a capitalised " + member + " beside it"},
+	}
+	if strings.Contains(member, "s") {
+		folded := strings.Replace(member, "s", "\u017f", 1)
+		variants = append(variants, struct{ name, code, why string }{folded, "UNKNOWN_REQUEST_FIELD", folded + " (a long s) beside " + member})
+	}
+	variants = append(variants, struct{ name, code, why string }{member, malformed, member + " twice"})
+	for _, p := range variants {
 		o := obj()
 		rest, _ := json.Marshal(o)
 		name, _ := json.Marshal(p.name)
-		value, _ := json.Marshal(o["subject"])
-		body := slices.Concat([]byte("{"), name, []byte(":"), value, []byte(","), rest[1:])
-		k.refused(c, k.send(request{method: http.MethodPost, target: route, body: wrap(body)}), 400, p.code, p.why)
+		value, _ := json.Marshal(o[member])
+		var body any = json.RawMessage(slices.Concat([]byte("{"), name, []byte(":"), value, []byte(","), rest[1:]))
+		if wrap != nil {
+			body = wrap(body.(json.RawMessage))
+		}
+		k.refused(c, k.send(request{method: method, target: route, body: body}), 400, p.code, p.why+" on "+method+" "+route)
 	}
 }
 

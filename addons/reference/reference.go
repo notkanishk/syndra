@@ -30,7 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"syndra/addons/contract/strictjson"
+	"syndra/addons/strictjson"
 )
 
 // ContractVersion is the wire major this add-on speaks (design §2).
@@ -366,7 +366,7 @@ type planRequest struct {
 // plan mutates nothing. It is computed against the target as it is now.
 func (a *Addon) plan(_ *http.Request, body []byte) reply {
 	var req planRequest
-	if refused := a.parse(body, &req); refused != nil {
+	if refused := a.parse(body, &req, "BAD_REQUEST"); refused != nil {
 		return *refused
 	}
 	if n := len(req.Subjects); n > subjectsPerPlan {
@@ -405,7 +405,7 @@ type applyRequest struct {
 // backend re-plans before re-sending and the fingerprint will have moved.
 func (a *Addon) apply(_ *http.Request, body []byte) reply {
 	var req applyRequest
-	if refused := a.parse(body, &req); refused != nil {
+	if refused := a.parse(body, &req, "BAD_REQUEST"); refused != nil {
 		return *refused
 	}
 	if blank(req.CallID) || blank(req.Subject) || req.Desired == nil {
@@ -649,7 +649,7 @@ func (a *Addon) operation(r *http.Request, body []byte) reply {
 		return problem(404, "OPERATION_FAILED", "This add-on has no such operation.", nil)
 	}
 	var req operationRequest
-	if refused := a.parse(body, &req); refused != nil {
+	if refused := a.parse(body, &req, "BAD_REQUEST"); refused != nil {
 		return *refused
 	}
 	if req.Operation != name {
@@ -760,7 +760,7 @@ type lifecycleRequest struct {
 // every write with LIFECYCLE_REFUSAL while reads go on answering.
 func (a *Addon) setLifecycle(_ *http.Request, body []byte) reply {
 	var req lifecycleRequest
-	if refused := a.parse(body, &req); refused != nil {
+	if refused := a.parse(body, &req, "BAD_REQUEST"); refused != nil {
 		return *refused
 	}
 	switch {
@@ -789,7 +789,7 @@ type settingRequest struct {
 
 func (a *Addon) putSetting(r *http.Request, body []byte) reply {
 	var req settingRequest
-	if refused := a.parse(body, &req); refused != nil {
+	if refused := a.parse(body, &req, "INVALID_BODY"); refused != nil {
 		return *refused
 	}
 	switch name := r.PathValue("name"); {
@@ -934,8 +934,11 @@ func (v versioned) version() *int { return v.ContractVersion }
 // this add-on does not know is refused, never ignored (design §2), and so is a
 // case or fold variant of one it does (RFC 8259 §4: names compare code point
 // for code point) and a name given twice (RFC 7493 §2.3), by the decoder
-// both add-ons share (addons/contract/strictjson).
-func (a *Addon) parse(body []byte, into interface{ version() *int }) *reply {
+// both add-ons share (addons/strictjson).
+//
+// malformed is the route's code for a body that is not its JSON: BAD_REQUEST,
+// or INVALID_BODY for a setting (registry/errors.json).
+func (a *Addon) parse(body []byte, into interface{ version() *int }, malformed string) *reply {
 	err := a.decode(body, into)
 	var unknown *strictjson.UnknownMemberError
 	var duplicate *strictjson.DuplicateMemberError
@@ -944,9 +947,9 @@ func (a *Addon) parse(body []byte, into interface{ version() *int }) *reply {
 	case errors.As(err, &unknown):
 		r = problem(400, "UNKNOWN_REQUEST_FIELD", "The request carries a field this add-on does not know ("+unknown.Error()+").", nil)
 	case errors.As(err, &duplicate):
-		r = problem(400, "BAD_REQUEST", "The body is not the JSON this route takes ("+duplicate.Error()+").", nil)
+		r = problem(400, malformed, "The body is not the JSON this route takes ("+duplicate.Error()+").", nil)
 	case err != nil:
-		r = problem(400, "BAD_REQUEST", "The body is not the JSON this route takes.", nil)
+		r = problem(400, malformed, "The body is not the JSON this route takes.", nil)
 	case v == nil || *v != ContractVersion:
 		caller := 0
 		if v != nil {

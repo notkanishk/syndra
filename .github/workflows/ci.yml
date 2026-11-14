@@ -83,6 +83,9 @@ jobs:
         with:
           go-version-file: addons/conformance/go.mod
           cache-dependency-path: addons/conformance/go.sum
+      - name: the request decoder both add-ons share
+        working-directory: addons/strictjson
+        run: go vet ./... && go test -count=1 ./...
       - name: the contract's embed module, and AUTHORING.md held to it
         working-directory: addons/contract
         run: go vet ./... && go test -count=1 ./...

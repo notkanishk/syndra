@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"mime"
 	"net/http"
 	"net/url"
@@ -71,9 +70,9 @@ func (k *kit) mutate() error {
 		}},
 		// Under a wrong fingerprint, so an add-on that takes the probe still writes nothing.
 		{"exact-names", []string{"requests.exact-names"}, func() {
-			k.exactNames(k.at("requests.exact-names"), "/apply", func() map[string]any {
+			k.exactNames(k.at("requests.exact-names"), http.MethodPost, "/apply", "subject", "BAD_REQUEST", func() map[string]any {
 				return k.applyBody(k.callID(), "conformance-wrong-fingerprint", map[string]any{k.m.account: false})
-			}, func(body json.RawMessage) any { return body })
+			}, nil)
 		}},
 		{"settings", []string{"settings"}, func() { k.settingsWrite(k.at("settings")) }},
 		{"create", []string{"plan-equals-apply", "create-is-new", "health"}, func() {
@@ -690,6 +689,9 @@ func (k *kit) settingsWrite(c *check) {
 	}
 	k.ok(c, k.send(request{method: http.MethodPut, target: target, body: body(), schema: "setting_put_request.json"}), "setting.json")
 	k.strict(k.at("strict-requests"), target, http.MethodPut, body(), nil)
+	// Safe under -mutate-settings alone: refused at decoding, and an add-on
+	// that took a probe would write back the value it already holds.
+	k.exactNames(k.at("requests.exact-names"), http.MethodPut, target, "value", "INVALID_BODY", body, nil)
 }
 
 func (k *kit) withdrawExisting(c, channel *check) {

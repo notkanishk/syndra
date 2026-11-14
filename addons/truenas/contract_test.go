@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"syndra/addons/contract/strictjson"
+	"syndra/addons/strictjson"
 )
 
 // The add-on half of the wire contract, major 2 (see ../contract/README.md).

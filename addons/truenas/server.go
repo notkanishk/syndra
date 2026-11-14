@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"syndra/addons/contract/strictjson"
+	"syndra/addons/strictjson"
 )
 
 // The HTTP surface (design §5).
