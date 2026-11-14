@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -177,7 +176,7 @@ func (s *server) operateNow(w http.ResponseWriter, name string, req OperationReq
 		writeError(w, http.StatusInternalServerError, CodeOperationFailed, notLoggedDetail, nil)
 		return
 	case errors.Is(err, errStoreUnreadable):
-		// The add-on's own store (boundAccount): nothing was sent.
+		// The add-on's own store (operatedAccount): nothing was sent.
 		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, err.Error(), nil)
 		return
 	case err != nil:
@@ -314,31 +313,6 @@ func (s *server) runOperation(name string, req OperationRequest) (OperationResul
 	return OperationResult{}, http.StatusNotFound, fmt.Errorf("no such operation")
 }
 
-// operatedAccount resolves the subject's account for an operation, refusing rather than guessing. It
-// is NOT the free function boundAccount (apply's rule): it goes through recordID, which has its own.
-// Slice 7t brings the two together.
-//
-// An operation that could not find its subject must not fall back to
-// derivation: derivation names an account that may not exist, and setting a
-// password on the wrong one is the whole hazard.
-func (s *server) operatedAccount(subject string) (Binding, int, error) {
-	b, bound, err := s.store.GetBinding(subject)
-	if err != nil {
-		// The add-on's own store, read before anything is sent to the NAS:
-		// its fault, never the subject's, so 500 STORE_UNREADABLE (as /plan
-		// answers it), never the 422 that means "no account". On a write,
-		// Syndra reads any 5xx as possibly acted (indeterminate), which
-		// overstates it and is safe: a refusal is never recorded, so GET
-		// /calls answers unknown and a re-send runs it once.
-		log.Printf("[STORE] binding for an operation could not be read: %v", err)
-		return Binding{}, http.StatusInternalServerError, errStoreUnreadable
-	}
-	if !bound {
-		return Binding{}, http.StatusUnprocessableEntity, fmt.Errorf("no account is bound to this subject yet")
-	}
-	return b, 0, nil
-}
-
 // setPassword forwards a member's credential and keeps nothing.
 //
 // `user.update({password})`, never `user.set_password`: the latter rejects the
@@ -354,13 +328,10 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 	if err != nil {
 		return OperationResult{}, http.StatusBadRequest, err
 	}
-	binding, status, err := s.operatedAccount(req.Subject)
+	who := opCaller("password.set", req)
+	r, status, err := s.operatedAccount(req.Subject, &who)
 	if err != nil {
 		return OperationResult{}, status, err
-	}
-	id, err := s.recordID(binding)
-	if err != nil {
-		return OperationResult{}, statusForLookup(err), lookupRefusal(err)
 	}
 	// Three fields, one call, and the grouping is forced by the target.
 	//
@@ -382,7 +353,7 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 	if smb, known := s.desiredSMB(req.Subject); known && smb {
 		update["smb"] = true
 	}
-	if err := s.send(opCaller("password.set", req), "user.update", []any{id, update}, nil); err != nil {
+	if err := s.send(who, "user.update", []any{r.Account.ID, update}, nil); err != nil {
 		// A sentence an operator can read, not the security boundary. The
 		// client wrapper already classifies rather than wraps, so the target's
 		// own text — built from a call whose parameters include the password —
@@ -393,7 +364,7 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 	}
 	return OperationResult{
 		Operation: "password.set", Subject: req.Subject, Outcome: "succeeded",
-		Detail: "The credential was set on " + binding.Username + ".",
+		Detail: "The credential was set on " + r.Account.Username + ".",
 	}, http.StatusOK, nil
 }
 
@@ -506,7 +477,8 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 // they reconnect — TrueNAS exposes no session-close method at all — which is
 // why the operator surface must say so rather than implying immediacy.
 func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, error) {
-	binding, status, err := s.operatedAccount(req.Subject)
+	who := opCaller("password.rotate", req)
+	r, status, err := s.operatedAccount(req.Subject, &who)
 	if err != nil {
 		return OperationResult{}, status, err
 	}
@@ -514,22 +486,18 @@ func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, err
 	if err != nil {
 		return OperationResult{}, http.StatusInternalServerError, fmt.Errorf("could not mint a credential")
 	}
-	id, err := s.recordID(binding)
-	if err != nil {
-		return OperationResult{}, statusForLookup(err), lookupRefusal(err)
-	}
 	// `password_disabled` cleared here too, for the reason it is cleared in
 	// setPassword: an update carrying only `password` is accepted and leaves
 	// authentication disabled. A rotation deliberately does NOT touch `smb` —
 	// it is the credential half of a revocation, and turning share access on
 	// during one would be the opposite of what it is for.
-	if err := s.send(opCaller("password.rotate", req), "user.update", []any{id,
+	if err := s.send(who, "user.update", []any{r.Account.ID,
 		map[string]any{"password": minted, "password_disabled": false}}, nil); err != nil {
 		return OperationResult{}, statusFor(err), failedWrite(err, "rotation")
 	}
 	return OperationResult{
 		Operation: "password.rotate", Subject: req.Subject, Outcome: "succeeded", Rotated: true,
-		Detail: "A new credential was set on " + binding.Username +
+		Detail: "A new credential was set on " + r.Account.Username +
 			". Established sessions end when they next reconnect, not immediately.",
 	}, http.StatusOK, nil
 }
@@ -565,10 +533,12 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	if err != nil {
 		return OperationResult{}, http.StatusBadRequest, err
 	}
-	binding, status, err := s.operatedAccount(req.Subject)
+	who := opCaller("account.purge", req)
+	r, status, err := s.operatedAccount(req.Subject, &who)
 	if err != nil {
 		return OperationResult{}, status, err
 	}
+	who = who.on(r.Account.UID)
 	// Checked again here and not only at adoption. A binding can predate this
 	// guard, or predate a key reissued against a different account, and this is
 	// the one operation that cannot be undone.
@@ -576,16 +546,13 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	if err := s.requireSelfKnown(); err != nil {
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
-	if err := s.refuseSelfAccount(binding.Username); err != nil {
+	// The account's name now, which is what the self check is about: the
+	// binding's may be one it has since been renamed from.
+	if err := s.refuseSelfAccount(r.Account.Username); err != nil {
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
-
-	// Resolved on the shared session, which can read but not delete. The
-	// elevated one does exactly one thing.
-	id, err := s.recordID(binding)
-	if err != nil {
-		return OperationResult{}, statusForLookup(err), lookupRefusal(err)
-	}
+	// Resolved on the shared session (operatedAccount), which can read but
+	// not delete. The elevated one does exactly one thing.
 
 	// A session of its own, closed immediately. Not the long-lived one: an
 	// elevated credential must not outlive the single call it was injected for,
@@ -598,8 +565,8 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	defer client.Close()
 
 	// Through the seam like every write, on its own session: callOnce, not send.
-	if err := s.mutate(opCaller("account.purge", req).on(binding.UID), "user.delete", func() error {
-		return callOnce(client, "user.delete", []any{id}, nil)
+	if err := s.mutate(who, "user.delete", func() error {
+		return callOnce(client, "user.delete", []any{r.Account.ID}, nil)
 	}); err != nil {
 		return OperationResult{}, statusFor(err), failedWrite(err, "deletion")
 	}
@@ -608,8 +575,8 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	// bound-but-absent path — which re-creates under the recorded name, because
 	// that path exists for an account deleted BEHIND our back. A purge is not
 	// that: we deleted it, on purpose, and it must not resurrect itself.
-	detail := "Deleted " + binding.Username + "."
-	if err := s.mutate(opCaller("account.purge", req).on(binding.UID), "store.unbind", func() error {
+	detail := "Deleted " + r.Account.Username + "."
+	if err := s.mutate(who, "store.unbind", func() error {
 		return s.store.DeleteBinding(req.Subject)
 	}); err != nil {
 		logStoreFailure("binding", req.Subject, err)
@@ -696,7 +663,8 @@ func statusToken(s string) string {
 
 // smbActivity reads the audit log and says what it could not see.
 func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error) {
-	binding, status, err := s.operatedAccount(req.Subject)
+	// A read: resolved, never rewritten (operatedAccount).
+	r, status, err := s.operatedAccount(req.Subject, nil)
 	if err != nil {
 		return OperationResult{}, status, err
 	}
@@ -712,7 +680,10 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 	// exactly how the timestamp took the operation down. What varies is decoded
 	// separately and defensively; what does not is decoded here.
 	var rows []auditRow
-	filters := [][]any{{"username", "=", binding.Username}}
+	// By the account's name NOW: the audit log is keyed by name (auditRow has
+	// no uid), so an account renamed since it was bound is found under its
+	// new name, and a conflict never reads the holder's log.
+	filters := [][]any{{"username", "=", r.Account.Username}}
 	// The lower bound, in the target's own units. The backend hands this over
 	// as RFC3339 because that is what an HTTP caller writes; the column is an
 	// integer, and a string compared against it is ACCEPTED and matches nothing
@@ -758,7 +729,7 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 	}
 	// Reported whether or not there were events, because the case that matters
 	// is the empty one.
-	if blind, err := s.sharesNotWatching(binding.Username); err != nil {
+	if blind, err := s.sharesNotWatching(r.Account.Username); err != nil {
 		report.Uncovered = []string{"(the audit coverage of the shares could not be read, so coverage is unknown)"}
 	} else {
 		report.Uncovered = append([]string{}, blind...)
@@ -1254,25 +1225,19 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		return OperationResult{}, http.StatusInternalServerError, err
 	} else if bound {
 		if existing.Username == username {
-			// A repeat only while the name still names the bound account. When
-			// another account now holds it (boundAccount's conflict), "already
-			// bound" would answer done and leave the apply blocked for ever:
-			// refused, and the operator releases first.
-			floor, ceiling := s.idRange()
-			lookup := func(field string, value any) (*Subject, error) {
-				found, _, err := s.subjectWhere(field, value)
-				return found, err
-			}
-			found, _, conflict, err := boundAccount(existing, floor, ceiling,
-				func(name string) (*Subject, error) { return lookup("username", name) },
-				func(uid int64) (*Subject, error) { return lookup("uid", uid) })
+			// A repeat only while the binding still names an account
+			// (resolveLive). When another account now holds its name or number
+			// (a conflict), "already bound" would answer done and leave the
+			// apply blocked for ever: refused, and the operator releases first.
+			who := opCaller("account.adopt", req)
+			r, _, err := s.resolveLive(req.Subject, &who)
 			if err != nil {
-				return OperationResult{}, statusFor(err), err
+				return OperationResult{}, statusForLookup(err), err
 			}
-			if conflict != nil {
-				return OperationResult{}, http.StatusConflict,
-					fmt.Errorf("this subject is bound to %s, which another account now holds; release the binding first", username)
+			if r.Conflict != nil {
+				return OperationResult{}, http.StatusConflict, conflictRefusal(r.Conflict)
 			}
+			found := r.Account
 			if found == nil {
 				// Bound, and the account is gone: not "already bound", which
 				// would answer done for nothing, but the miss any adopt is.

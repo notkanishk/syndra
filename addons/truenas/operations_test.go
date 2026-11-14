@@ -671,11 +671,13 @@ func TestTheRecordedActorIsTheOneWhoAsked(t *testing.T) {
 // 6.9 built the apply path to follow a stable uid whose username moved out of
 // band — a rename, not a missing account. The one-shot operations resolved by
 // NAME instead, so a rename made every one of them fail until an apply happened
-// to run and re-sync the binding. One rule for both paths, and it is the uid.
+// to run and re-sync the binding. One rule for both paths (boundAccount): a uid
+// in this add-on's range is followed to its new name; one outside it is a
+// conflict (TestEveryCallerResolvesOneIdentity).
 func TestAnOutOfBandRenameDoesNotBreakTheOperationPath(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"charlotte_renamed","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	s, m := applyServer(t, `[{"username":"charlotte_renamed","id":11,"uid":300001,"locked":false,"smb":true,"groups":[42]}]`)
 	// The binding still names the account as it was.
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -726,15 +728,15 @@ func TestABindingWithNoUidFallsBackToTheName(t *testing.T) {
 }
 
 // Two accounts sharing a uid is a question about which one, and the answer is
-// never "whichever the next query returns". Falling through to the name would
-// answer it by changing the subject — on the path whose next call sets a
-// credential.
+// never "whichever the next query returns": the binding's name is gone, and
+// following its number would pick one of two on the path whose next call sets
+// a credential.
 func TestAnAmbiguousUidRefusesRatherThanResolvingByName(t *testing.T) {
 	s, m := applyServer(t, `[
-		{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
-		{"username":"charlotte_clone","id":12,"uid":3001,"locked":false,"smb":true,"groups":[42]}
+		{"username":"charlotte_a","id":11,"uid":300001,"locked":false,"smb":true,"groups":[42]},
+		{"username":"charlotte_clone","id":12,"uid":300001,"locked":false,"smb":true,"groups":[42]}
 	]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -757,15 +759,15 @@ func TestTheFakeAppliesTheFiltersTheLookupSends(t *testing.T) {
 		{"username":"seth","id":12,"uid":3002,"locked":false,"smb":true,"groups":[42]}
 	]`)
 
-	id, err := s.lookupOne("uid", int64(3002))
-	if err != nil {
+	found, _, err := s.subjectWhere("uid", int64(3002))
+	if err != nil || found == nil {
 		t.Fatalf("a filtered lookup must find its row: %v", err)
 	}
-	if id.String() != "12" {
-		t.Fatalf("want seth's record id, got %s", id.String())
+	if found.ID.String() != "12" {
+		t.Fatalf("want seth's record id, got %s", found.ID.String())
 	}
-	if _, err := s.lookupOne("uid", int64(9999)); !errors.Is(err, errNoSuchAccount) {
-		t.Fatalf("want errNoSuchAccount, got %v", err)
+	if found, _, err := s.subjectWhere("uid", int64(9999)); err != nil || found != nil {
+		t.Fatalf("want no account, got %+v %v", found, err)
 	}
 }
 
@@ -811,13 +813,13 @@ func TestAMissingBoundAccountIsRefusedRatherThanLeftUnknown(t *testing.T) {
 func TestAnAmbiguousBindingIsItsOwnRefusal(t *testing.T) {
 	rpc := &fakeRPC{
 		users: `[
-			{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
-			{"username":"charlotte-old","id":12,"uid":3001,"locked":false,"smb":false,"groups":[42]}
+			{"username":"charlotte-a","id":11,"uid":300001,"locked":false,"smb":true,"groups":[42]},
+			{"username":"charlotte-old","id":12,"uid":300001,"locked":false,"smb":false,"groups":[42]}
 		]`,
 		groups: fixtureGroups,
 	}
 	s := testServer(t, rpc)
-	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "charlotte", UID: 300001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 

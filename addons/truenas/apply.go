@@ -628,7 +628,8 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		}, http.StatusUnprocessableEntity, nil
 	}
 	if err != nil {
-		return ApplyOutcome{}, http.StatusBadGateway, err
+		// Two accounts on the binding's key is a 409, as the operations answer it.
+		return ApplyOutcome{}, statusForLookup(err), err
 	}
 	if conflict != nil {
 		// Halted, and surfacing THE SAME adoption action the unmanaged
@@ -793,88 +794,12 @@ func (s *server) rememberWishes(req ApplyRequest, desired desiredState, out Appl
 	}
 }
 
-// inIDRange is whether n is a number this add-on hands out (identity.go). Those numbers are never
-// handed out twice (ClaimID's high-water mark), so one names the same account for good; a number
-// outside it can come back after a delete, so it never names an account by itself (boundAccount).
-func inIDRange(n, floor, ceiling int64) bool { return n >= floor && n <= ceiling }
-
-// boundAccount is the rule for which account a binding names, for apply (locate), plan and
-// resolveBinding (standing, statistics, accountBound). Plan asks it of its snapshot and apply of the
-// target, so the plan never says "absent" (or "creates") for an account the apply would find, or the
-// other way round. It is not yet the rule of the account operations: (*server).operatedAccount goes
-// through recordID, which has its own, and so do storageStatus, smbActivity and the backend's drift
-// matching (slice 7t, one account identity).
-// byName and byUID look up one account by an exact key. It returns the account
-// (nil when there is none), the binding as it should now read, and a conflict
-// when the name is held by a different account of ours, or, for a uid outside this add-on's range,
-// when the recorded name is gone and the number is held by another name.
-//
-// What a binding's uid means decides the rest. In range, it is a real uid that is never reused: the
-// account it names is that one, so a rename is followed. Outside the range (an adopted hand-made
-// account, uid_kind "account"; or a contract-1 record key, which names nothing by number) a number
-// can be handed to a new account after a delete, so it is only ever believed alongside the
-// recorded name: name and number agree, or the binding halts for an operator (BindingConflict) and
-// is never rebound to whoever holds the number.
-func boundAccount(binding Binding, floor, ceiling int64,
-	byName func(string) (*Subject, error), byUID func(int64) (*Subject, error),
-) (*Subject, Binding, *BindingConflict, error) {
-	found, err := byName(binding.Username)
-	if err != nil {
-		return nil, binding, nil, err
-	}
-	owned := binding.ownsUID(floor, ceiling)
-	if found != nil {
-		if owned && found.UID != binding.UID {
-			// A name some other account now holds (the original was deleted
-			// and the name reused). Converging it would hand this subject's
-			// entitlements to a stranger, so it halts like any foreign name.
-			return nil, binding, &BindingConflict{Username: found.Username, AccountID: accountID(found.UID)}, nil
-		}
-		if !owned {
-			// A legacy binding holding a record key (or a real uid it never said was one): the name
-			// found the account, so the real uid, marked, and the next pass is guarded by the check above.
-			binding.UID = found.UID
-		}
-		binding.UIDKind = uidKindAccount
-		return found, binding, nil, nil
-	}
-	if !owned {
-		// A legacy uid of 0 or a record key must never match root or a
-		// built-in account: with no name hit the account is missing.
-		return nil, binding, nil, nil
-	}
-	// The name moved. A stable uid whose username changed out of band is a
-	// RENAME, not a missing account: reporting it as missing would create a
-	// replacement while the original kept the home data, or, for a subject
-	// wanted off, leave the original unlocked.
-	renamed, err := byUID(binding.UID)
-	if err != nil {
-		return nil, binding, nil, err
-	}
-	if renamed != nil {
-		if !inIDRange(binding.UID, floor, ceiling) {
-			// A number outside the range may have been handed to a new account since this one was
-			// deleted: not a rename, whatever else is true. An operator decides; nothing is written
-			// to the account that holds the number and nothing is created.
-			return nil, binding, &BindingConflict{Username: renamed.Username, AccountID: accountID(renamed.UID),
-				numberHeld: true, was: binding.Username}, nil
-		}
-		binding.Username = renamed.Username
-		binding.UIDKind = uidKindAccount
-		return renamed, binding, nil, nil
-	}
-	// Bound, and neither the name nor the uid is there. The account was
-	// deleted out of band; convergence re-creates it under the recorded name
-	// rather than re-deriving, because the recorded name is what every ACL and
-	// share still refers to.
-	return nil, binding, nil, nil
-}
-
 // locate finds the subject's account, by binding first and derivation second.
 //
 // The binding is authoritative and the derivation is a recovery path. Asking
 // the other way round would rename an account every time somebody's email
-// changed, which is the one thing §11 forbids.
+// changed, which is the one thing §11 forbids. The bound half is resolveLive
+// (identity_resolve.go), the rule every caller asks; the derivation is locate's.
 // The fourth return value says a lookup came back cut short. Each lookup here
 // is one account by an exact key, filtered at the target, so that only happens
 // when a target ignores the filter and sends its whole list: carried out rather
@@ -882,34 +807,13 @@ func boundAccount(binding Binding, floor, ceiling int64,
 // The fifth says the account found is unbound and this subject's own, left by
 // a create in doubt (leftByCrashedCreate), for applyOne to bind.
 func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, bool, bool, error) {
-	binding, bound, err := s.store.GetBinding(req.Subject)
+	who := applyCaller(req)
+	r, bound, err := s.resolveLive(req.Subject, &who)
 	if err != nil {
 		return nil, Binding{}, nil, false, false, err
 	}
 	if bound {
-		// Each lookup is one account by an exact key; a cut-short answer only
-		// matters when the conclusion is that the account is not there.
-		cut := false
-		lookup := func(field string, value any) (*Subject, error) {
-			found, c, err := s.subjectWhere(field, value)
-			cut = cut || c
-			return found, err
-		}
-		floor, ceiling := s.idRange()
-		found, resolved, conflict, err := boundAccount(binding, floor, ceiling,
-			func(name string) (*Subject, error) { return lookup("username", name) },
-			func(uid int64) (*Subject, error) { return lookup("uid", uid) })
-		if err != nil {
-			return nil, Binding{}, nil, false, false, err
-		}
-		if resolved.Username != binding.Username || resolved.UID != binding.UID || resolved.UIDKind != binding.UIDKind {
-			// A rename, or a legacy binding's real uid and marker: recorded once, so the next
-			// pass finds the account by number and is guarded by its uid.
-			if err := s.mutate(applyCaller(req).on(resolved.UID), "store.bind", func() error { return s.store.PutBinding(resolved) }); err != nil {
-				logStoreFailure("binding", req.Subject, err)
-			}
-		}
-		return found, resolved, conflict, found == nil && conflict == nil && cut, false, nil
+		return r.Account, r.Binding, r.Conflict, r.Cut, false, nil
 	}
 
 	if strings.TrimSpace(req.Email) == "" {
@@ -1415,13 +1319,19 @@ func (s *server) subjectWhere(field string, value any) (*Subject, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
+	var found *Subject
 	for i := range snap.Subjects {
 		got := snap.Subjects[i]
 		if (field == "username" && got.Username == value) || (field == "uid" && got.UID == value) {
-			return &snap.Subjects[i], snap.Truncated, nil
+			if found != nil {
+				// Two accounts on one key is a question about which one, and the
+				// answer is never "whichever the target listed first".
+				return nil, snap.Truncated, fmt.Errorf("%w: %s=%v", errAmbiguousAccount, field, value)
+			}
+			found = &snap.Subjects[i]
 		}
 	}
-	return nil, snap.Truncated, nil
+	return found, snap.Truncated, nil
 }
 
 // emptyGroupNamed finds a group by name that nobody belongs to, primary or

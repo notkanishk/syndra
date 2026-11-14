@@ -414,18 +414,29 @@ func (s *server) handleReach(w http.ResponseWriter, r *http.Request, _ []byte) {
 // change, one quota read per dataset. The folder permissions come through the
 // fresher like /reach (fresh asks for a read of the NAS now), and the places
 // are as fresh as that read says.
-func (s *server) memberPlaces(fresh bool, uid int64, groupIDs []apiID, home string) ([]Place, Observed, error) {
+func (s *server) memberPlaces(fresh bool, account *Subject) ([]Place, Observed, error) {
 	read, seen, err := s.reach(fresh)
 	if err != nil {
 		return nil, Observed{}, err
 	}
-	byID := gidsOf(read.groups)
+	// Every group it is in: the managed ones by name, the machine's own by
+	// record id (readSubjectsWhere keeps those apart), each to its gid.
+	byID, byName := gidsOf(read.groups), map[string]int64{}
+	for _, g := range read.groups {
+		byName[g.Name] = g.GID
+	}
 	who := principals{}
-	for _, id := range groupIDs {
+	for _, name := range account.Groups {
+		if gid, ok := byName[name]; ok {
+			who[gid] = true
+		}
+	}
+	for _, id := range account.builtinGroups {
 		if gid, ok := byID[id.String()]; ok {
 			who[gid] = true
 		}
 	}
+	uid, home := account.UID, account.Home
 	places := placesFor(read.places, who, nil)
 	if sh, inside, ok := shareAt(read.shares, home); ok && inside != "" {
 		places = append(places, Place{Share: sh.Name, Folder: inside, Path: home,

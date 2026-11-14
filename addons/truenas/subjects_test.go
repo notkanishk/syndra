@@ -33,6 +33,9 @@ type fakeRPC struct {
 	// saying no over a healthy socket, which is a different thing from the
 	// transport failing and was for a while indistinguishable from success.
 	refuse map[string]string
+	// refuseFrom refuses a method from its nth call on (1-based), so a read made
+	// after the account was resolved can fail on its own.
+	refuseFrom map[string]int
 	// methods overrides what `core.get_methods` enumerates; empty means every
 	// method this add-on uses is present.
 	methods string
@@ -77,6 +80,17 @@ func (f *fakeRPC) Call(method string, _ int64, params any) (json.RawMessage, err
 	}
 	if msg, ok := f.refuse[method]; ok {
 		return errorEnvelope(msg), nil
+	}
+	if from, ok := f.refuseFrom[method]; ok {
+		n := 0
+		for _, c := range f.calls {
+			if c == method {
+				n++
+			}
+		}
+		if n >= from {
+			return errorEnvelope("permission denied"), nil
+		}
 	}
 	// A per-path answer ("filesystem.getacl /mnt/tank/main") wins over the
 	// method's own, for reads made once per folder; a per-path refusal too.
@@ -603,7 +617,7 @@ func TestAReplayedOperationIdReturnsTheRecordedResult(t *testing.T) {
 // not real until it has been watched to fail, and two of these escaped a version
 // of it that had already been reviewed. The empty-fixture case is the one that
 // matters most, because it was reachable today — `orEmptyList` answers `[]`
-// whenever a test sets no users, and `lookupOne` always sends a filter.
+// whenever a test sets no users, and `subjectWhere` always sends a filter.
 func TestTheFakeRefusesAQueryItDoesNotImplement(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -670,7 +684,7 @@ func TestTheFakeStillAnswersTheQueriesTheAddonSends(t *testing.T) {
 	if got := filterRows(rows, []any{[]any{}, map[string]any{"limit": 5001}}); got != rows {
 		t.Errorf("an unfiltered query must answer with everything, got %s", got)
 	}
-	// `lookupOne`: one equality, one row.
+	// `subjectWhere`: one equality, one row.
 	got := filterRows(rows, []any{[]any{[]any{"uid", "=", int64(3002)}}, map[string]any{"limit": 2}})
 	if !strings.Contains(got, "seth") || strings.Contains(got, "charlotte") {
 		t.Errorf("want only seth, got %s", got)

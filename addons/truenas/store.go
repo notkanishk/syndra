@@ -336,8 +336,8 @@ func (s *Store) GetSnapshot() (Snapshot, bool, error) {
 // missing account would create a replacement while the original kept the home data. A number
 // outside the range (an adopted account's, from 3000) can be handed to a new account after a delete,
 // so it is only believed beside the recorded name; name gone and number held by another name halts
-// as a conflict (UIDKind says the uid is real; the account operations, storage status and the
-// backend's drift do not follow this rule yet: slice 7t, one account identity).
+// as a conflict (UIDKind says the uid is real). Every add-on caller asks it of one module,
+// identity_resolve.go (slice 7t-1); the backend's drift matching follows in 7t-3.
 //
 // AccountID is contract 2's name for the same number (account_id, a string). It
 // is written BESIDE uid, never instead of it, for one release (decision 10,
@@ -486,7 +486,7 @@ type Wish struct {
 }
 
 // Bindings is every binding, as stored, each with its uid read from account_id when that is all it
-// kept. Which NAS account one names is the server's rule, not this list's (resolveBinding).
+// kept. Which NAS account one names is the server's rule, not this list's (identity_resolve.go).
 func (s *Store) Bindings() ([]Binding, error) {
 	var out []Binding
 	err := s.db.View(func(tx *bolt.Tx) error {
