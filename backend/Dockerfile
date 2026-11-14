@@ -1,5 +1,5 @@
 # Build Stage
-FROM golang:alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # The context is the repository root, not backend/: go.mod replaces
 # syndra/addons/strictjson with ../addons/strictjson (the JSON decoder the

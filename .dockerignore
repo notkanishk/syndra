@@ -16,3 +16,11 @@ backend/.gomodcache
 **/*.out
 **/*.log
 **/.DS_Store
+# Secrets, should one sit inside an allowed directory (the root .gitignore's
+# list, and a key file by its usual names): never into an image layer.
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/zitadel-machine-key.json
+**/DEPLOY.local.md

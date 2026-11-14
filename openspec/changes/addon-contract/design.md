@@ -118,6 +118,16 @@ input to Syndra: a member name exactly as the schema spells it, never twice in
 one object. A request (an add-on's, or the backend's API) refuses a name it
 does not know; Syndra reading a reply skips one (`AllowUnknown`, chapter 14
 rule 1 of the guide), a case variant included, and never folds it in.
+Covered: every backend API body (`decodeJSONStrict`; the UI proxy forwards
+the bytes sent, splicing in the one member it adds, so it settles nothing),
+and every add-on reply (`addons.DecodeReply`). Not covered, deliberately:
+the two inputs Zitadel owns, the Actions v2 payload (`claimserve.Decode`:
+top level and grant rows through maps, already exact; `user`, `human` and
+`application` through structs, folded) and the event webhook
+(`translateZitadelEvent`). No recorded Zitadel payload exists to prove each
+tag is Zitadel's exact spelling, and F-0 (`projectId` in Zitadel's docs,
+`project_id` on the wire) showed that one wrong guess costs every token its
+claims; they stay on `encoding/json` until a recorded payload pins them.
 
 **Rejected: Go types as truth with schemas emitted.** Truth would live in one
 compiler, the add-on author would read Go to learn JSON, and emitted schemas

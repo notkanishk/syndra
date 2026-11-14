@@ -345,6 +345,11 @@ func DecodeReply(body []byte, v any) error {
 // behind, so the call may have acted (absence is never a value).
 var ErrUnknownOutcome = errors.New("addon: the reply's outcome is missing or not one the add-on may say")
 
+// ErrUnreadableReply is a 2xx operation reply that does not decode: not JSON,
+// or a name twice in one object (RFC 7493 §2.3). Answered, and unreadable, so
+// it may have acted, as with ErrUnknownOutcome; the log says which.
+var ErrUnreadableReply = errors.New("addon: the reply does not read")
+
 // readOutcome reads a 2xx operation reply's own outcome (6.3a): succeeded as
 // it was; no_change, from an add-on declaring calls, as answered and nothing
 // done; anything else, or none, as indeterminate. Status alone said only that
@@ -353,7 +358,10 @@ func readOutcome(resp CallResponse, calls bool) CallResponse {
 	var reply struct {
 		Outcome string `json:"outcome"`
 	}
-	_ = DecodeReply(resp.Body, &reply)
+	if err := DecodeReply(resp.Body, &reply); err != nil {
+		resp.Outcome, resp.Err = OutcomeIndeterminate, fmt.Errorf("%w: %v", ErrUnreadableReply, err)
+		return resp
+	}
 	switch {
 	case reply.Outcome == string(OutcomeSucceeded):
 	case reply.Outcome == "no_change" && calls:
