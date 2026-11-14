@@ -127,9 +127,6 @@ func (o DecodeOptions) Decode(data []byte, v any) error {
 
 var unmarshaler = reflect.TypeFor[json.Unmarshaler]()
 
-// maxDepth is encoding/json's maxNestingDepth.
-const maxDepth = 10000
-
 // walker reads one document. path is where it is, a member name or (index
 // >= 0) an array position per level, turned into a pointer only for an
 // error: building one per value would cost memory quadratic in the depth.
@@ -137,7 +134,6 @@ type walker struct {
 	dec     *json.Decoder
 	path    []step
 	started bool       // a token has been read
-	depth   int        // arrays and objects open
 	skip    bool       // AllowUnknown
 	drop    [][2]int64 // byte ranges of skipped members, blanked before the decode
 }
@@ -190,15 +186,10 @@ func (w *walker) walk(t reflect.Type) error {
 	if t != nil && (t.Implements(unmarshaler) || reflect.PointerTo(t).Implements(unmarshaler)) {
 		t = nil // opaque: its own UnmarshalJSON reads it
 	}
-	if tok == json.Delim('[') || tok == json.Delim('{') {
-		// json.Decoder.Token keeps no limit, and this walk recurses per
-		// level: encoding/json's own (maxNestingDepth), so a body that is
-		// all brackets costs no more here than in its decoder.
-		if w.depth++; w.depth > maxDepth {
-			return errors.New("the body nests deeper than 10000 levels")
-		}
-		defer func() { w.depth-- }()
-	}
+	// This walk recurses per level, so it stops where json.Decoder.Token
+	// does: encoding/json's limit of 10000 nested levels, which Token holds
+	// since Go 1.27 (the v2-backed decoder, go.dev/doc/go1.27#jsonv2) and
+	// this module's go directive requires.
 	switch tok {
 	case json.Delim('['):
 		var elem reflect.Type

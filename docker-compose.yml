@@ -10,7 +10,7 @@ x-logging: &default-logging
 services:
   postgres:
     logging: *default-logging
-    image: postgres:15-alpine
+    image: postgres:15.20-alpine3.24
     container_name: syndra_postgres
     environment:
       # TZ is the deployment's zone, set in .env (unset is UTC); every service reads it.
@@ -36,7 +36,7 @@ services:
 
   redis:
     logging: *default-logging
-    image: redis:7-alpine
+    image: redis:7.4.12-alpine3.22
     container_name: syndra_redis
     volumes:
       - redisdata:/data
@@ -321,7 +321,7 @@ services:
   # decides for itself whether there is anything to do.
   truenas-addon-secret:
     logging: *default-logging
-    image: alpine:3.22
+    image: alpine:3.24.4
     container_name: syndra_truenas_addon_secret
     user: "0:0"
     restart: "no"

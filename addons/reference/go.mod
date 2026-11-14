@@ -1,6 +1,6 @@
 module syndra/addons/reference
 
-go 1.25.0
+go 1.27.4
 
 replace syndra/addons/strictjson => ../strictjson
 

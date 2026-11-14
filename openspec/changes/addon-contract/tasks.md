@@ -2650,3 +2650,57 @@ end to end) found no missing function; three regressions with one root cause
     7. `backend/Dockerfile` pinned to `golang:1.25-alpine`; `TestEveryGoBuildUsesTheModulesGoMinor` (repoguard) holds every Go Dockerfile to its go.mod's minor, finds any Go Dockerfile not listed, and holds ci.yml to `go-version-file` only.
   - **Review round 3 (14 Nov 2026), blocking:** CI's images job was red at `2a2d7ff0`: `backend/Dockerfile` ran `go get <pkg>` (no version) and `go mod tidy`, so every image resolved its dependencies at build time, newer than CI tested; go-redis v9.23 needs Go 1.26 and the image's Go is 1.25 (`GOTOOLCHAIN=local`). It now copies `go.mod` and `go.sum`, runs `go mod download`, then copies the source and builds, as `Dockerfile.claims` and the TrueNAS image already did (both clean, as is the UI image). `TestNoImageResolvesItsOwnDependencies` (repoguard) refuses `go get`, `go mod tidy` and `go install pkg@version` in any Dockerfile (red on the old one: 6 lines). Reproduced locally with `GOTOOLCHAIN=go1.25.0`, an empty module cache and `-mod=readonly`: download, `cmd/api`, `cmd/syndra-world-export` and `cmd/claims` build, go-redis v9.18.0 as pinned. Upgrades are slice 7q.
   - Tests: `TestAllowUnknownSkipsVariantsAndStillRefusesDuplicates`, `TestMalformedAndTrailingInputIsRefused` (cut short is not `io.EOF`), `TestMutationBodiesMatchNamesExactlyAndOnce` (terms, sign-in lookup, bulk decision, mark-external: variant and duplicate give the unknown-field refusal and do nothing), `TestDecodeJSONStrictTellsAnEmptyBodyFromATruncatedOne`, `TestAReplysCaseVariantIsSkippedNeverRead` (`Effect`, `Kind`, `Code`), `TestAReplyNamingAMemberTwiceIsNotRead`, `TestAReplyCarryingMoreStillReads`, the claims image guard, the proxy's "forwards the body's bytes", "adds requester_id … beside the bytes sent", "adds the demo admin …" and "forwards a body that is not a JSON object as sent", `TestTheWireOutcomeIsReadNotTheStatus` (unreadable versus missing), `TestEveryGoBuildUsesTheModulesGoMinor`. Each mutation-checked (the old decoder, `AllowUnknown` off, no blanking, no comma, no `io.EOF` mapping, no depth limit, no go.mod copy, no raw forward): red.
+
+- [x] 7q Every component up to date (owner's ruling, 14 Nov 2026: "if updating/upgrading versions for any component (go for example) can help or is available, please update"). Patch and minor taken; majors listed below for the owner; Go 1.x counts as minor (the Go 1 compatibility promise).
+  *Done (14 Nov 2026, slice 7q):*
+  - **One Go, exact:** every module's `go` directive is `go 1.27.4` (no `toolchain` line: a full version in the directive is the minimum release, go.dev/doc/toolchain), every Go image builds `FROM golang:1.27.4-alpine3.24`, CI reads it with `go-version-file` (setup-go reads `toolchain`, else `go`), `.tool-versions` names it. CI had been testing on Go 1.25.0, the images on 1.25.x; Go 1.25 is out of support since 1.27 (two releases are), so its fixes stopped.
+  - **Go 1.27 behaviour read (go.dev/doc/go1.26, go.dev/doc/go1.27):** `encoding/json` is backed by the v2 implementation (same semantics, error texts may differ; no test compares one), and `json.Decoder.Token` now refuses nesting past 10000 levels. strictjson's own depth counter (7p, written because 1.25's Token kept no limit) is deleted: the walk stops on Token's error. `TestNestingIsBoundedAsInEncodingJSON` holds it and goes red with `GOEXPERIMENT=nojsonv2` (the old decoder, no limit). `go test` now runs vet's `stdversion` check: clean.
+  - **Exact pins everywhere**, held by repoguard `TestEveryVersionIsPinnedExactly` (new) and `TestEveryGoBuildUsesTheModulesGo` (was `…GoMinor`; now the exact release across every `go.mod`, Dockerfile, CI and `.tool-versions`): image tags name a release (PostgreSQL's is major.minor), GitHub Actions are pinned to the release's full commit SHA with the release in a comment (GitHub, "Security hardening for GitHub Actions"), `ui/package.json` names exact versions (no `^`, no `latest`), and `.tool-versions`, CI's `bun-version` and `ui/Dockerfile` name one Bun. Mutation-checked: `alpine:latest`, `postgres:15-alpine`, `redis:7-alpine`, `actions/checkout@v7`, `"next": "^15.5.29"`, `oven/bun:1.3-alpine`, `bun-version: "1.4"`, a go.mod at `1.27.0`, `golang:1.27-alpine`, `.tool-versions` at 1.26.2: each red.
+  - **Before → after:**
+
+    | Component | Before | After | Note |
+    |---|---|---|---|
+    | Go (6 modules, CI) | `go 1.25.0` (CI ran 1.25.0) | `go 1.27.4` | |
+    | `golang` build images (3) | `1.25-alpine` | `1.27.4-alpine3.24` | |
+    | `alpine` runtime: backend | `latest` | `3.24.4` | |
+    | `alpine` runtime: claims, TrueNAS, `truenas-addon-secret` | `3.22` | `3.24.4` | |
+    | `postgres` (compose, CI service) | `15-alpine` (staging ran 15.17) | `15.20-alpine3.24` | same major |
+    | `redis` | `7-alpine` | `7.4.12-alpine3.22` | newest 7.x |
+    | `oven/bun` image, CI `bun-version`, `.tool-versions` | `1.3-alpine`, `"1.3"`, none (`golang 1.26.2`) | `1.4.4` | |
+    | `actions/checkout` | `@v4` | `@3d3c42e5… # v7.0.1` | Node 24, ESM; deploy.yml's is on a GitHub-hosted runner |
+    | `actions/setup-go` | `@v5` | `@b7ad1dad… # v7.0.0` | reads `toolchain` first; we have none |
+    | `oven-sh/setup-bun` | `@v2` | `@0c5077e5… # v2.2.0` | |
+    | `docker/setup-buildx-action` | `@v3` | `@f87e5991… # v4.4.1` | removed inputs: none used |
+    | `docker/build-push-action` | `@v6` | `@c3c9e263… # v7.4.0` | removed envs: none used |
+    | `jackc/pgx/v5` | v5.9.1 | v5.13.0 | security, below; libpq-exact DSN parsing (DEPLOY.md) |
+    | `redis/go-redis/v9` | v9.18.0 | v9.23.0 | needs Go 1.26; default timeouts changed, ours are explicit (`claimserve.NewRedisClient`); a pipeline pool of 10 per client |
+    | `golang-migrate/migrate/v4` | v4.19.1 | v4.20.1 | |
+    | `golang.org/x/text` | v0.36.0 (backend), v0.14.0 (add-ons) | v0.44.0 | security, below |
+    | `golang.org/x/sync`, `x/sys` | v0.20.0, v0.43–0.45 | v0.25.0, v0.50.0 | |
+    | `truenas/api_client_golang` | `fc6edc0b6ebe` | `508624041bb3` | README-only commit |
+    | `golang-jwt/jwt/v5`, `santhosh-tekuri/jsonschema/v6`, `gorilla/websocket`, `bbolt` | v5.3.1, v6.0.3, v1.5.3, v1.5.0 | unchanged | already newest |
+    | `next`, `eslint-config-next` | 15.5.15 | 15.5.29 | |
+    | `react`, `react-dom` | 19.2.5 | 19.3.1 | |
+    | `@tanstack/react-query(-devtools)` | 5.100.5 | 5.107.1 | |
+    | `tailwindcss`, `@tailwindcss/postcss` | 4.2.2 | 4.3.5 | |
+    | `vitest`, `@vitejs/plugin-react` | 4.1.4, 6.0.1 | 4.1.12, 6.3.0 | |
+    | `eslint`, `jsdom`, `postcss`, `autoprefixer` | 9.39.4, 29.1.0, 8.5.9, `latest` | 9.39.5, 29.1.1, 8.5.33, 10.6.2 | |
+    | `@types/react(-dom)`, `@types/bun`, testing-library | 19.2.x, `latest`, … | 19.3.0, 1.4.4, dom 10.4.2, react 16.3.3 | |
+    | `sharp` (Next's optional) | 0.34.5 | 0.35.5 | inside Next 15.5.29's own range `^0.34.3 \|\| ^0.35.5` |
+
+  - **Vulnerabilities.** `govulncheck@v1.9.0` (DB of 11 Nov 2026), every module: before (Go 1.25.14, the images' Go) the backend had 14 reachable (11 standard library: `net/http` HTTP/1 and HTTP/2 server crashes and desyncs, `crypto/x509` compromised intermediates, `crypto/tls` ECH, `net/textproto`; `x/text` GO-2026-6629 and GO-2026-5970; pgx GO-2026-5004, SQL injection via dollar-quoted placeholders), the TrueNAS add-on 9, reference 9, conformance 11 (all standard library); after: **none in any module**. pgx 5.12 and 5.13 also fix GHSA-j38q-h3ph-jjpq and GHSA-95fj-3fxw-g62g (high) and GHSA-w9rp-vfrh-q8vv. `bun audit`: 99 before (3 critical, 46 high: Next, undici, vite, sharp, …), 5 after, none fixable inside the rule: `postcss@8.4.31` (2 high, 2 moderate; Next 15 pins it exactly, used at build time on our own CSS only; Next 16 takes 8.5.23) and `minimatch@10.2.6` (1 moderate, a glob DoS in `@typescript-eslint` under lint; its fix is minimatch 11). Both leave with the Next 16 major below.
+  - **Majors, for the owner (not taken):**
+
+    | Component | Current | Latest | What changes | Risk | Migration |
+    |---|---|---|---|---|---|
+    | PostgreSQL | 15.20 | 18.7 | three majors (16, 17, 18): SQL/JSON `JSON_TABLE` (17), asynchronous I/O and `md5` password authentication deprecated (18) | data | `pg_dump`/`pg_restore` or `pg_upgrade` of both databases, a rehearsal on staging; PG 15 is supported to Nov 2027 |
+    | Redis | 7.4.12 | 8.6.7 | Redis 8: modules in core, AGPLv3 joins the licence options; 7.4 is already RSALv2/SSPL | low (a cache and the claims snapshot) | AOF/RDB loads forward; a licence decision; staging first |
+    | Next.js (+ `eslint-config-next`) | 15.5.29 | 16.4.6 | Turbopack the default bundler, `middleware` deprecated for `proxy`, synchronous Dynamic APIs removed, linting out of the build and `next lint` (our `lint` script, deprecated since 15.5) gone, flat ESLint config by default (v16.0.0 release notes) | medium | `@next/codemod` upgrade and the `middleware` → `proxy` codemod, the lint script to the ESLint CLI; clears the postcss audit findings |
+    | TypeScript | 5.9.3 | 7.0.2 (6.0.3 between) | 6.0 turns 5.x deprecations into errors; 7 is the Go-native compiler | medium | through 6.0 first, fixing any deprecated `tsconfig.json` option |
+    | ESLint | 9.39.5 | 10.15.0 | eslintrc support removed, Node `^20.19 \|\| ^22.13 \|\| >=24` (v10.0.0 notes) | low | with Next 16 (its flat config) |
+    | Vitest | 4.1.12 | 5.1.0 | Node 22 and Vite 6.4 required, `sequential` option and deprecated entry points removed (v5.0.0 notes) | low | `vitest.config.ts`, rerun the 399 files |
+    | jsdom | 29.1.1 | 31.0.1 | two majors of the test DOM | low | with Vitest 5, its Changelog read first |
+    | `@testing-library/jest-dom` | 6.9.1 | 7.0.1 | `@testing-library/dom` a required peer (present), Node 22 (v7.0.0 notes; 6.10.0 is deprecated for shipping the same) | low | with Vitest 5 |
+    | Go modules | | | none: no direct dependency has a newer `/vN` | | |
+
+  - **Verified:** every Go module `go vet` and `go test` (backend also against the live `syndra_test` database: it applied 000095, rolled back to `94|f` as found); the conformance kit end to end as CI runs it (both references, every `-mutate` run: 0 fail); `-mod=readonly` linux builds of `cmd/api`, `cmd/syndra-world-export`, `cmd/claims` and the TrueNAS add-on; UI `test` (4261), `lint`, `typecheck`, `build` on Next 15.5.29; `bun install --frozen-lockfile` clean. The images themselves build in CI's images job (no Docker on the build Mac). DEPLOY.md says what an operator sees when a pinned image changes, and pgx's DSN parsing.

@@ -11,7 +11,7 @@
 # with ../addons/strictjson, and resolving the module graph reads that
 # module's go.mod. The binary does not import it, so its go.mod is all that
 # is copied, and a change to its code does not rebuild this image.
-FROM golang:1.25-alpine AS build
+FROM golang:1.27.4-alpine3.24 AS build
 WORKDIR /src/backend
 COPY addons/strictjson/go.mod /src/addons/strictjson/go.mod
 COPY backend/go.mod backend/go.sum ./
@@ -25,7 +25,7 @@ COPY backend/internal/services/periodic ./internal/services/periodic
 COPY backend/cmd/claims ./cmd/claims
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/claims ./cmd/claims
 
-FROM alpine:3.22
+FROM alpine:3.24.4
 RUN addgroup -g 65532 -S claims && adduser -u 65532 -S claims -G claims
 COPY --from=build /out/claims /usr/local/bin/claims
 USER 65532:65532

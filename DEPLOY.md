@@ -540,6 +540,21 @@ against last night's copy of production's data.
 
 Merging to `main` is the whole procedure.
 
+**Pinned versions.** Every image tag, Go release, Bun release, UI dependency
+and GitHub Action is exact (repoguard `TestEveryVersionIsPinnedExactly`,
+`TestEveryGoBuildUsesTheModulesGo`), so nothing changes on a host until a
+merged commit changes it. Two things to know when such a commit deploys:
+- A new `postgres` or `redis` tag recreates that container, a restart of a
+  few seconds. Within a PostgreSQL major (15 here) a newer minor release keeps
+  the data format, so no dump and restore is needed
+  ([postgresql.org/support/versioning](https://www.postgresql.org/support/versioning/));
+  production's deploy takes its `pg_dump` first regardless. A new major of
+  either is never a tag bump: it needs a data migration plan.
+- Since pgx 5.11 (slice 7q) `DB_DSN` is parsed exactly as libpq parses it: a
+  hand-set DSN must percent-encode `@`, `#`, `/`, `?`, `%` and spaces in its
+  password. The default, built from the generated hex `POSTGRES_PASSWORD`, is
+  unaffected.
+
 **Production's data on staging.** The copy goes to staging every night at
 02:30, from production: `syndra-staging-dump.timer` runs
 `/usr/local/bin/syndra-push-staging-dump`.
