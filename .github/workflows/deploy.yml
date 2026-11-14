@@ -147,13 +147,15 @@ jobs:
           [ "$(git rev-parse HEAD)" = "$DEPLOY_SHA" ] || { echo "checked out $(git rev-parse HEAD), not $DEPLOY_SHA"; exit 1; }
           echo "production now at $(git rev-parse --short HEAD): $(git log -1 --format=%s)"
 
-      # Built while the old containers still serve, so the stop below is
-      # followed by a start from cached images, never by a build.
+      # Pulled and built while the old containers still serve, so the stop
+      # below is followed by a start from local images, never by a pull or a
+      # build: a registry outage fails this step, with nothing stopped.
       - name: Build the images
         id: build
         run: |
           set -euo pipefail
           cd /opt/syndra
+          docker compose pull --ignore-buildable
           docker compose build
 
       # Contract 2, and every deploy after it (openspec/changes/addon-contract,

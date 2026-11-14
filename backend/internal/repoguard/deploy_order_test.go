@@ -9,8 +9,10 @@ import (
 )
 
 // The deploy order add-on contract 2 needs (openspec/changes/addon-contract,
-// task 1.10), held in both workflows that deploy: the images are built while
-// the old containers still serve, then the backend stops before the add-on,
+// task 1.10), held in both workflows that deploy: the released images are
+// pulled before anything stops (a registry outage then fails the deploy with
+// everything still serving, slice 7q) and built while the old containers
+// still serve, then the backend stops before the add-on,
 // the add-on's store is copied only once the add-on has stopped, and only then
 // is anything started; a failure anywhere starts everything again; nothing
 // stops the GitHub runner. A push to main runs the workflow file at the pushed
@@ -18,7 +20,12 @@ import (
 func TestBothDeploysBuildThenStopTheBackendThenTheAddOnBeforeStarting(t *testing.T) {
 	for _, name := range []string{"deploy.yml", "_staging.yml"} {
 		s := workflow(t, name)
+		pull := "docker compose pull --ignore-buildable\n"
+		if p, stop := strings.Index(s, pull), strings.Index(s, "docker compose stop"); p < 0 || stop < 0 || p > stop {
+			t.Errorf("%s: %q must come before the first `docker compose stop`", name, strings.TrimSpace(pull))
+		}
 		order := []string{
+			pull,
 			"docker compose build\n",
 			"docker compose stop backend\n",
 			"docker compose stop truenas-addon\n",

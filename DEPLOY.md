@@ -544,16 +544,21 @@ Merging to `main` is the whole procedure.
 and GitHub Action is exact (repoguard `TestEveryVersionIsPinnedExactly`,
 `TestEveryGoBuildUsesTheModulesGo`), so nothing changes on a host until a
 merged commit changes it. Two things to know when such a commit deploys:
-- A new `postgres` or `redis` tag recreates that container, a restart of a
-  few seconds. Within a PostgreSQL major (15 here) a newer minor release keeps
+- Both deploys pull the released images (`docker compose pull
+  --ignore-buildable`) before anything stops, so a registry outage fails the
+  deploy with everything still serving. A new `postgres` or `redis` tag then
+  recreates that container from the local image, a restart of a few seconds. Within a PostgreSQL major (15 here) a newer minor release keeps
   the data format, so no dump and restore is needed
   ([postgresql.org/support/versioning](https://www.postgresql.org/support/versioning/));
   production's deploy takes its `pg_dump` first regardless. A new major of
   either is never a tag bump: it needs a data migration plan.
-- Since pgx 5.11 (slice 7q) `DB_DSN` is parsed exactly as libpq parses it: a
-  hand-set DSN must percent-encode `@`, `#`, `/`, `?`, `%` and spaces in its
-  password. The default, built from the generated hex `POSTGRES_PASSWORD`, is
-  unaffected.
+- Since pgx 5.11 (slice 7q) `DB_DSN` is parsed exactly as libpq parses it
+  (pgx 5.11.0 changelog). In a hand-set URI: the first `@` ends the user
+  part, so an `@` in the password is written `%40`; a `%` not starting a
+  valid escape is an error (write `%25`); a space is an error (write `%20`);
+  `+` in the query is a literal plus, not a space; `#` is ordinary data, not
+  a fragment. The default, built from the generated hex `POSTGRES_PASSWORD`,
+  is unaffected.
 
 **Production's data on staging.** The copy goes to staging every night at
 02:30, from production: `syndra-staging-dump.timer` runs

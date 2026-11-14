@@ -39,7 +39,7 @@ func TestEveryGoBuildUsesTheModulesGo(t *testing.T) {
 		t.Fatalf("backend/go.mod says go %s; name the exact release, as 1.27.4", want)
 	}
 
-	mods := repoFiles(t, root, func(name string) bool { return name == "go.mod" })
+	mods := repoFiles(t, func(name string) bool { return filepath.Base(name) == "go.mod" })
 	if len(mods) < 2 {
 		t.Fatalf("found only %v", mods)
 	}
@@ -52,14 +52,16 @@ func TestEveryGoBuildUsesTheModulesGo(t *testing.T) {
 		}
 	}
 
-	from := regexp.MustCompile(`(?m)^FROM golang:(\S+)`)
-	tag := regexp.MustCompile(`^` + regexp.QuoteMeta(want) + `-alpine\d+\.\d+$`)
+	tag := regexp.MustCompile(`^golang:` + regexp.QuoteMeta(want) + `-alpine\d+\.\d+$`)
 	built := 0
-	for _, df := range dockerfiles(t, root) {
-		for _, m := range from.FindAllStringSubmatch(read(df), -1) {
+	for _, df := range dockerfiles(t) {
+		for _, ref := range fromImages(read(df)) {
+			if !strings.HasPrefix(ref, "golang:") && !strings.HasPrefix(ref, "golang@") {
+				continue
+			}
 			built++
-			if !tag.MatchString(m[1]) {
-				t.Errorf("%s builds with golang:%s, want golang:%s-alpine<3.x>", df, m[1], want)
+			if !tag.MatchString(ref) {
+				t.Errorf("%s builds with %s, want golang:%s-alpine<3.x>", df, ref, want)
 			}
 		}
 	}
@@ -94,7 +96,7 @@ func TestEveryGoBuildUsesTheModulesGo(t *testing.T) {
 func TestNoImageResolvesItsOwnDependencies(t *testing.T) {
 	root := repoRoot(t)
 	resolve := regexp.MustCompile(`\bgo\s+(get|mod\s+tidy|install\s+\S+@)`)
-	for _, rel := range dockerfiles(t, root) {
+	for _, rel := range dockerfiles(t) {
 		b, err := os.ReadFile(filepath.Join(root, rel))
 		if err != nil {
 			t.Fatal(err)
@@ -107,37 +109,29 @@ func TestNoImageResolvesItsOwnDependencies(t *testing.T) {
 	}
 }
 
-// dockerfiles is every Dockerfile in the repository, by path from its root.
-func dockerfiles(t *testing.T, root string) []string {
+// dockerfiles is every tracked Dockerfile, by path from the repository root.
+func dockerfiles(t *testing.T) []string {
 	t.Helper()
-	return repoFiles(t, root, func(name string) bool {
-		return strings.HasPrefix(name, "Dockerfile") && !strings.HasSuffix(name, ".dockerignore")
+	return repoFiles(t, func(name string) bool {
+		base := filepath.Base(name)
+		return strings.HasPrefix(base, "Dockerfile") && !strings.HasSuffix(base, ".dockerignore")
 	})
 }
 
-// repoFiles is every file in the repository whose name match accepts, by path
-// from its root, outside dependencies and worktrees.
-func repoFiles(t *testing.T, root string, match func(name string) bool) []string {
+// repoFiles is every tracked file (git ls-files: what CI checks out and
+// builds, never a stray file on this disk) match accepts, by path from the
+// repository root.
+func repoFiles(t *testing.T, match func(path string) bool) []string {
 	t.Helper()
+	_, files := trackedFiles(t)
 	var out []string
-	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
+	for _, f := range files {
+		if match(f) {
+			out = append(out, f)
 		}
-		if d.IsDir() {
-			if d.Name() == "node_modules" || d.Name() == ".git" || d.Name() == ".claude" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if match(d.Name()) {
-			rel, _ := filepath.Rel(root, path)
-			out = append(out, rel)
-		}
-		return nil
-	})
+	}
 	if len(out) == 0 {
-		t.Fatal("no such file found")
+		t.Fatal("no such tracked file")
 	}
 	return out
 }

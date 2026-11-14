@@ -2664,9 +2664,9 @@ end to end) found no missing function; three regressions with one root cause
     | `golang` build images (3) | `1.25-alpine` | `1.27.4-alpine3.24` | |
     | `alpine` runtime: backend | `latest` | `3.24.4` | |
     | `alpine` runtime: claims, TrueNAS, `truenas-addon-secret` | `3.22` | `3.24.4` | |
-    | `postgres` (compose, CI service) | `15-alpine` (staging ran 15.17) | `15.20-alpine3.24` | same major |
+    | `postgres` (compose, CI service) | `15-alpine` (production ran 15.18 on alpine 3.24.1, staging 15.17) | `15.20-alpine3.24` | same major; Alpine required (below) |
     | `redis` | `7-alpine` | `7.4.12-alpine3.22` | newest 7.x |
-    | `oven/bun` image, CI `bun-version`, `.tool-versions` | `1.3-alpine`, `"1.3"`, none (`golang 1.26.2`) | `1.4.4` | |
+    | `oven/bun` image, CI `bun-version`, `.tool-versions` | `1.3-alpine`, `"1.3"`, none (`golang 1.26.2`) | `1.4.4`; the image `1.4.4-alpine@sha256:4cf82f56…` | Docker Hub has no versioned-Alpine bun tag, so the digest pins its Alpine |
     | `actions/checkout` | `@v4` | `@3d3c42e5… # v7.0.1` | Node 24, ESM; deploy.yml's is on a GitHub-hosted runner |
     | `actions/setup-go` | `@v5` | `@b7ad1dad… # v7.0.0` | reads `toolchain` first; we have none |
     | `oven-sh/setup-bun` | `@v2` | `@0c5077e5… # v2.2.0` | |
@@ -2680,21 +2680,29 @@ end to end) found no missing function; three regressions with one root cause
     | `truenas/api_client_golang` | `fc6edc0b6ebe` | `508624041bb3` | README-only commit |
     | `golang-jwt/jwt/v5`, `santhosh-tekuri/jsonschema/v6`, `gorilla/websocket`, `bbolt` | v5.3.1, v6.0.3, v1.5.3, v1.5.0 | unchanged | already newest |
     | `next`, `eslint-config-next` | 15.5.15 | 15.5.29 | |
-    | `react`, `react-dom` | 19.2.5 | 19.3.1 | |
+    | `react`, `react-dom` | 19.2.5 | 19.2.9 | held to the React Next vendors (below) |
     | `@tanstack/react-query(-devtools)` | 5.100.5 | 5.107.1 | |
     | `tailwindcss`, `@tailwindcss/postcss` | 4.2.2 | 4.3.5 | |
     | `vitest`, `@vitejs/plugin-react` | 4.1.4, 6.0.1 | 4.1.12, 6.3.0 | |
     | `eslint`, `jsdom`, `postcss`, `autoprefixer` | 9.39.4, 29.1.0, 8.5.9, `latest` | 9.39.5, 29.1.1, 8.5.33, 10.6.2 | |
-    | `@types/react(-dom)`, `@types/bun`, testing-library | 19.2.x, `latest`, … | 19.3.0, 1.4.4, dom 10.4.2, react 16.3.3 | |
+    | `@types/react(-dom)`, `@types/bun`, testing-library | 19.2.14 / 19.2.3, `latest`, … | 19.2.18 / 19.2.7, 1.4.4, dom 10.4.2, react 16.3.3 | |
     | `sharp` (Next's optional) | 0.34.5 | 0.35.5 | inside Next 15.5.29's own range `^0.34.3 \|\| ^0.35.5` |
 
+  - **Review round (14 Nov 2026, the coordinator's six):**
+    1. PostgreSQL stays on Alpine: `imageRefProblem` refuses any `postgres` reference without `-alpine<X.Y>`, digest or not. Text indexes sort by the C library's collation; musl's compares byte by byte, every index here was built under it, and glibc's `en_US.utf8` orders differently, so a Debian image would read them in the wrong order, silently. `TestImageRefRule` (`postgres:15.20`, `postgres:15.20-bookworm@sha256:…` refused); mutation: `postgres:15.20` in compose, `-bookworm` in CI, each red.
+    2. Both deploys pull the released images (`docker compose pull --ignore-buildable`) before anything stops: production in "Build the images", staging in its own step before the database reset (which itself stops the backend). A Docker Hub failure now fails the deploy with everything serving, instead of after the backend stopped, with the failure restart retrying the same pull. `TestBothDeploysBuildThenStopTheBackendThenTheAddOnBeforeStarting` requires the pull before the first `docker compose stop`; mutation (pull removed in either file, production's pull moved after the stop, staging's moved into its build step after the reset's stop): red. Staging's Compose is v5.5.1 (has `--ignore-buildable`).
+    3. React parity: Next 15.5 renders App Router pages with the React it vendors (`next/dist/compiled/react`: 19.2.0-canary), while tests and tsc ran the installed 19.3.1. `react`, `react-dom` 19.2.9 and `@types/react` 19.2.18, `@types/react-dom` 19.2.7, the newest stable on the vendored minor. React's majors and minors move only with Next's: `ui/src/lib/__tests__/react-parity.guard.test.ts` holds all four to the vendored major.minor (mutation: `react-dom` 19.3.1, red).
+    4. Go 1.27's `encoding/json` (v2-backed) words its errors differently, and those texts reach clients: `decodeJSONStrict` failures are answered with `details.body = err.Error()` (`handlers/bundles.go:178` and 61 more). Wording only, no status or code changes; no UI or test reads the text.
+    5. The guards: `fromImages` reads `FROM [--platform=…] image [AS stage]` and skips `scratch` and earlier stage names; an `@sha256:` digest pins; an `-alpine` tag must name its Alpine release (or carry a digest); `.yaml` workflows are scanned; both guards walk `git ls-files`, not the disk (`repoFiles` over `trackedFiles`). `TestImageRefRule` covers each; mutations (a `--platform` stage on `golang:1.27-alpine`, `alpine:3.24` as a named stage, a tracked `.yaml` workflow with `node:22` and `checkout@v7`, the bun digest removed): red; an untracked stray Dockerfile: ignored.
+    6. DEPLOY.md's DSN rules corrected to pgx 5.11's changelog: the first `@` ends the user part, a malformed `%` and a space are errors, `+` in the query is literal, `#` is ordinary data.
+  - **Cutover (owner, just before 7q merges to main):** re-run the read-only check on production that no GIN or GiST index and no `bpchar` column exists (`SELECT … FROM pg_index JOIN pg_am …` / `information_schema.columns WHERE data_type = 'character'`), which PostgreSQL 15.19's and 15.20's release notes ask to REINDEX after the update. None found: no action. Any found: REINDEX them after the deploy.
   - **Vulnerabilities.** `govulncheck@v1.9.0` (DB of 11 Nov 2026), every module: before (Go 1.25.14, the images' Go) the backend had 14 reachable (11 standard library: `net/http` HTTP/1 and HTTP/2 server crashes and desyncs, `crypto/x509` compromised intermediates, `crypto/tls` ECH, `net/textproto`; `x/text` GO-2026-6629 and GO-2026-5970; pgx GO-2026-5004, SQL injection via dollar-quoted placeholders), the TrueNAS add-on 9, reference 9, conformance 11 (all standard library); after: **none in any module**. pgx 5.12 and 5.13 also fix GHSA-j38q-h3ph-jjpq and GHSA-95fj-3fxw-g62g (high) and GHSA-w9rp-vfrh-q8vv. `bun audit`: 99 before (3 critical, 46 high: Next, undici, vite, sharp, …), 5 after, none fixable inside the rule: `postcss@8.4.31` (2 high, 2 moderate; Next 15 pins it exactly, used at build time on our own CSS only; Next 16 takes 8.5.23) and `minimatch@10.2.6` (1 moderate, a glob DoS in `@typescript-eslint` under lint; its fix is minimatch 11). Both leave with the Next 16 major below.
-  - **Majors, for the owner (not taken):**
+  - **Majors, for the owner (not taken).** Order agreed by the owner (14 Nov 2026), also in NEXT.md 0h2: (1) contract 2 ships (staging checks, 6.10's 48 hours, cutover); (2) one Next 16 slice with TypeScript 6.0, ESLint 10, Vitest 5, jsdom and jest-dom; (3) Redis → Valkey 8 (BSD, drop-in) on a fresh volume, since everything in Redis is rebuildable (checked on production 14 Nov; plan in NEXT.md 0h2); (4) PostgreSQL 15 → 18, rehearsed on staging, then production in a short window after the automatic `pg_dump`, within about six months; (5) TypeScript 7 once Next supports it.
 
     | Component | Current | Latest | What changes | Risk | Migration |
     |---|---|---|---|---|---|
     | PostgreSQL | 15.20 | 18.7 | three majors (16, 17, 18): SQL/JSON `JSON_TABLE` (17), asynchronous I/O and `md5` password authentication deprecated (18) | data | `pg_dump`/`pg_restore` or `pg_upgrade` of both databases, a rehearsal on staging; PG 15 is supported to Nov 2027 |
-    | Redis | 7.4.12 | 8.6.7 | Redis 8: modules in core, AGPLv3 joins the licence options; 7.4 is already RSALv2/SSPL | low (a cache and the claims snapshot) | AOF/RDB loads forward; a licence decision; staging first |
+    | Redis | 7.4.12 | 8.6.7 | Redis 8: modules in core, AGPLv3 joins the licence options; 7.4 is already RSALv2/SSPL | low (a cache and the claims snapshot) | planned as Valkey 8 instead (step 3 above); staging first |
     | Next.js (+ `eslint-config-next`) | 15.5.29 | 16.4.6 | Turbopack the default bundler, `middleware` deprecated for `proxy`, synchronous Dynamic APIs removed, linting out of the build and `next lint` (our `lint` script, deprecated since 15.5) gone, flat ESLint config by default (v16.0.0 release notes) | medium | `@next/codemod` upgrade and the `middleware` → `proxy` codemod, the lint script to the ESLint CLI; clears the postcss audit findings |
     | TypeScript | 5.9.3 | 7.0.2 (6.0.3 between) | 6.0 turns 5.x deprecations into errors; 7 is the Go-native compiler | medium | through 6.0 first, fixing any deprecated `tsconfig.json` option |
     | ESLint | 9.39.5 | 10.15.0 | eslintrc support removed, Node `^20.19 \|\| ^22.13 \|\| >=24` (v10.0.0 notes) | low | with Next 16 (its flat config) |

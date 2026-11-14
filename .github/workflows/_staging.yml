@@ -63,6 +63,15 @@ jobs:
             echo "::warning::this ref has no docker-compose.staging.yml; the stand-in Zitadel is off for this deploy"
           fi
 
+      # The released images (postgres, redis, alpine), pulled before anything
+      # stops, here or in the reset below, so every later start is from local
+      # images and a registry outage fails the deploy with nothing stopped.
+      - name: Pull the released images
+        run: |
+          set -euo pipefail
+          cd "$STAGE_DIR"
+          docker compose pull --ignore-buildable
+
       # Production's data, last night's copy, so every migration and every
       # read runs against real rows before it runs on production. It also
       # wipes whatever an experiment left behind.
