@@ -1,5 +1,10 @@
 -- 000079_one_time_zone
 --
+-- A one-time re-bucket of THIS deployment's history: the zone literal below is
+-- the zone this deployment's rows were already counted in, not a setting. It is
+-- harmless on an empty (fresh) install; nothing after it names a zone: code
+-- reads TZ (backend/internal/clock).
+--
 -- One zone (owner, 5 Nov 2026: "get everything in one IST time zone"). Until
 -- every container ran with TZ=Asia/Kolkata (5 Nov 2026, PR #102), two stores
 -- keyed their rows by the UTC day. An instant is absolute; a day is not: a

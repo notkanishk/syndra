@@ -81,7 +81,7 @@ func TestOnlyPerPersonFieldsCanBeSetForOnePerson(t *testing.T) {
 	post := func(field, value string) int {
 		rr := httptest.NewRecorder()
 		handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
-			`{"subject_id":"u1","target":"truenas","field":"`+field+`","value":"`+value+`","direction":"set","reason":"thesis data","review_date":"2027-01-01T00:00:00Z"}`)))
+			`{"subject_id":"u1","target":"truenas","field":"`+field+`","value":"`+value+`","direction":"set","reason":"thesis data","review_date":"2027-01-01"}`)))
 		return rr.Code
 	}
 	if code := post("group", "Staff"); code != http.StatusBadRequest {

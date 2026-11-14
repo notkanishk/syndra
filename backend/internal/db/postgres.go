@@ -80,7 +80,7 @@ func ConnectPostgres() error {
 	if err := migrateUp(m, newest); err != nil {
 		log.Fatalf("An error occurred while running migrations: %v", err)
 	}
-	fmt.Println("Database schemas successfully migrated and synced.")
+	log.Println("[STARTUP] Database schemas successfully migrated and synced.")
 
 	PG = pool
 	// Re-run at every start, not only by its migration: rows a rolled-back
@@ -88,7 +88,7 @@ func ConnectPostgres() error {
 	if err := BackfillAccountIDs(context.Background()); err != nil {
 		log.Printf("[STARTUP] account_id backfill: %v (retried at the next start)", err)
 	}
-	fmt.Printf("Connected to PostgreSQL successfully (pool max %d).\n", config.MaxConns)
+	log.Printf("[STARTUP] Connected to PostgreSQL successfully (pool max %d).", config.MaxConns)
 	return nil
 }
 

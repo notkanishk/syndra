@@ -1,21 +1,33 @@
 package clock
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestLoadReadsTZAndFallsBackToTheMakerspace(t *testing.T) {
+func TestLoadReadsTZAndNothingElse(t *testing.T) {
 	for _, tc := range []struct{ tz, want string }{
-		{"", Default},
-		{"Local", Default},
-		{"Not/AZone", Default},
+		{"", "UTC"}, // POSIX and Go: unset is UTC, not a zone chosen for the deployment
+		{"  ", "UTC"},
+		{"UTC", "UTC"},
 		{"Asia/Kolkata", "Asia/Kolkata"},
 		{":Asia/Kolkata", "Asia/Kolkata"},
 		{"Europe/London", "Europe/London"},
 	} {
-		if name, loc := load(tc.tz); name != tc.want || loc.String() != tc.want {
-			t.Errorf("load(%q) = %s, %s; want %s", tc.tz, name, loc, tc.want)
+		name, loc, err := load(tc.tz)
+		if err != nil || name != tc.want || loc.String() != tc.want {
+			t.Errorf("load(%q) = %s, %v, %v; want %s", tc.tz, name, loc, err, tc.want)
+		}
+	}
+}
+
+// A TZ that names no zone is an error with the value in it, never a silent
+// replacement: a day counted in a zone nobody chose is a wrong count.
+func TestLoadRefusesAZoneItCannotRead(t *testing.T) {
+	for _, tz := range []string{"Not/AZone", "Local", "Asia/Kolkatta"} {
+		if _, _, err := load(tz); err == nil || !strings.Contains(err.Error(), tz) {
+			t.Errorf("load(%q) err = %v; want a refusal naming it", tz, err)
 		}
 	}
 }
@@ -23,7 +35,7 @@ func TestLoadReadsTZAndFallsBackToTheMakerspace(t *testing.T) {
 // 23:00 UTC is 04:30 the next morning in India: that sign-in belongs to the
 // next day, not the UTC one.
 func TestDayIsTheMakerspaceDayNotTheUTCOne(t *testing.T) {
-	_, ist := load("Asia/Kolkata")
+	ist := zone(t, "Asia/Kolkata")
 	old := Loc
 	Loc = ist
 	t.Cleanup(func() { Loc = old })
@@ -43,7 +55,7 @@ func TestDayIsTheMakerspaceDayNotTheUTCOne(t *testing.T) {
 // "Until 30 Nov" holds through the whole of 30 Nov in India, not until UTC
 // midnight (05:30 IST); "for 7 days" ends as the 7th calendar day does.
 func TestEndsAreTheWholeOfTheirDay(t *testing.T) {
-	_, ist := load("Asia/Kolkata")
+	ist := zone(t, "Asia/Kolkata")
 	old := Loc
 	Loc = ist
 	t.Cleanup(func() { Loc = old })
@@ -72,7 +84,7 @@ func TestEndsAreTheWholeOfTheirDay(t *testing.T) {
 // the previous day's 23:00, and that day still ends as its own day does. A
 // statistics bucket starts there (addon-contract §9.2), as the add-ons' do.
 func TestASkippedMidnightIsWhenTheClocksResume(t *testing.T) {
-	_, santiago := load("America/Santiago")
+	santiago := zone(t, "America/Santiago")
 	old := Loc
 	Loc = santiago
 	t.Cleanup(func() { Loc = old })
@@ -90,5 +102,96 @@ func TestASkippedMidnightIsWhenTheClocksResume(t *testing.T) {
 	}
 	if got := AddDate("2026-11-12", 0, -11, 0); got != "2025-12-12" {
 		t.Fatalf("AddDate(12 Nov, -11 months) = %s", got)
+	}
+}
+
+func zone(t *testing.T, name string) *time.Location {
+	t.Helper()
+	_, loc, err := load(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return loc
+}
+
+// An end date on the wire is the date the person means; the backend turns it
+// into that day's last second in its own zone, so "until 30 Nov" is all of 30
+// Nov wherever the client is and whatever zone it believed in.
+func TestAnEndDayOnTheWireIsTheLastSecondOfThatDayInTheDeploymentZone(t *testing.T) {
+	old := Loc
+	t.Cleanup(func() { Loc = old })
+	for _, tc := range []struct{ zone, want string }{
+		{"Asia/Kolkata", "2026-11-30T23:59:59+05:30"},
+		{"America/Santiago", "2026-11-30T23:59:59-03:00"},
+		{"UTC", "2026-11-30T23:59:59Z"},
+	} {
+		Loc = zone(t, tc.zone)
+		var d EndDay
+		if err := d.UnmarshalJSON([]byte(`"2026-11-30"`)); err != nil {
+			t.Fatal(err)
+		}
+		if got := d.Time.Format(time.RFC3339); got != tc.want || d.Time.Location() != Loc {
+			t.Errorf("%s: %s, want %s", tc.zone, got, tc.want)
+		}
+		if got := d.Instant(); got == nil || !got.Equal(d.Time) {
+			t.Errorf("Instant() = %v", got)
+		}
+	}
+	if (*EndDay)(nil).Instant() != nil {
+		t.Error("an absent end must stay absent")
+	}
+}
+
+// One shape only: a client's own guess at the day's end is refused, not read.
+func TestAnEndDayRefusesAnythingButADate(t *testing.T) {
+	for _, in := range []string{`"2026-11-30T00:00:00Z"`, `"2026-11-30T23:59:59+05:30"`, `"2026-02-30"`, `"30 Nov 2026"`, `"2026-1-5"`, `""`, `5`, `true`} {
+		var d EndDay
+		if err := d.UnmarshalJSON([]byte(in)); err == nil {
+			t.Errorf("%s was accepted as %v", in, d.Time)
+		}
+	}
+}
+
+// Santiago's clocks skip 00:00 on 6 Sep 2026 (they jump 00:00 to 01:00). Three
+// days after 2 Sep is still the end of 5 Sep, 23:59:59, and four days is the end
+// of 6 Sep: counting 24-hour days across the change ended an hour early.
+func TestEndAfterDaysEndsTheDayEvenWhenTheNextMidnightIsSkipped(t *testing.T) {
+	old := Loc
+	t.Cleanup(func() { Loc = old })
+	Loc = zone(t, "America/Santiago")
+	from := time.Date(2026, 9, 2, 10, 0, 0, 0, Loc)
+	for n, want := range map[int]string{3: "2026-09-05T23:59:59-04:00", 4: "2026-09-06T23:59:59-03:00", 0: "2026-09-02T23:59:59-04:00"} {
+		if got := EndAfterDays(from, n).Format(time.RFC3339); got != want {
+			t.Errorf("%d days: %s, want %s", n, got, want)
+		}
+	}
+}
+
+// A month count clamps to the target month's last day (Postgres' interval
+// arithmetic), never overflows into the next month as Go's AddDate does.
+func TestEndAfterMonthsClampsToTheLastDayOfTheTargetMonth(t *testing.T) {
+	old := Loc
+	t.Cleanup(func() { Loc = old })
+	for _, tc := range []struct {
+		zone, from string
+		n          int
+		want       string
+	}{
+		{"Asia/Kolkata", "2026-08-31", 6, "2027-02-28T23:59:59+05:30"},
+		{"Asia/Kolkata", "2027-08-31", 6, "2028-02-29T23:59:59+05:30"}, // leap year
+		{"Asia/Kolkata", "2028-02-29", 12, "2029-02-28T23:59:59+05:30"},
+		{"Asia/Kolkata", "2026-03-15", 6, "2026-09-15T23:59:59+05:30"},
+		{"Asia/Kolkata", "2026-11-14", 6, "2027-05-14T23:59:59+05:30"}, // across a year
+		{"America/Santiago", "2026-03-31", 6, "2026-09-30T23:59:59-03:00"},
+		{"America/Santiago", "2026-03-06", 6, "2026-09-06T23:59:59-03:00"}, // 00:00 of 6 Sep is skipped
+	} {
+		Loc = zone(t, tc.zone)
+		from, err := time.ParseInLocation(time.DateOnly, tc.from, Loc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := EndAfterMonths(from.Add(10*time.Hour), tc.n).Format(time.RFC3339); got != tc.want {
+			t.Errorf("%s %s + %d months: %s, want %s", tc.zone, tc.from, tc.n, got, tc.want)
+		}
 	}
 }

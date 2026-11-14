@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { formatClock, formatRelative, formatShortDate } from "@/lib/format";
+import { formatClock, formatClockSeconds, formatRelative, formatShortDate } from "@/lib/format";
 
 /**
  * Anything whose value depends on "now" is rendered client-side only.
@@ -37,9 +37,8 @@ export function LogTime({ iso }: { iso: string | null | undefined }) {
 
   useEffect(() => {
     if (!iso) return;
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return;
-    setTime(date.toLocaleTimeString("en-GB", { hour12: false }));
+    if (Number.isNaN(new Date(iso).getTime())) return;
+    setTime(formatClockSeconds(iso));
   }, [iso]);
 
   return <>{time ?? "··:··:··"}</>;

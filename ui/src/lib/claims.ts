@@ -8,6 +8,7 @@ import type {
   Reach,
   RoleMap,
 } from "@/lib/queries/useClaimShape";
+import { formatClock } from "@/lib/format";
 import { sortByName } from "@/lib/sort";
 
 /**
@@ -669,8 +670,7 @@ export function sentAs(
 
 export function clockOf(iso: string | undefined | null): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return formatClock(iso);
 }
 
 export function minutesLeft(iso: string, now = Date.now()): number {

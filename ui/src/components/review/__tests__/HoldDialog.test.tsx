@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HoldDialog } from "@/components/review/HoldDialog";
+import { resetMakerspaceZoneForTests, setMakerspaceZone } from "@/lib/time";
 
 const createHold = vi.hoisted(() => vi.fn());
 
@@ -28,6 +29,27 @@ function open() {
 const act = () => screen.getByRole("button", { name: "Put the prints share on hold" });
 
 describe("HoldDialog", () => {
+  afterEach(() => {
+    resetMakerspaceZoneForTests();
+    setMakerspaceZone(process.env.TZ);
+  });
+
+  // The wire carries the date the person picked. Never an instant worked out
+  // here: whatever zone the page believes in (or none yet), the backend ends
+  // the date in its own.
+  it.each([undefined, "America/Santiago", "UTC"])("sends the picked date itself, with the page's zone at %s", async (zone) => {
+    resetMakerspaceZoneForTests();
+    setMakerspaceZone(zone);
+    createHold.mockResolvedValueOnce({});
+    open();
+    fireEvent.change(screen.getByLabelText(/Why \(shown to Kevin Owens\)/i), { target: { value: "r" } });
+    fireEvent.change(screen.getByLabelText(/Remind us on/i), { target: { value: "2026-11-30" } });
+    fireEvent.click(act());
+    await screen.findByText("On hold");
+    expect(createHold).toHaveBeenLastCalledWith(expect.objectContaining({ reviewDate: "2026-11-30" }));
+    expect(createHold.mock.lastCall?.[0].expiresAt).toBeUndefined();
+  });
+
   it("confirms the hold and says where it shows up next, without going quiet on success", async () => {
     createHold.mockResolvedValueOnce({});
     open();

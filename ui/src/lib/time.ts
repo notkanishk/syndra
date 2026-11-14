@@ -14,21 +14,77 @@
  * through `toISOString()`: repoguard-ui's time guard refuses both.
  */
 
-/** The makerspace's zone. backend/internal/clock.Default. */
-export const MAKERSPACE_TZ = "Asia/Kolkata";
+/**
+ * The zone is the deployment's `TZ`, read by the backend (clock.Name), the one
+ * source: no zone is written here. The root layout reads it from /healthz on
+ * the server and hands it to <Providers>, which calls setMakerspaceZone while
+ * rendering, before any child formats a time, so the first paint is already in
+ * that zone. If it cannot be read (or names no zone) times are shown in UTC and
+ * say so (zoneTag), never in a guessed zone.
+ */
+let zone = "UTC";
+let known = false;
+
+/** The zone every date and clock is read in; pass as `{ timeZone: makerspaceZone() }`. */
+export const makerspaceZone = (): string => zone;
+
+/** " UTC" while the backend's zone is unknown, so a reader is never left guessing; otherwise empty. */
+export const zoneTag = (): string => (known ? "" : " UTC");
+
+const wallClockIn = (timeZone: string) =>
+  new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+let wallClock = wallClockIn(zone);
+
+/**
+ * Adopt the backend's zone. The zone is one deployment value (a TZ change is a
+ * redeploy, which restarts the UI), so this is WRITE-ONCE from a VALIDATED
+ * name: the first valid name is kept, the same name again is a no-op, a
+ * different valid name is logged once and ignored, and a missing or invalid
+ * name does nothing at all. A failed read therefore never overwrites a zone
+ * already learned; it renders with whatever is held (the right zone after one
+ * good read, UTC labelled before).
+ */
+export function setMakerspaceZone(name: string | null | undefined): void {
+  if (!name) return;
+  try {
+    wallClockIn(name); // throws RangeError on an unknown zone
+  } catch {
+    return;
+  }
+  if (known) {
+    if (name !== zone && !warned) {
+      warned = true;
+      console.warn(`[zone] backend now names ${name}; keeping ${zone} until the UI restarts`);
+    }
+    return;
+  }
+  zone = name;
+  known = true;
+  wallClock = wallClockIn(zone);
+}
+let warned = false;
+
+/** The zone this process is actually using, or undefined while it is UTC-and-labelled. What the layout hands the client, so both render the same. */
+export const knownMakerspaceZone = (): string | undefined => (known ? zone : undefined);
+
+/** Test-only: forget the zone, as a fresh process. */
+export function resetMakerspaceZoneForTests(): void {
+  zone = "UTC";
+  known = false;
+  warned = false;
+  wallClock = wallClockIn(zone);
+}
 
 const pad = (n: number) => String(n).padStart(2, "0");
-
-const wallClock = new Intl.DateTimeFormat("en-US", {
-  timeZone: MAKERSPACE_TZ,
-  hourCycle: "h23",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-});
 
 function wall(at: Date): Record<string, number> {
   const out: Record<string, number> = {};

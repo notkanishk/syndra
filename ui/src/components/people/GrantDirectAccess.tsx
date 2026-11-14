@@ -27,7 +27,7 @@ import { withRuleWaits } from "@/lib/request-decisions";
 import { expiryLabel, formatShortDate } from "@/lib/format";
 import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
-import { daysFromToday, endAfterDaysISO, endOfDayISO } from "@/lib/time";
+import { daysFromToday, endAfterDaysISO, endOfDayISO, zoneTag } from "@/lib/time";
 import { personOr, roleName } from "@/lib/names";
 
 /**
@@ -136,7 +136,11 @@ function GrantDirectAccessOpen({
     : undefined;
 
   // Held while the plan is read, when it can't be, and when the planner refuses.
-  const ready = Boolean(value) && (preset !== "date" || Boolean(customDate)) && !consent.hold && !refused;
+  // A date or the end of term is turned into a number of days from today, and
+  // today depends on the zone: until the server has said which (a deploy window),
+  // those two wait rather than count a day wrongly. "30 days" and "never" do not.
+  const zonePending = (preset === "date" || preset === "term") && zoneTag() !== "";
+  const ready = Boolean(value) && (preset !== "date" || Boolean(customDate)) && !consent.hold && !refused && !zonePending;
   // Given, or waiting for you to send: the sheet is its result and nothing sends twice.
   const done = result?.outcome.kind === "applied" || result?.outcome.kind === "queued" || Boolean(result?.outcome.recorded);
 
@@ -302,6 +306,8 @@ function GrantDirectAccessOpen({
                 !ready
                   ? !value
                     ? "Choose a role to give."
+                    : zonePending
+                    ? "Waiting for the server to say which time zone the days are counted in. Try again in a moment."
                     : consent.hold ?? refusedReason ?? "Pick the date the access should end."
                   : undefined
               }

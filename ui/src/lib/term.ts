@@ -46,8 +46,10 @@ export function daysUntilTermEnd(now: Date = new Date(), terms?: TermDates[]): n
 /** What asking to keep a role offers: a way to pick how much longer, and where it lands. */
 export interface KeepChoice {
   days: number;
-  /** The end it would have, counted from the current end. */
+  /** The end it would have, counted from the current end (an instant, for showing). */
   until: string;
+  /** The same end as a date, YYYY-MM-DD: what is sent. The backend resolves it to the end of that day in its zone. */
+  day: string;
 }
 
 /**
@@ -64,7 +66,7 @@ export function keepOptions(
 ): { month: KeepChoice; term: KeepChoice | { reason: string } } {
   // "N days" is N calendar days, ending as the Nth does (lib/time.ts), as the backend counts it.
   const endDay = civilDay(new Date(currentEnd));
-  const reach = (days: number): KeepChoice => ({ days, until: endOfDayISO(addDays(endDay, days)) });
+  const reach = (days: number): KeepChoice => ({ days, until: endOfDayISO(addDays(endDay, days)), day: addDays(endDay, days) });
 
   const today = civilDay(now);
   const sorted = [...terms].sort((a, b) => a.start.localeCompare(b.start));
@@ -76,5 +78,5 @@ export function keepOptions(
   if (days < 1) {
     return { month: reach(30), term: { reason: "It already ends after the end of next term." } };
   }
-  return { month: reach(30), term: { days, until: endOfDayISO(next.end) } };
+  return { month: reach(30), term: { days, until: endOfDayISO(next.end), day: next.end } };
 }

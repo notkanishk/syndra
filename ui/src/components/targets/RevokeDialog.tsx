@@ -13,7 +13,6 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useRevokeTargetAccess, type RevocationResult } from "@/lib/queries/useHolds";
 import { useIsTouch } from "@/lib/useViewport";
-import { endOfDayISO } from "@/lib/time";
 
 /**
  * Revoking somebody's access on a target (6.17; design §27).
@@ -187,7 +186,7 @@ export function RevokeDialog({
             revoke.mutate(
               {
                 reason,
-                reviewDate: reviewDate ? endOfDayISO(reviewDate) : undefined,
+                reviewDate: reviewDate || undefined, // a date: the backend ends it in its own zone
               },
               { onSuccess: setResult },
             )

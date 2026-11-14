@@ -36,6 +36,15 @@ const buffer = 90 * 24 * time.Hour
 func collectLive(t *testing.T) context.Context {
 	t.Helper()
 	ctx := db.LiveDB(t)
+	// These cases are built on a zone that is not UTC (a UTC midnight is not a
+	// day boundary in it): state it, the code has no default to lean on.
+	ist, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prevName, prevLoc := clock.Name, clock.Loc
+	clock.Name, clock.Loc = "Asia/Kolkata", ist
+	t.Cleanup(func() { clock.Name, clock.Loc = prevName, prevLoc })
 	clear := func() {
 		for _, q := range []string{
 			`DELETE FROM addon_metric_points WHERE target_id = $1`, `DELETE FROM addon_metric_gaps WHERE target_id = $1`,

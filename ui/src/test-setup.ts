@@ -119,3 +119,8 @@ afterEach(() => {
   cleanup();
   if (typeof window !== "undefined") (window as { __motionInTests?: boolean }).__motionInTests = false;
 });
+
+// The tests' zone, as the backend would hand it over (test config; the product
+// writes none). vitest.config.ts sets TZ to the same name for `new Date(y, m, d)` fixtures.
+import { setMakerspaceZone } from "@/lib/time";
+setMakerspaceZone(process.env.TZ);
