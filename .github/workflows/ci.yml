@@ -83,6 +83,9 @@ jobs:
         with:
           go-version-file: addons/conformance/go.mod
           cache-dependency-path: addons/conformance/go.sum
+      - name: the request decoder both add-ons share
+        working-directory: addons/strictjson
+        run: go vet ./... && go test -count=1 ./...
       - name: the contract's embed module, and AUTHORING.md held to it
         working-directory: addons/contract
         run: go vet ./... && go test -count=1 ./...
@@ -148,7 +151,7 @@ jobs:
           - { name: backend, context: backend, file: backend/Dockerfile }
           - { name: claims, context: backend, file: backend/Dockerfile.claims }
           - { name: ui, context: ui, file: ui/Dockerfile }
-          - { name: truenas-addon, context: addons/truenas, file: addons/truenas/Dockerfile }
+          - { name: truenas-addon, context: addons, file: addons/truenas/Dockerfile }
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

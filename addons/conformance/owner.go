@@ -91,7 +91,7 @@ type subjectWrite struct {
 // about says whether a request is about the kit's subject, and whether it is
 // a write to it: an apply or operation for it, or a plan for it alone.
 func (k *kit) about(r request) (about, write bool) {
-	body, _ := r.body.(map[string]any)
+	body := r.fields()
 	switch path, _, _ := strings.Cut(r.target, "?"); {
 	case path == "/apply" || strings.HasPrefix(path, "/operations/"):
 		// An effect: read operation is no write (contract.writes, the one rule).
@@ -176,7 +176,7 @@ func (k *kit) sawForeign(id string) {
 // summary says what a write asked for, never a parameter's value: an
 // operation's parameters may be a member's password.
 func summary(r request) string {
-	body, _ := r.body.(map[string]any)
+	body := r.fields()
 	path, _, _ := strings.Cut(r.target, "?")
 	if path == "/apply" {
 		desired, _ := json.Marshal(body["desired"])

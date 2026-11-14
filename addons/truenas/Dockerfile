@@ -6,13 +6,18 @@
 # the least trusted component in the deployment.
 
 FROM golang:1.25-alpine AS build
-WORKDIR /src
+# The context is addons/, not addons/truenas: go.mod replaces
+# syndra/addons/strictjson with ../strictjson (the request decoder both
+# add-ons share), so the build needs that module beside this one.
+WORKDIR /src/truenas
 
 # Dependencies first, so a source edit does not re-download the module graph.
-COPY go.mod go.sum ./
+COPY strictjson/go.mod /src/strictjson/go.mod
+COPY truenas/go.mod truenas/go.sum ./
 RUN go mod download
 
-COPY . .
+COPY strictjson /src/strictjson
+COPY truenas .
 # CGO off for a static binary the scratch stage can run; trimpath so the image
 # carries no build-host paths.
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/truenas-addon .

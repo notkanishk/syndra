@@ -1,0 +1,12 @@
+# The context of the TrueNAS add-on's image (addons/truenas/Dockerfile): only
+# its own module and the strictjson module its go.mod replaces. Without this it
+# also carried the 9.5 MB binary a local `go build` leaves behind, shipped
+# into the image and then overwritten by the one the builder produces.
+*
+!strictjson
+!truenas
+truenas/truenas
+**/*.test
+**/*.db
+**/*.log
+**/*.log.*

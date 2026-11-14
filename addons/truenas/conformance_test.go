@@ -156,7 +156,7 @@ func TestTheConformanceKitPassesThisAddOn(t *testing.T) {
 		}
 	}
 	// The run that writes judges what reads cannot: these must have run.
-	for _, id := range []string{"replay", "replay.refusal", "read-back", "limit-combine", "limit-empty", "operations.reads", "health", "channel-follows-account",
+	for _, id := range []string{"requests.exact-names", "replay", "replay.refusal", "read-back", "limit-combine", "limit-empty", "operations.reads", "health", "channel-follows-account",
 		"withdraw-only.existing", "lifecycle", "operations", "plan-equals-apply", "create-is-new", "bound-to-created", "operations.result",
 		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "calls.unknown", "calls.recorded",
 		"stats.descriptors", "stats.points", "stats.totals", "stats.since", "stats.idempotent", "stats.gaps",

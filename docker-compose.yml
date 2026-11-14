@@ -371,8 +371,8 @@ services:
   truenas-addon:
     logging: *default-logging
     build:
-      context: ./addons/truenas
-      dockerfile: Dockerfile
+      context: ./addons
+      dockerfile: truenas/Dockerfile
     container_name: syndra_truenas_addon
     # Opt-in, and for a sharper reason than an unreachable dependency: this
     # container holds the

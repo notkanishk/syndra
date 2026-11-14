@@ -106,7 +106,9 @@ a supported major is not a promise that every method is present.
   checked by equality at registration; everything after it is a feature the
   backend uses only when the add-on declares it. The two ends never share a Go
   module: a shared constant would hide exactly the version skew the major exists
-  to surface. Constants that must match are written out on both sides and
+  to surface. (The two Go add-ons share one request decoder, `strictjson`, a
+  module of its own that holds no contract fact: names matched exactly and
+  once, RFC 8259 §4 and RFC 7493 §2.3.) Constants that must match are written out on both sides and
   asserted against `contract/`.
 - **One refusal shape**: every non-2xx is an RFC 9457 `application/problem+json`
   with a registered `code` (`contract/v2/registry/errors.json`).

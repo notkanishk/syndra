@@ -1050,6 +1050,31 @@ settings with the full §5 rules.
   caller can send `Subject` or `\u017fubject`. Options: exact-case key
   validation, or `encoding/json/v2` case-sensitive decoding. Also
   `PUT /settings/<name>` is not lifecycle-gated #needs-triage
+  *Decoder half done (14 Nov 2026, slice 7o; owner: "yes add exact-case
+  decoding to contract 2"):* `Decode` in `addons/strictjson`, a module of
+  its own with no dependency (the contract module stays files only,
+  design §1), walks the body token by token against the target type and
+  refuses a name not byte-equal to a field's JSON name (`UnknownMemberError`,
+  400 `UNKNOWN_REQUEST_FIELD`) and a repeated name (`DuplicateMemberError`,
+  400 with the route's malformed-body code: `BAD_REQUEST`, `INVALID_BODY` on
+  a setting), RFC 8259 §4 and RFC 7493 §2.3. Field names resolve as
+  `encoding/json`'s `typeFields` (tags, `-`, embedded structs, dominance,
+  the diamond); maps, `any` and `UnmarshalJSON` types take any name, never
+  twice. Errors quote in ASCII (`QuoteToASCII`) and echo at most 64 bytes;
+  the JSON pointer is built only for an error. A 1 MB `/plan`: 38.8 ms,
+  283 MB, 540k allocs before; 11.5 ms, 10.8 MB, 218k allocs after
+  (`BenchmarkDecodePlan1MB`). Not `encoding/json/v2`: still a GOEXPERIMENT
+  in Go 1.25. TrueNAS `decodeStrict` and the reference's `parse` call it
+  (reference defect `folds-names` restores the old decoding); the kit's
+  `requests.exact-names` probes `/plan`, `/apply` under a wrong fingerprint
+  (`-mutate`) and `PUT /settings/{name}` with its current value
+  (`-mutate-settings`; both add-ons decode before anything is stored).
+  Tests: `strictjson_test.go` (mutation-checked: folded lookup, duplicate
+  check, the diamond's cancelling), `TestEveryRouteMatchesNamesExactlyAndOnce`
+  (TrueNAS, every body route; red with the old decoder),
+  `TestExactNamesProbesTheApplyUnderAWrongFingerprint`,
+  `TestExactNamesProbesTheSettingWithItsCurrentValue`, the defect row. The
+  settings-lifecycle half stays open.
 
 ## 5. The guide
 

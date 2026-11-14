@@ -413,10 +413,20 @@ vectors.
 
 - **Strict requests.** The add-on MUST decode every request body strictly. A
   field the route does not know MUST be refused with 400
-  `UNKNOWN_REQUEST_FIELD`; a body that is not the route's JSON with 400
-  `BAD_REQUEST`. Syndra sends a request field only to an add-on that
+  `UNKNOWN_REQUEST_FIELD`; a body that is not the route's JSON with 400 and
+  the route's malformed-body code: `BAD_REQUEST`, or `INVALID_BODY` on
+  `PUT /settings/{name}`. Syndra sends a request field only to an add-on that
   declared the feature introducing it (`v2/registry/features.json`), so a
   strict add-on is never surprised.
+- **Names exactly, and once.** A member name MUST be refused unless it is
+  exactly, code point for code point, a name the schema gives (RFC 8259
+  §4): `Subject` or `ſubject` beside `subject` is an unknown field, 400
+  `UNKNOWN_REQUEST_FIELD`. A name twice in one object MUST be refused as a
+  body that is not the route's JSON (I-JSON, RFC 7493 §2.3): 400 with the
+  route's malformed-body code. Many decoders do neither by
+  default: Go's `encoding/json` matches names case-insensitively, under
+  Unicode folding, and keeps the last of two. Both Go add-ons here use
+  `Decode` in `addons/strictjson/strictjson.go`.
 - **`contract_version` in every request body.** Absent or not `2` MUST be
   422 `CONTRACT_VERSION_MISMATCH` with `caller_version` (0 when absent) and
   `addon_version` (fixture in [chapter 6](#6-errors)). A body wrong both ways
