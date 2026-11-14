@@ -52,7 +52,7 @@ func TestEveryGoBuildUsesTheModulesGo(t *testing.T) {
 		}
 	}
 
-	tag := regexp.MustCompile(`^golang:` + regexp.QuoteMeta(want) + `-alpine\d+\.\d+$`)
+	tag := golangImage(want)
 	built := 0
 	for _, df := range dockerfiles(t) {
 		for _, ref := range fromImages(read(df)) {
@@ -105,6 +105,30 @@ func TestNoImageResolvesItsOwnDependencies(t *testing.T) {
 			if l := strings.TrimSpace(line); !strings.HasPrefix(l, "#") && resolve.MatchString(l) {
 				t.Errorf("%s:%d resolves dependencies at build time (%s); copy go.mod and go.sum and `go mod download`", rel, i+1, l)
 			}
+		}
+	}
+}
+
+// golangImage matches the golang image for Go release want: its versioned
+// Alpine tag, optionally pinned further by digest, as imageRefProblem allows.
+func golangImage(want string) *regexp.Regexp {
+	return regexp.MustCompile(`^golang:` + regexp.QuoteMeta(want) + `-alpine\d+\.\d+(@sha256:[0-9a-f]{64})?$`)
+}
+
+func TestGolangImageAgreesWithThePinRule(t *testing.T) {
+	digest := "@sha256:" + strings.Repeat("ab", 32)
+	for ref, ok := range map[string]bool{
+		"golang:1.27.4-alpine3.24":          true,
+		"golang:1.27.4-alpine3.24" + digest: true,
+		"golang:1.27.4-alpine3.24@sha256:x": false,
+		"golang:1.27.3-alpine3.24" + digest: false,
+		"golang:1.27-alpine":                false,
+	} {
+		if golangImage("1.27.4").MatchString(ref) != ok {
+			t.Errorf("%s: want match=%v", ref, ok)
+		}
+		if ok && imageRefProblem(ref) != "" {
+			t.Errorf("%s: the Go guard accepts it and the pin guard does not: %s", ref, imageRefProblem(ref))
 		}
 	}
 }
