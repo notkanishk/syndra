@@ -825,7 +825,7 @@ func TestAMissingBoundAccountIsRefusedRatherThanLeftUnknown(t *testing.T) {
 			if status < 400 || status >= 500 {
 				t.Fatalf("want a deterministic 4xx, got %d (%v)", status, err)
 			}
-			if !strings.Contains(err.Error(), "no longer exists") {
+			if !strings.Contains(err.Error(), "is no longer on TrueNAS") {
 				t.Errorf("the operator needs to know the account is gone: %v", err)
 			}
 		})

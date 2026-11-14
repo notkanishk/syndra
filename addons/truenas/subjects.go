@@ -424,13 +424,17 @@ func groupIDs(names []string, byName map[string]apiID, builtin map[string]bool) 
 
 // errAmbiguousAccount is two accounts matching one exact key (accountWhere, accountIndex): a
 // question about which one, and the answer is never "whichever the next query returns".
-var errAmbiguousAccount = errors.New("more than one account on the target matches")
+var errAmbiguousAccount = errors.New("more than one account on TrueNAS matches")
+
+// errAccountNotFound is a lookup that could not tell whether the account is there: the sentence for
+// a cut-short read and any other lookup failure (lookupRefusal).
+var errAccountNotFound = errors.New("This person's account could not be found on TrueNAS.")
 
 // ambiguityWords are errAmbiguousAccount as an operator reads it, once for the operations, the
 // apply (lookupRefusal) and the plan.
 func ambiguityWords() (detail, next string) {
-	return "More than one account on the target matches this binding.",
-		"Rename or remove one of them on the target, then try again."
+	return "More than one account on TrueNAS has the name or number this person's account is recorded under.",
+		"Rename or remove one of them on TrueNAS, then try again."
 }
 
 // Ping is the reachability probe `/health` uses.
@@ -493,6 +497,6 @@ func lookupRefusal(err error) error {
 		detail, next := ambiguityWords()
 		return errors.New(detail + " " + next)
 	default:
-		return fmt.Errorf("the bound account could not be located on the target")
+		return errAccountNotFound
 	}
 }

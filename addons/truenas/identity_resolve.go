@@ -254,18 +254,18 @@ func (s *server) operatedAccount(subject string, who *caller) (resolved, int, er
 		status, refusal := liveRefusal(err)
 		return resolved{}, status, refusal
 	case !bound:
-		return resolved{}, http.StatusUnprocessableEntity, fmt.Errorf("no account is bound to this subject yet")
+		return resolved{}, http.StatusUnprocessableEntity, errors.New("This person has no account on TrueNAS yet.")
 	case r.Conflict != nil:
 		// The binding names nothing: another account holds its name or number. Refused whole, with
 		// the apply's own words; the holder is never acted on.
 		return resolved{}, http.StatusConflict, conflictRefusal(r.Conflict)
 	case r.Account == nil && r.Cut:
 		// A target that ignored the filter and cut its list short proves no absence.
-		return resolved{}, http.StatusBadGateway, fmt.Errorf("the bound account could not be located on the target")
+		return resolved{}, http.StatusBadGateway, errAccountNotFound
 	case r.Account == nil:
 		// Gone: a deterministic 4xx, which Syndra records as rejected, never a
 		// 5xx that parks it as "we do not know whether it happened".
-		return resolved{}, http.StatusUnprocessableEntity, fmt.Errorf("the bound account no longer exists on the target")
+		return resolved{}, http.StatusUnprocessableEntity, errors.New("This person's account is no longer on TrueNAS.")
 	}
 	return r, 0, nil
 }

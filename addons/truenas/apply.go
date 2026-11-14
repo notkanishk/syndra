@@ -320,14 +320,14 @@ func (c BindingConflict) words() (detail, next string) {
 		return fmt.Sprintf("An account named %s already exists and is bound to another subject.", c.Username),
 			"If it is not theirs, release it from that subject, then adopt it here."
 	case c.numberHeld:
-		return fmt.Sprintf("The account %s, bound to this subject, is gone, and its number is now held by a different account, %s.", c.was, c.Username),
-			fmt.Sprintf("Release this subject's binding; the next apply creates a new account for them. Adopt %s instead only if it is theirs.", c.Username)
+		return fmt.Sprintf("The account %s, recorded for this person, is gone, and its number is now held by a different account, %s.", c.was, c.Username),
+			fmt.Sprintf("Stop tracking this person's old account; the next change creates a new one for them. Adopt %s instead only if it is theirs.", c.Username)
 	case c.selfUnknown:
 		return fmt.Sprintf("An account named %s already exists, and Syndra can't check yet whether it is the account this add-on signs in to the app with.", c.Username),
 			"Try again shortly."
 	default:
-		return fmt.Sprintf("The name %s this subject is bound to is now held by a different account.", c.Username),
-			"Release this subject's binding first, then adopt that account only if it is theirs, or rename it in the app."
+		return fmt.Sprintf("The name %s this person's account is recorded under is now held by a different account.", c.Username),
+			"Stop tracking this person's old account first, then adopt that account only if it is theirs, or rename it on TrueNAS."
 	}
 }
 
@@ -632,7 +632,8 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		return ApplyOutcome{}, http.StatusConflict, lookupRefusal(err)
 	}
 	if err != nil {
-		return ApplyOutcome{}, http.StatusBadGateway, err
+		// What the lookup's failure was: a rate-limited TrueNAS is a 429, unreachable a 503.
+		return ApplyOutcome{}, statusFor(err), err
 	}
 	if conflict != nil {
 		// Halted, and surfacing THE SAME adoption action the unmanaged

@@ -183,7 +183,7 @@ func TestEveryCallerResolvesOneIdentity(t *testing.T) {
 				switch {
 				case c.conflict:
 					if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "now held by a different account") ||
-						!strings.Contains(rr.Body.String(), "Release this subject") {
+						!strings.Contains(rr.Body.String(), "Stop tracking this person") {
 						t.Fatalf("%s: want 409 in the add-on's words, got %d %s", op.name, rr.Code, rr.Body.String())
 					}
 					if strings.Contains(rr.Body.String(), itoa(c.holderUID(t))) {
@@ -199,7 +199,7 @@ func TestEveryCallerResolvesOneIdentity(t *testing.T) {
 						t.Errorf("activity.get: the audit log was read on a conflict (%q)", auditFilter(m))
 					}
 				case c.want == "":
-					if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "no longer exists") {
+					if rr.Code != http.StatusUnprocessableEntity || !strings.Contains(rr.Body.String(), "is no longer on TrueNAS") {
 						t.Fatalf("%s: want 422 no account, got %d %s", op.name, rr.Code, rr.Body.String())
 					}
 					if len(writes) != 0 {
@@ -445,6 +445,18 @@ func TestPlanAndApplyAgreeOnTwoAccountsOnOneUID(t *testing.T) {
 	rr = postApply(t, s, oneApply)
 	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), detail+" "+next) || len(m.updates)+len(m.creates) != 0 {
 		t.Fatalf("apply: want 409 in the same words and nothing written, got %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+// The apply says what its lookup's failure was: a rate-limited TrueNAS is a 429, which Syndra
+// retries later, never a 502 it parks as possibly acted.
+func TestARateLimitedLookupIsA429OnTheApply(t *testing.T) {
+	s, m := idCases[0].server(t)
+	m.rateLimitOn = "user.query"
+	// A fingerprint of its own, so the first user.query is the apply's (postApply would read first).
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"bob@example.edu","fingerprint":"f","desired":{"enabled":true}}`)
+	if rr.Code != http.StatusTooManyRequests || problemCode(t, rr) != CodeApplyFailed || len(m.updates)+len(m.creates) != 0 {
+		t.Fatalf("want 429 APPLY_FAILED and nothing written, got %d %s", rr.Code, rr.Body.String())
 	}
 }
 
