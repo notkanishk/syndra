@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { standingWords } from "@/lib/account-standing";
+import type { Standing } from "@/lib/queries/useTargets";
 import { NOTHING_TO_DO } from "@/lib/outcome";
 
 describe("standing, in words", () => {
@@ -25,5 +26,31 @@ describe("standing, in words", () => {
     }
     expect(standingWords({ usable: true, waiting_on: "none" }, "TrueNAS", "member").next).toBe(NOTHING_TO_DO);
     expect(standingWords({ usable: false, waiting_on: "target" }, "TrueNAS", "member").next).toContain(NOTHING_TO_DO);
+  });
+});
+
+describe("an account that is switched off", () => {
+  const off: Standing = { usable: false, waiting_on: "none", note: "The account is switched off." };
+
+  it("says it is off and why it may be, and does not promise 'yet'", () => {
+    const w = standingWords(off, "TrueNAS", "operator");
+    expect(w.state).toBe("Switched off");
+    expect(w.state).not.toMatch(/yet/i);
+    expect(w.note).toContain("The account is switched off.");
+    expect(w.note).toMatch(/put on hold or is deactivated in Zitadel/);
+    expect(w.note).toMatch(/switch it off on TrueNAS directly/);
+    expect(w.next).toMatch(/Nothing for you to do if the person is on hold or deactivated/);
+  });
+
+  it("tells a member to ask staff rather than wait", () => {
+    expect(standingWords(off, "TrueNAS", "member").next).toMatch(/Ask them if you did not expect this/);
+  });
+
+  it("keeps the add-on's own next step when it gave one", () => {
+    expect(standingWords({ ...off, next: "Ask the front desk." }, "TrueNAS", "operator").next).toBe("Ask the front desk.");
+  });
+
+  it("leaves a different waiting state as it was", () => {
+    expect(standingWords({ usable: false, waiting_on: "target" } as Standing, "TrueNAS", "operator").state).toBe("Waiting on TrueNAS");
   });
 });

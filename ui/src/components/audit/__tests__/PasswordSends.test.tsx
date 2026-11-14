@@ -87,6 +87,6 @@ describe("a password change in the record", () => {
         }}
       />,
     );
-    expect(document.body.textContent).toBe("Said it didn't happen · a delete of an account and its files TrueNAS never answered");
+    expect(document.body.textContent).toBe("Said it didn't happen · a delete of an account TrueNAS never answered");
   });
 });

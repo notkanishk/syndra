@@ -176,7 +176,7 @@ describe("dormant accounts", () => {
     renderDormant();
     fireEvent.click(screen.getByLabelText("Select former-member"));
 
-    expect(screen.getByText(/home directories and everything in them/i)).toBeInTheDocument();
+    expect(screen.getByText(/files stay on TrueNAS/i)).toBeInTheDocument();
     expect(screen.queryByText(/0 bytes/)).toBeNull();
   });
 
@@ -187,7 +187,7 @@ describe("dormant accounts", () => {
 
     // GiB, not GB. This divided by 1024 and printed a decimal unit name, which
     // by the terabyte is naming a quantity 10% smaller than the one shown.
-    expect(screen.getByText(/38\.4 GiB of their files/)).toBeInTheDocument();
+    expect(screen.getByText(/38\.4 GiB of their files stays/)).toBeInTheDocument();
   });
 
   // Everything else on these screens queues. This one does not, and saying so
@@ -383,3 +383,18 @@ describe("inside the add-on's cooldown", () => {
     expect(screen.queryByText("This list could not be read")).toBeNull();
   });
 });
+
+describe("the sign-in column", () => {
+  // One rule for the column (A-10 §6): a 23-day-old sign-in is a date like a 40-day-old one, never
+  // "23 days ago" beside "15 Oct".
+  it("says every sign-in the same way, capitalised the same way", async () => {
+    const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+    state.report!.accounts[0].last_seen_at = ago(23);
+    state.report!.accounts[1].last_seen_at = ago(40);
+    renderDormant();
+    const lines = await screen.findAllByText(/^Last signed in /);
+    expect(lines).toHaveLength(2);
+    for (const line of lines) expect(line.textContent).toMatch(/^Last signed in \d{1,2} [A-Z][a-z]{2,4}( \d{4})?$/);
+  });
+});
+

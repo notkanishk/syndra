@@ -34,3 +34,22 @@ describe("AppShell skip link", () => {
     expect(main).toHaveAttribute("tabindex", "-1");
   });
 });
+
+describe("AppShell scrolling", () => {
+  // The window must never scroll and push the top bar off. `overflow-hidden` is still a scroll
+  // container (focus, find and anchors can move it); `overflow-clip` is not. The one scroller is
+  // #app-scroll, and it is the containing block of what is positioned inside it.
+  it("clips the shell rather than hiding its overflow, and scrolls only in #app-scroll", () => {
+    const { container } = render(
+      <AppShell session={{ id: "u1", role: "admin" } as SessionUser}>
+        <p>page</p>
+      </AppShell>,
+    );
+    const root = container.querySelector("#app-root")!;
+    expect(root).toHaveClass("overflow-clip");
+    expect(root).not.toHaveClass("overflow-hidden");
+    const scroller = container.querySelector("#app-scroll")!;
+    expect(scroller).toHaveClass("relative", "overflow-y-auto");
+  });
+});
+

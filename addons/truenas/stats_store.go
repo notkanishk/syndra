@@ -45,6 +45,9 @@ type statsMeta struct {
 	Failing bool      `json:"failing,omitempty"`
 	// HeldFrom is the oldest day the buffer holds; before it, a gap.
 	HeldFrom string `json:"held_from"`
+	// Began is the day the first collection ran. While HeldFrom is still Began, the days before
+	// it were never collected; once the buffer has trimmed past it, they were collected and dropped.
+	Began string `json:"began,omitempty"`
 	// Behind is the day from which the audit log was too long to read in
 	// one run: counted on the next.
 	Behind string `json:"behind,omitempty"`

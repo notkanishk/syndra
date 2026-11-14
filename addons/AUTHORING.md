@@ -1378,7 +1378,9 @@ oldest days first. Syndra's first collection of a metric asks from now
 minus `stats_buffer`. When Syndra asks from further back than you still
 hold, the add-on MUST answer a gap from the day `since` falls in to the
 first day it holds, with a reason (the TrueNAS add-on says "The add-on no
-longer holds these days"), and go on from what it has.
+longer holds these days" for days it dropped, and "Not collected yet: counting
+began on 9 Nov" for days before its first collection, which it never held),
+and go on from what it has.
 
 **A point is the whole day.** A point's `start` MUST be a midnight in
 `stats_zone` and its `end` the next one, both RFC 3339 with the zone's

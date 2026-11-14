@@ -761,3 +761,24 @@ func TestTheZonePatternIsTheSchemas(t *testing.T) {
 		}
 	}
 }
+
+// Days before the first collection were never counted, and the reason says so (with the day)
+// rather than claiming the add-on lost them; once the buffer has trimmed past it, they were lost.
+func TestADayBeforeCountingBeganIsNotCollectedYet(t *testing.T) {
+	s, _, at := statsServer(t)
+	s.collectStatsOnce()
+	first, _, _ := allStats(t, s, metricSessions, day0.AddDate(0, 0, -3))
+	want := s.stats.reasonBegan(s.stats.day(day0))
+	if !strings.HasPrefix(want, "Not collected yet: counting began on ") {
+		t.Fatalf("reason %q", want)
+	}
+	if len(first.Gaps) == 0 || first.Gaps[0].Reason != want {
+		t.Errorf("gaps %+v, want the first to say %q", first.Gaps, want)
+	}
+	*at = day0.AddDate(0, 0, 95)
+	s.collectStatsOnce()
+	later, _, _ := allStats(t, s, metricSessions, day0.AddDate(0, 0, -3))
+	if len(later.Gaps) == 0 || later.Gaps[0].Reason != reasonBuffer {
+		t.Errorf("after the buffer trimmed past it, gaps %+v, want %q", later.Gaps, reasonBuffer)
+	}
+}

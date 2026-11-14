@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { UiViewProvider } from "@/lib/ui-view";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -176,11 +177,13 @@ function summary(operations: TargetSummary["operations"]): TargetSummary {
   };
 }
 
-function renderTarget() {
+function renderTarget(view: "basic" | "advanced" = "advanced") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <TargetOverview target="truenas" />
+      <UiViewProvider isOperator initialView={view}>
+        <TargetOverview target="truenas" />
+      </UiViewProvider>
     </QueryClientProvider>,
   );
 }
@@ -406,7 +409,7 @@ describe("one target's page", () => {
     renderTarget();
 
     // Words outside; the ids wait under Technical detail until it is opened (A-20 P11).
-    expect(screen.getByText("Deletes an account and its files")).toBeInTheDocument();
+    expect(screen.getByText("Deletes an account (its files stay on TrueNAS)")).toBeInTheDocument();
     expect(screen.queryByText("account.purge")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Technical detail/ }));
     expect(screen.getByText("password.set")).toBeInTheDocument();
@@ -456,7 +459,7 @@ describe("one target's page", () => {
 
     // Shown disabled and explained. Omitted, an operator wonders whether the
     // feature exists at all.
-    expect(screen.getByText("Deletes an account and its files")).toBeInTheDocument();
+    expect(screen.getByText("Deletes an account (its files stay on TrueNAS)")).toBeInTheDocument();
     expect(screen.getByText(/does not expose user.delete/)).toBeInTheDocument();
   });
 
@@ -478,9 +481,61 @@ describe("one target's page", () => {
 
     // A state somebody chose reads as a decision, not a fault: the reason they
     // gave is on screen, and nothing on the page calls it an outage.
-    expect(screen.getByText(/set that on purpose: rotating the API key/)).toBeInTheDocument();
+    // Said in the reach card and again in Maintenance, from the one sentence (lifecycleWhy).
+    expect(screen.getAllByText(/set that on purpose: “rotating the API key”/)).toHaveLength(2);
     expect(screen.queryByText(/did not answer/i)).toBeNull();
     expect(screen.queryByText(/Not answering/)).toBeNull();
+  });
+
+  // The add-on's own reason codes are never shown as codes, in the reach card or in Maintenance.
+  it("says an add-on's own lifecycle reason as a sentence, never the code", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "read_only", lifecycle_note: "startup" };
+    renderTarget();
+    expect(screen.getAllByText(/It was started this way by its configuration\./)).toHaveLength(2);
+    expect(screen.queryByText(/startup/)).toBeNull();
+    expect(screen.queryByText(/Somebody set that on purpose: startup/)).toBeNull();
+  });
+
+  // R4: Basic hides the machine's words; the sections around them keep their order and their anchors.
+  it("hides the technical parts in Basic without moving or removing any section", () => {
+    state.roster = [{ ...summary([{ id: "account.purge", scope: "admin", confirm: true, available: true }]), also_says: ["x-vendor: 1"] }];
+    state.health = { reachable: true, lifecycle: "active" };
+    const sections = () => Array.from(document.querySelectorAll("section[id]")).map((x) => x.id);
+    const advanced = renderTarget("advanced");
+    expect(screen.getByText("Maintenance")).toBeInTheDocument();
+    expect(screen.getByText("What the add-on also says")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Technical detail/ })).toBeInTheDocument();
+    const inAdvanced = sections();
+    advanced.unmount();
+
+    renderTarget("basic");
+    expect(screen.queryByText("Maintenance")).toBeNull();
+    expect(screen.queryByText("What the add-on also says")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Technical detail/ })).toBeNull();
+    // What stays: the operations in words, and every region, in the same order, jumpable by id.
+    expect(screen.getByText("Deletes an account (its files stay on TrueNAS)")).toBeInTheDocument();
+    expect(sections()).toEqual(inAdvanced);
+    expect(screen.getAllByRole("link", { name: /What runs here/ }).length).toBeGreaterThan(0);
+  });
+
+  it("lays the accounts it did not create out in columns, whatever the username's length", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = {
+      target: "truenas",
+      bound: 0,
+      current: true,
+      read_at: new Date().toISOString(),
+      unmanaged: [
+        { username: "a", account_id: "1" },
+        { username: "a-much-longer-service-account", account_id: "2" },
+      ],
+    };
+    renderTarget();
+    const names = ["a", "a-much-longer-service-account"].map((n) => screen.getByText(n));
+    for (const n of names) expect(n).toHaveClass("w-[220px]", "flex-none");
+    expect(document.querySelectorAll("[data-standing-seat]")).toHaveLength(2);
   });
 
   // A-01: Syndra's breaker is "waiting to retry", and it sends the operator to
@@ -876,7 +931,7 @@ describe("what it can do · the confirmation the manifest declares", () => {
     renderTarget();
 
     // The board's words: "Stops and asks" / "Runs by itself" (route-system-targets-id).
-    const purge = screen.getByText("Deletes an account and its files").closest(".flex-wrap");
+    const purge = screen.getByText("Deletes an account (its files stay on TrueNAS)").closest(".flex-wrap");
     expect(purge?.textContent).toContain("Stops and asks");
 
     const provision = screen.getByText("Creates an account").closest(".flex-wrap");
@@ -1120,6 +1175,16 @@ describe("where home folders go", () => {
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Choose where home folders go")).toBeInTheDocument();
     expect(within(dialog).getByText(/Nothing is made until a mapping gives home folders/)).toBeInTheDocument();
+    // Nothing is chosen until the person picks: a placeholder, no default, and the primary is off
+    // with its reason beside it.
+    const select = within(dialog).getByLabelText(/Folder in main/) as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(within(dialog).getByRole("option", { name: "Choose a folder…" })).toBeDisabled();
+    const use = within(dialog).getByRole("button", { name: "Use this folder" });
+    expect(use).toBeDisabled();
+    expect(within(dialog).getByText("Choose a folder first.")).toBeInTheDocument();
+    expect(state.settingPut).toEqual([]);
+    fireEvent.change(select, { target: { value: "/mnt/p/main/home_dir" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Use main › home_dir" }));
     expect(state.settingPut).toEqual([{ name: "home_root", value: "/mnt/p/main/home_dir" }]);
   });

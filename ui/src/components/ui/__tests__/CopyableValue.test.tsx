@@ -152,3 +152,29 @@ describe("the note under a page of copy rows", () => {
     expect(await screen.findByText(/Tap a value to select it, then hold to copy/)).toBeTruthy();
   });
 });
+
+describe("on a plain-http page, where there is no Clipboard API", () => {
+  // The deployment is reached over http on a LAN, so navigator.clipboard is undefined there and the
+  // button used to say Select. Where the browser can still copy a selection it is a Copy button.
+  it("copies through the browser's own copy command and confirms", async () => {
+    withoutClipboard();
+    const exec = vi.fn().mockReturnValue(true);
+    Object.defineProperty(document, "queryCommandSupported", { value: () => true, configurable: true });
+    Object.defineProperty(document, "execCommand", { value: exec, configurable: true });
+    vi.spyOn(document, "createRange").mockReturnValue({ selectNodeContents: vi.fn() } as unknown as Range);
+    vi.spyOn(window, "getSelection").mockReturnValue({ removeAllRanges: vi.fn(), addRange: vi.fn() } as unknown as Selection);
+    try {
+      render(<CopyableValue value="account.purge" label="Operation id" />);
+      fireEvent.click(await screen.findByRole("button", { name: "Copy operation id" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Copied operation id" })).toBeTruthy());
+      expect(exec).toHaveBeenCalledWith("copy");
+      expect(document.querySelector("[aria-live=polite]")?.textContent).toBe("Operation id copied");
+      expect(screen.queryByRole("button", { name: /^Select/ })).toBeNull();
+    } finally {
+      vi.restoreAllMocks();
+      Reflect.deleteProperty(document, "queryCommandSupported");
+      Reflect.deleteProperty(document, "execCommand");
+    }
+  });
+});
+

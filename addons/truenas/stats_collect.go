@@ -276,7 +276,7 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 		meta.Watermark, meta.Behind = until, until
 	}
 	if first {
-		meta.HeldFrom = today
+		meta.HeldFrom, meta.Began = today, today
 	}
 	meta.TakenAt, meta.Failing = now, false
 	if err := s.store.PutStats(metricSessions, meta, days, c.oldest(now)); err != nil {

@@ -903,3 +903,23 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | A unit's group heading, grams | Weights |
 
 One meter draws every "used of limit" in the product (`components/ui/Meter.tsx`): 90% and over turns it warn and writes "nearly full" beside the bar, the limit itself writes "full", and the word is never left to the colour. Units are the registry's (`registry/units.json`): count plain, items "3 items", bytes in binary steps with one decimal ("18.4 GiB", as the storage card says it), seconds as minutes or hours, grams as g or kg. A meter is drawn over the limit Syndra **read** (the storage card's number), and when none was read it says so instead of guessing. Rows are in the order the backend sends them (alphabetical by label, then by breakdown).
+
+## 16. The system page, after the visual check (addon-contract slice 7r)
+
+| Where | Sentence |
+|---|---|
+| Operation label, `account.purge` (TrueNAS's `user.delete` removes the account and its `.ssh` keys, never the home directory: middleware TS-25.10.7 `plugins/account.py` `do_delete`) | Deletes an account (its files stay on TrueNAS) |
+| Operation labels with no storage verb | `password.set` Lets a member set their own storage password, never logged; `holdings.list` Reads what a member holds; `item.checkout` Records that a member took an item |
+| Removing dormant accounts, what it costs | The accounts cannot be brought back. {size} of their files stays on {name}, with nobody's account to open it. (Unknown size: Their files stay on {name}, with nobody's account to open them. Syndra cannot see how much there is.) |
+| An unconfirmed delete | Did {name} delete {who}'s account? Yes: {account} is gone from {name}. Its files stay. No: {account} is still on {name}. |
+| Choosing where home folders go, before a choice | Placeholder Choose a folder…; the primary Use this folder is off, reason Choose a folder first.; the lede ends The same folder is used for every role on {name}; each role does not get its own. |
+| A role's holders, on its mapping row | {n} people hold this role / 1 person holds this role; nobody holds it is said once, as the reason on the convergence button: Nobody holds this role |
+| Why an add-on is not active (`lifecycle_note`, one place: `lifecycleWhy`) | startup: It was started this way by its configuration. shutting down: It is shutting down. an unrecognised configured state: Its configured state was not recognised, so it started read-only to be safe. An operator's own words: Somebody set that on purpose: “{reason}”. No reason: Somebody set that on purpose. |
+| A last sign-in, in one column (A-10 §6) | Last signed in {10 min ago or 3 hours ago under a day, then 15 Oct} |
+| An account that is switched off, nobody waited on | State Switched off. Note: the add-on's, then Syndra switches an account off when its person is put on hold or is deactivated in Zitadel, and somebody can also switch it off on {system} directly. Next (operator): Nothing for you to do if the person is on hold or deactivated. If neither, switch it back on on {system}. Next (member): It stays off until makerspace staff switch it back on. Ask them if you did not expect this. |
+| Statistics, days before the first collection | Not collected yet: counting began on {day} (the add-on's reason; it keeps The add-on no longer holds these days for days it dropped) |
+| Statistics, gaps | One line per reason over the same days: {14–15 Nov}, {Share}: “a” and “b”: {reason}; consecutive days joined; days outside the window shown are not listed |
+| The Mappings freshness | One line: the read line (What each group opens was read {age}) when it is shown, otherwise the header's (What each group opens, read from {name}'s folder permissions {age}) |
+| Copy button on an id (Clipboard API, or the browser's copy command on plain http) | Copy; Copied; announced as {what} copied |
+
+Basic hides the machine's words (ids, Maintenance, What the add-on also says, a finding's exact sides, the Merge findings term) and never a section: see `basic-advanced-ia` design.

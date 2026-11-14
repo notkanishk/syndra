@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ago, GAP, GIB } from "@/components/usage/__tests__/fixtures";
-import { capText, daysSince, dimensionWords, formatValue, gapIsOn, gapRange, plot, quoted, windowDays, WINDOW_DAYS } from "@/lib/usage";
+import { capText, daysSince, dimensionWords, formatValue, gapIsOn, gapLines, gapRange, gapWhere, plot, quoted, windowDays, WINDOW_DAYS } from "@/lib/usage";
 
 describe("a value in its unit", () => {
   it("says each registry unit in its own words", () => {
@@ -125,5 +125,55 @@ describe("days not yet counted", () => {
   });
   it("is today's old behaviour when the backend names no day", () => {
     expect(plot(series, [], "counter").cells.find((c) => c.day === ago(1))?.value).toBe(0);
+  });
+});
+
+describe("gaps said as lines", () => {
+  const dims = (share: string) => ({ share });
+  const audit = "Auditing does not record everyone on this share";
+
+  it("makes one line of the same reason over the same days on several shares, sorted by date", () => {
+    const lines = gapLines(
+      [
+        { start: "2026-11-14", end: "2026-11-16", dimensions: dims("main"), reason: audit },
+        { start: "2026-11-14", end: "2026-11-16", dimensions: dims("gitlab_data"), reason: audit },
+        { start: "2026-11-02", end: "2026-11-03", reason: "The NAS could not be read" },
+      ],
+      "2026-10-20",
+      "2026-11-20",
+    );
+    expect(lines.map((l) => [l.start, l.end, l.reason])).toEqual([
+      ["2026-11-02", "2026-11-03", "The NAS could not be read"],
+      ["2026-11-14", "2026-11-16", audit],
+    ]);
+    const metric = { dimensions: [{ name: "share", label: "Share" }] } as Parameters<typeof gapWhere>[0];
+    expect(gapWhere(metric, lines[1])).toBe("Share: \u201cgitlab_data\u201d and \u201cmain\u201d");
+    expect(gapRange(lines[1])).toBe("14–15 Nov");
+  });
+
+  it("joins consecutive days of one series", () => {
+    const lines = gapLines(
+      [
+        { start: "2026-11-10", end: "2026-11-11", dimensions: dims("main"), reason: audit },
+        { start: "2026-11-11", end: "2026-11-12", dimensions: dims("main"), reason: audit },
+      ],
+      "2026-10-20",
+      "2026-11-20",
+    );
+    expect(lines).toHaveLength(1);
+    expect([lines[0].start, lines[0].end]).toEqual(["2026-11-10", "2026-11-12"]);
+  });
+
+  it("drops what is outside the window shown and cuts what starts before it", () => {
+    const lines = gapLines(
+      [
+        { start: "2026-08-01", end: "2026-08-05", reason: "gone" },
+        { start: "2026-09-01", end: "2026-11-01", reason: "Not collected yet: counting began on 1 Nov" },
+        { start: "2026-11-25", end: "2026-11-26", reason: "future" },
+      ],
+      "2026-10-20",
+      "2026-11-20",
+    );
+    expect(lines.map((l) => [l.start, l.end])).toEqual([["2026-10-20", "2026-11-01"]]);
   });
 });

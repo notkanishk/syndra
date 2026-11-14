@@ -63,6 +63,8 @@ const (
 	// Syndra reads (TestStatsPagesFitTheContractsCeiling holds the two equal).
 	statsMaxReplyBytes = 1 << 20
 
+	// reasonBuffer is for days the buffer dropped to stay within its size or its P90D; days before
+	// the first collection were never held, and say so (reasonBegan).
 	reasonBuffer   = "The add-on no longer holds these days"
 	reasonNAS      = "The NAS could not be read"
 	reasonDark     = "The NAS could not be read that day"
@@ -78,6 +80,17 @@ func declaredMetric(name string) (Metric, bool) {
 		return Metric{}, false
 	}
 	return statsMetrics[i], true
+}
+
+// reasonBegan is the gap before the first collection: not days the add-on lost, days it never
+// counted. "2 Jan", with the year when it is not this year's, as Syndra says days.
+func (c statsClock) reasonBegan(day string) string {
+	t := c.midnight(day)
+	layout := "2 Jan"
+	if t.Year() != c.clock().In(c.loc()).Year() {
+		layout = "2 Jan 2006"
+	}
+	return "Not collected yet: counting began on " + t.Format(layout)
 }
 
 // StatPoint is one bucket; StatGap one window not observed.
@@ -346,7 +359,11 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request, _ []byte) {
 	}
 	if after == nil { // gaps on the first page only
 		if from < meta.HeldFrom {
-			out.Gaps = append(out.Gaps, StatGap{Start: c.stamp(from), End: c.stamp(meta.HeldFrom), Reason: reasonBuffer})
+			reason := reasonBuffer
+			if meta.Began != "" && meta.Began == meta.HeldFrom {
+				reason = c.reasonBegan(meta.Began)
+			}
+			out.Gaps = append(out.Gaps, StatGap{Start: c.stamp(from), End: c.stamp(meta.HeldFrom), Reason: reason})
 		}
 		out.Gaps = append(out.Gaps, mergeGaps(dayGaps, c.stamp(meta.Watermark))...)
 		if meta.Behind != "" {

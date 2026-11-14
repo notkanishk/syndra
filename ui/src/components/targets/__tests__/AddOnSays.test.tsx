@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { UiViewProvider } from "@/lib/ui-view";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -23,14 +24,18 @@ const base: TargetSummary = {
 function roster(rows: Partial<TargetSummary>[]) {
   const client = new QueryClient();
   client.setQueryData(["targets"], { targets: rows.map((r) => ({ ...base, ...r })) });
-  const Wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const Wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <UiViewProvider isOperator initialView="advanced">{children}</UiViewProvider>
+    </QueryClientProvider>
+  );
   return Wrapper;
 }
 
 describe("what the add-on says about itself (3.6)", () => {
   it("quotes also_says as given, escaped, and never as markup", () => {
     const lines = ['x-vendor: "<img src=x onerror=alert(1)>"', "features[3]: next-thing"];
-    const { container } = render(<Capabilities registered={{ ...base, also_says: lines }} />);
+    const { container } = render(<UiViewProvider isOperator initialView="advanced"><Capabilities registered={{ ...base, also_says: lines }} /></UiViewProvider>);
     expect(screen.getByText(lines[0])).toBeInTheDocument();
     expect(screen.getByText("features[3]: next-thing")).toBeInTheDocument();
     expect(container.querySelector("img")).toBeNull();
@@ -38,14 +43,14 @@ describe("what the add-on says about itself (3.6)", () => {
   });
 
   it("keeps its seat, saying so, when there is nothing", () => {
-    render(<Capabilities registered={base} />);
+    render(<UiViewProvider isOperator initialView="advanced"><Capabilities registered={base} /></UiViewProvider>);
     expect(screen.getByText("What the add-on also says")).toBeInTheDocument();
     expect(screen.getByText("Nothing beyond what Syndra uses.")).toBeInTheDocument();
   });
 
   it("says a refused description: the reason as given, the last good one in use, and what to do", () => {
     const reason = 'contract_version 3: "<b>not spoken</b>"';
-    const { container } = render(<Capabilities registered={{ ...base, last_error: reason }} />);
+    const { container } = render(<UiViewProvider isOperator initialView="advanced"><Capabilities registered={{ ...base, last_error: reason }} /></UiViewProvider>);
     expect(screen.getByText(/TrueNAS's latest description of itself was not accepted/)).toBeInTheDocument();
     expect(screen.getByText(/still using the last good one/)).toBeInTheDocument();
     expect(container.querySelector("[data-last-error]")?.textContent).toBe(reason);
@@ -54,7 +59,7 @@ describe("what the add-on says about itself (3.6)", () => {
   });
 
   it("shows no refusal when none happened", () => {
-    render(<Capabilities registered={base} />);
+    render(<UiViewProvider isOperator initialView="advanced"><Capabilities registered={base} /></UiViewProvider>);
     expect(screen.queryByText(/was not accepted/)).toBeNull();
   });
 });

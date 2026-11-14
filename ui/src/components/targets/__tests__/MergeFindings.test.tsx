@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { UiViewProvider } from "@/lib/ui-view";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,11 +51,13 @@ vi.mock("@/components/names", () => ({
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
 }));
 
-function renderFindings() {
+function renderFindings(view: "basic" | "advanced" = "basic") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MergeFindings target="truenas" />
+      <UiViewProvider isOperator initialView={view}>
+        <MergeFindings target="truenas" />
+      </UiViewProvider>
     </QueryClientProvider>,
   );
 }
@@ -76,6 +79,20 @@ function finding(over: Partial<MergeFinding>): MergeFinding {
 }
 
 describe("differences waiting on a decision", () => {
+  // R4: the glossary term and the exact payload are Advanced; Basic says the same thing in words.
+  it("keeps the term and the exact sides for Advanced", () => {
+    state.findings = [finding({ field: "groups", base: { a: 1 }, ours: { a: 2 }, theirs: { a: 3 } })];
+    state.error = null;
+    const basic = renderFindings("basic");
+    expect(screen.queryByRole("button", { name: /Technical detail/ })).toBeNull();
+    expect(screen.queryByText("Merge findings")).toBeNull();
+    expect(screen.getByText(/Differences between Syndra and TrueNAS that Syndra will not settle/)).toBeTruthy();
+    basic.unmount();
+    renderFindings("advanced");
+    expect(screen.getByRole("button", { name: /Technical detail/ })).toBeTruthy();
+    expect(screen.getByText("Merge findings")).toBeTruthy();
+  });
+
   it("leads with what the value used to be", () => {
     state.findings = [finding({})];
     state.resolved = [];

@@ -8,6 +8,8 @@ import { EmptyState, ListStates } from "@/components/states";
 import { ApiError } from "@/lib/api-client";
 import { describeFailure, mayHaveGoneThrough, outcomeFromError, partialSentence, sentence } from "@/lib/outcome";
 import { UserName } from "@/components/names";
+import { AdvancedOnly } from "@/components/ui/AdvancedOnly";
+import { useIsAdvanced } from "@/lib/ui-view";
 import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDetail";
 import { RoleRef } from "@/components/names/RoleRef";
 import { fieldNoun, limitWordsFor, membershipNoun, type EntitlementField } from "@/lib/fields";
@@ -60,6 +62,7 @@ export function MergeFindings({ target }: { target: string }) {
 
   const rows = findings.data ?? [];
   const name = nameOf(target);
+  const advanced = useIsAdvanced();
 
   return (
     <Card>
@@ -67,10 +70,15 @@ export function MergeFindings({ target }: { target: string }) {
         title="Waiting on a decision"
         count={rows.length}
         note={
-          <>
-            <Term name="mergeFinding">Merge findings</Term>: differences between Syndra and {name}{" "}
-            that Syndra will not settle on its own.
-          </>
+          // The term and its definition are the machine's vocabulary: Advanced. Basic says the thing.
+          advanced ? (
+            <>
+              <Term name="mergeFinding">Merge findings</Term>: differences between Syndra and {name}{" "}
+              that Syndra will not settle on its own.
+            </>
+          ) : (
+            <>Differences between Syndra and {name} that Syndra will not settle on its own.</>
+          )
         }
       />
       <ListStates
@@ -105,9 +113,11 @@ export function MergeFindings({ target }: { target: string }) {
               <div className="px-5 pb-3 text-[13.5px] text-muted">
                 {describe(f, name, schema)}
                 {rawSides(f) && (
-                  <TechnicalDetail className="mt-2" placeKey={`finding:${f.id}`}>
-                    <TechnicalPayload>{rawSides(f)}</TechnicalPayload>
-                  </TechnicalDetail>
+                  <AdvancedOnly>
+                    <TechnicalDetail className="mt-2" placeKey={`finding:${f.id}`}>
+                      <TechnicalPayload>{rawSides(f)}</TechnicalPayload>
+                    </TechnicalDetail>
+                  </AdvancedOnly>
                 )}
               </div>
               {f.decision === "unbound" ? (

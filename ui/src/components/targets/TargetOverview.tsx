@@ -34,6 +34,8 @@ import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadAgainError, ReadFreshness, RetryWait } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
+import { AdvancedOnly } from "@/components/ui/AdvancedOnly";
+import { lifecycleWhy } from "@/lib/lifecycle-reason";
 import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
 import { TargetName } from "@/components/targets/TargetName";
@@ -226,7 +228,10 @@ export function TargetOverview({ target }: { target: string }) {
                 />
                 <SystemHealth target={target} stale={lastKnown} />
               </div>
-              <LifecycleControl target={target} health={health.data} isLoading={health.isLoading} />
+              {/* Advanced only: lifecycle controls are for whoever looks after the add-on. */}
+              <AdvancedOnly gap={16}>
+                <LifecycleControl target={target} health={health.data} isLoading={health.isLoading} />
+              </AdvancedOnly>
             </>
           )}
         </Region>
@@ -823,9 +828,7 @@ function ReachCard({
         ? holdingOff
           ? `The add-on on the Syndra server is waiting before it calls ${name} again, after repeated failures, and tries again by itself. Changes for ${name} wait, and nothing is lost.`
           : paused
-            ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)}. Somebody set that on purpose${
-                health.lifecycle_note ? `: ${health.lifecycle_note}.` : "."
-              } ${
+            ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)}. ${lifecycleWhy(health.lifecycle_note)} ${
                 lifecycle === "draining"
                   ? "New changes are refused and the ones already sent are being allowed to finish."
                   : "Every change is refused at once. Reads keep working."
@@ -956,17 +959,22 @@ function TargetRead({ health, name }: { health: TargetHealth | undefined; name: 
  * What each operation does, in the board's plain verbs, for the ids the connection is known to
  * report. The id stays beneath in mono: it is what an operator matches against the manifest.
  */
-const OPERATION_LABEL: Record<string, string> = {
+export const OPERATION_LABEL: Record<string, string> = {
   ...STORAGE_OPERATION_LABEL,
   "account.provision": "Creates an account",
   "account.converge": "Brings an account in line",
   "account.release": "Lets go of an account, keeping it",
   "account.adopt": "Assigns an existing account to a person",
-  "account.purge": "Deletes an account and its files",
+  // TrueNAS's user.delete removes the account and its `.ssh` folder only; the home folder stays
+  // (middleware TS-25.10.7, plugins/account.py do_delete), so "and its files" would be false: the files stay.
+  "account.purge": "Deletes an account (its files stay on TrueNAS)",
   "account.list": "Reads the list of accounts",
   "health.get": "Reads the system's own health report",
   "credential.set": "Sets a member's password, never logged",
   "password.rotate": "Replaces a person's password, never logged",
+  "password.set": "Lets a member set their own storage password, never logged",
+  "holdings.list": "Reads what a member holds",
+  "item.checkout": "Records that a member took an item",
   "storage.status": "Reads space used and quota",
 };
 
@@ -1026,15 +1034,19 @@ export function Capabilities({ registered }: { registered: TargetSummary }) {
         ))
       )}
       {registered.callable && registered.operations.length > 0 && (
-        <div className="row-divider px-5 py-3">
-          <TechnicalDetail placeKey={`capabilities:${registered.target}`}>
-            {sortByName(registered.operations, (op) => op.id, (op) => op.id).map((op) => (
-              <CopyableValue key={op.id} value={op.id} label={`Operation ${OPERATION_LABEL[op.id] ?? "id"}`} />
-            ))}
-          </TechnicalDetail>
-        </div>
+        <AdvancedOnly>
+          <div className="row-divider px-5 py-3">
+            <TechnicalDetail placeKey={`capabilities:${registered.target}`}>
+              {sortByName(registered.operations, (op) => op.id, (op) => op.id).map((op) => (
+                <CopyableValue key={op.id} value={op.id} label={`Operation ${OPERATION_LABEL[op.id] ?? "id"}`} />
+              ))}
+            </TechnicalDetail>
+          </div>
+        </AdvancedOnly>
       )}
-      <AlsoSays lines={registered.also_says} name={name} />
+      <AdvancedOnly>
+        <AlsoSays lines={registered.also_says} name={name} />
+      </AdvancedOnly>
     </Card>
     </>
   );
@@ -1564,9 +1576,12 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
                 ) : null
               }
             >
-              <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-[13.5px]">{account.username}</span>
-              {account.standing && <StandingLine standing={account.standing} system={name} audience="operator" />}
-              <span className="flex-1" />
+              {/* Columns, as in "Accounts Syndra manages": the name in a seat of its own width, so
+                  the standing starts at one x whatever the username's length. */}
+              <span className="w-[220px] min-w-0 flex-none [overflow-wrap:anywhere] font-mono text-[13.5px]">{account.username}</span>
+              <span className="min-w-0 flex-1" data-standing-seat>
+                {account.standing && <StandingLine standing={account.standing} system={name} audience="operator" />}
+              </span>
               {account.self ? (
                 // Syndra's own credential. Listed, because it IS on the target
                 // and hiding it would leave an operator wondering where it
@@ -1914,7 +1929,7 @@ function LifecycleControl({
                 current === "draining"
                   ? "Refusing new changes; finishing what's already sent."
                   : "Refusing every change. Reads keep working."
-              }${health?.lifecycle_note ? ` Set on purpose: ${health.lifecycle_note}.` : ""}`}
+              } ${lifecycleWhy(health?.lifecycle_note)}`}
         </span>
       </CardRow>
 

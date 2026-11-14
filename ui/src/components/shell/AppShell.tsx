@@ -58,7 +58,7 @@ export function AppShell({
     <UiViewProvider isOperator={session.role === "admin"} selfId={session.id} initialView={initialView}>
       <PageCrumbProvider>
         {/* `app-root` is what a dialog makes inert (Modal): overlays portal to <body>, outside it. */}
-        <div id="app-root" className="flex h-dvh flex-col overflow-hidden bg-canvas tablet:flex-row">
+        <div id="app-root" className="flex h-dvh flex-col overflow-clip bg-canvas tablet:flex-row">
           {/* First in the tab order, off-screen until focused: a keyboard user
               reaches the page without tabbing through the whole rail first. */}
           <a
@@ -80,7 +80,12 @@ export function AppShell({
               zero, and never asked whether the page could scroll. */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <TopBar session={session} />
-            <div id="app-scroll" className="min-h-0 flex-1 overflow-y-auto">
+            {/* `relative`: the scroller is the containing block of everything absolutely positioned inside it
+                (the `sr-only` live regions, popovers), so none of it sits outside the scroller where
+                the shell could be scrolled to reach it. `overflow-clip` on the shell above is the other
+                half: unlike `overflow-hidden` it is never a scroll container, so no focus, find or
+                animation can scroll the window and push the top bar off. The app scrolls here, only. */}
+            <div id="app-scroll" className="relative min-h-0 flex-1 overflow-y-auto">
               {/* Notices, not a band under the top bar (6a): every dysfunction
                   is said in the content column and pushes the page down
                   rather than covering it. They sit under the page's own

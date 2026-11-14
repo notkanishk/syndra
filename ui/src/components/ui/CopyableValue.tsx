@@ -7,6 +7,15 @@ import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
 import { TINT_MS, useExitPhase } from "@/lib/motion";
 
 /**
+ * Whether this page can put text on the clipboard: the async Clipboard API (secure origins only),
+ * or `document.execCommand("copy")`, which is deprecated but is the only way on the plain-http LAN
+ * this is reached over, and still works in every browser.
+ */
+const clipboardWorks = () =>
+  typeof navigator !== "undefined" &&
+  (Boolean(navigator.clipboard) || (typeof document !== "undefined" && Boolean(document.queryCommandSupported?.("copy"))));
+
+/**
  * A value somebody retypes into another application.
  *
  * Mono, on its own ground, copyable — the same treatment `CommandBlock` gives a
@@ -55,12 +64,17 @@ export function CopyableValue({
   const word = useExitPhase(copied, TINT_MS);
 
   useEffect(() => {
-    setCanCopy(typeof navigator !== "undefined" && Boolean(navigator.clipboard));
+    setCanCopy(clipboardWorks());
   }, []);
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(value);
+      if (navigator.clipboard) await navigator.clipboard.writeText(value);
+      else {
+        // No Clipboard API (plain http): select the value and ask the browser to copy the selection.
+        highlight();
+        if (!document.execCommand("copy")) throw new Error("copy refused");
+      }
       confirmFor(setCopied);
     } catch {
       // A clipboard the browser refuses at the moment of the tap: fall back to
@@ -71,17 +85,21 @@ export function CopyableValue({
     }
   }
 
-  /** Puts the value under the platform's own copy gesture. */
-  function select() {
+  /** Selects the value's text; false when there is nothing to select it in. */
+  function highlight() {
     const node = valueRef.current;
-    if (!node) return;
     const selection = window.getSelection?.();
-    if (!selection) return;
+    if (!node || !selection) return false;
     selection.removeAllRanges();
     const range = document.createRange();
     range.selectNodeContents(node);
     selection.addRange(range);
-    confirmFor(setSelected);
+    return true;
+  }
+
+  /** Puts the value under the platform's own copy gesture. */
+  function select() {
+    if (highlight()) confirmFor(setSelected);
   }
 
   if (inline) {
@@ -171,7 +189,7 @@ export function CopyableValue({
 export function ClipboardUnavailableNote({ className = "" }: { className?: string }) {
   const [canCopy, setCanCopy] = useState(true);
   useEffect(() => {
-    setCanCopy(typeof navigator !== "undefined" && Boolean(navigator.clipboard));
+    setCanCopy(clipboardWorks());
   }, []);
 
   if (canCopy) return null;

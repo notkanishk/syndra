@@ -44,5 +44,21 @@ export function standingWords(standing: Standing, system: string, audience: "mem
   if (waiting === "target") {
     return { state: `Waiting on ${system}`, tone: "neutral", note, next: standing.next || `${NOTHING_TO_DO} ${system} has to finish first.` };
   }
+  if (waiting === "none") {
+    // Nobody is waited on, and it is still not usable: it was switched off, and that does not end by
+    // itself. "Yet" would promise it will, so it is not said; the reasons a system switches an
+    // account off are, so the reader can tell whether this is expected.
+    const why = `Syndra switches an account off when its person is put on hold or is deactivated in Zitadel, and somebody can also switch it off on ${system} directly.`;
+    return {
+      state: "Switched off",
+      tone: "neutral",
+      note: note ? `${note} ${why}` : why,
+      next:
+        standing.next ||
+        (you
+          ? "It stays off until makerspace staff switch it back on. Ask them if you did not expect this."
+          : `Nothing for you to do if the person is on hold or deactivated. If neither, switch it back on on ${system}.`),
+    };
+  }
   return { state: "Not usable yet", tone: "neutral", note, next: standing.next || NOTHING_TO_DO };
 }
