@@ -267,6 +267,7 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.StatsNoBufferGap:          "stats.buffer",
 		reference.StatsTotalMissing:         "stats.totals",
 		reference.StatsDimensionNamesPerson: "stats.no-people",
+		reference.FoldsNames:                "requests.exact-names",
 		// A reply lost mid-call and two calls racing a limit are beyond a
 		// black-box kit (calls.unsettled, calls.serialised skip); the
 		// reference's own tests watch these two fail.
@@ -309,6 +310,57 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 				t.Error("the run would exit 0")
 			}
 		})
+	}
+}
+
+// requests.exact-names probes /apply too, and only under a wrong fingerprint:
+// each probe is the kit's own apply with one more member before the rest, so
+// an add-on that took one would answer PLAN_STALE and write nothing.
+func TestExactNamesProbesTheApplyUnderAWrongFingerprint(t *testing.T) {
+	var mu sync.Mutex
+	probes := map[string]string{} // the extra member → the fingerprint it was sent with
+	url, _ := serve(t, testSecret, func(r *http.Request, body []byte, answered bool) {
+		if r.URL.Path != "/apply" || answered {
+			return
+		}
+		dec := json.NewDecoder(bytes.NewReader(body))
+		if _, err := dec.Token(); err != nil {
+			return
+		}
+		first, _ := dec.Token()
+		var doc struct {
+			Fingerprint string `json:"fingerprint"`
+		}
+		_ = json.Unmarshal(body, &doc)
+		// A body the kit builds is marshalled with its keys sorted, actor first.
+		if name, _ := first.(string); name != "actor" {
+			mu.Lock()
+			probes[name] = doc.Fingerprint
+			mu.Unlock()
+		}
+	})
+	r := run(t, config(url, true))
+	if r.Status("requests.exact-names") != "pass" {
+		t.Errorf("requests.exact-names %s against the clean reference: %v", r.Status("requests.exact-names"), r.Results)
+	}
+	want := map[string]string{"Subject": "conformance-wrong-fingerprint", "\u017fubject": "conformance-wrong-fingerprint", "subject": "conformance-wrong-fingerprint"}
+	if !maps.Equal(probes, want) {
+		t.Errorf("the /apply probes led with %v, want %v", probes, want)
+	}
+	// Sent as raw JSON, each probe is still a write to the kit's subject: on
+	// the record, and its reply held to the owner checks like any apply.
+	k, err := newKit(context.Background(), config(url, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k.exactNames(k.at("requests.exact-names"), "/apply", func() map[string]any {
+		return k.applyBody(k.callID(), "conformance-wrong-fingerprint", map[string]any{"enabled": false})
+	}, func(body json.RawMessage) any { return body })
+	for _, ex := range k.log {
+		r := request{method: ex.method, target: ex.target, body: json.RawMessage(ex.request)}
+		if about, write := k.about(r); !about || !write || summary(r) != `apply {"enabled":false}` {
+			t.Errorf("a probe %s is about the subject %v, a write %v, summarised %q", ex.request, about, write, summary(r))
+		}
 	}
 }
 
@@ -1254,9 +1306,9 @@ func TestAnEmptyAccountIDFromTheCreateIsForeign(t *testing.T) {
 			applies++
 		}
 	}
-	// withdraw-only, stale (2), fingerprint (2), strict (3), create: nothing after the create.
-	if applies != 9 {
-		t.Errorf("%d applies were sent, want 9 (none after the create): %v", applies, writes(seen()))
+	// withdraw-only, stale (2), fingerprint (2), strict (3), exact-names (3), create: nothing after the create.
+	if applies != 12 {
+		t.Errorf("%d applies were sent, want 12 (none after the create): %v", applies, writes(seen()))
 	}
 	if !strings.HasPrefix(r.Left, `no account of the kit's own; subject "conformance-self-test" was answered with account_id "", 1001, which the kit does not own`) ||
 		!strings.Contains(r.Left, `(answered 200 naming account_id "")`) {

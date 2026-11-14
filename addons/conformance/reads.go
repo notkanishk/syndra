@@ -86,6 +86,13 @@ func (k *kit) reads() {
 	}
 	k.plan(k.at("plan"))
 	k.strictPlan(k.at("strict-requests"))
+	k.exactNames(k.at("requests.exact-names"), "/plan",
+		func() map[string]any {
+			return map[string]any{"subject": k.cfg.Subject, "email": k.cfg.Email, "desired": map[string]any{}}
+		},
+		func(subject json.RawMessage) any {
+			return map[string]any{"contract_version": Major, "subjects": []any{subject}}
+		})
 	ex := k.send(request{method: http.MethodGet, target: "/conformance/no-such-route"})
 	k.refused(k.at("error-envelope"), ex, 404, "UNKNOWN_ROUTE", "an unknown route")
 
@@ -490,6 +497,29 @@ func (k *kit) strict(c *check, target, method string, valid map[string]any, via 
 		_, hasCaller := num(d["caller_version"])
 		c.expect(addon == Major && hasCaller, "CONTRACT_VERSION_MISMATCH must carry both numbers, carries caller_version %v, addon_version %v",
 			d["caller_version"], d["addon_version"])
+	}
+}
+
+// exactNames sends, to POST route, the object obj builds (wrap places it in
+// the body) with one more member before its own: `Subject`, then `ſubject`
+// (a long s, which Unicode simple folding makes an s), each 400
+// UNKNOWN_REQUEST_FIELD, since a member name is compared code point for code
+// point (RFC 8259 §4) and no schema names them; then `subject` again, 400
+// BAD_REQUEST, since a name may appear once (RFC 7493 §2.3). The extra member
+// repeats subject's own value, so an add-on that folds or keeps the last of two
+// still acts on the kit's own subject: a wrong answer, never a wrong target.
+func (k *kit) exactNames(c *check, route string, obj func() map[string]any, wrap func(json.RawMessage) any) {
+	for _, p := range []struct{ name, code, why string }{
+		{"Subject", "UNKNOWN_REQUEST_FIELD", "Subject beside subject"},
+		{"\u017fubject", "UNKNOWN_REQUEST_FIELD", "\u017fubject (a long s) beside subject"},
+		{"subject", "BAD_REQUEST", "subject twice"},
+	} {
+		o := obj()
+		rest, _ := json.Marshal(o)
+		name, _ := json.Marshal(p.name)
+		value, _ := json.Marshal(o["subject"])
+		body := slices.Concat([]byte("{"), name, []byte(":"), value, []byte(","), rest[1:])
+		k.refused(c, k.send(request{method: http.MethodPost, target: route, body: wrap(body)}), 400, p.code, p.why)
 	}
 }
 

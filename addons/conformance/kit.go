@@ -57,7 +57,7 @@ type Config struct {
 // of the run; an interrupted run never passes them.
 const interruptedNote = "not judged: the run was interrupted"
 
-var spansTheRun = []string{"health", "settings", "strict-requests", "error-envelope", "required-fields",
+var spansTheRun = []string{"health", "settings", "strict-requests", "requests.exact-names", "error-envelope", "required-fields",
 	"plan-equals-apply", "create-is-new", "bound-to-created", "replay.refusal", "operations.secret"}
 
 var (
@@ -452,6 +452,19 @@ type request struct {
 	signAs         string // a different target for the MAC than the one sent
 	creates        bool   // the apply that creates the kit's account (owner's claim)
 	owned          bool   // came through toOwned: a plan naming the kit's account was read just before
+}
+
+// fields is the body as a map, whichever way it was built: a body sent as raw
+// JSON (requests.exact-names) is decoded, so the subject it is about and the
+// write it is are seen like any other's.
+func (r request) fields() map[string]any {
+	if m, ok := r.body.(map[string]any); ok {
+		return m
+	}
+	raw, _ := json.Marshal(r.body)
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	return m
 }
 
 func (k *kit) send(r request) *exchange {

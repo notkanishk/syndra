@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"syndra/addons/contract/strictjson"
 )
 
 // The add-on half of the wire contract, major 2 (see ../contract/README.md).
@@ -122,7 +124,7 @@ func TestOperationRequestAcceptsContract(t *testing.T) {
 			with := v2JSON(t, "fixtures", "operation_request.json")
 			with[key] = true
 			raw, _ := json.Marshal(with)
-			var unknown errUnknownRequestField
+			var unknown *strictjson.UnknownMemberError
 			err := decodeStrict(raw, &OperationRequest{})
 			if slices.Contains(features, name) {
 				if err != nil {
@@ -606,5 +608,67 @@ func TestEveryReadAnswersTheSchemaItsRegistryNames(t *testing.T) {
 		if err := v2Validate(t, schema, a.result); err != nil {
 			t.Errorf("%s's result does not satisfy %s: %v", a.id, schema, err)
 		}
+	}
+}
+
+// A member name is matched exactly and once (RFC 8259 §4, RFC 7493 §2.3), on
+// every route that takes a body: the 7n finding, a signed caller sending
+// `ſubject` beside `subject` and having the second one obeyed, is refused
+// before anything is read or written, and so are its siblings.
+func TestEveryRouteMatchesNamesExactlyAndOnce(t *testing.T) {
+	s, m := applyServer(t, fixtureUsers)
+	put := func(rr *httptest.ResponseRecorder, body string) {
+		req := httptest.NewRequest(http.MethodPut, "/settings/home_root", strings.NewReader(body))
+		req.SetPathValue("name", settingHomeRoot)
+		s.handlePutSetting(rr, req, []byte(body))
+	}
+	op := func(rr *httptest.ResponseRecorder, body string) {
+		req := httptest.NewRequest(http.MethodPost, "/operations/health.get", strings.NewReader(body))
+		req.SetPathValue("name", "health.get")
+		s.handleOperation(rr, req, []byte(body))
+	}
+	for _, tc := range []struct {
+		why, code string
+		drive     func(*httptest.ResponseRecorder)
+	}{
+		{"the long s beside the name", CodeUnknownRequestField, func(rr *httptest.ResponseRecorder) {
+			postTo(s.handleApply, rr, "/apply", `{"contract_version":2,"call_id":"c1","subject":"conformance-x","ſubject":"wwe-the-rock","fingerprint":"f","desired":{"enabled":true}}`)
+		}},
+		{"a capitalised name", CodeUnknownRequestField, func(rr *httptest.ResponseRecorder) {
+			postTo(s.handleApply, rr, "/apply", `{"contract_version":2,"call_id":"c2","Subject":"wwe-the-rock","fingerprint":"f","desired":{"enabled":true}}`)
+		}},
+		{"the same name twice", CodeBadRequest, func(rr *httptest.ResponseRecorder) {
+			postTo(s.handleApply, rr, "/apply", `{"contract_version":2,"call_id":"c3","subject":"conformance-x","subject":"wwe-the-rock","fingerprint":"f","desired":{"enabled":true}}`)
+		}},
+		{"a field of desired twice", CodeBadRequest, func(rr *httptest.ResponseRecorder) {
+			postTo(s.handleApply, rr, "/apply", `{"contract_version":2,"call_id":"c4","subject":"conformance-x","fingerprint":"f","desired":{"enabled":true,"enabled":false}}`)
+		}},
+		{"a capitalised name inside a plan's subject", CodeUnknownRequestField, func(rr *httptest.ResponseRecorder) {
+			postTo(s.handlePlan, rr, "/plan", `{"contract_version":2,"subjects":[{"subject":"conformance-x","email":"","Desired":{}}]}`)
+		}},
+		{"a capitalised state", CodeUnknownRequestField, func(rr *httptest.ResponseRecorder) {
+			postTo(s.handleLifecycle, rr, "/lifecycle", `{"contract_version":2,"call_id":"c5","State":"read_only","reason":"r"}`)
+		}},
+		{"an operation's subject twice", CodeBadRequest, func(rr *httptest.ResponseRecorder) {
+			op(rr, `{"contract_version":2,"call_id":"c6","operation":"health.get","subject":"a","subject":"b","actor":"x"}`)
+		}},
+		{"a setting's value twice", CodeInvalidBody, func(rr *httptest.ResponseRecorder) {
+			put(rr, `{"contract_version":2,"call_id":"c7","value":"","value":"/mnt/tank/x","actor":"x"}`)
+		}},
+	} {
+		rr := httptest.NewRecorder()
+		tc.drive(rr)
+		if rr.Code != http.StatusBadRequest || problemCode(t, rr) != tc.code {
+			t.Errorf("%s: %d %s, want 400 %s", tc.why, rr.Code, problemCode(t, rr), tc.code)
+		}
+	}
+	if len(m.creates)+len(m.updates)+m.groupCreates+m.groupDeletes != 0 {
+		t.Errorf("a refused body still wrote: %d creates, %d updates", len(m.creates), len(m.updates))
+	}
+	if state, _ := s.life.State(); state != "active" {
+		t.Errorf("a refused lifecycle body still moved the add-on to %q", state)
+	}
+	if _, set, _ := s.store.GetSetting(settingHomeRoot); set {
+		t.Error("a refused setting body still set home_root")
 	}
 }

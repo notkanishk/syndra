@@ -148,7 +148,7 @@ jobs:
           - { name: backend, context: backend, file: backend/Dockerfile }
           - { name: claims, context: backend, file: backend/Dockerfile.claims }
           - { name: ui, context: ui, file: ui/Dockerfile }
-          - { name: truenas-addon, context: addons/truenas, file: addons/truenas/Dockerfile }
+          - { name: truenas-addon, context: addons, file: addons/truenas/Dockerfile }
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

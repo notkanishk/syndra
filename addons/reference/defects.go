@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"syndra/addons/contract/strictjson"
 )
 
 // Defect switches on one deliberate violation of the contract, so that the
@@ -78,6 +80,7 @@ const (
 	StatsNoBufferGap          Defect = "stats-no-buffer-gap"          // the window the buffer no longer holds has no gap (with stats)
 	StatsTotalMissing         Defect = "stats-total-missing"          // a day with per-person points has no total (with stats)
 	StatsDimensionNamesPerson Defect = "stats-dimension-names-person" // the mk4-a printer is named for the first account's username (with stats)
+	FoldsNames                Defect = "folds-names"                  // decodes a request with encoding/json alone: names case-folded, the last of two kept
 )
 
 // Defects lists every defect, for the kit's self-tests and the binary's help.
@@ -90,7 +93,7 @@ var Defects = []Defect{IgnoresFingerprint, CreatesOnWithdraw, EchoesSecret, Repl
 	CachedAsCurrent, ReadsPerRequest, CooldownIgnored, PreviewRecorded, ReexecutesInDoubt, CheckoutUnserialised,
 	NoChangeAsSucceeded, CallsEchoParams, StatsUndeclaredDimension, StatsLocalNameSubject, StatsZeroForGap,
 	StatsWatermarkAhead, StatsSubjectsAboveTotal, StatsSinceIgnored, StatsFinalMoves, StatsUnknownMetricOK,
-	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing, StatsDimensionNamesPerson}
+	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing, StatsDimensionNamesPerson, FoldsNames}
 
 // ParseDefects turns names into a set, refusing any name it does not know.
 func ParseDefects(names []string) (map[Defect]bool, error) {
@@ -124,6 +127,23 @@ func (a *Addon) openIntent(subject string) *intent {
 		return nil
 	}
 	return a.intents[subject]
+}
+
+// decode is the shared strict decoder, unless FoldsNames: then encoding/json's
+// own, which matches `Subject` and `ſubject` to `subject` and keeps the last of
+// two, its unknown field still refused as one.
+func (a *Addon) decode(body []byte, into any) error {
+	if !a.cfg.Defects[FoldsNames] {
+		return strictjson.Decode(body, into)
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	err := dec.Decode(into)
+	if quoted, found := strings.CutPrefix(fmt.Sprint(err), "json: unknown field "); found {
+		name, _ := strconv.Unquote(quoted)
+		return &strictjson.UnknownMemberError{Name: name}
+	}
+	return err
 }
 
 // serialise holds the subject's checkouts to one at a time; it returns the

@@ -1,15 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
+
+	"syndra/addons/contract/strictjson"
 )
 
 // The HTTP surface (design §5).
@@ -501,47 +501,33 @@ const (
 	kindLifecycle = "lifecycle"
 )
 
-// errUnknownRequestField is the strict decoder meeting a field it does not
-// know, which contract 2 answers with its own code (UNKNOWN_REQUEST_FIELD):
-// a shape refusal the backend reads as "not reached", never as the target's.
-type errUnknownRequestField struct{ field string }
-
-func (e errUnknownRequestField) Error() string { return "unknown request field " + e.field }
-
-// decodeStrict parses a request body and refuses what it does not understand.
+// decodeStrict parses a request body and refuses what it does not understand:
+// a member it has no field for, a member whose name is a case or fold variant
+// of a field's (RFC 8259 §4: names compare code point for code point), the
+// same member twice (RFC 7493 §2.3), and anything after the body.
 //
 // The project's rule for its own mutation endpoints, applied here for a sharper
 // reason: this boundary is between two separately deployed binaries, and a
 // field the sender thinks it is honouring and this one silently drops is
 // exactly the skew the contract version exists to surface.
-func decodeStrict(body []byte, into any) error {
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(into); err != nil {
-		// encoding/json has no typed error for this one; its text is stable.
-		if field, found := strings.CutPrefix(err.Error(), "json: unknown field "); found {
-			return errUnknownRequestField{field: field}
-		}
-		return err
-	}
-	if dec.More() {
-		return errors.New("the body carries more than one JSON document")
-	}
-	return nil
-}
+func decodeStrict(body []byte, into any) error { return strictjson.Decode(body, into) }
 
-// decodeRequest is decodeStrict answering its own refusal: an unknown field is
-// 400 UNKNOWN_REQUEST_FIELD, and any other undecodable body is 400 under the
-// route's own code (BAD_REQUEST, or INVALID_BODY for a setting).
+// decodeRequest is decodeStrict answering its own refusal: an unknown member
+// is 400 UNKNOWN_REQUEST_FIELD, and any other undecodable body (a duplicate
+// member among them) is 400 under the route's own code (BAD_REQUEST, or
+// INVALID_BODY for a setting).
 func decodeRequest(w http.ResponseWriter, body []byte, into any, malformed string) bool {
 	err := decodeStrict(body, into)
-	var unknown errUnknownRequestField
+	var unknown *strictjson.UnknownMemberError
+	var duplicate *strictjson.DuplicateMemberError
 	switch {
 	case err == nil:
 		return true
 	case errors.As(err, &unknown):
 		writeError(w, http.StatusBadRequest, CodeUnknownRequestField,
-			"The request carries a field this add-on does not know: "+unknown.field+".", nil)
+			"The request carries a field this add-on does not know ("+unknown.Error()+").", nil)
+	case errors.As(err, &duplicate):
+		writeError(w, http.StatusBadRequest, malformed, "The body is not the JSON this route takes ("+duplicate.Error()+").", nil)
 	default:
 		writeError(w, http.StatusBadRequest, malformed, "The body is not the JSON this route takes.", nil)
 	}

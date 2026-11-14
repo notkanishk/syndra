@@ -1050,6 +1050,23 @@ settings with the full §5 rules.
   caller can send `Subject` or `\u017fubject`. Options: exact-case key
   validation, or `encoding/json/v2` case-sensitive decoding. Also
   `PUT /settings/<name>` is not lifecycle-gated #needs-triage
+  *Decoder half done (14 Nov 2026, slice 7o; owner: "yes add exact-case
+  decoding to contract 2"):* `Decode` in `addons/contract/strictjson` walks
+  the body token by token against the target type and refuses a name not
+  byte-equal to a field's JSON name (`UnknownMemberError`, so 400
+  `UNKNOWN_REQUEST_FIELD`) and a repeated name (`DuplicateMemberError`, 400
+  `BAD_REQUEST`, or `INVALID_BODY` on a setting), RFC 8259 §4 and RFC 7493
+  §2.3; field names resolved as `encoding/json`'s `typeFields` (tags, `-`,
+  embedded structs, dominance); maps, `any` and `UnmarshalJSON` types take
+  any name, never twice. Not `encoding/json/v2`: still a GOEXPERIMENT in Go
+  1.25. TrueNAS `decodeStrict` and the reference's `parse` (defect
+  `folds-names` restores the old decoding) both call it; the kit's
+  `requests.exact-names` sends `Subject`, `ſubject` and `subject` twice to
+  `/plan` and, with `-mutate`, `/apply` under a wrong fingerprint. Tests:
+  `strictjson_test.go` (mutation-checked: folded lookup, duplicate check
+  removed), `TestEveryRouteMatchesNamesExactlyAndOnce` (TrueNAS, every body
+  route; red with the old decoder), `TestExactNamesProbesTheApplyUnderAWrongFingerprint`,
+  the defect row. The settings-lifecycle half stays open.
 
 ## 5. The guide
 
