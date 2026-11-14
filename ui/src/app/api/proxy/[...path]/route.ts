@@ -231,7 +231,11 @@ async function proxy(request: NextRequest, method: Method, path: string[]) {
         ...init.headers,
         "Content-Type": "application/json",
       };
-      init.body = JSON.stringify(payload);
+      // The bytes the browser sent, unless the proxy added a field above:
+      // JSON.parse keeps the last of two members with one name, so
+      // re-serialising would hide a duplicate the backend refuses (RFC 7493
+      // §2.3) and settle it here instead.
+      init.body = payload === body ? raw : JSON.stringify(payload);
     }
     // payload === null → bodyless forward (no Content-Type, no body).
   }

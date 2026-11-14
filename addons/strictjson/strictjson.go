@@ -16,9 +16,11 @@
 // So Decode first walks the document token by token against the target type,
 // refusing any member name that is not byte-equal to a field's JSON name, and
 // any repeated name, then decodes as before with DisallowUnknownFields.
+// DecodeOptions{AllowUnknown: true} is the same rule for a reader that must
+// skip members it does not know (Syndra reading an add-on's reply).
 //
-// A module of its own, with no dependency, so both Go add-ons share one
-// decoder while the contract module stays files only (design §1). It holds
+// A module of its own, with no dependency, so both Go add-ons and the backend
+// share one decoder while the contract module stays files only (design §1). It holds
 // no contract type or fact: only RFC 8259's and RFC 7493's rule, which cannot
 // skew against a contract version.
 package strictjson
@@ -84,14 +86,39 @@ func shown(s string) string {
 // the field name; `-` is no field; embedded structs are promoted; a type with
 // its own UnmarshalJSON (json.RawMessage among them), an interface and a map
 // take any member name, still never twice.
-func Decode(data []byte, v any) error {
-	w := walker{dec: json.NewDecoder(bytes.NewReader(data))}
+func Decode(data []byte, v any) error { return DecodeOptions{}.Decode(data, v) }
+
+// DecodeOptions is how Decode reads; the zero value is Decode.
+type DecodeOptions struct {
+	// AllowUnknown skips a member the target type has no field for, instead
+	// of refusing it, as protojson's UnmarshalOptions.DiscardUnknown does: for
+	// a reader whose writer may add members (the contract's replies, AUTHORING
+	// chapter 14, rule 1). A case or fold variant of a field's name is such a
+	// member, skipped, never folded into the field. A duplicate is still
+	// refused, skipped member or not.
+	AllowUnknown bool
+}
+
+// Decode is the package's Decode, read as o says.
+func (o DecodeOptions) Decode(data []byte, v any) error {
+	w := walker{dec: json.NewDecoder(bytes.NewReader(data)), skip: o.AllowUnknown}
 	w.dec.UseNumber() // a number is only skipped here; never refused for its range
 	if err := w.walk(reflect.TypeOf(v)); err != nil {
 		return err
 	}
 	if _, err := w.dec.Token(); err != io.EOF {
 		return errors.New("the body carries more than one JSON value")
+	}
+	if len(w.drop) > 0 {
+		// encoding/json would fold a skipped variant into its field, so the
+		// skipped members are blanked out, each with the comma that joined it
+		// (RFC 8259 §2: whitespace may stand anywhere between tokens).
+		data = bytes.Clone(data)
+		for _, d := range w.drop {
+			for i := d[0]; i < d[1]; i++ {
+				data[i] = ' '
+			}
+		}
 	}
 	strict := json.NewDecoder(bytes.NewReader(data))
 	strict.DisallowUnknownFields()
@@ -100,17 +127,37 @@ func Decode(data []byte, v any) error {
 
 var unmarshaler = reflect.TypeFor[json.Unmarshaler]()
 
+// maxDepth is encoding/json's maxNestingDepth.
+const maxDepth = 10000
+
 // walker reads one document. path is where it is, a member name or (index
 // >= 0) an array position per level, turned into a pointer only for an
 // error: building one per value would cost memory quadratic in the depth.
 type walker struct {
-	dec  *json.Decoder
-	path []step
+	dec     *json.Decoder
+	path    []step
+	started bool       // a token has been read
+	depth   int        // arrays and objects open
+	skip    bool       // AllowUnknown
+	drop    [][2]int64 // byte ranges of skipped members, blanked before the decode
 }
 
 type step struct {
 	name  string
 	index int // -1: a member, named name
+}
+
+// token is the next token. json.Decoder answers io.EOF at any token boundary
+// the input ends on, so past the first token it is a document cut short:
+// io.ErrUnexpectedEOF, as encoding/json's Decode says, and never the io.EOF
+// of an empty body, which a caller may read as "no body sent".
+func (w *walker) token() (json.Token, error) {
+	tok, err := w.dec.Token()
+	if err == io.EOF && w.started {
+		err = io.ErrUnexpectedEOF
+	}
+	w.started = true
+	return tok, err
 }
 
 // pointer is path as an RFC 6901 JSON Pointer.
@@ -133,7 +180,7 @@ var escape = strings.NewReplacer("~", "~0", "/", "~1")
 // walk reads one value and checks every object in it against t (nil: any
 // names, duplicates still refused).
 func (w *walker) walk(t reflect.Type) error {
-	tok, err := w.dec.Token()
+	tok, err := w.token()
 	if err != nil {
 		return err
 	}
@@ -142,6 +189,15 @@ func (w *walker) walk(t reflect.Type) error {
 	}
 	if t != nil && (t.Implements(unmarshaler) || reflect.PointerTo(t).Implements(unmarshaler)) {
 		t = nil // opaque: its own UnmarshalJSON reads it
+	}
+	if tok == json.Delim('[') || tok == json.Delim('{') {
+		// json.Decoder.Token keeps no limit, and this walk recurses per
+		// level: encoding/json's own (maxNestingDepth), so a body that is
+		// all brackets costs no more here than in its decoder.
+		if w.depth++; w.depth > maxDepth {
+			return errors.New("the body nests deeper than 10000 levels")
+		}
+		defer func() { w.depth-- }()
 	}
 	switch tok {
 	case json.Delim('['):
@@ -157,7 +213,7 @@ func (w *walker) walk(t reflect.Type) error {
 			}
 		}
 		w.path = w.path[:len(w.path)-1]
-		_, err = w.dec.Token()
+		_, err = w.token()
 		return err
 	case json.Delim('{'):
 		var known map[string]reflect.Type
@@ -172,8 +228,10 @@ func (w *walker) walk(t reflect.Type) error {
 		// pointer before decoding takes any names here (and folded ones in
 		// encoding/json). No request type does that; walk the dynamic value if one ever must.
 		seen := map[string]bool{}
+		kept := false // a member before this one stays, so this one's leading comma may go
 		for w.dec.More() {
-			tok, err := w.dec.Token()
+			start := w.dec.InputOffset() // at this member's leading comma, or its name if first
+			tok, err := w.token()
 			if err != nil {
 				return err
 			}
@@ -182,21 +240,31 @@ func (w *walker) walk(t reflect.Type) error {
 				return &DuplicateMemberError{Object: w.pointer(), Name: name}
 			}
 			seen[name] = true
-			next := elem
+			next, ok := elem, true
 			if known != nil {
-				ft, ok := known[name]
-				if !ok {
+				next, ok = known[name]
+				if !ok && !w.skip {
 					return &UnknownMemberError{Object: w.pointer(), Name: name}
 				}
-				next = ft
 			}
 			w.path = append(w.path, step{name: name, index: -1})
 			if err := w.walk(next); err != nil {
 				return err
 			}
 			w.path = w.path[:len(w.path)-1]
+			if ok {
+				kept = true
+				continue
+			}
+			// Skipped: from its leading comma, or, with nothing kept before
+			// it, through the comma after it, so the object stays JSON.
+			end := w.dec.InputOffset()
+			if !kept && w.dec.More() {
+				end = w.dec.InputOffset() + 1 // More stops at the comma
+			}
+			w.drop = append(w.drop, [2]int64{start, end})
 		}
-		_, err = w.dec.Token()
+		_, err = w.token()
 		return err
 	}
 	return nil // a scalar

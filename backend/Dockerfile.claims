@@ -5,17 +5,24 @@
 # unchanged, and `docker compose up -d --build` does not recreate the claims
 # container. `TestTheImageCopiesExactlyWhatTheBinaryImports` (cmd/claims)
 # keeps this list equal to `go list -deps`. A go.mod change still rebuilds it.
+#
+# The context is the repository root (the root .dockerignore keeps it to
+# backend/ and addons/strictjson): go.mod replaces syndra/addons/strictjson
+# with ../addons/strictjson, and resolving the module graph reads that
+# module's go.mod. The binary does not import it, so its go.mod is all that
+# is copied, and a change to its code does not rebuild this image.
 FROM golang:1.25-alpine AS build
-WORKDIR /src
-COPY go.mod go.sum ./
+WORKDIR /src/backend
+COPY addons/strictjson/go.mod /src/addons/strictjson/go.mod
+COPY backend/go.mod backend/go.sum ./
 RUN go mod download
-COPY internal/claims ./internal/claims
-COPY internal/claimtel ./internal/claimtel
-COPY internal/claimserve ./internal/claimserve
-COPY internal/logstamp ./internal/logstamp
-COPY internal/ratelimit ./internal/ratelimit
-COPY internal/services/periodic ./internal/services/periodic
-COPY cmd/claims ./cmd/claims
+COPY backend/internal/claims ./internal/claims
+COPY backend/internal/claimtel ./internal/claimtel
+COPY backend/internal/claimserve ./internal/claimserve
+COPY backend/internal/logstamp ./internal/logstamp
+COPY backend/internal/ratelimit ./internal/ratelimit
+COPY backend/internal/services/periodic ./internal/services/periodic
+COPY backend/cmd/claims ./cmd/claims
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/claims ./cmd/claims
 
 FROM alpine:3.22

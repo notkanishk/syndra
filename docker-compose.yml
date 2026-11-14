@@ -64,8 +64,10 @@ services:
   claims:
     logging: *default-logging
     build:
-      context: ./backend
-      dockerfile: Dockerfile.claims
+      # The repository root, for backend/go.mod's replace ../addons/strictjson;
+      # the root .dockerignore keeps the context to backend/ and that module.
+      context: .
+      dockerfile: backend/Dockerfile.claims
     container_name: syndra_claims
     environment:
       - TZ=${TZ:-}
@@ -108,8 +110,8 @@ services:
   backend:
     logging: *default-logging
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: syndra_backend
     environment:
       # Default derives from POSTGRES_PASSWORD rather than repeating a literal,

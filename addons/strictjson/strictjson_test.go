@@ -3,6 +3,7 @@ package strictjson
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"strconv"
 	"strings"
 	"testing"
@@ -183,7 +184,92 @@ func TestMalformedAndTrailingInputIsRefused(t *testing.T) {
 			t.Errorf("%q was accepted", body)
 		}
 	}
+	// Cut short at a token boundary is not an empty body: a caller reads
+	// io.EOF as "no body sent" (a route whose body is optional).
+	for _, body := range []string{`{"subject":`, `{"subject":"x"`, `{"subject":"x",`, `{"list":[`, `{`, `[`} {
+		if _, err := decode(body); err == nil || errors.Is(err, io.EOF) {
+			t.Errorf("%q: got %v, want an error other than io.EOF", body, err)
+		}
+	}
+	for _, body := range []string{``, " \n\t"} {
+		if _, err := decode(body); err != io.EOF {
+			t.Errorf("%q: got %v, want io.EOF", body, err)
+		}
+	}
 	if _, err := decode(" {\"contract_version\":1e400} \n"); err == nil {
 		t.Error("a number out of an int's range was accepted")
+	}
+}
+
+// AllowUnknown skips what it does not know, a case or fold variant included,
+// and never folds it into a field; the object stays JSON wherever the skipped
+// member stood (first, last, alone, between), and a duplicate is still refused.
+func TestAllowUnknownSkipsVariantsAndStillRefusesDuplicates(t *testing.T) {
+	lenient := DecodeOptions{AllowUnknown: true}
+	for _, tc := range []struct{ why, body, subject, name string }{
+		{"a case variant, first", `{"Subject":"wwe-the-rock","subject":"wwe-edge"}`, "wwe-edge", ""},
+		{"a case variant, last", `{"subject":"wwe-edge" , "Subject":"wwe-the-rock"}`, "wwe-edge", ""},
+		{"a case variant, alone", `{ "Subject" : "wwe-the-rock" }`, "", ""},
+		{"a fold variant", `{"ſubject":"wwe-the-rock"}`, "", ""},
+		{"two skipped, then kept", `{"x-vendor":{"a":[1,2]},"Subject":"wwe-the-rock",
+			"subject":"wwe-edge"}`, "wwe-edge", ""},
+		{"kept, skipped, kept", `{"subject":"wwe-edge","x":1,"nested":{"Name":"x","name":"n"}}`, "wwe-edge", "n"},
+		{"a variant in an array element", `{"list":[{"NAME":"b","name":"a"},{"name":"c","Name":"d"}]}`, "", ""},
+	} {
+		var r request
+		if err := lenient.Decode([]byte(tc.body), &r); err != nil {
+			t.Errorf("%s: %v", tc.why, err)
+			continue
+		}
+		if r.Subject != tc.subject || (r.Nested != nil) != (tc.name != "") || r.Nested != nil && r.Nested.Name != tc.name {
+			t.Errorf("%s: decoded %+v", tc.why, r)
+		}
+	}
+	var r request
+	if err := lenient.Decode([]byte(`{"list":[{"NAME":"b","name":"a"},{"name":"c","Name":"d"}]}`), &r); err != nil ||
+		len(r.List) != 2 || r.List[0].Name != "a" || r.List[1].Name != "c" {
+		t.Errorf("array: %v, %+v", err, r.List)
+	}
+	for _, body := range []string{
+		`{"subject":"wwe-edge","subject":"wwe-the-rock"}`,
+		`{"x":1,"x":2}`,
+		`{"x":{"a":1,"a":2}}`,
+	} {
+		var dup *DuplicateMemberError
+		if err := lenient.Decode([]byte(body), &r); !errors.As(err, &dup) {
+			t.Errorf("%s: got %v, want a duplicate", body, err)
+		}
+	}
+	if err := lenient.Decode([]byte(`{"x":1}{}`), &r); err == nil {
+		t.Error("trailing input was accepted")
+	}
+	body := []byte(`{"Subject":"wwe-the-rock"}`)
+	_ = lenient.Decode(body, &r)
+	if string(body) != `{"Subject":"wwe-the-rock"}` {
+		t.Errorf("the caller's bytes were changed: %s", body)
+	}
+}
+
+// No deeper than encoding/json goes (10000 levels), and the walk itself
+// stops there: it recurses per level, before encoding/json reads a byte, and
+// Go 1.25's json.Decoder.Token keeps no limit (1.27's does).
+func TestNestingIsBoundedAsInEncodingJSON(t *testing.T) {
+	deep := []string{strings.Repeat("[", 10001) + strings.Repeat("]", 10001),
+		strings.Repeat(`{"a":`, 10001) + "1" + strings.Repeat("}", 10001)}
+	for _, body := range deep {
+		w := walker{dec: json.NewDecoder(strings.NewReader(body))}
+		if err := w.walk(nil); err == nil {
+			t.Errorf("%.8s x10001: the walk went all the way down", body)
+		}
+		for _, opts := range []DecodeOptions{{}, {AllowUnknown: true}} {
+			var v any
+			if err := opts.Decode([]byte(body), &v); err == nil {
+				t.Errorf("%+v, %.8s x10001: accepted", opts, body)
+			}
+		}
+	}
+	var v any
+	if err := Decode([]byte(strings.Repeat("[", 10000)+strings.Repeat("]", 10000)), &v); err != nil {
+		t.Errorf("10000 levels: %v", err)
 	}
 }

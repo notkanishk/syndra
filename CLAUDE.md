@@ -31,7 +31,7 @@ cd addons/truenas && go test ./... && go vet ./...
 
 - **UI:** design tokens live only in `ui/src/app/globals.css`; navigation structure only in `ui/src/lib/nav.ts`. Both themes are authored in full — never a hardcoded hex in a component. Structure never moves in response to data (see `basic-advanced-ia`)
 - **Token shape:** `internal/claims` is the only shaper, applied on read by BOTH the Actions v2 handler and the simulator. A preview computed by different code from the token it previews is a preview of nothing
-- Strict JSON decoding (`decodeJSONStrict`) on all mutation endpoints
+- Strict JSON decoding (`decodeJSONStrict`) on all mutation endpoints: exact names, no duplicates
 - Injectable dependency pattern for testability (`deps.go` files)
 - Zitadel Actions v2 is the only source-of-truth claim integration path
 - Backend is the single mutation authority — frontend and triggers signal, backend decides

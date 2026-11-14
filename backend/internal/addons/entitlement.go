@@ -199,7 +199,7 @@ func Apply(ctx context.Context, req ApplyRequest) ApplyResponse {
 		LifecycleRefusal: resp.LifecycleRefusal, Code: resp.Code,
 	}
 	var wire applyWire
-	decodeErr := json.Unmarshal(resp.Body, &wire)
+	decodeErr := DecodeReply(resp.Body, &wire)
 	if decodeErr == nil {
 		out.Username, out.AccountID, out.Standing, out.Detail = wire.Username, wire.AccountID, wire.Standing, wire.Detail
 		if wire.Effect != nil {

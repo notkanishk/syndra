@@ -65,6 +65,19 @@ describe("proxy route admin/member boundary", () => {
     expect(proxy.calls[0].body).toEqual({ force: true });
   });
 
+  // The backend decodes one rule (RFC 7493 §2.3: a name twice is refused).
+  // JSON.parse keeps the last of two, so a re-serialised body would reach it
+  // with the duplicate already settled; the proxy forwards the bytes sent.
+  it("forwards the body's bytes, so the backend sees a duplicate name", async () => {
+    (getSession as Mock).mockResolvedValue(ADMIN);
+    const raw = '{"force":false, "force":true}';
+    const req = new NextRequest("http://localhost/api/proxy/zitadel/action-key/rotate", {
+      method: "POST", body: raw, headers: { "content-type": "application/json" },
+    });
+    await POST(req, { params: Promise.resolve({ path: ["zitadel", "action-key", "rotate"] }) });
+    expect(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body).toBe(raw);
+  });
+
   it("returns 401 when there is no session", async () => {
     (getSession as Mock).mockResolvedValue(null);
     const res = await call(GET, "GET", ["catalog"]);

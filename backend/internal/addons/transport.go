@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"syndra/addons/strictjson"
 	"syndra/internal/extcall"
 )
 
@@ -328,6 +329,17 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 	return resp
 }
 
+// DecodeReply reads an add-on's reply (or the part of one in body) into v by
+// the one rule for every JSON input to Syndra: member names exactly as v
+// spells them (RFC 8259 §4), never twice in one object (RFC 7493 §2.3), one
+// JSON value. A member v does not know is skipped, because a reply may carry
+// more (AUTHORING.md chapter 14, rule 1; "Replies MAY carry more"), and a
+// case variant of a name v knows is such a member: skipped, never read as
+// that name, as encoding/json alone would.
+func DecodeReply(body []byte, v any) error {
+	return strictjson.DecodeOptions{AllowUnknown: true}.Decode(body, v)
+}
+
 // ErrUnknownOutcome is a 2xx operation reply whose outcome is missing or not
 // one this add-on may say: answered, and saying nothing Syndra can stand
 // behind, so the call may have acted (absence is never a value).
@@ -341,7 +353,7 @@ func readOutcome(resp CallResponse, calls bool) CallResponse {
 	var reply struct {
 		Outcome string `json:"outcome"`
 	}
-	_ = json.Unmarshal(resp.Body, &reply)
+	_ = DecodeReply(resp.Body, &reply)
 	switch {
 	case reply.Outcome == string(OutcomeSucceeded):
 	case reply.Outcome == "no_change" && calls:
@@ -496,7 +508,7 @@ func refusalOf(body []byte) (string, Refusal) {
 		Unit  json.RawMessage `json:"unit"`
 		Count json.RawMessage `json:"count"`
 	}
-	if json.Unmarshal(body, &p) != nil {
+	if DecodeReply(body, &p) != nil {
 		return "", Refusal{}
 	}
 	var r Refusal

@@ -280,7 +280,7 @@ func ReadStats(ctx context.Context, target, metric string, since time.Time, curs
 		return StatsPage{}, fmt.Errorf("addon %s: /stats %s answered %d %s", target, metric, resp.Status, resp.Code)
 	}
 	var w statsWire
-	if err := json.Unmarshal(resp.Body, &w); err != nil {
+	if err := DecodeReply(resp.Body, &w); err != nil {
 		return StatsPage{}, fmt.Errorf("%w: %v", ErrStatsReply, err)
 	}
 	switch {

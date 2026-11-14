@@ -1,13 +1,18 @@
 # Build Stage
 FROM golang:alpine AS builder
 
-WORKDIR /app
+# The context is the repository root, not backend/: go.mod replaces
+# syndra/addons/strictjson with ../addons/strictjson (the JSON decoder the
+# add-ons share), so the build needs that module beside this one. The root
+# .dockerignore keeps the context to the two.
+WORKDIR /src/backend
 
 # Copy Go mod files and resolve dependencies first
-COPY go.mod ./
+COPY addons/strictjson /src/addons/strictjson
+COPY backend/go.mod ./
 # RUN go mod download # Uncomment once go.sum exists
 
-COPY . .
+COPY backend .
 
 # Fetch dependencies
 RUN go get github.com/jackc/pgx/v5/pgxpool
@@ -26,9 +31,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o syndra-world-export ./cmd/syndra-world-
 FROM alpine:latest
 
 WORKDIR /app
-COPY --from=builder /app/syndra .
-COPY --from=builder /app/syndra-world-export .
-COPY --from=builder /app/db ./db
+COPY --from=builder /src/backend/syndra .
+COPY --from=builder /src/backend/syndra-world-export .
+COPY --from=builder /src/backend/db ./db
 
 EXPOSE 8080
 CMD ["./syndra"]
