@@ -750,6 +750,31 @@ func TestAnAmbiguousUidRefusesRatherThanResolvingByName(t *testing.T) {
 	}
 }
 
+// The name is asked first (identity_resolve.go): a name that finds the recorded uid names that
+// account, even when another account shares the uid, and the credential lands on it, never on the
+// other one.
+func TestANameThatFindsTheRecordedUidWinsOverASharedUid(t *testing.T) {
+	s, m := applyServer(t, `[
+		{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
+		{"username":"charlotte_clone","id":12,"uid":3001,"locked":false,"smb":true,"groups":[42]}
+	]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
+		t.Fatal(err)
+	}
+	rr := postOperation(t, s, "password.set",
+		`{"call_id":"c1","subject":"sub-1","actor":"op_1","params":{"password":"`+theSecret+`"}}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("name and number agree: %d %s", rr.Code, rr.Body.String())
+	}
+	args, _ := lastCallParams(m, "user.update").([]any)
+	if len(m.updates) != 1 || len(args) != 2 {
+		t.Fatalf("want one update, got %v", m.updates)
+	}
+	if id, ok := args[0].(apiID); !ok || id.String() != "11" {
+		t.Fatalf("want charlotte's record 11, got %#v", args[0])
+	}
+}
+
 // And the rename test above is only meaningful because the fake applies the
 // query's filters: with the binding naming `charlotte` and the target holding
 // `charlotte_renamed`, a name-first lookup matches nothing at all.

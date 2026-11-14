@@ -105,7 +105,7 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	status.NeedsNewPassword = subject.needsNewPassword()
 
 	// Best-effort like usage: whether the account works is the urgent half.
-	if places, seen, err := s.memberPlaces(req.Fresh, &subject); err == nil {
+	if places, seen, err := s.memberPlaces(req.Fresh, subject.UID, subject.groupIDs, subject.Home); err == nil {
 		status.Places, status.PlacesReadable, status.placesSeen = places, true, seen
 	}
 

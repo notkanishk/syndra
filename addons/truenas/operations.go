@@ -1222,7 +1222,9 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 	// other repeat — an operator adopting the same account twice from two
 	// screens — without a second mutation.
 	if existing, bound, err := s.store.GetBinding(req.Subject); err != nil {
-		return OperationResult{}, http.StatusInternalServerError, err
+		// The module's mapping, as every operation answers an unreadable binding.
+		status, refusal := liveRefusal(fmt.Errorf("%w: %w", errStoreUnreadable, err))
+		return OperationResult{}, status, refusal
 	} else if bound {
 		if existing.Username == username {
 			// A repeat only while the binding still names an account
@@ -1232,7 +1234,8 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 			who := opCaller("account.adopt", req)
 			r, _, err := s.resolveLive(req.Subject, &who)
 			if err != nil {
-				return OperationResult{}, statusForLookup(err), err
+				status, refusal := liveRefusal(err)
+				return OperationResult{}, status, refusal
 			}
 			if r.Conflict != nil {
 				return OperationResult{}, http.StatusConflict, conflictRefusal(r.Conflict)

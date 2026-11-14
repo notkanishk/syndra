@@ -127,8 +127,7 @@ func TestCoverageIsUnknownRatherThanCompleteWhenTheGroupsCannotBeRead(t *testing
 	s, m := opServer(t)
 	m.fakeRPC.audit = `[]`
 	m.fakeRPC.shares = `[{"name":"main","audit":{"enable":true,"watch_list":["staff"],"ignore_list":[]}}]`
-	// The account is resolved first (one group read); coverage's own read fails.
-	m.fakeRPC.refuseFrom = map[string]int{"group.query": 2}
+	m.fakeRPC.refuse = map[string]string{"group.query": "permission denied"}
 
 	report := activityReport(t, s)
 	if len(report.Uncovered) != 1 {

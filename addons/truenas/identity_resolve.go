@@ -12,18 +12,24 @@ import (
 // purge), storage.status, activity.get, adoption's repeat check, and the views over a read (the
 // wishes behind a standing, the statistics, accountBound). Two adapters, one rule:
 //
-//   - resolveLive asks it of the target now, one account by an exact key per lookup, and rewrites
-//     the binding once when it should now read differently (a legacy binding's real uid and marker,
-//     an in-range rename followed); operatedAccount is resolveLive with an operation's refusals
-//     (422 no account, 409 conflict, 500 store unreadable).
-//   - resolveIn asks it of one read of the accounts (plan, wishes, statistics).
+//   - resolveLive asks it of the target now, one account by an exact key per lookup (accountWhere:
+//     the user table alone, since naming an account needs only its uid and name), and rewrites the
+//     binding once when it should now read differently (a legacy binding's real uid and marker, an
+//     in-range rename followed); operatedAccount is resolveLive with an operation's refusals: 422 no
+//     binding or account gone, 409 a conflict or two accounts on one key, 502 an absence read from
+//     a cut-short list, 500 STORE_UNREADABLE.
+//   - resolveIn asks it of one read of the accounts (plan, wishes, statistics, a contract-1 reply's
+//     standing).
 //
-// An uid inside this add-on's id range names its account by number (those numbers are never reused,
-// identity.go). Any other uid (an adopted hand-made account's, or a contract-1 record key) is only
-// believed beside the recorded name, and a binding whose name is gone while its number is held by
-// another name names no account at all: a conflict, and the holder is never its account.
+// The name is asked first. A name that finds the recorded uid names that account, even when another
+// account shares the uid; the uid is asked only when the name is gone, and two accounts on whichever
+// key is asked are a refusal (errAmbiguousAccount), never the first one listed. An uid inside this
+// add-on's id range names its account by number (those numbers are never reused, identity.go). Any
+// other uid (an adopted hand-made account's, or a contract-1 record key) is only believed beside the
+// recorded name, and a binding whose name is gone while its number is held by another name names no
+// account at all: a conflict, and the holder is never its account.
 //
-// Invariant (TestNoOperationWritesToTheHolder): no operation ever sends a write to an account
+// Invariant (TestEveryCallerResolvesOneIdentity): no operation ever sends a write to an account
 // resolveLive did not return as its Account. The per-subject lock (calls.go) serialises
 // resolve-then-act for applies and write operations; a read operation runs outside it and outside
 // the lifecycle gate, so it resolves without rewriting anything.
@@ -31,19 +37,70 @@ import (
 // Not yet here: /subjects saying the attribution on the wire (each row's subject, the conflicts) is
 // slice 7t-2, and the backend's matching on account_id is 7t-3.
 
-// accountIndex looks accounts up by exact key, as the apply's lookups do against the target.
+// accountIndex looks accounts up by exact key, as accountWhere does against the target: a key two
+// accounts hold is marked, so a lookup of it refuses as the live one does.
 type accountIndex struct {
-	byName map[string]*Subject
-	byUID  map[int64]*Subject
+	byName   map[string]*Subject
+	byUID    map[int64]*Subject
+	twoNames map[string]bool
+	twoUIDs  map[int64]bool
 }
 
 func indexAccounts(subjects []Subject) accountIndex {
-	ix := accountIndex{byName: map[string]*Subject{}, byUID: map[int64]*Subject{}}
+	ix := accountIndex{byName: map[string]*Subject{}, byUID: map[int64]*Subject{},
+		twoNames: map[string]bool{}, twoUIDs: map[int64]bool{}}
 	for i := range subjects {
-		ix.byName[subjects[i].Username] = &subjects[i]
-		ix.byUID[subjects[i].UID] = &subjects[i]
+		a := &subjects[i]
+		if _, seen := ix.byName[a.Username]; seen {
+			ix.twoNames[a.Username] = true
+		}
+		if _, seen := ix.byUID[a.UID]; seen {
+			ix.twoUIDs[a.UID] = true
+		}
+		ix.byName[a.Username], ix.byUID[a.UID] = a, a
 	}
 	return ix
+}
+
+func (ix accountIndex) name(n string) (*Subject, error) {
+	if ix.twoNames[n] {
+		return nil, fmt.Errorf("%w: username=%s", errAmbiguousAccount, n)
+	}
+	return ix.byName[n], nil
+}
+
+func (ix accountIndex) uid(u int64) (*Subject, error) {
+	if ix.twoUIDs[u] {
+		return nil, fmt.Errorf("%w: uid=%d", errAmbiguousAccount, u)
+	}
+	return ix.byUID[u], nil
+}
+
+// accountWhere reads the one account whose field equals value, or nil when the target has none,
+// from the user table alone (readAccountsWhere): its groups are record ids, unnamed (subjectWhere
+// names them for the apply). Filtered at the target: the whole account list per lookup was a
+// 100-person cascade's worth of full reads. The key comparison is kept on this side as well, so a
+// target that ignored the filter cannot hand back the wrong account; the second return is that
+// read's truncation, which is only ever set by such a target (an exact key matches one row) and
+// stops an absence being concluded from a list that was cut short.
+func (s *server) accountWhere(field string, value any) (*Subject, bool, error) {
+	accounts, truncated, err := s.readAccountsWhere([]any{[]any{field, "=", value}})
+	if err != nil {
+		return nil, false, err
+	}
+	var found *Subject
+	for i := range accounts {
+		got := accounts[i]
+		if (field == "username" && got.Username == value) || (field == "uid" && got.UID == value) {
+			if found != nil {
+				// Two accounts on one key is a question about which one, and the
+				// answer is never "whichever the target listed first".
+				return nil, truncated, fmt.Errorf("%w: %s=%v", errAmbiguousAccount, field, value)
+			}
+			found = &accounts[i]
+		}
+	}
+	return found, truncated, nil
 }
 
 // inIDRange is whether n is a number this add-on hands out (identity.go). Those numbers are never
@@ -135,13 +192,15 @@ type resolved struct {
 	Cut bool
 }
 
-// resolveIn is boundAccount over one read of the accounts.
-func (s *server) resolveIn(b Binding, ix accountIndex) resolved {
+// resolveIn is boundAccount over one read of the accounts. Its only error is errAmbiguousAccount:
+// two accounts in the read on the key it asked.
+func (s *server) resolveIn(b Binding, ix accountIndex) (resolved, error) {
 	floor, ceiling := s.idRange()
-	found, now, conflict, _ := boundAccount(b, floor, ceiling,
-		func(n string) (*Subject, error) { return ix.byName[n], nil },
-		func(u int64) (*Subject, error) { return ix.byUID[u], nil })
-	return resolved{Binding: now, Account: found, Conflict: conflict}
+	found, now, conflict, err := boundAccount(b, floor, ceiling, ix.name, ix.uid)
+	if err != nil {
+		return resolved{Binding: b}, err
+	}
+	return resolved{Binding: now, Account: found, Conflict: conflict}, nil
 }
 
 // resolveLive is boundAccount against the target now, for the subject's binding; bound is false
@@ -161,7 +220,7 @@ func (s *server) resolveLive(subject string, who *caller) (r resolved, bound boo
 	// Each lookup is one account by an exact key; a cut-short answer only
 	// matters when the conclusion is that the account is not there.
 	lookup := func(field string, value any) (*Subject, error) {
-		found, cut, err := s.subjectWhere(field, value)
+		found, cut, err := s.accountWhere(field, value)
 		r.Cut = r.Cut || cut
 		return found, err
 	}
@@ -191,17 +250,9 @@ func (s *server) resolveLive(subject string, who *caller) (r resolved, bound boo
 func (s *server) operatedAccount(subject string, who *caller) (resolved, int, error) {
 	r, bound, err := s.resolveLive(subject, who)
 	switch {
-	case errors.Is(err, errStoreUnreadable):
-		// The add-on's own store, read before anything is sent to the NAS:
-		// its fault, never the subject's, so 500 STORE_UNREADABLE (as /plan
-		// answers it), never the 422 that means "no account". On a write,
-		// Syndra reads any 5xx as possibly acted (indeterminate), which
-		// overstates it and is safe: a refusal is never recorded, so GET
-		// /calls answers unknown and a re-send runs it once.
-		log.Printf("[STORE] binding for an operation could not be read: %v", err)
-		return resolved{}, http.StatusInternalServerError, errStoreUnreadable
 	case err != nil:
-		return resolved{}, statusForLookup(err), lookupRefusal(err)
+		status, refusal := liveRefusal(err)
+		return resolved{}, status, refusal
 	case !bound:
 		return resolved{}, http.StatusUnprocessableEntity, fmt.Errorf("no account is bound to this subject yet")
 	case r.Conflict != nil:
@@ -217,6 +268,21 @@ func (s *server) operatedAccount(subject string, who *caller) (resolved, int, er
 		return resolved{}, http.StatusUnprocessableEntity, fmt.Errorf("the bound account no longer exists on the target")
 	}
 	return r, 0, nil
+}
+
+// liveRefusal is resolveLive's error as an operation answers it.
+func liveRefusal(err error) (int, error) {
+	if errors.Is(err, errStoreUnreadable) {
+		// The add-on's own store, read before anything is sent to the NAS:
+		// its fault, never the subject's, so 500 STORE_UNREADABLE (as /plan
+		// answers it), never the 422 that means "no account". On a write,
+		// Syndra reads any 5xx as possibly acted (indeterminate), which
+		// overstates it and is safe: a refusal is never recorded, so GET
+		// /calls answers unknown and a re-send runs it once.
+		log.Printf("[STORE] binding for an operation could not be read: %v", err)
+		return http.StatusInternalServerError, errStoreUnreadable
+	}
+	return statusForLookup(err), lookupRefusal(err)
 }
 
 // conflictRefusal is a conflict as an operation's refusal: the words the apply and plan say it in.
@@ -239,7 +305,7 @@ func (s *server) boundAccounts(subjects []Subject) (map[int64]string, map[int64]
 	subjectOf, bindingOf := map[int64]string{}, map[int64]Binding{}
 	for _, b := range bindings {
 		uid := int64(0)
-		if r := s.resolveIn(b, ix); r.Account != nil {
+		if r, _ := s.resolveIn(b, ix); r.Account != nil {
 			uid = r.Account.UID
 		} else if inIDRange(b.UID, floor, ceiling) {
 			uid = b.UID

@@ -190,7 +190,15 @@ func (s *server) planOne(req PlanSubject, ix accountIndex, claimed map[string]st
 	adopts := false // leftByCrashedCreate, as the apply decides it
 	if bound {
 		// The rule the apply's locate uses, read from this snapshot.
-		r := s.resolveIn(binding, ix)
+		r, err := s.resolveIn(binding, ix)
+		if err != nil {
+			// Two accounts on the key: the apply refuses it in these words.
+			detail, next := ambiguityWords()
+			return ApplyOutcome{
+				Subject: req.Subject, Effect: EffectBlocked,
+				Detail: detail, Consequence: "Nothing would change. " + next,
+			}, nil
+		}
 		if conflict := r.Conflict; conflict != nil {
 			detail, next := conflict.words()
 			return ApplyOutcome{

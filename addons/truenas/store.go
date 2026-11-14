@@ -264,6 +264,10 @@ type Subject struct {
 	// Not on the wire: no mapping can explain them, so the backend never sees
 	// them. Kept so a convergence's full replace writes them back unchanged.
 	builtinGroups []apiID
+	// groupIDs is every group the account is in, by record id, as the user table says it (raw,
+	// unnamed): what an account read without the group table (readAccountsWhere) knows of its
+	// groups. Not on the wire, not stored.
+	groupIDs []apiID
 	// wantsSMB is SMB wanted on: the binding's Binding.WantsSMB (subjects,
 	// storage.status) or the request's own wish (plan, apply), so every
 	// standing sees the wait for a new password. Not on the wire, not stored.

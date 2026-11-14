@@ -292,12 +292,15 @@ func (s *server) legacyReply(kind string, raw json.RawMessage) ([]byte, error) {
 		}
 		out.AccountID, out.Standing = "", nil
 		if old.UID != 0 {
-			if snap, found, err := s.store.GetSnapshot(); err == nil && found {
-				for i := range snap.Subjects {
-					if sub := snap.Subjects[i]; sub.UID == old.UID {
-						sub.applyWish(s.wishesFor(snap.Subjects))
-						out.AccountID, out.Standing = accountID(old.UID), standingOf(&sub)
-					}
+			// The account the subject's binding names in the mirror (resolveIn), and only while it is
+			// still that uid: a number TrueNAS handed out again shows nobody's standing as theirs.
+			snap, found, err := s.store.GetSnapshot()
+			b, bound, bErr := s.store.GetBinding(out.Subject)
+			if err == nil && found && bErr == nil && bound {
+				if r, err := s.resolveIn(b, indexAccounts(snap.Subjects)); err == nil && r.Account != nil && r.Account.UID == old.UID {
+					sub := *r.Account
+					sub.applyWish(s.wishesFor(snap.Subjects))
+					out.AccountID, out.Standing = accountID(old.UID), standingOf(&sub)
 				}
 			}
 		}

@@ -627,9 +627,12 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 			Consequence: "Nothing was changed.",
 		}, http.StatusUnprocessableEntity, nil
 	}
+	if errors.Is(err, errAmbiguousAccount) {
+		// Two accounts on the binding's key: the operations' refusal, in their words.
+		return ApplyOutcome{}, http.StatusConflict, lookupRefusal(err)
+	}
 	if err != nil {
-		// Two accounts on the binding's key is a 409, as the operations answer it.
-		return ApplyOutcome{}, statusForLookup(err), err
+		return ApplyOutcome{}, http.StatusBadGateway, err
 	}
 	if conflict != nil {
 		// Halted, and surfacing THE SAME adoption action the unmanaged
@@ -813,6 +816,12 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		return nil, Binding{}, nil, false, false, err
 	}
 	if bound {
+		if r.Account != nil {
+			// The converge diffs and writes groups by name: the apply's one group read.
+			if err := s.nameGroupsOf(r.Account); err != nil {
+				return nil, Binding{}, nil, false, false, err
+			}
+		}
 		return r.Account, r.Binding, r.Conflict, r.Cut, false, nil
 	}
 
@@ -1307,31 +1316,27 @@ func (s *server) readBack(username string) (*Subject, error) {
 	return found, nil
 }
 
-// subjectWhere reads the one account whose field equals value, or nil when the
-// target has none. Filtered at the target: the whole account list per lookup was
-// a 100-person cascade's worth of full reads. The key comparison is kept on this
-// side as well, so a target that ignored the filter cannot hand back the wrong
-// account; the second return is that read's truncation, which is only ever set
-// by such a target (an exact key matches one row) and stops an absence being
-// concluded from a list that was cut short.
+// subjectWhere is accountWhere with the account's groups named (nameGroups), for the apply, which
+// converges them: the one group read a lookup pays for, and only when it found an account.
 func (s *server) subjectWhere(field string, value any) (*Subject, bool, error) {
-	snap, err := s.readSubjectsWhere([]any{[]any{field, "=", value}})
+	found, cut, err := s.accountWhere(field, value)
+	if err != nil || found == nil {
+		return found, cut, err
+	}
+	if err := s.nameGroupsOf(found); err != nil {
+		return nil, cut, err
+	}
+	return found, cut, nil
+}
+
+// nameGroupsOf names one account's groups from a read of the group table.
+func (s *server) nameGroupsOf(account *Subject) error {
+	names, _, builtin, err := s.groupIndex()
 	if err != nil {
-		return nil, false, err
+		return err
 	}
-	var found *Subject
-	for i := range snap.Subjects {
-		got := snap.Subjects[i]
-		if (field == "username" && got.Username == value) || (field == "uid" && got.UID == value) {
-			if found != nil {
-				// Two accounts on one key is a question about which one, and the
-				// answer is never "whichever the target listed first".
-				return nil, snap.Truncated, fmt.Errorf("%w: %s=%v", errAmbiguousAccount, field, value)
-			}
-			found = &snap.Subjects[i]
-		}
-	}
-	return found, snap.Truncated, nil
+	account.nameGroups(names, builtin)
+	return nil
 }
 
 // emptyGroupNamed finds a group by name that nobody belongs to, primary or

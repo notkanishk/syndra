@@ -1312,7 +1312,8 @@ A binding records the account's uid and what that uid is (`uid_kind`). `"account
 NAS uid: written by create, both adoptions and `boundAccount`'s rewrite. Absent is a contract-1
 binding, whose uid may be the NAS record key. `boundAccount` says which account it names, and since
 7t-1 it is the rule of **every add-on caller**, through one module (`addons/truenas/identity_resolve.go`):
-`resolveLive` against the target now (apply's `locate`, the account operations set-password, rotate
+`resolveLive` against the target now, from the user table alone since naming an account needs only
+its uid and name (apply's `locate`, which then names the account's groups to converge them, the account operations set-password, rotate
 and purge, `storage.status`, `activity.get`, and adoption's repeat check) and `resolveIn` over one read
 (the plan, and the wishes behind the standing, the statistics and `accountBound`). `recordID` is gone.
 It is **not yet** what the backend's drift matching uses: that matches on `account_id`, and saying
@@ -1339,7 +1340,8 @@ the attribution on `/subjects` is slice 7t-2 (wire) and 7t-3 (backend). Below, "
 - An operation refuses rather than guesses: 422 when the subject has no binding or its account is
   gone, 409 on a conflict (the conflict's own detail and next step, `OPERATION_FAILED`; no wire
   change in 7t-1) and on two accounts holding one key, 500 `STORE_UNREADABLE` when the add-on's store
-  cannot be read. On a conflict nothing is sent and nothing is logged: no write ever goes to an
+  cannot be read; 502 when an absence is read from a cut-short list. On a conflict no write is sent and
+  nothing is logged (the lookups are reads): no write ever goes to an
   account `resolveLive` did not return. A purge's self check and `activity.get`'s audit filter use the
   account's name now (the audit log is keyed by name), so an in-range rename finds its log.
 - A conflicted binding names no account for the statistics, the standing or `accountBound`: the holder

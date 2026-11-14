@@ -33,9 +33,6 @@ type fakeRPC struct {
 	// saying no over a healthy socket, which is a different thing from the
 	// transport failing and was for a while indistinguishable from success.
 	refuse map[string]string
-	// refuseFrom refuses a method from its nth call on (1-based), so a read made
-	// after the account was resolved can fail on its own.
-	refuseFrom map[string]int
 	// methods overrides what `core.get_methods` enumerates; empty means every
 	// method this add-on uses is present.
 	methods string
@@ -80,17 +77,6 @@ func (f *fakeRPC) Call(method string, _ int64, params any) (json.RawMessage, err
 	}
 	if msg, ok := f.refuse[method]; ok {
 		return errorEnvelope(msg), nil
-	}
-	if from, ok := f.refuseFrom[method]; ok {
-		n := 0
-		for _, c := range f.calls {
-			if c == method {
-				n++
-			}
-		}
-		if n >= from {
-			return errorEnvelope("permission denied"), nil
-		}
 	}
 	// A per-path answer ("filesystem.getacl /mnt/tank/main") wins over the
 	// method's own, for reads made once per folder; a per-path refusal too.
