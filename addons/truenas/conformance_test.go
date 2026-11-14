@@ -245,7 +245,13 @@ func TestTheAddonCallToolIsAcceptedByThisAddOn(t *testing.T) {
 			t.Errorf("%v: %v, %s", c, err, out)
 		}
 	}
-	if out, err := call("POST", "/operations/account.release", `{"subject":"conformance-x","ſubject":"wwe-the-rock"}`); err == nil || strings.HasPrefix(out, "200") {
-		t.Errorf("a folded key was sent: %v, %s", err, out)
+	if out, err := call("POST", "/operations/account.release", `{"subject":"conformance-x","ſubject":"wwe-the-rock"}`); func() int {
+		ee, _ := err.(*exec.ExitError)
+		if ee == nil {
+			return -1
+		}
+		return ee.ExitCode()
+	}() != 2 {
+		t.Errorf("a folded key must be refused before sending (exit 2): %v, %s", err, out)
 	}
 }
