@@ -143,18 +143,15 @@ func entitlementSchema() []EntitlementField {
 // beyond the core (design §2, §4).
 const kindStorage = "storage"
 
-// results: every read operation answers one `result` in the shape the
-// registry names for it, and no typed pocket. The backend reads both shapes
-// until major 3, so it may deploy first or together with this add-on; never
-// this add-on alone, whose `result` a pre-6a backend does not read.
-// deploy.yml ships both from one commit, so the workflow never does that.
+// Every read operation answers one `result` in the shape the registry names
+// for it (core in contract 2, no feature).
 //
 // freshness: reads answer from a copy unless asked for a fresh one, within a
 // cooldown, one read of the NAS for concurrent asks (fresh.go). Declared last
 // and only with the backend that sends `fresh`: a backend that never does
 // would read every /subjects as a copy, and its drift sweep would skip every
 // pass. The two roll back together.
-var features = []string{"operations", "settings", "storage.reach", "storage.homes", "results", "freshness", "calls", "stats"}
+var features = []string{"operations", "settings", "storage.reach", "storage.homes", "freshness", "calls", "stats"}
 
 // operationSet is the one-shot, event-shaped half. Anything with a desired
 // state belongs in the schema above instead.

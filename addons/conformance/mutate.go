@@ -87,9 +87,9 @@ func (k *kit) mutate() error {
 		{"limit-empty", []string{"limit-empty", "plan-equals-apply"}, func() { k.limitEmpty(k.at("limit-empty")) }},
 		{"operations", []string{"operations", "operations.secret", "strict-requests", "health"}, func() { k.operations(k.at("operations")) }},
 		{"calls", []string{"calls.recorded", "operations.physical", "health"}, func() { k.callsWrite() }},
-		{"reads", []string{"operations.reads", "results"}, func() {
+		{"reads", []string{"operations.reads", "operations.result"}, func() {
 			k.readOperations(k.at("operations.reads"), callID)
-			k.results(k.at("results"))
+			k.results(k.at("operations.result"), true)
 		}},
 		{"stats", []string{"stats.points", "stats.totals", "stats.since", "stats.gaps", "stats.unbound", "stats.no-people", "stats.no-people.ids"}, func() { k.statsAfterWrites() }},
 		{"lifecycle", []string{"lifecycle", "replay.refusal", "strict-requests"}, func() { k.lifecycle(k.at("lifecycle"), k.at("replay.refusal")) }},
@@ -422,39 +422,58 @@ func (k *kit) readOps() []string {
 	return reads
 }
 
-// results holds an add-on declaring feature results to its promise: every
-// read answers one `result`, valid against the schema the registry names for
-// the id (which also holds current false iff stale), or, for an id that
-// declares its own, an object. Without the feature, a read that had no pocket
-// to answer under before results (holdings.list) cannot be served at all, so
-// declaring it available is a failure; otherwise there is nothing to judge.
-func (k *kit) results(c *check) {
+// results holds every read to the core rule: it answers one `result`, valid
+// against the schema the registry names for the id (which also holds current
+// false iff stale), or, for an id that declares its own, an object. A reply
+// without `result` carries no reading.
+//
+// A read writes nothing, so a reads-only run judges it too (owned false): the
+// same reads about the kit's subject, sent without the plan that precedes a
+// write. A read about a subject the add-on has no account for refuses it (422
+// OPERATION_FAILED, the registry's code for an operation that could not be
+// done), which says nothing about its result's shape: that read is skipped,
+// and named, and -mutate (owned true) reads the account it made. Only a read
+// the registry marks `subject: true` is excused: one about the target
+// (`subject: false`, health.get) refused at all, or any other code
+// (TARGET_VERSION_UNSUPPORTED), fails.
+//
+// ponytail: the registry has no code for "no account for this subject", so
+// 422 OPERATION_FAILED on a subject read stands for it. The add-on's own
+// faults are not 422 (TrueNAS answers a store it cannot read 500
+// STORE_UNREADABLE, boundAccount), but another subject-read refusal an
+// add-on answers 422 OPERATION_FAILED is skipped here too, and judged only
+// under -mutate; a dedicated code is the upgrade (an owner's decision).
+func (k *kit) results(c *check, owned bool) {
 	reads := k.readOps()
-	if !k.m.has("results") {
-		for _, id := range reads {
-			if k.c.operations[id].Pocket == "" {
-				c.fail("%s is declared available without feature results, and has no other shape to answer in", id)
-			}
-		}
-		if len(c.fails) == 0 {
-			c.skip("feature results not declared")
-		}
-		return
-	}
 	if len(reads) == 0 {
 		c.skip("no effect: read operation is declared available")
 		return
 	}
-	send := k.viaOwned(c)
+	send := k.send
+	if owned {
+		send = k.viaOwned(c)
+	}
+	var judged, skipped []string
+	defer func() {
+		if len(skipped) > 0 {
+			c.skip("judged %s; skipped %s: no account for the kit's subject; -mutate reads the account it makes",
+				orNone(judged), strings.Join(skipped, ", "))
+		}
+	}()
 	for _, id := range reads {
 		ex := send(request{method: http.MethodPost, target: "/operations/" + id,
 			body: k.operationBody(id, k.callID(), map[string]any{}), schema: "operation_request.json"})
+		if !owned && *k.c.operations[id].Subject && ex.err == nil && ex.status == http.StatusUnprocessableEntity && ex.code() == "OPERATION_FAILED" {
+			skipped = append(skipped, id)
+			continue
+		}
+		judged = append(judged, id)
 		doc := k.ok(c, ex, "operation_response.json")
 		if doc == nil {
 			continue
 		}
 		result, ok := doc["result"].(map[string]any)
-		if !c.expect(ok, "%s: an add-on declaring results answered no result object", id) {
+		if !c.expect(ok, "%s answered no result object", id) {
 			continue
 		}
 		if schema := k.c.operations[id].Result; schema != "" {
@@ -463,6 +482,13 @@ func (k *kit) results(c *check) {
 			}
 		}
 	}
+}
+
+func orNone(ids []string) string {
+	if len(ids) == 0 {
+		return "none"
+	}
+	return strings.Join(ids, ", ")
 }
 
 func (k *kit) replay(c *check, callID string, first *exchange) {

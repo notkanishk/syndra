@@ -10,8 +10,7 @@
     "storage.homes",
     "calls",
     "freshness",
-    "stats",
-    "results"
+    "stats"
   ],
   "entitlement_schema": [
     {

@@ -938,7 +938,8 @@ settings with the full §5 rules.
 - [x] 4.3 CI: the kit runs against the reference add-on on every push
   (`ci.yml` job `addon-conformance`); the job is required for `ci-ok` #ready-for-agent
   - *Done (13 Nov 2026, slice 7g):* the end-to-end step also starts a second
-    reference with every feature (`-features results,freshness,calls,stats`)
+    reference with every feature (`-features results,freshness,calls,stats`;
+    `freshness,calls,stats` since 7h, `result` being core)
     and runs reads, `-mutate -item item-0001`, reads, `-mutate
     -mutate-settings -item item-0002` against that one process, as an
     operator's runs follow each other (step bound: 8 minutes; about 30 s
@@ -2271,6 +2272,53 @@ per-person only) applied there.
       `TestAPointNamingTheKitsOwnAccountIsStillALocalName`;
       `stats-local-name-subject` still fails `stats.unbound`.
     - Decided while building (6d-1 fix round): the `.no-people` MUST is the kit's own account only (username and `account_id`, which it makes unique); any other listed account is advisory (`.no-people.ids`), since TrueNAS lists service accounts and a `scanner` share by a `scanner` user is no leak (`TestAResourceNamedLikeAServiceAccountIsAdvisory`; `stats-dimension-names-person` still fails the MUST).
+
+- [x] 6.1r (slice 7h) `result` is core; the pockets and feature `results`
+  go. Owner's ruling (14 Nov 2026): "We currently only have TrueNAS as the
+  sole add-on on production, and the backend and the add-on are updated
+  together, so the backwards compatibility is not needed." Contract 2 has not
+  shipped, so this is a change to major 2 before release (CHANGELOG), not a
+  major 3. #ready-for-agent
+  *Done (14 Nov 2026):* every `effect: read` answers one `result`, read by
+  `ReadReply.answer` alone (`results.go`); a reply under an old key
+  (`storage`, `activity`, `health`) and no `result` is indeterminate, as a
+  result missing a required key already was
+  (`TestAReplyUnderAnOldPerReadKeyIsNotAReading`). Gone: `Pocket` from
+  `OperationPolicy`, `EffectiveOperation` and the registry; `ReadReply.Pocket`
+  and `ReadReply.Results`; the pocket branches of `Storage` and `Activity`
+  (`storageWire` now decodes the profile, its `Observation` embedded);
+  `physicalNeeds` (a physical op needs `calls` alone, in
+  `resolveOperations`); `pocket` from `operation_response.json` with its
+  three `$defs`; feature `results` from `features.json`, the fixtures, the
+  TrueNAS add-on and the reference (`OptionalFeatures`; `holdings.list` and
+  `health.get` under `result` always); the three pocket fixtures. The kit's
+  `results` check is the core `operations.result`
+  (`TestEveryReadIsHeldToItsResult`, a `health.get` under `health` fails),
+  judged in a reads-only run too (`results(c, owned)`: the reads go without
+  the owned-account plan, and a read about a subject answering 422
+  `OPERATION_FAILED` for a subject with no account is skipped and named
+  beside the pass ("judged …; skipped …"); `health.get` refused, or any other
+  code, fails. The registry has no "no account" code and no "about the
+  target" marker; the marker is now the registry's `subject` (required on
+  every id, `false` for `health.get` alone; the kit's loader and the
+  backend's registry test refuse an entry without it,
+  `TestTheRegistryMustSayWhetherAnOperationIsAboutASubject`), and the
+  dedicated code stays the owner's to add. The TrueNAS add-on answers a
+  binding its store cannot read 500 `STORE_UNREADABLE` on every operation
+  that resolves one (`boundAccount`, then `operateNow`/`readNow`; reads and writes, before
+  any NAS call), never the 422 of "no account"
+  (`TestAnUnreadableBindingIsTheAddOnsFaultNotNoAccount`); an effect: read operation is no write, one rule for
+  the kit and its tests, `contract.writes`, so a reads-only run still reports
+  "nothing written"),
+  and ci.yml's every-feature reference is `-features freshness,calls,stats`.
+  `TestAReadNeedsNoFeature` holds `holdings.list` from an add-on declaring
+  operations alone. The person and member pages now list `storage.status`
+  among `reads` from any add-on, as they already did from TrueNAS.
+  Deploy and rollback: unchanged. The backend and the add-ons roll back
+  together, to production's contract-1 pair (1.10), which never read a
+  contract-2 read reply; removing the pockets changes nothing there, and the
+  rollback guards (1.7b's `account_uid` dual write, the mutation log's format
+  compatibility) are untouched.
 
 ## Owner's answers of 13 Nov 2026
 

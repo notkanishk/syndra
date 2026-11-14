@@ -759,7 +759,7 @@ func ResolvesValue(ctx context.Context, target, field, value string) (Resolution
 
 // StorageStatus is one member's own account on a target, as the target sees it
 // right now: storage.status read into Syndra's own view, from the storage
-// profile's result (results) or the legacy pocket. How much room is used
+// profile's result. How much room is used
 // travels once, as the result's meters (ReadView); this view is what the
 // storage card decides on.
 type StorageStatus struct {
@@ -779,15 +779,15 @@ type StorageStatus struct {
 	// home folder first. PlacesReadable false is "not read", never "none".
 	Places         []Place `json:"places"`
 	PlacesReadable bool    `json:"places_readable"`
-	// QuotaRead is the storage profile's quota_read (the legacy pocket's
-	// usage_readable): every quota table was read. False is "the usage
-	// couldn't be read", in part or in full, never "nothing used".
+	// QuotaRead is the storage profile's quota_read: every quota table was
+	// read. False is "the usage couldn't be read", in part or in full, never
+	// "nothing used".
 	QuotaRead bool `json:"quota_read"`
 	// Standing is the account's standing as the add-on reports it in this
-	// reply (contract 2): nil when it did not say.
+	// reply (contract 2).
 	Standing *Standing `json:"standing,omitempty"`
 	// Observation is when the add-on read it, and whether this is that read or
-	// its copy (design §4); nil when the reply did not say (the legacy pocket).
+	// its copy (design §4); nil only on a status that was not read.
 	*Observation
 
 	Outcome Outcome `json:"-"`
@@ -1087,30 +1087,12 @@ type PlaceRole struct {
 
 // Storage is a storage.status reply read into Syndra's view.
 func (r ReadReply) Storage() StorageStatus {
-	raw, err := r.answer()
+	// The storage profile (profiles/storage/status.json): the common status,
+	// plus the five keys the storage card decides on.
 	var w storageWire
-	var quotaRead bool
-	var seen *Observation
-	switch {
-	case err != nil:
-	case r.Results:
-		// The storage profile (profiles/storage/status.json): the common
-		// status, plus the five keys the storage card decides on.
-		var p struct {
-			storageWire
-			QuotaRead bool `json:"quota_read"`
-			Observation
-		}
-		err = r.decodeShape(storageNeed, raw, &p)
-		w, quotaRead, seen = p.storageWire, p.QuotaRead, &p.Observation
-	default:
-		// ponytail: the legacy pocket's name for quota_read, read until major 3.
-		var p struct {
-			storageWire
-			UsageReadable bool `json:"usage_readable"`
-		}
-		err = json.Unmarshal(raw, &p)
-		w, quotaRead = p.storageWire, p.UsageReadable
+	raw, err := r.answer()
+	if err == nil {
+		err = r.decodeShape(storageNeed, raw, &w)
 	}
 	if err != nil {
 		out := StorageStatus{}
@@ -1118,21 +1100,21 @@ func (r ReadReply) Storage() StorageStatus {
 		return out
 	}
 	return StorageStatus{Usable: w.Usable, NeedsPassword: w.NeedsPassword, NeedsNewPassword: w.NeedsNewPassword,
-		Places: placesOf(w.Places), PlacesReadable: w.PlacesReadable, QuotaRead: quotaRead, Standing: w.Standing,
-		Observation: seen, Outcome: OutcomeSucceeded}
+		Places: placesOf(w.Places), PlacesReadable: w.PlacesReadable, QuotaRead: w.QuotaRead, Standing: w.Standing,
+		Observation: &w.Observation, Outcome: OutcomeSucceeded}
 }
 
-// storageWire is what Storage reads of either shape, the profile's result or
-// the legacy pocket: the keys they share, with places as the add-on sends
-// them, never the view's. Usage completeness is each shape's own key
-// (quota_read, the pocket's usage_readable), read beside it.
+// storageWire is what Storage reads of the profile's result, with places as
+// the add-on sends them, never the view's.
 type storageWire struct {
 	Usable           bool        `json:"usable"`
 	NeedsPassword    bool        `json:"needs_password"`
 	NeedsNewPassword bool        `json:"needs_new_password"`
 	Places           []placeWire `json:"places"`
 	PlacesReadable   bool        `json:"places_readable"`
+	QuotaRead        bool        `json:"quota_read"`
 	Standing         *Standing   `json:"standing"`
+	Observation
 }
 
 // ActivityReport is what a target's own audit log says about one subject, and
@@ -1153,8 +1135,8 @@ type ActivityReport struct {
 	Uncovered []string `json:"uncovered"`
 	// Truncated says older events exist than the newest ones returned.
 	Truncated bool `json:"truncated"`
-	// Observation is when the log was read; nil from a legacy pocket, which
-	// never said.
+	// Observation is when the log was read; nil only on a report that was
+	// not read.
 	*Observation
 
 	Outcome Outcome `json:"-"`
@@ -1206,29 +1188,10 @@ func Activity(ctx context.Context, target, subject, actor, since string, fresh b
 
 // Activity is an activity.get reply read into Syndra's view.
 func (r ReadReply) Activity() ActivityReport {
-	raw, err := r.answer()
 	var out ActivityReport
-	switch {
-	case err != nil:
-	case r.Results:
+	raw, err := r.answer()
+	if err == nil {
 		err = r.decodeShape(activityNeed, raw, &out)
-	default:
-		// ponytail: the legacy pocket's names, read until major 3.
-		var w struct {
-			Events []struct {
-				ActivityEvent
-				Share string `json:"share"`
-			} `json:"events"`
-			UncoveredShares []string `json:"uncovered_shares"`
-			Truncated       bool     `json:"truncated"`
-		}
-		if err = json.Unmarshal(raw, &w); err == nil {
-			out = ActivityReport{Uncovered: w.UncoveredShares, Truncated: w.Truncated}
-			for _, e := range w.Events {
-				e.Resource = e.Share
-				out.Events = append(out.Events, e.ActivityEvent)
-			}
-		}
 	}
 	if err != nil {
 		out = ActivityReport{Status: r.Status, RetryAfter: r.RetryAfter}
@@ -1320,8 +1283,7 @@ func SystemHealth(ctx context.Context, target, actor string) SystemReport {
 	return Read(ctx, target, "health.get", "", actor, nil, false).Health()
 }
 
-// Health is a health.get reply read into Syndra's view: `result` from a
-// results add-on, the `health` pocket otherwise, the same shape either way.
+// Health is a health.get reply's `result` read into Syndra's view.
 //
 // ponytail: SystemReport is TrueNAS-shaped; at major 3 it goes and the raw
 // renderer serves health.get (it declares no registry result).

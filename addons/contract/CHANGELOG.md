@@ -3,6 +3,40 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## `result` is core; the per-read keys and feature `results` go (slice 7h, 14 Nov 2026)
+
+A change to major 2 before its release, not a new major: production runs
+contract 1, and no contract-2 add-on has shipped. Owner ruling (14 Nov
+2026): TrueNAS is the only add-on in production and it ships with the
+backend, so nothing needs a contract-2 add-on without `results`. Every
+`effect: read` operation now answers one `result`, valid against the schema
+`registry/operations.json` names for it, the one key Syndra reads; Syndra
+reads `result` alone (`answer` in `backend/internal/addons/results.go`), and
+a reply without it is no reading (indeterminate), as a result missing a
+required key already was. A physical operation needs `calls` alone.
+
+- Schema files: `operation_response.json` loses `activity`, `storage` and
+  `health` and their `$defs` (`ActivityReport`, `StorageStatus`,
+  `TargetHealth`); `result` loses `x-feature: results`.
+  `profiles/storage/status.json`'s description drops "feature results".
+- Registries: `operations.json` loses `pocket` (from `activity.get`,
+  `health.get`, `storage.status`) and its `$comment` the rules about it,
+  and gains `subject`, required on every id: `true` when the operation is
+  about the member the request's subject names, `false` when it is about
+  the target itself (`health.get`);
+  `features.json` loses `results`. A manifest still listing `results` is
+  an unknown feature: skipped, never refused.
+- Fixtures: `operation_response_activity.json`,
+  `operation_response_storage.json` and `operation_response_health.json`
+  are deleted; `manifest.json`, `manifest_truenas.json` and
+  `manifest_inventory.json` no longer list `results`.
+- The kit's `results` check is the core check `operations.result`: every
+  read answers a `result`, whatever the manifest declares. The guide's
+  section is "Read operations and `result`".
+- Deploy and rollback: unchanged. The backend and the TrueNAS add-on ship
+  and roll back together; the rollback target is production's contract-1
+  pair, which never read or wrote a contract-2 read reply.
+
 ## Feature `stats` served by the add-ons, in makerspace days (slice 6d-1, 12 Nov 2026)
 
 Additive within major 2, but for two tightenings of the schema: `against`
@@ -114,6 +148,8 @@ Additive within major 2. Syndra now reads `result` from an add-on declaring
 `results`, through one read path for every `effect: read` operation (never
 dispatched, logged or confirmed), and still reads the typed pockets from one
 that does not, until major 3. The TrueNAS add-on declares `results`.
+(Superseded before release by slice 7h, above: `result` is core and the
+pockets are gone.)
 
 - `holdings.list` added (`v2/registry/operations.json`): scope `member`,
   `effect: read`, no parameters, result `common/records.json`.
@@ -224,7 +260,7 @@ query string joins the MAC.
 | `v2/schema/values.json` | unchanged shape; exempt from `taken_at`/`current` | `values.json` |
 | `v2/schema/plan_request.json`, `plan_response.json` | no `acknowledge_scope`; reply gains `stale` | `plan_request.json`, `plan_response.json` |
 | `v2/schema/apply_request.json`, `apply_ok.json` (the /apply 200 body), `apply_response.json` (also plan outcomes) | `account_id` + `standing` together or neither; conflict carries `account_id` | `apply_request.json`, `apply_response.json` |
-| `v2/schema/operation_request.json`, `operation_response.json` | `preview` (calls), `fresh` (freshness), `result` (results); legacy pockets kept | `operation_request.json`, `operation_response*.json` |
+| `v2/schema/operation_request.json`, `operation_response.json` | `preview` (calls), `fresh` (freshness), `result` (every read's answer, slice 7h) | `operation_request.json`, `operation_response*.json` |
 | `v2/schema/lifecycle_request.json`, `lifecycle_response.json` | `call_id` on the request | `lifecycle_request.json`, `lifecycle_response.json` |
 | `v2/schema/settings.json`, `setting.json`, `setting_put_request.json` | `contract_version` and `call_id` in the body | `settings.json`, `setting.json`, `setting_put_request.json` |
 | `v2/schema/profiles/storage/reach.json`, `homes.json` | `read_at` to `taken_at`; `current`, `stale`; `quota_read` | `reach.json`, `homes.json` |
@@ -235,7 +271,7 @@ query string joins the MAC.
 | `v2/schema/common/stale.json` | `stale` and the `current` iff `stale` invariant | `subjects_stale.json` |
 | `v2/schema/common/standing.json` | `standing` | `subjects.json` |
 | `v2/schema/common/effect.json`, `outcome.json` | as contract 1 | n/a |
-| `v2/schema/common/records.json`, `activity.json`, `status.json` | the three `result` shapes (feature `results`) | `records.json`, `activity.json`, `status.json` |
+| `v2/schema/common/records.json`, `activity.json`, `status.json` | the three `result` shapes | `records.json`, `activity.json`, `status.json` |
 | `v2/schema/identity/{apply,operation,lifecycle,setting}.json` | the request-identity objects of design §5 | n/a |
 | `v2/schema/identity/vector.json` | a JCS golden vector | `identity_{apply,operation,lifecycle,setting}.json` |
 | `v2/registry/roles.json`, `kinds.json`, `units.json`, `constants.json` | closed vocabularies and Syndra's own constants | n/a |

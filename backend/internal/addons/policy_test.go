@@ -205,16 +205,12 @@ func TestEveryPhysicalOperationIsConfirmedAndNeverARead(t *testing.T) {
 		if !p.Confirm {
 			t.Errorf("%s is physical and not confirmed", id)
 		}
-		if p.Pocket != "" {
-			t.Errorf("%s is physical and has a legacy pocket", id)
-		}
 	}
 }
 
 // Without calls a physical operation has no preview to be confirmed after and
-// no way to settle when its answer is lost; without results its preview has no
-// record to show. Either way it is shown unavailable, with the reason, and so
-// resolves to ErrOperationUnavailable on every path that sends.
+// no way to settle when its answer is lost: it is shown unavailable, with the
+// reason, and so resolves to ErrOperationUnavailable on every path that sends.
 func TestAPhysicalOperationWithoutCallsIsUnavailable(t *testing.T) {
 	op := Operation{ID: "item.checkout", Scope: ScopeMember, Confirm: true, Available: true}
 	for _, tc := range []struct {
@@ -222,9 +218,7 @@ func TestAPhysicalOperationWithoutCallsIsUnavailable(t *testing.T) {
 		available bool
 	}{
 		{[]string{"operations"}, false},
-		{[]string{"operations", "calls"}, false},
-		{[]string{"operations", "results"}, false},
-		{[]string{"operations", "calls", "results"}, true},
+		{[]string{"operations", "calls"}, true},
 	} {
 		ops, _ := resolveOperations(Manifest{Features: tc.features, Operations: []Operation{op}})
 		if len(ops) != 1 || ops[0].Available != tc.available {

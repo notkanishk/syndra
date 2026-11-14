@@ -1121,7 +1121,7 @@ func TestABlockedEffectOnA2xxIsRejected(t *testing.T) {
 func TestActivityCarriesTheTruncatedFlag(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"outcome":"succeeded","activity":{"events":[],"truncated":true}}`))
+		_, _ = w.Write([]byte(`{"outcome":"succeeded","result":{"events":[],"uncovered":[],"truncated":true,"taken_at":"2026-11-10T09:30:00Z","current":true}}`))
 	}))
 	defer srv.Close()
 	signedAddon(t, srv.URL, "a-test-secret")

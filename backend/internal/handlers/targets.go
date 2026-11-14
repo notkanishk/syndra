@@ -682,7 +682,7 @@ func handleTargetActivity(w http.ResponseWriter, r *http.Request) {
 		"uncovered": report.Uncovered,
 		"truncated": report.Truncated,
 	}
-	// When the log was read, from an add-on that says (feature results).
+	// When the log was read.
 	if report.Observation != nil {
 		body["taken_at"], body["current"] = report.TakenAt, report.Current
 		if report.Stale != nil {

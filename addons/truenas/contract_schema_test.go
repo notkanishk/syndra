@@ -98,9 +98,11 @@ func codesInSource(t *testing.T) (written, declared map[string]bool, inline []st
 							return true
 						}
 						id, isIdent := n.Args[at].(*ast.Ident)
-						if code, known := consts[id.Name]; isIdent && known {
-							written[code] = true
-							return true
+						if isIdent {
+							if code, known := consts[id.Name]; known {
+								written[code] = true
+								return true
+							}
 						}
 						// A forwarding function passing its own parameter on
 						// (writeError's code, decodeRequest's malformed).

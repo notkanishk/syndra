@@ -106,7 +106,7 @@ type myTargetView struct {
 	// password authentication disabled until the member sets one, so it exists,
 	// is correct, and refuses them.
 	Storage *addons.StorageStatus `json:"storage,omitempty"`
-	// Reads is every member read the target answered under feature results
+	// Reads is every member read the target answered
 	// (storage.status, holdings.list), for the generic renderers: its shape,
 	// its result and what the add-on also says. A kind module may render the
 	// ones it specialises itself (storage reads Storage above).
@@ -365,9 +365,7 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 			// fresh only when the person pressed "Read again" (wantsFresh);
 			// a page load and the waiting poll accept the add-on's copy.
 			reply := addonsRead(r.Context(), target, op, subject, resolveActor(r, ""), nil, wantsFresh(r))
-			if reply.Results {
-				view.Reads = append(view.Reads, reply.View())
-			}
+			view.Reads = append(view.Reads, reply.View())
 			if op != storageStatusRead {
 				continue
 			}

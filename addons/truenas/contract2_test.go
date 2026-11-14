@@ -126,9 +126,6 @@ var v2Messages = []struct{ fixture, schema string }{
 	{"operation_request_preview.json", "operation_request.json"},
 	{"operation_response.json", "operation_response.json"},
 	{"operation_response_result.json", "operation_response.json"},
-	{"operation_response_activity.json", "operation_response.json"},
-	{"operation_response_storage.json", "operation_response.json"},
-	{"operation_response_health.json", "operation_response.json"},
 	{"operation_response_activity_result.json", "operation_response.json"},
 	{"operation_response_health_result.json", "operation_response.json"},
 	{"operation_response_records.json", "operation_response.json"},
@@ -471,7 +468,7 @@ func TestV2SchemasAcceptWhatTheyShould(t *testing.T) {
 		{"a preview carries no call_id", "operation_request.json", "operation_request.json", v2Also(v2Edit("preview", true), v2Edit("call_id", nil))},
 		{"a gauge point of zero", "stats.json", "stats.json", v2Edit("value", 0, "points", 1)},
 		{"a manifest without feature stats needs no stats_zone", man, man, v2Also(
-			v2Edit("features", []any{"operations", "settings", "storage.reach", "storage.homes", "calls", "freshness", "results"}),
+			v2Edit("features", []any{"operations", "settings", "storage.reach", "storage.homes", "calls", "freshness"}),
 			v2Edit("metrics", nil), v2Edit("stats_zone", nil), v2Edit("stats_buffer", nil, "limits"))},
 		{"stats_zone UTC", man, man, v2Edit("stats_zone", "UTC")},
 		{"stats_zone with three segments", man, man, v2Edit("stats_zone", "America/Argentina/Buenos_Aires")},
