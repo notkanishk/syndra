@@ -593,11 +593,12 @@ func adoptOwnLimit(ctx context.Context, f db.MergeFinding, req resolveMergeFindi
 	if n, err := strconv.ParseInt(value, 10, 64); err != nil || n < 0 {
 		return fmt.Errorf("%w: the target's value for %s, %q, is not a whole number", ErrResolutionNotExpressible, f.Field, value)
 	}
+	expires, review := adoptionBound(req)
 	_, err = dbCreateAllowance(ctx, db.Allowance{
 		SubjectID: f.SubjectID, Target: f.Target,
 		Field: field, Value: value, Direction: db.AllowanceSet,
 		ActorID: actor, Reason: req.Reason,
-		ExpiresAt: req.ExpiresAt.Instant(), ReviewDate: req.ReviewDate.Instant(),
+		ExpiresAt: expires, ReviewDate: review,
 	})
 	return err
 }
@@ -649,11 +650,12 @@ func adoptTargetValue(ctx context.Context, f db.MergeFinding, req resolveMergeFi
 
 	// The denial names the value it removes — the `true` the resolver would
 	// otherwise compute — which is the shape `resolveLifecycle` matches on.
+	expires, review := adoptionBound(req)
 	_, err = dbCreateAllowance(ctx, db.Allowance{
 		SubjectID: f.SubjectID, Target: f.Target,
 		Field: f.Field, Value: "true", Direction: db.AllowanceDeny,
 		ActorID: actor, Reason: req.Reason,
-		ExpiresAt: req.ExpiresAt.Instant(), ReviewDate: req.ReviewDate.Instant(),
+		ExpiresAt: expires, ReviewDate: review,
 	})
 	return err
 }
@@ -701,3 +703,22 @@ type mergeDecidedBy struct {
 }
 
 func (m mergeDecidedBy) Unwrap() error { return m.error }
+
+// adoptionReviewMonths is how long an adopted decision stands before it is
+// looked at again when the operator names no bound.
+const adoptionReviewMonths = 6
+
+// adoptionBound is the bound an adopted value carries: the dates the operator
+// sent, or, with neither, a review date six months on from today. The schema
+// refuses an unbounded allowance; six months is a review interval, not an
+// expiry (guessing when somebody else's decision lapses would be inventing
+// policy). The backend owns the date, as it does the end of a day: the page
+// does not work out time.
+func adoptionBound(req resolveMergeFindingRequest) (expires, review *time.Time) {
+	expires, review = req.ExpiresAt.Instant(), req.ReviewDate.Instant()
+	if expires == nil && review == nil {
+		r := clock.EndAfterMonths(time.Now(), adoptionReviewMonths)
+		review = &r
+	}
+	return expires, review
+}

@@ -18,7 +18,7 @@ import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import { useCreateRequest } from "@/lib/queries/useRequests";
 import { useTerms } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, keepOptions, nextTermEnd } from "@/lib/term";
-import { endAfterDaysISO, endOfDayISO } from "@/lib/time";
+import { endAfterDaysISO, endOfDayISO, zoneTag } from "@/lib/time";
 import { roleName } from "@/lib/names";
 
 /** What a member asks for, in the units a member thinks in. */
@@ -167,12 +167,19 @@ function AskForAccessOpen({
     }
   }
 
+  // Keeping a role and "until the end of term" are worked out from today's day,
+  // and today depends on the zone: until the server has said which (a deploy
+  // window) they wait rather than pick a day wrongly. A week or a month do not.
+  const zonePending = (extend || howLong === "term") && zoneTag() !== "";
+
   const footerNote = final
     ? undefined
     : blockedArrival
       ? blockedFooter(arrivedState)
       : !value
         ? "Choose a role to ask for."
+        : zonePending
+          ? "Waiting for the server to say which time zone the days are counted in. Try again in a moment."
         : extend
           ? `${selfDecides ? "You'll decide this yourself, unless another operator does first. Until then" : "Until it's decided"}, it still ends ${formatShortDate(current)}.`
           : selfDecides
@@ -294,7 +301,7 @@ function AskForAccessOpen({
         ) : (
           <Button
             variant="accent"
-            disabled={!value || Boolean(blockedArrival)}
+            disabled={!value || Boolean(blockedArrival) || zonePending}
             /* Why it's off is the footer note's sentence; said once. */
             isPending={create.isPending}
             onClick={send}

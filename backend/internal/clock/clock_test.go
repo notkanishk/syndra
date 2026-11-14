@@ -151,3 +151,27 @@ func TestAnEndDayRefusesAnythingButADate(t *testing.T) {
 		}
 	}
 }
+
+// Santiago's clocks skip 00:00 on 6 Sep 2026 (they jump 00:00 to 01:00). Three
+// days after 2 Sep is still the end of 5 Sep, 23:59:59, and four days is the end
+// of 6 Sep: counting 24-hour days across the change ended an hour early.
+func TestEndAfterDaysEndsTheDayEvenWhenTheNextMidnightIsSkipped(t *testing.T) {
+	old := Loc
+	t.Cleanup(func() { Loc = old })
+	Loc = zone(t, "America/Santiago")
+	from := time.Date(2026, 9, 2, 10, 0, 0, 0, Loc)
+	for n, want := range map[int]string{3: "2026-09-05T23:59:59-04:00", 4: "2026-09-06T23:59:59-03:00", 0: "2026-09-02T23:59:59-04:00"} {
+		if got := EndAfterDays(from, n).Format(time.RFC3339); got != want {
+			t.Errorf("%d days: %s, want %s", n, got, want)
+		}
+	}
+}
+
+func TestEndAfterMonthsIsTheEndOfThatCalendarDay(t *testing.T) {
+	old := Loc
+	t.Cleanup(func() { Loc = old })
+	Loc = zone(t, "Asia/Kolkata")
+	if got := EndAfterMonths(time.Date(2026, 11, 14, 3, 0, 0, 0, Loc), 6).Format(time.RFC3339); got != "2027-05-14T23:59:59+05:30" {
+		t.Errorf("got %s", got)
+	}
+}

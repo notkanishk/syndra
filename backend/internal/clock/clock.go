@@ -132,6 +132,13 @@ func (d *EndDay) Instant() *time.Time {
 // EndAfterDays is the last second of the n-th day after t's own (both in the
 // makerspace's zone): 7 days from any time on 5 Nov ends at 23:59:59 on 12 Nov.
 func EndAfterDays(t time.Time, n int) time.Time {
-	y, m, d := t.In(Loc).Date()
-	return time.Date(y, m, d+n+1, 0, 0, 0, 0, Loc).Add(-time.Second)
+	end, _ := EndOfDay(AddDate(Day(t), 0, 0, n)) // a Day is always a valid day; EndOfDay holds when midnight is skipped (DST)
+	return end
+}
+
+// EndAfterMonths is the last second of the day n calendar months after t's own,
+// as time.AddDate counts them (31 Aug + 6 months is 3 Mar): a review interval.
+func EndAfterMonths(t time.Time, n int) time.Time {
+	end, _ := EndOfDay(AddDate(Day(t), 0, n, 0))
+	return end
 }

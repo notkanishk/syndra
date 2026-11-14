@@ -349,12 +349,9 @@ function DecisionForm({
               onResolve({
                 id: finding.id,
                 resolution: pick,
-                // A suspension adopted from the target is a decision that has to
-                // end or be looked at again — the schema underneath refuses one
-                // with neither. Six months is the review interval, not an expiry:
-                // this is somebody else's decision being written down, and
-                // guessing when it should lapse would be inventing policy.
-                ...(gone ? {} : { review_date: sixMonthsOut() }),
+                // A suspension adopted from the target has to end or be looked at
+                // again, and the backend owns that date: with none sent it sets a
+                // review six months on, in its own zone. The page does not work out time.
                 reason,
               });
             }}
@@ -464,12 +461,6 @@ function DecisionForm({
 function valueOf(v: unknown): string | undefined {
   const one = Array.isArray(v) ? v[v.length - 1] : v;
   return one === undefined || one === null ? undefined : String(one);
-}
-
-function sixMonthsOut(): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() + 6);
-  return d.toISOString();
 }
 
 /** What the backend sends back when somebody decided first. */
