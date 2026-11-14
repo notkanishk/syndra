@@ -100,7 +100,7 @@
 
 - [x] 10.1 Add-on schema: a single-valued mappable field `home` (label "Home folder"). Its values are folders inside an SMB share, read from the NAS. Tests
 - [x] 10.2 Converge:
-  - no home yet: `home = <place>/<account name>`, with `home_create: true` and `home_mode: "700"`. That is TrueNAS's own private create, mode 700 with the ACL stripped.
+  - no home yet: `home = <place>`, with `home_create: true` and `home_mode: "700"`; TrueNAS makes `<place>/<account name>` itself. That is TrueNAS's own private create, mode 700 with the ACL stripped. *Corrected 14 Nov 2026 (addon-contract slice 7k): this said `home = <place>/<account name>`, which TrueNAS refuses (`home_create` takes the parent).*
   - already there: no change.
   - elsewhere: never moved. The outcome says so.
   - no longer wanted: kept.

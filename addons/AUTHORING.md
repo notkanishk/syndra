@@ -1122,7 +1122,10 @@ The kit checks each of these with `-mutate`.
   that sets the field; the add-on MUST combine them by `max`, the
   `unlimited` value dominating: max(`"0"`, 5 GiB) is no limit when `"0"` is
   unlimited. `observed` MUST carry the effective limit, one value, or leave
-  it out when it could not be read.
+  it out when it could not be read. The kit judges a limit only from a
+  `state` that reports it: one left out (TrueNAS reads a home folder limit
+  only for an account with a home folder) is a skip that names it, never a
+  pass and never a fail.
 - **Every value is checked against its role** (a `flag` value is `"true"`,
   a `limit` value a non-negative decimal integer, a `membership` value one
   the app has), and every key against your entitlement schema. A desired

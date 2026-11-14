@@ -117,9 +117,18 @@ func (s *server) decideHome(desired desiredState, username, current string, uid 
 	}
 }
 
-// homeFields is the part of a user.create or user.update that makes the home.
+// homeFields is the part of a user.create or user.update that makes the home
+// at p, decideHome's <place>/<account name>. With `home_create`, TrueNAS takes
+// `home` as the PARENT, refuses it unless it is already a folder, and makes
+// <home>/<username> itself (middlewared plugins/account.py, TS-25.04 to
+// TS-25.10.7: validate_homedir_path, setup_homedir, do_update). So it is sent
+// the place: sent p, it refuses a new home, and nests an existing one a level
+// down. Neither call here renames, so the username TrueNAS joins is p's last
+// element. TrueNAS also refuses a `home` that is any account's home already
+// (account.py:518-523, `in_use`): an account whose home is the place itself
+// blocks every home made there.
 func homeFields(p string) map[string]any {
-	return map[string]any{"home": p, "home_create": true, "home_mode": "700"}
+	return map[string]any{"home": path.Dir(p), "home_create": true, "home_mode": "700"}
 }
 
 // convergeQuota sets the account's limit on the dataset holding its home, when
