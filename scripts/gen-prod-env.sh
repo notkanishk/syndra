@@ -36,7 +36,7 @@ fi
 # server's runtime defaults to. The backend validates the tag in full at start;
 # this catches an obvious slip (underscore, space) before it is written.
 : "${DEPLOYMENT_LOCALE:?set DEPLOYMENT_LOCALE to the BCP 47 language tag of this deployment, e.g. en-GB}"
-if ! printf '%s' "$DEPLOYMENT_LOCALE" | grep -Eq '^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$'; then
+if ! printf '%s' "$DEPLOYMENT_LOCALE" | grep -Eq '^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$'; then
   echo "error: DEPLOYMENT_LOCALE=$DEPLOYMENT_LOCALE is not a BCP 47 language tag (for example en-GB)" >&2
   exit 1
 fi

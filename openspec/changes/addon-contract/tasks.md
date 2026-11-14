@@ -2592,5 +2592,18 @@ end to end) found no missing function; three regressions with one root cause
   `greeting.ts` and `usage.ts` no longer name `en-GB`. The zone-less Intl guard in
   `time.test.ts` now also fails a locale literal or a missing `displayLocale()`
   in `toLocale*String` / `Intl.DateTimeFormat` / `Intl.NumberFormat`.
-  Compose, `.env.example`, `gen-prod-env.sh` (`DEPLOYMENT_LOCALE`), DEPLOY.md and
+  Review round (14 Nov 2026): the layout passes the CONFIGURED tag (undefined
+  when unset or unread) and `runtimeLocale()` as a separate fallback, so a failed
+  first `/healthz` never pins the server's default (`setDisplayLocale` stores
+  only configured values, write-once, warns once on a different one; the
+  fallback is `setFallbackLocale`; no valid fallback means `undefined`, Intl's
+  own default on both sides). The browser trusts the server-validated tag.
+  Ordering is display: `sort.ts` collates in `displayLocale()` and
+  `textsort` in `locale.Language()` (sv: å after z). Numbers go through
+  `formatDecimal` (`Intl.NumberFormat`), not `toFixed`; ISO timestamps compare
+  with `compareInstants`, not `localeCompare`. The backend refuses the root and
+  private-use-only tags and any tag not already in canonical form (Go and ICU
+  disagree on tl, mo, grandfathered tags; checked against Node). The guard covers
+  every `Intl.<Name>(`, `toLocale*String` and `localeCompare` and any locale
+  literal. Compose, `.env.example`, `gen-prod-env.sh` (`DEPLOYMENT_LOCALE`), DEPLOY.md and
   NEXT.md (owner's cutover step: `LOCALE=en-GB` on staging and production).

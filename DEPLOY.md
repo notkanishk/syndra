@@ -128,7 +128,7 @@ su - runner -c 'cd /opt/syndra && \
   ./scripts/gen-prod-env.sh'
 ```
 
-`DEPLOYMENT_LOCALE` is the display locale (a BCP 47 tag, written to `.env` as `LOCALE`); the UI formats every date and number in it. **Production and staging must set `LOCALE=en-GB` before this ships**: the UI no longer has a locale of its own, so without it dates switch to the UI server's default format ("Aug 2", not "2 Aug"). An invalid tag refuses to start the backend.
+`DEPLOYMENT_LOCALE` is the display locale (a BCP 47 tag, written to `.env` as `LOCALE`); the UI formats every date, number and name order in it. It does not translate: the copy stays English, so an English variant (`en-GB`, `en-US`, `en-IN`) is the intended choice. Write the tag in canonical form; the backend refuses an invalid or non-canonical tag, the root tag (`und`) and a private-use-only tag (`x-...`). **Production and staging must set `LOCALE=en-GB` before this ships**: the UI no longer has a locale of its own, so without it dates switch to the UI server's default format ("Aug 2", not "2 Aug"). An invalid tag refuses to start the backend.
 
 Every variable here is required; the script exits if any is unset. `EXTERNAL_URL`
 is the address *Zitadel* will POST to, so it is the one value here that no local

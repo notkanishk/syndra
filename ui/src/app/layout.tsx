@@ -5,7 +5,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { Providers } from '@/components/providers';
 import { getSession } from '@/lib/session';
 import { fetchMakerspaceFormat } from '@/lib/zone';
-import { effectiveLocale } from '@/lib/locale';
+import { effectiveLocale, runtimeLocale } from '@/lib/locale';
 import { effectiveZone } from '@/lib/zone-effective';
 import { THEME_SCRIPT } from '@/lib/theme-script';
 import { VIEW_COOKIE, parseUiView } from '@/lib/ui-view-cookie';
@@ -92,7 +92,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="bg-ground text-ink antialiased">
-        <Providers timeZone={timeZone} locale={locale} hasSession={Boolean(session)} isOperator={session?.role === "admin"}>
+        <Providers timeZone={timeZone} locale={locale} fallbackLocale={runtimeLocale()} hasSession={Boolean(session)} isOperator={session?.role === "admin"}>
           {session ? <AppShell session={session} initialView={initialView}>{children}</AppShell> : children}
         </Providers>
       </body>

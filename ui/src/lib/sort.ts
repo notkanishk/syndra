@@ -1,3 +1,5 @@
+import { displayLocale } from "@/lib/locale";
+
 /**
  * Names in the order a person reads them: case and accents aside, "Lab 2"
  * before "Lab 10". Every dropdown or picker of names, and every list of places
@@ -5,9 +7,19 @@
  * its most logical order (soonest due, most recent) with sortable headings
  * (owner, 13 Nov 2026).
  */
-const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+/**
+ * In the deployment's locale (an order is a display: in sv, å sorts after z),
+ * the same one the backend's textsort collates in. One collator per locale,
+ * rebuilt only when the locale changes (it is learned once, at the first read).
+ */
+let collator: { locale: string | undefined; by: Intl.Collator } | undefined;
+const collatorFor = (): Intl.Collator => {
+  const locale = displayLocale();
+  if (collator?.locale !== locale || !collator) collator = { locale, by: new Intl.Collator(displayLocale(), { sensitivity: "base", numeric: true }) };
+  return collator.by;
+};
 
-export const compareNames = (a: string, b: string): number => collator.compare(a, b);
+export const compareNames = (a: string, b: string): number => collatorFor().compare(a, b);
 
 /**
  * A copy of `items` alphabetical by `name`. Equal names fall back to `id`

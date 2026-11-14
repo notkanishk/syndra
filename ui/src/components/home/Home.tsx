@@ -1,5 +1,6 @@
 "use client";
 
+import { compareInstants } from "@/lib/time";
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -154,7 +155,7 @@ export function Home({ session }: { session: SessionUser }) {
   // read drops the person and the row fades where it was.
   const missed = useMemo(
     () =>
-      [...(onboarding.data?.missed ?? [])].sort((a, b) => (b.joined ?? "").localeCompare(a.joined ?? "")),
+      [...(onboarding.data?.missed ?? [])].sort((a, b) => compareInstants(b.joined ?? "", a.joined ?? "")),
     [onboarding.data?.missed],
   );
   const gaps = useLeavingRows(missed, (person) => person.user_id, !onboarding.isLoading && !onboarding.error);
@@ -620,7 +621,7 @@ function OpenRequests({
   // A decided row keeps its seat and its outcome through the beat, so the count
   // is what is still open.
   const open = rows.filter((entry) => !resolved.has(entry.id)).length;
-  const newestFirst = [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const newestFirst = [...rows].sort((a, b) => compareInstants(b.created_at, a.created_at));
 
   return (
     <Card {...queue.listProps}>
@@ -693,7 +694,7 @@ function ExpiringSoon({
 }) {
   // No end date is the furthest end there is, so it goes last.
   const soonestFirst = [...grants].sort((a, b) =>
-    (a.expires_at ?? "￿").localeCompare(b.expires_at ?? "￿"),
+    compareInstants(a.expires_at ?? "￿", b.expires_at ?? "￿"),
   );
   return (
     <Card>

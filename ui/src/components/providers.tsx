@@ -7,7 +7,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NameResolverProvider } from "@/lib/queries/useNameResolver";
 import { getQueryClient } from "@/lib/query-client";
 import { ThemeProvider } from "@/lib/theme";
-import { setDisplayLocale } from "@/lib/locale";
+import { setDisplayLocale, setFallbackLocale } from "@/lib/locale";
 import { setMakerspaceZone } from "@/lib/time";
 
 /**
@@ -25,6 +25,7 @@ export function Providers({
   isOperator = false,
   timeZone,
   locale,
+  fallbackLocale,
 }: {
   children: React.ReactNode;
   /**
@@ -37,11 +38,14 @@ export function Providers({
   isOperator?: boolean;
   /** The backend's zone (TZ), read by the layout. Set during render, before any child formats a time. */
   timeZone?: string;
-  /** The locale the server renders with (lib/locale.ts), so the browser formats the same. Set during render too. */
+  /** The deployment's configured locale (LOCALE, lib/locale.ts), undefined when none. Set during render, before any child formats. */
   locale?: string;
+  /** The server runtime's default, for when none is configured, so the browser formats as the server did. */
+  fallbackLocale?: string;
 }) {
   setMakerspaceZone(timeZone);
   setDisplayLocale(locale);
+  setFallbackLocale(fallbackLocale);
 
   // The cache() inside getQueryClient ensures one client per request on the
   // server and one shared client for the browser session. Calling it directly

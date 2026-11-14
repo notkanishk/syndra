@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDecimal } from "@/lib/locale";
 import type { ReactNode } from "react";
 
 import { Reads } from "@/components/results/ReadResult";
@@ -45,7 +46,7 @@ const GB = 1024 ** 3;
 /** "18.4 GB", "50 GB": the card speaks in the limits' own unit. */
 function size(bytes: number): string {
   const n = bytes / GB;
-  return `${Number.isInteger(n) ? n : n.toFixed(1)} GB`;
+  return `${Number.isInteger(n) ? n : formatDecimal(n)} GB`;
 }
 
 function gbWords(bytes: number | undefined): string {

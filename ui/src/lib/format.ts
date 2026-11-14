@@ -3,7 +3,7 @@
 // who recognize project names better than internal keys. This module
 // centralizes the human-readable formatting so every view does it the same way.
 
-import { displayLocale } from "@/lib/locale";
+import { displayLocale, formatDecimal } from "@/lib/locale";
 import { humanizeKey, roleName } from "@/lib/names";
 import { civilDay, makerspaceZone, zoneTag, daysFromToday, endAfterDaysISO, isSameDay } from "@/lib/time";
 
@@ -263,7 +263,7 @@ export function formatBytes(bytes: number): string {
     unit += 1;
   }
   // One decimal place above bytes; nobody needs "1.0 B".
-  return unit === 0 ? `${Math.round(value)} B` : `${value.toFixed(1)} ${units[unit]}`;
+  return unit === 0 ? `${Math.round(value)} B` : `${formatDecimal(value)} ${units[unit]}`;
 }
 
 /**

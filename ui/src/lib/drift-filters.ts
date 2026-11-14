@@ -1,3 +1,4 @@
+import { compareInstants } from "@/lib/time";
 import { compareNames } from "@/lib/sort";
 import type { DriftTriageItem } from "@/lib/queries/useDrift";
 
@@ -205,12 +206,12 @@ export function sortDrift(
   names: DriftNames,
 ): DriftTriageItem[] {
   const newest = (a: DriftTriageItem, b: DriftTriageItem) =>
-    b.detected_at.localeCompare(a.detected_at);
+    compareInstants(b.detected_at, a.detected_at);
   const text = (item: DriftTriageItem) =>
     key === "who" ? names.who(item) : key === "what" ? names.what(item) : REASON_LABELS[driftReason(item)];
   return [...items].sort((a, b) => {
     // Found is a time: ascending is oldest first, and its first order is descending.
-    const order = key === "found" ? a.detected_at.localeCompare(b.detected_at) : compareNames(text(a), text(b));
+    const order = key === "found" ? compareInstants(a.detected_at, b.detected_at) : compareNames(text(a), text(b));
     return order * dir || newest(a, b);
   });
 }

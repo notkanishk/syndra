@@ -1,5 +1,7 @@
 import { validLocale } from "@/lib/locale";
 
+let droppedLogged = false;
+
 /**
  * The deployment's zone, from the backend (`time_zone` on /healthz: the one
  * unauthenticated read that exists, answered with or without the database).
@@ -27,7 +29,12 @@ export async function fetchMakerspaceFormat(): Promise<{ zone: string | undefine
       signal: AbortSignal.timeout(3000),
     });
     const body = (await res.json()) as { time_zone?: unknown; locale?: unknown };
-    return { zone: validZone(body.time_zone), locale: validLocale(body.locale) };
+    const locale = validLocale(body.locale);
+    if (body.locale && !locale && !droppedLogged) {
+      droppedLogged = true; // once: /healthz is read on every render
+      console.warn(`[locale] ignoring the backend's locale ${JSON.stringify(body.locale)}: not a well-formed BCP 47 tag`);
+    }
+    return { zone: validZone(body.time_zone), locale };
   } catch {
     return { zone: undefined, locale: undefined };
   }

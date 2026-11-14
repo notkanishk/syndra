@@ -208,24 +208,35 @@ describe("a time is never shown in the browser's zone", () => {
 });
 
 /**
- * The locale is the deployment's (lib/locale.ts), never a literal: a date or
- * number formatted in a locale written in code ignores LOCALE, and one with no
+ * The locale is the deployment's (lib/locale.ts), never a literal: a date,
+ * number or order in a locale written in code ignores LOCALE, and one with no
  * locale argument reads the browser's, so server and client disagree. Every
- * toLocale*String and Intl.DateTimeFormat / Intl.NumberFormat call passes
- * displayLocale(). A call that is never shown to a person (its output is parsed
- * for numbers) says so with `locale: not displayed` on the same line.
+ * toLocale*String, every Intl.<Name>( constructor and every localeCompare
+ * passes displayLocale(). A call whose output is never shown to a person (its
+ * parts are parsed for numbers) says so with `locale: not displayed` on the
+ * same line.
  */
-describe("a date or number is never shown in a locale written in code", () => {
-  const namesTheLocale = (call: string) => /^[^(]*\(\s*displayLocale\(\)/.test(call);
+describe("a date, number or order is never shown in a locale written in code", () => {
+  const namesTheLocale = (call: string) =>
+    /^\s*(?:\.)?localeCompare\b/.test(call) || /\blocaleCompare\s*\(/.test(call)
+      ? /,\s*displayLocale\(\)\s*[,)]/.test(call)
+      : /^[^(]*\(\s*displayLocale\(\)/.test(call);
   it("recognises the shared accessor, and refuses a literal, undefined or nothing", () => {
     expect(namesTheLocale("toLocaleDateString(displayLocale(), { })")).toBe(true);
     expect(namesTheLocale("toLocaleDateString(\n  displayLocale(),")).toBe(true);
+    expect(namesTheLocale("Intl.Collator(displayLocale(), { })")).toBe(true);
+    expect(namesTheLocale("a.localeCompare(b, displayLocale())")).toBe(true);
     expect(namesTheLocale('toLocaleDateString("en-GB", { })')).toBe(false);
+    expect(namesTheLocale('Intl.Collator("sv")')).toBe(false);
     expect(namesTheLocale("toLocaleString(undefined, { })")).toBe(false);
     expect(namesTheLocale("toLocaleString()")).toBe(false);
     expect(namesTheLocale("Intl.NumberFormat(someLocale)")).toBe(false);
+    expect(namesTheLocale("Intl.PluralRules()")).toBe(false);
+    expect(namesTheLocale("a.localeCompare(b)")).toBe(false);
+    expect(namesTheLocale("a.localeCompare(b, undefined, { sensitivity: 'base' })")).toBe(false);
   });
-  const CALL = /(toLocale(?:Time|Date)?String|Intl\.(?:DateTimeFormat|NumberFormat))\s*\(/g;
+  // Intl.getCanonicalLocales and supportedValuesOf take no locale to display in.
+  const CALL = /(toLocale(?:Time|Date)?String|\blocaleCompare|Intl\.(?!getCanonicalLocales\b|supportedValuesOf\b)[A-Za-z]+)\s*\(/g;
   it("passes displayLocale() at every call", () => {
     const found: string[] = [];
     for (const file of sources(SRC)) {
@@ -240,13 +251,18 @@ describe("a date or number is never shown in a locale written in code", () => {
     }
     expect(found).toEqual([]);
   });
-  it("leaves no en-GB or en-US literal in the product", () => {
+  // Any language tag written as a string in the product, not just en-GB / en-US.
+  const TAG = /["'`][a-z]{2,3}(?:-[A-Z][a-z]{3})?-[A-Z]{2}["'`]/;
+  it("leaves no locale literal in the product", () => {
+    expect(TAG.test('"sv-SE"')).toBe(true);
+    expect(TAG.test('"zh-Hant-TW"')).toBe(true);
+    expect(TAG.test('"data-state"')).toBe(false);
     const found: string[] = [];
     for (const file of sources(SRC)) {
       if (file.endsWith("src/test-setup.ts")) continue; // tests state their locale
       const text = readFileSync(file, "utf8");
       text.split("\n").forEach((l, i) => {
-        if (/["'`]en-(GB|US)["'`]/.test(l) && !/locale: not displayed/.test(l)) found.push(`${file.slice(SRC.length + 1)}:${i + 1}`);
+        if (TAG.test(l) && !/locale: not displayed/.test(l)) found.push(`${file.slice(SRC.length + 1)}:${i + 1}`);
       });
     }
     expect(found).toEqual([]);

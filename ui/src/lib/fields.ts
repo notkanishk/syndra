@@ -1,3 +1,5 @@
+import { formatDecimal } from "@/lib/locale";
+
 /**
  * The UI reads a target's fields by ROLE, never by name (addon-contract §3).
  *
@@ -57,7 +59,7 @@ const MB = 1024 ** 2;
 const KB = 1024;
 
 function plain(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+  return Number.isInteger(n) ? String(n) : formatDecimal(n);
 }
 
 /**

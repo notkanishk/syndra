@@ -34,6 +34,8 @@ export const zoneTag = (): string => (known ? "" : " UTC");
 const wallClockIn = (timeZone: string) =>
   new Intl.DateTimeFormat("en-US", { // locale: not displayed, only formatToParts' numbers are read
     timeZone,
+    calendar: "gregory", // the parts are read as Gregorian numbers in Latin digits, whatever the display locale is
+    numberingSystem: "latn",
     hourCycle: "h23",
     year: "numeric",
     month: "2-digit",
@@ -83,6 +85,9 @@ export function resetMakerspaceZoneForTests(): void {
   warned = false;
   wallClock = wallClockIn(zone);
 }
+
+/** Order two instants written as RFC 3339 strings in one zone (the API's): by character, which is by time. Not a locale's order, so never localeCompare. */
+export const compareInstants = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
