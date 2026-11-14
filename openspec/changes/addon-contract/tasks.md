@@ -2346,6 +2346,7 @@ able to trace down the individual." Approved: Insights names who, what
 names a person is kept with whom it names, members unchanged. Declined: an audit
 record of each view.
 
+- [x] 7j One unambiguous timestamp in every log line. *Done (14 Nov 2026):* every Go service logs `2006-01-02T15:04:05.000Z07:00` in `time.Local` (follows `TZ`; unset is `Z`), replacing the backend's offset-less local time and the add-on's offset-less UTC (`LUTC` dropped). One copy per module, because the backend and add-ons share no Go module (`backend/internal/logstamp.Install`, `addons/truenas` and `addons/reference/cmd/reference-addon` `stampLogs`), each with the same prefix regexp test and a same-unix-instant test across zones. The add-on's `http.Server.ErrorLog` now writes through the stamped logger (it had no timestamp at all), and the backend's five bare `fmt.Print*` start/stop lines became tagged `log` lines. Storage and wire audit: no `timestamp without time zone` in any migration; wire instants are RFC 3339 (`fingerprint.go` formats UTC with `Z`); remaining `Format` calls are dates or display text in `clock.Loc`. `ui/src/lib/format.ts` pins `Asia/Kolkata`; `components/ui/Time.tsx` and `apps/DebugMode.tsx` use the browser zone (reported, owner decision). `DEPLOY.md` Operations states the rule and the unix-time conversion.
 - [x] 7i Admins can trace usage to a person (design §9.6, §9.7, §9.8
   annotated; copy guide §15).
   *Done (14 Nov 2026, slice 7i; PR 180 with its review round):*

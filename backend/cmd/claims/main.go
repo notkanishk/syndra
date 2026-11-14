@@ -11,7 +11,6 @@ import (
 
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -21,10 +20,12 @@ import (
 	"time"
 
 	"syndra/internal/claimserve"
+	"syndra/internal/logstamp"
 	"syndra/internal/ratelimit"
 )
 
 func main() {
+	logstamp.Install()
 	healthcheck := flag.Bool("healthcheck", false, "exit 0 when this container's /healthz/claims answers, for the compose healthcheck")
 	flag.Parse()
 	if *healthcheck {
@@ -47,7 +48,7 @@ func main() {
 	proc.Limit = ratelimit.FromEnv(rdb, os.Getenv)
 	srv := claimserve.NewServer(claimserve.Addr(), proc.Router())
 	go func() {
-		fmt.Printf("Claims data plane listening on %s\n", srv.Addr)
+		log.Printf("[DATA PLANE] listening on %s", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("[DATA PLANE] server: %v", err)
 		}

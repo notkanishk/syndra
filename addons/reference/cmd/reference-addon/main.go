@@ -23,6 +23,7 @@ func (n *names) String() string     { return strings.Join(*n, ",") }
 func (n *names) Set(v string) error { *n = append(*n, strings.Split(v, ",")...); return nil }
 
 func main() {
+	stampLogs()
 	listen := flag.String("listen", "127.0.0.1:8443", "address to serve on")
 	target := flag.String("target", "reference", "the target name: the salt of the key derivation")
 	secretFile := flag.String("secret-file", "", "file holding the per-target secret (trimmed UTF-8)")
