@@ -603,7 +603,7 @@ func TestAReplayedOperationIdReturnsTheRecordedResult(t *testing.T) {
 // not real until it has been watched to fail, and two of these escaped a version
 // of it that had already been reviewed. The empty-fixture case is the one that
 // matters most, because it was reachable today — `orEmptyList` answers `[]`
-// whenever a test sets no users, and `lookupOne` always sends a filter.
+// whenever a test sets no users, and `subjectWhere` always sends a filter.
 func TestTheFakeRefusesAQueryItDoesNotImplement(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -670,7 +670,7 @@ func TestTheFakeStillAnswersTheQueriesTheAddonSends(t *testing.T) {
 	if got := filterRows(rows, []any{[]any{}, map[string]any{"limit": 5001}}); got != rows {
 		t.Errorf("an unfiltered query must answer with everything, got %s", got)
 	}
-	// `lookupOne`: one equality, one row.
+	// `subjectWhere`: one equality, one row.
 	got := filterRows(rows, []any{[]any{[]any{"uid", "=", int64(3002)}}, map[string]any{"limit": 2}})
 	if !strings.Contains(got, "seth") || strings.Contains(got, "charlotte") {
 		t.Errorf("want only seth, got %s", got)

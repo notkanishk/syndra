@@ -320,14 +320,14 @@ func (c BindingConflict) words() (detail, next string) {
 		return fmt.Sprintf("An account named %s already exists and is bound to another subject.", c.Username),
 			"If it is not theirs, release it from that subject, then adopt it here."
 	case c.numberHeld:
-		return fmt.Sprintf("The account %s, bound to this subject, is gone, and its number is now held by a different account, %s.", c.was, c.Username),
-			fmt.Sprintf("Release this subject's binding; the next apply creates a new account for them. Adopt %s instead only if it is theirs.", c.Username)
+		return fmt.Sprintf("The account %s, recorded for this person, is gone, and its number is now held by a different account, %s.", c.was, c.Username),
+			fmt.Sprintf("Stop tracking this person's old account; the next change creates a new one for them. Adopt %s instead only if it is theirs.", c.Username)
 	case c.selfUnknown:
 		return fmt.Sprintf("An account named %s already exists, and Syndra can't check yet whether it is the account this add-on signs in to the app with.", c.Username),
 			"Try again shortly."
 	default:
-		return fmt.Sprintf("The name %s this subject is bound to is now held by a different account.", c.Username),
-			"Release this subject's binding first, then adopt that account only if it is theirs, or rename it in the app."
+		return fmt.Sprintf("The name %s this person's account is recorded under is now held by a different account.", c.Username),
+			"Stop tracking this person's old account first, then adopt that account only if it is theirs, or rename it on TrueNAS."
 	}
 }
 
@@ -627,8 +627,13 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 			Consequence: "Nothing was changed.",
 		}, http.StatusUnprocessableEntity, nil
 	}
+	if errors.Is(err, errAmbiguousAccount) {
+		// Two accounts on the binding's key: the operations' refusal, in their words.
+		return ApplyOutcome{}, http.StatusConflict, lookupRefusal(err)
+	}
 	if err != nil {
-		return ApplyOutcome{}, http.StatusBadGateway, err
+		// What the lookup's failure was: a rate-limited TrueNAS is a 429, unreachable a 503.
+		return ApplyOutcome{}, statusFor(err), err
 	}
 	if conflict != nil {
 		// Halted, and surfacing THE SAME adoption action the unmanaged
@@ -793,88 +798,12 @@ func (s *server) rememberWishes(req ApplyRequest, desired desiredState, out Appl
 	}
 }
 
-// inIDRange is whether n is a number this add-on hands out (identity.go). Those numbers are never
-// handed out twice (ClaimID's high-water mark), so one names the same account for good; a number
-// outside it can come back after a delete, so it never names an account by itself (boundAccount).
-func inIDRange(n, floor, ceiling int64) bool { return n >= floor && n <= ceiling }
-
-// boundAccount is the rule for which account a binding names, for apply (locate), plan and
-// resolveBinding (standing, statistics, accountBound). Plan asks it of its snapshot and apply of the
-// target, so the plan never says "absent" (or "creates") for an account the apply would find, or the
-// other way round. It is not yet the rule of the account operations: (*server).operatedAccount goes
-// through recordID, which has its own, and so do storageStatus, smbActivity and the backend's drift
-// matching (slice 7t, one account identity).
-// byName and byUID look up one account by an exact key. It returns the account
-// (nil when there is none), the binding as it should now read, and a conflict
-// when the name is held by a different account of ours, or, for a uid outside this add-on's range,
-// when the recorded name is gone and the number is held by another name.
-//
-// What a binding's uid means decides the rest. In range, it is a real uid that is never reused: the
-// account it names is that one, so a rename is followed. Outside the range (an adopted hand-made
-// account, uid_kind "account"; or a contract-1 record key, which names nothing by number) a number
-// can be handed to a new account after a delete, so it is only ever believed alongside the
-// recorded name: name and number agree, or the binding halts for an operator (BindingConflict) and
-// is never rebound to whoever holds the number.
-func boundAccount(binding Binding, floor, ceiling int64,
-	byName func(string) (*Subject, error), byUID func(int64) (*Subject, error),
-) (*Subject, Binding, *BindingConflict, error) {
-	found, err := byName(binding.Username)
-	if err != nil {
-		return nil, binding, nil, err
-	}
-	owned := binding.ownsUID(floor, ceiling)
-	if found != nil {
-		if owned && found.UID != binding.UID {
-			// A name some other account now holds (the original was deleted
-			// and the name reused). Converging it would hand this subject's
-			// entitlements to a stranger, so it halts like any foreign name.
-			return nil, binding, &BindingConflict{Username: found.Username, AccountID: accountID(found.UID)}, nil
-		}
-		if !owned {
-			// A legacy binding holding a record key (or a real uid it never said was one): the name
-			// found the account, so the real uid, marked, and the next pass is guarded by the check above.
-			binding.UID = found.UID
-		}
-		binding.UIDKind = uidKindAccount
-		return found, binding, nil, nil
-	}
-	if !owned {
-		// A legacy uid of 0 or a record key must never match root or a
-		// built-in account: with no name hit the account is missing.
-		return nil, binding, nil, nil
-	}
-	// The name moved. A stable uid whose username changed out of band is a
-	// RENAME, not a missing account: reporting it as missing would create a
-	// replacement while the original kept the home data, or, for a subject
-	// wanted off, leave the original unlocked.
-	renamed, err := byUID(binding.UID)
-	if err != nil {
-		return nil, binding, nil, err
-	}
-	if renamed != nil {
-		if !inIDRange(binding.UID, floor, ceiling) {
-			// A number outside the range may have been handed to a new account since this one was
-			// deleted: not a rename, whatever else is true. An operator decides; nothing is written
-			// to the account that holds the number and nothing is created.
-			return nil, binding, &BindingConflict{Username: renamed.Username, AccountID: accountID(renamed.UID),
-				numberHeld: true, was: binding.Username}, nil
-		}
-		binding.Username = renamed.Username
-		binding.UIDKind = uidKindAccount
-		return renamed, binding, nil, nil
-	}
-	// Bound, and neither the name nor the uid is there. The account was
-	// deleted out of band; convergence re-creates it under the recorded name
-	// rather than re-deriving, because the recorded name is what every ACL and
-	// share still refers to.
-	return nil, binding, nil, nil
-}
-
 // locate finds the subject's account, by binding first and derivation second.
 //
 // The binding is authoritative and the derivation is a recovery path. Asking
 // the other way round would rename an account every time somebody's email
-// changed, which is the one thing §11 forbids.
+// changed, which is the one thing §11 forbids. The bound half is resolveLive
+// (identity_resolve.go), the rule every caller asks; the derivation is locate's.
 // The fourth return value says a lookup came back cut short. Each lookup here
 // is one account by an exact key, filtered at the target, so that only happens
 // when a target ignores the filter and sends its whole list: carried out rather
@@ -882,34 +811,19 @@ func boundAccount(binding Binding, floor, ceiling int64,
 // The fifth says the account found is unbound and this subject's own, left by
 // a create in doubt (leftByCrashedCreate), for applyOne to bind.
 func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, bool, bool, error) {
-	binding, bound, err := s.store.GetBinding(req.Subject)
+	who := applyCaller(req)
+	r, bound, err := s.resolveLive(req.Subject, &who)
 	if err != nil {
 		return nil, Binding{}, nil, false, false, err
 	}
 	if bound {
-		// Each lookup is one account by an exact key; a cut-short answer only
-		// matters when the conclusion is that the account is not there.
-		cut := false
-		lookup := func(field string, value any) (*Subject, error) {
-			found, c, err := s.subjectWhere(field, value)
-			cut = cut || c
-			return found, err
-		}
-		floor, ceiling := s.idRange()
-		found, resolved, conflict, err := boundAccount(binding, floor, ceiling,
-			func(name string) (*Subject, error) { return lookup("username", name) },
-			func(uid int64) (*Subject, error) { return lookup("uid", uid) })
-		if err != nil {
-			return nil, Binding{}, nil, false, false, err
-		}
-		if resolved.Username != binding.Username || resolved.UID != binding.UID || resolved.UIDKind != binding.UIDKind {
-			// A rename, or a legacy binding's real uid and marker: recorded once, so the next
-			// pass finds the account by number and is guarded by its uid.
-			if err := s.mutate(applyCaller(req).on(resolved.UID), "store.bind", func() error { return s.store.PutBinding(resolved) }); err != nil {
-				logStoreFailure("binding", req.Subject, err)
+		if r.Account != nil {
+			// The converge diffs and writes groups by name: the apply's one group read.
+			if err := s.nameGroupsOf(r.Account); err != nil {
+				return nil, Binding{}, nil, false, false, err
 			}
 		}
-		return found, resolved, conflict, found == nil && conflict == nil && cut, false, nil
+		return r.Account, r.Binding, r.Conflict, r.Cut, false, nil
 	}
 
 	if strings.TrimSpace(req.Email) == "" {
@@ -1403,25 +1317,27 @@ func (s *server) readBack(username string) (*Subject, error) {
 	return found, nil
 }
 
-// subjectWhere reads the one account whose field equals value, or nil when the
-// target has none. Filtered at the target: the whole account list per lookup was
-// a 100-person cascade's worth of full reads. The key comparison is kept on this
-// side as well, so a target that ignored the filter cannot hand back the wrong
-// account; the second return is that read's truncation, which is only ever set
-// by such a target (an exact key matches one row) and stops an absence being
-// concluded from a list that was cut short.
+// subjectWhere is accountWhere with the account's groups named (nameGroups), for the apply, which
+// converges them: the one group read a lookup pays for, and only when it found an account.
 func (s *server) subjectWhere(field string, value any) (*Subject, bool, error) {
-	snap, err := s.readSubjectsWhere([]any{[]any{field, "=", value}})
+	found, cut, err := s.accountWhere(field, value)
+	if err != nil || found == nil {
+		return found, cut, err
+	}
+	if err := s.nameGroupsOf(found); err != nil {
+		return nil, cut, err
+	}
+	return found, cut, nil
+}
+
+// nameGroupsOf names one account's groups from a read of the group table.
+func (s *server) nameGroupsOf(account *Subject) error {
+	names, _, builtin, err := s.groupIndex()
 	if err != nil {
-		return nil, false, err
+		return err
 	}
-	for i := range snap.Subjects {
-		got := snap.Subjects[i]
-		if (field == "username" && got.Username == value) || (field == "uid" && got.UID == value) {
-			return &snap.Subjects[i], snap.Truncated, nil
-		}
-	}
-	return nil, snap.Truncated, nil
+	account.nameGroups(names, builtin)
+	return nil
 }
 
 // emptyGroupNamed finds a group by name that nobody belongs to, primary or

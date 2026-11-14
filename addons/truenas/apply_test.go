@@ -679,7 +679,7 @@ func TestAReusedUsernameIsNotThisSubjectsAccount(t *testing.T) {
 	}
 	// And the account after it may be a stranger's (the name was reused), so
 	// the step never reads as "adopt it": only if it is theirs.
-	if !strings.Contains(out.Consequence, "Release this subject's binding first") ||
+	if !strings.Contains(out.Consequence, "Stop tracking this person's old account first") ||
 		!strings.Contains(out.Consequence, "adopt that account only if it is theirs") {
 		t.Errorf("the next step is a release, then an adoption only of their own account, got %q", out.Consequence)
 	}

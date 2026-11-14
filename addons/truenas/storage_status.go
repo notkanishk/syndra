@@ -82,58 +82,37 @@ type Meter struct {
 
 // storageStatus reads the caller's own account state and usage.
 func (s *server) storageStatus(req OperationRequest) (OperationResult, int, error) {
-	binding, refused, err := s.operatedAccount(req.Subject)
+	// A read: resolved, never rewritten (operatedAccount). The account comes
+	// from a read of the NAS now, not the subjects mirror: this is the field a
+	// member is about to act on, and that mirror could be six hours old,
+	// telling somebody to set a password they set this morning. Its own copy
+	// (fresh.go) is forgotten by every write, so a password set through this
+	// add-on shows on the next read.
+	r, refused, err := s.operatedAccount(req.Subject, nil)
 	if err != nil {
 		return OperationResult{}, refused, err
 	}
 
 	status := StorageStatus{Meters: []Meter{}, Places: []Place{}}
-
-	// Account state from a read of the NAS, not the subjects mirror. This is
-	// the field a member is about to act on, and that mirror could be six hours
-	// old — telling somebody to set a password they set this morning. Its own
-	// copy (fresh.go) is forgotten by every write, so a password set through
-	// this add-on shows on the next read.
-	var accounts []struct {
-		UID              int64   `json:"uid"`
-		SMB              bool    `json:"smb"`
-		Locked           bool    `json:"locked"`
-		PasswordDisabled bool    `json:"password_disabled"`
-		Groups           []apiID `json:"groups"`
-		Home             string  `json:"home"`
-	}
-	if err := s.nas.call("user.query",
-		[]any{[]any{[]any{"username", "=", binding.Username}},
-			map[string]any{"select": []string{"uid", "smb", "locked", "password_disabled", "groups", "home"}}},
-		&accounts); err != nil {
-		return OperationResult{}, statusFor(err), fmt.Errorf("your account could not be read")
-	}
-	if len(accounts) == 0 {
-		// Bound to an account the target does not have. Said plainly rather
-		// than as a usage report of nothing, because the fix is an operator's.
-		return OperationResult{}, http.StatusUnprocessableEntity,
-			fmt.Errorf("the account this binding names is not on the target")
-	}
-	account := accounts[0]
 	// One account, one standing: usable and needs_new_password are read off
 	// the same Subject the standing is, so the reply never says both.
-	subject := Subject{Username: binding.Username, UID: account.UID,
-		Enabled: !account.Locked, SMBEnabled: account.SMB, PasswordSet: !account.PasswordDisabled,
-		wantsSMB: binding.WantsSMB != nil && *binding.WantsSMB, wantsEnabled: binding.WantsEnabled}
+	subject := *r.Account
+	subject.wantsSMB = r.Binding.WantsSMB != nil && *r.Binding.WantsSMB
+	subject.wantsEnabled = r.Binding.WantsEnabled
 	status.Standing = standingOf(&subject)
 	status.Usable = status.Standing.Usable
-	status.NeedsPassword = account.PasswordDisabled
+	status.NeedsPassword = !subject.PasswordSet
 	status.NeedsNewPassword = subject.needsNewPassword()
 
 	// Best-effort like usage: whether the account works is the urgent half.
-	if places, seen, err := s.memberPlaces(req.Fresh, account.UID, account.Groups, homeOf(account.Home)); err == nil {
+	if places, seen, err := s.memberPlaces(req.Fresh, subject.UID, subject.groupIDs, subject.Home); err == nil {
 		status.Places, status.PlacesReadable, status.placesSeen = places, true, seen
 	}
 
 	// Usage is best-effort: a member who cannot be told their usage can still
 	// be told whether their account works, and that is the more urgent half.
 	// What was read is sent; QuotaRead is true only when all of it was.
-	meters, err := s.shareUsage(account.UID)
+	meters, err := s.shareUsage(subject.UID)
 	if meters != nil {
 		status.Meters = meters
 	}

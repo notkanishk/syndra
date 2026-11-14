@@ -128,6 +128,29 @@ func (s *server) readSubjects() (Snapshot, error) {
 // matters: its Snapshot.Truncated is false unless the target sent more rows
 // than a lookup of a unique key can match.
 func (s *server) readSubjectsWhere(filters []any) (Snapshot, error) {
+	subjects, truncated, err := s.readAccountsWhere(filters)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	names, byName, builtin, err := s.groupIndex()
+	if err != nil {
+		// A read that cannot name groups is a read whose group sets are
+		// meaningless to the resolver. Reported as a failure rather than
+		// returned with numbers in it, because the caller would diff those
+		// numbers against names and find everything drifting.
+		return Snapshot{}, err
+	}
+	for i := range subjects {
+		subjects[i].nameGroups(names, builtin)
+	}
+	return Snapshot{TakenAt: time.Now().UTC(), Subjects: subjects, Truncated: truncated,
+		groupsByName: byName, builtinGroups: builtin}, nil
+}
+
+// readAccountsWhere reads the user table alone: every field but the group names, which need the
+// group table (nameGroups). Naming an account needs only its uid and name, so the identity lookup
+// (accountWhere) stops here, and an operation never waits on the group table it does not use.
+func (s *server) readAccountsWhere(filters []any) ([]Subject, bool, error) {
 	var users []nasUser
 	// `select` names every field, and only these. The two hash fields are
 	// absent by construction rather than stripped afterwards — stripping is a
@@ -140,7 +163,7 @@ func (s *server) readSubjectsWhere(filters []any) (Snapshot, error) {
 		},
 	}
 	if err := s.nas.call("user.query", query, &users); err != nil {
-		return Snapshot{}, err
+		return nil, false, err
 	}
 
 	// Truncation is decided on what the TARGET sent, before anything is
@@ -159,35 +182,11 @@ func (s *server) readSubjectsWhere(filters []any) (Snapshot, error) {
 	// what came back costs one pass over a list that is already in memory.
 	users = withoutSystemAccounts(users)
 
-	names, byName, builtin, err := s.groupIndex()
-	if err != nil {
-		// A read that cannot name groups is a read whose group sets are
-		// meaningless to the resolver. Reported as a failure rather than
-		// returned with numbers in it, because the caller would diff those
-		// numbers against names and find everything drifting.
-		return Snapshot{}, err
-	}
-
 	selfName, _, _ := s.nas.Self()
 	subjects := make([]Subject, 0, len(users))
 	for _, u := range users {
-		groups := make([]string, 0, len(u.Groups))
-		var builtinIDs []apiID
-		for _, id := range u.Groups {
-			if name, ok := names[id.String()]; ok && builtin[name] {
-				// Not reported: no mapping can explain it, so a diff would call
-				// it drift forever. Kept, so the write carries it through.
-				builtinIDs = append(builtinIDs, id)
-			} else if ok {
-				groups = append(groups, name)
-			}
-			// An id with no name is skipped rather than rendered as a number.
-			// It is a group the resolver could never have asked for, so
-			// including it would be reporting drift against a mapping that
-			// cannot exist.
-		}
 		subjects = append(subjects, Subject{
-			ID: u.ID, Username: u.Username, UID: u.UID, Groups: groups,
+			ID: u.ID, Username: u.Username, UID: u.UID,
 			// `locked` is the NAS's word for it; `enabled` is Syndra's, and the
 			// translation belongs here rather than in the backend, which does
 			// not know what TrueNAS calls things.
@@ -201,13 +200,31 @@ func (s *server) readSubjectsWhere(filters []any) (Snapshot, error) {
 			// rather than hidden: an operator who sees the account they know
 			// exists simply vanish from the inventory learns nothing, while one
 			// who sees it labelled learns why it is not on offer.
-			Self:          selfName != "" && strings.EqualFold(u.Username, selfName),
-			Home:          homeOf(u.Home),
-			builtinGroups: builtinIDs,
+			Self:     selfName != "" && strings.EqualFold(u.Username, selfName),
+			Home:     homeOf(u.Home),
+			groupIDs: u.Groups,
 		})
 	}
-	return Snapshot{TakenAt: time.Now().UTC(), Subjects: subjects, Truncated: truncated,
-		groupsByName: byName, builtinGroups: builtin}, nil
+	return subjects, truncated, nil
+}
+
+// nameGroups names an account's groups from one read of the group table (groupIndex): the managed
+// ones by name in Groups, the machine's own kept by record id in builtinGroups.
+func (sub *Subject) nameGroups(names map[string]string, builtin map[string]bool) {
+	sub.Groups, sub.builtinGroups = make([]string, 0, len(sub.groupIDs)), nil
+	for _, id := range sub.groupIDs {
+		if name, ok := names[id.String()]; ok && builtin[name] {
+			// Not reported: no mapping can explain it, so a diff would call
+			// it drift forever. Kept, so the write carries it through.
+			sub.builtinGroups = append(sub.builtinGroups, id)
+		} else if ok {
+			sub.Groups = append(sub.Groups, name)
+		}
+		// An id with no name is skipped rather than rendered as a number.
+		// It is a group the resolver could never have asked for, so
+		// including it would be reporting drift against a mapping that
+		// cannot exist.
+	}
 }
 
 // systemUIDCeiling is where the operating system's accounts stop.
@@ -405,84 +422,19 @@ func groupIDs(names []string, byName map[string]apiID, builtin map[string]bool) 
 	return ids, nil
 }
 
-// recordID resolves a bound account's record key.
-//
-// By UID first, because that is the number a binding records precisely so it
-// can survive a rename. The apply path already follows a stable uid whose
-// username moved out of band and treats it as a rename rather than a missing
-// account (6.9); the one-shot operations went through the NAME instead, so an
-// out-of-band rename made `password.set`, `password.rotate` and `account.purge`
-// answer "the target has no account named X" until an apply happened to run and
-// re-sync the binding.
-//
-// This is NOT apply's rule (boundAccount): it follows any uid, whatever its range, and falls back
-// to the name only when there is none or the uid finds nothing. So for an adopted account outside
-// the range this add-on hands out, a number TrueNAS has since given to another account is followed
-// here where apply would halt. Slice 7t (one account identity) replaces it with the one rule.
-//
-// The name is the fallback, for a binding recorded before a uid was, and it is
-// also what a uid of zero would otherwise match: uid 0 is root.
-//
-// Read at the moment of use rather than stored, so there is no second copy of
-// the record key to go stale.
-func (s *server) recordID(b Binding) (apiID, error) {
-	if b.UID != 0 {
-		id, err := s.lookupOne("uid", b.UID)
-		if err == nil {
-			return id, nil
-		}
-		if !errors.Is(err, errNoSuchAccount) {
-			// Ambiguity included, and deliberately. Two accounts sharing a uid
-			// is a question about which one, and falling through to the name
-			// would answer it by changing the subject — quietly resolving the
-			// operation against whichever account happened to hold the recorded
-			// name, on a path whose next call sets a credential.
-			return apiID{}, err
-		}
-		// Gone by uid. Fall through: the account may have been recreated under
-		// the recorded name, which the binding still points at.
-	}
-	id, err := s.lookupOne("username", b.Username)
-	if err != nil {
-		return apiID{}, err
-	}
-	return id, nil
-}
+// errAmbiguousAccount is two accounts matching one exact key (accountWhere, accountIndex): a
+// question about which one, and the answer is never "whichever the next query returns".
+var errAmbiguousAccount = errors.New("more than one account on TrueNAS matches")
 
-// The two ways a lookup can fail to name one account, kept apart because the
-// caller does different things with them. Absence is recoverable — try the
-// other field — and ambiguity is not: two accounts matching is a question
-// about which one, and the answer is never "whichever the next query returns".
-var (
-	errNoSuchAccount    = errors.New("the target has no such account")
-	errAmbiguousAccount = errors.New("more than one account on the target matches")
-)
+// errAccountNotFound is a lookup that could not tell whether the account is there: the sentence for
+// a cut-short read and any other lookup failure (lookupRefusal).
+var errAccountNotFound = errors.New("This person's account could not be found on TrueNAS.")
 
-// lookupOne resolves exactly one account by one field, refusing an ambiguous
-// answer rather than picking from it.
-func (s *server) lookupOne(field string, value any) (apiID, error) {
-	var rows []nasUser
-	// limit 2 rather than 1: one row is not evidence that only one matched, and
-	// the second row is the whole reason this function can refuse.
-	query := []any{
-		[]any{[]any{field, "=", value}},
-		map[string]any{"select": []string{"id", "username", "uid"}, "limit": 2},
-	}
-	if err := s.nas.call("user.query", query, &rows); err != nil {
-		return apiID{}, err
-	}
-	switch {
-	case len(rows) > 1:
-		return apiID{}, fmt.Errorf("%w: %s=%v matched %d", errAmbiguousAccount, field, value, len(rows))
-	case len(rows) == 0:
-		return apiID{}, fmt.Errorf("%w: %s=%v", errNoSuchAccount, field, value)
-	case !rows[0].ID.known():
-		// Matched and unusable. Reported as absence, because the recoverable
-		// reading is the true one: this field cannot name the record key, and
-		// the other field is still worth asking.
-		return apiID{}, fmt.Errorf("%w: %s=%v answered without a record id", errNoSuchAccount, field, value)
-	}
-	return rows[0].ID, nil
+// ambiguityWords are errAmbiguousAccount as an operator reads it, once for the operations, the
+// apply (lookupRefusal) and the plan.
+func ambiguityWords() (detail, next string) {
+	return "More than one account on TrueNAS has the name or number this person's account is recorded under.",
+		"Rename or remove one of them on TrueNAS, then try again."
 }
 
 // Ping is the reachability probe `/health` uses.
@@ -516,12 +468,11 @@ func (n *NAS) Ping() (string, error) {
 // unconfirmed-revocations surface for ever, when the truthful answer is that
 // there was nothing there to revoke and no retry will change it.
 //
-// Both lookup failures are deterministic and neither is a target fault, so both
-// are 4xx: the backend classifies those as rejected, which is what they are.
+// An ambiguous lookup is deterministic and not a target fault, so it is a 4xx:
+// the backend classifies those as rejected, which is what it is. (An account
+// that is gone is operatedAccount's 422.)
 func statusForLookup(err error) int {
 	switch {
-	case errors.Is(err, errNoSuchAccount):
-		return http.StatusUnprocessableEntity
 	case errors.Is(err, errAmbiguousAccount):
 		// A different refusal from absence. Two accounts matching is a question
 		// about which one, and an operator has to answer it before anything
@@ -542,11 +493,10 @@ func lookupRefusal(err error) error {
 	case errors.Is(err, ErrNotSent):
 		// Nothing was asked, so nothing was done: kept, so the reply says so.
 		return ErrNotSent
-	case errors.Is(err, errNoSuchAccount):
-		return fmt.Errorf("the bound account no longer exists on the target")
 	case errors.Is(err, errAmbiguousAccount):
-		return fmt.Errorf("more than one account on the target matches the binding")
+		detail, next := ambiguityWords()
+		return errors.New(detail + " " + next)
 	default:
-		return fmt.Errorf("the bound account could not be located on the target")
+		return errAccountNotFound
 	}
 }

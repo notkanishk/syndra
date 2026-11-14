@@ -118,7 +118,6 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		snap, current = cached, false
 	}
 	ix := indexAccounts(snap.Subjects) // the one lookup of accounts the wishes and the stats use too
-	byName, byUID := ix.byName, ix.byUID
 	claimed, err := s.store.BoundUsernames()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, "The add-on's bindings could not be read.", nil)
@@ -135,7 +134,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		out.Stale = unreachableSince(snap.TakenAt)
 	}
 	for _, subject := range req.Subjects {
-		outcome, err := s.planOne(subject, byName, byUID, claimed, snap, current)
+		outcome, err := s.planOne(subject, ix, claimed, snap, current)
 		switch {
 		case errors.Is(err, errStoreUnreadable):
 			writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, "The add-on's own records could not be read, so nothing was planned.", nil)
@@ -150,7 +149,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 }
 
 // errStoreUnreadable is the add-on's own records failing to read: a plan
-// refused whole (handlePlan), an operation's binding (boundAccount); 500
+// refused whole (handlePlan), an operation's binding (operatedAccount); 500
 // STORE_UNREADABLE, never a 4xx (handlePlan, operateNow, readNow).
 var errStoreUnreadable = errors.New("the add-on's own records could not be read")
 
@@ -167,7 +166,7 @@ var errStoreUnreadable = errors.New("the add-on's own records could not be read"
 // folder's stat, as it skips the group check, and leaves both to the apply:
 // with the NAS down, one subject's home would otherwise turn the whole
 // stored-copy answer into a 5xx.
-func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[int64]*Subject, claimed map[string]string, snap Snapshot, live bool) (ApplyOutcome, error) {
+func (s *server) planOne(req PlanSubject, ix accountIndex, claimed map[string]string, snap Snapshot, live bool) (ApplyOutcome, error) {
 	truncated := snap.Truncated
 	desired, err := s.decodeDesired(req.Desired)
 	var u unholdable
@@ -191,21 +190,26 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 	adopts := false // leftByCrashedCreate, as the apply decides it
 	if bound {
 		// The rule the apply's locate uses, read from this snapshot.
-		floor, ceiling := s.idRange()
-		found, resolved, conflict, _ := boundAccount(binding, floor, ceiling,
-			func(n string) (*Subject, error) { return byName[n], nil },
-			func(u int64) (*Subject, error) { return byUID[u], nil })
-		if conflict != nil {
+		r, err := s.resolveIn(binding, ix)
+		if err != nil {
+			// Two accounts on the key: the apply refuses it in these words.
+			detail, next := ambiguityWords()
+			return ApplyOutcome{
+				Subject: req.Subject, Effect: EffectBlocked,
+				Detail: detail, Consequence: "Nothing would change. " + next,
+			}, nil
+		}
+		if conflict := r.Conflict; conflict != nil {
 			detail, next := conflict.words()
 			return ApplyOutcome{
 				Subject: req.Subject, Effect: EffectBlocked,
 				Detail: detail, Consequence: "Nothing would change. " + next,
 				Username:    conflict.Username,
-				Fingerprint: fingerprintSubject(byName[conflict.Username]),
+				Fingerprint: fingerprintSubject(ix.byName[conflict.Username]),
 				Conflict:    conflict,
 			}, nil
 		}
-		current, name = found, resolved.Username
+		current, name = r.Account, r.Binding.Username
 	} else {
 		// The same rule the apply uses, or the plan predicts a name the apply
 		// does not produce — and a plan that disagrees with its apply is worse
@@ -214,7 +218,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 			owner, ok := claimed[candidate]
 			return ok && owner != req.Subject
 		})
-		if existing, ok := byName[name]; ok {
+		if existing, ok := ix.byName[name]; ok {
 			// Reported, not resolved. Adopting silently is the dangerous
 			// outcome — that account may belong to somebody else entirely —
 			// save the one case the apply adopts (5.3d), planned the same.
