@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { MEMBER, cooldownLine, copyLine, unreachableLine, type Reader } from "@/components/results/copy";
+import { MEMBER, cooldownLine, copyLine, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
 import { COOLDOWN_REFUSED, cooldownNext } from "@/lib/outcome";
 
 /**
@@ -18,6 +18,7 @@ const OPERATOR: Reader = { audience: "operator", person: "{person}" };
 const SAID = [
   copyLine("{name}", "{age}"),
   cooldownLine("{name}", 0).replace("0", "{n}"),
+  retryingLine("{name}", 0).replace("0", "{n}"),
   unreachableLine("{name}", "{time}", MEMBER),
   unreachableLine("{name}", "{time}", OPERATOR),
   COOLDOWN_REFUSED,
@@ -34,6 +35,7 @@ describe("the copy guide's section on how fresh a read is", () => {
 
   it("says the control's words, and never Refresh", () => {
     expect(section).toContain("**Read again**");
+    expect(section).toContain(`**${STOP_WAITING}**`);
     expect(SAID.join(" ")).not.toMatch(/refresh/i);
   });
 

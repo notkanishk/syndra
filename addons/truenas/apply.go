@@ -334,6 +334,15 @@ var errNoIdentityToDeriveFrom = errors.New("no identity to derive a username fro
 
 // desiredState is the request's fields, decoded once into the shapes this
 // add-on actually converges.
+// standingOf is s's standing with the SMB this request asks for as its wish
+// (Subject.wantsSMB), so a plan or an apply waiting on the member's new
+// password says so in its standing as its detail does (smbWaiting).
+func (d desiredState) standingOf(s *Subject) *Standing {
+	w := *s
+	w.wantsSMB = d.managed[FieldSMBEnabled] && d.smbEnabled
+	return standingOf(&w)
+}
+
 type desiredState struct {
 	groups     []string
 	enabled    bool
@@ -996,7 +1005,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 			return ApplyOutcome{
 				Subject: req.Subject, Effect: EffectApplied, Detail: detail,
 				Consequence: describeHolding(*current),
-				Username:    current.Username, AccountID: accountID(current.UID), Standing: standingOf(current),
+				Username:    current.Username, AccountID: accountID(current.UID), Standing: desired.standingOf(current),
 				Fingerprint: fingerprintSubject(current),
 			}, http.StatusOK, nil
 		}
@@ -1014,7 +1023,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 			Consequence: describeHolding(*current),
 			Username:    current.Username,
 			AccountID:   accountID(current.UID),
-			Standing:    standingOf(current),
+			Standing:    desired.standingOf(current),
 			Fingerprint: fingerprintSubject(current),
 		}, http.StatusOK, nil
 	}
@@ -1029,7 +1038,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 			Consequence: describeHolding(*current),
 			Username:    current.Username,
 			AccountID:   accountID(current.UID),
-			Standing:    standingOf(current),
+			Standing:    desired.standingOf(current),
 			Fingerprint: fingerprintSubject(current),
 		}, http.StatusOK, nil
 	}
@@ -1083,7 +1092,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 			// Its standing as last read: the write landed and what it left
 			// could not be read back.
 			AccountID: accountID(current.UID),
-			Standing:  standingOf(current),
+			Standing:  desired.standingOf(current),
 		}, http.StatusOK, nil
 	}
 
@@ -1110,7 +1119,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		Consequence: describeHolding(*applied),
 		Username:    applied.Username,
 		AccountID:   accountID(applied.UID),
-		Standing:    standingOf(applied),
+		Standing:    desired.standingOf(applied),
 		Fingerprint: fingerprintSubject(applied),
 		Observed:    s.observedFields(desired, applied),
 	}, http.StatusOK, nil
@@ -1279,7 +1288,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		Consequence: describeHolding(*created),
 		Username:    binding.Username,
 		AccountID:   accountID(created.UID),
-		Standing:    standingOf(created),
+		Standing:    desired.standingOf(created),
 		Fingerprint: fingerprintSubject(created),
 		Observed:    s.observedFields(desired, created),
 	}, http.StatusOK, nil

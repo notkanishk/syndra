@@ -463,13 +463,10 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 	out.Accounts, out.Stale = decoded.Subjects, decoded.Stale
 	out.Current = decoded.Current != nil && *decoded.Current
 	out.Truncated = decoded.Truncated == nil || *decoded.Truncated
-	// A reply that breaks a rule below is served, labelled, never concluded
-	// from, and never made current by a cooldown's copy either.
-	trusted := true
 	if err := staleInvariant(resp.Body); err != nil {
 		// Two answers about one read: served, labelled, never concluded from.
 		log.Printf("[ADDON] %s/subjects: %v; the read is not usable", target, err)
-		out.Current, out.Truncated, trusted = false, true, false
+		out.Current, out.Truncated = false, true
 	}
 	// Every subject is an account, so every one carries standing.usable; one
 	// that does not makes the read one nothing may be concluded from.
@@ -484,7 +481,7 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 	for _, s := range standing.Subjects {
 		if s.Standing == nil || s.Standing.Usable == nil {
 			log.Printf("[ADDON] %s/subjects lists an account with no standing.usable; the read is not usable", target)
-			out.Current, out.Truncated, trusted = false, true, false
+			out.Current, out.Truncated = false, true
 			break
 		}
 	}
@@ -494,10 +491,7 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 	if at, ok := takenAt(target, decoded.TakenAt, resp.Clock); ok {
 		out.TakenAt = at
 	} else {
-		out.Current, out.Truncated, trusted = false, true, false
-	}
-	if trusted && currentWithinCooldown(target, fresh, out.Stale, out.TakenAt) {
-		out.Current, out.Stale = true, nil
+		out.Current, out.Truncated = false, true
 	}
 	return out
 }

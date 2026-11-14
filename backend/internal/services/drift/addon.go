@@ -96,8 +96,10 @@ type AddonReconcileResult struct {
 	// ReadStale is why the read is not current, as the add-on said it
 	// (cached, cooldown, unreachable, ...): the inventory's "Read again" line.
 	ReadStale *addons.Stale `json:"read_stale,omitempty"`
-	// RetryAfter is a fresh read the add-on refused inside its cooldown with
-	// nothing to serve: halted, readable again in this many seconds.
+	// RetryAfter is a fresh read the add-on refused inside its cooldown, with
+	// nothing to serve or with its copy: halted, readable again in this many
+	// seconds (RFC 9110 §10.2.3). "Check now" waits them out and runs once
+	// more (the UI's one retry, 7l).
 	RetryAfter int `json:"retry_after,omitempty"`
 	// LogVerdict is what the add-on's mutation-log head said when compared
 	// against the anchor. Carried on the reconcile result because this is the
@@ -218,18 +220,17 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	res := AddonReconcileResult{Target: target}
 
 	// Always fresh: the sweep is the one scheduled sender (design §4) and it
-	// needs a current read. A copy read live within the cooldown window is
-	// current (addons.Subjects, 7l), so "Check now" just after the page's
-	// dormant list runs. Answered inside the cooldown with an older one, the
-	// scheduled sweep waits sweepWait and asks once more; a second cooldown
-	// answer is a skipped pass, recorded as a stale read (no new reason, no
-	// migration; B6), never as unreachable. One wait, not a loop: someone else reading
+	// needs a current read. Answered inside the cooldown, the scheduled sweep
+	// waits sweepWait and asks once more; a second cooldown answer is a
+	// skipped pass, recorded as a stale read (no new reason, no migration;
+	// B6), never as unreachable. One wait, not a loop: someone else reading
 	// the target that often is not the sweep's to outlast.
 	read := addonSubjects(ctx, target, true)
 	if retry, cooled := read.CooledDown(); cooled && patient && waitOut(ctx, sweepWait(target, retry)) {
 		read = addonSubjects(ctx, target, true)
 	}
 	if wait, cooled := read.CooledDown(); cooled {
+		res.RetryAfter = max(1, wait)
 		return halt(ctx, res, db.UnreconciledStaleRead,
 			fmt.Sprintf("skipped: the target was read moments ago and can be read again in %d s", wait))
 	}

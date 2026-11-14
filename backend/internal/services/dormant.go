@@ -95,10 +95,7 @@ func (e ReadCooledDown) Error() string {
 // Always a fresh read (feature freshness): every row is a candidate for
 // removal, so only a read of the target now may list one, and the removal
 // re-reads the same way. Inside the add-on's cooldown it is refused with the
-// wait (ReadCooledDown), never answered from an older copy (owner Q1). A
-// copy the add-on read live within the cooldown window comes back current
-// (addons.Subjects, 7l): that IS a live read, seconds old, so Remove pressed
-// just after the list goes ahead and Q1 still holds.
+// wait (ReadCooledDown), never answered from a copy (owner Q1).
 func DormantAccounts(ctx context.Context, target string) (DormantReport, error) {
 	if target == db.TargetZitadel {
 		return DormantReport{}, fmt.Errorf("dormant accounts: %s holds no accounts of its own", target)

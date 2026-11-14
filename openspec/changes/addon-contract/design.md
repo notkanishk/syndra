@@ -587,26 +587,21 @@ building 6b, B1); one that joins a read that fails is answered as that
 failure is, and never reads the app again. A reply made of several reads,
 answered later from the add-on's copy, carries the copy's own reason,
 dated by its oldest part, never a part's label from when the copy was made:
-a copy says `cooldown` only to a fresh read the cooldown refused. *Read at
-the backend (7l, 14 Nov 2026):* a `/subjects` cooldown answer to a fresh
-read whose copy was taken live within the target's cooldown window
-(`taken_at`, on this clock, no older than `limits.fresh_read_cooldown`) is
-**current** for that caller (`addons.currentWithinCooldown`, applied in
-`addons.Subjects`, the one read the drift sweep, "Check now", the dormant
-list, its removal and the inventory's "Read again" share): it is the data a
-second live read would return, since every write through the add-on forgets
-its copies (RFC 9111 §4.2: a response still fresh by its age is served).
-The add-on still says `cooldown` on the wire (B1 stands there); an older
-copy, a reply breaking a rule, or a read that did not ask fresh stays the
-cooldown it says. So "Check now" just after the target page's dormant list
-runs, and Remove pressed just after listing goes ahead; owner Q1 (dormant
-removal needs a live read) holds, because a copy read live seconds ago is
-one. Display reads (`/reach`, `/homes`, read operations) keep their
-cooldown strip. Answered
-`cooldown` with an older copy, the sweep waits once, `min(retry_after or the declared
+a copy says `cooldown` only to a fresh read the cooldown refused. *A person's press inside
+the cooldown (7l, 14 Nov 2026):* a cooldown is a cooldown, with its copy and
+its `taken_at`, however young the copy; the backend never reads it as
+current. "Check now" (a skipped pass carries `retry_after`) and the dormant
+removal (429 `FRESH_READ_COOLDOWN`) honour `Retry-After` (RFC 9110
+§10.2.3): the UI waits it out with the countdown, never longer than the
+sweep's 60 s ceiling, and sends the same press once more by itself
+(`useRetryOnce`, `lib/queries/fresh.ts`); once only, so a second refusal is
+shown as it is, and **Stop waiting** cancels it. One press then ends on a
+live read, which meets owner Q1 literally. Answered
+`cooldown`, the sweep waits once, `min(retry_after or the declared
 cooldown, the declared cooldown, 60 s)`, the ceiling twice
 `constants.cooldown_default`; "Check now" runs the same pass inside a
-person's request and never waits (`ReconcileAddonNow`). An add-on's
+person's request and never waits server-side (`ReconcileAddonNow`; the
+UI's one retry above is the person's wait). An add-on's
 `taken_at` more than two minutes ahead of the backend's clock is read as
 now, logged once per target (decided while building 6b, review round 2),
 and one dated the zero time is not a reading: every reply shape, the typed

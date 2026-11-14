@@ -2467,20 +2467,29 @@ end to end) found no missing function; three regressions with one root cause
     `TestMigration95_AddsAcceptedShape`, `TestLiveMigration95RunsDownAndUp`,
     `TestTargetFieldRolesArePersisted`). The handlers' `TestMain` defaults
     the seam to "never accepted".
-  - A fresh read's copy counts as current within its cooldown:
-    `addons.currentWithinCooldown`, applied once in `addons.Subjects`
-    (`trusted` keeps a reply that broke a rule out of it), so the drift
-    sweep's "Check now" and the dormant list's removal both take a copy the
-    add-on read live within the window; older than the window it is still
-    `cooldown` (`TestACooldownCopyReadWithinTheWindowIsCurrentForAFreshRead`).
-    Owner Q1 holds: that copy is a live read seconds old (`DormantAccounts`
-    comment).
-  - `storage.status` says one thing (parity A W5): `Subject.needsNewPassword`
-    (password set, SMB off, the binding wanting SMB, `Subject.wantsSMB`, set
-    where the binding is read) is the one fact; `standingOf` answers it
-    "waiting on the member, set a new password", and `storage.status` takes
-    `usable` from its standing and `needs_new_password` from the same method
-    (`TestAccessGivenBackNeedsANewPassword` extended).
+  - A press inside the cooldown honours `Retry-After` (RFC 9110 §10.2.3;
+    review round, replacing a first cut that read a young cooldown copy as
+    current): the backend keeps a cooldown a cooldown
+    (`TestACooldownIsNeverReportedCurrent`); a skipped "Check now" pass
+    carries `retry_after` (`AddonReconcileResult.RetryAfter`,
+    `TestCheckNowNeverWaitsOutACooldown`); the UI's `useRetryOnce`
+    (`lib/queries/fresh.ts`) waits it out with the countdown, at most
+    `RETRY_CEILING_S` (60 s, the sweep's ceiling), and sends the same press
+    once more, once only, cancellable with **Stop waiting**, on "Check now"
+    (`TargetOverview` `ReconcileControl`) and the dormant removal (a fresh
+    one-shot box for the key). Owner Q1 met literally: the removal runs on
+    a live read (`ReconcileRetry.test.tsx`, `DormantAccounts.test.tsx`;
+    copy guide §13 row "trying again by itself in {n} s").
+  - One standing everywhere (parity A W5): `Subject.needsNewPassword`
+    (password set, SMB off, SMB wanted) is the one fact and `standingOf`
+    answers it "waiting on the member, set a new password". The wish
+    (`Subject.wantsSMB`) comes from the bindings on `/subjects` and in the
+    legacy replay (`Store.WantedSMB`, so the operator's target page agrees),
+    from the binding in `storage.status`, and from the request in plan and
+    apply (`desiredState.standingOf`, so a no-change outcome's standing
+    matches its `smbWaiting` detail); `storage.status` takes `usable` from
+    its standing (`TestAccessGivenBackNeedsANewPassword` extended,
+    `TestEveryStandingSeesTheWaitForANewPassword`).
   - Production's own `state.db`: `addons/truenas/testdata/state-contract-1.db`
     written by 981efba3's store code (`testdata/state-contract-1.gen.go`,
     `//go:build ignore`, with how to write it again): three bindings, the
@@ -2499,12 +2508,11 @@ end to end) found no missing function; three regressions with one root cause
     - Write paths (mapping and allowance validation, `mappedTo`, merge
       findings) still read the held manifest: a value is checked against
       what the add-on says now.
-    - The cooldown rule is applied to `/subjects` only, the read whose
-      callers conclude from `current`; display reads keep their cooldown
-      strip and countdown.
-    - Only `storage.status` reads the binding beside the account, so only
-      it can see the wait for a new password; `/subjects`, plan and apply
-      standings are unchanged (their `wantsSMB` is false).
+    - The retry is the UI's, not the server's: the request never holds a
+      person's press open for up to a minute, and the scheduled sweep keeps
+      its own one wait.
+    - The removal's retry keeps the key in the wait's closure for at most
+      60 s, no longer than it already sits in the field.
     - A target whose contract-2 manifest was accepted before 000095 has no
       saved shape until its next acceptance (the 15-minute refresh), and is
       operators-only until then, as before.

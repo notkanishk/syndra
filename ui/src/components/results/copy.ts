@@ -67,5 +67,8 @@ export const READ_AGAIN = "Read again";
 export const READING = "Reading";
 export const copyLine = (name: string, age: string) => `${name} was read ${age}`;
 export const cooldownLine = (name: string, seconds: number) => `${name} was read moments ago; you can read again in ${seconds} s`;
+/** "Check now" or a removal the cooldown refused, going again by itself once the count ends (useRetryOnce); STOP_WAITING stops it. */
+export const retryingLine = (name: string, seconds: number) => `${name} was read moments ago; trying again by itself in ${seconds} s`;
+export const STOP_WAITING = "Stop waiting";
 export const unreachableLine = (name: string, time: string, who: Reader) =>
   `${name} can't be reached right now; this is what it said at ${time}. ${notReadableNext(who)}`;

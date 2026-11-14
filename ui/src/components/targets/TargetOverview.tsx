@@ -3,6 +3,7 @@
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
 import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
+import { retryingLine, STOP_WAITING } from "@/components/results/copy";
 import { useState } from "react";
 
 import { ADOPT_STAYS, SERVICE_STOPPED, STORAGE_OPERATION_LABEL, UNAUDITED_LABEL, UnauditedShares, serviceName } from "@/components/kinds/storage/readings";
@@ -40,7 +41,7 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
-import { stamped } from "@/lib/queries/fresh";
+import { stamped, useRetryOnce } from "@/lib/queries/fresh";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
@@ -536,6 +537,17 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
   const [unfinished, setUnfinished] = useState<Record<string, string>>({});
   const result = run.data;
   const name = nameOf(target);
+  // A pass skipped inside the add-on's cooldown waits out its retry_after and runs once more by
+  // itself (RFC 9110 §10.2.3), so one press ends on a live read; a second skip is shown as it is.
+  const retry = useRetryOnce();
+  const waiting = retry.waiting;
+  function check() {
+    run.mutate(undefined, {
+      onSuccess: (pass) => {
+        if (pass.halted && pass.retry_after) retry.refused(pass.retry_after, check);
+      },
+    });
+  }
 
   return (
     <Card>
@@ -545,7 +557,9 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
       />
       <CardRow>
         <div className="flex-1 text-[14.5px] text-muted">
-          {!result ? (
+          {waiting ? (
+            <span className="text-warn-text">{retryingLine(name, retry.left)}</span>
+          ) : !result ? (
             "Syndra checks by itself every six hours."
           ) : result.halted ? (
             <span className="text-warn-text">
@@ -565,10 +579,15 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
           isPending={run.isPending}
           disabled={lastKnown}
           reason={lastKnown ? `Check now waits too: it reads ${name} first.` : undefined}
-          onClick={() => run.mutate()}
+          onClick={() => retry.press(check)}
         >
           Check now
         </Button>
+        {waiting && (
+          <Button variant="outline" size="sm" onClick={retry.cancel}>
+            {STOP_WAITING}
+          </Button>
+        )}
       </CardRow>
 
       {run.error && (
@@ -579,7 +598,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
         </CardRow>
       )}
 
-      {result && !result.current && (
+      {result && !result.current && !waiting && (
         // A pass that concluded nothing must not read as a clean one.
         <CardRow>
           <span className="text-[13.5px] text-warn-text">

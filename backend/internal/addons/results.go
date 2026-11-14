@@ -418,20 +418,6 @@ func (o *Observation) observation() *Observation { return o }
 // cooldown and answered with the last read (common/stale.json).
 const StaleCooldown = "cooldown"
 
-// currentWithinCooldown reports a cooldown answer to a fresh read whose copy
-// the add-on read live within its cooldown window (taken_at, on this clock,
-// no older than FreshCooldown): the same data a second live read would
-// return, since every write through the add-on forgets its copies, so it is
-// current for the caller that asked fresh (7l). The add-on's words stay
-// honest on the wire; this is the backend's reading of them, the way an HTTP
-// cache serves a response still fresh by its age (RFC 9111 §4.2). A copy
-// older than the window, or one answering a read that did not ask fresh, is
-// the cooldown it says.
-func currentWithinCooldown(target string, fresh bool, stale *Stale, takenAt time.Time) bool {
-	return fresh && stale != nil && stale.Reason == StaleCooldown && !takenAt.IsZero() &&
-		timeNow().Sub(takenAt) <= FreshCooldown(target)
-}
-
 // staleInvariant holds a reply to design §4's `current == false` ⇔ `stale`
 // present (common/stale.json#/$defs/Invariant). A reply breaking it says two
 // things about one read, and is not a reading. One with no `current` says

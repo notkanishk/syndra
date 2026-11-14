@@ -22,7 +22,8 @@ import {
   type DormantAccount,
   type SweepResult,
 } from "@/lib/queries/useDormant";
-import { cooldownOf, pageLoad } from "@/lib/queries/fresh";
+import { cooldownOf, pageLoad, useRetryOnce } from "@/lib/queries/fresh";
+import { retryingLine, STOP_WAITING } from "@/components/results/copy";
 import { sortByName } from "@/lib/sort";
 import { oneShot } from "@/lib/secret";
 
@@ -68,6 +69,30 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   const safe = byName(accounts.filter((a) => !a.subject_still_member));
   const lockouts = byName(accounts.filter((a) => a.subject_still_member));
   const chosen = safe.filter((a) => selected.has(a.account));
+  // A removal refused inside the add-on's cooldown waits out its retry_after and is sent once more
+  // by itself (RFC 9110 §10.2.3), so one press removes on a live read (owner Q1). The key rides in
+  // that wait's closure, no longer than it already sits in the field, and a fresh box is made for
+  // the second send. A second refusal is shown as it is.
+  const retry = useRetryOnce();
+  function removeNow(accounts: string[], key: string) {
+    setResult(null);
+    remove.mutate(
+      { accounts, elevatedKey: oneShot(key) },
+      {
+        onSuccess: (outcome) => {
+          setResult(sweepResult(outcome, name));
+          setSelected(new Set());
+          setAcknowledged(false);
+          setElevatedKey("");
+        },
+        onError: (error) => {
+          const cooled = cooldownOf(error);
+          if (cooled && retry.refused(cooled.retry_after, () => removeNow(accounts, key))) return;
+          setResult({ outcome: outcomeFromError(error), word: "Not removed" });
+        },
+      },
+    );
+  }
 
   function toggle(account: string) {
     setSelected((current) => {
@@ -168,6 +193,15 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
       </ListStates>
       )}
 
+      {retry.waiting && (
+        <div className="flex flex-wrap items-center gap-3 border-t border-line px-5 py-4">
+          <span className="flex-1 text-[14px] text-warn-text">{retryingLine(name, retry.left)}</span>
+          <Button variant="outline" size="sm" onClick={retry.cancel}>
+            {STOP_WAITING}
+          </Button>
+        </div>
+      )}
+
       {result && (
         <div className="border-t border-line px-5 py-4">
           <ActionOutcome outcome={result.outcome} word={result.word} />
@@ -221,21 +255,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
                       : undefined
                   : undefined
               }
-              onClick={() => {
-                setResult(null);
-                remove.mutate(
-                  { accounts: chosen.map((a) => a.account), elevatedKey: oneShot(elevatedKey) },
-                  {
-                    onSuccess: (outcome) => {
-                      setResult(sweepResult(outcome, name));
-                      setSelected(new Set());
-                      setAcknowledged(false);
-                      setElevatedKey("");
-                    },
-                    onError: (error) => setResult({ outcome: outcomeFromError(error), word: "Not removed" }),
-                  },
-                );
-              }}
+              onClick={() => retry.press(() => removeNow(chosen.map((a) => a.account), elevatedKey))}
             >
               {`Remove ${chosen.length} ${chosen.length === 1 ? "account" : "accounts"}`}
             </Button>
