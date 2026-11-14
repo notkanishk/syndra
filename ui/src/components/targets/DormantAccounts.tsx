@@ -86,7 +86,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
     setResult({ outcome: wait === undefined ? outcome : { ...outcome, retryAfter: wait }, word: "Not removed" });
   }
   function stopWaiting() {
-    retry.cancel();
+    retry.stop();
     refusedAfter(held, retry.left);
   }
   function removeNow(accounts: string[], key: string) {
@@ -218,6 +218,11 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         </div>
       )}
 
+      {/* With the card, always: its status region is there before a wait starts (RetryWait). */}
+      <div className={retry.waiting ? "border-t border-line px-5 py-4" : undefined}>
+        <RetryWait name={name} retry={retry} onStop={stopWaiting} />
+      </div>
+
       {chosen.length > 0 && (
         <div className="grid gap-3 border-t border-line px-5 py-4">
           {/* The acknowledgement names the DATA, not the people. Removing the
@@ -250,9 +255,6 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
               stored.
             </FieldHint>
           </div>
-          {retry.waiting && (
-            <RetryWait name={name} seconds={retry.seconds} left={retry.left} onStop={stopWaiting} />
-          )}
           <div className="flex gap-2">
             <Button
               variant="danger"

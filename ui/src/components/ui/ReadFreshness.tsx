@@ -375,25 +375,39 @@ function sentence(
 }
 
 /**
- * A press going again by itself once its cooldown is over (useRetryOnce): the line amber, as a
- * cooldown the reader caused is (copy guide section 13), and **Stop waiting** beside it, which takes
- * focus so the press's own next step is where the reader already is. The start of the wait is
- * announced once (`role="status"` on a line that does not tick); the visible count ticks silently.
+ * A press going again by itself once its cooldown is over (useRetryOnce). Mount it with the card,
+ * always: its `role="status"` region is there empty from the start and filled when a wait starts,
+ * so the start is announced once (a region born with its text is often skipped; the visible count
+ * ticks outside it). While waiting it draws the line amber, as a cooldown the reader caused is
+ * (copy guide section 13), and **Stop waiting**, described by that line, which takes focus only
+ * when the person is still on the button they pressed.
  */
-export function RetryWait({ name, seconds, left, onStop }: { name: string; seconds: number; left: number; onStop: () => void }) {
+export function RetryWait({ name, retry, onStop }: {
+  name: string;
+  retry: { waiting: boolean; seconds: number; left: number; takeFocus: boolean };
+  onStop: () => void;
+}) {
   const stopId = useId();
-  useEffect(() => document.getElementById(stopId)?.focus(), [stopId]);
+  const lineId = useId();
+  const { waiting, takeFocus } = retry;
+  useEffect(() => {
+    if (waiting && takeFocus) document.getElementById(stopId)?.focus();
+  }, [waiting, takeFocus, stopId]);
   return (
-    <span className="flex flex-wrap items-center gap-3">
-      <span className="flex-1 text-[14px] text-warn-text">
-        <span role="status" className="sr-only">
-          {retryingLine(name, seconds)}
-        </span>
-        <span aria-hidden>{retryingLine(name, left)}</span>
+    <>
+      <span role="status" className="sr-only">
+        {waiting ? retryingLine(name, retry.seconds) : ""}
       </span>
-      <Button id={stopId} variant="outline" size="sm" onClick={onStop}>
-        {STOP_WAITING}
-      </Button>
-    </span>
+      {waiting && (
+        <span className="flex flex-wrap items-center gap-3">
+          <span id={lineId} className="flex-1 text-[14px] text-warn-text">
+            {retryingLine(name, retry.left)}
+          </span>
+          <Button id={stopId} variant="outline" size="sm" aria-describedby={lineId} onClick={onStop}>
+            {STOP_WAITING}
+          </Button>
+        </span>
+      )}
+    </>
   );
 }

@@ -564,9 +564,8 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
       />
       <CardRow>
         <div className="flex-1 text-[14.5px] text-muted">
-          {waiting ? (
-            <RetryWait name={name} seconds={retry.seconds} left={retry.left} onStop={retry.cancel} />
-          ) : skipped ? (
+          <RetryWait name={name} retry={retry} onStop={retry.stop} />
+          {waiting ? null : skipped ? (
             <span className="text-warn-text">
               {left > 0 ? `${cooldownLine(name, left)}. ` : ""}
               {checkAgainNext(left)}

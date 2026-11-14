@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
@@ -94,12 +94,22 @@ describe("Check now inside the add-on's cooldown", () => {
   it("waits out retry_after and runs once more by itself", () => {
     passes.answers = [skipped(5), ran];
     renderTarget();
-    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    // The status region is there, empty, before any wait: it is filled, not born, when one starts.
+    const pressed = screen.getByRole("button", { name: "Check now" });
+    const row = within(pressed.parentElement!.parentElement!);
+    const region = row.getByRole("status");
+    expect(region).toHaveTextContent(/^$/);
+    pressed.focus();
+    fireEvent.click(pressed);
     expect(passes.sent).toBe(1);
-    // Its start announced once, the line amber in the card's main line, and focus on Stop waiting.
-    expect(screen.getByText(/was read moments ago; trying again by itself in 5 s$/, { selector: '[role="status"]' })).toBeInTheDocument();
-    expect(screen.getByText(/was read moments ago; trying again by itself in 5 s$/, { selector: ".text-warn-text > span[aria-hidden]" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Stop waiting" })).toHaveFocus();
+    // Its start announced once in that same region, the line amber in the card's main line, and
+    // focus on Stop waiting, which the line describes.
+    expect(row.getByRole("status")).toBe(region);
+    expect(region).toHaveTextContent(/was read moments ago; trying again by itself in 5 s$/);
+    expect(screen.getByText(/was read moments ago; trying again by itself in 5 s$/, { selector: ".text-warn-text" })).toBeInTheDocument();
+    const stop = screen.getByRole("button", { name: "Stop waiting" });
+    expect(stop).toHaveFocus();
+    expect(stop).toHaveAccessibleDescription(/trying again by itself in 5 s$/);
     expect(screen.queryByText(/stopped before it concluded anything/i)).toBeNull();
     // Off until the count ends, with the line as its reason, linked (§13).
     const check = screen.getByRole("button", { name: "Check now" });
@@ -139,17 +149,21 @@ describe("Check now inside the add-on's cooldown", () => {
   it("Stop waiting cancels it, and the wait is never longer than 60 s", () => {
     passes.answers = [skipped(3600), skipped(3600), ran];
     renderTarget();
-    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
-    expect(screen.getByText(/trying again by itself in 60 s$/, { selector: '[role="status"]' })).toBeInTheDocument();
+    const pressed = screen.getByRole("button", { name: "Check now" });
+    pressed.focus();
+    fireEvent.click(pressed);
+    expect(within(pressed.parentElement!.parentElement!).getByRole("status")).toHaveTextContent(/trying again by itself in 60 s$/);
     act(() => void vi.advanceTimersByTime(10_000));
     fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
     // The skip it held is said, counting from when it arrived, with its step.
     expect(screen.getByText(/you can read again in 3590 s\. Press Check now again when the count ends\.$/)).toBeInTheDocument();
     act(() => void vi.advanceTimersByTime(120_000));
     expect(passes.sent).toBe(1);
-    // The skip's own count still holds Check now off (§13), however long the add-on said.
+    // The skip's own count still holds Check now off (§13), however long the add-on said; focus
+    // goes back to it the moment it can take it.
     expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
     act(() => void vi.advanceTimersByTime(3_600_000));
+    expect(screen.getByRole("button", { name: "Check now" })).toHaveFocus();
 
     // A new press is a new press: it may wait once again, the ceiling at most.
     fireEvent.click(screen.getByRole("button", { name: "Check now" }));
