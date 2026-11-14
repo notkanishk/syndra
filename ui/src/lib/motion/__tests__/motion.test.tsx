@@ -133,16 +133,20 @@ describe("reduced motion is first-class", () => {
       expect(target.classList.contains("flash")).toBe(true);
     });
 
-    it("leaves the section band's height above the heading unless told otherwise", async () => {
-      document.documentElement.style.setProperty("--section-band", "64px");
-      try {
-        await motion.glideTo(document.getElementById("t")!);
-        await motion.glideTo(document.getElementById("t")!, 10);
-        const calls = (document.getElementById("app-scroll")!.scrollTo as ReturnType<typeof vi.fn>).mock.calls;
-        expect(calls[0][0].top - calls[1][0].top).toBe(-54);
-      } finally {
-        document.documentElement.style.removeProperty("--section-band");
-      }
+    // The browser's own formula for an anchor jump or a focus: the scroller's scroll-padding-top plus
+    // the target's scroll-margin-top, so a glide, a link and Tab land alike.
+    it("lands where a native jump would: scroll-padding-top plus scroll-margin-top", async () => {
+      const scroller = document.getElementById("app-scroll")!;
+      const heading = document.getElementById("t")!;
+      const top = () => (scroller.scrollTo as ReturnType<typeof vi.fn>).mock.lastCall![0].top as number;
+      await motion.glideTo(heading);
+      const bare = top();
+      scroller.style.setProperty("scroll-padding-top", "64px");
+      await motion.glideTo(heading);
+      expect(bare - top()).toBe(64);
+      heading.style.setProperty("scroll-margin-top", "16px");
+      await motion.glideTo(heading);
+      expect(bare - top()).toBe(80);
     });
 
     it("a later jump takes over a glide in motion, and only the last one lands", async () => {

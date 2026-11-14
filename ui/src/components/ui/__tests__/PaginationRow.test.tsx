@@ -97,11 +97,11 @@ describe("PaginationRow motion", () => {
   function glidePage() {
     vi.useFakeTimers();
     motionInTests();
-    document.documentElement.style.setProperty("--section-band", "64px"); // globals.css, not loaded here
     document.documentElement.style.setProperty("--duration-glide", "520ms");
     document.documentElement.style.setProperty("--ease-settle", "cubic-bezier(0.16, 1, 0.3, 1)");
     const scroller = document.createElement("div");
     scroller.id = "app-scroll";
+    scroller.style.setProperty("scroll-padding-top", "64px"); // the band's room (globals.css)
     scroller.scrollTo = vi.fn(({ top }: ScrollToOptions) => void (scroller.scrollTop = top ?? 0)) as never;
     scroller.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
     const heading = document.createElement("h2");

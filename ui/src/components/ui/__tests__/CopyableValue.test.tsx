@@ -162,6 +162,7 @@ describe("on a plain-http page, where there is no Clipboard API", () => {
       const area = document.querySelector("textarea");
       expect(area?.value).toBe("account.purge");
       expect(area?.readOnly).toBe(true);
+      expect(area).not.toHaveAttribute("aria-hidden"); // hidden content is not copyable in every browser
       return result;
     });
     Object.defineProperty(document, "queryCommandSupported", { value: () => true, configurable: true });

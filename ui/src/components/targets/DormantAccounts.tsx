@@ -306,8 +306,8 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
 }
 
 /**
- * What a removal does: the accounts go, and Syndra deletes no files. Said as Syndra's own act, not as
- * a fact about the system (what a system does with an account's files is its own).
+ * What a removal costs: the accounts go and cannot be brought back, and what they held, when it is
+ * known. It says nothing of what the system does with what they held (that is the system's own).
  *
  * Says the size when the target reported one and says so plainly when it did
  * not. A sentence claiming "0 bytes" from a read that never happened would be
@@ -318,9 +318,9 @@ function filesSentence(chosen: DormantAccount[], name: string): string {
   const known = chosen.filter((a) => typeof a.bytes_held === "number");
   if (known.length === chosen.length && known.length > 0) {
     const total = known.reduce((sum, a) => sum + (a.bytes_held ?? 0), 0);
-    return `The accounts cannot be brought back. Syndra does not delete their files: ${formatBytes(total)} on ${name} are left as they are.`;
+    return `The accounts cannot be brought back. They held ${formatBytes(total)} on ${name} when it was last read.`;
   }
-  return `The accounts cannot be brought back. Syndra does not delete their files on ${name}. It cannot see how much there is.`;
+  return `The accounts cannot be brought back. Syndra cannot see how much they held on ${name}.`;
 }
 
 function GroupHeading({ title, blurb }: { title: string; blurb: string }) {

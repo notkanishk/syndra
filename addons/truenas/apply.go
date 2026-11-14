@@ -338,7 +338,20 @@ var errNoIdentityToDeriveFrom = errors.New("no identity to derive a username fro
 func (d desiredState) standingOf(s *Subject) *Standing {
 	w := *s
 	w.wantsSMB = d.managed[FieldSMBEnabled] && d.smbEnabled
+	// A request is about a subject Syndra holds, so the account is bound, and what it asks for the
+	// account is its wish.
+	w.unbound = false
+	w.wantsEnabled = d.wishEnabled()
 	return standingOf(&w)
+}
+
+// wishEnabled is the account on or off the request asks for, nil when it names no such field.
+func (d desiredState) wishEnabled() *bool {
+	if !d.managed[FieldEnabled] {
+		return nil
+	}
+	on := d.enabled
+	return &on
 }
 
 // desiredState is the request's fields, decoded once into the shapes this
@@ -635,6 +648,8 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		// create in doubt: CreateInDoubt reads no create before a binding. Under
 		// the subject's lock (once), so no second create of theirs races it;
 		// BindIfFree holds the name against every other subject.
+		// The binding is written with its wish, so recording it is not a second write.
+		binding.WantsEnabled = desired.wishEnabled()
 		if err := s.mutate(applyCaller(req).on(binding.UID), "store.bind", func() error { return s.store.BindIfFree(binding) }); err != nil {
 			logStoreFailure("binding", req.Subject, err)
 			return ApplyOutcome{}, http.StatusInternalServerError, err
@@ -642,7 +657,7 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		// Then on as the create would have gone on: the desired fields onto
 		// the account, answered as a create.
 		out, status, err := s.converge(req, desired, current)
-		s.rememberWantedSMB(req, desired, err)
+		s.rememberWishes(req, desired, err)
 		if err != nil {
 			// The binding landed; what failed came after it.
 			return out, status, fmt.Errorf("%s was adopted for this subject, then: %w", binding.Username, err)
@@ -669,11 +684,11 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 			return noAccountToSwitchOffOutcome(req.Subject), http.StatusOK, nil
 		}
 		out, status, err := s.createAndConverge(req, desired, binding)
-		s.rememberWantedSMB(req, desired, err)
+		s.rememberWishes(req, desired, err)
 		return out, status, err
 	}
 	out, status, err := s.converge(req, desired, current)
-	s.rememberWantedSMB(req, desired, err)
+	s.rememberWishes(req, desired, err)
 	return out, status, err
 }
 
@@ -697,21 +712,32 @@ func noAccountToSwitchOffOutcome(subject string) ApplyOutcome {
 	}
 }
 
-// rememberWantedSMB keeps what this apply asked for SMB on the subject's
-// binding, so the member's first password can turn it on (see Binding.WantsSMB).
-// Best-effort: the apply already happened, and failing it over this record
-// would report a mutation as not made. Written only when it changes, so an
-// apply that asks what the binding already says adds nothing to the log.
-func (s *server) rememberWantedSMB(req ApplyRequest, desired desiredState, applyErr error) {
-	if applyErr != nil || !desired.managed[FieldSMBEnabled] {
+// rememberWishes keeps what this apply asked for SMB and for the account on or off on the
+// subject's binding: the first so the member's first password can turn SMB on (see
+// Binding.WantsSMB), the second so a standing can tell an account Syndra holds off from one
+// switched off on TrueNAS (Binding.WantsEnabled). Best-effort: the apply already happened, and
+// failing it over this record would report a mutation as not made. Written only when it changes,
+// so an apply that asks what the binding already says adds nothing to the log.
+func (s *server) rememberWishes(req ApplyRequest, desired desiredState, applyErr error) {
+	if applyErr != nil || (!desired.managed[FieldSMBEnabled] && !desired.managed[FieldEnabled]) {
 		return
 	}
 	b, found, err := s.store.GetBinding(req.Subject)
-	if err != nil || !found || (b.WantsSMB != nil && *b.WantsSMB == desired.smbEnabled) {
+	if err != nil || !found {
 		return
 	}
-	want := desired.smbEnabled
-	b.WantsSMB = &want
+	changed := false
+	if desired.managed[FieldSMBEnabled] && (b.WantsSMB == nil || *b.WantsSMB != desired.smbEnabled) {
+		want := desired.smbEnabled
+		b.WantsSMB, changed = &want, true
+	}
+	if desired.managed[FieldEnabled] && (b.WantsEnabled == nil || *b.WantsEnabled != desired.enabled) {
+		want := desired.enabled
+		b.WantsEnabled, changed = &want, true
+	}
+	if !changed {
+		return
+	}
 	if err := s.mutate(applyCaller(req).on(b.UID), "store.bind", func() error { return s.store.PutBinding(b) }); err != nil {
 		logStoreFailure("binding", req.Subject, err)
 	}
@@ -1132,6 +1158,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		return ApplyOutcome{}, http.StatusUnprocessableEntity,
 			fmt.Errorf("derived name %q is not valid on this target", binding.Username)
 	}
+	binding.WantsEnabled = desired.wishEnabled() // written with the binding: no second write
 	want := decide(nil, desired, homeDecision{})
 	var groupIDs []apiID
 	if want.groups != nil {

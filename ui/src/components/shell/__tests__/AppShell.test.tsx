@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -53,14 +55,17 @@ describe("AppShell scrolling", () => {
   });
 
   // The sticky section band covers the top of the scroller; a link to an anchor or a focus that
-  // scrolls must land below it (WCAG 2.4.11), from the same value the band and glideTo use.
-  it("keeps a native jump or a focus below the section band", () => {
+  // scrolls must land below it (WCAG 2.4.11), on pages that have a band and only those.
+  it("keeps a jump below the section band, on a page that has one", () => {
+    const css = readFileSync(resolve(__dirname, "../../../app/globals.css"), "utf8");
+    expect(css).toMatch(/#app-scroll:has\(\[data-section-band\]\)\s*\{\s*scroll-padding-top:\s*var\(--section-band\);/);
     const { container } = render(
       <AppShell session={{ id: "u1", role: "admin" } as SessionUser}>
         <p>page</p>
       </AppShell>,
     );
-    expect(container.querySelector("#app-scroll")).toHaveClass("scroll-pt-(--section-band)");
+    // Not on the scroller itself: a page without a band is not shifted.
+    expect(container.querySelector("#app-scroll")!.className).not.toMatch(/scroll-p/);
   });
 });
 

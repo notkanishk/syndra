@@ -268,6 +268,21 @@ type Subject struct {
 	// storage.status) or the request's own wish (plan, apply), so every
 	// standing sees the wait for a new password. Not on the wire, not stored.
 	wantsSMB bool
+	// unbound is an account no Syndra subject is bound to: Syndra never asked for any of its state.
+	// Not on the wire, not stored; the zero value is a bound account, so a caller that does not set it
+	// makes no claim about who switched an account off.
+	unbound bool
+	// wantsEnabled is the binding's Binding.WantsEnabled, or the request's own wish (plan, apply).
+	wantsEnabled *bool
+}
+
+// applyWish puts a binding's wish on s; nil wishes (not read) leaves s as read.
+func (s *Subject) applyWish(wishes map[int64]Wish) {
+	if wishes == nil {
+		return
+	}
+	w, bound := wishes[s.UID]
+	s.wantsSMB, s.unbound, s.wantsEnabled = w.SMB, !bound, w.Enabled
 }
 
 // needsNewPassword is an account that has had a password and is kept off SMB
@@ -341,6 +356,11 @@ type Binding struct {
 	// snapshot says what the NAS HAS, which for a new account is "off" because
 	// nothing could turn it on yet.
 	WantsSMB *bool `json:"wants_smb,omitempty"`
+	// WantsEnabled is whether the last apply asked for the account on (true) or off (false), nil
+	// before any did (a binding from before this was kept). Desire, like WantsSMB: the NAS can only
+	// say an account is off, never who switched it off, and a standing needs to tell Syndra's own
+	// "off" (what it asked for) from one made on TrueNAS (standingOf).
+	WantsEnabled *bool `json:"wants_enabled,omitempty"`
 }
 
 // encodeBinding is the one place a binding is written, so both ids always are.
@@ -451,16 +471,23 @@ func (s *Store) UIDBound(uid int64) (bool, error) {
 	return bound, err
 }
 
-// WantedSMB is, by uid, the bound accounts whose last apply asked for SMB
-// on (Binding.WantsSMB): the wish a new password waits on, which a standing
-// built from a read of the NAS alone cannot see (Subject.needsNewPassword).
-func (s *Store) WantedSMB() (map[int64]bool, error) {
-	out := map[int64]bool{}
+// Wish is what Syndra last asked of a bound account, kept on its binding: SMB wanted on (which a
+// new password waits on) and the account on or off. A standing built from a read of the NAS alone
+// cannot see either (Subject.needsNewPassword, standingOf).
+type Wish struct {
+	SMB     bool
+	Enabled *bool
+}
+
+// Wishes is every binding's Wish by uid. Presence is what "bound" means: an account absent from it
+// is one no subject is bound to.
+func (s *Store) Wishes() (map[int64]Wish, error) {
+	out := map[int64]Wish{}
 	err := s.db.View(func(tx *bolt.Tx) error {
 		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
 			var b Binding
-			if json.Unmarshal(v, &b) == nil && b.UID != 0 && b.WantsSMB != nil && *b.WantsSMB {
-				out[b.UID] = true
+			if json.Unmarshal(v, &b) == nil && b.UID != 0 {
+				out[b.UID] = Wish{SMB: b.WantsSMB != nil && *b.WantsSMB, Enabled: b.WantsEnabled}
 			}
 			return nil
 		})

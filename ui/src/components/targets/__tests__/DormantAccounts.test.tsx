@@ -176,8 +176,10 @@ describe("dormant accounts", () => {
     renderDormant();
     fireEvent.click(screen.getByLabelText("Select former-member"));
 
-    expect(screen.getByText(/Syndra does not delete their files on TrueNAS/i)).toBeInTheDocument();
+    expect(screen.getByText("The accounts cannot be brought back. Syndra cannot see how much they held on Truenas.")).toBeInTheDocument();
     expect(screen.queryByText(/0 bytes/)).toBeNull();
+    // Generic surface: no promise or claim about files, whatever a system does with them.
+    expect(document.body.textContent).not.toMatch(/their files|files stay|left as they are|does not delete/i);
   });
 
   it("states the size when the target reported one", () => {
@@ -187,7 +189,8 @@ describe("dormant accounts", () => {
 
     // GiB, not GB. This divided by 1024 and printed a decimal unit name, which
     // by the terabyte is naming a quantity 10% smaller than the one shown.
-    expect(screen.getByText(/Syndra does not delete their files: 38\.4 GiB on TrueNAS are left as they are/i)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/their files|files stay|left as they are|does not delete/i);
+    expect(screen.getByText("The accounts cannot be brought back. They held 38.4 GiB on Truenas when it was last read.")).toBeInTheDocument();
   });
 
   // Everything else on these screens queues. This one does not, and saying so

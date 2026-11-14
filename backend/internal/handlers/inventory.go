@@ -459,7 +459,7 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 		return
 	case !req.Confirmed:
 		jsonErrorResponse(w, http.StatusUnprocessableEntity, "CONFIRMATION_REQUIRED",
-			"The accounts cannot be brought back. Syndra does not delete their files.")
+			"The accounts cannot be brought back.")
 		return
 	}
 

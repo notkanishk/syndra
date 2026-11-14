@@ -119,7 +119,7 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	// the same Subject the standing is, so the reply never says both.
 	subject := Subject{Username: binding.Username, UID: account.UID,
 		Enabled: !account.Locked, SMBEnabled: account.SMB, PasswordSet: !account.PasswordDisabled,
-		wantsSMB: binding.WantsSMB != nil && *binding.WantsSMB}
+		wantsSMB: binding.WantsSMB != nil && *binding.WantsSMB, wantsEnabled: binding.WantsEnabled}
 	status.Standing = standingOf(&subject)
 	status.Usable = status.Standing.Usable
 	status.NeedsPassword = account.PasswordDisabled

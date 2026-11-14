@@ -125,9 +125,10 @@ describe("converging a cohort", () => {
       fireEvent.click(screen.getByRole("button", { name: /queue|apply/i }));
       await waitFor(() => expect(state.applyCalls.length).toBe(1));
 
-      const body = document.body.textContent ?? "";
-      expect(body).toMatch(/Pending changes lists it until it is sent/);
-      expect(body).not.toMatch(/waiting for you to send to TrueNAS/i);
+      // The call being made is not the result being drawn: wait for the sentence itself, so the
+      // read below never races the mutation's resolving.
+      await waitFor(() => expect(document.body.textContent).toMatch(/Pending changes lists it until it is sent/));
+      expect(document.body.textContent).not.toMatch(/waiting for you to send to TrueNAS/i);
     } finally {
       state.applied = before;
     }

@@ -97,7 +97,10 @@ func (acct *account) shown() map[string]any {
 }
 
 // standing is observed, never desired: why a converged account cannot be used
-// yet, and who is waited on (design §6).
+// yet, and who is waited on (design §6). This app's `enabled` changes only through
+// an apply, so an account that is off is off because Syndra asked: `none` is true
+// here, which an app that can be switched off elsewhere must tell apart
+// (AUTHORING.md, standing).
 func (acct *account) standing() *standing {
 	switch {
 	case acct.state["enabled"] != true:

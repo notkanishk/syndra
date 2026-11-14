@@ -790,25 +790,71 @@ func TestADayBeforeCountingBeganIsNotCollectedYet(t *testing.T) {
 	}
 }
 
-// State from before Began existed: a HeldFrom after the oldest day the buffer could hold was never
-// trimmed, so it is adopted as the day counting began; at or before it, the buffer may have trimmed.
-func TestStateWithoutBeganIsAdoptedOnlyWhenNeverTrimmed(t *testing.T) {
+// putMeta writes a metric's meta as stored, bypassing PutStats: a state.db from an older binary.
+func putMeta(t *testing.T, s *server, metric string, meta statsMeta) {
+	t.Helper()
+	raw, _ := json.Marshal(meta)
+	if err := s.store.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(bucketStats).Bucket([]byte(metric)).Put(statsMetaKey, raw)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func metaOf(t *testing.T, s *server, metric string) statsMeta {
+	t.Helper()
+	m, _, err := s.store.StatsMeta(metric)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+// Began is the exact signal: the first collection that succeeded (the stored watermark was empty and
+// this run's is not). A failed first run decides nothing, and once set it never changes.
+func TestBeganIsTheFirstSuccessfulCollectionAndNeverChanges(t *testing.T) {
+	for _, metric := range []string{metricSessions, metricUsedBytes, metricHomeBytes} {
+		t.Run(metric, func(t *testing.T) {
+			s, nas, at := statsServer(t)
+			nas.down = true
+			s.collectStatsOnce()
+			if m := metaOf(t, s, metric); m.Began != "" {
+				t.Fatalf("a failed first run is not the first collection, Began %q", m.Began)
+			}
+			nas.down = false
+			s.nas.lastTry = time.Time{} // the connection's reconnect cooldown is over
+			*at = day0.AddDate(0, 0, 1)
+			s.collectStatsOnce()
+			first := s.stats.day(*at)
+			if m := metaOf(t, s, metric); m.Began != first || m.Version != statsMetaVersion {
+				t.Fatalf("Began %q version %d, want %q the first successful run, version %d", m.Began, m.Version, first, statsMetaVersion)
+			}
+			for _, move := range []time.Duration{24 * time.Hour, -48 * time.Hour, 24 * 100 * time.Hour} {
+				*at = at.Add(move)
+				s.collectStatsOnce()
+				if m := metaOf(t, s, metric); m.Began != first {
+					t.Fatalf("after moving the clock %v, Began %q, want it to stay %q", move, m.Began, first)
+				}
+			}
+		})
+	}
+}
+
+// State from before Began existed (version 0) is judged once, by the one rule left to it, and then
+// never again: a HeldFrom after the oldest day the buffer could hold has never trimmed, so it is the day
+// counting began; at or before it the buffer may have trimmed, and Began stays empty for good.
+func TestStateWithoutBeganIsMigratedOnce(t *testing.T) {
 	for _, metric := range []string{metricSessions, metricUsedBytes, metricHomeBytes} {
 		for _, trimmed := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/trimmed=%v", metric, trimmed), func(t *testing.T) {
 				s, _, at := statsServer(t)
 				s.collectStatsOnce()
-				meta, _, _ := s.store.StatsMeta(metric)
-				meta.Began = ""
+				meta := metaOf(t, s, metric)
+				meta.Began, meta.Version = "", 0
 				if trimmed {
 					meta.HeldFrom = s.stats.oldest(*at)
 				}
-				raw, _ := json.Marshal(meta)
-				if err := s.store.db.Update(func(tx *bolt.Tx) error {
-					return tx.Bucket(bucketStats).Bucket([]byte(metric)).Put(statsMetaKey, raw)
-				}); err != nil {
-					t.Fatal(err)
-				}
+				putMeta(t, s, metric, meta)
 				*at = at.Add(time.Hour)
 				s.collectStatsOnce()
 				got, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -200))
@@ -818,6 +864,19 @@ func TestStateWithoutBeganIsAdoptedOnlyWhenNeverTrimmed(t *testing.T) {
 				}
 				if len(got.Gaps) == 0 || got.Gaps[0].Reason != want {
 					t.Errorf("gaps %+v, want the first to say %q", got.Gaps, want)
+				}
+				decided := metaOf(t, s, metric)
+				if decided.Version != statsMetaVersion || (decided.Began != "") == trimmed {
+					t.Fatalf("migrated meta %+v", decided)
+				}
+				// Never judged again: the clock moving back, so the old rule would now read
+				// the same HeldFrom the other way, changes nothing.
+				*at = day0.AddDate(0, 0, -30)
+				s.collectStatsOnce()
+				*at = day0.AddDate(0, 0, 1)
+				s.collectStatsOnce()
+				if again := metaOf(t, s, metric); again.Began != decided.Began {
+					t.Errorf("Began %q after the clock moved, was decided %q", again.Began, decided.Began)
 				}
 			})
 		}

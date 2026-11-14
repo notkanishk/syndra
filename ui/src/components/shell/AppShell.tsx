@@ -86,10 +86,9 @@ export function AppShell({
                 the shell could be scrolled to reach it. `overflow-clip` on the shell above is the other
                 half: unlike `overflow-hidden` it is never a scroll container, so no focus, find or
                 animation can scroll the window and push the top bar off. The app scrolls here, only.
-                `scroll-pt`: the sticky section band covers the top of this scroller, so a link
-                to an anchor or a focus that scrolls lands below it (WCAG 2.4.11), on top of each
-                section's own `scroll-mt`. */}
-            <div id="app-scroll" className="relative min-h-0 flex-1 scroll-pt-(--section-band) overflow-y-auto">
+                A page with a sticky section band gets `scroll-padding-top` for it (globals.css), so a
+                link to an anchor or a focus that scrolls lands below it (WCAG 2.4.11). */}
+            <div id="app-scroll" className="relative min-h-0 flex-1 overflow-y-auto">
               {/* Notices, not a band under the top bar (6a): every dysfunction
                   is said in the content column and pushes the page down
                   rather than covering it. They sit under the page's own

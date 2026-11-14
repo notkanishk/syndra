@@ -78,7 +78,6 @@ describe("the read line", () => {
 
   it("asks for the section to be opened, then glides to it", () => {
     vi.useFakeTimers();
-    document.documentElement.style.setProperty("--section-band", "64px"); // globals.css, not loaded here
     const onOpen = vi.fn();
     render(<Page onOpen={onOpen} />);
     document.getElementById("sec-b")!.getBoundingClientRect = () => rect(900);
@@ -90,8 +89,8 @@ describe("the read line", () => {
     act(() => {
       vi.runAllTimers();
     });
-    // 900 down, less the 64 the heading is left clear of the top by.
-    expect(window.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 836 }));
+    // 900 down; no scroller here, so no band padding (the glide reads the browser's own offsets).
+    expect(window.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 900 }));
   });
 });
 

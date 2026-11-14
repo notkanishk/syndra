@@ -46,12 +46,13 @@ export function standingWords(standing: Standing, system: string, audience: "mem
   }
   if (waiting === "none") {
     // Nobody is waited on, and it is still not usable: it is switched off, and that does not end by
-    // itself, so "yet" is not said. The contract makes this Syndra's own doing: an account the
+    // itself, so "yet" is not said. The contract makes `none` Syndra's own doing: an account the
     // `account` field holds off is `waiting_on: none` because off is what Syndra asked for
-    // (addons/AUTHORING.md), and an account somebody switched off outside Syndra is a drift,
-    // which Syndra shows where it triages them, never a standing. So it is one statement, and a
-    // next step that stays in Syndra. The add-on's own "The account is switched off." only
-    // repeats the state, so it is not shown beside it.
+    // (addons/AUTHORING.md). An add-on that can tell otherwise (TrueNAS: an account no subject is
+    // bound to, or off while Syndra wants it on) says so in its own `note` and `next`, which are
+    // shown as written; these words are only for the contract's case, where the add-on said
+    // nothing more. The add-on's own "The account is switched off." only repeats the state, so it
+    // is not shown beside it.
     const repeats = !note || /^the account is switched off\.?$/i.test(note.trim());
     return {
       state: "Switched off",

@@ -57,6 +57,38 @@ describe("an account that is switched off", () => {
     );
   });
 
+  // The add-on tells the three apart (TrueNAS: Binding.WantsEnabled) and says each in its own note and
+  // next, shown as written. Only `none` with nothing said is the contract's own case, Syndra's.
+  it("shows an account switched off outside Syndra as the add-on says it, never as Syndra's doing", () => {
+    const by: Standing = {
+      usable: false,
+      waiting_on: "operator",
+      note: "Switched off on TrueNAS, outside Syndra.",
+      next: "Makerspace staff can use Check for differences on the system's Mappings page to bring it back in line.",
+    };
+    for (const audience of ["operator", "member"] as const) {
+      const w = standingWords(by, "TrueNAS", audience);
+      expect(w.state).toBe("Waiting on makerspace staff");
+      expect(w.note).toBe(by.note);
+      expect(w.next).toBe(by.next);
+      expect(w.next).not.toMatch(/Syndra keeps it off|by hand|switch it back on/i);
+    }
+  });
+
+  it("shows an account no subject is bound to without a claim of Syndra's", () => {
+    const root: Standing = {
+      usable: false,
+      waiting_on: "none",
+      note: "Switched off on TrueNAS, not by Syndra.",
+      next: "Nothing for you to do unless you assign it to a person.",
+    };
+    const w = standingWords(root, "TrueNAS", "operator");
+    expect(w.state).toBe("Switched off");
+    expect(w.note).toBe(root.note);
+    expect(w.next).toBe(root.next);
+    expect(`${w.note} ${w.next}`).not.toMatch(/Syndra keeps it off/);
+  });
+
   it("keeps the add-on's own next step when it gave one", () => {
     expect(standingWords({ ...off, next: "Ask the front desk." }, "TrueNAS", "operator").next).toBe("Ask the front desk.");
   });

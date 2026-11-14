@@ -48,6 +48,9 @@ type statsMeta struct {
 	// Began is the day the first collection ran (set once, in PutStats). While HeldFrom is still Began, the days before
 	// it were never collected; once the buffer has trimmed past it, they were collected and dropped.
 	Began string `json:"began,omitempty"`
+	// Version is the meta's schema: 0 (absent) is a meta written before Began existed, migrated once
+	// by beganFor; 1 is the current.
+	Version int `json:"version,omitempty"`
 	// Behind is the day from which the audit log was too long to read in
 	// one run: counted on the next.
 	Behind string `json:"behind,omitempty"`
@@ -139,13 +142,7 @@ func (s *Store) PutStats(metric string, meta statsMeta, days map[string]statDay,
 			}
 		}
 
-		// The buffer holds from the first day collected until it first trims; a HeldFrom still after the
-		// oldest day it could hold has never trimmed, so it is the day counting began. This also adopts
-		// state written before Began existed. At or before the oldest day it may have trimmed: left unset,
-		// the gap before it stays "no longer holds".
-		if meta.Began == "" && meta.HeldFrom > oldest {
-			meta.Began = meta.HeldFrom
-		}
+		meta.Version, meta.Began = beganFor(b.Get(statsMetaKey), meta, oldest)
 		if meta.HeldFrom < oldest {
 			meta.HeldFrom = oldest
 		}
@@ -175,6 +172,42 @@ func (s *Store) PutStats(metric string, meta statsMeta, days map[string]statDay,
 		}
 		return b.Put(statsMetaKey, v)
 	})
+}
+
+// statsMetaVersion is the current schema of statsMeta.
+const statsMetaVersion = 1
+
+// beganFor is the meta's Version and Began as they are to be written, from what is stored (stored,
+// nil when there is none) and what this run brings (meta). Began is decided exactly once and then
+// never changes, so nothing later (the clock, the zone, the buffer's size) can flip it.
+//
+//   - First collection: the stored Watermark was empty and this run's is not, so the day it held
+//     from is the day counting began. A failed first run leaves Watermark empty and decides nothing.
+//   - A meta from before Began existed (Version 0) is migrated here, once, by the one rule that is
+//     left to it: a HeldFrom later than the oldest day the buffer could hold has never been trimmed,
+//     so it is the first collected day; at or before it the buffer may have trimmed, and Began stays
+//     empty (the gap before HeldFrom is then truthfully "no longer holds"). It is then Version 1 and
+//     never judged again.
+func beganFor(stored []byte, meta statsMeta, oldest string) (int, string) {
+	var was statsMeta
+	if stored == nil || json.Unmarshal(stored, &was) != nil {
+		if meta.Watermark != "" {
+			return statsMetaVersion, meta.HeldFrom
+		}
+		return statsMetaVersion, ""
+	}
+	if was.Began != "" {
+		return statsMetaVersion, was.Began
+	}
+	switch {
+	case was.Version < statsMetaVersion:
+		if was.HeldFrom != "" && was.HeldFrom > oldest {
+			return statsMetaVersion, was.HeldFrom
+		}
+	case was.Watermark == "" && meta.Watermark != "":
+		return statsMetaVersion, meta.HeldFrom
+	}
+	return statsMetaVersion, ""
 }
 
 // nextDayKey is the calendar day after a stored one, by its date alone.

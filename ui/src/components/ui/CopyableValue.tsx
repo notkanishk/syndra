@@ -28,7 +28,6 @@ function copyViaTextarea(value: string): boolean {
   const area = document.createElement("textarea");
   area.value = value;
   area.readOnly = true; // no on-screen keyboard on a phone
-  area.setAttribute("aria-hidden", "true");
   area.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
   document.body.appendChild(area);
   try {
