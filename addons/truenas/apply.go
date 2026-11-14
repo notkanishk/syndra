@@ -320,8 +320,8 @@ func (c BindingConflict) words() (detail, next string) {
 		return fmt.Sprintf("An account named %s already exists and is bound to another subject.", c.Username),
 			"If it is not theirs, release it from that subject, then adopt it here."
 	case c.numberHeld:
-		return fmt.Sprintf("The account %s was bound to this subject is gone, and its number is now held by a different account, %s.", c.was, c.Username),
-			"Release this subject's binding first, then adopt that account only if it is theirs."
+		return fmt.Sprintf("The account %s, bound to this subject, is gone, and its number is now held by a different account, %s.", c.was, c.Username),
+			fmt.Sprintf("Release this subject's binding; the next apply creates a new account for them. Adopt %s instead only if it is theirs.", c.Username)
 	case c.selfUnknown:
 		return fmt.Sprintf("An account named %s already exists, and Syndra can't check yet whether it is the account this add-on signs in to the app with.", c.Username),
 			"Try again shortly."

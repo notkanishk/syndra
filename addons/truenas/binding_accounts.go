@@ -1,11 +1,16 @@
 package main
 
-// Which NAS account a binding names, asked of a read of the accounts: boundAccount's rule and no
-// other, so locate, the plan, the wishes, the statistics and the adoption check can never disagree.
+// Which NAS account a binding names, asked of a read of the accounts: boundAccount's rule. It is the
+// rule of `locate` (the apply), the plan, and resolveBinding's callers here: the wishes (standing),
+// the statistics and the adoption check (accountBound). It is NOT yet the rule of the account
+// operations (`recordID` in subjects.go: set-password, rotate, purge), of `storageStatus` and
+// `smbActivity` (which look an account up by name), or of the backend's drift matching on
+// `account_id`: each has its own, and slice 7t ("one account identity") brings them together.
+//
 // An uid inside this add-on's id range names its account by number (those numbers are never reused);
 // any other uid (an adopted hand-made account's, or a contract-1 record key) is only believed beside
 // the recorded name, and a binding whose name is gone while its number is held by another name names
-// no account at all (a conflict): the holder is never its account.
+// no account at all (a conflict): the holder is never its account, in the places above.
 
 // accountIndex looks accounts up by exact key, as the apply's lookups do against the target.
 type accountIndex struct {

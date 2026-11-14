@@ -330,26 +330,33 @@ func (s *Store) GetSnapshot() (Snapshot, bool, error) {
 // an existing account — and re-deriving from the new email would name an
 // account that does not exist while the real one sat there unbound.
 //
-// The uid is recorded beside the name because the name can change out of band.
-// A stable uid whose username moved is a RENAME, and reporting it as a missing
-// account would create a replacement while the original kept the home data.
+// The uid is recorded beside the name because the name can change out of band. What the
+// uid is worth depends on its range (boundAccount): a number this add-on hands out is never handed
+// out twice, so a username that moved under it is a RENAME and is followed, and reporting it as a
+// missing account would create a replacement while the original kept the home data. A number
+// outside the range (an adopted account's, from 3000) can be handed to a new account after a delete,
+// so it is only believed beside the recorded name; name gone and number held by another name halts
+// as a conflict (UIDKind says the uid is real; the account operations, storage status and the
+// backend's drift do not follow this rule yet: slice 7t, one account identity).
 //
 // AccountID is contract 2's name for the same number (account_id, a string). It
 // is written BESIDE uid, never instead of it, for one release (decision 10,
 // task 1.7): a contract-1 binary rolled back onto this file still finds every
-// binding by uid, so rollback restores nothing. Both are filled on every write
-// (putBinding) and either is read (GetBinding).
+// binding by uid, so rollback restores nothing. It is stamped only for a marked uid. It is the
+// uid, not an identity that outlives the account: an uid outside the range can be reused by TrueNAS
+// (slice 7t decides what Syndra holds instead).
 type Binding struct {
 	SubjectID string `json:"subject_id"`
 	Username  string `json:"username"`
 	UID       int64  `json:"uid"`
 	AccountID string `json:"account_id,omitempty"`
-	// UIDKind says what UID is. "account" is a real uid on the NAS, which the binding then names by
-	// number whatever range it is in (an adopted hand-made account has uid 3051, far below the range
-	// this add-on hands out). Absent is a binding from before it (contract 1): its UID may be the NAS
-	// record key, so it is matched by name until the apply that finds its account rewrites it
-	// with the real uid and this marker. Every binding contract-2 code writes carries it
-	// (create, adoption, boundAccount's rewrite).
+	// UIDKind says what UID is. "account" is a real uid on the NAS (an adopted hand-made account has
+	// uid 3051, far below the range this add-on hands out), so a name held by a different uid is a
+	// conflict whatever the range; it never lets an out-of-range number be followed to a new name
+	// (boundAccount). Absent is a binding from before it (contract 1): its UID may be the NAS record
+	// key, so it is matched by name until the apply that finds its account rewrites it with the real
+	// uid and this marker. Every binding contract-2 code writes carries it (create, adoption,
+	// boundAccount's rewrite).
 	UIDKind string    `json:"uid_kind,omitempty"`
 	BoundAt time.Time `json:"bound_at"`
 	// BoundBy records whether an operator adopted an existing account or the
@@ -381,13 +388,15 @@ func (b Binding) ownsUID(floor, ceiling int64) bool {
 	return b.UIDKind == uidKindAccount || inIDRange(b.UID, floor, ceiling)
 }
 
-// encodeBinding is the one place a binding is written, so both ids always are.
+// encodeBinding is the one place a binding is written: uid, and account_id beside it where the uid
+// is marked real.
 func (s *Store) encodeBinding(b Binding) ([]byte, error) {
 	if b.BoundAt.IsZero() {
 		b.BoundAt = s.now().UTC()
 	}
-	// account_id says "this is the account's stable id", so only a marked uid is stamped: a contract-1
-	// record key must not read as one.
+	// account_id names the account by its uid, so only a marked uid is stamped: a contract-1 record
+	// key must not read as one. It is not "stable" outside the add-on's range, where TrueNAS can hand
+	// the number to a new account after a delete (slice 7t).
 	b.AccountID = ""
 	if b.UID != 0 && b.UIDKind == uidKindAccount {
 		b.AccountID = accountID(b.UID)

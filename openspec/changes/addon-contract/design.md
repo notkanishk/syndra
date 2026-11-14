@@ -1310,9 +1310,12 @@ cover (`uncovered` today, as a gap reason).
 
 A binding records the account's uid and what that uid is (`uid_kind`). `"account"` says it is a real
 NAS uid: written by create, both adoptions and `boundAccount`'s rewrite. Absent is a contract-1
-binding, whose uid may be the NAS record key. One rule (`boundAccount`, asked of a read by
-`resolveBinding` for the wishes, the statistics and the adoption check, and of the target by `locate`
-and the plan) says which account it names:
+binding, whose uid may be the NAS record key. `boundAccount` says which account it names, and in 7r it
+is the rule of **apply (`locate`), plan, and `resolveBinding`** (the wishes behind the standing, the
+statistics, `accountBound`). It is **not yet** the rule of the account operations (`recordID`:
+set-password, rotate, purge), of `storageStatus` and `smbActivity` (by name), or of the backend's drift
+matching on `account_id`; those still use their own, and slice 7t ("one account identity") covers
+them. Below, "never written", "never attributed" and "names no account" are about those three places:
 
 - The name is the anchor. A name that finds an account with the recorded uid names it; a name held by
   a different uid is a conflict (the original was deleted and the name reused). An unmarked binding
@@ -1323,20 +1326,22 @@ and the plan) says which account it names:
   can come back after a delete, the hazard `identity.go` records (three new accounts got departed
   members' home folders), so it is never believed alone: name gone and number held by another name is
   a `BindingConflict` (an operator releases the binding, and adopts that account only if it is
-  theirs); nothing is renamed, written or created. Name and number both gone is the deleted account,
-  re-created as before.
+  theirs); the apply renames, writes and creates nothing. Name and number both gone is the deleted
+  account, re-created as before.
 - A conflicted binding names no account for the statistics, the standing or `accountBound`: the holder
-  of the number is never attributed to the subject. `account_id` is stamped on a binding only for a
-  marked uid, so a record key never reads as a stable account id.
+  of the number is not attributed to the subject there. `account_id` is stamped on a binding only for
+  a marked uid, so a record key never reads as one; it is the uid, which outside the range TrueNAS can
+  hand to a new account (7t).
 
-The conflict reaches the operator as the apply's `blocked` outcome (detail and next step as the add-on
-words them), which the backend settles as the target refusing that row.
+The conflict reaches the operator as the apply's and the plan's `blocked` outcome (detail and next
+step as the add-on words them), which the backend settles as the target refusing that row. Known
+gaps in that path are in 7t.
 
 ### 9.5 Identity
 
 A per-person point carries the Syndra subject id, resolved by the add-on
-through the binding it recorded at apply (the same `boundAccount` lookup
-operations use), never the target's local name. Usage by an account the
+through the binding it recorded at apply (`boundAccount`'s rule, as in 9.4b; the
+operations' own lookup is slice 7t's), never the target's local name. Usage by an account the
 add-on cannot bind (an unmanaged local account, a visitor, a shared desk
 login) counts in the target-wide and per-dimension totals, where the
 resource's truth belongs, and is **never** reported per person; the reply's

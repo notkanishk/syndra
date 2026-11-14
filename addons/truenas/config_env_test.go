@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -179,5 +180,69 @@ func TestTheAddOnStillRefusesToStartWithoutATargetURL(t *testing.T) {
 		t.Fatal("an add-on with no target URL must not start")
 	} else if !strings.Contains(err.Error(), "TRUENAS_URL") {
 		t.Fatalf("the refusal must name the variable, got %v", err)
+	}
+}
+
+// The uid range is refused at start when it is wrong, never repaired: a range that overlaps the
+// numbers TrueNAS hands out itself is how three new accounts got departed members' home folders
+// (identity.go). The default, and docker-compose.yml's, pass.
+func TestTheIDRangeIsRefusedAtStartWhenItCannotBeTrusted(t *testing.T) {
+	for _, tc := range []struct{ name, floor, ceiling, names string }{
+		{"a floor inside TrueNAS's own numbering", "3000", "999999", "TRUENAS_ID_FLOOR"},
+		{"a floor at 65535", "65535", "999999", "TRUENAS_ID_FLOOR"},
+		{"a floor of zero or less", "0", "999999", "TRUENAS_ID_FLOOR"},
+		{"a ceiling equal to the floor", "200000", "200000", "TRUENAS_ID_CEILING"},
+		{"a ceiling below the floor", "300000", "200000", "TRUENAS_ID_CEILING"},
+		{"a floor that is not an integer", "twohundredthousand", "999999", "TRUENAS_ID_FLOOR"},
+		{"a floor with a fraction is not an integer", "200000.5", "999999", "TRUENAS_ID_FLOOR"},
+		{"a ceiling that is not an integer", "200000", "9e5", "TRUENAS_ID_CEILING"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, _, err := idRangeFromEnv(tc.floor, tc.ceiling); err == nil || !strings.Contains(err.Error(), tc.names) {
+				t.Fatalf("want a refusal naming %s, got %v", tc.names, err)
+			} else if strings.Contains(tc.name, "not an integer") != strings.Contains(err.Error(), "is not an integer") {
+				t.Fatalf("a value that is not an integer says so, and only that does: %v", err)
+			}
+		})
+	}
+	for _, ok := range [][2]string{{"", ""}, {"200000", "999999"}, {"65536", "70000"}, {" 200000 ", " 999999 "}} {
+		if lo, hi, err := idRangeFromEnv(ok[0], ok[1]); err != nil || lo <= minIDFloor || hi <= lo {
+			t.Errorf("%q..%q must be accepted, got %d..%d %v", ok[0], ok[1], lo, hi, err)
+		}
+	}
+	if lo, hi, _ := idRangeFromEnv("", ""); lo != defaultIDFloor || hi != defaultIDCeiling {
+		t.Errorf("unset is the default, got %d..%d", lo, hi)
+	}
+}
+
+// And it is the start that refuses, with the variable named.
+func TestTheAddOnWillNotStartWithABadIDRange(t *testing.T) {
+	t.Setenv("TRUENAS_URL", "wss://nas.example.org/api/current")
+	t.Setenv("TRUENAS_API_KEY", "k")
+	t.Setenv("ADDON_TARGET", "truenas")
+	t.Setenv("ADDON_SECRET", "0123456789abcdef0123456789abcdef")
+	t.Setenv("TRUENAS_ID_FLOOR", "3000")
+	if _, err := loadConfig(); err == nil || !strings.Contains(err.Error(), "TRUENAS_ID_FLOOR") {
+		t.Fatalf("a range inside TrueNAS's own numbering must stop the start, naming the variable: %v", err)
+	}
+	t.Setenv("TRUENAS_ID_FLOOR", "")
+	if cfg, err := loadConfig(); err != nil || cfg.idFloor != defaultIDFloor || cfg.idCeiling != defaultIDCeiling {
+		t.Fatalf("the default range starts: %+v %v", cfg, err)
+	}
+}
+
+// docker-compose.yml's defaults are the add-on's defaults.
+func TestComposeDefaultsForTheIDRangeAreTheAddOnsDefaults(t *testing.T) {
+	raw, err := os.ReadFile("../../docker-compose.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"TRUENAS_ID_FLOOR=${TRUENAS_ID_FLOOR:-" + strconv.Itoa(defaultIDFloor) + "}",
+		"TRUENAS_ID_CEILING=${TRUENAS_ID_CEILING:-" + strconv.Itoa(defaultIDCeiling) + "}",
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("docker-compose.yml does not carry %s", want)
+		}
 	}
 }

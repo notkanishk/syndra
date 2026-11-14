@@ -114,14 +114,50 @@ type config struct {
 	statsEvery time.Duration
 }
 
+// minIDFloor is the top of the numbers that belong to TrueNAS itself (identity.go): its automatic
+// numbering of new accounts and groups, the system accounts, nobody (65534) and 65535. Nothing at or
+// under it is ours to hand out.
+const minIDFloor = 65535
+
+// idRangeFromEnv is the range of uids and gids this add-on hands out (identity.go), unset meaning the
+// default. A wrong range is refused at start, never repaired: a range that overlaps the numbers TrueNAS
+// hands out itself is the hazard identity.go records (new accounts got departed members' home
+// folders), and an inverted one hands out nothing. Each value must be an integer, the floor above
+// 65535, the ceiling above the floor.
+func idRangeFromEnv(floorRaw, ceilingRaw string) (floor, ceiling int64, err error) {
+	read := func(name, raw string, fallback int64) (int64, error) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return fallback, nil
+		}
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("%s=%q is not an integer: the add-on will not start with a uid range it cannot read", name, raw)
+		}
+		return n, nil
+	}
+	if floor, err = read("TRUENAS_ID_FLOOR", floorRaw, defaultIDFloor); err != nil {
+		return 0, 0, err
+	}
+	if ceiling, err = read("TRUENAS_ID_CEILING", ceilingRaw, defaultIDCeiling); err != nil {
+		return 0, 0, err
+	}
+	switch {
+	case floor <= minIDFloor:
+		return 0, 0, fmt.Errorf("TRUENAS_ID_FLOOR=%d is inside TrueNAS's own automatic numbering (%d and below): "+
+			"the add-on would hand out numbers TrueNAS hands out too, and will not start", floor, minIDFloor)
+	case ceiling <= floor:
+		return 0, 0, fmt.Errorf("TRUENAS_ID_CEILING=%d is not above TRUENAS_ID_FLOOR=%d: the range holds no number, and the add-on will not start", ceiling, floor)
+	}
+	return floor, ceiling, nil
+}
+
 func loadConfig() (config, error) {
 	c := config{
 		listen:     envOr("LISTEN_ADDR", ":8443"),
 		target:     strings.TrimSpace(os.Getenv("ADDON_TARGET")),
 		nasURL:     os.Getenv("TRUENAS_URL"),
 		shareHost:  strings.TrimSpace(os.Getenv("TRUENAS_SHARE_HOST")),
-		idFloor:    int64(envInt("TRUENAS_ID_FLOOR", defaultIDFloor)),
-		idCeiling:  int64(envInt("TRUENAS_ID_CEILING", defaultIDCeiling)),
 		shares:     splitList(os.Getenv("TRUENAS_SHARES")),
 		statePath:  envOr("STATE_PATH", "/var/lib/syndra-truenas/state.db"),
 		logDir:     envOr("MUTATION_LOG_DIR", "/var/lib/syndra-truenas"),
@@ -134,6 +170,10 @@ func loadConfig() (config, error) {
 		// deployment will need this — which is exactly why it must be an
 		// explicit `false` rather than something that quietly defaults off.
 		nasVerify: envBool("TRUENAS_VERIFY_TLS", true),
+	}
+	var err error
+	if c.idFloor, c.idCeiling, err = idRangeFromEnv(os.Getenv("TRUENAS_ID_FLOOR"), os.Getenv("TRUENAS_ID_CEILING")); err != nil {
+		return config{}, err
 	}
 	apiKey, err := secretValue("TRUENAS_API_KEY")
 	if err != nil {
