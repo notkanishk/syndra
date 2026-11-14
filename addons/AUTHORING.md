@@ -1322,8 +1322,11 @@ rules the schema cannot express:
   items on loan); its total is the level of the whole, by sum or by maximum
   as the quantity means.
 - Each dimension MUST name a **resource, never a person** (a machine, a
-  share, a category). Syndra will drop and log a dimension value equal to a
-  subject's `account_id` or name. The kit fails a dimension value equal to
+  share, a category): a person is a `subject`. Syndra keeps a dimension
+  value or gap reason that names a bound person as you sent it, flags it,
+  and shows it to admins only; a member's own page leaves it out. That is
+  Syndra's guard for a broken add-on, not a second way to report a person.
+  The kit fails a dimension value equal to
   the username or `account_id` of the account it created, and warns on one
   equal to those of any other account `/subjects` lists (a service account
   may share a resource's name: a `scanner` share written by a `scanner`
@@ -1551,11 +1554,11 @@ the start of today. A page that fails rolls the whole collection back and
 the next run asks again from the same watermark. It drops and counts a point
 that is not one makerspace day, has no value or a negative one, names a
 subject with no binding on your app, carries a `subject` on a metric that is
-not `per_subject`, names an undeclared dimension or a bound person in a
-dimension value, is older than retention, or starts a series beyond
-`constants.series_per_metric`. Per-person points are kept 400 days (an
-operator may shorten that per system), totals and gaps five years. Admins
-see the totals and each person's numbers; a member sees their own. The
+not `per_subject`, names an undeclared dimension, is older than retention,
+or starts a series beyond `constants.series_per_metric`. Per-person points
+are kept 400 days (an operator may shorten that per system), totals and gaps
+five years. Admins see the totals and each person's numbers, and Insights
+names who used what; a member sees their own. The
 kit's `stats.*` checks hold every MUST above that a black box can see.
 
 ## 5. Plan and apply agree

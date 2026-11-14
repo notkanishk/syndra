@@ -58,7 +58,16 @@ const SAID = [
   sub(copy.keptLine(777), 777, "{n}"),
   sub(copy.dayKept("{day}", 777), 777, "{n}"),
   copy.dayPending("{day}"),
-  copy.FEW_PEOPLE,
+  copy.NOBODY_RECENTLY,
+  sub(copy.yearDays(777), 777, "{n}"),
+  copy.peopleLabel("{what}"),
+  copy.PERSON_COLUMN,
+  copy.LAST_30_COLUMN,
+  copy.LAST_12_COLUMN,
+  copy.NO_VALUE,
+  copy.ACCOUNT_ID,
+  copy.leftOut(1),
+  sub(copy.leftOut(2), 2, N),
   sub(copy.spreadDays(777), 777, "{n}"),
   copy.droppedLine(["{reason}"]),
   ...Object.values(copy.DROPPED).flatMap((say) => [sub(say(555), 555, N), sub(say(1), 1, N)]),
@@ -96,7 +105,7 @@ describe("the copy guide's section on what has been used", () => {
   it("has a row for every unit and every reason the backend can give", () => {
     expect(Object.keys(copy.UNIT_HEADING).sort()).toEqual((["count", "items", "bytes", "seconds", "grams"] as StatsUnit[]).sort());
     expect(Object.keys(copy.DROPPED).sort()).toEqual(
-      ["not_a_day", "bad_value", "not_per_subject", "unbound_subject", "undeclared_dimension", "person_in_dimension", "past_retention", "series"].sort(),
+      ["not_a_day", "bad_value", "not_per_subject", "unbound_subject", "undeclared_dimension", "past_retention", "series"].sort(),
     );
   });
 

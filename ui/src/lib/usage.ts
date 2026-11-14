@@ -12,14 +12,6 @@ import type { StatsDay, StatsGap, StatsMetric, StatsSeries, StatsUnit } from "@/
 
 export const WINDOW_DAYS = 30;
 
-/**
- * Fewer people than this and a spread points at them (with one person the
- * middle IS their number), so Insights says how many and shows none. The
- * backend has no such floor for this read (insights.go's 5 is the holders a
- * role needs before it is called a single route); this is the same number.
- */
-export const MIN_SPREAD_MEMBERS = 5;
-
 /** A value in its unit: bytes in binary steps (as the storage card), the rest as a limit is said. */
 export function formatValue(value: number, unit: StatsUnit): string {
   if (unit === "bytes") return formatBytes(value);

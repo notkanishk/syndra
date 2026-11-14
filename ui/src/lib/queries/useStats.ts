@@ -63,6 +63,8 @@ export interface StatsMetric {
   series: StatsSeries[];
   gaps: StatsGap[];
   collected?: StatsCollected;
+  /** A member's own card: how many of their series are not shown, as the add-on named a person in them. */
+  left_out?: number;
 }
 
 /**
@@ -106,14 +108,38 @@ export interface InsightsStatsMetric {
   per_subject?: boolean;
   against?: string;
   dimensions?: Array<{ name: string; label: string }>;
-  /** The first day the spread covers: the window's `from`, or later when that system keeps per-person numbers for fewer days (the backend's own clamp). */
+  /** The first day each window covers: the window's own, or later when that system keeps per-person numbers for fewer days (the backend's own clamp). */
   window_30d_from: string;
-  series: Array<{ dimensions: Record<string, string>; members: number; p50: number; p90: number }>;
+  window_12m_from: string;
+  series: InsightsSeries[];
+}
+
+/**
+ * One person's numbers on one breakdown, read from the days the spread is
+ * read from. `last_30d` is a counter's 0 when they counted none there, and a
+ * gauge's null when there was no sample; `name` is "" when the directory could
+ * not be read, never the id.
+ */
+export interface InsightsPerson {
+  user_id: string;
+  name: string;
+  last_30d: number | null;
+  last_12m: number;
+}
+
+/** A breakdown's spread over the people with a value in the 30 days (none below a floor: an operator's read), and everyone with a value in the 12 months. */
+export interface InsightsSeries {
+  dimensions: Record<string, string>;
+  members: number;
+  p50: number;
+  p90: number;
+  people: InsightsPerson[];
 }
 
 export interface InsightsStats {
   window_days: number;
   from: string;
+  from_12m: string;
   metrics: InsightsStatsMetric[];
 }
 

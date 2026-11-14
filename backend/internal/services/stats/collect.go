@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -28,8 +29,8 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// directoryUsers is who the directory knows, for the display names the privacy
-// rule checks. A var so a test can stand in for Zitadel.
+// directoryUsers is who the directory knows, for the display names the
+// matcher checks. A var so a test can stand in for Zitadel.
 var directoryUsers = func(ctx context.Context) ([]models.UserProfile, error) {
 	return directory.Default.Users(ctx)
 }
@@ -47,14 +48,16 @@ const (
 	DropNotPerSubject       = "not_per_subject"      // a subject on a metric not reported per person
 	DropUnboundSubject      = "unbound_subject"      // a subject with no binding on this target
 	DropUndeclaredDimension = "undeclared_dimension" // a dimension the metric does not declare
-	DropPersonInDimension   = "person_in_dimension"  // a dimension value that names a bound person; a gap reason that does is withheld (reasonWithheld), its gap kept
 	DropPastRetention       = "past_retention"       // older than retention keeps
 	DropSeries              = "series"               // a new series past constants.series_per_metric
 )
 
-// reasonWithheld is a kept gap's reason in place of one that named a bound
-// person (ruling B7).
-const reasonWithheld = "The add-on's reason named a person."
+// A dimension value or gap reason that names a bound person is not a drop:
+// it is kept as sent and flagged names_person (migration 000094, the owner's
+// ruling of 14 Nov 2026, superseding ruling B7's drop and withhold). Admins
+// read it as stored; a member's own view leaves it out (handlers/stats.go).
+// The contract rule stands: people go in `subject`, never in a dimension (kit
+// stats.no-people); the flag is Syndra's guard against an add-on that breaks it.
 
 // metricTimeout bounds one metric's collection, its pages and its
 // transaction: one slow metric holds only its own rows, and only this long.
@@ -109,8 +112,8 @@ func Collect(ctx context.Context, target string, m addons.Metric, buffer time.Du
 		return nil, err
 	}
 	// A refusal to read the directory fails the collection (the watermark
-	// stays): a privacy check that could not look at the names must not read
-	// as one that found none.
+	// stays): a flag set without looking at the names would read as one that
+	// found none, and a member would be shown what names a person.
 	users, err := directoryUsers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("stats: the directory could not be read for display names: %w", err)
@@ -212,8 +215,8 @@ func finalThrough(reported, now time.Time) (time.Time, error) {
 
 // people is who is bound on the target: the subjects a point may name, and
 // the one pattern for every word that names a bound person (subject id,
-// account name and id, and the display name the directory holds), which no dimension value and no gap reason may
-// contain (ruling B7).
+// account name and id, and the display name the directory holds), which flags
+// a dimension value or gap reason that contains one (names_person).
 type people struct {
 	bound map[string]bool
 	named *regexp.Regexp
@@ -271,9 +274,20 @@ func nameable(name string) bool {
 // Both sides are NFC, so a precomposed "é" and "e" plus a combining accent are one name.
 func (p people) names(text string) bool { return p.named.MatchString(norm.NFC.String(text)) }
 
-// keep is the points of a page worth storing, each checked (checkPoint), the
-// series cap applied, and one per key (an add-on that repeats a key in a page
-// has the last one kept: equal keys replace).
+// namesIn reports whether any dimension value names a bound person.
+func (p people) namesIn(dims map[string]string) bool {
+	for _, v := range dims {
+		if p.names(v) {
+			return true
+		}
+	}
+	return false
+}
+
+// keep is the points of a page worth storing, each checked (checkPoint) and
+// flagged when a dimension value names a bound person, the series cap
+// applied, and one per key (an add-on that repeats a key in a page has the
+// last one kept: equal keys replace).
 func keep(points []addons.StatPoint, m addons.Metric, who people, series map[string]bool, dropped map[string]int) []db.StatsPoint {
 	var out []db.StatsPoint
 	at := map[string]int{}
@@ -291,7 +305,7 @@ func keep(points []addons.StatPoint, m addons.Metric, who people, series map[str
 			}
 			series[key] = true
 		}
-		point := db.StatsPoint{Subject: p.Subject, Dims: p.Dimensions, Day: day, Value: *p.Value}
+		point := db.StatsPoint{Subject: p.Subject, Dims: p.Dimensions, Day: day, Value: *p.Value, NamesPerson: who.namesIn(p.Dimensions)}
 		if i, seen := at[p.Subject+"\x00"+day+"\x00"+key]; seen {
 			out[i] = point
 			continue
@@ -315,23 +329,21 @@ func checkPoint(p addons.StatPoint, m addons.Metric, who people) (string, string
 	case p.Subject != "" && !who.bound[p.Subject]:
 		return "", DropUnboundSubject
 	}
-	if why := checkDims(p.Dimensions, m, who); why != "" {
+	if why := checkDims(p.Dimensions, m); why != "" {
 		return "", why
 	}
 	return day, ""
 }
 
 // keepGaps is the gaps of a page worth storing: whole makerspace days, only
-// declared dimensions naming nobody, a reason capped at 200 characters. A
-// reason that names a person is withheld, never stored, and counted: the gap
-// itself is still true and still says the numbers are incomplete. A dimension
-// that names a person drops the gap, as it drops that series' points.
+// declared dimensions, a reason capped at 200 characters, flagged when a
+// dimension value or the reason names a bound person.
 func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[string]int) []db.StatsGap {
 	var out []db.StatsGap
 	for _, g := range gaps {
 		start, ok1 := midnight(g.Start)
 		end, ok2 := midnight(g.End)
-		why := checkDims(g.Dimensions, m, who)
+		why := checkDims(g.Dimensions, m)
 		switch {
 		case !ok1 || !ok2 || end <= start:
 			dropped[DropNotADay]++
@@ -341,27 +353,17 @@ func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[st
 			dropped[why]++
 		default:
 			reason := []rune(g.Reason)
-			if who.names(g.Reason) {
-				dropped[DropPersonInDimension]++
-				reason = []rune(reasonWithheld)
-			}
-			out = append(out, db.StatsGap{Dims: g.Dimensions, Start: start, End: end, Reason: string(reason[:min(len(reason), 200)])})
+			out = append(out, db.StatsGap{Dims: g.Dimensions, Start: start, End: end, Reason: string(reason[:min(len(reason), 200)]),
+				NamesPerson: who.namesIn(g.Dimensions) || who.names(g.Reason)})
 		}
 	}
 	return out
 }
 
-func checkDims(dims map[string]string, m addons.Metric, who people) string {
-	for name, value := range dims {
-		declared := false
-		for _, d := range m.Dimensions {
-			declared = declared || d.Name == name
-		}
-		if !declared {
+func checkDims(dims map[string]string, m addons.Metric) string {
+	for name := range dims {
+		if !slices.ContainsFunc(m.Dimensions, func(d addons.Dimension) bool { return d.Name == name }) {
 			return DropUndeclaredDimension
-		}
-		if who.names(value) {
-			return DropPersonInDimension
 		}
 	}
 	return ""

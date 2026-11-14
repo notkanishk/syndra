@@ -308,8 +308,8 @@ func TestLiveTheWatermarkIsAMidnightThatNeverGoesBack(t *testing.T) {
 // What the add-on may not say is dropped and counted, by reason, and the
 // rest is kept: a point that is not one makerspace day, no value or a
 // negative one, a subject on a metric not per person or with no binding here,
-// an undeclared dimension, a dimension naming a bound person (their subject
-// id, account name or account id), and a late point past retention.
+// an undeclared dimension, and a late point past retention. A dimension naming
+// a bound person is not a drop (TestLiveWhatNamesAPersonIsKeptAndFlagged).
 func TestLiveEachDropIsCountedByReason(t *testing.T) {
 	ctx := collectLive(t)
 	utcMidnight := pt(t, day(3), "", share("makers"), 1)
@@ -324,12 +324,11 @@ func TestLiveEachDropIsCountedByReason(t *testing.T) {
 		pt(t, day(3), "", share("lab"), -1),
 		pt(t, day(3), "sub-orton", share("makers"), 1),
 		pt(t, day(3), "", map[string]string{"printer": "xl-1"}, 1),
-		pt(t, day(3), "", share("john_cena"), 1), pt(t, day(3), "", share("1001"), 1), pt(t, day(3), "", share("sub-cena"), 1),
 		pt(t, day(401), "sub-cena", share("makers"), 1), pt(t, day(401), "", share("makers"), 1),
-	}, gp(t, day(3), day(2), share("john_cena"), "Off"), gp(t, day(3), day(2), share("lab"), ""))}}}
+	}, gp(t, day(3), day(2), share("lab"), ""))}}}
 	dropped := collect(t, ctx, sessions, s)
 	want := map[string]int{stats.DropNotADay: 2, stats.DropBadValue: 3, stats.DropUnboundSubject: 1,
-		stats.DropUndeclaredDimension: 1, stats.DropPersonInDimension: 4, stats.DropPastRetention: 1}
+		stats.DropUndeclaredDimension: 1, stats.DropPastRetention: 1}
 	if !reflect.DeepEqual(dropped, want) {
 		t.Errorf("dropped %v, want %v", dropped, want)
 	}
@@ -346,6 +345,61 @@ func TestLiveEachDropIsCountedByReason(t *testing.T) {
 	totals := &script{replies: [][]any{{page(t, day(1), []addons.StatPoint{pt(t, day(3), "sub-cena", nil, 1), pt(t, day(3), "", nil, 4)})}}}
 	if dropped := collect(t, ctx, doors, totals); !reflect.DeepEqual(dropped, map[string]int{stats.DropNotPerSubject: 1}) {
 		t.Errorf("a subject on a metric not per person: dropped %v", dropped)
+	}
+}
+
+// What names a bound person (their subject id, account name or account id,
+// as a whole token in any case) is kept as the add-on sent it and flagged
+// names_person in the row, at collection: a point by its dimension value, a
+// gap by its value or its reason. Nothing else is flagged, and nothing is
+// counted as dropped (the owner's ruling of 14 Nov 2026).
+func TestLiveWhatNamesAPersonIsKeptAndFlagged(t *testing.T) {
+	ctx := collectLive(t)
+	s := &script{replies: [][]any{{page(t, day(1), []addons.StatPoint{
+		pt(t, day(3), "", share("makers"), 7), pt(t, day(3), "sub-cena", share("home-JOHN_CENA"), 2),
+		pt(t, day(3), "", share("1001"), 1), pt(t, day(3), "", share("sub-cena"), 1),
+	}, gp(t, day(3), day(2), share("john_cena"), "Off"), gp(t, day(3), day(2), share("makers"), "account 1001 is locked"),
+		gp(t, day(3), day(2), share("lab"), "Auditing is off"))}}}
+	if dropped := collect(t, ctx, sessions, s); len(dropped) != 0 {
+		t.Errorf("dropped %v: naming a person is not a drop", dropped)
+	}
+	rowsOf := func(q string) []string {
+		t.Helper()
+		rows, err := db.PG.Query(ctx, q, collectTarget, sessions.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	points := rowsOf(`SELECT subject || ' ' || dims::text || ' ' || names_person FROM addon_metric_points WHERE target_id = $1 AND metric = $2 ORDER BY 1`)
+	if want := []string{` {"share": "1001"} true`, ` {"share": "makers"} false`, ` {"share": "sub-cena"} true`, `sub-cena {"share": "home-JOHN_CENA"} true`}; !reflect.DeepEqual(points, want) {
+		t.Errorf("points %q, want %q", points, want)
+	}
+	gaps := rowsOf(`SELECT dims::text || ' ' || reason || ' ' || names_person FROM addon_metric_gaps WHERE target_id = $1 AND metric = $2 ORDER BY 1`)
+	if want := []string{`{"share": "john_cena"} Off true`, `{"share": "lab"} Auditing is off false`, `{"share": "makers"} account 1001 is locked true`}; !reflect.DeepEqual(gaps, want) {
+		t.Errorf("gaps %q, want %q", gaps, want)
+	}
+
+	// The reads a page is built from carry the flag: a day, its month, a gap.
+	if vals, err := db.StatsDays(ctx, collectTarget, "sub-cena", day(30)); err != nil || len(vals) != 1 || !vals[0].NamesPerson {
+		t.Errorf("days %+v (%v): want cena's one point, flagged", vals, err)
+	}
+	if vals, err := db.StatsMonths(ctx, collectTarget, "sub-cena", day(30)); err != nil || len(vals) != 1 || !vals[0].NamesPerson {
+		t.Errorf("months %+v (%v): want cena's one month, flagged", vals, err)
+	}
+	read, err := db.StatsGaps(ctx, collectTarget, day(30))
+	var flagged []string
+	for _, g := range read {
+		if g.NamesPerson {
+			flagged = append(flagged, g.Dims["share"])
+		}
+	}
+	if err != nil || len(read) != 3 || !reflect.DeepEqual(flagged, []string{"john_cena", "makers"}) && !reflect.DeepEqual(flagged, []string{"makers", "john_cena"}) {
+		t.Errorf("gaps read %+v (%v): want john_cena's and makers' flagged", read, err)
 	}
 }
 

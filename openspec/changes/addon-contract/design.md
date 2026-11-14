@@ -1328,6 +1328,21 @@ in the totals". No local name crosses the wire for an unbound account.
   counted `person_in_dimension`. So is a point dropped that is not one
   makerspace day, or has no value or a negative one. Each is counted by
   reason on the metric's row.
+  *Superseded (14 Nov 2026, slice 7i, the owner's ruling: "those statistics
+  would need to be able to identify individuals. visible only to the admins.
+  under the required situations, admin should be able to trace down the
+  individual.").* The same matcher (unchanged) no longer drops or rewrites:
+  a point whose dimension value names a bound person, and a gap whose value
+  or reason does, are kept as the add-on sent them and flagged
+  `names_person` on the row (migration 000094, expand-only, both tables;
+  `stats.keep`, `keepGaps`, `people.namesIn`). The flag is set at
+  collection: a name bound later is flagged from its next collection on,
+  and a series is treated as flagged when any point read for it is. The
+  drop reason `person_in_dimension` is gone (the stored `dropped` map is
+  rewritten by each hourly collection, so an old count clears within the
+  hour); the other drops stand. The contract rule is unchanged: people go
+  in `subject`, never in a dimension (kit `stats.no-people`); the flag is
+  Syndra's guard for an add-on that breaks it.
 - **A metric is never re-purposed**: a manifest that changes an existing
   metric's `instrument` or `unit` is refused at registration with the
   reason; a new meaning is a new name (§2 rule 6). Bucket width is not
@@ -1397,12 +1412,30 @@ this contract carries.
   hiding a total with three people in it would hide nothing from anyone
   who can see it; the threshold stays where it already lives, in
   `services/insights.go`, and is not extended here.
+  *14 Nov 2026 (7i):* the UI's own floor (Insights showed no spread under
+  5 people, `MIN_SPREAD_MEMBERS`) is removed with it: the spread is always
+  shown, one person included.
 - **No ranking of people** is a UI choice, not a privacy control: insights
   shows distributions ("most members use under 2 GB") and the person page
   shows one person, because a leaderboard of members is not a view this
   makerspace wants on a wall, and an admin who needs one person's number
   opens that person. The copy guard keeps the words that would introduce
   one out of Syndra's own sentences.
+  *Superseded in part (14 Nov 2026, 7i, the owner's ruling above): admins
+  trace usage to a person.* `GET /insights/stats` (operators only, as
+  before) carries, on each per-person series, its spread over the members
+  with a value in the last 30 days and `people`: every person with a value
+  in the last 12 months, each with their user id, the directory's display
+  name (`""` when it cannot be read, never the id) and their value in each
+  window. One query defines "a person's value" for both
+  (`db.StatsDistributions`: a counter's sum, a gauge's latest, over
+  `GREATEST(window, kept_from)`), so the spread is over exactly the values
+  the list names; a counter's empty 30 days is 0 and a gauge's is null. Per
+  series, never across: a counter is never summed across series. The UI
+  orders the people by the last 30 days, largest first, with sortable
+  headings, each name linking to the person's page; the copy guard still
+  refuses words that label a place in that order (copy guide §15). The
+  owner declined a view audit again with this ruling: none is written.
 - **No raw logs copied wholesale**: events and holdings are live reads (§9.4);
   Syndra stores points, gaps and watermarks.
 - **Retention is a ceiling, not a target**: the operator may shorten the
@@ -1415,7 +1448,19 @@ this contract carries.
   dimension value that names a person (§9.6, whole token): dropped,
   counted, logged, and the kit warns; a gap reason that names one is
   withheld, its gap kept and counted. Dimensions are resources, never
-  people. A person's page carries only the gaps whose dimensions are `{}`
+  people. *Superseded for the person rule (14 Nov 2026, 7i):* what names a
+  person is kept and flagged `names_person`; admin surfaces (the target
+  overview, Insights, an admin's person page) show it as stored, and a
+  member's own view (`/me/targets`, `statsUsageFor(memberView)`) leaves out
+  every series with a flagged point, saying how many (`left_out`, "1 more
+  line is not shown here, as the add-on named a person in it."), and
+  replaces a flagged gap's reason with "The add-on's reason named a
+  person.", in the backend response, not only the UI. Left out rather than
+  relabelled: the flag is the series', not one dimension's, so a relabelled
+  row would be a number under a label that is neither the add-on's nor
+  true, and two such rows could not be told apart; leaving it out and
+  saying so keeps every word true. A gap on a series left out is not shown
+  either (it is on no series of theirs). A person's page carries only the gaps whose dimensions are `{}`
   or a subset of one of that person's own series (every key=value of the
   gap in that series: `{"share":"makers"}` is on their
   `{"share":"makers","protocol":"smb"}`), never a gap on a resource only

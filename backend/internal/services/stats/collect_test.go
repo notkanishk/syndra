@@ -1,7 +1,6 @@
 package stats
 
 import (
-	"reflect"
 	"slices"
 	"testing"
 
@@ -11,11 +10,12 @@ import (
 	"syndra/internal/models"
 )
 
-// One rule names a bound person (ruling B7), for a dimension value and a gap
-// reason alike: a subject id, account name or account id as a whole token, in
-// any case. A point or gap whose dimension names someone is dropped and
-// counted; a gap whose reason does is kept, its reason withheld, and counted.
-func TestNoValueOrReasonNamesABoundPerson(t *testing.T) {
+// One rule names a bound person, for a dimension value and a gap reason
+// alike: a subject id, account name or account id as a whole token, in any
+// case. Nothing that names one is dropped or rewritten (the owner's ruling of
+// 14 Nov 2026): the point or gap is kept as sent and flagged names_person,
+// and nothing else is.
+func TestWhatNamesABoundPersonIsKeptAndFlagged(t *testing.T) {
 	account := "3051"
 	who := peopleOn([]db.TargetBinding{{SubjectID: "sub-cena", Username: "john_cena", AccountID: &account}, {SubjectID: "sub-orton", Username: ""}, {SubjectID: "sub-rey", Username: "Rey_Mysterio"}}, nil)
 	m := addons.Metric{Name: "storage.sessions", Instrument: "counter", Unit: "count", PerSubject: true,
@@ -33,25 +33,31 @@ func TestNoValueOrReasonNamesABoundPerson(t *testing.T) {
 
 	dropped := map[string]int{}
 	kept := keep([]addons.StatPoint{point("John_Cena"), point("home-JOHN_CENA"), point("SUB-CENA"), point("makers")}, m, who, map[string]bool{}, dropped)
-	if len(kept) != 1 || kept[0].Dims["share"] != "makers" {
-		t.Errorf("kept %+v: a value naming a person in another case was stored", kept)
+	var flags []bool
+	for _, p := range kept {
+		flags = append(flags, p.NamesPerson)
+	}
+	if len(kept) != 4 || kept[1].Dims["share"] != "home-JOHN_CENA" || !slices.Equal(flags, []bool{true, true, true, false}) {
+		t.Errorf("kept %+v: want every point as sent, flagged only where a value names a person", kept)
 	}
 	gaps := keepGaps([]addons.StatGap{
 		gap("makers", "John_Cena's home is offline"), gap("makers", "account 3051 is locked"), gap("makers", "rey_mysterio is away"),
 		gap("JOHN_CENA", "Auditing is off"), gap("makers", "Auditing is off on this share"),
 	}, m, who, dropped)
 	var reasons []string
+	flags = nil
 	for _, g := range gaps {
-		if g.Dims["share"] != "makers" {
-			t.Errorf("kept a gap on %q: a dimension naming a person was stored", g.Dims["share"])
-		}
 		reasons = append(reasons, g.Reason)
+		flags = append(flags, g.NamesPerson)
 	}
-	if want := []string{reasonWithheld, reasonWithheld, reasonWithheld, "Auditing is off on this share"}; !slices.Equal(reasons, want) {
-		t.Errorf("kept reasons %q, want %q: a reason naming a person was stored, or its gap lost", reasons, want)
+	if want := []string{"John_Cena's home is offline", "account 3051 is locked", "rey_mysterio is away", "Auditing is off", "Auditing is off on this share"}; !slices.Equal(reasons, want) {
+		t.Errorf("kept reasons %q, want %q: a reason was rewritten or its gap lost", reasons, want)
 	}
-	if want := map[string]int{DropPersonInDimension: 7}; !reflect.DeepEqual(dropped, want) {
-		t.Errorf("dropped %v, want %v", dropped, want)
+	if want := []bool{true, true, true, true, false}; !slices.Equal(flags, want) {
+		t.Errorf("gap flags %v, want %v: a reason or a dimension value naming a person flags its gap", flags, want)
+	}
+	if len(dropped) != 0 {
+		t.Errorf("dropped %v: naming a person is no longer a drop", dropped)
 	}
 	// An empty username names nobody: "" is in every string.
 	if who.names("makers") {
@@ -148,8 +154,8 @@ func TestADisplayNameIsCheckedLikeAnyOtherName(t *testing.T) {
 		}
 	}
 
-	// Through the same two places an account name goes: a value drops its
-	// series and is counted; a reason is withheld, its gap kept.
+	// Through the same two places an account name goes: a value flags its
+	// point, a reason its gap; both kept as sent.
 	m := addons.Metric{Name: "storage.sessions", Instrument: "counter", Unit: "count", PerSubject: true,
 		Dimensions: []addons.Dimension{{Name: "share", Label: "Share"}}}
 	day := clock.Day(clock.Now())
@@ -161,13 +167,13 @@ func TestADisplayNameIsCheckedLikeAnyOtherName(t *testing.T) {
 		{Start: start, End: end, Dimensions: map[string]string{"share": "John Cena"}, Value: &v},
 		{Start: start, End: end, Dimensions: map[string]string{"share": "makers"}, Value: &v},
 	}, m, who, map[string]bool{}, dropped)
-	if len(kept) != 1 || kept[0].Dims["share"] != "makers" || dropped[DropPersonInDimension] != 1 {
-		t.Errorf("kept %+v, dropped %v: a display name in a dimension value was stored", kept, dropped)
+	if len(kept) != 2 || !kept[0].NamesPerson || kept[1].NamesPerson || len(dropped) != 0 {
+		t.Errorf("kept %+v, dropped %v: want both kept, the display name's flagged", kept, dropped)
 	}
 	gaps := keepGaps([]addons.StatGap{
 		{Start: start, End: end, Dimensions: map[string]string{"share": "makers"}, Reason: "John Cena's home is offline"},
 	}, m, who, dropped)
-	if len(gaps) != 1 || gaps[0].Reason != reasonWithheld || dropped[DropPersonInDimension] != 2 {
-		t.Errorf("gaps %+v, dropped %v: want the gap kept, its reason withheld, and counted", gaps, dropped)
+	if len(gaps) != 1 || gaps[0].Reason != "John Cena's home is offline" || !gaps[0].NamesPerson || len(dropped) != 0 {
+		t.Errorf("gaps %+v, dropped %v: want the gap kept as sent and flagged", gaps, dropped)
 	}
 }

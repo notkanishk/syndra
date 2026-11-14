@@ -125,7 +125,7 @@ func describePersonTarget(r *http.Request, target, subject string, hasProject bo
 	if err != nil {
 		return personTargetView{}, err
 	}
-	mine.Usage = personalUsage(r.Context(), target, subject)
+	mine.Usage = personalUsage(r.Context(), target, subject, false)
 	// The member's own line about a password change nobody confirmed is theirs
 	// to settle, by setting it again; passwords never reach an operator (A-13 §5).
 	mine.PasswordChange = nil
