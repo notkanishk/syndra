@@ -1034,6 +1034,22 @@ settings with the full §5 rules.
   `conformance-` subject, four GET reads; `account.purge` and every other
   write refused (`TestCallRefusalsSendNothing`, mutation-checked), signed
   round trip (`TestCallSettingRoundTrips`, `TestCallReleasesAConformanceSubject`).
+  *Review fix (14 Nov 2026):* Go's decoder folds key case and Unicode, so a
+  re-encoded operator body let `{"subject":"conformance-x","\u017fubject":"wwe-the-rock"}`
+  release a member on TrueNAS's real handler. Now nothing is passed through:
+  `onlyString` parses one key, byte-equal, once, a string, nothing after the
+  object, and the payload is built (`TestCallRefusalsSendNothing`: folded,
+  capitalised, duplicate, trailing); `actor` is the tool's own
+  (`TestCallActorIsTheToolsOwn`); `-url` is an origin only
+  (`TestCallRefusesABaseURLThatIsMoreThanAnOrigin`); `GET /settings/<name>`
+  dropped (no such route); a refusal exits 2, not 1 (not sent, versus
+  answered non-2xx); accepted by TrueNAS's real `decodeStrict`
+  (`TestTheAddonCallToolIsAcceptedByThisAddOn`).
+- [ ] 7n.1 Contract follow-up, not for now: the TrueNAS add-on's
+  `decodeStrict` accepts case-folded keys (Go `encoding/json`), so any signed
+  caller can send `Subject` or `\u017fubject`. Options: exact-case key
+  validation, or `encoding/json/v2` case-sensitive decoding. Also
+  `PUT /settings/<name>` is not lifecycle-gated #needs-triage
 
 ## 5. The guide
 

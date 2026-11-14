@@ -57,7 +57,11 @@ func callServer(t *testing.T) (string, func() []map[string]any, func() []string)
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	return srv.URL,
-		func() []map[string]any { mu.Lock(); defer mu.Unlock(); return append([]map[string]any(nil), releases...) },
+		func() []map[string]any {
+			mu.Lock()
+			defer mu.Unlock()
+			return append([]map[string]any(nil), releases...)
+		},
 		func() []string { mu.Lock(); defer mu.Unlock(); return append([]string(nil), seen...) }
 }
 
@@ -112,6 +116,26 @@ func TestCallRefusalsSendNothing(t *testing.T) {
 		"read an operation":        {"GET", "/operations/account.release", ``},
 		"read a plan":              {"GET", "/plan", ``},
 		"not an object":            {"POST", "/operations/account.release", `[1]`},
+		"folded key (long s)":      {"POST", "/operations/account.release", `{"subject":"conformance-x","\u017fubject":"wwe-the-rock"}`},
+		"folded key, first":        {"POST", "/operations/account.release", `{"\u017fubject":"wwe-the-rock","subject":"conformance-x"}`},
+		"capitalised key":          {"POST", "/operations/account.release", `{"Subject":"conformance-x"}`},
+		"capitalised beside":       {"POST", "/operations/account.release", `{"subject":"conformance-x","Subject":"wwe-the-rock"}`},
+		"duplicate subject":        {"POST", "/operations/account.release", `{"subject":"conformance-x","subject":"wwe-the-rock"}`},
+		"duplicate, member first":  {"POST", "/operations/account.release", `{"subject":"wwe-the-rock","subject":"conformance-x"}`},
+		"trailing junk":            {"POST", "/operations/account.release", `{"subject":"conformance-x"} junk`},
+		"second document":          {"POST", "/operations/account.release", `{"subject":"conformance-x"}{"subject":"wwe-the-rock"}`},
+		"subject not a string":     {"POST", "/operations/account.release", `{"subject":null}`},
+		"release with an actor":    {"POST", "/operations/account.release", `{"subject":"conformance-x","actor":"someone-else"}`},
+		"release with params":      {"POST", "/operations/account.release", `{"subject":"conformance-x","params":{"a":1}}`},
+		"setting with an actor":    {"PUT", "/settings/home_root", `{"value":"","actor":"someone-else"}`},
+		"setting with a call_id":   {"PUT", "/settings/home_root", `{"value":"","call_id":"x"}`},
+		"setting, folded value":    {"PUT", "/settings/home_root", `{"value":"","\u017ealue":"x"}`},
+		"setting, capital Value":   {"PUT", "/settings/home_root", `{"Value":""}`},
+		"setting, no body":         {"PUT", "/settings/home_root", ``},
+		"setting, value not text":  {"PUT", "/settings/home_root", `{"value":1}`},
+		"setting, trailing":        {"PUT", "/settings/home_root", `{"value":""}x`},
+		"setting read by name":     {"GET", "/settings/home_root", ``},
+		"read with a body":         {"GET", "/health", `{}`},
 	} {
 		if status, _, err := Call(context.Background(), callCfg(url), c.method, c.path, []byte(c.body)); err == nil || status != 0 {
 			t.Errorf("%s: sent, answered %d, err %v", name, status, err)
@@ -119,6 +143,32 @@ func TestCallRefusalsSendNothing(t *testing.T) {
 	}
 	if s := seen(); len(s) != 0 {
 		t.Fatalf("a refused call reached the add-on: %v", s)
+	}
+}
+
+// The tool sets the actor, the call_id and the contract version itself.
+func TestCallActorIsTheToolsOwn(t *testing.T) {
+	url, releases, _ := callServer(t)
+	if _, _, err := Call(context.Background(), callCfg(url), "POST", "/operations/account.release", []byte(`{"subject":"conformance-wwe-rey"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got := releases(); len(got) != 1 || got[0]["actor"] != "syndra-addon-call" || len(got[0]) != 6 {
+		t.Fatalf("the add-on saw %v", got)
+	}
+}
+
+func TestCallRefusesABaseURLThatIsMoreThanAnOrigin(t *testing.T) {
+	url, _, seen := callServer(t)
+	for _, base := range []string{url + "/x", url + "?a=1", url + "/?a=1", url + "#f", url + "?", "https://user:pw@" + strings.TrimPrefix(url, "https://")} {
+		if status, _, err := Call(context.Background(), callCfg(base), "GET", "/health", nil); err == nil || status != 0 {
+			t.Errorf("%q: sent, answered %d, err %v", base, status, err)
+		}
+	}
+	if s := seen(); len(s) != 0 {
+		t.Fatalf("a refused call reached the add-on: %v", s)
+	}
+	if status, _, err := Call(context.Background(), callCfg(url+"/"), "GET", "/health", nil); err != nil || status != 200 {
+		t.Fatalf("a trailing slash is the origin: %d %v", status, err)
 	}
 }
 
