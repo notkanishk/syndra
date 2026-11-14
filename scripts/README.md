@@ -119,6 +119,14 @@ export SECRET
 kit='/tmp/syndra-addon-conform -url "https://$ADDON_IP:8443" -target truenas -secret-file "$SECRET"'
 scripts/addon-quiet-run.sh -- sh -c "$kit -json /tmp/conformance-reads.json"
 scripts/addon-quiet-run.sh --writes -- sh -c "$kit -mutate -json /tmp/conformance-mutate.json"
+# 4b. After the test, inside a --writes window: release the test subjects and
+#     clear home_root with the one-request command (it refuses anything else,
+#     account.purge included), then the owner deletes the test accounts and
+#     folders on the NAS by hand:
+GOOS=linux GOARCH=amd64 go build -C addons/conformance -o /tmp/syndra-addon-call ./cmd/syndra-addon-call
+call='/tmp/syndra-addon-call -url "https://$ADDON_IP:8443" -target truenas -secret-file "$SECRET"'
+scripts/addon-quiet-run.sh --writes -- sh -c "$call POST /operations/account.release '{\"subject\":\"conformance-<run>\"}'"
+scripts/addon-quiet-run.sh --writes -- sh -c "$call PUT /settings/home_root '{\"value\":\"\"}'"
 # 5. When staging testing is over, staging goes back to its normal settings
 #    (no add-on): remove truenas from COMPOSE_PROFILES and ADDON_TARGETS in
 #    .env, then

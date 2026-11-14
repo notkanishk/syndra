@@ -1025,6 +1025,15 @@ settings with the full §5 rules.
   (`TestTheConformanceKitPassesThisAddOn`, `TestARoleMakesAPrivateHomeFolder`).
   Still open: a `-mutate` re-run with a `home_root` chosen on staging is
   the only proof `limit-combine` passes on the real NAS #ready-for-human
+  *Done (14 Nov 2026), slice 7n:* `syndra-addon-call`
+  (`addons/conformance/cmd/syndra-addon-call`, `conformance.Call`), one
+  signed request over the kit's own `deriveKeys`/`pinnedClient`/`mac`, no
+  second signer, for the staging `--writes` window: set and clear `home_root`,
+  release `conformance-` subjects. Allow-list `checkCall` before anything is
+  sent: PUT/GET `/settings/<name>`, POST `account.release` for a
+  `conformance-` subject, four GET reads; `account.purge` and every other
+  write refused (`TestCallRefusalsSendNothing`, mutation-checked), signed
+  round trip (`TestCallSettingRoundTrips`, `TestCallReleasesAConformanceSubject`).
 
 ## 5. The guide
 
