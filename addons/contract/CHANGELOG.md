@@ -10,7 +10,7 @@ contract 1, and no contract-2 add-on has shipped. Owner ruling (14 Nov
 2026): TrueNAS is the only add-on in production and it ships with the
 backend, so nothing needs a contract-2 add-on without `results`. Every
 `effect: read` operation now answers one `result`, valid against the schema
-`registry/operations.json` names for it, and under no other key; Syndra
+`registry/operations.json` names for it, the one key Syndra reads; Syndra
 reads `result` alone (`answer` in `backend/internal/addons/results.go`), and
 a reply without it is no reading (indeterminate), as a result missing a
 required key already was. A physical operation needs `calls` alone.

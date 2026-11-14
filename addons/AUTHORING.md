@@ -1807,8 +1807,9 @@ core: no feature declares it.
 | `v2/schema/profiles/storage/status.json` | `storage.status`: the status shape, plus places and password state, for kind `storage` | the storage card |
 
 An id with no `result` in the registry (`health.get`) declares its own
-object, shown raw until a page reads it. Every `result` is an observation:
-it carries `taken_at` and `current`, and `stale` exactly when `current` is
+object, shown raw until a page reads it. Every `result` of a registry
+schema is an observation (`health.get`'s own is not): it carries `taken_at`
+and `current`, and `stale` exactly when `current` is
 false ([Observations](#observations-taken_at-current-stale)). Syndra reads a
 result missing a key its schema requires as no reading at all. A key that
 begins `x-`, on the result or inside a record, event or meter, is vendor
@@ -1858,7 +1859,7 @@ it:
 
 Rules:
 
-- Every read MUST answer under `result`, and under no other key. A reply
+- Every read MUST answer under `result`, the one key Syndra reads. A reply
   without `result` carries no reading: Syndra refuses it as it refuses a
   result missing a required key (`answer` in
   `backend/internal/addons/results.go`), and the kit's `operations.result`
