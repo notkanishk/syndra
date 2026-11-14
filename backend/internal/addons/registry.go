@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"maps"
 	"net/http"
@@ -949,16 +948,12 @@ func httpFetchManifest(ctx context.Context, r Registration) (Manifest, error) {
 // decodeManifest reads a manifest tolerantly and lists what it carries beyond
 // what this backend knows.
 func decodeManifest(body []byte) (Manifest, error) {
-	dec := json.NewDecoder(bytes.NewReader(body))
 	var raw map[string]any
-	if err := dec.Decode(&raw); err != nil {
+	if err := DecodeReply(body, &raw); err != nil {
 		return Manifest{}, fmt.Errorf("decode manifest: %w", err)
 	}
-	if err := dec.Decode(new(any)); err != io.EOF {
-		return Manifest{}, errors.New("decode manifest: multiple JSON values in body")
-	}
 	var m Manifest
-	if err := json.Unmarshal(body, &m); err != nil {
+	if err := DecodeReply(body, &m); err != nil {
 		return Manifest{}, fmt.Errorf("decode manifest: %w", err)
 	}
 	m.Unknown = unknownKeys("", raw, manifestKeys)

@@ -93,13 +93,16 @@ func TestTheWireOutcomeIsReadNotTheStatus(t *testing.T) {
 		features []string
 		want     Outcome
 		noChange bool
+		err      error // for an indeterminate one: missing or unknown, or unreadable
 	}{
-		{"succeeded", `{"operation":"item.checkout","subject":"s","outcome":"succeeded"}`, nil, OutcomeSucceeded, false},
-		{"no_change from a calls add-on", string(contractFixture(t, "operation_response_no_change.json")), nil, OutcomeSucceeded, true},
-		{"no_change from an add-on without calls", `{"outcome":"no_change"}`, []string{"operations"}, OutcomeIndeterminate, false},
-		{"no outcome", `{"operation":"item.checkout","subject":"s"}`, nil, OutcomeIndeterminate, false},
-		{"an outcome outside the vocabulary", `{"outcome":"conflict"}`, nil, OutcomeIndeterminate, false},
-		{"not JSON", `ok`, nil, OutcomeIndeterminate, false},
+		{"succeeded", `{"operation":"item.checkout","subject":"s","outcome":"succeeded"}`, nil, OutcomeSucceeded, false, nil},
+		{"no_change from a calls add-on", string(contractFixture(t, "operation_response_no_change.json")), nil, OutcomeSucceeded, true, nil},
+		{"no_change from an add-on without calls", `{"outcome":"no_change"}`, []string{"operations"}, OutcomeIndeterminate, false, ErrUnknownOutcome},
+		{"no outcome", `{"operation":"item.checkout","subject":"s"}`, nil, OutcomeIndeterminate, false, ErrUnknownOutcome},
+		{"an outcome outside the vocabulary", `{"outcome":"conflict"}`, nil, OutcomeIndeterminate, false, ErrUnknownOutcome},
+		{"Outcome is not outcome", `{"Outcome":"succeeded"}`, nil, OutcomeIndeterminate, false, ErrUnknownOutcome},
+		{"not JSON", `ok`, nil, OutcomeIndeterminate, false, ErrUnreadableReply},
+		{"the outcome twice", `{"outcome":"no_change","outcome":"succeeded"}`, nil, OutcomeIndeterminate, false, ErrUnreadableReply},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			op := "item.checkout"
@@ -118,8 +121,8 @@ func TestTheWireOutcomeIsReadNotTheStatus(t *testing.T) {
 			if resp.Outcome != tc.want || resp.NoChange != tc.noChange {
 				t.Fatalf("outcome %s no_change %t (err %v), want %s %t", resp.Outcome, resp.NoChange, resp.Err, tc.want, tc.noChange)
 			}
-			if tc.want == OutcomeIndeterminate && !errors.Is(resp.Err, ErrUnknownOutcome) {
-				t.Errorf("err %v, want ErrUnknownOutcome", resp.Err)
+			if tc.err != nil && !errors.Is(resp.Err, tc.err) {
+				t.Errorf("err %v, want %v", resp.Err, tc.err)
 			}
 			want := map[bool]string{true: db.AddonOpNoChange, false: StatusFor(tc.want)}[tc.noChange]
 			if got := StatusOf(resp); got != want {

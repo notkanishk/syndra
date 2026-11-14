@@ -25,6 +25,29 @@ function refuse(status: number, error: string, message: string, extra?: { detail
   );
 }
 
+/**
+ * raw with the member `key: value` spliced in after its opening brace, never
+ * a re-serialised copy: JSON.parse keeps the last of two members with one
+ * name, so a copy would settle a duplicate here, the caller's own `key`
+ * among them, where the backend refuses both (RFC 7493 §2.3). A body that is
+ * not a JSON object is forwarded as it is, for the backend's 400; an empty
+ * one becomes the member alone.
+ */
+function withMember(raw: string, key: string, value: string): string {
+  const member = `${JSON.stringify(key)}:${JSON.stringify(value)}`;
+  if (/^[ \t\n\r]*$/.test(raw)) return `{${member}}`; // RFC 8259 §2's whitespace
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw;
+  // Parsed, so only whitespace precedes the object's brace.
+  const at = raw.indexOf("{") + 1;
+  return raw.slice(0, at) + member + (Object.keys(parsed).length > 0 ? "," : "") + raw.slice(at);
+}
+
 /** A 5xx the proxy itself speaks: raw text goes to the log under a reference, never to the screen. */
 function upstreamFailure(status: number, code: string, message: string, raw: string, headers?: Record<string, string>) {
   const ref = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
@@ -185,26 +208,18 @@ async function proxy(request: NextRequest, method: Method, path: string[]) {
   };
 
   if (method !== "GET") {
-    // Bodyless writes are legal (e.g. PUT /bundles/{id}/welcome — an
-    // idempotent toggle with all state encoded in the path), and a DELETE may
-    // carry one (the mapping delete's plan_id). Read the raw text and only
-    // parse if non-empty; treat empty/malformed as "no body".
+    // The bytes the caller sent, as sent: the backend's one decoder is the
+    // judge of them (names exactly, never twice: RFC 8259 §4, RFC 7493 §2.3),
+    // and a body it cannot read is its 400, never "no body" here. An empty
+    // body stays bodyless (PUT /bundles/{id}/welcome is a toggle in the path).
     const raw = await request.text();
-    let body: Record<string, unknown> | null = null;
-    if (raw.length > 0) {
-      try {
-        const parsed = JSON.parse(raw);
-        body = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
-      } catch {
-        body = null;
-      }
-    }
-
-    let payload: Record<string, unknown> | null = body;
+    let added: [string, string] | null = null;
 
     if (session.role !== "admin") {
       // Members can only create requests for themselves. Backend checks this
-      // independently; the proxy enforces it here as defense-in-depth.
+      // independently; the proxy adds the member's own id as defense-in-depth,
+      // and a requester_id the member sent too makes the body a duplicate the
+      // backend refuses (withMember).
       //
       // Scoped to that ONE route, deliberately. This used to stamp requester_id onto every
       // member POST/PUT body, which was harmless only while filing a request was the sole thing
@@ -212,7 +227,7 @@ async function proxy(request: NextRequest, method: Method, path: string[]) {
       // carrying an unknown field, and decodeJSONStrict rejects those — a 400 on a route that
       // was working, caused by the proxy adding something nobody asked for.
       if (method === "POST" && path.length === 1 && path[0] === "requests") {
-        payload = { ...(body ?? {}), requester_id: session.id };
+        added = ["requester_id", session.id];
       }
     } else if (session.sessionType === "demo") {
       // Demo-mode admins authenticate via the shared API key, so the backend
@@ -222,18 +237,18 @@ async function proxy(request: NextRequest, method: Method, path: string[]) {
       // resolves the actor from the JWT subject and ignores these fields.
       const isGrantWrite = method === "POST" && path[0] === "users" && path[2] === "grants";
       const isDecisionWrite = method === "POST" && path[0] === "requests" && path.length === 3 && path[2] === "decision";
-      if (isGrantWrite) payload = { ...(body ?? {}), granted_by: session.id };
-      else if (isDecisionWrite) payload = { ...(body ?? {}), reviewer_id: session.id };
+      if (isGrantWrite) added = ["granted_by", session.id];
+      else if (isDecisionWrite) added = ["reviewer_id", session.id];
     }
 
-    if (payload !== null) {
+    const forward = added ? withMember(raw, added[0], added[1]) : raw;
+    if (forward.length > 0) {
       init.headers = {
         ...init.headers,
         "Content-Type": "application/json",
       };
-      init.body = JSON.stringify(payload);
+      init.body = forward;
     }
-    // payload === null → bodyless forward (no Content-Type, no body).
   }
 
   let res: Response;

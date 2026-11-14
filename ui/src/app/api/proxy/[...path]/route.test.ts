@@ -46,6 +46,13 @@ function call(
   return handler(req, { params: Promise.resolve({ path }) });
 }
 
+function rawCall(handler: Handler, method: string, path: string[], body: string): Promise<Response> {
+  const req = new NextRequest(`http://localhost/api/proxy/${path.join("/")}`, {
+    method, body, headers: { "content-type": "application/json" },
+  });
+  return handler(req, { params: Promise.resolve({ path }) });
+}
+
 describe("proxy route admin/member boundary", () => {
   // Replacing the action signing key is admin-only (action-key-autorotation):
   // no member allowlist entry, and the admin path forwards the strict body as sent.
@@ -63,6 +70,16 @@ describe("proxy route admin/member boundary", () => {
     expect(proxy.calls).toHaveLength(1);
     expect(proxy.calls[0].url).toMatch(/\/api\/v1\/zitadel\/action-key\/rotate$/);
     expect(proxy.calls[0].body).toEqual({ force: true });
+  });
+
+  // The backend decodes one rule (RFC 7493 §2.3: a name twice is refused).
+  // JSON.parse keeps the last of two, so a re-serialised body would reach it
+  // with the duplicate already settled; the proxy forwards the bytes sent.
+  it("forwards the body's bytes, so the backend sees a duplicate name", async () => {
+    (getSession as Mock).mockResolvedValue(ADMIN);
+    const raw = '{"force":false, "force":true}';
+    await rawCall(POST, "POST", ["zitadel", "action-key", "rotate"], raw);
+    expect(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body).toBe(raw);
   });
 
   it("returns 401 when there is no session", async () => {
@@ -110,15 +127,41 @@ describe("proxy route admin/member boundary", () => {
     expect(proxy.calls.length).toBe(0);
   });
 
-  it("forces requester_id to the session id on a member's POST /requests", async () => {
+  // The proxy's own member goes in beside the bytes sent, never into a re-serialised copy, so a
+  // requester_id of the member's own (or any name twice) reaches the backend as a duplicate,
+  // which its decoder refuses (RFC 7493 §2.3), instead of JSON.parse settling it here.
+  it("adds requester_id to a member's POST /requests beside the bytes sent", async () => {
     (getSession as Mock).mockResolvedValue(MEMBER);
     proxy.register("POST", /\/api\/v1\/requests(\?|$)/, () => ({ ok: true }));
-    const res = await call(POST, "POST", ["requests"], {
-      body: { requester_id: "spoofed", note: "x" },
-    });
-    expect(res.status).toBe(200);
-    const forwarded = proxy.calls.find((c) => c.method === "POST");
-    expect((forwarded?.body as { requester_id?: string })?.requester_id).toBe(MEMBER.id);
+    const sent = (raw: string) => {
+      vi.mocked(global.fetch).mockClear();
+      return rawCall(POST, "POST", ["requests"], raw).then(() => vi.mocked(global.fetch).mock.calls[0]?.[1]?.body);
+    };
+    expect(await sent(' {"note":"x"}')).toBe(' {"requester_id":"member-1","note":"x"}');
+    expect(await sent('{"requester_id":"spoofed","note":"x"}')).toBe('{"requester_id":"member-1","requester_id":"spoofed","note":"x"}');
+    expect(await sent('{"note":"a","note":"b"}')).toBe('{"requester_id":"member-1","note":"a","note":"b"}');
+    expect(await sent("{ }")).toBe('{"requester_id":"member-1" }');
+    expect(await sent("")).toBe('{"requester_id":"member-1"}');
+    expect(await sent("{not json")).toBe("{not json");
+    expect(await sent('["x"]')).toBe('["x"]');
+  });
+
+  it("adds the demo admin as granted_by and reviewer_id the same way", async () => {
+    (getSession as Mock).mockResolvedValue(ADMIN);
+    await rawCall(POST, "POST", ["users", "u1", "grants"], '{"role_key":"r","role_key":"s"}');
+    await rawCall(POST, "POST", ["requests", "r1", "decision"], '{"status":"approved"}');
+    const bodies = vi.mocked(global.fetch).mock.calls.map((c) => c[1]?.body);
+    expect(bodies).toEqual(['{"granted_by":"admin-1","role_key":"r","role_key":"s"}', '{"reviewer_id":"admin-1","status":"approved"}']);
+  });
+
+  // An optional-body route (mark-external, the mapping delete) reads "no body" as consent to
+  // defaults; a body it cannot read must reach it, to be its 400, never arrive as nothing.
+  it("forwards a body that is not a JSON object as sent", async () => {
+    (getSession as Mock).mockResolvedValue(ADMIN);
+    for (const raw of ["{not json", '["x"]', "42", '{"reason":'])
+      await rawCall(POST, "POST", ["drift", "d1", "mark-external"], raw);
+    await rawCall(DELETE, "DELETE", ["rules", "mapping", "m1"], "{");
+    expect(vi.mocked(global.fetch).mock.calls.map((c) => c[1]?.body)).toEqual(["{not json", '["x"]', "42", '{"reason":', "{"]);
   });
 
   it("blocks member mutations outside the routes a member owns", async () => {

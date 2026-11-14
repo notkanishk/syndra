@@ -13,7 +13,7 @@ import (
 // against the source rather than trusted.
 //
 // Each rule below was already true, and each was already written down — in
-// CLAUDE.md, in `deps.go`'s own comment, in the doc on `decodeJSONLenient`.
+// CLAUDE.md, in `deps.go`'s own comment, in the doc on `decodeJSONStrict`.
 // None of them was checked, which means none of them was a rule: it was a habit
 // that had held so far. A habit does not survive the next hurried afternoon,
 // and the one that matters here is the gate on a route.
@@ -161,8 +161,7 @@ func TestUserLevelRoutesAreClassified(t *testing.T) {
 func TestEveryMutationDecodesStrictly(t *testing.T) {
 	// Zitadel owns this payload and may extend it; rejecting a field a newer
 	// Zitadel adds would break the claim path on THEIR upgrade, at a moment
-	// nobody here chose. `decodeJSONLenient` keeps the trailing-token guard, so
-	// the laxity is on the field set only.
+	// nobody here chose. claimserve decodes it, tolerant of new fields.
 	argued := map[string]string{
 		"HandleActionInject": "Zitadel Actions v2 owns this body shape",
 	}

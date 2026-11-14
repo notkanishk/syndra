@@ -1,7 +1,6 @@
 package addons
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -76,8 +75,7 @@ func CallAnswer(ctx context.Context, target, op, callID string) (Settlement, err
 		State  string           `json:"state"`
 		Reply  *json.RawMessage `json:"reply"`
 	}
-	dec := json.NewDecoder(bytes.NewReader(resp.Body))
-	if err := dec.Decode(&ans); err != nil {
+	if err := DecodeReply(resp.Body, &ans); err != nil {
 		return Settlement{}, fmt.Errorf("%w: %v", ErrNotACallAnswer, err)
 	}
 	// About this call, one of the three, and a reply only with recorded

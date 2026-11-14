@@ -198,10 +198,11 @@ func (r ReadReply) answer() (json.RawMessage, error) {
 	if r.Outcome != OutcomeSucceeded {
 		return nil, fmt.Errorf("read %s: %s: %w", r.Operation, r.Outcome, r.Err)
 	}
-	// A map, not a struct: encoding/json matches a struct's keys without
-	// regard to case, and the key is `result`, exactly.
+	// A map: the key is `result`, exactly. Read by DecodeReply, so a key
+	// twice anywhere in the reply makes it no reading, and every part of
+	// raw read below has had its names counted once.
 	var env map[string]json.RawMessage
-	if err := json.Unmarshal(r.Body, &env); err != nil {
+	if err := DecodeReply(r.Body, &env); err != nil {
 		return nil, fmt.Errorf("read %s: %w", r.Operation, err)
 	}
 	if raw := env["result"]; len(raw) > 0 && string(raw) != "null" {
@@ -394,7 +395,7 @@ func (r ReadReply) decodeShape(spec needSpec, raw json.RawMessage, into any) err
 	if err := staleInvariant(raw); err != nil {
 		return err
 	}
-	if err := json.Unmarshal(raw, into); err != nil {
+	if err := DecodeReply(raw, into); err != nil {
 		return err
 	}
 	if o, ok := into.(observed); ok {
@@ -427,7 +428,7 @@ func staleInvariant(raw []byte) error {
 		Current *bool           `json:"current"`
 		Stale   json.RawMessage `json:"stale"`
 	}
-	if json.Unmarshal(raw, &o) != nil || o.Current == nil {
+	if DecodeReply(raw, &o) != nil || o.Current == nil {
 		return nil
 	}
 	if hasStale := len(o.Stale) > 0 && string(o.Stale) != "null"; *o.Current == hasStale {

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"syndra/addons/strictjson"
 	"syndra/internal/extcall"
 )
 
@@ -328,10 +329,26 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 	return resp
 }
 
+// DecodeReply reads an add-on's reply (or the part of one in body) into v by
+// the one rule for every JSON input to Syndra: member names exactly as v
+// spells them (RFC 8259 §4), never twice in one object (RFC 7493 §2.3), one
+// JSON value. A member v does not know is skipped, because a reply may carry
+// more (AUTHORING.md chapter 14, rule 1; "Replies MAY carry more"), and a
+// case variant of a name v knows is such a member: skipped, never read as
+// that name, as encoding/json alone would.
+func DecodeReply(body []byte, v any) error {
+	return strictjson.DecodeOptions{AllowUnknown: true}.Decode(body, v)
+}
+
 // ErrUnknownOutcome is a 2xx operation reply whose outcome is missing or not
 // one this add-on may say: answered, and saying nothing Syndra can stand
 // behind, so the call may have acted (absence is never a value).
 var ErrUnknownOutcome = errors.New("addon: the reply's outcome is missing or not one the add-on may say")
+
+// ErrUnreadableReply is a 2xx operation reply that does not decode: not JSON,
+// or a name twice in one object (RFC 7493 §2.3). Answered, and unreadable, so
+// it may have acted, as with ErrUnknownOutcome; the log says which.
+var ErrUnreadableReply = errors.New("addon: the reply does not read")
 
 // readOutcome reads a 2xx operation reply's own outcome (6.3a): succeeded as
 // it was; no_change, from an add-on declaring calls, as answered and nothing
@@ -341,7 +358,10 @@ func readOutcome(resp CallResponse, calls bool) CallResponse {
 	var reply struct {
 		Outcome string `json:"outcome"`
 	}
-	_ = json.Unmarshal(resp.Body, &reply)
+	if err := DecodeReply(resp.Body, &reply); err != nil {
+		resp.Outcome, resp.Err = OutcomeIndeterminate, fmt.Errorf("%w: %v", ErrUnreadableReply, err)
+		return resp
+	}
 	switch {
 	case reply.Outcome == string(OutcomeSucceeded):
 	case reply.Outcome == "no_change" && calls:
@@ -496,7 +516,7 @@ func refusalOf(body []byte) (string, Refusal) {
 		Unit  json.RawMessage `json:"unit"`
 		Count json.RawMessage `json:"count"`
 	}
-	if json.Unmarshal(body, &p) != nil {
+	if DecodeReply(body, &p) != nil {
 		return "", Refusal{}
 	}
 	var r Refusal

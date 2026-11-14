@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -327,7 +326,7 @@ func replyNoChange(reply []byte) bool {
 	var r struct {
 		Outcome string `json:"outcome"`
 	}
-	return json.Unmarshal(reply, &r) == nil && r.Outcome == "no_change"
+	return addons.DecodeReply(reply, &r) == nil && r.Outcome == "no_change"
 }
 
 // memberActionState is where a record stands for the member who made it.

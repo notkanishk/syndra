@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -296,7 +297,7 @@ func TestClaimsDoor_UnaffectedByAdminPanicsAndSlowness(t *testing.T) {
 			t.Fatal(err)
 		}
 		var out ActionV2Response
-		_ = decodeJSONLenient(resp.Body, &out)
+		_ = json.NewDecoder(resp.Body).Decode(&out)
 		resp.Body.Close()
 		if resp.StatusCode != 200 || len(out.AppendClaims) != 1 {
 			t.Fatalf("call %d under admin load: HTTP %d %v", i, resp.StatusCode, out)

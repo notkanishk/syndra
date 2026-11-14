@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 
@@ -54,7 +53,7 @@ func handlePutTargetSetting(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case resp.Status == http.StatusOK:
 		var view addons.TargetSetting
-		if err := json.Unmarshal(resp.Body, &view); err != nil {
+		if err := addons.DecodeReply(resp.Body, &view); err != nil {
 			jsonErrorResponse(w, http.StatusBadGateway, "TARGET_ANSWER_UNREADABLE", "The system changed it, and its answer couldn't be read.")
 			return
 		}

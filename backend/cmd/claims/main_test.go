@@ -34,8 +34,20 @@ func TestTheImageCopiesExactlyWhatTheBinaryImports(t *testing.T) {
 		t.Fatal(err)
 	}
 	copied := map[string]bool{}
-	for _, m := range regexp.MustCompile(`(?m)^COPY (\S+) \./(\S+)$`).FindAllStringSubmatch(string(df), -1) {
+	// The context is the repository root, so a backend path is backend/<path>.
+	for _, m := range regexp.MustCompile(`(?m)^COPY backend/(\S+) \./(\S+)$`).FindAllStringSubmatch(string(df), -1) {
 		copied[strings.TrimSuffix(m[1], "/")] = true
+	}
+	// Every module go.mod replaces with a directory: resolving the module
+	// graph (`go mod download`) reads its go.mod, imported or not.
+	mod, err := os.ReadFile("../../go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range regexp.MustCompile(`(?m)^replace \S+ => \.\./(\S+)$`).FindAllStringSubmatch(string(mod), -1) {
+		if !strings.Contains(string(df), "\nCOPY "+m[1]+"/go.mod /src/"+m[1]+"/go.mod\n") {
+			t.Errorf("go.mod replaces a module with ../%s, but Dockerfile.claims does not copy its go.mod to /src/%[1]s", m[1])
+		}
 	}
 	for pkg := range need {
 		if !copied[pkg] {

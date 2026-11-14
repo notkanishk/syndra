@@ -283,7 +283,7 @@ func planChunk(ctx context.Context, a *Addon, target string, subjects []PlanSubj
 	}
 	if resp.Outcome == OutcomeSucceeded {
 		var decoded planWire
-		if err := json.Unmarshal(resp.Body, &decoded); err != nil {
+		if err := DecodeReply(resp.Body, &decoded); err != nil {
 			// A 2xx whose body will not decode is not a plan. Reported as
 			// indeterminate rather than as an empty plan, which would be an
 			// approval of nothing that reads like an approval of something.
@@ -456,7 +456,7 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 	}
 
 	var decoded subjectsWire
-	if err := json.Unmarshal(resp.Body, &decoded); err != nil {
+	if err := DecodeReply(resp.Body, &decoded); err != nil {
 		out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode subjects: %w", target, err)
 		return out
 	}
@@ -477,7 +477,7 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 			} `json:"standing"`
 		} `json:"subjects"`
 	}
-	_ = json.Unmarshal(resp.Body, &standing)
+	_ = DecodeReply(resp.Body, &standing)
 	for _, s := range standing.Subjects {
 		if s.Standing == nil || s.Standing.Usable == nil {
 			log.Printf("[ADDON] %s/subjects lists an account with no standing.usable; the read is not usable", target)
@@ -583,7 +583,7 @@ func readHealth(ctx context.Context, target string) TargetHealth {
 		return out
 	}
 	var wire healthWire
-	if err := json.Unmarshal(resp.Body, &wire); err != nil {
+	if err := DecodeReply(resp.Body, &wire); err != nil {
 		out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode health: %w", target, err)
 		return out
 	}
@@ -661,7 +661,7 @@ func SetLifecycle(ctx context.Context, target, state, reason, actor string) (map
 		return nil, fmt.Errorf("addon %s: lifecycle change refused (%d): %v", target, resp.Status, resp.Err)
 	}
 	var out map[string]any
-	if err := json.Unmarshal(resp.Body, &out); err != nil {
+	if err := DecodeReply(resp.Body, &out); err != nil {
 		return nil, fmt.Errorf("addon %s: decode lifecycle: %w", target, err)
 	}
 	return out, nil
@@ -728,7 +728,7 @@ func ResolvesValue(ctx context.Context, target, field, value string) (Resolution
 		Values     []string `json:"values"`
 		Enumerable bool     `json:"enumerable"`
 	}
-	if err := json.Unmarshal(resp.Body, &decoded); err != nil {
+	if err := DecodeReply(resp.Body, &decoded); err != nil {
 		return Resolution{}, nil
 	}
 	if !decoded.Enumerable {
@@ -822,7 +822,7 @@ func ReadValues(ctx context.Context, target, field string) Values {
 		return Values{Outcome: resp.Outcome}
 	}
 	var out Values
-	if err := json.Unmarshal(resp.Body, &out); err != nil {
+	if err := DecodeReply(resp.Body, &out); err != nil {
 		return Values{Outcome: OutcomeIndeterminate}
 	}
 	if out.Values == nil {
@@ -855,7 +855,7 @@ func ReadSettings(ctx context.Context, target string) (settings []TargetSetting,
 	var out struct {
 		Settings []TargetSetting `json:"settings"`
 	}
-	if err := json.Unmarshal(resp.Body, &out); err != nil {
+	if err := DecodeReply(resp.Body, &out); err != nil {
 		return nil, false
 	}
 	return out.Settings, true
@@ -953,7 +953,7 @@ func ReadHomes(ctx context.Context, target string, fresh bool) Homes {
 		return Homes{RetryAfter: cooldownOf(resp)}
 	}
 	var wire homesWire
-	if err := json.Unmarshal(resp.Body, &wire); err != nil || wire.Current == nil || staleInvariant(resp.Body) != nil {
+	if err := DecodeReply(resp.Body, &wire); err != nil || wire.Current == nil || staleInvariant(resp.Body) != nil {
 		// A reply that does not say whether its read is current, or says it
 		// two ways, is not one to show as a reading (design §2(b), §4).
 		return Homes{}
@@ -1004,7 +1004,7 @@ func ReadReach(ctx context.Context, target string, fresh bool) Reach {
 		return Reach{RetryAfter: cooldownOf(resp)}
 	}
 	var wire reachWire
-	if err := json.Unmarshal(resp.Body, &wire); err != nil || staleInvariant(resp.Body) != nil {
+	if err := DecodeReply(resp.Body, &wire); err != nil || staleInvariant(resp.Body) != nil {
 		return Reach{}
 	}
 	at, ok := takenAt(target, wire.TakenAt, resp.Clock)
@@ -1291,7 +1291,7 @@ func (r ReadReply) Health() SystemReport {
 	raw, err := r.answer()
 	var out SystemReport
 	if err == nil {
-		err = json.Unmarshal(raw, &out)
+		err = DecodeReply(raw, &out)
 	}
 	if err != nil {
 		out = SystemReport{}

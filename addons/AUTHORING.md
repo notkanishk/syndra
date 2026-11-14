@@ -439,7 +439,12 @@ vectors.
   unusable, not quietly different.
 - **Replies MAY carry more.** Outside the manifest's field, operation and
   metric objects, a reply MAY carry keys its schema does not list, and
-  Syndra ignores them; a good name for yours is `x-<product>-…`.
+  Syndra ignores them; a good name for yours is `x-<product>-…`. Syndra
+  reads a reply's names exactly too: `Effect` beside or instead of
+  `effect` is such a key, ignored, never read as `effect`. A name twice
+  in one object makes the reply one Syndra cannot read (RFC 7493 §2.3):
+  a 2xx write or plan is then possibly acted, a read no reading.
+  `DecodeReply` in `backend/internal/addons/transport.go`.
 - **Size.** A reply MUST fit in `constants.max_reply_bytes`; Syndra reads no
   further.
 - **Unknown routes.** Every other method and path, a feature route your

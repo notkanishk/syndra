@@ -148,8 +148,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: backend, context: backend, file: backend/Dockerfile }
-          - { name: claims, context: backend, file: backend/Dockerfile.claims }
+          - { name: backend, context: ., file: backend/Dockerfile }
+          - { name: claims, context: ., file: backend/Dockerfile.claims }
           - { name: ui, context: ui, file: ui/Dockerfile }
           - { name: truenas-addon, context: addons, file: addons/truenas/Dockerfile }
     steps:

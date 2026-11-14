@@ -185,7 +185,7 @@ type operationAnswer struct {
 // the reply an add-on recorded and GET /calls hands back (settleByCall).
 func AccountIDOf(reply []byte) string {
 	var answer operationAnswer
-	if len(reply) == 0 || json.Unmarshal(reply, &answer) != nil {
+	if len(reply) == 0 || addons.DecodeReply(reply, &answer) != nil {
 		return ""
 	}
 	return answer.AccountID

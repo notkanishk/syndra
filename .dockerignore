@@ -1,0 +1,26 @@
+# The context of the backend's two images (backend/Dockerfile and
+# backend/Dockerfile.claims) is the repository root, because backend/go.mod
+# replaces syndra/addons/strictjson with ../addons/strictjson: only those two
+# directories go in. The UI and the add-ons build from contexts of their own.
+*
+!backend
+!addons/strictjson
+# What a local build or run leaves behind (the root .gitignore's list).
+backend/bin
+backend/api
+backend/test
+backend/syndra-token
+backend/.gocache
+backend/.gomodcache
+**/*.test
+**/*.out
+**/*.log
+**/.DS_Store
+# Secrets, should one sit inside an allowed directory (the root .gitignore's
+# list, and a key file by its usual names): never into an image layer.
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/zitadel-machine-key.json
+**/DEPLOY.local.md

@@ -3,6 +3,24 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Syndra reads reply member names exactly, and once (slice 7p, 14 Nov 2026)
+
+The same rule from Syndra's side (owner ruling, 14 Nov 2026: "use the same
+decoder in the backend too"). Syndra reads a reply's member names exactly
+(RFC 8259 §4): a case or fold variant of a name the schema gives (`Effect`
+for `effect`) is a key the schema does not list, ignored as any other, never
+read as that name. A name twice in one object (RFC 7493 §2.3) makes the
+reply one Syndra cannot read: a 2xx write or plan is possibly acted, a read
+is no reading. Keys a schema does not list are still allowed (guide,
+chapter 14, rule 1).
+
+- Schema files, registries, fixtures, kit: unchanged.
+- Guide: "Replies MAY carry more" says how Syndra reads names.
+- Go: the backend decodes replies with `addons/strictjson`
+  (`DecodeOptions{AllowUnknown: true}`) and its own API with `Decode`.
+- Deploy and rollback: an add-on that sends exact names once, as both here
+  do, sees no change.
+
 ## Request member names exactly, and once (slice 7o, 14 Nov 2026)
 
 A change to major 2 before its release, not a new major (owner ruling, 14 Nov
