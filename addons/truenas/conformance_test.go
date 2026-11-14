@@ -209,3 +209,49 @@ func TestTheKitSkipsALimitThisAddOnDoesNotReport(t *testing.T) {
 		}
 	}
 }
+
+// syndra-addon-call's exact bodies, through this add-on's real decodeStrict
+// and handlers: a home_root set and clear, and a release of a conformance-
+// subject, all accepted; and a refused body never reaches the add-on at all.
+func TestTheAddonCallToolIsAcceptedByThisAddOn(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds and runs the call tool")
+	}
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("no go toolchain to build the tool with")
+	}
+	bin := filepath.Join(t.TempDir(), "syndra-addon-call")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/syndra-addon-call")
+	build.Dir = filepath.Join("..", "conformance")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build the tool: %v\n%s", err, out)
+	}
+	url := kitAddOn(t, "")
+	secret := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(secret, []byte(kitSecret), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	call := func(args ...string) (string, error) {
+		out, err := exec.Command(bin, append([]string{"-url", url, "-target", kitTarget, "-secret-file", secret}, args...)...).CombinedOutput()
+		return string(out), err
+	}
+	for _, c := range [][]string{
+		{"PUT", "/settings/home_root", `{"value":"` + kitHomeRoot + `"}`},
+		{"GET", "/settings"},
+		{"PUT", "/settings/home_root", `{"value":""}`},
+		{"POST", "/operations/account.release", `{"subject":"conformance-wwe-rey"}`},
+	} {
+		if out, err := call(c...); err != nil || !strings.HasPrefix(out, "200\n") {
+			t.Errorf("%v: %v, %s", c, err, out)
+		}
+	}
+	if out, err := call("POST", "/operations/account.release", `{"subject":"conformance-x","ſubject":"wwe-the-rock"}`); func() int {
+		ee, _ := err.(*exec.ExitError)
+		if ee == nil {
+			return -1
+		}
+		return ee.ExitCode()
+	}() != 2 {
+		t.Errorf("a folded key must be refused before sending (exit 2): %v, %s", err, out)
+	}
+}
