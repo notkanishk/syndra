@@ -115,6 +115,11 @@ func (c *check) skip(format string, args ...any) {
 	c.skips = append(c.skips, fmt.Sprintf(format, args...))
 }
 
+// unjudged is a check that reached nothing it asserts: the reads that led
+// there are judged by their own checks, and its skips say why it could not
+// look. It is a skip then, never a pass on the way in; a fail stays a fail.
+func (c *check) unjudged() { c.ran = false }
+
 // expect is one assertion: it counts as having run whether or not it holds.
 func (c *check) expect(holds bool, format string, args ...any) bool {
 	if !holds {

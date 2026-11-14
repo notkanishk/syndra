@@ -18,6 +18,7 @@ const homePlace = "/mnt/pool/main/home_dir"
 func homeServer(t *testing.T, users string, answers map[string]string, refuse map[string]string) (*server, *mutatingRPC) {
 	t.Helper()
 	s, m := applyServer(t, users)
+	m.folders = []string{homePlace}
 	m.fakeRPC.answers = answers
 	m.fakeRPC.refuse = refuse
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
@@ -62,9 +63,14 @@ func TestARoleMakesAPrivateHomeFolder(t *testing.T) {
 	if out.Effect != EffectApplied {
 		t.Fatalf("want applied, got %s (%s)", out.Effect, out.Detail)
 	}
+	// TrueNAS's own private create: `home` is the place, the parent TrueNAS
+	// makes <place>/charlotte in (homeFields), and the account reads back there.
 	u := m.updates[0]
-	if u["home"] != homePlace+"/charlotte" || u["home_create"] != true || u["home_mode"] != "700" {
-		t.Fatalf("want TrueNAS's own private create at %s/charlotte, got %v", homePlace, u)
+	if u["home"] != homePlace || u["home_create"] != true || u["home_mode"] != "700" {
+		t.Fatalf("want TrueNAS's own private create in %s, got %v", homePlace, u)
+	}
+	if got, err := s.readBack("charlotte"); err != nil || got.Home != homePlace+"/charlotte" {
+		t.Fatalf("want the home at %s/charlotte, got %+v (%v)", homePlace, got, err)
 	}
 }
 
@@ -113,8 +119,8 @@ func TestAnotherPersonsFolderIsNeverAdopted(t *testing.T) {
 func TestTwoRolesGivingAHomeGiveOne(t *testing.T) {
 	s, m := homeServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/var/empty"}]`, nil, noSuchPath)
 	applyHome(t, s, `{"group":["lab_makers"],"home":["true","true"]}`)
-	if len(m.updates) != 1 || m.updates[0]["home"] != homePlace+"/charlotte" {
-		t.Fatalf("want one home at %s/charlotte, got %v", homePlace, m.updates)
+	if len(m.updates) != 1 || m.updates[0]["home"] != homePlace {
+		t.Fatalf("want one home made in %s, got %v", homePlace, m.updates)
 	}
 }
 
