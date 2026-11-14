@@ -50,7 +50,7 @@ var catalogue = []struct {
 	{id: "lifecycle", guide: "9-lifecycle-and-degradation", must: "read_only refuses writes with 503 LIFECYCLE_REFUSAL and Retry-After while reads answer; no reason 400 REASON_REQUIRED; unknown state 422 UNKNOWN_LIFECYCLE_STATE", mutate: true},
 	{id: "operations", guide: "post-operationsname-feature-operations", must: "an unknown operation is 404; a missing parameter 400; a re-send with another secret is the recorded reply, nothing written", mutate: true},
 	{id: "operations.reads", guide: "every-write-once-per-call_id", must: "an effect: read operation ignores call_id: two reads under one call_id, and a read of another operation under it, all answer 200", mutate: true},
-	{id: "operations.result", guide: "read-operations-and-result", must: "every read operation answers one result valid against the schema the registry names for it; a reply without it fails", mutate: true},
+	{id: "operations.result", guide: "read-operations-and-result", must: "every read operation answers one result valid against the schema the registry names for it; a reply without it fails (reads-only: a member read about a subject with no account is skipped)"},
 	{id: "operations.secret", guide: "8-security-rules", must: "a secret parameter never appears in any later byte of any reply", mutate: true},
 	{id: "calls.unknown", guide: "physical-operations-and-get-callscall_id-feature-calls", must: "GET /calls on a call_id never sent answers unknown, with no reply (feature calls)"},
 	{id: "calls.recorded", guide: "physical-operations-and-get-callscall_id-feature-calls", must: "GET /calls on a write's call_id answers recorded with its first reply, and never a secret parameter (feature calls)", mutate: true},

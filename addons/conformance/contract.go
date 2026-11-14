@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"path"
 	"strings"
 
@@ -51,6 +52,15 @@ type contract struct {
 	// cooldownDefault is constants.cooldown_default: limits.fresh_read_cooldown when undeclared.
 	cooldownDefault string
 	vectors         []byte // transport_derivation.json, raw
+}
+
+// writes is whether a request may change the add-on or its app: anything but
+// a GET, /plan, and an effect: read operation, which write nothing by
+// contract (the kit's operations.reads holds them to it under -mutate).
+func (c *contract) writes(method, target string) bool {
+	path, _, _ := strings.Cut(target, "?")
+	op, isOp := strings.CutPrefix(path, "/operations/")
+	return method != http.MethodGet && path != "/plan" && !(isOp && c.operations[op].Effect == "read")
 }
 
 type offline struct{}

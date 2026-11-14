@@ -2294,6 +2294,11 @@ per-person only) applied there.
   `health.get` under `result` always); the three pocket fixtures. The kit's
   `results` check is the core `operations.result`
   (`TestEveryReadIsHeldToItsResult`, a `health.get` under `health` fails),
+  judged in a reads-only run too (`results(c, owned)`: the reads go without
+  the owned-account plan, and a member read answering 422 for a subject with
+  no account is skipped; an effect: read operation is no write, one rule for
+  the kit and its tests, `contract.writes`, so a reads-only run still reports
+  "nothing written"),
   and ci.yml's every-feature reference is `-features freshness,calls,stats`.
   `TestAReadNeedsNoFeature` holds `holdings.list` from an add-on declaring
   operations alone. The person and member pages now list `storage.status`

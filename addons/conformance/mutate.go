@@ -89,7 +89,7 @@ func (k *kit) mutate() error {
 		{"calls", []string{"calls.recorded", "operations.physical", "health"}, func() { k.callsWrite() }},
 		{"reads", []string{"operations.reads", "operations.result"}, func() {
 			k.readOperations(k.at("operations.reads"), callID)
-			k.results(k.at("operations.result"))
+			k.results(k.at("operations.result"), true)
 		}},
 		{"stats", []string{"stats.points", "stats.totals", "stats.since", "stats.gaps", "stats.unbound", "stats.no-people", "stats.no-people.ids"}, func() { k.statsAfterWrites() }},
 		{"lifecycle", []string{"lifecycle", "replay.refusal", "strict-requests"}, func() { k.lifecycle(k.at("lifecycle"), k.at("replay.refusal")) }},
@@ -424,18 +424,31 @@ func (k *kit) readOps() []string {
 
 // results holds every read to the core rule: it answers one `result`, valid
 // against the schema the registry names for the id (which also holds current
-// false iff stale), or, for an id that declares its own, an object. A read
-// answered under any other key carries no reading.
-func (k *kit) results(c *check) {
+// false iff stale), or, for an id that declares its own, an object. A reply
+// without `result` carries no reading.
+//
+// A read writes nothing, so a reads-only run judges it too (owned false): the
+// same reads about the kit's subject, sent without the plan that precedes a
+// write. A member read about a subject the add-on has no account for answers
+// 422, which says nothing about its result's shape; that read is skipped, and
+// -mutate (owned true) reads the account it made.
+func (k *kit) results(c *check, owned bool) {
 	reads := k.readOps()
 	if len(reads) == 0 {
 		c.skip("no effect: read operation is declared available")
 		return
 	}
-	send := k.viaOwned(c)
+	send := k.send
+	if owned {
+		send = k.viaOwned(c)
+	}
 	for _, id := range reads {
 		ex := send(request{method: http.MethodPost, target: "/operations/" + id,
 			body: k.operationBody(id, k.callID(), map[string]any{}), schema: "operation_request.json"})
+		if !owned && ex.err == nil && ex.status == http.StatusUnprocessableEntity {
+			c.skip("%s: the kit's subject has no account here (422), so there is nothing to read; -mutate reads the account it makes", id)
+			continue
+		}
 		doc := k.ok(c, ex, "operation_response.json")
 		if doc == nil {
 			continue

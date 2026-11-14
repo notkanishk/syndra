@@ -514,8 +514,7 @@ func (k *kit) prepare(r request) (ex *exchange, _ *http.Request, write bool) {
 		ex.err = err
 		return ex, nil, false
 	}
-	path, _, _ := strings.Cut(r.target, "?")
-	write = r.method != http.MethodGet && path != "/plan"
+	write = k.c.writes(r.method, r.target)
 	k.wrote = k.wrote || write // before it is sent: a write that never answers may still have landed
 	if r.body != nil {
 		req.Header.Set("Content-Type", "application/json")

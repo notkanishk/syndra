@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	contractfiles "syndra/addons/contract"
 	"syndra/addons/reference"
 )
 
@@ -123,7 +124,14 @@ func failures(r *Report) []Result {
 }
 
 func writes(seen []string) []string {
-	return slices.DeleteFunc(seen, func(s string) bool { return strings.HasPrefix(s, "GET ") || s == "POST /plan" })
+	c, err := loadContract(contractfiles.FS())
+	if err != nil {
+		panic(err)
+	}
+	return slices.DeleteFunc(seen, func(s string) bool {
+		method, target, _ := strings.Cut(s, " ")
+		return !c.writes(method, target)
+	})
 }
 
 // subjects reads /subjects through a kit of its own: what the run left.
@@ -1653,14 +1661,25 @@ func TestANonEnumerableMembershipFailsTheValuesCheck(t *testing.T) {
 }
 
 // The result check is core: against the reference with no feature it passes,
-// every read's result held to its registry schema. A read answered under the
-// key it had before contract 2 made result core (health.get's `health`) and
-// no result fails: that reply carries no reading.
+// every read's result held to its registry schema, in a reads-only run too (a
+// read writes nothing): there health.get is judged and holdings.list, about a
+// subject with no account yet, answers 422 and is skipped. A read answered
+// under the key it had before contract 2 made result core (health.get's
+// `health`) and no result fails in either mode: that reply carries no reading.
 func TestEveryReadIsHeldToItsResult(t *testing.T) {
 	url, seen := serve(t, testSecret, nil)
-	r := run(t, config(url, true))
+	r := run(t, config(url, false))
 	if got := r.Status("operations.result"); got != "pass" || r.Failed() {
-		t.Errorf("operations.result says %s against the reference (failed %v): %v", got, r.Failed(), failures(r))
+		t.Errorf("reads-only: operations.result says %s against the reference (failed %v): %v", got, r.Failed(), failures(r))
+	}
+	if !slices.Contains(seen(), "POST /operations/health.get") || slices.ContainsFunc(seen(), func(s string) bool {
+		return strings.HasPrefix(s, "POST /apply") || strings.HasPrefix(s, "POST /lifecycle") || strings.HasPrefix(s, "PUT ")
+	}) {
+		t.Errorf("reads-only sent %v: want health.get read and nothing written", seen())
+	}
+	r = run(t, config(url, true))
+	if got := r.Status("operations.result"); got != "pass" || r.Failed() {
+		t.Errorf("-mutate: operations.result says %s against the reference (failed %v): %v", got, r.Failed(), failures(r))
 	}
 	for _, read := range []string{"POST /operations/health.get", "POST /operations/holdings.list"} {
 		if !slices.Contains(seen(), read) {
@@ -1674,12 +1693,14 @@ func TestEveryReadIsHeldToItsResult(t *testing.T) {
 		}
 		return bytes.Replace(reply, []byte(`"result":`), []byte(`"health":`), 1)
 	}, nil)
-	r, err := Run(context.Background(), config(url, true))
-	if err != nil && !errors.Is(err, ErrReadsFailed) {
-		t.Fatal(err)
-	}
-	if got := r.Status("operations.result"); got != "fail" {
-		t.Errorf("health.get answered under the old health key: operations.result says %s, want fail", got)
+	for _, mutate := range []bool{false, true} {
+		r, err := Run(context.Background(), config(url, mutate))
+		if err != nil && !errors.Is(err, ErrReadsFailed) {
+			t.Fatal(err)
+		}
+		if got := r.Status("operations.result"); got != "fail" {
+			t.Errorf("mutate %v: health.get answered under the old health key: operations.result says %s, want fail", mutate, got)
+		}
 	}
 }
 

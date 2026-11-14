@@ -2443,7 +2443,9 @@ manifest key, health field and reply field each one introduces.
    major at a time.
 6. Nothing is ever re-purposed. A deprecated feature or field is marked in
    the registry with its replacement and removed only at the next major; a
-   new meaning is a new name.
+   new meaning is a new name. The one exception: before a major's first
+   release its own deprecations may go, as `addons/contract/CHANGELOG.md`
+   records for feature `results` and the per-read keys in major 2.
 
 **What a change needs.**
 
