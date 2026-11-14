@@ -81,6 +81,12 @@ func TestACreateLeftInDoubtByACrashIsAdoptedByTheNextCreate(t *testing.T) {
 			bind = append(bind, r)
 		}
 	}
+	// Then the wish the apply kept once the enable landed (rememberWishes): a second binding write,
+	// logged the same way, under the same call.
+	if len(bind) != 4 || bind[2].Outcome != outcomeIntent || bind[3].Outcome != outcomeSucceeded || bind[2].CallID != "c2" {
+		t.Fatalf("want the wish write logged after the adoption's, got %+v", bind)
+	}
+	bind = bind[:2]
 	if len(bind) != 2 || bind[0].Outcome != outcomeIntent || bind[1].Outcome != outcomeSucceeded ||
 		bind[1].Intent != bind[0].Seq || bind[0].CallID != "c2" || bind[0].Subject != "sub-1" {
 		t.Fatalf("want the adoption's bind logged as an intent and its result, got %+v", bind)

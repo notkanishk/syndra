@@ -99,8 +99,8 @@ func (k *kit) mutate() error {
 		}},
 		{"stats", []string{"stats.points", "stats.totals", "stats.since", "stats.gaps", "stats.unbound", "stats.no-people", "stats.no-people.ids"}, func() { k.statsAfterWrites() }},
 		{"lifecycle", []string{"lifecycle", "replay.refusal", "strict-requests"}, func() { k.lifecycle(k.at("lifecycle"), k.at("replay.refusal")) }},
-		{"withdraw", []string{"withdraw-only.existing", "channel-follows-account", "plan-equals-apply"}, func() {
-			k.withdrawExisting(k.at("withdraw-only.existing"), k.at("channel-follows-account"))
+		{"withdraw", []string{"withdraw-only.existing", "channel-follows-account", "standing.off", "plan-equals-apply"}, func() {
+			k.withdrawExisting(k.at("withdraw-only.existing"), k.at("channel-follows-account"), k.at("standing.off"))
 		}},
 	}
 	all := append(steps, withAccount...)
@@ -291,6 +291,23 @@ func (k *kit) state(c *check) map[string]any {
 	}
 	c.fail("/subjects does not list the kit's account %s", k.created.id)
 	return nil
+}
+
+// offStanding reads the kit's own account, which Syndra has just asked to be off and which the app
+// reports off: nobody is waited on, because off is what Syndra asked for (AUTHORING, standing). An
+// add-on that answers anything else for it sends an operator to fix what Syndra did on purpose.
+func (k *kit) offStanding(c *check) {
+	doc := k.ok(c, k.send(request{method: http.MethodGet, target: "/subjects"}), "subjects.json")
+	for _, s := range objects(doc["subjects"]) {
+		if k.owner(s, false) != ours {
+			continue
+		}
+		st, _ := s["standing"].(map[string]any)
+		c.expect(st["usable"] == false && st["waiting_on"] == "none",
+			"the kit's account was asked off by an apply and is off, and its standing is %v, not usable: false, waiting_on: none", st)
+		return
+	}
+	c.fail("/subjects does not list the kit's account %s", k.created.id)
 }
 
 func (k *kit) withdrawWithoutAccount(c *check) {
@@ -694,7 +711,7 @@ func (k *kit) settingsWrite(c *check) {
 	k.exactNames(k.at("requests.exact-names"), http.MethodPut, target, "value", "INVALID_BODY", body, nil)
 }
 
-func (k *kit) withdrawExisting(c, channel *check) {
+func (k *kit) withdrawExisting(c, channel, standing *check) {
 	// Hold a managed value first, so "every membership unchanged" is a claim
 	// about something Syndra gave and not about an empty list.
 	hold := map[string]any{k.m.account: true}
@@ -714,6 +731,9 @@ func (k *kit) withdrawExisting(c, channel *check) {
 	c.expect(after[k.m.account] == false, "after a withdraw-only apply the account is %v", after[k.m.account])
 	k.untouched(c, before, after, "a withdraw-only apply")
 	k.created.off = after[k.m.account] == false
+	if after[k.m.account] == false {
+		k.offStanding(standing)
+	}
 	observed, _ := out["observed"].(map[string]any)
 	for _, name := range k.m.withRole("channel") {
 		channel.expect(after[name] == false && (observed == nil || observed[name] == false),

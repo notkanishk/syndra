@@ -363,6 +363,21 @@ type Binding struct {
 	WantsEnabled *bool `json:"wants_enabled,omitempty"`
 }
 
+// uid is the account's uid as the binding names it: UID, or the account_id of a binding written by a
+// binary that keeps that alone. The one reading of a binding's account, so every question asked of
+// "is this account bound" (UIDBound, Wishes, BoundUIDs, GetBinding) agrees. 0 is "names none".
+func (b Binding) uid() int64 {
+	if b.UID != 0 {
+		return b.UID
+	}
+	if b.AccountID != "" {
+		if uid, err := strconv.ParseInt(b.AccountID, 10, 64); err == nil {
+			return uid
+		}
+	}
+	return 0
+}
+
 // encodeBinding is the one place a binding is written, so both ids always are.
 func (s *Store) encodeBinding(b Binding) ([]byte, error) {
 	if b.BoundAt.IsZero() {
@@ -442,12 +457,7 @@ func (s *Store) GetBinding(subjectID string) (Binding, bool, error) {
 		if err := json.Unmarshal(raw, &b); err != nil {
 			return fmt.Errorf("stored binding for %s is unreadable: %w", subjectID, err)
 		}
-		if b.UID == 0 && b.AccountID != "" {
-			// Written by a later binary that keeps account_id alone.
-			if uid, err := strconv.ParseInt(b.AccountID, 10, 64); err == nil {
-				b.UID = uid
-			}
-		}
+		b.UID = b.uid() // a later binary may keep account_id alone
 		found = true
 		return nil
 	})
@@ -462,7 +472,7 @@ func (s *Store) UIDBound(uid int64) (bool, error) {
 	err := s.db.View(func(tx *bolt.Tx) error {
 		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
 			var b Binding
-			if json.Unmarshal(v, &b) == nil && (b.UID == uid || b.AccountID == accountID(uid)) {
+			if json.Unmarshal(v, &b) == nil && b.uid() == uid {
 				bound = true
 			}
 			return nil
@@ -486,8 +496,8 @@ func (s *Store) Wishes() (map[int64]Wish, error) {
 	err := s.db.View(func(tx *bolt.Tx) error {
 		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
 			var b Binding
-			if json.Unmarshal(v, &b) == nil && b.UID != 0 {
-				out[b.UID] = Wish{SMB: b.WantsSMB != nil && *b.WantsSMB, Enabled: b.WantsEnabled}
+			if json.Unmarshal(v, &b) == nil && b.uid() != 0 {
+				out[b.uid()] = Wish{SMB: b.WantsSMB != nil && *b.WantsSMB, Enabled: b.WantsEnabled}
 			}
 			return nil
 		})

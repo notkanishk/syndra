@@ -882,3 +882,25 @@ func TestStateWithoutBeganIsMigratedOnce(t *testing.T) {
 		}
 	}
 }
+
+// A version-0 meta that never collected (the first runs all failed) has nothing to migrate: its first
+// successful collection is the first collection, and Began is set then, not frozen empty.
+func TestAVersionZeroMetaThatNeverCollectedBeginsAtItsFirstCollection(t *testing.T) {
+	for _, metric := range []string{metricSessions, metricUsedBytes, metricHomeBytes} {
+		t.Run(metric, func(t *testing.T) {
+			s, nas, at := statsServer(t)
+			nas.down = true
+			s.collectStatsOnce()
+			meta := metaOf(t, s, metric)
+			meta.Version, meta.Began = 0, ""
+			putMeta(t, s, metric, meta)
+			nas.down = false
+			s.nas.lastTry = time.Time{}
+			*at = day0.AddDate(0, 0, 1)
+			s.collectStatsOnce()
+			if m := metaOf(t, s, metric); m.Began != s.stats.day(*at) || m.Version != statsMetaVersion {
+				t.Fatalf("Began %q version %d, want the first collection %q", m.Began, m.Version, s.stats.day(*at))
+			}
+		})
+	}
+}

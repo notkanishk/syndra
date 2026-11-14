@@ -304,6 +304,7 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.StatsTotalMissing:         "stats.totals",
 		reference.StatsDimensionNamesPerson: "stats.no-people",
 		reference.FoldsNames:                "requests.exact-names",
+		reference.OffWaitsOnOperator:        "standing.off",
 		// A reply lost mid-call and two calls racing a limit are beyond a
 		// black-box kit (calls.unsettled, calls.serialised skip); the
 		// reference's own tests watch these two fail.

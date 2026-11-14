@@ -140,8 +140,9 @@ export function SectionPill<T extends NavSection>({
   return (
     <div className="sticky top-0 z-(--layer-bar) h-0" style={{ marginBottom: -gap }}>
       {/* The band behind the pill: the page's own ground, full width of the column, so text that
-          scrolls up never shows through beside the pill. --section-band is the `clear` a jump leaves above a
-          heading (glideTo, and the scroller's scroll-padding), so a section it lands on starts just under the band. */}
+          scrolls up never shows through beside the pill. --section-band is the room a page with this band keeps
+          above what a jump lands on (the scroller's scroll-padding-top in globals.css, which glideTo reads
+          as the browser does), so a section it lands on starts just under the band. */}
       <div
         aria-hidden
         data-section-band

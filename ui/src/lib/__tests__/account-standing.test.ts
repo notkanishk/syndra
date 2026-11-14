@@ -79,7 +79,7 @@ describe("an account that is switched off", () => {
     const root: Standing = {
       usable: false,
       waiting_on: "none",
-      note: "Switched off on TrueNAS, not by Syndra.",
+      note: "Switched off on TrueNAS. No one in Syndra is assigned to it.",
       next: "Nothing for you to do unless you assign it to a person.",
     };
     const w = standingWords(root, "TrueNAS", "operator");

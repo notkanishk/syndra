@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
 	bolt "go.etcd.io/bbolt"
@@ -183,7 +182,7 @@ const statsMetaVersion = 1
 //
 //   - First collection: the stored Watermark was empty and this run's is not, so the day it held
 //     from is the day counting began. A failed first run leaves Watermark empty and decides nothing.
-//   - A meta from before Began existed (Version 0) is migrated here, once, by the one rule that is
+//   - A meta from before Began existed (Version 0) that had collected is migrated here, once, by the one rule that is
 //     left to it: a HeldFrom later than the oldest day the buffer could hold has never been trimmed,
 //     so it is the first collected day; at or before it the buffer may have trimmed, and Began stays
 //     empty (the gap before HeldFrom is then truthfully "no longer holds"). It is then Version 1 and
@@ -199,12 +198,15 @@ func beganFor(stored []byte, meta statsMeta, oldest string) (int, string) {
 	if was.Began != "" {
 		return statsMetaVersion, was.Began
 	}
-	switch {
-	case was.Version < statsMetaVersion:
+	if was.Version < statsMetaVersion && was.Watermark != "" {
+		// Collected before Began existed: judged here, once. (A version-0 meta that never collected
+		// has nothing to judge: it falls to the first-collection rule below.)
 		if was.HeldFrom != "" && was.HeldFrom > oldest {
 			return statsMetaVersion, was.HeldFrom
 		}
-	case was.Watermark == "" && meta.Watermark != "":
+		return statsMetaVersion, ""
+	}
+	if was.Watermark == "" && meta.Watermark != "" {
 		return statsMetaVersion, meta.HeldFrom
 	}
 	return statsMetaVersion, ""
@@ -227,11 +229,8 @@ func (s *Store) BoundUIDs() (map[int64]string, error) {
 			if json.Unmarshal(v, &b) != nil {
 				return nil
 			}
-			if b.UID == 0 && b.AccountID != "" {
-				b.UID, _ = strconv.ParseInt(b.AccountID, 10, 64)
-			}
-			if b.UID != 0 {
-				out[b.UID] = string(k)
+			if uid := b.uid(); uid != 0 {
+				out[uid] = string(k)
 			}
 			return nil
 		})

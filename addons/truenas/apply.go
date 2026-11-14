@@ -354,6 +354,20 @@ func (d desiredState) wishEnabled() *bool {
 	return &on
 }
 
+// offWish is wishEnabled when it is off, and nil otherwise: the one wish that is safe to record
+// before the write, since it never claims an account is on that may not be.
+func (d desiredState) offWish() *bool {
+	if w := d.wishEnabled(); w != nil && !*w {
+		return w
+	}
+	return nil
+}
+
+// offOnly is d naming nothing but an off wish: what is recorded before a lock is written.
+func (d desiredState) offOnly() desiredState {
+	return desiredState{enabled: d.enabled, managed: map[string]bool{FieldEnabled: d.managed[FieldEnabled] && !d.enabled}}
+}
+
 // desiredState is the request's fields, decoded once into the shapes this
 // add-on actually converges.
 type desiredState struct {
@@ -648,8 +662,9 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		// create in doubt: CreateInDoubt reads no create before a binding. Under
 		// the subject's lock (once), so no second create of theirs races it;
 		// BindIfFree holds the name against every other subject.
-		// The binding is written with its wish, so recording it is not a second write.
-		binding.WantsEnabled = desired.wishEnabled()
+		// An off wish goes in with the binding, before anything is written to the account: it never
+		// accuses anybody. An on wish waits until the enable has landed (rememberWishes).
+		binding.WantsEnabled = desired.offWish()
 		if err := s.mutate(applyCaller(req).on(binding.UID), "store.bind", func() error { return s.store.BindIfFree(binding) }); err != nil {
 			logStoreFailure("binding", req.Subject, err)
 			return ApplyOutcome{}, http.StatusInternalServerError, err
@@ -657,7 +672,7 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		// Then on as the create would have gone on: the desired fields onto
 		// the account, answered as a create.
 		out, status, err := s.converge(req, desired, current)
-		s.rememberWishes(req, desired, err)
+		s.rememberWishes(req, desired, out, err)
 		if err != nil {
 			// The binding landed; what failed came after it.
 			return out, status, fmt.Errorf("%s was adopted for this subject, then: %w", binding.Username, err)
@@ -684,11 +699,14 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 			return noAccountToSwitchOffOutcome(req.Subject), http.StatusOK, nil
 		}
 		out, status, err := s.createAndConverge(req, desired, binding)
-		s.rememberWishes(req, desired, err)
+		s.rememberWishes(req, desired, out, err)
 		return out, status, err
 	}
+	// An off wish is on the binding before the lock is written: a lock left in doubt must not read
+	// as an account somebody else switched off.
+	s.rememberWishes(req, desired.offOnly(), ApplyOutcome{Effect: EffectApplied}, nil)
 	out, status, err := s.converge(req, desired, current)
-	s.rememberWishes(req, desired, err)
+	s.rememberWishes(req, desired, out, err)
 	return out, status, err
 }
 
@@ -715,11 +733,24 @@ func noAccountToSwitchOffOutcome(subject string) ApplyOutcome {
 // rememberWishes keeps what this apply asked for SMB and for the account on or off on the
 // subject's binding: the first so the member's first password can turn SMB on (see
 // Binding.WantsSMB), the second so a standing can tell an account Syndra holds off from one
-// switched off on TrueNAS (Binding.WantsEnabled). Best-effort: the apply already happened, and
-// failing it over this record would report a mutation as not made. Written only when it changes,
-// so an apply that asks what the binding already says adds nothing to the log.
-func (s *server) rememberWishes(req ApplyRequest, desired desiredState, applyErr error) {
-	if applyErr != nil || (!desired.managed[FieldSMBEnabled] && !desired.managed[FieldEnabled]) {
+// switched off on TrueNAS (Binding.WantsEnabled).
+//
+// Asymmetric on purpose, so a record is never false against the account. An off wish never accuses
+// anybody and is also written BEFORE the lock (apply, offOnly). An on wish is written only once an
+// enable has landed: applied or no change, not blocked, and not in doubt (Unverified), because a
+// blocked or doubtful enable leaves the account off and the record would then call that drift. The
+// SMB wish is what the member's first password turns on later, so it is kept whenever the apply was
+// not blocked. Best-effort: the apply already happened, and failing it over this record would report
+// a mutation as not made. Written only when it changes, so an apply that asks what the binding already
+// says adds nothing to the log.
+func (s *server) rememberWishes(req ApplyRequest, desired desiredState, out ApplyOutcome, applyErr error) {
+	if applyErr != nil || out.Effect == EffectBlocked {
+		return
+	}
+	landed := (out.Effect == EffectApplied || out.Effect == EffectNoChange) && !out.Unverified
+	wantSMB := desired.managed[FieldSMBEnabled]
+	wantEnabled := desired.managed[FieldEnabled] && (landed || !desired.enabled)
+	if !wantSMB && !wantEnabled {
 		return
 	}
 	b, found, err := s.store.GetBinding(req.Subject)
@@ -727,11 +758,11 @@ func (s *server) rememberWishes(req ApplyRequest, desired desiredState, applyErr
 		return
 	}
 	changed := false
-	if desired.managed[FieldSMBEnabled] && (b.WantsSMB == nil || *b.WantsSMB != desired.smbEnabled) {
+	if wantSMB && (b.WantsSMB == nil || *b.WantsSMB != desired.smbEnabled) {
 		want := desired.smbEnabled
 		b.WantsSMB, changed = &want, true
 	}
-	if desired.managed[FieldEnabled] && (b.WantsEnabled == nil || *b.WantsEnabled != desired.enabled) {
+	if wantEnabled && (b.WantsEnabled == nil || *b.WantsEnabled != desired.enabled) {
 		want := desired.enabled
 		b.WantsEnabled, changed = &want, true
 	}

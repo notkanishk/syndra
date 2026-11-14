@@ -37,6 +37,15 @@ func at(s *server, start time.Time) *time.Time {
 	return &now
 }
 
+// wishesDerived marks the one-time wish derivation done, so a test about freshness is not the first
+// live read that derives them (its writes make every copy a read of the past, by design).
+func wishesDerived(t *testing.T, s *server) {
+	t.Helper()
+	if err := s.store.PutSetting(settingWishesDerived, Setting{Value: "done"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func getSubjects(t *testing.T, s *server, fresh bool) (*httptest.ResponseRecorder, SubjectsResponse) {
 	t.Helper()
 	target := "/subjects"
@@ -60,6 +69,7 @@ func userReads(f *fakeRPC) int { return strings.Count(strings.Join(f.calls, " ")
 func TestAReadWithoutFreshIsTheCopyAndTouchesNothing(t *testing.T) {
 	fake := &fakeRPC{users: fixtureUsers, groups: fixtureGroups}
 	s := testServer(t, fake)
+	wishesDerived(t, s)
 	if _, first := getSubjects(t, s, true); !first.Current || first.Stale != nil {
 		t.Fatalf("a fresh read is current with no stale: %+v", first.Observed)
 	}
@@ -81,6 +91,7 @@ func TestAReadWithoutFreshIsTheCopyAndTouchesNothing(t *testing.T) {
 func TestAFreshReadInsideTheCooldownIsTheCopySaidSo(t *testing.T) {
 	fake := &fakeRPC{users: fixtureUsers, groups: fixtureGroups}
 	s := testServer(t, fake)
+	wishesDerived(t, s)
 	now := at(s, time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC))
 	getSubjects(t, s, true)
 	reads := userReads(fake)
@@ -287,6 +298,7 @@ func TestOneSubjectsCooldownIsNotAnothers(t *testing.T) {
 func TestAnUnreadableNASAnswersTheCopyNotAnError(t *testing.T) {
 	fake := &fakeRPC{users: fixtureUsers, groups: fixtureGroups}
 	s := testServer(t, fake)
+	wishesDerived(t, s)
 	now := at(s, time.Now())
 	getSubjects(t, s, true)
 	*now = now.Add(time.Minute)

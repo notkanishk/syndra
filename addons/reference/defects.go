@@ -80,6 +80,7 @@ const (
 	StatsNoBufferGap          Defect = "stats-no-buffer-gap"          // the window the buffer no longer holds has no gap (with stats)
 	StatsTotalMissing         Defect = "stats-total-missing"          // a day with per-person points has no total (with stats)
 	StatsDimensionNamesPerson Defect = "stats-dimension-names-person" // the mk4-a printer is named for the first account's username (with stats)
+	OffWaitsOnOperator        Defect = "off-waits-on-operator"        // an account that is off answers standing waiting_on: operator
 	FoldsNames                Defect = "folds-names"                  // decodes a request with encoding/json alone: names case-folded, the last of two kept
 )
 
@@ -93,7 +94,7 @@ var Defects = []Defect{IgnoresFingerprint, CreatesOnWithdraw, EchoesSecret, Repl
 	CachedAsCurrent, ReadsPerRequest, CooldownIgnored, PreviewRecorded, ReexecutesInDoubt, CheckoutUnserialised,
 	NoChangeAsSucceeded, CallsEchoParams, StatsUndeclaredDimension, StatsLocalNameSubject, StatsZeroForGap,
 	StatsWatermarkAhead, StatsSubjectsAboveTotal, StatsSinceIgnored, StatsFinalMoves, StatsUnknownMetricOK,
-	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing, StatsDimensionNamesPerson, FoldsNames}
+	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing, StatsDimensionNamesPerson, FoldsNames, OffWaitsOnOperator}
 
 // ParseDefects turns names into a set, refusing any name it does not know.
 func ParseDefects(names []string) (map[Defect]bool, error) {
@@ -372,6 +373,15 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 		}
 	}
 	switch {
+	case route == "GET /subjects" && d[OffWaitsOnOperator]:
+		rewrite(func(doc map[string]any) {
+			for _, s := range doc["subjects"].([]any) {
+				m := s.(map[string]any)
+				if m["state"].(map[string]any)["enabled"] == false {
+					m["standing"] = map[string]any{"usable": false, "waiting_on": "operator", "note": "Something to fix."}
+				}
+			}
+		})
 	case route == "GET /subjects" && d[CachedAsCurrent]:
 		rewrite(func(doc map[string]any) {
 			if s, _ := doc["stale"].(map[string]any); s["reason"] == "cached" {

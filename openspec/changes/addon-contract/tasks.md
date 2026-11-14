@@ -2747,5 +2747,13 @@ end to end) found no missing function; three regressions with one root cause
   - **Band offsets** `glideTo` uses the scroller's computed `scroll-padding-top` plus the target's `scroll-margin-top`, the browser's own formula; the padding is `#app-scroll:has([data-section-band])` (globals.css), so a page without a band is not shifted.
   - **`revealInAdvanced`** focuses the panel after the glide (tabindex -1 when needed), in the shared effect.
   - **Nits** the fallback textarea is no longer `aria-hidden`; `ConvergeEntitlements.test.tsx` waited for the apply call and then read the result synchronously (a race with the mutation resolving): it now waits for the sentence.
+  *Review round 3 (15 Nov 2026, PR 189, Opus review of 62bf81ca):*
+  - **Legacy wishes** `deriveWishes` (`wishes_derive.go`): at the first complete live `/subjects` read, after the answer (its writes make every copy a read of the past), each binding's unset `WantsEnabled` and `WantsSMB` is set to what the NAS holds, through the logged `store.bind` path, then a marker in `bucketSettings` (`wishes_derived`, `store.setting`) stops it for good. Without it a contract-1 binding's hand switch-off (a `theirs_only` finding nothing converges) would read "Syndra keeps it off" for ever. A truncated read decides nothing; a failed write leaves the marker unset. `account.adopt` (the operator's) writes no wish, so the old rule holds for an account adopted after the derivation ran, until the next apply; adoptions made before it ran are covered by it.
+  - **Wishes are never false** `rememberWishes`: an off wish is written before the lock (and in the adoption's own binding write), an on wish only after an enable landed (applied or no change; not blocked, not `Unverified`); the SMB wish is kept unless the apply was blocked. The adoption path now logs one more binding write (the on wish after a landed enable).
+  - **One matcher** `Binding.uid` (UID, else account_id) is the one reading of which account a binding names: `UIDBound`, `Wishes`, `BoundUIDs`, `GetBinding`.
+  - **Release** an account bound to nobody reads "Switched off on TrueNAS. No one in Syndra is assigned to it." (a release leaves the NAS as it was, so who switched it off is unknown).
+  - **`beganFor`** a version-0 meta that never collected falls to the first-collection rule.
+  - **Kit** `standing.off` (guide: get-subjects, `-mutate` only): after the withdraw-only apply, the account the app reports off answers `usable: false, waiting_on: none`; the reference's `off-waits-on-operator` defect must fail it.
+  - **Cutover** NEXT.md: the operator's read-only check of production's `state.db` for legacy-shaped bindings.
 
 

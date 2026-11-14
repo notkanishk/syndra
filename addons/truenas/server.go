@@ -361,7 +361,7 @@ func standingOf(s *Subject) *Standing {
 	case !s.Enabled && s.unbound:
 		// Nobody in Syndra asked for this and nothing in Syndra will change it: said as what it is,
 		// not as Syndra's doing (AUTHORING: `none` is for an account Syndra holds off).
-		return &Standing{WaitingOn: "none", Note: "Switched off on TrueNAS, not by Syndra.",
+		return &Standing{WaitingOn: "none", Note: "Switched off on TrueNAS. No one in Syndra is assigned to it.",
 			Next: "Nothing for you to do unless you assign it to a person."}
 	case !s.Enabled && s.wantsEnabled != nil && *s.wantsEnabled:
 		// Syndra wants it on and TrueNAS has it off: a difference made outside Syndra. The way back is
@@ -460,6 +460,7 @@ type subjectsRead struct {
 // or the mirror on disk when the NAS cannot be read and nothing newer is kept
 // (fresh.go) — labelled whichever it is.
 func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte) {
+	var live *Snapshot // set only when this request read the NAS itself
 	val, obs, err := s.fresh.read("subjects", wantsFresh(r), func() (any, time.Time, error) {
 		snap, err := s.readSubjects()
 		if err != nil {
@@ -471,6 +472,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 			// which of the two matters.
 			log.Printf("[STORE] could not persist snapshot: %v", putErr)
 		}
+		live = &snap
 		return subjectsRead{subjectViews(snap.Subjects, s.homeLimits(snap.Subjects), s.wishes()), snap.Truncated}, snap.TakenAt, nil
 	})
 	if writeCooldown(w, err) {
@@ -479,6 +481,11 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 	if err == nil {
 		read := val.(subjectsRead)
 		writeJSON(w, http.StatusOK, SubjectsResponse{Subjects: read.views, Truncated: read.truncated, Observed: obs})
+		if live != nil {
+			// After the answer, not inside the read: its writes make every copy a read of the past
+			// (mutate), which would stop this very read being kept. The next read has the wishes.
+			s.deriveWishes(*live)
+		}
 		return
 	}
 
