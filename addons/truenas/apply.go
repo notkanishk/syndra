@@ -212,6 +212,10 @@ type BindingConflict struct {
 	// account.adopt refuses (refuseSelfAccount). Not on the wire: adoptable
 	// false already says the one thing Syndra acts on, and words says why.
 	serviceAccount bool
+	// numberHeld is the recorded name gone and its uid (outside the add-on's range, which can be
+	// handed out again) now held by another name, which was: not on the wire.
+	numberHeld bool
+	was        string
 	// selfUnknown is the add-on not yet knowing its own account (auth.me),
 	// while account.adopt refuses everything; not on the wire either.
 	selfUnknown bool
@@ -264,7 +268,7 @@ func (s *server) leftByCrashedCreate(subject, derived string, account *Subject, 
 		account.PasswordSet || account.SMBEnabled {
 		return false, nil
 	}
-	if bound, err := s.store.UIDBound(account.UID); err != nil || bound {
+	if bound, err := s.accountBound(account); err != nil || bound {
 		return false, err
 	}
 	return s.log.CreateInDoubt(subject, accountID(account.UID))
@@ -315,6 +319,9 @@ func (c BindingConflict) words() (detail, next string) {
 	case c.BoundTo != "":
 		return fmt.Sprintf("An account named %s already exists and is bound to another subject.", c.Username),
 			"If it is not theirs, release it from that subject, then adopt it here."
+	case c.numberHeld:
+		return fmt.Sprintf("The account %s, bound to this subject, is gone, and its number is now held by a different account, %s.", c.was, c.Username),
+			fmt.Sprintf("Release this subject's binding; the next apply creates a new account for them. Adopt %s instead only if it is theirs.", c.Username)
 	case c.selfUnknown:
 		return fmt.Sprintf("An account named %s already exists, and Syndra can't check yet whether it is the account this add-on signs in to the app with.", c.Username),
 			"Try again shortly."
@@ -338,7 +345,29 @@ var errNoIdentityToDeriveFrom = errors.New("no identity to derive a username fro
 func (d desiredState) standingOf(s *Subject) *Standing {
 	w := *s
 	w.wantsSMB = d.managed[FieldSMBEnabled] && d.smbEnabled
+	// A request is about a subject Syndra holds, so the account is bound, and what it asks for the
+	// account is its wish.
+	w.unbound = false
+	w.wantsEnabled = d.wishEnabled()
 	return standingOf(&w)
+}
+
+// wishEnabled is the account on or off the request asks for, nil when it names no such field.
+func (d desiredState) wishEnabled() *bool {
+	if !d.managed[FieldEnabled] {
+		return nil
+	}
+	on := d.enabled
+	return &on
+}
+
+// offWish is wishEnabled when it is off, and nil otherwise: the one wish that is safe to record
+// before the write, since it never claims an account is on that may not be.
+func (d desiredState) offWish() *bool {
+	if w := d.wishEnabled(); w != nil && !*w {
+		return w
+	}
+	return nil
 }
 
 // desiredState is the request's fields, decoded once into the shapes this
@@ -635,6 +664,9 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		// create in doubt: CreateInDoubt reads no create before a binding. Under
 		// the subject's lock (once), so no second create of theirs races it;
 		// BindIfFree holds the name against every other subject.
+		// An off wish goes in with the binding, before anything is written to the account: it never
+		// accuses anybody. An on wish waits until the enable has landed (rememberWishes).
+		binding.WantsEnabled = desired.offWish()
 		if err := s.mutate(applyCaller(req).on(binding.UID), "store.bind", func() error { return s.store.BindIfFree(binding) }); err != nil {
 			logStoreFailure("binding", req.Subject, err)
 			return ApplyOutcome{}, http.StatusInternalServerError, err
@@ -642,7 +674,7 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		// Then on as the create would have gone on: the desired fields onto
 		// the account, answered as a create.
 		out, status, err := s.converge(req, desired, current)
-		s.rememberWantedSMB(req, desired, err)
+		s.rememberWishes(req, desired, out, err)
 		if err != nil {
 			// The binding landed; what failed came after it.
 			return out, status, fmt.Errorf("%s was adopted for this subject, then: %w", binding.Username, err)
@@ -669,11 +701,14 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 			return noAccountToSwitchOffOutcome(req.Subject), http.StatusOK, nil
 		}
 		out, status, err := s.createAndConverge(req, desired, binding)
-		s.rememberWantedSMB(req, desired, err)
+		s.rememberWishes(req, desired, out, err)
 		return out, status, err
 	}
+	// An off wish is on the binding before the lock is written: a lock left in doubt must not read
+	// as an account somebody else switched off.
+	s.rememberOffWish(req, desired)
 	out, status, err := s.converge(req, desired, current)
-	s.rememberWantedSMB(req, desired, err)
+	s.rememberWishes(req, desired, out, err)
 	return out, status, err
 }
 
@@ -697,37 +732,89 @@ func noAccountToSwitchOffOutcome(subject string) ApplyOutcome {
 	}
 }
 
-// rememberWantedSMB keeps what this apply asked for SMB on the subject's
-// binding, so the member's first password can turn it on (see Binding.WantsSMB).
-// Best-effort: the apply already happened, and failing it over this record
-// would report a mutation as not made. Written only when it changes, so an
-// apply that asks what the binding already says adds nothing to the log.
-func (s *server) rememberWantedSMB(req ApplyRequest, desired desiredState, applyErr error) {
-	if applyErr != nil || !desired.managed[FieldSMBEnabled] {
+// rememberOffWish records an off wish before the lock that makes it is written: it never accuses
+// anybody, and a lock left in doubt must not read as an account somebody else switched off.
+func (s *server) rememberOffWish(req ApplyRequest, desired desiredState) {
+	if desired.offWish() == nil {
 		return
 	}
 	b, found, err := s.store.GetBinding(req.Subject)
-	if err != nil || !found || (b.WantsSMB != nil && *b.WantsSMB == desired.smbEnabled) {
+	if err != nil || !found || (b.WantsEnabled != nil && !*b.WantsEnabled) {
 		return
 	}
-	want := desired.smbEnabled
-	b.WantsSMB = &want
+	off := false
+	b.WantsEnabled = &off
 	if err := s.mutate(applyCaller(req).on(b.UID), "store.bind", func() error { return s.store.PutBinding(b) }); err != nil {
 		logStoreFailure("binding", req.Subject, err)
 	}
 }
 
-// inIDRange is whether n is a number this add-on hands out (identity.go). A
-// binding's uid outside it is a legacy one holding the NAS record key, never
-// an account's uid (boundAccount).
+// rememberWishes keeps what this apply asked for SMB and for the account on or off on the
+// subject's binding: the first so the member's first password can turn SMB on (see
+// Binding.WantsSMB), the second so a standing can tell an account Syndra holds off from one
+// switched off on TrueNAS (Binding.WantsEnabled).
+//
+// Asymmetric on purpose, so a record is never false against the account. An off wish never accuses
+// anybody and is also written BEFORE the lock (rememberOffWish). An on wish is written only once an
+// enable has landed: applied or no change, not blocked, and not in doubt (Unverified), because a
+// blocked or doubtful enable leaves the account off and the record would then call that drift. The
+// SMB wish is what the member's first password turns on later, so it is kept whenever the apply was
+// not blocked. Best-effort: the apply already happened, and failing it over this record would report
+// a mutation as not made. Written only when it changes, so an apply that asks what the binding already
+// says adds nothing to the log.
+func (s *server) rememberWishes(req ApplyRequest, desired desiredState, out ApplyOutcome, applyErr error) {
+	if applyErr != nil || out.Effect == EffectBlocked {
+		return
+	}
+	landed := (out.Effect == EffectApplied || out.Effect == EffectNoChange) && !out.Unverified
+	wantSMB := desired.managed[FieldSMBEnabled]
+	wantEnabled := desired.managed[FieldEnabled] && (landed || !desired.enabled)
+	if !wantSMB && !wantEnabled {
+		return
+	}
+	b, found, err := s.store.GetBinding(req.Subject)
+	if err != nil || !found {
+		return
+	}
+	changed := false
+	if wantSMB && (b.WantsSMB == nil || *b.WantsSMB != desired.smbEnabled) {
+		want := desired.smbEnabled
+		b.WantsSMB, changed = &want, true
+	}
+	if wantEnabled && (b.WantsEnabled == nil || *b.WantsEnabled != desired.enabled) {
+		want := desired.enabled
+		b.WantsEnabled, changed = &want, true
+	}
+	if !changed {
+		return
+	}
+	if err := s.mutate(applyCaller(req).on(b.UID), "store.bind", func() error { return s.store.PutBinding(b) }); err != nil {
+		logStoreFailure("binding", req.Subject, err)
+	}
+}
+
+// inIDRange is whether n is a number this add-on hands out (identity.go). Those numbers are never
+// handed out twice (ClaimID's high-water mark), so one names the same account for good; a number
+// outside it can come back after a delete, so it never names an account by itself (boundAccount).
 func inIDRange(n, floor, ceiling int64) bool { return n >= floor && n <= ceiling }
 
-// boundAccount is the one rule for which account a binding names. Plan asks
-// it of its snapshot and apply of the target, so the plan never says "absent"
-// (or "creates") for an account the apply would find, or the other way round.
+// boundAccount is the rule for which account a binding names, for apply (locate), plan and
+// resolveBinding (standing, statistics, accountBound). Plan asks it of its snapshot and apply of the
+// target, so the plan never says "absent" (or "creates") for an account the apply would find, or the
+// other way round. It is not yet the rule of the account operations: (*server).operatedAccount goes
+// through recordID, which has its own, and so do storageStatus, smbActivity and the backend's drift
+// matching (slice 7t, one account identity).
 // byName and byUID look up one account by an exact key. It returns the account
 // (nil when there is none), the binding as it should now read, and a conflict
-// when the name is held by a different account of ours.
+// when the name is held by a different account of ours, or, for a uid outside this add-on's range,
+// when the recorded name is gone and the number is held by another name.
+//
+// What a binding's uid means decides the rest. In range, it is a real uid that is never reused: the
+// account it names is that one, so a rename is followed. Outside the range (an adopted hand-made
+// account, uid_kind "account"; or a contract-1 record key, which names nothing by number) a number
+// can be handed to a new account after a delete, so it is only ever believed alongside the
+// recorded name: name and number agree, or the binding halts for an operator (BindingConflict) and
+// is never rebound to whoever holds the number.
 func boundAccount(binding Binding, floor, ceiling int64,
 	byName func(string) (*Subject, error), byUID func(int64) (*Subject, error),
 ) (*Subject, Binding, *BindingConflict, error) {
@@ -735,7 +822,7 @@ func boundAccount(binding Binding, floor, ceiling int64,
 	if err != nil {
 		return nil, binding, nil, err
 	}
-	owned := inIDRange(binding.UID, floor, ceiling)
+	owned := binding.ownsUID(floor, ceiling)
 	if found != nil {
 		if owned && found.UID != binding.UID {
 			// A name some other account now holds (the original was deleted
@@ -743,11 +830,12 @@ func boundAccount(binding Binding, floor, ceiling int64,
 			// entitlements to a stranger, so it halts like any foreign name.
 			return nil, binding, &BindingConflict{Username: found.Username, AccountID: accountID(found.UID)}, nil
 		}
-		if !owned && inIDRange(found.UID, floor, ceiling) {
-			// A legacy binding holding a record key, not a uid: the real one,
-			// so the next pass is guarded by the check above.
+		if !owned {
+			// A legacy binding holding a record key (or a real uid it never said was one): the name
+			// found the account, so the real uid, marked, and the next pass is guarded by the check above.
 			binding.UID = found.UID
 		}
+		binding.UIDKind = uidKindAccount
 		return found, binding, nil, nil
 	}
 	if !owned {
@@ -764,7 +852,15 @@ func boundAccount(binding Binding, floor, ceiling int64,
 		return nil, binding, nil, err
 	}
 	if renamed != nil {
+		if !inIDRange(binding.UID, floor, ceiling) {
+			// A number outside the range may have been handed to a new account since this one was
+			// deleted: not a rename, whatever else is true. An operator decides; nothing is written
+			// to the account that holds the number and nothing is created.
+			return nil, binding, &BindingConflict{Username: renamed.Username, AccountID: accountID(renamed.UID),
+				numberHeld: true, was: binding.Username}, nil
+		}
 		binding.Username = renamed.Username
+		binding.UIDKind = uidKindAccount
 		return renamed, binding, nil, nil
 	}
 	// Bound, and neither the name nor the uid is there. The account was
@@ -806,9 +902,9 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		if err != nil {
 			return nil, Binding{}, nil, false, false, err
 		}
-		if resolved.Username != binding.Username || resolved.UID != binding.UID {
-			// A rename, or a legacy binding's real uid: recorded so the next
-			// pass finds the account by name and is guarded by its uid.
+		if resolved.Username != binding.Username || resolved.UID != binding.UID || resolved.UIDKind != binding.UIDKind {
+			// A rename, or a legacy binding's real uid and marker: recorded once, so the next
+			// pass finds the account by number and is guarded by its uid.
 			if err := s.mutate(applyCaller(req).on(resolved.UID), "store.bind", func() error { return s.store.PutBinding(resolved) }); err != nil {
 				logStoreFailure("binding", req.Subject, err)
 			}
@@ -855,7 +951,7 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 			return nil, Binding{}, conflict, false, false, nil
 		}
 		// Not bound here: the apply binds it once the plan is verified.
-		return existing, Binding{SubjectID: req.Subject, Username: existing.Username, UID: existing.UID, BoundBy: "apply"}, nil, false, true, nil
+		return existing, Binding{SubjectID: req.Subject, Username: existing.Username, UID: existing.UID, UIDKind: uidKindAccount, BoundBy: "apply"}, nil, false, true, nil
 	}
 	return nil, Binding{SubjectID: req.Subject, Username: derived}, nil, cut, false, nil
 }
@@ -1132,6 +1228,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		return ApplyOutcome{}, http.StatusUnprocessableEntity,
 			fmt.Errorf("derived name %q is not valid on this target", binding.Username)
 	}
+	binding.WantsEnabled = desired.wishEnabled() // written with the binding: no second write
 	want := decide(nil, desired, homeDecision{})
 	var groupIDs []apiID
 	if want.groups != nil {
@@ -1255,7 +1352,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	if readErr == nil {
 		uid = created.UID
 	}
-	binding.SubjectID, binding.UID, binding.BoundBy = req.Subject, uid, "apply"
+	binding.SubjectID, binding.UID, binding.UIDKind, binding.BoundBy = req.Subject, uid, uidKindAccount, "apply"
 	if err := s.mutate(who.on(uid), "store.bind", func() error { return s.store.BindIfFree(binding) }); err != nil {
 		// The account exists and the record of whose it is did not land. Not a
 		// silent success: the next apply would derive the same name, find it

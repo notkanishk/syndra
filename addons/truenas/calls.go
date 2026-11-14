@@ -295,7 +295,7 @@ func (s *server) legacyReply(kind string, raw json.RawMessage) ([]byte, error) {
 			if snap, found, err := s.store.GetSnapshot(); err == nil && found {
 				for i := range snap.Subjects {
 					if sub := snap.Subjects[i]; sub.UID == old.UID {
-						sub.wantsSMB = s.wantedSMB()[old.UID]
+						sub.applyWish(s.wishesFor(snap.Subjects))
 						out.AccountID, out.Standing = accountID(old.UID), standingOf(&sub)
 					}
 				}

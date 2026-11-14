@@ -3,7 +3,7 @@
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
 import { NOTHING_TO_DO, cooldownNext, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { formatBytes } from "@/lib/format";
+import { formatBytes, formatSignIn } from "@/lib/format";
 import { useState } from "react";
 
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -13,7 +13,6 @@ import { RowCheckbox } from "@/components/ui/SelectionBar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { ReadAgainError, ReadFreshness, RetryWait } from "@/components/ui/ReadFreshness";
-import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import {
@@ -226,7 +225,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
       {chosen.length > 0 && (
         <div className="grid gap-3 border-t border-line px-5 py-4">
           {/* The acknowledgement names the DATA, not the people. Removing the
-              row is not what cannot be undone — the files are. */}
+              row is not what cannot be undone — the account is. What a system keeps of its files is its own. */}
           <AcknowledgeCount
             checked={acknowledged}
             onChange={setAcknowledged}
@@ -307,7 +306,8 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
 }
 
 /**
- * What actually goes with the accounts.
+ * What a removal costs: the accounts go and cannot be brought back, and what they held, when it is
+ * known. It says nothing of what the system does with what they held (that is the system's own).
  *
  * Says the size when the target reported one and says so plainly when it did
  * not. A sentence claiming "0 bytes" from a read that never happened would be
@@ -318,9 +318,9 @@ function filesSentence(chosen: DormantAccount[], name: string): string {
   const known = chosen.filter((a) => typeof a.bytes_held === "number");
   if (known.length === chosen.length && known.length > 0) {
     const total = known.reduce((sum, a) => sum + (a.bytes_held ?? 0), 0);
-    return `${formatBytes(total)} of their files goes with the accounts.`;
+    return `The accounts cannot be brought back. They held ${formatBytes(total)} on ${name} when it was last read.`;
   }
-  return `Their home directories and everything in them go with the accounts. Syndra cannot see how much that is on ${name}.`;
+  return `The accounts cannot be brought back. Syndra cannot see how much they held on ${name}.`;
 }
 
 function GroupHeading({ title, blurb }: { title: string; blurb: string }) {
@@ -343,7 +343,8 @@ function AccountLine({ account }: { account: DormantAccount }) {
       )}
       <span className="flex-1" />
       <span className="text-[13px] text-faint">
-        last signed in <Relative iso={account.last_seen_at} />
+        {/* One rule for the whole column (A-10 §6): minutes or hours under a day, then the date. */}
+        Last signed in <time dateTime={account.last_seen_at}>{formatSignIn(account.last_seen_at)}</time>
       </span>
     </>
   );

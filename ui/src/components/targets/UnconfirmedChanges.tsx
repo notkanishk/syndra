@@ -92,13 +92,13 @@ export function wording(op: UnconfirmedOperation, who: string, name: string) {
   switch (op.operation) {
     case "account.purge":
       return {
-        asked: [`Delete `, `'s account and files on ${name}`],
-        question: `Did ${name} delete ${who}'s account and files?`,
+        asked: [`Delete `, `'s account on ${name}`],
+        question: `Did ${name} delete ${who}'s account?`,
         tell: `Read ${name} again. If ${account} is gone from Accounts on ${name}, it happened. Syndra won't send a delete again by itself.`,
-        yes: `${account} and its files are gone from ${name}.`,
-        no: `${account} is still on ${name}, with its files.`,
-        done: `${name} deleted ${who}'s account and files.`,
-        notDone: `You recorded that ${name} didn't delete ${who}'s account and files.`,
+        yes: `${account} is gone from ${name}.`,
+        no: `${account} is still on ${name}.`,
+        done: `${name} deleted ${who}'s account.`,
+        notDone: `You recorded that ${name} didn't delete ${who}'s account.`,
       };
     // Syndra's lists of accounts change only when the system confirms an
     // assign or a stop, and an answer here records the answer alone (it writes

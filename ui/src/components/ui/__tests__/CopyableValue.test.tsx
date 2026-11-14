@@ -152,3 +152,70 @@ describe("the note under a page of copy rows", () => {
     expect(await screen.findByText(/Tap a value to select it, then hold to copy/)).toBeTruthy();
   });
 });
+
+describe("on a plain-http page, where there is no Clipboard API", () => {
+  // The deployment is reached over http on a LAN, so navigator.clipboard is undefined there and the
+  // button used to say Select. Where the browser can still copy a selection it is a Copy button.
+  function withExec(result: boolean) {
+    const exec = vi.fn().mockImplementation(() => {
+      // What is copied is the hidden textarea's selection, never the page's.
+      const area = document.querySelector("textarea");
+      expect(area?.value).toBe("account.purge");
+      expect(area?.readOnly).toBe(true);
+      expect(area).not.toHaveAttribute("aria-hidden"); // hidden content is not copyable in every browser
+      expect(area).toHaveAttribute("aria-label", "Text being copied");
+      return result;
+    });
+    Object.defineProperty(document, "queryCommandSupported", { value: () => true, configurable: true });
+    Object.defineProperty(document, "execCommand", { value: exec, configurable: true });
+    return exec;
+  }
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(document, "queryCommandSupported");
+    Reflect.deleteProperty(document, "execCommand");
+  });
+
+  it("copies through a hidden textarea and confirms", async () => {
+    withoutClipboard();
+    const exec = withExec(true);
+    render(<CopyableValue value="account.purge" label="Operation id" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Copy operation id" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Copied operation id" })).toBeTruthy());
+    expect(exec).toHaveBeenCalledWith("copy");
+    expect(document.querySelector("textarea")).toBeNull();
+    expect(document.querySelector("[aria-live=polite]")?.textContent).toBe("Operation id copied");
+  });
+
+  it("puts the reader's selection and focus back", async () => {
+    withoutClipboard();
+    withExec(true);
+    render(
+      <div>
+        <p data-testid="prose">some prose to have selected</p>
+        <input aria-label="Elsewhere" />
+        <CopyableValue value="account.purge" label="Operation id" />
+      </div>,
+    );
+    const input = screen.getByLabelText("Elsewhere");
+    input.focus();
+    const range = document.createRange();
+    range.selectNodeContents(screen.getByTestId("prose"));
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    fireEvent.click(await screen.findByRole("button", { name: "Copy operation id" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Copied operation id" })).toBeTruthy());
+    expect(window.getSelection()!.toString()).toBe("some prose to have selected");
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("does not say Copied when the browser refused, and says so", async () => {
+    withoutClipboard();
+    withExec(false);
+    render(<CopyableValue value="account.purge" label="Operation id" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Copy operation id" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Select/ })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /^Copied/ })).toBeNull();
+    expect(document.querySelector("[aria-live=polite]")?.textContent).toBe("Couldn't copy operation id: select it and copy");
+  });
+});

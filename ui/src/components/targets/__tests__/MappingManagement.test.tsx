@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { UiViewProvider } from "@/lib/ui-view";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -136,11 +137,13 @@ vi.mock("@/lib/queries/useMappings", async () => {
   };
 });
 
-function renderMappings() {
+function renderMappings(view: "basic" | "advanced" = "advanced") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MappingManagement target="truenas" />
+      <UiViewProvider isOperator initialView={view}>
+        <MappingManagement target="truenas" />
+      </UiViewProvider>
     </QueryClientProvider>,
   );
 }
@@ -164,9 +167,36 @@ describe("what roles reach a target", () => {
     expect(screen.getByText("Gives the lab_makers group")).toBeInTheDocument();
     expect(screen.queryByText("group → lab_makers")).toBeNull();
     const row = screen.getByText("Gives the lab_makers group").closest("div") as HTMLElement;
-    expect(row.parentElement?.textContent).toMatch(/3 people/);
+    expect(row.parentElement?.textContent).toMatch(/3 people hold this role/);
     fireEvent.click(screen.getByRole("button", { name: /Technical detail/ }));
     expect(screen.getByText("group → lab_makers")).toBeInTheDocument();
+  });
+
+  it("hides a role's ids in Basic, and labels the count of people it moves", () => {
+    state.holders = ["u1"];
+    renderMappings("basic");
+    expect(screen.queryByRole("button", { name: /Technical detail/ })).toBeNull();
+    expect(screen.getByText("1 person holds this role")).toBeInTheDocument();
+  });
+
+  // The count sits in the "Gives" column, before the Technical fold, which is the row's last part:
+  // it never drops to a line of its own, and Basic leaves no empty line or gap at the end.
+  it("puts the count with what the role gives, and the Technical fold last", () => {
+    state.holders = ["u1", "u2"];
+    const advanced = renderMappings();
+    const count = document.querySelector("[data-holders]") as HTMLElement;
+    const gives = screen.getByText("Gives the lab_makers group");
+    expect(count.parentElement).toBe(gives.parentElement);
+    const row = count.closest(".row-divider, [class*='flex-wrap']") as HTMLElement;
+    const fold = screen.getByRole("button", { name: /Technical detail/ }).closest(".unfold") as HTMLElement;
+    expect(row.lastElementChild).toBe(fold);
+    expect(fold).toHaveClass("basis-full");
+    advanced.unmount();
+
+    renderMappings("basic");
+    const basicRow = (document.querySelector("[data-holders]") as HTMLElement).closest("[class*='flex-wrap']") as HTMLElement;
+    expect(basicRow.querySelector(".unfold")).toBeNull();
+    expect(basicRow.lastElementChild).toHaveTextContent("Remove");
   });
 
   // The cohort is the reason this row can offer a convergence at all: the
@@ -177,7 +207,9 @@ describe("what roles reach a target", () => {
     renderMappings();
 
     expect(screen.queryByRole("button", { name: /bring accounts in line/i })).toBeNull();
-    expect(screen.getByText(/Nobody holds this role/i)).toBeInTheDocument();
+    // Said once, as the button's reason: no bare "0" in a column of its own, no second sentence.
+    expect(screen.getAllByText(/Nobody holds this role/i)).toHaveLength(1);
+    expect(document.querySelector("[data-holders]")).toBeNull();
   });
 
   // "maker" alone is not an identity — the same key means a different role in
@@ -447,6 +479,9 @@ describe("what each group opens", () => {
     reach.data = { read: true, current: false, read_at: new Date(Date.now() - 3 * 60_000).toISOString(), stale: { reason: "cached" }, groups: { lab_makers: [] } };
     const { unmount } = renderMappings();
     expect(screen.getByText("What each group opens was read 3 min ago")).toBeInTheDocument();
+    // One freshness line, from one source: the header does not say it a second, different way.
+    expect(screen.queryByText(/folder permissions/)).toBeNull();
+    expect(screen.getAllByText(/What each group opens/)).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Read again" }));
     expect(reach.press).toHaveBeenCalledTimes(1);
     unmount();

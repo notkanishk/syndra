@@ -268,6 +268,21 @@ type Subject struct {
 	// storage.status) or the request's own wish (plan, apply), so every
 	// standing sees the wait for a new password. Not on the wire, not stored.
 	wantsSMB bool
+	// unbound is an account no Syndra subject is bound to: Syndra never asked for any of its state.
+	// Not on the wire, not stored; the zero value is a bound account, so a caller that does not set it
+	// makes no claim about who switched an account off.
+	unbound bool
+	// wantsEnabled is the binding's Binding.WantsEnabled, or the request's own wish (plan, apply).
+	wantsEnabled *bool
+}
+
+// applyWish puts a binding's wish on s; nil wishes (not read) leaves s as read.
+func (s *Subject) applyWish(wishes map[int64]Wish) {
+	if wishes == nil {
+		return
+	}
+	w, bound := wishes[s.UID]
+	s.wantsSMB, s.unbound, s.wantsEnabled = w.SMB, !bound, w.Enabled
 }
 
 // needsNewPassword is an account that has had a password and is kept off SMB
@@ -315,21 +330,35 @@ func (s *Store) GetSnapshot() (Snapshot, bool, error) {
 // an existing account — and re-deriving from the new email would name an
 // account that does not exist while the real one sat there unbound.
 //
-// The uid is recorded beside the name because the name can change out of band.
-// A stable uid whose username moved is a RENAME, and reporting it as a missing
-// account would create a replacement while the original kept the home data.
+// The uid is recorded beside the name because the name can change out of band. What the
+// uid is worth depends on its range (boundAccount): a number this add-on hands out is never handed
+// out twice, so a username that moved under it is a RENAME and is followed, and reporting it as a
+// missing account would create a replacement while the original kept the home data. A number
+// outside the range (an adopted account's, from 3000) can be handed to a new account after a delete,
+// so it is only believed beside the recorded name; name gone and number held by another name halts
+// as a conflict (UIDKind says the uid is real; the account operations, storage status and the
+// backend's drift do not follow this rule yet: slice 7t, one account identity).
 //
 // AccountID is contract 2's name for the same number (account_id, a string). It
 // is written BESIDE uid, never instead of it, for one release (decision 10,
 // task 1.7): a contract-1 binary rolled back onto this file still finds every
-// binding by uid, so rollback restores nothing. Both are filled on every write
-// (putBinding) and either is read (GetBinding).
+// binding by uid, so rollback restores nothing. It is stamped only for a marked uid. It is the
+// uid, not an identity that outlives the account: an uid outside the range can be reused by TrueNAS
+// (slice 7t decides what Syndra holds instead).
 type Binding struct {
-	SubjectID string    `json:"subject_id"`
-	Username  string    `json:"username"`
-	UID       int64     `json:"uid"`
-	AccountID string    `json:"account_id,omitempty"`
-	BoundAt   time.Time `json:"bound_at"`
+	SubjectID string `json:"subject_id"`
+	Username  string `json:"username"`
+	UID       int64  `json:"uid"`
+	AccountID string `json:"account_id,omitempty"`
+	// UIDKind says what UID is. "account" is a real uid on the NAS (an adopted hand-made account has
+	// uid 3051, far below the range this add-on hands out), so a name held by a different uid is a
+	// conflict whatever the range; it never lets an out-of-range number be followed to a new name
+	// (boundAccount). Absent is a binding from before it (contract 1): its UID may be the NAS record
+	// key, so it is matched by name until the apply that finds its account rewrites it with the real
+	// uid and this marker. Every binding contract-2 code writes carries it (create, adoption,
+	// boundAccount's rewrite).
+	UIDKind string    `json:"uid_kind,omitempty"`
+	BoundAt time.Time `json:"bound_at"`
 	// BoundBy records whether an operator adopted an existing account or the
 	// apply created one. Adoption hands somebody else's account to a subject if
 	// it is wrong, so who decided it survives.
@@ -341,15 +370,35 @@ type Binding struct {
 	// snapshot says what the NAS HAS, which for a new account is "off" because
 	// nothing could turn it on yet.
 	WantsSMB *bool `json:"wants_smb,omitempty"`
+	// WantsEnabled is whether the last apply asked for the account on (true) or off (false), nil
+	// before any did (a binding from before this was kept). Desire, like WantsSMB: the NAS can only
+	// say an account is off, never who switched it off, and a standing needs to tell Syndra's own
+	// "off" (what it asked for) from one made on TrueNAS (standingOf).
+	WantsEnabled *bool `json:"wants_enabled,omitempty"`
 }
 
-// encodeBinding is the one place a binding is written, so both ids always are.
+// uidKindAccount marks Binding.UID as a real NAS uid.
+const uidKindAccount = "account"
+
+// ownsUID is whether this binding's uid is a real one to hold the recorded name against: a marked
+// uid always, an unmarked one (contract 1) only inside the range this add-on hands out, since outside
+// it the number may be a NAS record key. It decides refusal (a name held by a different number is a
+// conflict), never a rename: only an in-range number is followed to a new name (boundAccount).
+func (b Binding) ownsUID(floor, ceiling int64) bool {
+	return b.UIDKind == uidKindAccount || inIDRange(b.UID, floor, ceiling)
+}
+
+// encodeBinding is the one place a binding is written: uid, and account_id beside it where the uid
+// is marked real.
 func (s *Store) encodeBinding(b Binding) ([]byte, error) {
 	if b.BoundAt.IsZero() {
 		b.BoundAt = s.now().UTC()
 	}
+	// account_id names the account by its uid, so only a marked uid is stamped: a contract-1 record
+	// key must not read as one. It is not "stable" outside the add-on's range, where TrueNAS can hand
+	// the number to a new account after a delete (slice 7t).
 	b.AccountID = ""
-	if b.UID != 0 {
+	if b.UID != 0 && b.UIDKind == uidKindAccount {
 		b.AccountID = accountID(b.UID)
 	}
 	return json.Marshal(b)
@@ -422,45 +471,29 @@ func (s *Store) GetBinding(subjectID string) (Binding, bool, error) {
 		if err := json.Unmarshal(raw, &b); err != nil {
 			return fmt.Errorf("stored binding for %s is unreadable: %w", subjectID, err)
 		}
-		if b.UID == 0 && b.AccountID != "" {
-			// Written by a later binary that keeps account_id alone.
-			if uid, err := strconv.ParseInt(b.AccountID, 10, 64); err == nil {
-				b.UID = uid
-			}
-		}
 		found = true
 		return nil
 	})
 	return b, found, err
 }
 
-// UIDBound says whether any subject's binding holds this uid, under whatever
-// name it last recorded: BoundUsernames sees a name, and an account renamed
-// since its binding was written is still bound.
-func (s *Store) UIDBound(uid int64) (bool, error) {
-	bound := false
-	err := s.db.View(func(tx *bolt.Tx) error {
-		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
-			var b Binding
-			if json.Unmarshal(v, &b) == nil && (b.UID == uid || b.AccountID == accountID(uid)) {
-				bound = true
-			}
-			return nil
-		})
-	})
-	return bound, err
+// Wish is what Syndra last asked of a bound account, kept on its binding: SMB wanted on (which a
+// new password waits on) and the account on or off. A standing built from a read of the NAS alone
+// cannot see either (Subject.needsNewPassword, standingOf).
+type Wish struct {
+	SMB     bool
+	Enabled *bool
 }
 
-// WantedSMB is, by uid, the bound accounts whose last apply asked for SMB
-// on (Binding.WantsSMB): the wish a new password waits on, which a standing
-// built from a read of the NAS alone cannot see (Subject.needsNewPassword).
-func (s *Store) WantedSMB() (map[int64]bool, error) {
-	out := map[int64]bool{}
+// Bindings is every binding, as stored, each with its uid read from account_id when that is all it
+// kept. Which NAS account one names is the server's rule, not this list's (resolveBinding).
+func (s *Store) Bindings() ([]Binding, error) {
+	var out []Binding
 	err := s.db.View(func(tx *bolt.Tx) error {
 		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
 			var b Binding
-			if json.Unmarshal(v, &b) == nil && b.UID != 0 && b.WantsSMB != nil && *b.WantsSMB {
-				out[b.UID] = true
+			if json.Unmarshal(v, &b) == nil {
+				out = append(out, b)
 			}
 			return nil
 		})

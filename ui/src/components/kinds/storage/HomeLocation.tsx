@@ -84,7 +84,7 @@ export function HomeLocationDialog({
   const homes = useTargetHomes(target);
   const save = useSetTargetSetting(target);
   const current = setting.value;
-  const [chosen, setChosen] = useState(current || setting.values[0] || "");
+  const [chosen, setChosen] = useState(current || "");
   const label = (v: string) => setting.labels?.[v] ?? v;
   const share = (label(setting.values[0] ?? current).split(" › ")[0] || "the share").trim();
   const none = setting.values_read && setting.values.length === 0;
@@ -100,7 +100,7 @@ export function HomeLocationDialog({
       <ModalHeader
         title={current ? "Change where home folders go" : "Choose where home folders go"}
         titleId="home-title"
-        lede={`Everyone whose role gives a home folder gets one of their own in it, named after their account and private to them. It's one folder for every role on ${name}.`}
+        lede={`Everyone whose role gives a home folder gets one of their own in it, named after their account and private to them. The same folder is used for every role on ${name}; each role does not get its own.`}
       />
       {done ? (
         <div className="px-6">
@@ -116,6 +116,12 @@ export function HomeLocationDialog({
             </Select>
           ) : (
             <Select id="home-folder" value={chosen} onChange={(e) => setChosen(e.target.value)}>
+              {/* Nothing is chosen until the person picks (no default selection). */}
+              {!current && (
+                <option value="" disabled>
+                  Choose a folder…
+                </option>
+              )}
               {sortByName(setting.values, label, (v) => v).map((v) => (
                 <option key={v} value={v}>
                   {label(v)}
@@ -179,6 +185,7 @@ export function HomeLocationDialog({
           <Button
             variant="accent"
             disabled={none || !chosen || chosen === current || save.isPending}
+            reason={!none && !chosen ? "Choose a folder first." : undefined}
             onClick={() =>
               save.mutate(
                 { name: HOME_ROOT, value: chosen },
@@ -192,7 +199,7 @@ export function HomeLocationDialog({
               )
             }
           >
-            {current ? `Make new homes in ${label(chosen)}` : `Use ${label(chosen)}`}
+            {current ? `Make new homes in ${label(chosen)}` : chosen ? `Use ${label(chosen)}` : "Use this folder"}
           </Button>
         )}
       </ModalFooter>

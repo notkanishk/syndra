@@ -44,6 +44,7 @@ var catalogue = []struct {
 	{id: "read-back", guide: "post-apply", must: "an apply's observed equals the subject's state on the next /subjects", mutate: true},
 	{id: "withdraw-only.no-account", guide: "what-desired-means", must: "a withdraw-only apply for a subject with no account is no_change and creates nothing", mutate: true},
 	{id: "withdraw-only.existing", guide: "what-desired-means", must: "a withdraw-only apply turns the account off and leaves every membership, flag and limit as it was", mutate: true},
+	{id: "standing.off", guide: "get-subjects", must: "an account the kit's apply asked off, and the app reports off, answers standing usable: false, waiting_on: none (nobody is waited on: off is what Syndra asked for)", mutate: true},
 	{id: "channel-follows-account", guide: "what-desired-means", must: "every channel is off whenever the account is off", mutate: true},
 	{id: "absent-unmanaged", guide: "what-desired-means", must: "a field absent from desired is not touched", mutate: true},
 	{id: "limit-combine", guide: "what-desired-means", must: "a limit combines by max and unlimited dominates: max(unlimited, 5 GiB) is unlimited", mutate: true},

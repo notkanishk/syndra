@@ -358,8 +358,29 @@ func standingOf(s *Subject) *Standing {
 	case s.Self:
 		// The add-on's own service account, used through its API key.
 		return &Standing{Usable: true, WaitingOn: "none"}
+	case !s.Enabled && s.unbound:
+		// Nobody in Syndra is assigned to it, so nothing in Syndra waits on anyone for it: `none`, as
+		// AUTHORING's standing rule allows for an unassigned off account, but said as what it is and
+		// never as Syndra's doing.
+		return &Standing{WaitingOn: "none", Note: "Switched off on TrueNAS. No one in Syndra is assigned to it.",
+			Next: "Nothing for you to do unless you assign it to a person."}
+	case !s.Enabled && s.wantsEnabled != nil && *s.wantsEnabled:
+		// Syndra wants it on and TrueNAS has it off: a difference made outside Syndra. The way back is
+		// Syndra's own check for differences, which re-sends what it wants.
+		return &Standing{WaitingOn: "operator", Note: "Switched off on TrueNAS, outside Syndra.",
+			Next: "Makerspace staff can use Check for differences on the system's Mappings page to bring it back in line."}
+	case !s.Enabled && s.wantsEnabled != nil:
+		// Syndra asked for it off: what it asked for is what it has, so nobody is waited on.
+		// `next` is shown to the member whose account it is as well as to the operator, so it reads
+		// right to both.
+		return &Standing{WaitingOn: "none",
+			Next: "Nothing for you to do. It stays off while the person it belongs to is on hold or deactivated, or holds no role that reaches TrueNAS."}
 	case !s.Enabled:
-		return &Standing{WaitingOn: "none", Note: "The account is switched off."}
+		// A bound account whose wish is unknown (a binding never applied since wishes were kept): no
+		// claim either way. The wish fills in on its next apply (rememberWishes). No `next` of ours:
+		// Syndra supplies one for each audience (an operator is sent to the comparison, a member to
+		// makerspace staff), which a line written once here could not do.
+		return &Standing{WaitingOn: "none", Note: "Switched off on TrueNAS."}
 	case !s.PasswordSet:
 		return &Standing{WaitingOn: "member", Note: smbWaiting(s), Next: "Set a storage password on your storage page."}
 	case s.needsNewPassword():
@@ -400,14 +421,16 @@ type SubjectView struct {
 
 // subjectViews serves subjects; limits holds each account's effective home
 // folder limit where it was read (homeLimits), and an account absent from it
-// reports no home_quota, which is "not known", never "no limit". wanted is
-// the bindings' SMB wish by uid (Store.WantedSMB), so a standing says when an
-// account waits on a new password, as storage.status does.
-func subjectViews(subjects []Subject, limits map[int64]string, wanted map[int64]bool) []SubjectView {
+// reports no home_quota, which is "not known", never "no limit". wishes is
+// the bindings' wishes by uid (Store.Wishes), so a standing says when an
+// account waits on a new password, and whether an account that is off was
+// switched off by Syndra, as storage.status does. An account with no entry
+// is bound to nobody; a nil map is "not read", and says nothing of either.
+func subjectViews(subjects []Subject, limits map[int64]string, wishes map[int64]Wish) []SubjectView {
 	out := make([]SubjectView, 0, len(subjects))
 	for i := range subjects {
 		s := subjects[i]
-		s.wantsSMB = wanted[s.UID]
+		s.applyWish(wishes)
 		state := entitlementState(&s)
 		if limit, ok := limits[s.UID]; ok {
 			state[FieldHomeQuota] = []string{limit}
@@ -425,16 +448,6 @@ func subjectViews(subjects []Subject, limits map[int64]string, wanted map[int64]
 // wantsFresh is the request asking for a read of the NAS now (`?fresh=true`,
 // feature freshness). Only the literal true asks.
 func wantsFresh(r *http.Request) bool { return r.URL.Query().Get("fresh") == "true" }
-
-// wantedSMB is the bindings' SMB wish, or none when the store cannot be
-// read: the standing then says what the NAS shows, as it always could.
-func (s *server) wantedSMB() map[int64]bool {
-	wanted, err := s.store.WantedSMB()
-	if err != nil {
-		logStoreFailure("binding", "subjects", err)
-	}
-	return wanted
-}
 
 // subjectsRead is one read of every account, as served.
 type subjectsRead struct {
@@ -457,7 +470,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 			// which of the two matters.
 			log.Printf("[STORE] could not persist snapshot: %v", putErr)
 		}
-		return subjectsRead{subjectViews(snap.Subjects, s.homeLimits(snap.Subjects), s.wantedSMB()), snap.Truncated}, snap.TakenAt, nil
+		return subjectsRead{subjectViews(snap.Subjects, s.homeLimits(snap.Subjects), s.wishesFor(snap.Subjects)), snap.Truncated}, snap.TakenAt, nil
 	})
 	if writeCooldown(w, err) {
 		return
@@ -486,7 +499,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 	}
 	// The mirror holds no limits: they are read live or not reported.
 	writeJSON(w, http.StatusOK, SubjectsResponse{
-		Subjects: subjectViews(cached.Subjects, nil, s.wantedSMB()), Truncated: cached.Truncated,
+		Subjects: subjectViews(cached.Subjects, nil, s.wishesFor(cached.Subjects)), Truncated: cached.Truncated,
 		Observed: Observed{TakenAt: rfc3339(cached.TakenAt), Stale: unreachableSince(cached.TakenAt)},
 	})
 }

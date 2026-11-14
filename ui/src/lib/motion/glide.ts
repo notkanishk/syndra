@@ -36,14 +36,19 @@ let gliding = 0;
  * it jumps and the flash stays. Every jump to a section, from a chip, the
  * pill, a count or a revealed panel, goes through here. The shell's own
  * scroller where there is one, so a narrow page never moves sideways.
- * `clear` is the space left above the heading. Resolves true once it has
- * landed (at once when still), false if a later jump took over.
+ * It lands where the browser's own jump to an anchor, or a focus, does: the scroller's computed
+ * `scroll-padding-top` plus the target's computed `scroll-margin-top`, so the sticky section band
+ * (globals.css) and a section's own `scroll-mt` are cleared the same way by a glide, a link and Tab.
+ * Resolves true once it has landed (at once when still), false if a later jump took over.
  */
-export function glideTo(target: HTMLElement, clear = 64): Promise<boolean> {
+export function glideTo(target: HTMLElement): Promise<boolean> {
   const container = document.getElementById("app-scroll");
   const from = container ? container.scrollTop : window.scrollY;
   const base = container ? container.getBoundingClientRect().top : 0;
-  const to = from + target.getBoundingClientRect().top - base - clear;
+  // "auto" or nothing is 0: parseFloat reads the px the browser resolves a length to.
+  const px = (value: string | null | undefined) => parseFloat(value ?? "") || 0;
+  const room = px(container && getComputedStyle(container).scrollPaddingTop) + px(getComputedStyle(target).scrollMarginTop);
+  const to = from + target.getBoundingClientRect().top - base - room;
   const go = (top: number) => (container ? container.scrollTo?.({ top }) : window.scrollTo?.({ top }));
 
   const root = getComputedStyle(document.documentElement);

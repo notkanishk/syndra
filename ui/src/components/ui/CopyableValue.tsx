@@ -7,6 +7,45 @@ import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
 import { TINT_MS, useExitPhase } from "@/lib/motion";
 
 /**
+ * Whether this page can put text on the clipboard: the async Clipboard API (secure origins only),
+ * or `document.execCommand("copy")`, which is deprecated but is the only way on the plain-http LAN
+ * this is reached over, and still works in every browser.
+ */
+const clipboardWorks = () =>
+  typeof navigator !== "undefined" &&
+  (Boolean(navigator.clipboard) || (typeof document !== "undefined" && Boolean(document.queryCommandSupported?.("copy"))));
+
+/**
+ * The plain-http copy: a hidden read-only textarea holds the text, `execCommand("copy")` copies its
+ * selection, and the reader's own selection and focus are put back (the standard fallback; the
+ * page must not lose the selection or the focus place to a copy). True only if the browser says
+ * it copied.
+ */
+function copyViaTextarea(value: string): boolean {
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const selection = window.getSelection?.();
+  const ranges = selection ? Array.from({ length: selection.rangeCount }, (_, i) => selection.getRangeAt(i).cloneRange()) : [];
+  const area = document.createElement("textarea");
+  area.value = value;
+  area.readOnly = true; // no on-screen keyboard on a phone
+  area.setAttribute("aria-label", "Text being copied"); // it is briefly in the page; a reader names it
+  area.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+  document.body.appendChild(area);
+  try {
+    area.focus({ preventScroll: true }); // selecting needs focus in some browsers (Safari)
+    area.select();
+    area.setSelectionRange(0, value.length);
+    return document.execCommand("copy");
+  } finally {
+    area.remove();
+    // Focus first: giving an element focus moves the selection, so the reader's ranges go back after it.
+    active?.focus({ preventScroll: true });
+    selection?.removeAllRanges();
+    for (const range of ranges) selection?.addRange(range);
+  }
+}
+
+/**
  * A value somebody retypes into another application.
  *
  * Mono, on its own ground, copyable — the same treatment `CommandBlock` gives a
@@ -40,6 +79,7 @@ export function CopyableValue({
 }) {
   const [copied, setCopied] = useState(false);
   const [selected, setSelected] = useState(false);
+  const [failed, setFailed] = useState(false);
   // "Your account name" mid-sentence is "your account name"; "TrueNAS host" stays.
   const object = label.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase());
   // Resolved after mount. Rendering the answer on the server would mean a
@@ -55,33 +95,40 @@ export function CopyableValue({
   const word = useExitPhase(copied, TINT_MS);
 
   useEffect(() => {
-    setCanCopy(typeof navigator !== "undefined" && Boolean(navigator.clipboard));
+    setCanCopy(clipboardWorks());
   }, []);
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(value);
+      if (navigator.clipboard) await navigator.clipboard.writeText(value);
+      else if (!copyViaTextarea(value)) throw new Error("copy refused"); // plain http: no Clipboard API
+      setFailed(false);
       confirmFor(setCopied);
     } catch {
       // A clipboard the browser refuses at the moment of the tap: fall back to
       // the same selection the insecure-origin path uses, rather than leaving
       // the operator with a control that appeared to do nothing.
       setCanCopy(false);
+      setFailed(true);
       select();
     }
   }
 
-  /** Puts the value under the platform's own copy gesture. */
-  function select() {
+  /** Selects the value's text; false when there is nothing to select it in. */
+  function highlight() {
     const node = valueRef.current;
-    if (!node) return;
     const selection = window.getSelection?.();
-    if (!selection) return;
+    if (!node || !selection) return false;
     selection.removeAllRanges();
     const range = document.createRange();
     range.selectNodeContents(node);
     selection.addRange(range);
-    confirmFor(setSelected);
+    return true;
+  }
+
+  /** Puts the value under the platform's own copy gesture. */
+  function select() {
+    if (highlight()) confirmFor(setSelected);
   }
 
   if (inline) {
@@ -155,7 +202,11 @@ export function CopyableValue({
       {/* Announced rather than only coloured: the label change is the whole
           feedback, and a sighted user gets it from the button's own text. */}
       <span aria-live="polite" className="sr-only">
-        {copied ? `${label} copied` : selected ? `${label} is selected. Hold to copy` : ""}
+        {copied
+          ? `${label} copied`
+          : failed
+            ? `Couldn't copy ${object}: select it and copy`
+            : selected ? `${label} is selected. Hold to copy` : ""}
       </span>
     </div>
   );
@@ -171,7 +222,7 @@ export function CopyableValue({
 export function ClipboardUnavailableNote({ className = "" }: { className?: string }) {
   const [canCopy, setCanCopy] = useState(true);
   useEffect(() => {
-    setCanCopy(typeof navigator !== "undefined" && Boolean(navigator.clipboard));
+    setCanCopy(clipboardWorks());
   }, []);
 
   if (canCopy) return null;

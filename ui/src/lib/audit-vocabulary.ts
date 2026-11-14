@@ -194,7 +194,7 @@ export const ADDON_EVENT = /^addon\.([a-z0-9_-]+)\.([a-z_]+\.[a-z_]+)\.(dispatch
 export const OPERATION_NOUN: Record<string, string> = {
   "password.set": "a storage password change",
   "password.rotate": "a storage password replacement",
-  "account.purge": "a delete of an account and its files",
+  "account.purge": "a delete of an account",
   "account.adopt": "an account assignment",
   "account.release": "a release of an account",
   "setting.put": "a settings change",

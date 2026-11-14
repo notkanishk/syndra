@@ -44,5 +44,24 @@ export function standingWords(standing: Standing, system: string, audience: "mem
   if (waiting === "target") {
     return { state: `Waiting on ${system}`, tone: "neutral", note, next: standing.next || `${NOTHING_TO_DO} ${system} has to finish first.` };
   }
+  if (waiting === "none") {
+    // Nobody is waited on, and it is still not usable: it is switched off, and that does not end by
+    // itself, so "yet" is not said. Whether Syndra asked for it is the add-on's to say, in its own
+    // `note` and `next`, shown as written (TrueNAS says it for an account Syndra holds off, one
+    // nobody is assigned to, and one whose intent it does not know). Where it says nothing more,
+    // these words make no claim either way, and send the operator to Syndra's own comparison.
+    // The add-on's "The account is switched off." only repeats the state, so it is not shown beside it.
+    const repeats = !note || /^the account is switched off\.?$/i.test(note.trim());
+    return {
+      state: "Switched off",
+      tone: "neutral",
+      note: repeats ? undefined : note,
+      next:
+        standing.next ||
+        (you
+          ? "Ask makerspace staff if you did not expect this."
+          : "If no one in Syndra asked for this, use Check for differences on the system's Mappings page."),
+    };
+  }
   return { state: "Not usable yet", tone: "neutral", note, next: standing.next || NOTHING_TO_DO };
 }

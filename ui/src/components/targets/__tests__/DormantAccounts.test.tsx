@@ -176,8 +176,10 @@ describe("dormant accounts", () => {
     renderDormant();
     fireEvent.click(screen.getByLabelText("Select former-member"));
 
-    expect(screen.getByText(/home directories and everything in them/i)).toBeInTheDocument();
+    expect(screen.getByText("The accounts cannot be brought back. Syndra cannot see how much they held on Truenas.")).toBeInTheDocument();
     expect(screen.queryByText(/0 bytes/)).toBeNull();
+    // Generic surface: no promise or claim about files, whatever a system does with them.
+    expect(document.body.textContent).not.toMatch(/their files|files stay|left as they are|does not delete/i);
   });
 
   it("states the size when the target reported one", () => {
@@ -187,7 +189,8 @@ describe("dormant accounts", () => {
 
     // GiB, not GB. This divided by 1024 and printed a decimal unit name, which
     // by the terabyte is naming a quantity 10% smaller than the one shown.
-    expect(screen.getByText(/38\.4 GiB of their files/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/their files|files stay|left as they are|does not delete/i);
+    expect(screen.getByText("The accounts cannot be brought back. They held 38.4 GiB on Truenas when it was last read.")).toBeInTheDocument();
   });
 
   // Everything else on these screens queues. This one does not, and saying so
@@ -383,3 +386,22 @@ describe("inside the add-on's cooldown", () => {
     expect(screen.queryByText("This list could not be read")).toBeNull();
   });
 });
+
+describe("the sign-in column", () => {
+  // One rule for the column (A-10 §6): a 23-day-old sign-in is a date like a 40-day-old one, never
+  // "23 days ago" beside "15 Oct".
+  it("says every sign-in the same way, capitalised the same way", async () => {
+    const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+    state.report!.accounts[0].last_seen_at = ago(23);
+    state.report!.accounts[1].last_seen_at = ago(40);
+    renderDormant();
+    const lines = (await screen.findAllByText((_, el) => el?.tagName === "SPAN" && /^Last signed in /.test(el.textContent ?? ""))).filter(
+      (el) => el.querySelector("time"),
+    );
+    expect(lines).toHaveLength(2);
+    for (const line of lines) expect(line.textContent).toMatch(/^Last signed in \d{1,2} [A-Z][a-z]{2,4}( \d{4})?$/);
+    // The date stays machine-readable (<time datetime>), as <Relative> made it.
+    for (const line of lines) expect(line.querySelector("time[datetime]")).not.toBeNull();
+  });
+});
+

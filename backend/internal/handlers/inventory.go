@@ -459,7 +459,7 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 		return
 	case !req.Confirmed:
 		jsonErrorResponse(w, http.StatusUnprocessableEntity, "CONFIRMATION_REQUIRED",
-			"Their home directories and everything in them go with the accounts. There is no undo.")
+			"The accounts cannot be brought back.")
 		return
 	}
 

@@ -89,8 +89,8 @@ describe("the read line", () => {
     act(() => {
       vi.runAllTimers();
     });
-    // 900 down, less the 64 the heading is left clear of the top by.
-    expect(window.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 836 }));
+    // 900 down; no scroller here, so no band padding (the glide reads the browser's own offsets).
+    expect(window.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 900 }));
   });
 });
 
@@ -154,3 +154,18 @@ describe("the floating pill", () => {
     expect(onOpen).toHaveBeenCalledWith(SECTIONS[1]);
   });
 });
+
+describe("the band behind the pill", () => {
+  // Without it the page's text scrolls up beside the pill and runs under it.
+  it("backs the pill with the page's own ground, only while the pill shows", () => {
+    render(<Page />);
+    const band = document.querySelector<HTMLElement>("[data-section-band]")!;
+    expect(band).toHaveClass("bg-canvas", "h-(--section-band)");
+    expect(band).toHaveAttribute("aria-hidden", "true");
+    place(80, { "sec-a": 200, "sec-b": 900 });
+    expect(band).toHaveClass("opacity-0");
+    place(-40, { "sec-a": 10, "sec-b": 900 });
+    expect(band).toHaveClass("opacity-100");
+  });
+});
+

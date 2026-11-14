@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
 	bolt "go.etcd.io/bbolt"
@@ -45,6 +44,12 @@ type statsMeta struct {
 	Failing bool      `json:"failing,omitempty"`
 	// HeldFrom is the oldest day the buffer holds; before it, a gap.
 	HeldFrom string `json:"held_from"`
+	// Began is the day the first collection ran (set once, in PutStats). While HeldFrom is still Began, the days before
+	// it were never collected; once the buffer has trimmed past it, they were collected and dropped.
+	Began string `json:"began,omitempty"`
+	// Version is the meta's schema: 0 (absent) is a meta written before Began existed, migrated once
+	// by beganFor; 1 is the current.
+	Version int `json:"version,omitempty"`
 	// Behind is the day from which the audit log was too long to read in
 	// one run: counted on the next.
 	Behind string `json:"behind,omitempty"`
@@ -136,6 +141,7 @@ func (s *Store) PutStats(metric string, meta statsMeta, days map[string]statDay,
 			}
 		}
 
+		meta.Version, meta.Began = beganFor(b.Get(statsMetaKey), meta, oldest)
 		if meta.HeldFrom < oldest {
 			meta.HeldFrom = oldest
 		}
@@ -167,31 +173,47 @@ func (s *Store) PutStats(metric string, meta statsMeta, days map[string]statDay,
 	})
 }
 
+// statsMetaVersion is the current schema of statsMeta.
+const statsMetaVersion = 1
+
+// beganFor is the meta's Version and Began as they are to be written, from what is stored (stored,
+// nil when there is none) and what this run brings (meta). Began is decided exactly once and then
+// never changes, so nothing later (the clock, the zone, the buffer's size) can flip it.
+//
+//   - First collection: the stored Watermark was empty and this run's is not, so the day it held
+//     from is the day counting began. A failed first run leaves Watermark empty and decides nothing.
+//   - A meta from before Began existed (Version 0) that had collected is migrated here, once, by the one rule that is
+//     left to it: a HeldFrom later than the oldest day the buffer could hold has never been trimmed,
+//     so it is the first collected day; at or before it the buffer may have trimmed, and Began stays
+//     empty (the gap before HeldFrom is then truthfully "no longer holds"). It is then Version 1 and
+//     never judged again.
+func beganFor(stored []byte, meta statsMeta, oldest string) (int, string) {
+	var was statsMeta
+	if stored == nil || json.Unmarshal(stored, &was) != nil {
+		if meta.Watermark != "" {
+			return statsMetaVersion, meta.HeldFrom
+		}
+		return statsMetaVersion, ""
+	}
+	if was.Began != "" {
+		return statsMetaVersion, was.Began
+	}
+	if was.Version < statsMetaVersion && was.Watermark != "" {
+		// Collected before Began existed: judged here, once. (A version-0 meta that never collected
+		// has nothing to judge: it falls to the first-collection rule below.)
+		if was.HeldFrom != "" && was.HeldFrom > oldest {
+			return statsMetaVersion, was.HeldFrom
+		}
+		return statsMetaVersion, ""
+	}
+	if was.Watermark == "" && meta.Watermark != "" {
+		return statsMetaVersion, meta.HeldFrom
+	}
+	return statsMetaVersion, ""
+}
+
 // nextDayKey is the calendar day after a stored one, by its date alone.
 func nextDayKey(day string) string {
 	t, _ := time.Parse(time.DateOnly, day)
 	return t.AddDate(0, 0, 1).Format(time.DateOnly)
-}
-
-// BoundUIDs is every bound account's uid with its subject: how usage on the
-// NAS, recorded by account, finds its person. By uid, never by name: a name
-// can change out of band, a uid is the account.
-func (s *Store) BoundUIDs() (map[int64]string, error) {
-	out := map[int64]string{}
-	err := s.db.View(func(tx *bolt.Tx) error {
-		return tx.Bucket(bucketBindings).ForEach(func(k, v []byte) error {
-			var b Binding
-			if json.Unmarshal(v, &b) != nil {
-				return nil
-			}
-			if b.UID == 0 && b.AccountID != "" {
-				b.UID, _ = strconv.ParseInt(b.AccountID, 10, 64)
-			}
-			if b.UID != 0 {
-				out[b.UID] = string(k)
-			}
-			return nil
-		})
-	})
-	return out, err
 }

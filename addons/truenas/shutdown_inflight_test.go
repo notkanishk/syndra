@@ -66,7 +66,7 @@ func TestAMutationInFlightSettlesRatherThanBeingAbandoned(t *testing.T) {
 	s.nas = newNAS(func() (rpc, error) { return b, nil }, []string{"25.04"})
 	s.nas.version, s.nas.probed = "25.04.2", true
 	s.auth = signedAuth(time.Now())
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 

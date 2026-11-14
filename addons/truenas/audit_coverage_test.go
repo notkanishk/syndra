@@ -108,7 +108,7 @@ func TestAShareWatchingTheMembersOwnGroupIsNotReported(t *testing.T) {
 func TestTheMembersPrimaryGroupCountsTowardsCoverage(t *testing.T) {
 	s, m := applyServer(t,
 		`[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"group":{"id":41}}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	m.fakeRPC.audit = `[]`

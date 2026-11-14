@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	bolt "go.etcd.io/bbolt"
 )
 
 // The statistics collector and GET /stats against a fake NAS: two members
@@ -102,8 +104,11 @@ func statsServer(t *testing.T) (*server, *statsNAS, *time.Time) {
 	s.nas.version, s.nas.probed, s.nas.selfName = "25.04.2", true, "syndra"
 	at := day0
 	s.stats = statsClock{zone: kolkata, now: func() time.Time { return at }}
-	// Bound by uid, under the name the account had when it was bound.
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-rey", Username: "rey_old_name", UID: 3051}); err != nil {
+	// Bound by uid, under the name the account had when it was bound. A rename is followed by number
+	// only for a number this add-on hands out (never reused), so the fixture's range holds 3051 and
+	// 3077; an adopted account outside the range is a conflict instead (binding_uid_test.go).
+	s.idFloor, s.idCeiling = 3000, 3999
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-rey", Username: "rey_old_name", UID: 3051, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	return s, nas, &at
@@ -759,5 +764,146 @@ func TestTheZonePatternIsTheSchemas(t *testing.T) {
 		if _, err := loadZone(ok); err != nil {
 			t.Errorf("TZ=%s refused: %v", ok, err)
 		}
+	}
+}
+
+// Days before the first collection were never counted, and the reason says so (with the day)
+// rather than claiming the add-on lost them; once the buffer has trimmed past it, they were lost.
+// Every metric, including the levels.
+func TestADayBeforeCountingBeganIsNotCollectedYet(t *testing.T) {
+	for _, metric := range []string{metricSessions, metricUsedBytes, metricHomeBytes} {
+		t.Run(metric, func(t *testing.T) {
+			s, _, at := statsServer(t)
+			s.collectStatsOnce()
+			first, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -3))
+			want := s.stats.reasonBegan(s.stats.day(day0))
+			if !strings.HasPrefix(want, "Not collected yet: counting began on ") {
+				t.Fatalf("reason %q", want)
+			}
+			if len(first.Gaps) == 0 || first.Gaps[0].Reason != want {
+				t.Errorf("gaps %+v, want the first to say %q", first.Gaps, want)
+			}
+			*at = day0.AddDate(0, 0, 95)
+			s.collectStatsOnce()
+			later, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -3))
+			if len(later.Gaps) == 0 || later.Gaps[0].Reason != reasonBuffer {
+				t.Errorf("after the buffer trimmed past it, gaps %+v, want %q", later.Gaps, reasonBuffer)
+			}
+		})
+	}
+}
+
+// putMeta writes a metric's meta as stored, bypassing PutStats: a state.db from an older binary.
+func putMeta(t *testing.T, s *server, metric string, meta statsMeta) {
+	t.Helper()
+	raw, _ := json.Marshal(meta)
+	if err := s.store.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(bucketStats).Bucket([]byte(metric)).Put(statsMetaKey, raw)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func metaOf(t *testing.T, s *server, metric string) statsMeta {
+	t.Helper()
+	m, _, err := s.store.StatsMeta(metric)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+// Began is the exact signal: the first collection that succeeded (the stored watermark was empty and
+// this run's is not). A failed first run decides nothing, and once set it never changes.
+func TestBeganIsTheFirstSuccessfulCollectionAndNeverChanges(t *testing.T) {
+	for _, metric := range []string{metricSessions, metricUsedBytes, metricHomeBytes} {
+		t.Run(metric, func(t *testing.T) {
+			s, nas, at := statsServer(t)
+			nas.down = true
+			s.collectStatsOnce()
+			if m := metaOf(t, s, metric); m.Began != "" {
+				t.Fatalf("a failed first run is not the first collection, Began %q", m.Began)
+			}
+			nas.down = false
+			s.nas.lastTry = time.Time{} // the connection's reconnect cooldown is over
+			*at = day0.AddDate(0, 0, 1)
+			s.collectStatsOnce()
+			first := s.stats.day(*at)
+			if m := metaOf(t, s, metric); m.Began != first || m.Version != statsMetaVersion {
+				t.Fatalf("Began %q version %d, want %q the first successful run, version %d", m.Began, m.Version, first, statsMetaVersion)
+			}
+			for _, move := range []time.Duration{24 * time.Hour, -48 * time.Hour, 24 * 100 * time.Hour} {
+				*at = at.Add(move)
+				s.collectStatsOnce()
+				if m := metaOf(t, s, metric); m.Began != first {
+					t.Fatalf("after moving the clock %v, Began %q, want it to stay %q", move, m.Began, first)
+				}
+			}
+		})
+	}
+}
+
+// State from before Began existed (version 0) is judged once, by the one rule left to it, and then
+// never again: a HeldFrom after the oldest day the buffer could hold has never trimmed, so it is the day
+// counting began; at or before it the buffer may have trimmed, and Began stays empty for good.
+func TestStateWithoutBeganIsMigratedOnce(t *testing.T) {
+	for _, metric := range []string{metricSessions, metricUsedBytes, metricHomeBytes} {
+		for _, trimmed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/trimmed=%v", metric, trimmed), func(t *testing.T) {
+				s, _, at := statsServer(t)
+				s.collectStatsOnce()
+				meta := metaOf(t, s, metric)
+				meta.Began, meta.Version = "", 0
+				if trimmed {
+					meta.HeldFrom = s.stats.oldest(*at)
+				}
+				putMeta(t, s, metric, meta)
+				*at = at.Add(time.Hour)
+				s.collectStatsOnce()
+				got, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -200))
+				want := s.stats.reasonBegan(s.stats.day(day0))
+				if trimmed {
+					want = reasonBuffer
+				}
+				if len(got.Gaps) == 0 || got.Gaps[0].Reason != want {
+					t.Errorf("gaps %+v, want the first to say %q", got.Gaps, want)
+				}
+				decided := metaOf(t, s, metric)
+				if decided.Version != statsMetaVersion || (decided.Began != "") == trimmed {
+					t.Fatalf("migrated meta %+v", decided)
+				}
+				// Never judged again: the clock moving back, so the old rule would now read
+				// the same HeldFrom the other way, changes nothing.
+				*at = day0.AddDate(0, 0, -30)
+				s.collectStatsOnce()
+				*at = day0.AddDate(0, 0, 1)
+				s.collectStatsOnce()
+				if again := metaOf(t, s, metric); again.Began != decided.Began {
+					t.Errorf("Began %q after the clock moved, was decided %q", again.Began, decided.Began)
+				}
+			})
+		}
+	}
+}
+
+// A version-0 meta that never collected (the first runs all failed) has nothing to migrate: its first
+// successful collection is the first collection, and Began is set then, not frozen empty.
+func TestAVersionZeroMetaThatNeverCollectedBeginsAtItsFirstCollection(t *testing.T) {
+	for _, metric := range []string{metricSessions, metricUsedBytes, metricHomeBytes} {
+		t.Run(metric, func(t *testing.T) {
+			s, nas, at := statsServer(t)
+			nas.down = true
+			s.collectStatsOnce()
+			meta := metaOf(t, s, metric)
+			meta.Version, meta.Began = 0, ""
+			putMeta(t, s, metric, meta)
+			nas.down = false
+			s.nas.lastTry = time.Time{}
+			*at = day0.AddDate(0, 0, 1)
+			s.collectStatsOnce()
+			if m := metaOf(t, s, metric); m.Began != s.stats.day(*at) || m.Version != statsMetaVersion {
+				t.Fatalf("Began %q version %d, want the first collection %q", m.Began, m.Version, s.stats.day(*at))
+			}
+		})
 	}
 }

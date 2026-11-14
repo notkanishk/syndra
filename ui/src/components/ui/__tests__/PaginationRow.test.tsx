@@ -101,6 +101,7 @@ describe("PaginationRow motion", () => {
     document.documentElement.style.setProperty("--ease-settle", "cubic-bezier(0.16, 1, 0.3, 1)");
     const scroller = document.createElement("div");
     scroller.id = "app-scroll";
+    scroller.style.setProperty("scroll-padding-top", "64px"); // the band's room (globals.css)
     scroller.scrollTo = vi.fn(({ top }: ScrollToOptions) => void (scroller.scrollTop = top ?? 0)) as never;
     scroller.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
     const heading = document.createElement("h2");

@@ -6,7 +6,8 @@ import { CardRow } from "@/components/ui/Card";
 import { Meter } from "@/components/ui/Meter";
 import { formatRelative } from "@/lib/format";
 import type { StatsMetric, StatsSeries, UsageWindows } from "@/lib/queries/useStats";
-import { CAP, capText, dayWords, daysSince, dimensionWords, formatValue, gapRange, plot, quoted, type Plot } from "@/lib/usage";
+import { addDays } from "@/components/insights/days";
+import { CAP, capText, dayWords, daysSince, dimensionWords, formatValue, gapLines, gapRange, gapWhere, plot, quoted, type Plot } from "@/lib/usage";
 
 /**
  * One metric, drawn from its descriptor and nothing else: a counter is its sum
@@ -77,20 +78,24 @@ function SeriesRow({ metric, series, cells, limits, windows }: { metric: StatsMe
 }
 
 /** `kept`: how many days Syndra keeps, said only when a drawn row's window starts at what retention keeps. */
-function Gaps({ metric, kept }: { metric: StatsMetric; kept?: number }) {
-  if (metric.gaps.length === 0 && kept === undefined) return null;
-  const shown = metric.gaps.slice(0, MAX_ROWS);
+function Gaps({ metric, kept, windows }: { metric: StatsMetric; kept?: number; windows: UsageWindows }) {
+  // The widest window the block shows: a counter's 12-month total is drawn, so every gap inside it
+  // is explained; a level shows 30 days only.
+  const from = metric.instrument === "counter" && windows.window_12m_from < windows.window_30d_from ? windows.window_12m_from : windows.window_30d_from;
+  const lines = gapLines(metric.gaps, from, addDays(windows.today, 1));
+  if (lines.length === 0 && kept === undefined) return null;
+  const shown = lines.slice(0, MAX_ROWS);
   return (
     <div className="row-divider flex flex-col gap-1 px-5 py-3 text-[13px] text-muted">
       <span className="font-semibold">{copy.GAPS_HEADING}</span>
       <ul className="flex flex-col gap-0.5">
         {kept !== undefined && <li>{copy.keptLine(kept)}</li>}
         {shown.map((g) => (
-          <li key={`${g.start}-${g.end}-${JSON.stringify(g.dimensions ?? {})}`} className="[overflow-wrap:anywhere]">
-            {copy.gapLine(gapRange(g), dimensionWords(metric, g.dimensions), quoted(g.reason, CAP.reason))}
+          <li key={`${g.start}-${g.end}-${g.reason}`} className="[overflow-wrap:anywhere]">
+            {copy.gapLine(gapRange(g), gapWhere(metric, g), quoted(g.reason, CAP.reason))}
           </li>
         ))}
-        {metric.gaps.length > shown.length && <li className="text-faint">{copy.noMoreLines(metric.gaps.length - shown.length)}</li>}
+        {lines.length > shown.length && <li className="text-faint">{copy.noMoreLines(lines.length - shown.length)}</li>}
       </ul>
       <span className="text-faint">{copy.GAPS_NOTE}</span>
     </div>
@@ -148,7 +153,7 @@ export function MetricBlock({ metric, limits, windows }: { metric: StatsMetric; 
           <span className="text-[13px] text-faint">{copy.leftOut(metric.left_out)}</span>
         </CardRow>
       ) : null}
-      <Gaps metric={metric} kept={keptShort ? daysSince(kept_from, windows.today) : undefined} />
+      <Gaps metric={metric} windows={windows} kept={keptShort ? daysSince(kept_from, windows.today) : undefined} />
       <Collected metric={metric} />
     </section>
   );

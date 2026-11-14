@@ -545,7 +545,7 @@ func TestEveryReadAnswersTheSchemaItsRegistryNames(t *testing.T) {
 	fake.answers["pool.dataset.get_quota tank/main"] = `[{"id":200001,"used_bytes":5000,"quota":1000000,"quota_type":"USER"}]`
 	fake.answers["pool.dataset.get_quota tank/open"] = `[{"id":200001,"used_bytes":7,"quota_type":"USER"}]`
 	s := testServer(t, fake)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	// Through the route, as served: the observation is readNow's (fresh.go).

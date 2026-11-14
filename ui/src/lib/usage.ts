@@ -2,6 +2,7 @@ import { addDays, dayLabel, daysBetween, dayLong, today } from "@/components/ins
 import { formatLimit } from "@/lib/fields";
 import { formatBytes } from "@/lib/format";
 import { displayLocale } from "@/lib/locale";
+import { compareNames } from "@/lib/sort";
 import type { StatsDay, StatsGap, StatsMetric, StatsSeries, StatsUnit } from "@/lib/queries/useStats";
 
 /**
@@ -38,6 +39,66 @@ export function gapRange(gap: Pick<StatsGap, "start" | "end">): string {
   const [da, ma] = a.split(" ");
   const [, mb] = b.split(" ");
   return ma === mb && gap.start.slice(0, 4) === last.slice(0, 4) ? `${da}–${b}` : `${a} to ${b}`;
+}
+
+/** ISO days compare as text. */
+const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Gaps said as lines: the same reason over the same days, however many series, is one line. */
+export interface GapLine {
+  start: string;
+  /** Exclusive, as a gap's `end`. */
+  end: string;
+  reason: string;
+  /** One entry per series the line covers; `undefined` is the whole metric. */
+  dimensions: Array<Record<string, string> | undefined>;
+}
+
+/**
+ * The gaps worth a line in the window shown, oldest first.
+ *
+ * Days outside `[from, end)` are not the reader's business and are dropped; one that starts before
+ * `from`, or ends after `end`, is cut to the window. Consecutive days of one series with one reason are one range, and series
+ * whose ranges and reason are identical are one line ("14–15 Nov, shares a and b: …"), so a page of
+ * sixty near-identical rows is five.
+ */
+export function gapLines(gaps: StatsGap[], from: string, end: string): GapLine[] {
+  const key = (d: StatsGap["dimensions"]) => JSON.stringify(Object.entries(d ?? {}).sort(([a], [b]) => compareNames(a, b)));
+  const series = new Map<string, StatsGap[]>();
+  for (const g of gaps) {
+    if (g.end <= from || g.start >= end) continue;
+    const clipped = { ...g, start: g.start < from ? from : g.start, end: g.end > end ? end : g.end };
+    const k = `${g.reason}\u0000${key(g.dimensions)}`;
+    series.set(k, [...(series.get(k) ?? []), clipped]);
+  }
+  const ranges: Array<StatsGap> = [];
+  for (const list of series.values()) {
+    list.sort((a, b) => byText(a.start, b.start));
+    for (const g of list) {
+      const last = ranges[ranges.length - 1];
+      if (last && last.reason === g.reason && key(last.dimensions) === key(g.dimensions) && g.start <= last.end) {
+        if (g.end > last.end) last.end = g.end;
+      } else ranges.push({ ...g });
+    }
+  }
+  const lines: GapLine[] = [];
+  for (const g of ranges) {
+    const same = lines.find((l) => l.start === g.start && l.end === g.end && l.reason === g.reason);
+    if (same) same.dimensions.push(g.dimensions);
+    else lines.push({ start: g.start, end: g.end, reason: g.reason, dimensions: [g.dimensions] });
+  }
+  return lines.sort((a, b) => byText(a.start, b.start) || compareNames(a.reason, b.reason));
+}
+
+/** A line's series as words: one dimension's values as a list in the display locale ("Share: “a”, “b” and “c”"). */
+export function gapWhere(metric: Pick<StatsMetric, "dimensions">, line: Pick<GapLine, "dimensions">): string {
+  const parts: string[] = [];
+  for (const d of metric.dimensions ?? []) {
+    const values = line.dimensions.map((x) => x?.[d.name]).filter((v): v is string => v !== undefined);
+    values.sort(compareNames);
+    if (values.length) parts.push(`${capText(d.label, CAP.label)}: ${new Intl.ListFormat(displayLocale(), { type: "conjunction" }).format(values.map((v) => quoted(v, CAP.value)))}`);
+  }
+  return parts.join(", ");
 }
 
 /**

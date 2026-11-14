@@ -64,7 +64,7 @@ func TestRequestIdentityReproducesTheContractVectors(t *testing.T) {
 // is checked, and nothing is written again.
 func TestAReplayIsAnsweredBeforeTheFingerprint(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":true,"smb":false,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	body := `{"call_id":"row-1","subject":"sub-1","email":"charlotte@example.edu","desired":{"enabled":true,"group":["lab_makers"]}}`
@@ -134,7 +134,7 @@ func TestACallStillRunningIsInProgress(t *testing.T) {
 	s := testServer(t, &b.fakeRPC)
 	s.nas = newNAS(func() (rpc, error) { return b, nil }, []string{"25.04"})
 	s.nas.version, s.nas.probed = "25.04.2", true
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	body := `{"call_id":"pw-1","operation":"password.set","subject":"sub-1","params":{"password":"p"}}`
@@ -185,7 +185,7 @@ func TestAReSendAfterACrashIsExecutedNotInProgress(t *testing.T) {
 // identity, as an entry with no kind always did, in contract 2's words.
 func TestAContractOneEntryReplaysInContractTwoWords(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"password_disabled":true}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	snap, err := s.readSubjects()
@@ -233,7 +233,7 @@ func TestALegacyReplaysStandingSeesTheWaitForANewPassword(t *testing.T) {
 	}{{true, false, "member"}, {false, true, "none"}} {
 		s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"groups":[42],"password_disabled":false}]`)
 		wants := tc.wants
-		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &wants}); err != nil {
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount, WantsSMB: &wants}); err != nil {
 			t.Fatal(err)
 		}
 		snap, err := s.readSubjects()
@@ -292,7 +292,7 @@ func TestAStoreWrittenByContractOneOpensWhole(t *testing.T) {
 			!b.BoundAt.Equal(written) || (b.WantsSMB == nil) != (want.WantsSMB == nil) || (b.WantsSMB != nil && *b.WantsSMB != *want.WantsSMB) {
 			t.Errorf("binding %s: %+v found %t %v, want %+v", want.SubjectID, b, found, err, want)
 		}
-		if bound, err := s.store.UIDBound(want.UID); err != nil || !bound {
+		if bound, err := s.accountBound(&Subject{Username: want.Username, UID: want.UID}); err != nil || !bound {
 			t.Errorf("uid %d is not bound: %v", want.UID, err)
 		}
 	}
@@ -433,20 +433,6 @@ func TestAContractOneReaderOpensThisStore(t *testing.T) {
 	}
 	if raw, _ := os.ReadFile(filepath.Join(filepath.Dir(path), "state.db")); !bytes.Contains(raw, []byte(`"account_id":"3001"`)) {
 		t.Error("the binding is not written with account_id beside uid")
-	}
-}
-
-// A binding a later binary wrote with account_id alone is read by it.
-func TestABindingWithAccountIDAloneIsRead(t *testing.T) {
-	s, _ := applyServer(t, fixtureUsers)
-	if err := s.store.db.Update(func(tx *bolt.Tx) error {
-		return tx.Bucket(bucketBindings).Put([]byte("sub-7"), []byte(`{"subject_id":"sub-7","username":"seth","account_id":"3002"}`))
-	}); err != nil {
-		t.Fatal(err)
-	}
-	b, found, err := s.store.GetBinding("sub-7")
-	if err != nil || !found || b.UID != 3002 {
-		t.Fatalf("got %+v %v %v", b, found, err)
 	}
 }
 

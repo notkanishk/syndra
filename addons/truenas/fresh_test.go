@@ -506,7 +506,7 @@ func TestFreshnessIsDeclaredWithItsCooldownAndItsCount(t *testing.T) {
 // cannot be read yields the copy.
 func TestARefusalIsNotCoveredByTheCopy(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"password_disabled":false,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	now := at(s, time.Now())
@@ -541,7 +541,7 @@ func TestStorageStatusIsNoFresherThanItsPlaces(t *testing.T) {
 			"groups":[41,50],"home":"/mnt/tank/main/home_dir/charlotte"}]`
 		fake.answers["pool.dataset.get_quota"] = `[]`
 		s := testServer(t, fake)
-		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001, UIDKind: uidKindAccount}); err != nil {
 			t.Fatal(err)
 		}
 		start := time.Now().UTC().Truncate(time.Second)

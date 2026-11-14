@@ -14,7 +14,7 @@ import (
 // step. This is the operation that tells them apart.
 func TestAnAccountWithNoPasswordIsReportedAsNotYetUsable(t *testing.T) {
 	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -44,7 +44,7 @@ func TestAnAccountWithNoPasswordIsReportedAsNotYetUsable(t *testing.T) {
 // "set a password".
 func TestALockedAccountIsNotUsableAndNotTheMembersToFix(t *testing.T) {
 	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":true,"smb":true,"password_disabled":false,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -67,7 +67,7 @@ func TestALockedAccountIsNotUsableAndNotTheMembersToFix(t *testing.T) {
 // reported as a usage report of nothing.
 func TestAMissingAccountIsRefusedRatherThanReportedEmpty(t *testing.T) {
 	s, _ := applyServer(t, `[]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ghost", UID: 4999}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ghost", UID: 4999, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := s.storageStatus(OperationRequest{Subject: "sub-1"}); err == nil {
@@ -102,7 +102,7 @@ func TestTheDatasetIsDerivedFromTheSharePath(t *testing.T) {
 // provision or unbind" was naming a resolution nothing implemented.
 func TestReleasingForgetsTheBindingAndLeavesTheAccount(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -148,7 +148,7 @@ func TestAnUnreadQuotaTableMakesTheUsageUnread(t *testing.T) {
 	fake.answers["pool.dataset.get_quota tank/open"] = `[{"id":200001,"used_bytes":7,"quota_type":"USER"}]`
 	fake.refuse = map[string]string{"pool.dataset.get_quota tank/open": "[EPERM] Operation not permitted"}
 	s := testServer(t, fake)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	res, status, err := s.storageStatus(OperationRequest{Subject: "sub-1"})

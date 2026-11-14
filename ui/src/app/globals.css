@@ -108,6 +108,10 @@
   --layer-dialog: 50; /* dialogs, sheets and their scrim */
   --layer-popover: 60; /* over a dialog; also the skip link */
 
+  /* The sticky section band (SectionPill): its height, and the scroll-padding-top the scroller
+   * takes where a page has one (see `#app-scroll:has([data-section-band])`). */
+  --section-band: 64px;
+
   /* The touch floor: nothing a thumb must hit is smaller. */
   --tap: 44px;
 
@@ -383,6 +387,12 @@
       opacity: 1;
     }
   }
+}
+
+/* A page with a sticky section band keeps what a link, a focus or a glide lands on below it (WCAG
+ * 2.4.11). Only such pages: a page without a band is not shifted. glideTo reads this computed value. */
+#app-scroll:has([data-section-band]) {
+  scroll-padding-top: var(--section-band);
 }
 
 @layer base {

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -34,3 +36,36 @@ describe("AppShell skip link", () => {
     expect(main).toHaveAttribute("tabindex", "-1");
   });
 });
+
+describe("AppShell scrolling", () => {
+  // The window must never scroll and push the top bar off. `overflow-hidden` is still a scroll
+  // container (focus, find and anchors can move it); `overflow-clip` is not. The one scroller is
+  // #app-scroll, and it is the containing block of what is positioned inside it.
+  it("clips the shell rather than hiding its overflow, and scrolls only in #app-scroll", () => {
+    const { container } = render(
+      <AppShell session={{ id: "u1", role: "admin" } as SessionUser}>
+        <p>page</p>
+      </AppShell>,
+    );
+    const root = container.querySelector("#app-root")!;
+    expect(root).toHaveClass("overflow-clip", "relative");
+    expect(root).not.toHaveClass("overflow-hidden");
+    const scroller = container.querySelector("#app-scroll")!;
+    expect(scroller).toHaveClass("relative", "overflow-y-auto");
+  });
+
+  // The sticky section band covers the top of the scroller; a link to an anchor or a focus that
+  // scrolls must land below it (WCAG 2.4.11), on pages that have a band and only those.
+  it("keeps a jump below the section band, on a page that has one", () => {
+    const css = readFileSync(resolve(__dirname, "../../../app/globals.css"), "utf8");
+    expect(css).toMatch(/#app-scroll:has\(\[data-section-band\]\)\s*\{\s*scroll-padding-top:\s*var\(--section-band\);/);
+    const { container } = render(
+      <AppShell session={{ id: "u1", role: "admin" } as SessionUser}>
+        <p>page</p>
+      </AppShell>,
+    );
+    // Not on the scroller itself: a page without a band is not shifted.
+    expect(container.querySelector("#app-scroll")!.className).not.toMatch(/scroll-p/);
+  });
+});
+

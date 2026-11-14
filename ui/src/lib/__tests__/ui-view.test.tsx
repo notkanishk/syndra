@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -78,5 +78,31 @@ describe("the stored Basic / Advanced view", () => {
       </UiViewProvider>,
     );
     expect(screen.getByTestId("view")).toHaveTextContent("basic");
+  });
+});
+
+describe("revealing an Advanced-only panel", () => {
+  // The shared effect, so every caller (PersonAccess, the reach card) gets it: after the glide, focus
+  // goes to the panel, which takes tabindex -1 when it is not focusable by itself.
+  it("moves focus to the panel once it is shown", async () => {
+    function Reveal() {
+      const { view, revealInAdvanced } = useUiView();
+      return (
+        <>
+          <button onClick={() => revealInAdvanced("panel")}>reveal</button>
+          {view === "advanced" && <section id="panel">the panel</section>}
+        </>
+      );
+    }
+    render(
+      <UiViewProvider isOperator initialView="basic">
+        <Reveal />
+      </UiViewProvider>,
+    );
+    const button = screen.getByRole("button", { name: "reveal" });
+    button.focus();
+    fireEvent.click(button);
+    await waitFor(() => expect(document.activeElement).toBe(document.getElementById("panel")));
+    expect(document.getElementById("panel")).toHaveAttribute("tabindex", "-1");
   });
 });

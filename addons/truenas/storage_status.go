@@ -82,7 +82,7 @@ type Meter struct {
 
 // storageStatus reads the caller's own account state and usage.
 func (s *server) storageStatus(req OperationRequest) (OperationResult, int, error) {
-	binding, refused, err := s.boundAccount(req.Subject)
+	binding, refused, err := s.operatedAccount(req.Subject)
 	if err != nil {
 		return OperationResult{}, refused, err
 	}
@@ -119,7 +119,7 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	// the same Subject the standing is, so the reply never says both.
 	subject := Subject{Username: binding.Username, UID: account.UID,
 		Enabled: !account.Locked, SMBEnabled: account.SMB, PasswordSet: !account.PasswordDisabled,
-		wantsSMB: binding.WantsSMB != nil && *binding.WantsSMB}
+		wantsSMB: binding.WantsSMB != nil && *binding.WantsSMB, wantsEnabled: binding.WantsEnabled}
 	status.Standing = standingOf(&subject)
 	status.Usable = status.Standing.Usable
 	status.NeedsPassword = account.PasswordDisabled

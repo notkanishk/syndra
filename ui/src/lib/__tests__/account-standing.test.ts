@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { standingWords } from "@/lib/account-standing";
+import type { Standing } from "@/lib/queries/useTargets";
 import { NOTHING_TO_DO } from "@/lib/outcome";
 
 describe("standing, in words", () => {
@@ -25,5 +26,90 @@ describe("standing, in words", () => {
     }
     expect(standingWords({ usable: true, waiting_on: "none" }, "TrueNAS", "member").next).toBe(NOTHING_TO_DO);
     expect(standingWords({ usable: false, waiting_on: "target" }, "TrueNAS", "member").next).toContain(NOTHING_TO_DO);
+  });
+});
+
+describe("an account that is switched off", () => {
+  const off: Standing = { usable: false, waiting_on: "none", note: "The account is switched off." };
+
+  it("makes no claim of its own where the add-on says nothing more, and does not promise 'yet'", () => {
+    const w = standingWords(off, "TrueNAS", "operator");
+    expect(w.state).toBe("Switched off");
+    expect(w.state).not.toMatch(/yet/i);
+    expect(w.next).toBe("If no one in Syndra asked for this, use Check for differences on the system's Mappings page.");
+    expect(w.next).not.toMatch(/Syndra keeps it off|on on|switch it back on|by hand/i);
+  });
+
+  // An add-on that knows says so, in its own words, shown as written.
+  it("shows what an add-on that knows says, as written", () => {
+    const known = { next: "Nothing for you to do. It stays off while the person it belongs to is on hold or deactivated, or holds no role that reaches TrueNAS." };
+    for (const audience of ["operator", "member"] as const) {
+      const w = standingWords({ usable: false, waiting_on: "none", ...known }, "TrueNAS", audience);
+      expect(w.next).toBe(known.next);
+    }
+  });
+
+  // The add-on says only that it is switched off, and leaves `next` for the UI, which knows who is reading.
+  it("gives an off account of unknown intent the line that is right for whoever reads it", () => {
+    const unknown: Standing = { usable: false, waiting_on: "none", note: "Switched off on TrueNAS." };
+    const operator = standingWords(unknown, "TrueNAS", "operator");
+    const member = standingWords(unknown, "TrueNAS", "member");
+    expect(operator.note).toBe(member.note);
+    expect(operator.next).toBe("If no one in Syndra asked for this, use Check for differences on the system's Mappings page.");
+    expect(member.next).toBe("Ask makerspace staff if you did not expect this.");
+    expect(member.next).not.toMatch(/Check for differences|Mappings/);
+  });
+
+  it("does not repeat the add-on's own 'switched off' note beside the state", () => {
+    expect(standingWords(off, "TrueNAS", "operator").note).toBeUndefined();
+    expect(standingWords({ ...off, note: "the account is switched off" }, "TrueNAS", "member").note).toBeUndefined();
+  });
+
+  it("keeps a note that says more than the state", () => {
+    expect(standingWords({ ...off, note: "Held since 12 Nov." }, "TrueNAS", "operator").note).toBe("Held since 12 Nov.");
+  });
+
+  it("tells a member to ask staff rather than wait", () => {
+    expect(standingWords(off, "TrueNAS", "member").next).toBe("Ask makerspace staff if you did not expect this.");
+  });
+
+  // The add-on tells the three apart (TrueNAS: Binding.WantsEnabled) and says each in its own note and
+  // next, shown as written. Only `none` with nothing said is the contract's own case, Syndra's.
+  it("shows an account switched off outside Syndra as the add-on says it, never as Syndra's doing", () => {
+    const by: Standing = {
+      usable: false,
+      waiting_on: "operator",
+      note: "Switched off on TrueNAS, outside Syndra.",
+      next: "Makerspace staff can use Check for differences on the system's Mappings page to bring it back in line.",
+    };
+    for (const audience of ["operator", "member"] as const) {
+      const w = standingWords(by, "TrueNAS", audience);
+      expect(w.state).toBe("Waiting on makerspace staff");
+      expect(w.note).toBe(by.note);
+      expect(w.next).toBe(by.next);
+      expect(w.next).not.toMatch(/Syndra keeps it off|by hand|switch it back on/i);
+    }
+  });
+
+  it("shows an account no subject is bound to without a claim of Syndra's", () => {
+    const root: Standing = {
+      usable: false,
+      waiting_on: "none",
+      note: "Switched off on TrueNAS. No one in Syndra is assigned to it.",
+      next: "Nothing for you to do unless you assign it to a person.",
+    };
+    const w = standingWords(root, "TrueNAS", "operator");
+    expect(w.state).toBe("Switched off");
+    expect(w.note).toBe(root.note);
+    expect(w.next).toBe(root.next);
+    expect(`${w.note} ${w.next}`).not.toMatch(/Syndra keeps it off/);
+  });
+
+  it("keeps the add-on's own next step when it gave one", () => {
+    expect(standingWords({ ...off, next: "Ask the front desk." }, "TrueNAS", "operator").next).toBe("Ask the front desk.");
+  });
+
+  it("leaves a different waiting state as it was", () => {
+    expect(standingWords({ usable: false, waiting_on: "target" } as Standing, "TrueNAS", "operator").state).toBe("Waiting on TrueNAS");
   });
 });

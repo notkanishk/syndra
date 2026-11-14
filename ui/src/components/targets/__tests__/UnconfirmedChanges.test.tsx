@@ -116,7 +116,7 @@ describe("Waiting on you: changes nobody confirmed", () => {
     const checkout = { ...PURGE, operation: "item.checkout", about: "item-0003" };
     renderIt([checkout]);
     expect(document.body.textContent).toContain("Check out item-0003 to Sami Zayn");
-    expect(document.body.textContent).not.toMatch(/a change for|account and files/i);
+    expect(document.body.textContent).not.toMatch(/a change for|account/i);
     fireEvent.click(screen.getByRole("button", { name: /^Say what happened/ }));
     expect(screen.getByRole("heading", { name: "Did item-0003 go out to Sami Zayn?" })).toBeTruthy();
     expect(screen.getByText("Ask at the desk whether item-0003 went out to Sami Zayn. If it did, it happened.")).toBeTruthy();
@@ -134,7 +134,7 @@ describe("Waiting on you: changes nobody confirmed", () => {
   it("asks the operator to look first, and records nothing until they choose", () => {
     renderIt([PURGE]);
     fireEvent.click(screen.getByRole("button", { name: /^Say what happened/ }));
-    expect(screen.getByRole("heading", { name: "Did TrueNAS delete Sami Zayn's account and files?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Did TrueNAS delete Sami Zayn's account?" })).toBeTruthy();
     expect(screen.getByText(/^Read TrueNAS again\. If sami\.zayn is gone from Accounts on TrueNAS, it happened\./)).toBeTruthy();
     expect(screen.getByText("Nothing is sent to TrueNAS. This records what you found, with your name.")).toBeTruthy();
 
@@ -155,7 +155,7 @@ describe("Waiting on you: changes nobody confirmed", () => {
     renderIt([PURGE]);
     fireEvent.click(screen.getByRole("button", { name: /^Say what happened/ }));
     expect(screen.getByText("Done")).toBeTruthy();
-    expect(screen.getByText("TrueNAS deleted Sami Zayn's account and files.")).toBeTruthy();
+    expect(screen.getByText("TrueNAS deleted Sami Zayn's account.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
   });
 });

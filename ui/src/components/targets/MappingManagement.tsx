@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { CopyableValue } from "@/components/ui/CopyableValue";
+import { AdvancedOnly } from "@/components/ui/AdvancedOnly";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
@@ -114,7 +115,9 @@ export function MappingManagement({ target }: { target: string }) {
         <CardHeader
           title={`What roles reach ${name}`}
           count={mappings.data ? shown.length : undefined}
-          note={<OpensNote name={name} reach={reach.data} />}
+          // One freshness line, from one source: the read line below owns it whenever it is shown (stale
+          // or cooling down, with the way to read again); the header says it only when that one is not.
+          note={reach.data && reachCopy ? undefined : <OpensNote name={name} reach={reach.data} />}
           action={<AddMappingButton target={target} first={(mappings.data ?? []).length === 0} />}
         />
         {reach.data && reachCopy && (
@@ -276,16 +279,15 @@ function MappingRow({
           />
         )}
         {home?.home && <MappingHomeLine quota={home.quota?.value} homeRoot={homeRoot} />}
-      </span>
-      <span className="basis-full">
-        <TechnicalDetail placeKey={`mapping:${mapping.id}`}>
-          <CopyableValue value={mapping.role_key} label="Role key" />
-          <CopyableValue value={`${mapping.field} → ${mapping.value}`} label="Field and value" />
-        </TechnicalDetail>
-      </span>
-      <span className="w-[110px] flex-none text-right text-[15px]">
-        {holders.isLoading ? "…" : cohort.length}
-        <span className="text-[13px] text-muted tablet:hidden"> people</span>
+        {/* The count says what it counts. Nobody holding the role is said once, as the reason on the
+            convergence button beside it, never as a bare "0" as well. */}
+        {(holders.isLoading || cohort.length > 0) && (
+          <span data-holders className="text-[13.5px] text-muted">
+            {holders.isLoading
+              ? "…"
+              : `${cohort.length} ${cohort.length === 1 ? "person holds" : "people hold"} this role`}
+          </span>
+        )}
       </span>
       <span className="flex-1" />
       <ConvergeButton
@@ -301,6 +303,13 @@ function MappingRow({
       <Button variant="danger" size="sm" onClick={onDelete}>
         Remove
       </Button>
+      {/* Last, and a region of its own that Basic does not render, so Basic leaves no empty line. */}
+      <AdvancedOnly className="basis-full">
+        <TechnicalDetail placeKey={`mapping:${mapping.id}`}>
+          <CopyableValue value={mapping.role_key} label="Role key" />
+          <CopyableValue value={`${mapping.field} → ${mapping.value}`} label="Field and value" />
+        </TechnicalDetail>
+      </AdvancedOnly>
     </CardRow>
   );
 }

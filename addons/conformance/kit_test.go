@@ -304,6 +304,7 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.StatsTotalMissing:         "stats.totals",
 		reference.StatsDimensionNamesPerson: "stats.no-people",
 		reference.FoldsNames:                "requests.exact-names",
+		reference.OffWaitsOnOperator:        "standing.off",
 		// A reply lost mid-call and two calls racing a limit are beyond a
 		// black-box kit (calls.unsettled, calls.serialised skip); the
 		// reference's own tests watch these two fail.
@@ -2277,5 +2278,35 @@ func TestALimitLeftOutOfStateIsSkippedNeverJudged(t *testing.T) {
 		if !found {
 			t.Errorf("no %s result", id)
 		}
+	}
+}
+
+// The account is off in the read before the standing's and back on in the standing's own: there is
+// nothing to judge, and the check says so (skip), never a pass on the way in.
+func TestAStandingReadWhereTheAccountIsBackOnIsNotJudged(t *testing.T) {
+	var sinceOff atomic.Int32
+	url, _ := wrapped(t, func(w http.ResponseWriter, r *http.Request, h http.Handler) bool {
+		switch {
+		case r.URL.Path == "/apply" && r.Method == http.MethodPost:
+			body, _ := io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewReader(body)) // the request is signed: put it back
+			if bytes.Contains(body, []byte(`"enabled":false`)) {
+				sinceOff.Store(0)
+			}
+		case r.URL.Path == "/subjects" && sinceOff.Add(1) == 2:
+			rewrite(w, r, h, func(doc map[string]any) {
+				for _, s := range doc["subjects"].([]any) {
+					if st, ok := s.(map[string]any)["state"].(map[string]any); ok && st["enabled"] == false {
+						st["enabled"] = true
+					}
+				}
+			})
+			return true
+		}
+		return false
+	})
+	r := run(t, config(url, true))
+	if got := r.Status("standing.off"); got != "skip" {
+		t.Errorf("standing.off is %q, want skip: a standing read of an account that is back on judges nothing", got)
 	}
 }

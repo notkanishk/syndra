@@ -73,6 +73,17 @@ describe("What I have used: data", () => {
 describe("What I have used: gaps", () => {
   const gapped = [sessions({ gaps: [GAP] })];
 
+  // The block shows a counter's 12-month total, so every gap inside that year is explained; a gauge
+  // shows 30 days only, so an older gap is not its business.
+  it("lists gaps within the widest window the block shows", () => {
+    const old = { start: ago(60), end: ago(58), dimensions: { area: "ring" }, reason: "Auditing is off in this area" };
+    const { unmount } = render(<UsageCard title="t" windows={windows()} metrics={[sessions({ gaps: [old] })]} />);
+    expect(screen.getByText(/Area: “ring”: “Auditing is off in this area”/)).toBeInTheDocument();
+    unmount();
+    render(<UsageCard title="t" windows={windows()} metrics={[homeBytes({ against: undefined, gaps: [old] })]} />);
+    expect(screen.queryByText(/Auditing is off in this area/)).toBeNull();
+  });
+
   it("footnotes the days and the add-on's reason, quoted, and says a blank is not a zero", () => {
     render(<UsageCard title="t" windows={windows()} metrics={gapped} />);
     expect(screen.getByText(copy.GAPS_HEADING)).toBeInTheDocument();

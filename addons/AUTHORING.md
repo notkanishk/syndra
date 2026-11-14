@@ -836,7 +836,26 @@ mirror holds no limits: absent in `state` is "not known".
   who is waited on (`waiting_on`, from the schema).
   - An account the `account` field holds off MUST be `usable: false`,
     `waiting_on: none`: nobody is waited on, because off is what Syndra
-    asked for (`standing` in `addons/reference/reference.go`).
+    asked for (`standing` in `addons/reference/reference.go`). `none` also
+    covers an off account no subject is bound to: nothing in Syndra waits
+    on anyone for it, but it is not Syndra's doing, so say so in `note`
+    ("no one in Syndra is assigned to it"), never as an account Syndra
+    holds off. An account the app has off while Syndra
+    wants it on is a difference made outside Syndra: report it
+    `waiting_on: operator` with a note that says so and a next step that
+    stays in Syndra, never `waiting_on: target` or a next step that asks
+    the operator to change it in the app. An off account whose intent
+    the add-on does not know (it never recorded what Syndra asked for it)
+    makes no claim either way: `waiting_on: none` and a note that says
+    only that it is switched off, with `next` left empty so Syndra
+    supplies the step for whoever reads (an operator is sent to Syndra's
+    own check for differences, a member to makerspace staff). `next` is
+    shown as written to the member whose account it is as well as to the
+    operator, so it MUST read correctly to both, or be left empty.
+    Syndra shows `note` and `next` as written, so it cannot know which
+    of these cases this is. The TrueNAS add-on keeps what each apply
+    asked (`Binding.WantsEnabled`) to tell them apart (`standingOf` in
+    `addons/truenas/server.go`).
   - A difference the app imposes and Syndra cannot change (an invitation not
     yet accepted) MUST be reported with the `account` field as Syndra set it,
     and `standing` `{usable: false, waiting_on: target}`. Drift compares
@@ -1378,7 +1397,9 @@ oldest days first. Syndra's first collection of a metric asks from now
 minus `stats_buffer`. When Syndra asks from further back than you still
 hold, the add-on MUST answer a gap from the day `since` falls in to the
 first day it holds, with a reason (the TrueNAS add-on says "The add-on no
-longer holds these days"), and go on from what it has.
+longer holds these days" for days it dropped, and "Not collected yet: counting
+began on 9 Nov" for days before its first collection, which it never held),
+and go on from what it has.
 
 **A point is the whole day.** A point's `start` MUST be a midnight in
 `stats_zone` and its `end` the next one, both RFC 3339 with the zone's

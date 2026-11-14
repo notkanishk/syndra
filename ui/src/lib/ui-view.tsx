@@ -94,7 +94,16 @@ export function UiViewProvider({
     if (!pendingPanel) return;
     const frame = requestAnimationFrame(() => {
       const target = document.getElementById(pendingPanel);
-      if (target) glideTo(target, 24);
+      if (target) {
+        // Then focus goes there too, for every caller: a reader who pressed a button that moved the page
+        // continues from the panel it showed, not from a button that has scrolled away. A panel that is
+        // not focusable by itself takes tabindex -1 (focusable by script, not a Tab stop).
+        void glideTo(target).then((landed) => {
+          if (!landed) return;
+          if (!target.matches("a[href], button, input, select, textarea, [tabindex]")) target.tabIndex = -1;
+          target.focus({ preventScroll: true });
+        });
+      }
       setPendingPanel(null);
     });
     return () => cancelAnimationFrame(frame);
