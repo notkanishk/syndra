@@ -2299,8 +2299,11 @@ per-person only) applied there.
   `OPERATION_FAILED` for a subject with no account is skipped and named
   beside the pass ("judged …; skipped …"); `health.get` refused, or any other
   code, fails. The registry has no "no account" code and no "about the
-  target" marker, so the kit names `health.get` (`readAboutTarget`): both are
-  the owner's to add; an effect: read operation is no write, one rule for
+  target" marker; the marker is now the registry's `subject` (required on
+  every id, `false` for `health.get` alone; the kit's loader and the
+  backend's registry test refuse an entry without it,
+  `TestTheRegistryMustSayWhetherAnOperationIsAboutASubject`), and the
+  dedicated code stays the owner's to add; an effect: read operation is no write, one rule for
   the kit and its tests, `contract.writes`, so a reads-only run still reports
   "nothing written"),
   and ci.yml's every-feature reference is `-features freshness,calls,stats`.

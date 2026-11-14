@@ -433,12 +433,13 @@ func (k *kit) readOps() []string {
 // OPERATION_FAILED, the registry's code for an operation that could not be
 // done), which says nothing about its result's shape: that read is skipped,
 // and named, and -mutate (owned true) reads the account it made. Only a read
-// about a subject is excused: health.get, about the target, refused at all,
-// or any other code (TARGET_VERSION_UNSUPPORTED), fails.
+// the registry marks `subject: true` is excused: one about the target
+// (`subject: false`, health.get) refused at all, or any other code
+// (TARGET_VERSION_UNSUPPORTED), fails.
 //
-// ponytail: the registry has no code for "no account for this subject" and
-// no marker for a read about the target, so the kit names health.get; a
-// registry code and marker are the upgrade (an owner's decision).
+// ponytail: the registry has no code for "no account for this subject", so
+// OPERATION_FAILED on a subject read stands for it; a dedicated code is the
+// upgrade (an owner's decision).
 func (k *kit) results(c *check, owned bool) {
 	reads := k.readOps()
 	if len(reads) == 0 {
@@ -459,7 +460,7 @@ func (k *kit) results(c *check, owned bool) {
 	for _, id := range reads {
 		ex := send(request{method: http.MethodPost, target: "/operations/" + id,
 			body: k.operationBody(id, k.callID(), map[string]any{}), schema: "operation_request.json"})
-		if !owned && id != readAboutTarget && ex.err == nil && ex.status == http.StatusUnprocessableEntity && ex.code() == "OPERATION_FAILED" {
+		if !owned && *k.c.operations[id].Subject && ex.err == nil && ex.status == http.StatusUnprocessableEntity && ex.code() == "OPERATION_FAILED" {
 			skipped = append(skipped, id)
 			continue
 		}
@@ -479,10 +480,6 @@ func (k *kit) results(c *check, owned bool) {
 		}
 	}
 }
-
-// readAboutTarget is the one read about the target, not a subject (the guide:
-// Syndra sends it with an empty subject).
-const readAboutTarget = "health.get"
 
 func orNone(ids []string) string {
 	if len(ids) == 0 {

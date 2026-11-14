@@ -1868,6 +1868,12 @@ Rules:
   operation whose `result` is `common/records.json`: a registry entry and a
   policy entry ([chapter 14](#14-evolving)), and the page that lists it
   exists.
+- `subject`, in the registry for every id, says whether the operation is
+  about the member the request's `subject` names (`true`) or about the
+  target itself (`false`: `health.get`, which Syndra sends with an empty
+  subject). The kit reads it: in a reads-only run a read about a subject
+  the add-on has no account for may answer 422 `OPERATION_FAILED` and is
+  skipped, while a read about the target is always judged.
 - `secret_result`, in the registry for every id, marks one whose reply
   carries a secret (a generated PIN). The add-on MUST record such a reply
   redacted: a replay and `GET /calls` answer `recorded` without it. Syndra

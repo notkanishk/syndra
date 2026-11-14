@@ -253,6 +253,7 @@ type operationRegistry struct {
 		Effect       string   `json:"effect"`
 		Result       string   `json:"result"`
 		SecretResult *bool    `json:"secret_result"`
+		Subject      *bool    `json:"subject"`
 		SecretParams []string `json:"secret_params"`
 		Params       []struct {
 			Name     string `json:"name"`
@@ -294,6 +295,11 @@ func checkPolicyAgainstRegistry(t *testing.T, dir string) {
 		// Present for every id (absence is never a value), and the policy's.
 		if r.SecretResult == nil || *r.SecretResult != p.SecretResult {
 			t.Errorf("%s: registry secret_result %v, policy %v", id, r.SecretResult, p.SecretResult)
+		}
+		// Present for every id too: whether the request's subject names the
+		// member it is about, or it is about the target (sent empty).
+		if r.Subject == nil {
+			t.Errorf("%s: registry says no subject; every operation says whether it is about a member", id)
 		}
 		if p.Effect == EffectRead && p.Confirm {
 			t.Errorf("%s is a read and asks for confirmation: a read is never confirmed", id)

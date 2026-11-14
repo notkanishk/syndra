@@ -20,7 +20,10 @@ required key already was. A physical operation needs `calls` alone.
   `TargetHealth`); `result` loses `x-feature: results`.
   `profiles/storage/status.json`'s description drops "feature results".
 - Registries: `operations.json` loses `pocket` (from `activity.get`,
-  `health.get`, `storage.status`) and its `$comment` the rules about it;
+  `health.get`, `storage.status`) and its `$comment` the rules about it,
+  and gains `subject`, required on every id: `true` when the operation is
+  about the member the request's subject names, `false` when it is about
+  the target itself (`health.get`);
   `features.json` loses `results`. A manifest still listing `results` is
   an unknown feature: skipped, never refused.
 - Fixtures: `operation_response_activity.json`,

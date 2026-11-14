@@ -38,6 +38,10 @@ type contract struct {
 		} `json:"params"`
 		SecretParams []string `json:"secret_params"`
 		Effect       string   `json:"effect"`
+		// Subject is whether the operation is about the member the request's
+		// subject names (true) or about the target itself (false). Required:
+		// the loader refuses a registry entry that does not say.
+		Subject *bool `json:"subject"`
 		// Result is the schema a read answers under `result` ("" for an id
 		// that declares its own).
 		Result string `json:"result"`
@@ -124,6 +128,11 @@ func loadContract(files fs.FS) (*contract, error) {
 		}
 		if err != nil {
 			return nil, fmt.Errorf("registry %s: %w", file, err)
+		}
+	}
+	for id, op := range c.operations {
+		if op.Subject == nil {
+			return nil, fmt.Errorf("registry operations.json: %s does not say whether it is about a subject", id)
 		}
 	}
 	c.cooldownDefault = constants.Constants.CooldownDefault.Value
