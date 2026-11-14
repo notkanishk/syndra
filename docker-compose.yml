@@ -172,6 +172,9 @@ services:
       # zone such as Asia/Kolkata; unset is UTC). AUTOROTATE=off is the kill
       # switch.
       - TZ=${TZ:-}
+      # The display locale, a BCP 47 tag (en-GB). Validated at start (an invalid one
+      # refuses to start) and handed to the UI on /healthz; unset sends nothing.
+      - LOCALE=${LOCALE:-}
       - SYNDRA_ACTION_KEY_AUTOROTATE=${SYNDRA_ACTION_KEY_AUTOROTATE:-}
       - SYNDRA_ACTION_KEY_LEAD_DAYS=${SYNDRA_ACTION_KEY_LEAD_DAYS:-}
       - SYNDRA_ACTION_KEY_WINDOW=${SYNDRA_ACTION_KEY_WINDOW:-}

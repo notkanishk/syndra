@@ -3,6 +3,7 @@ import { cleanup } from "@testing-library/react";
 import { createElement, type ComponentType } from "react";
 import { afterEach, beforeEach, vi } from "vitest";
 
+import { resetDisplayLocaleForTests, setDisplayLocale } from "@/lib/locale";
 import { installMatchMedia, resetMediaQueries } from "@/test-utils/media";
 
 // Every test runs on the same day: 9 Nov 2026, noon in the makerspace's zone,
@@ -101,6 +102,13 @@ function installClipboard() {
 }
 
 installClipboard();
+
+// Tests state their locale as the product learns it (the backend's LOCALE), not
+// the machine's: fixtures read "2 Aug", which is en-GB.
+beforeEach(() => {
+  resetDisplayLocaleForTests();
+  setDisplayLocale("en-GB");
+});
 
 beforeEach(() => {
   resetMediaQueries();

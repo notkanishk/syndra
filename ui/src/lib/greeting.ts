@@ -1,4 +1,5 @@
 import { formatShortDate } from "@/lib/format";
+import { displayLocale } from "@/lib/locale";
 import { civilDay, daysBetween, makerspaceZone, zoneTag } from "@/lib/time";
 
 /**
@@ -51,7 +52,7 @@ export function lastHere(
   if (days <= 0) return null;
   if (days === 1) return { since: "yesterday", on: "yesterday" };
   if (days < 7) {
-    const weekday = then.toLocaleDateString("en-GB", { weekday: "long", timeZone: makerspaceZone() }) + zoneTag();
+    const weekday = then.toLocaleDateString(displayLocale(), { weekday: "long", timeZone: makerspaceZone() }) + zoneTag();
     return { since: weekday, on: `on ${weekday}` };
   }
   const date = formatShortDate(iso, now);

@@ -124,10 +124,13 @@ su - runner -c 'cd /opt/syndra && \
   EXTERNAL_URL=https://syndra.example.org \
   ZITADEL_DOMAIN=auth.example.org \
   DEPLOYMENT_TZ=Europe/London \
+  DEPLOYMENT_LOCALE=en-GB \
   ./scripts/gen-prod-env.sh'
 ```
 
-Both variables are required; the script exits if either is unset. `EXTERNAL_URL`
+`DEPLOYMENT_LOCALE` is the display locale (a BCP 47 tag, written to `.env` as `LOCALE`); the UI formats every date and number in it. **Production and staging must set `LOCALE=en-GB` before this ships**: the UI no longer has a locale of its own, so without it dates switch to the UI server's default format ("Aug 2", not "2 Aug"). An invalid tag refuses to start the backend.
+
+Every variable here is required; the script exits if any is unset. `EXTERNAL_URL`
 is the address *Zitadel* will POST to, so it is the one value here that no local
 health check ever exercises — a wrong value fails silently and permanently.
 
@@ -717,7 +720,7 @@ docker compose up -d backend
 docker compose exec postgres psql -U syndra syndradb
 ```
 
-**Reading timestamps.** Every log line of every Go service (backend, claims, the TrueNAS add-on, the reference add-on) starts with one stamp: RFC 3339 in UTC with milliseconds and a literal `Z`, for example `2026-11-14T10:08:34.123Z`, whatever `TZ` is. It is unambiguous in any reader's zone, sorts as text across services, and is exact in unix time: `date -d 2026-11-14T10:08:34.123Z +%s` (GNU date). To read one in local time: `TZ=<zone> date -d <stamp>`. Panics and stack traces are written by the Go runtime and carry no stamp, and neither does the one line printed when an invalid `TZ` stops a service at startup (it runs before logging is set up). `TZ` (set in `.env`; unset means UTC; an invalid name refuses to start) is the deployment's zone: it fixes what a calendar day is, and the UI shows times in it, read from the backend (`time_zone` on `/healthz`). Stored and sent instants are separate and unchanged: Postgres `timestamptz`, JSON RFC 3339.
+**Reading timestamps.** Every log line of every Go service (backend, claims, the TrueNAS add-on, the reference add-on) starts with one stamp: RFC 3339 in UTC with milliseconds and a literal `Z`, for example `2026-11-14T10:08:34.123Z`, whatever `TZ` is. It is unambiguous in any reader's zone, sorts as text across services, and is exact in unix time: `date -d 2026-11-14T10:08:34.123Z +%s` (GNU date). To read one in local time: `TZ=<zone> date -d <stamp>`. Panics and stack traces are written by the Go runtime and carry no stamp, and neither does the one line printed when an invalid `TZ` stops a service at startup (it runs before logging is set up). `TZ` (set in `.env`; unset means UTC; an invalid name refuses to start) is the deployment's zone: it fixes what a calendar day is, and the UI shows times in it, read from the backend (`time_zone` on `/healthz`). Stored and sent instants are separate and unchanged: Postgres `timestamptz`, JSON RFC 3339. `LOCALE` (a BCP 47 tag such as `en-GB`; an invalid one refuses to start; unset sends nothing) is how the UI writes them, read from the same place (`locale` on `/healthz`).
 
 All commands run from `/opt/syndra` as the `runner` user.
 

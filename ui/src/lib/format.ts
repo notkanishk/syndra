@@ -3,6 +3,7 @@
 // who recognize project names better than internal keys. This module
 // centralizes the human-readable formatting so every view does it the same way.
 
+import { displayLocale } from "@/lib/locale";
 import { humanizeKey, roleName } from "@/lib/names";
 import { civilDay, makerspaceZone, zoneTag, daysFromToday, endAfterDaysISO, isSameDay } from "@/lib/time";
 
@@ -114,14 +115,12 @@ export function formatAgoShort(iso: string | null | undefined, now: Date = new D
 }
 
 /**
- * Dates are formatted in a FIXED locale, not the ambient one.
- *
- * A date rendered on the server in one locale and re-rendered in the browser in
- * another is a hydration mismatch: React discards the subtree and rebuilds it,
- * and the operator sees the value flicker. en-GB also happens to be the form
- * the design speaks in — "2 Aug", not "Aug 2".
+ * Dates are formatted in the DEPLOYMENT's locale (LOCALE, lib/locale.ts), the
+ * same on the server and in the browser: a date rendered in one locale and
+ * re-rendered in another is a hydration mismatch, and the operator sees the
+ * value flicker. The design speaks en-GB ("2 Aug", not "Aug 2"); a deployment
+ * that wants that sets LOCALE=en-GB.
  */
-const DATE_LOCALE = "en-GB";
 
 /** Every date and clock is read in the makerspace's zone, never the browser's (lib/time.ts). */
 const inZone = () => ({ timeZone: makerspaceZone() });
@@ -138,7 +137,7 @@ export function formatShortDate(
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString(DATE_LOCALE, {
+  return date.toLocaleDateString(displayLocale(), {
     ...inZone(),
     day: "numeric",
     month: "short",
@@ -155,7 +154,7 @@ export function formatClock(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleTimeString(DATE_LOCALE, { ...inZone(), hour: "2-digit", minute: "2-digit", hour12: false }) + zoneTag();
+  return date.toLocaleTimeString(displayLocale(), { ...inZone(), hour: "2-digit", minute: "2-digit", hour12: false }) + zoneTag();
 }
 
 /**
@@ -191,7 +190,7 @@ export function formatClockSeconds(iso: string | null | undefined): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
   return (
-    date.toLocaleTimeString(DATE_LOCALE, { ...inZone(), hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) +
+    date.toLocaleTimeString(displayLocale(), { ...inZone(), hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) +
     zoneTag()
   );
 }
@@ -201,7 +200,7 @@ export function formatWeekday(date: Date = new Date()): string {
   // Short month, matching formatShortDate everywhere else. "Saturday 19
   // September" beside a feed of "18 Sept" rows is the same product speaking
   // two dialects on one screen.
-  return date.toLocaleDateString(DATE_LOCALE, {
+  return date.toLocaleDateString(displayLocale(), {
     ...inZone(),
     weekday: "long",
     day: "numeric",

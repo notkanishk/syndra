@@ -32,7 +32,7 @@ export const makerspaceZone = (): string => zone;
 export const zoneTag = (): string => (known ? "" : " UTC");
 
 const wallClockIn = (timeZone: string) =>
-  new Intl.DateTimeFormat("en-US", {
+  new Intl.DateTimeFormat("en-US", { // locale: not displayed, only formatToParts' numbers are read
     timeZone,
     hourCycle: "h23",
     year: "numeric",
