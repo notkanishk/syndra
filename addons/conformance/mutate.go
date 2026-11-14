@@ -355,7 +355,8 @@ func (k *kit) limits(c *check) {
 		return
 	}
 	state := k.state(c)
-	if state == nil { // state failed c already
+	if state == nil { // state failed c already, or the run halted
+		c.unjudged()
 		return
 	}
 	judged := false

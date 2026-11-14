@@ -124,7 +124,9 @@ func (s *server) decideHome(desired desiredState, username, current string, uid 
 // TS-25.10.7: validate_homedir_path, setup_homedir, do_update). So it is sent
 // the place: sent p, it refuses a new home, and nests an existing one a level
 // down. Neither call here renames, so the username TrueNAS joins is p's last
-// element.
+// element. TrueNAS also refuses a `home` that is any account's home already
+// (account.py:518-523, `in_use`): an account whose home is the place itself
+// blocks every home made there.
 func homeFields(p string) map[string]any {
 	return map[string]any{"home": path.Dir(p), "home_create": true, "home_mode": "700"}
 }
