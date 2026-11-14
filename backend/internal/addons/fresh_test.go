@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // Fresh reads (feature freshness, design §4): `fresh` reaches the wire only
@@ -166,6 +167,23 @@ func TestACooldownAnswerIsCooledDownAndNotUsable(t *testing.T) {
 	r := Subjects(context.Background(), "truenas", true)
 	if wait, ok := r.CooledDown(); !ok || wait != 20 || r.Usable() {
 		t.Errorf("a cooldown answer: wait %d cooled %t usable %t", wait, ok, r.Usable())
+	}
+}
+
+// A cooldown is a cooldown, however young its copy (7l review): the backend
+// never reads a cooldown answer as current. The person's action waits out
+// retry_after and asks again (RFC 9110 §10.2.3; the UI's one retry), so what
+// it concludes from is a live read.
+func TestACooldownIsNeverReportedCurrent(t *testing.T) {
+	taken := ts(t, "2026-11-10T08:00:00Z")
+	for _, age := range []time.Duration{0, 5 * time.Second, FreshCooldown("truenas")} {
+		withClock(t, taken.Add(age))
+		addonAnswering(t, "subjects_cooldown.json")
+		r := Subjects(context.Background(), "truenas", true)
+		if wait, cooled := r.CooledDown(); r.Current || r.Usable() || !cooled || wait != 20 || r.Stale == nil || !r.TakenAt.Equal(taken) {
+			t.Errorf("a copy %s old: current %t usable %t cooled %t wait %d stale %+v taken %s, want a cooldown with its copy's taken_at",
+				age, r.Current, r.Usable(), cooled, wait, r.Stale, r.TakenAt)
+		}
 	}
 }
 

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 
-import { copyLine, cooldownLine, READ_AGAIN, READING, unreachableLine, type Reader } from "@/components/results/copy";
+import { copyLine, cooldownLine, READ_AGAIN, READING, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Crossfade } from "@/lib/motion";
@@ -372,4 +372,42 @@ function sentence(
         ? `Could not reach the connected system. This is the last state seen, ${age}`
         : "Could not reach the connected system, and there is no earlier copy to show";
   }
+}
+
+/**
+ * A press going again by itself once its cooldown is over (useRetryOnce). Mount it with the card,
+ * always: its `role="status"` region is there empty from the start and filled when a wait starts,
+ * so the start is announced once (a region born with its text is often skipped; the visible count
+ * ticks outside it). While waiting it draws the line amber, as a cooldown the reader caused is
+ * (copy guide section 13), and **Stop waiting**, described by that line, which takes focus only
+ * when the person is still on the button they pressed.
+ */
+export function RetryWait({ name, retry, onStop }: {
+  name: string;
+  retry: { waiting: boolean; seconds: number; left: number; takeFocus: boolean };
+  onStop: () => void;
+}) {
+  const stopId = useId();
+  const lineId = useId();
+  const { waiting, takeFocus } = retry;
+  useEffect(() => {
+    if (waiting && takeFocus) document.getElementById(stopId)?.focus();
+  }, [waiting, takeFocus, stopId]);
+  return (
+    <>
+      <span role="status" className="sr-only">
+        {waiting ? retryingLine(name, retry.seconds) : ""}
+      </span>
+      {waiting && (
+        <span className="flex flex-wrap items-center gap-3">
+          <span id={lineId} className="flex-1 text-[14px] text-warn-text">
+            {retryingLine(name, retry.left)}
+          </span>
+          <Button id={stopId} variant="outline" size="sm" aria-describedby={lineId} onClick={onStop}>
+            {STOP_WAITING}
+          </Button>
+        </span>
+      )}
+    </>
+  );
 }

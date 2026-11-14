@@ -277,6 +277,17 @@ needs a word in the core.
   works with the add-on unreachable; by role it must keep working after a
   backend restart while the add-on is down, which a cached manifest cannot
   promise and a column can. Revocation never depends on reachability.
+  *The same holds for what a target is (7l, 14 Nov 2026):* the accepted
+  manifest's kind, product and entitlement schema (each field's role and,
+  for a limit, its unit) are saved beside the role map in the same write
+  (`targets.accepted_shape`, migration 000095, `addons.AcceptedShape`), and
+  every page reads them from there (`handlers.acceptedShape`, so
+  `memberMeets`, the person page, `/targets/{t}/homes` and
+  `kinds.HomeLimit`'s callers, and `systemName`'s product), never from the
+  manifest held in memory. A restart with the add-on down or its manifest
+  refused keeps the member card and rail row, the person page and the home
+  limits, as production's constants did. Write paths that check a value
+  against the schema (mappings, allowances) still need the held manifest.
 - `IsLifecycleField`, `FieldEnabled`, `FieldSMBEnabled`, `fieldHomeQuota`,
   `FIELD_GROUP/HOME/HOME_QUOTA` are deleted, and every caller moves to the
   role map: `services/entitlement.go`, `handlers/revocation.go:99`,
@@ -576,11 +587,21 @@ building 6b, B1); one that joins a read that fails is answered as that
 failure is, and never reads the app again. A reply made of several reads,
 answered later from the add-on's copy, carries the copy's own reason,
 dated by its oldest part, never a part's label from when the copy was made:
-a copy says `cooldown` only to a fresh read the cooldown refused. Answered
+a copy says `cooldown` only to a fresh read the cooldown refused. *A person's press inside
+the cooldown (7l, 14 Nov 2026):* a cooldown is a cooldown, with its copy and
+its `taken_at`, however young the copy; the backend never reads it as
+current. "Check now" (a skipped pass carries `retry_after`) and the dormant
+removal (429 `FRESH_READ_COOLDOWN`) honour `Retry-After` (RFC 9110
+§10.2.3): the UI waits it out with the countdown, never longer than the
+sweep's 60 s ceiling, and sends the same press once more by itself
+(`useRetryOnce`, `lib/queries/fresh.ts`); once only, so a second refusal is
+shown as it is, and **Stop waiting** cancels it. One press then ends on a
+live read, which meets owner Q1 literally. Answered
 `cooldown`, the sweep waits once, `min(retry_after or the declared
 cooldown, the declared cooldown, 60 s)`, the ceiling twice
 `constants.cooldown_default`; "Check now" runs the same pass inside a
-person's request and never waits (`ReconcileAddonNow`). An add-on's
+person's request and never waits server-side (`ReconcileAddonNow`; the
+UI's one retry above is the person's wait). An add-on's
 `taken_at` more than two minutes ahead of the backend's clock is read as
 now, logged once per target (decided while building 6b, review round 2),
 and one dated the zero time is not a reading: every reply shape, the typed
@@ -836,7 +857,10 @@ lists kind `storage` only); any other kind gets its own row in the member rail
 and its own page, `/systems/{target}` (a storage system there is sent to
 `/storage`, one address per page). A registration with **no accepted manifest
 is operators-only**: no member row, no member card, decided server-side
-(`handlers.memberMeets`), so neither member read ever carries one. Rows are
+(`handlers.memberMeets`), so neither member read ever carries one. "No
+accepted manifest" means none ever accepted (no saved shape, §3); one
+accepted before and unreachable now keeps its member row and card from the
+saved kind, the card saying what it could not read (7l). Rows are
 registrations, never entitlements: a member none of whose roles reaches the
 system has the row, and the page says so with a next step. The rail's seat is
 a static *family* leaf in `MEMBER_NAV` (`basic-advanced-ia` §1), so

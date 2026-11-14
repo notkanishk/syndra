@@ -49,9 +49,13 @@ func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 		addonsConnection = prev[7].(func(string) (*addons.Connection, error))
 	})
 
-	schema := addonsEntitlementSchema
-	t.Cleanup(func() { addonsEntitlementSchema = schema })
-	addonsEntitlementSchema = func(string) ([]addons.EntitlementField, error) { return truenasSchema, nil }
+	// The kind and the limit's unit as saved at acceptance: the in-memory
+	// manifest is not what these pages read (R3, 7l).
+	shape := addonsAcceptedShape
+	t.Cleanup(func() { addonsAcceptedShape = shape })
+	addonsAcceptedShape = func(context.Context, string) (addons.Shape, error) {
+		return addons.Shape{Kind: "storage", EntitlementSchema: truenasSchema}, nil
+	}
 
 	bound := time.Date(2026, 9, 12, 10, 0, 0, 0, time.UTC)
 	dbGetTargetBinding = func(context.Context, string, string) (db.TargetBinding, bool, error) {
@@ -294,13 +298,13 @@ func TestATargetWithNoRoleMapIsNotReadAndTheOthersStillShow(t *testing.T) {
 	h := &personStorageHarness{storageHarness: storageHarness{entitled: true, bound: true}}
 	stubPersonStorage(t, h)
 	addonsRegistered = func() []addons.Registration { return []addons.Registration{{Target: "truenas"}, {Target: "unifi"}} }
-	manifest := addonsAcceptedManifest
-	t.Cleanup(func() { addonsAcceptedManifest = manifest })
-	addonsAcceptedManifest = func(target string) (addons.Manifest, error) {
+	manifest := addonsAcceptedShape
+	t.Cleanup(func() { addonsAcceptedShape = manifest })
+	addonsAcceptedShape = func(ctx context.Context, target string) (addons.Shape, error) {
 		if target == "truenas" {
-			return addons.Manifest{Product: "TrueNAS", Kind: "storage", EntitlementSchema: truenasSchema}, nil
+			return addons.Shape{Product: "TrueNAS", Kind: "storage", EntitlementSchema: truenasSchema}, nil
 		}
-		return addons.Manifest{}, addons.ErrNoManifest
+		return addons.Shape{}, addons.ErrNoManifest
 	}
 	svcResolveEntitlementSet = func(_ context.Context, _, target string) (services.EntitlementSet, error) {
 		if target == "unifi" {
@@ -349,5 +353,51 @@ func TestATargetWithNoRoleMapIsNotReadAndTheOthersStillShow(t *testing.T) {
 	handleMyTargets(rr, req)
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("want 500 for a failed read, got %d", rr.Code)
+	}
+}
+
+// A restart while the add-on is down (or its manifest is refused) holds no
+// manifest in memory, and what Syndra holds itself still shows, as production
+// showed it (7l, R1-R3): the member's card and rail row from the kind saved
+// at acceptance, and on the person page the account, entitlement, roles,
+// hold, the roles' limit and the own limit, the limit field found by the
+// saved schema's unit. Nothing is read from the add-on, and the card says so.
+func TestARestartWithTheAddonDownKeepsWhatSyndraHolds(t *testing.T) {
+	h := &personStorageHarness{storageHarness: storageHarness{entitled: true, bound: true}}
+	stubPersonStorage(t, h)
+	callable, schema := addonsCallable, addonsEntitlementSchema
+	t.Cleanup(func() { addonsCallable, addonsEntitlementSchema = callable, schema })
+	// The registry after the restart: registered, no manifest accepted yet.
+	addonsCallable = func(string) bool { return false }
+	addonsEntitlementSchema = func(string) ([]addons.EntitlementField, error) { return nil, addons.ErrNoManifest }
+
+	member := httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
+	member = member.WithContext(withPrincipal(member.Context(), &auth.Principal{Subject: "u1"}))
+	rr := httptest.NewRecorder()
+	handleMyTargets(rr, member)
+	var mine struct {
+		Targets []myTargetView `json:"targets"`
+	}
+	if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &mine) != nil || len(mine.Targets) != 1 {
+		t.Fatalf("R1: the member's storage must still show: %d %s", rr.Code, rr.Body.String())
+	}
+	if v := mine.Targets[0]; v.Kind != "storage" || !v.Entitled || v.Account == nil || v.Storage != nil || v.Health != "" {
+		t.Fatalf("R1: the card from Syndra's own facts, nothing read: %+v", v)
+	}
+	rr = httptest.NewRecorder()
+	handleMySystems(rr, member)
+	if !strings.Contains(rr.Body.String(), `"kind":"storage"`) {
+		t.Fatalf("R1: the rail row must still show: %s", rr.Body.String())
+	}
+
+	view := getPersonTargets(t)
+	if view.Kind != "storage" || view.Account == nil || !view.Entitled || len(view.Roles) != 1 || len(view.Holds) != 1 {
+		t.Fatalf("R2: the person page from Syndra's own facts: %+v", view)
+	}
+	if home := view.Home; home == nil || home.RolesLimit == nil || *home.RolesLimit != 20*gb || home.Own == nil || home.Own.Bytes != 50*gb {
+		t.Fatalf("R3: the roles' limit and the own limit: %+v", home)
+	}
+	if len(h.asked) != 0 {
+		t.Errorf("an add-on with no manifest was read: %v", h.asked)
 	}
 }

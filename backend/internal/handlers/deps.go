@@ -518,9 +518,9 @@ var (
 	addonsHealthOf             = addons.HealthOf
 	// How a member reaches a target, for the instructions on their own page.
 	addonsConnection = addons.ConnectionFor
-	// A target's accepted manifest: its kind and entitlement schema, for the
-	// pages that render fields by role.
-	addonsAcceptedManifest = addons.AcceptedManifest
+	// A target's kind, product and entitlement schema as last accepted, read
+	// from the store, for the pages that render fields by role.
+	addonsAcceptedShape = addons.AcceptedShape
 	// The backend's memory of an add-on's mutation log, read beside that add-on's
 	// own account of itself. Two authorities on purpose.
 	svcDormantAccounts = services.DormantAccounts

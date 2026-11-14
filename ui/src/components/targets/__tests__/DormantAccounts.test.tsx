@@ -237,22 +237,89 @@ describe("the sweep result", () => {
 describe("inside the add-on's cooldown", () => {
   const cooling = (wait: number) => new ApiError(429, { error: "FRESH_READ_COOLDOWN", message: "the server's words", retry_after: wait });
 
-  it("a removal says Not removed with the countdown, keeps the selection and the key, and is pressed again the same way", () => {
+  const pressRemove = (key = "k") => {
+    fireEvent.click(screen.getByLabelText("Select former-member"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand/i }));
+    fireEvent.change(screen.getByLabelText(/API key that is allowed to delete/i), { target: { value: key } });
+    fireEvent.click(screen.getByRole("button", { name: /remove 1 account/i }));
+  };
+
+  // RFC 9110 §10.2.3: the press waits out retry_after and is sent once more by itself, so one press
+  // removes on a live read (owner Q1), with a fresh box for the key.
+  it("a removal refused inside the cooldown waits it out and is sent once more by itself", () => {
     vi.useFakeTimers();
     state.sweepError = cooling(2);
     renderDormant();
-    fireEvent.click(screen.getByLabelText("Select former-member"));
-    fireEvent.click(screen.getByRole("checkbox", { name: /I understand/i }));
-    fireEvent.change(screen.getByLabelText(/API key that is allowed to delete/i), { target: { value: "k" } });
-    fireEvent.click(screen.getByRole("button", { name: /remove 1 account/i }));
+    pressRemove();
+    expect(state.swept).toHaveLength(1);
+    expect(screen.getByText(/^Truenas was read moments ago; trying again by itself in 2 s$/, { selector: '[role="status"]' })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop waiting" })).toHaveFocus();
+    expect(screen.queryByText("Not removed")).toBeNull();
+    state.sweepError = undefined;
+    state.answer = { removed: 1, outcomes: [{ account: "former-member", outcome: "removed" }] } as SweepResult;
+    act(() => void vi.advanceTimersByTime(2000));
+    expect(state.swept).toHaveLength(2);
+    expect(state.swept[1].accounts).toEqual(["former-member"]);
+    expect(state.swept[1].elevatedKey.take()).toBe("k");
+    expect(screen.getByText("Removed")).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("retries once only: a second refusal says Not removed with its countdown, and nothing goes again", () => {
+    vi.useFakeTimers();
+    state.sweepError = cooling(2);
+    renderDormant();
+    pressRemove();
+    act(() => void vi.advanceTimersByTime(2000));
+    expect(state.swept).toHaveLength(2);
     expect(screen.getByText("Not removed")).toBeInTheDocument();
     expect(screen.getByText("That system was read moments ago, so nothing was changed.")).toBeInTheDocument();
-    expect(screen.getByText("You can try again in 2 s.")).toBeInTheDocument();
-    act(() => void vi.advanceTimersByTime(2000));
+    expect(screen.getAllByText("You can try again in 2 s.").length).toBeGreaterThan(0);
+    // Off until its count ends, the count its linked reason.
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toHaveAccessibleDescription("You can try again in 2 s.");
+    act(() => void vi.advanceTimersByTime(120_000));
+    expect(state.swept).toHaveLength(2);
     expect(screen.getByText("Press the same button once more.")).toBeInTheDocument();
-    // Still armed: the same press, with the same key, is the next step.
+    // Still armed: the same press, with the same key, is the next step, and it may wait once again.
     expect(screen.getByLabelText(/API key that is allowed to delete/i)).toHaveValue("k");
+    fireEvent.click(screen.getByRole("button", { name: /remove 1 account/i }));
+    expect(state.swept).toHaveLength(3);
+    expect(screen.getByText(/trying again by itself in 2 s/, { selector: '[role="status"]' })).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("Stop waiting cancels the retry and shows the refusal it held, with its step; the wait never passes 60 s", () => {
+    vi.useFakeTimers();
+    state.sweepError = cooling(3600);
+    renderDormant();
+    pressRemove();
+    expect(screen.getByText(/trying again by itself in 60 s/, { selector: '[role="status"]' })).toBeInTheDocument();
+    // Off while it waits, the line its reason (§13).
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toHaveAccessibleDescription(/trying again by itself in 60 s/);
+    act(() => void vi.advanceTimersByTime(20_000));
+    fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+    expect(screen.getByText("Not removed")).toBeInTheDocument();
+    expect(screen.getByText("That system was read moments ago, so nothing was changed.")).toBeInTheDocument();
+    expect(screen.getAllByText("You can try again in 40 s.").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toBeDisabled();
+    act(() => void vi.advanceTimersByTime(120_000));
+    expect(state.swept).toHaveLength(1);
+    expect(screen.queryByText(/trying again by itself/)).toBeNull();
+    expect(screen.getByText("Press the same button once more.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /remove 1 account/i })).toBeEnabled();
+    vi.useRealTimers();
+  });
+
+  it("leaving the page cancels the wait", () => {
+    vi.useFakeTimers();
+    state.sweepError = cooling(2);
+    const page = renderDormant();
+    pressRemove();
+    page.unmount();
+    act(() => void vi.advanceTimersByTime(60_000));
+    expect(state.swept).toHaveLength(1);
     vi.useRealTimers();
   });
 

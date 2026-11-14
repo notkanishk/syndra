@@ -362,6 +362,8 @@ func standingOf(s *Subject) *Standing {
 		return &Standing{WaitingOn: "none", Note: "The account is switched off."}
 	case !s.PasswordSet:
 		return &Standing{WaitingOn: "member", Note: smbWaiting(s), Next: "Set a storage password on your storage page."}
+	case s.needsNewPassword():
+		return &Standing{WaitingOn: "member", Note: smbWaiting(s), Next: "Set a new storage password on your storage page."}
 	}
 	return &Standing{Usable: true, WaitingOn: "none"}
 }
@@ -398,12 +400,15 @@ type SubjectView struct {
 
 // subjectViews serves subjects; limits holds each account's effective home
 // folder limit where it was read (homeLimits), and an account absent from it
-// reports no home_quota, which is "not known", never "no limit".
-func subjectViews(subjects []Subject, limits map[int64]string) []SubjectView {
+// reports no home_quota, which is "not known", never "no limit". wanted is
+// the bindings' SMB wish by uid (Store.WantedSMB), so a standing says when an
+// account waits on a new password, as storage.status does.
+func subjectViews(subjects []Subject, limits map[int64]string, wanted map[int64]bool) []SubjectView {
 	out := make([]SubjectView, 0, len(subjects))
 	for i := range subjects {
-		s := &subjects[i]
-		state := entitlementState(s)
+		s := subjects[i]
+		s.wantsSMB = wanted[s.UID]
+		state := entitlementState(&s)
 		if limit, ok := limits[s.UID]; ok {
 			state[FieldHomeQuota] = []string{limit}
 		}
@@ -411,7 +416,7 @@ func subjectViews(subjects []Subject, limits map[int64]string) []SubjectView {
 			ID: s.ID, Username: s.Username, AccountID: accountID(s.UID),
 			Groups: append([]string{}, s.Groups...), Home: s.Home,
 			Enabled: s.Enabled, SMBEnabled: s.SMBEnabled, Self: s.Self,
-			State: state, Standing: standingOf(s),
+			State: state, Standing: standingOf(&s),
 		})
 	}
 	return out
@@ -420,6 +425,16 @@ func subjectViews(subjects []Subject, limits map[int64]string) []SubjectView {
 // wantsFresh is the request asking for a read of the NAS now (`?fresh=true`,
 // feature freshness). Only the literal true asks.
 func wantsFresh(r *http.Request) bool { return r.URL.Query().Get("fresh") == "true" }
+
+// wantedSMB is the bindings' SMB wish, or none when the store cannot be
+// read: the standing then says what the NAS shows, as it always could.
+func (s *server) wantedSMB() map[int64]bool {
+	wanted, err := s.store.WantedSMB()
+	if err != nil {
+		logStoreFailure("binding", "subjects", err)
+	}
+	return wanted
+}
 
 // subjectsRead is one read of every account, as served.
 type subjectsRead struct {
@@ -442,7 +457,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 			// which of the two matters.
 			log.Printf("[STORE] could not persist snapshot: %v", putErr)
 		}
-		return subjectsRead{subjectViews(snap.Subjects, s.homeLimits(snap.Subjects)), snap.Truncated}, snap.TakenAt, nil
+		return subjectsRead{subjectViews(snap.Subjects, s.homeLimits(snap.Subjects), s.wantedSMB()), snap.Truncated}, snap.TakenAt, nil
 	})
 	if writeCooldown(w, err) {
 		return
@@ -471,7 +486,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 	}
 	// The mirror holds no limits: they are read live or not reported.
 	writeJSON(w, http.StatusOK, SubjectsResponse{
-		Subjects: subjectViews(cached.Subjects, nil), Truncated: cached.Truncated,
+		Subjects: subjectViews(cached.Subjects, nil, s.wantedSMB()), Truncated: cached.Truncated,
 		Observed: Observed{TakenAt: rfc3339(cached.TakenAt), Stale: unreachableSince(cached.TakenAt)},
 	})
 }

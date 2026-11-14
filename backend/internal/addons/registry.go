@@ -483,7 +483,8 @@ func (e *ErrManifestRefused) Error() string {
 // come back meaning something else, and is recorded retired: the target no
 // longer accepts it, so nothing reads or sends it until a manifest declares it
 // again. The account field can never be retired: validate requires exactly
-// one account and this refuses any but the stored one.
+// one account and this refuses any but the stored one. The manifest's Shape is
+// saved with the map, in the same write (AcceptedShape reads it).
 func acceptRoles(ctx context.Context, target string, m Manifest) error {
 	stored, _, err := dbTargetFieldRoles(ctx, target)
 	if err != nil {
@@ -512,10 +513,47 @@ func acceptRoles(ctx context.Context, target string, m Manifest) error {
 		}
 	}
 	slices.Sort(retired)
-	if maps.Equal(merged, stored.Roles) && slices.Equal(retired, stored.Retired) {
+	shape, err := json.Marshal(m.Shape())
+	if err != nil {
+		return err
+	}
+	if maps.Equal(merged, stored.Roles) && slices.Equal(retired, stored.Retired) && sameShape(stored.Shape, shape) {
 		return nil
 	}
-	return dbSaveTargetFieldRoles(ctx, target, db.FieldRoleMap{Roles: merged, Retired: retired})
+	return dbSaveTargetFieldRoles(ctx, target, db.FieldRoleMap{Roles: merged, Retired: retired, Shape: shape})
+}
+
+// sameShape reports a stored shape that says what shape does. Compared
+// decoded and re-encoded: jsonb hands its keys back in its own order.
+func sameShape(stored, shape []byte) bool {
+	var was Shape
+	if stored == nil || json.Unmarshal(stored, &was) != nil {
+		return false
+	}
+	again, err := json.Marshal(was)
+	return err == nil && bytes.Equal(again, shape)
+}
+
+// AcceptedShape is a target's kind, product and entitlement schema as its
+// last accepted manifest declared them, read from the store
+// (targets.accepted_shape), never from the manifest held in memory: it holds
+// while the add-on is down, its manifest is refused, and across a backend
+// restart (design §3), as production's constants did. ErrNoManifest before
+// any acceptance saved one: a system never accepted is operators-only (owner,
+// 11 Nov 2026).
+func AcceptedShape(ctx context.Context, target string) (Shape, error) {
+	stored, _, err := dbTargetFieldRoles(ctx, target)
+	if err != nil {
+		return Shape{}, err
+	}
+	var shape Shape
+	if stored.Shape == nil {
+		return Shape{}, fmt.Errorf("%w: %s has no accepted contract-2 manifest yet", ErrNoManifest, target)
+	}
+	if err := json.Unmarshal(stored.Shape, &shape); err != nil {
+		return Shape{}, fmt.Errorf("the accepted shape of %s is unreadable: %w", target, err)
+	}
+	return shape, nil
 }
 
 // FieldRoles is a target's role map of the fields its accepted manifest
@@ -661,16 +699,6 @@ func EntitlementSchema(target string) ([]EntitlementField, error) {
 		return nil, err
 	}
 	return m.EntitlementSchema, nil
-}
-
-// AcceptedManifest is a target's accepted manifest, for the pages that show
-// its kind and fields; ErrNotRegistered or ErrNoManifest otherwise.
-func AcceptedManifest(target string) (Manifest, error) {
-	a, err := Get(target)
-	if err != nil {
-		return Manifest{}, err
-	}
-	return a.Manifest()
 }
 
 // ConnectionFor is how a member reaches a target, or nil.

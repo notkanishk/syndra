@@ -3,6 +3,7 @@
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
 import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
+import { checkAgainNext, cooldownLine, retryingLine } from "@/components/results/copy";
 import { useState } from "react";
 
 import { ADOPT_STAYS, SERVICE_STOPPED, STORAGE_OPERATION_LABEL, UNAUDITED_LABEL, UnauditedShares, serviceName } from "@/components/kinds/storage/readings";
@@ -31,7 +32,7 @@ import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
-import { blocksIrreversibleAction, ReadAgainError, ReadFreshness } from "@/components/ui/ReadFreshness";
+import { blocksIrreversibleAction, ReadAgainError, ReadFreshness, RetryWait } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
@@ -40,7 +41,7 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
-import { stamped } from "@/lib/queries/fresh";
+import { stamped, useCountdown, useRetryOnce } from "@/lib/queries/fresh";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
@@ -536,6 +537,24 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
   const [unfinished, setUnfinished] = useState<Record<string, string>>({});
   const result = run.data;
   const name = nameOf(target);
+  // A pass skipped inside the add-on's cooldown waits out its retry_after and runs once more by
+  // itself (RFC 9110 §10.2.3), so one press ends on a live read; a second skip is shown as it is.
+  const retry = useRetryOnce();
+  const waiting = retry.waiting;
+  // When the last skipped pass arrived: its count runs from there once nothing goes again by itself
+  // (a second skip, or Stop waiting), and the card says it, never the pass's raw reason.
+  const [skippedAt, setSkippedAt] = useState(0);
+  const skipped = !waiting && result?.halted && result.retry_after ? result.retry_after : undefined;
+  const left = useCountdown(skipped, skippedAt);
+  function check() {
+    run.mutate(undefined, {
+      onSuccess: (pass) => {
+        if (!(pass.halted && pass.retry_after)) return;
+        setSkippedAt(Date.now());
+        retry.refused(pass.retry_after, check);
+      },
+    });
+  }
 
   return (
     <Card>
@@ -545,7 +564,13 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
       />
       <CardRow>
         <div className="flex-1 text-[14.5px] text-muted">
-          {!result ? (
+          <RetryWait name={name} retry={retry} onStop={retry.stop} />
+          {waiting ? null : skipped ? (
+            <span className="text-warn-text">
+              {left > 0 ? `${cooldownLine(name, left)}. ` : ""}
+              {checkAgainNext(left)}
+            </span>
+          ) : !result ? (
             "Syndra checks by itself every six hours."
           ) : result.halted ? (
             <span className="text-warn-text">
@@ -563,9 +588,17 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
           variant="outline"
           size="sm"
           isPending={run.isPending}
-          disabled={lastKnown}
-          reason={lastKnown ? `Check now waits too: it reads ${name} first.` : undefined}
-          onClick={() => run.mutate()}
+          disabled={lastKnown || waiting || left > 0}
+          reason={
+            waiting
+              ? retryingLine(name, retry.left)
+              : left > 0
+                ? cooldownLine(name, left)
+                : lastKnown
+                ? `Check now waits too: it reads ${name} first.`
+                : undefined
+          }
+          onClick={() => retry.press(check)}
         >
           Check now
         </Button>
@@ -579,7 +612,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
         </CardRow>
       )}
 
-      {result && !result.current && (
+      {result && !result.current && !waiting && !skipped && (
         // A pass that concluded nothing must not read as a clean one.
         <CardRow>
           <span className="text-[13.5px] text-warn-text">

@@ -96,8 +96,10 @@ type AddonReconcileResult struct {
 	// ReadStale is why the read is not current, as the add-on said it
 	// (cached, cooldown, unreachable, ...): the inventory's "Read again" line.
 	ReadStale *addons.Stale `json:"read_stale,omitempty"`
-	// RetryAfter is a fresh read the add-on refused inside its cooldown with
-	// nothing to serve: halted, readable again in this many seconds.
+	// RetryAfter is a fresh read the add-on refused inside its cooldown, with
+	// nothing to serve or with its copy: halted, readable again in this many
+	// seconds (RFC 9110 §10.2.3). "Check now" waits them out and runs once
+	// more (the UI's one retry, 7l).
 	RetryAfter int `json:"retry_after,omitempty"`
 	// LogVerdict is what the add-on's mutation-log head said when compared
 	// against the anchor. Carried on the reconcile result because this is the
@@ -228,6 +230,7 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 		read = addonSubjects(ctx, target, true)
 	}
 	if wait, cooled := read.CooledDown(); cooled {
+		res.RetryAfter = max(1, wait)
 		return halt(ctx, res, db.UnreconciledStaleRead,
 			fmt.Sprintf("skipped: the target was read moments ago and can be read again in %d s", wait))
 	}

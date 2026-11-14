@@ -322,13 +322,20 @@ func TestAccessGivenBackNeedsANewPassword(t *testing.T) {
 		t.Fatalf("got needs_new_password=%v usable=%v needs_password=%v",
 			res.Result.(*StorageStatus).NeedsNewPassword, res.Result.(*StorageStatus).Usable, res.Result.(*StorageStatus).NeedsPassword)
 	}
+	// Its standing is the same fact (7l): not usable, waiting on the member
+	// for a new password, never "usable, waiting on none" beside usable:false.
+	if st := res.Result.(*StorageStatus).Standing; st == nil || st.Usable || st.WaitingOn != "member" ||
+		!strings.Contains(st.Note, "set their password again") || !strings.Contains(st.Next, "new storage password") {
+		t.Fatalf("the standing contradicts the status: %+v", st)
+	}
 
 	off := false
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &off}); err != nil {
 		t.Fatal(err)
 	}
-	if res, _, _ := s.storageStatus(OperationRequest{Subject: "sub-1"}); res.Result.(*StorageStatus).NeedsNewPassword {
-		t.Fatal("SMB that isn't wanted was reported as waiting for a password")
+	res, _, _ = s.storageStatus(OperationRequest{Subject: "sub-1"})
+	if st := res.Result.(*StorageStatus); st.NeedsNewPassword || !st.Usable || st.Standing == nil || !st.Standing.Usable || st.Standing.WaitingOn != "none" {
+		t.Fatalf("SMB that isn't wanted was reported as waiting for a password: %+v", st)
 	}
 }
 

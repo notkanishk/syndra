@@ -139,8 +139,8 @@ func TestCheckNowNeverWaitsOutACooldown(t *testing.T) {
 	if len(h.waited) != 0 || !slices.Equal(h.askedFresh, []bool{true}) {
 		t.Errorf("check now waited %v and asked fresh %v, want no wait and one fresh read", h.waited, h.askedFresh)
 	}
-	if !res.Halted || res.Reason != db.UnreconciledStaleRead {
-		t.Errorf("check now inside the cooldown: halted %t reason %q, want a skipped pass", res.Halted, res.Reason)
+	if !res.Halted || res.Reason != db.UnreconciledStaleRead || res.RetryAfter != 12 {
+		t.Errorf("check now inside the cooldown: halted %t reason %q retry_after %d, want a skipped pass saying when to ask again", res.Halted, res.Reason, res.RetryAfter)
 	}
 }
 

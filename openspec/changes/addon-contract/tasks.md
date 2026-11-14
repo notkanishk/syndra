@@ -2470,6 +2470,96 @@ record of each view.
     counts as naming someone when any point read for it does.
   - Not built: paging of a long people table (every person is listed).
 
+## Production parity (owner, 14 Nov 2026)
+
+Verbatim: "ensure there is no function in the current prod truenas addon that
+our new one cant or fails to do." Two audits (parity A, the add-on; parity B,
+end to end) found no missing function; three regressions with one root cause
+(R1-R3), two frictions, one self-contradiction and one test gap, all fixed in
+7l.
+
+- [x] 7l Production-parity fixes (design §3, §4 and §6.1 annotated).
+  *Done (14 Nov 2026, slice 7l):*
+  - R1-R3, saved facts instead of the manifest in memory: migration 000095
+    adds `targets.accepted_shape JSONB` (nullable, expand-only, clean down);
+    `addons.acceptRoles` saves the manifest's `Shape` (kind, product,
+    entitlement schema with each field's role and unit) beside the role map
+    in the same write, and skips the write when nothing changed (compared
+    decoded, as jsonb reorders keys); `addons.AcceptedShape` reads it, and
+    `ErrNoManifest` before any acceptance. `addons.AcceptedManifest` is gone:
+    `handlers.acceptedShape(ctx, target)` reads the saved shape for
+    `memberMeets` (`/me/targets`, `/me/systems`), `describeTarget`,
+    `describeTargetFor`, `systemName`'s product, and the home limit on the
+    person page (from the view's schema) and `/targets/{t}/homes`. A
+    restart with the add-on down keeps the member card and rail row, the
+    person page (account, entitlement, roles, hold, roles' limit, own
+    limit) and the limits; a system never accepted stays operators-only
+    (`TestTheAcceptedShapeOutlivesTheManifestInMemory`,
+    `TestARestartWithTheAddonDownKeepsWhatSyndraHolds`,
+    `TestMigration95_AddsAcceptedShape`, `TestLiveMigration95RunsDownAndUp`,
+    `TestTargetFieldRolesArePersisted`). The handlers' `TestMain` defaults
+    the seam to "never accepted".
+  - A press inside the cooldown honours `Retry-After` (RFC 9110 §10.2.3;
+    review round, replacing a first cut that read a young cooldown copy as
+    current): the backend keeps a cooldown a cooldown
+    (`TestACooldownIsNeverReportedCurrent`); a skipped "Check now" pass
+    carries `retry_after` (`AddonReconcileResult.RetryAfter`,
+    `TestCheckNowNeverWaitsOutACooldown`); the UI's `useRetryOnce`
+    (`lib/queries/fresh.ts`) waits it out with the countdown, at most
+    `RETRY_CEILING_S` (60 s, the sweep's ceiling), and sends the same press
+    once more, once only, cancellable with **Stop waiting**, on "Check now"
+    (`TargetOverview` `ReconcileControl`) and the dormant removal (a fresh
+    one-shot box for the key). Owner Q1 met literally: the removal runs on
+    a live read (`ReconcileRetry.test.tsx`, `DormantAccounts.test.tsx`;
+    copy guide §13 row "trying again by itself in {n} s"). Both controls are
+    off while it waits, the line their reason; leaving the page cancels it.
+    When nothing goes again (a second refusal, or Stop waiting), Check now
+    says `cooldownLine` counting from the skipped pass with
+    `checkAgainNext` ("Press Check now again when the count ends."), never
+    the pass's raw reason, and Remove shows the refusal it held ("Not
+    removed", its countdown, "Press the same button once more."); each
+    control stays off until its count ends. The retrying line is amber in
+    the card (`RetryWait`, `ReadFreshness.tsx`), its start announced once
+    (`role="status"`), focus moved to **Stop waiting**, and every
+    `Button` reason is linked with `aria-describedby`.
+  - One standing everywhere (parity A W5): `Subject.needsNewPassword`
+    (password set, SMB off, SMB wanted) is the one fact and `standingOf`
+    answers it "waiting on the member, set a new password". The wish
+    (`Subject.wantsSMB`) comes from the bindings on `/subjects` and in the
+    legacy replay (`Store.WantedSMB`, so the operator's target page agrees),
+    from the binding in `storage.status`, and from the request in plan and
+    apply (`desiredState.standingOf`, so a no-change outcome's standing
+    matches its `smbWaiting` detail); `storage.status` takes `usable` from
+    its standing (`TestAccessGivenBackNeedsANewPassword` extended,
+    `TestEveryStandingSeesTheWaitForANewPassword`,
+    `TestALegacyReplaysStandingSeesTheWaitForANewPassword`).
+  - Production's own `state.db`: `addons/truenas/testdata/state-contract-1.db`
+    written by 981efba3's store code (`testdata/state-contract-1.gen.go`,
+    `//go:build ignore`, with how to write it again): three bindings, the
+    mirror, five contract-1 call entries (apply, adopt, password.set,
+    password.rotate, the home folder setting), the setting and the id
+    high-water mark. `TestAStoreWrittenByContractOneOpensWhole` opens it with
+    this binary, reads every binding, entry and setting, claims the next id
+    above production's, and replays the calls in contract 2's words with
+    nothing written to the NAS.
+  - Decided while building, one line each:
+    - The shape is one JSONB column beside `field_roles`, not more keys in
+      it: `field_roles` stays the map every lifecycle reader decodes, and a
+      shape is opaque to the db package.
+    - The product is saved too, so a system's name does not fall back to
+      its id title-cased in the same window.
+    - Write paths (mapping and allowance validation, `mappedTo`, merge
+      findings) still read the held manifest: a value is checked against
+      what the add-on says now.
+    - The retry is the UI's, not the server's: the request never holds a
+      person's press open for up to a minute, and the scheduled sweep keeps
+      its own one wait.
+    - The removal's retry keeps the key in the wait's closure for at most
+      60 s, no longer than it already sits in the field.
+    - A target whose contract-2 manifest was accepted before 000095 has no
+      saved shape until its next acceptance (the 15-minute refresh), and is
+      operators-only until then, as before.
+
 ## Out of scope, stated so nobody builds it here
 
 - The UniFi Access, Ruby and inventory add-ons themselves (each its own

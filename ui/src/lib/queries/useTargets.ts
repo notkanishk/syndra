@@ -551,6 +551,8 @@ export interface TargetReconcileResult {
    */
   halted?: boolean;
   reason?: string;
+  /** A pass skipped inside the add-on's cooldown: seconds until it may read again ("Check now" waits them out once). */
+  retry_after?: number;
   unmanaged?: UnmanagedAccount[];
   /** Bindings whose account is no longer on the target. Never converged — the
    * plan for one says "create", and acting on it would recreate an account

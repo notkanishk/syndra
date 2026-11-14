@@ -94,3 +94,18 @@ func TestMigration90_AddsRetiredFields(t *testing.T) {
 		t.Error("000090 down must drop retired_fields")
 	}
 }
+
+// Guard: 000095 adds accepted_shape beside field_roles, nullable and additive
+// (an older backend ignores it), and the down migration drops exactly that.
+func TestMigration95_AddsAcceptedShape(t *testing.T) {
+	up, down := readMigrationPair(t, "000095_target_accepted_shape")
+	if !strings.Contains(up, "ALTER TABLE targets ADD COLUMN IF NOT EXISTS accepted_shape JSONB;") {
+		t.Error("000095 up must add a nullable targets.accepted_shape JSONB")
+	}
+	if strings.Contains(up, "DROP") || strings.Contains(up, "UPDATE") || strings.Contains(up, "NOT NULL") {
+		t.Error("000095 up must be additive")
+	}
+	if strings.TrimSpace(down) != "ALTER TABLE targets DROP COLUMN IF EXISTS accepted_shape;" {
+		t.Errorf("000095 down must drop accepted_shape and nothing else: %q", down)
+	}
+}

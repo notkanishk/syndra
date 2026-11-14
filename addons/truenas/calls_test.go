@@ -221,6 +221,129 @@ func TestAContractOneEntryReplaysInContractTwoWords(t *testing.T) {
 	}
 }
 
+// A contract-1 apply entry replayed takes its standing from the mirror and
+// the binding's SMB wish together (7l): an account whose access was given
+// back waits on the member's new password, as every other standing says; the
+// same account with SMB not wanted is ready.
+func TestALegacyReplaysStandingSeesTheWaitForANewPassword(t *testing.T) {
+	for _, tc := range []struct {
+		wants   bool
+		usable  bool
+		waiting string
+	}{{true, false, "member"}, {false, true, "none"}} {
+		s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"groups":[42],"password_disabled":false}]`)
+		wants := tc.wants
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &wants}); err != nil {
+			t.Fatal(err)
+		}
+		snap, err := s.readSubjects()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.store.PutSnapshot(snap); err != nil {
+			t.Fatal(err)
+		}
+		entry := fmt.Sprintf(`{"stored_at":%q,"kind":%q,"result":{"subject":"sub-1","effect":"no_change","detail":"Done.","username":"charlotte","uid":3001}}`,
+			time.Now().UTC().Format(time.RFC3339Nano), kindApply)
+		if err := s.store.db.Update(func(tx *bolt.Tx) error {
+			return tx.Bucket(bucketIdempotency).Put([]byte("v1-apply"), []byte(entry))
+		}); err != nil {
+			t.Fatal(err)
+		}
+		out := decodeOutcome(t, postApply(t, s, `{"call_id":"v1-apply","subject":"sub-1","fingerprint":"anything","desired":{"enabled":true}}`))
+		if st := out.Standing; st == nil || st.Usable != tc.usable || st.WaitingOn != tc.waiting {
+			t.Errorf("SMB wanted %t: replayed standing %+v, want usable %t waiting on %s", tc.wants, st, tc.usable, tc.waiting)
+		}
+	}
+}
+
+// The forward half on a file production's binary wrote: testdata/
+// state-contract-1.db, written by 981efba3's own store code
+// (testdata/state-contract-1.gen.go), as testdata/mutations-before-intents.log
+// holds the log (parity A §7, 7l). This binary opens it whole: every binding,
+// call entry and setting, the mirror and the id high-water mark, and replays
+// the recorded calls in contract 2's words without writing to the NAS.
+func TestAStoreWrittenByContractOneOpensWhole(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "state-contract-1.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, m := applyServer(t, `[{"username":"rey_mysterio","id":11,"uid":3051,"locked":false,"smb":true,"groups":[42],"password_disabled":false}]`)
+	path := filepath.Join(t.TempDir(), "state.db")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.store.Close()
+	if s.store, err = OpenStore(path); err != nil {
+		t.Fatalf("production's state.db does not open: %v", err)
+	}
+	t.Cleanup(func() { s.store.Close() })
+	written := time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC)
+	s.store.now = func() time.Time { return written.Add(time.Hour) } // inside the 30-day call window
+
+	yes, no := true, false
+	for _, want := range []Binding{
+		{SubjectID: "sub-rey", Username: "rey_mysterio", UID: 3051, BoundBy: "apply", WantsSMB: &yes},
+		{SubjectID: "sub-becky", Username: "becky_lynch", UID: 3052, BoundBy: "adopt:op-undertaker"},
+		{SubjectID: "sub-cena", Username: "john_cena", UID: 3053, BoundBy: "apply", WantsSMB: &no},
+	} {
+		b, found, err := s.store.GetBinding(want.SubjectID)
+		if err != nil || !found || b.Username != want.Username || b.UID != want.UID || b.BoundBy != want.BoundBy ||
+			!b.BoundAt.Equal(written) || (b.WantsSMB == nil) != (want.WantsSMB == nil) || (b.WantsSMB != nil && *b.WantsSMB != *want.WantsSMB) {
+			t.Errorf("binding %s: %+v found %t %v, want %+v", want.SubjectID, b, found, err, want)
+		}
+		if bound, err := s.store.UIDBound(want.UID); err != nil || !bound {
+			t.Errorf("uid %d is not bound: %v", want.UID, err)
+		}
+	}
+	if names, err := s.store.BoundUsernames(); err != nil || len(names) != 3 || names["becky_lynch"] != "sub-becky" {
+		t.Errorf("bound names %v %v", names, err)
+	}
+	snap, found, err := s.store.GetSnapshot()
+	if err != nil || !found || len(snap.Subjects) != 4 || !snap.TakenAt.Equal(written) || !snap.Subjects[0].PasswordSet ||
+		snap.Subjects[1].PasswordSet || !snap.Subjects[3].Self || snap.Subjects[0].ID.String() != "11" {
+		t.Errorf("the mirror: %+v found %t %v", snap, found, err)
+	}
+	if v, found, err := s.store.GetSetting(settingHomeRoot); err != nil || !found || v.Value != "/mnt/tank/homes" ||
+		v.SetBy != "op-undertaker" || !v.SetAt.Equal(written) {
+		t.Errorf("the home folder setting: %+v found %t %v", v, found, err)
+	}
+	if id, err := s.store.ClaimID(3000, 60000, 0); err != nil || id != 3055 {
+		t.Errorf("the next id is %d (%v), want 3055, above production's high-water 3054", id, err)
+	}
+	for id, kind := range map[string]string{
+		"c1-apply-rey": kindApply, "c1-adopt-becky": kindOperation + "account.adopt",
+		"c1-password-rey": kindOperation + "password.set", "c1-rotate-cena": kindOperation + "password.rotate",
+		"c1-setting-home": kindSetting + settingHomeRoot,
+	} {
+		// No digest was recorded, so any identity matches (design §5 rule 5).
+		if e, found, err := s.store.Recall(id, kind, "a-contract-2-digest"); err != nil || !found || len(e.Result) == 0 || !e.StoredAt.Equal(written) {
+			t.Errorf("call %s: %+v found %t %v", id, e, found, err)
+		}
+	}
+
+	// Replayed in contract 2's words, nothing written to the NAS.
+	rr := postApply(t, s, `{"call_id":"c1-apply-rey","subject":"sub-rey","fingerprint":"anything","desired":{"enabled":true}}`)
+	if out := decodeOutcome(t, rr); rr.Code != http.StatusOK || out.AccountID != "3051" || out.Standing == nil || out.Fingerprint != "fp-rey" {
+		t.Errorf("the apply replay: %d %s", rr.Code, rr.Body)
+	}
+	assertSchema(t, "apply_ok.json", rr.Body.Bytes(), "production's apply replayed")
+	if op := postOperation(t, s, "account.adopt", `{"call_id":"c1-adopt-becky","operation":"account.adopt","subject":"sub-becky","params":{"username":"becky_lynch"}}`); op.Code != http.StatusOK ||
+		!strings.Contains(op.Body.String(), `"account_id":"3052"`) || strings.Contains(op.Body.String(), "account_uid") {
+		t.Errorf("the adopt replay: %d %s", op.Code, op.Body)
+	}
+	if op := postOperation(t, s, "password.set", `{"call_id":"c1-password-rey","operation":"password.set","subject":"sub-rey","params":{"password":"`+theSecret+`"}}`); op.Code != http.StatusOK ||
+		!strings.Contains(op.Body.String(), `"outcome":"succeeded"`) {
+		t.Errorf("the password replay: %d %s", op.Code, op.Body)
+	}
+	if put := putHomeRootKeyed(t, s, "/mnt/tank/homes", "c1-setting-home"); put.Code != http.StatusOK || !strings.Contains(put.Body.String(), `"set_by":"op-undertaker"`) {
+		t.Errorf("the setting replay: %d %s", put.Code, put.Body)
+	}
+	if len(m.updates) != 0 {
+		t.Errorf("a replay wrote to the NAS: %v", m.updates)
+	}
+}
+
 // Lifecycle carries a call_id like every write, and a re-sent change is the
 // recorded reply: a state set since is not undone by a stale re-send.
 func TestALifecycleReSendIsTheRecordedReply(t *testing.T) {

@@ -115,3 +115,61 @@ func TestADroppedFieldIsRetiredAndTheAccountNeverIs(t *testing.T) {
 		t.Fatalf("the last good map must stand: %v", roles)
 	}
 }
+
+// What a target is (kind, product, each field's role and unit) is saved with
+// the role map at acceptance and read from there (7l, R1-R3): after a restart
+// with the add-on down, or its manifest refused, nothing is held in memory and
+// the member page, the person page and the home limits still know the target
+// is storage and which field is its byte limit, as production's constants
+// did. A target never accepted has none (operators only, owner 11 Nov).
+func TestTheAcceptedShapeOutlivesTheManifestInMemory(t *testing.T) {
+	registerTrueNAS(t)
+	forgetRoles(t)
+	if _, err := AcceptedShape(context.Background(), "truenas"); !errors.Is(err, ErrNoManifest) {
+		t.Fatalf("never accepted must be no shape: %v", err)
+	}
+	m := goodManifest()
+	m.EntitlementSchema = append(m.EntitlementSchema, EntitlementField{Name: "home_quota", Role: RoleLimit,
+		Label: "Home folder limit", Unit: "bytes", Combine: "max", Unlimited: "0", PerPerson: true})
+	if err := refreshWith(t, m); err != nil {
+		t.Fatal(err)
+	}
+	memRoles.Lock()
+	saves := memRoles.saves
+	memRoles.Unlock()
+	// The same manifest again writes nothing: jsonb's key order is not a change.
+	if err := refreshWith(t, m); err != nil {
+		t.Fatal(err)
+	}
+	memRoles.Lock()
+	if memRoles.saves != saves {
+		t.Errorf("an unchanged manifest re-saved the shape (%d saves, want %d)", memRoles.saves, saves)
+	}
+	memRoles.Unlock()
+
+	// A restart with the add-on down: an empty registry, the column kept.
+	resetRegistry(t)
+	if _, err := Get("truenas"); !errors.Is(err, ErrNotRegistered) {
+		t.Fatalf("the registry must be empty: %v", err)
+	}
+	shape, err := AcceptedShape(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shape.Kind != "storage" || shape.Product != "TrueNAS SCALE" || !slices.EqualFunc(shape.EntitlementSchema, m.EntitlementSchema,
+		func(a, b EntitlementField) bool { return a == b }) {
+		t.Fatalf("the saved shape is not the accepted one: %+v", shape)
+	}
+
+	// A refused manifest leaves the last accepted shape, as it leaves the roles.
+	registerTrueNAS(t)
+	refused := withField(m, "enabled", RoleFlag)
+	refused.Kind = "machine"
+	var errRefused *ErrManifestRefused
+	if err := refreshWith(t, refused); !errors.As(err, &errRefused) {
+		t.Fatalf("want a refusal: %v", err)
+	}
+	if shape, _ := AcceptedShape(context.Background(), "truenas"); shape.Kind != "storage" {
+		t.Fatalf("a refused manifest replaced the saved shape: %+v", shape)
+	}
+}

@@ -547,13 +547,13 @@ func TestPlacesNameTheRolesThatOpenThem(t *testing.T) {
 // (addon-contract slice 2, for task 3.7). Nothing when no manifest has been
 // accepted, or when the add-on does not answer.
 func TestTheMembersViewCarriesKindSchemaAndTheirOwnStanding(t *testing.T) {
-	manifest := addonsAcceptedManifest
-	t.Cleanup(func() { addonsAcceptedManifest = manifest })
+	manifest := addonsAcceptedShape
+	t.Cleanup(func() { addonsAcceptedShape = manifest })
 	answer := addons.StorageStatus{Outcome: addons.OutcomeSucceeded,
 		Standing: &addons.Standing{WaitingOn: "member", Note: "Waiting for a password."}}
 	answerStorage(t, func(string, string) addons.StorageStatus { return answer })
-	addonsAcceptedManifest = func(string) (addons.Manifest, error) {
-		return addons.Manifest{Kind: "storage", EntitlementSchema: truenasSchema}, nil
+	addonsAcceptedShape = func(context.Context, string) (addons.Shape, error) {
+		return addons.Shape{Kind: "storage", EntitlementSchema: truenasSchema}, nil
 	}
 	stubMyStorage(t, &storageHarness{entitled: true, bound: true})
 
@@ -568,7 +568,7 @@ func TestTheMembersViewCarriesKindSchemaAndTheirOwnStanding(t *testing.T) {
 		t.Fatalf("the member's own standing from storage.status: %+v", view.Standing)
 	}
 
-	addonsAcceptedManifest = func(string) (addons.Manifest, error) { return addons.Manifest{}, addons.ErrNoManifest }
+	addonsAcceptedShape = func(context.Context, string) (addons.Shape, error) { return addons.Shape{}, addons.ErrNoManifest }
 	answer = addons.StorageStatus{Outcome: addons.OutcomeUnreached}
 	view, err = describeMyTarget(httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil), "truenas", "u1")
 	if err != nil {

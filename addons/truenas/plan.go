@@ -321,7 +321,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 			Detail:      detail,
 			Consequence: describeHolding(*current),
 			Username:    current.Username, Fingerprint: fingerprint,
-			AccountID: accountID(current.UID), Standing: standingOf(current),
+			AccountID: accountID(current.UID), Standing: desired.standingOf(current),
 		}
 		if adopts {
 			out = adoptionWords(out, true)
@@ -340,7 +340,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 		Detail:      detail,
 		Consequence: describeHolding(after),
 		Username:    current.Username, Fingerprint: fingerprint,
-		AccountID: accountID(current.UID), Standing: standingOf(current),
+		AccountID: accountID(current.UID), Standing: desired.standingOf(current),
 	}
 	if adopts {
 		out = adoptionWords(out, true)

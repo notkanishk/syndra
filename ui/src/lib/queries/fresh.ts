@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { QueryClientContext, type QueryKey } from "@tanstack/react-query";
 
 import { ApiError, FRESH_READ_COOLDOWN, request } from "@/lib/api-client";
@@ -108,4 +108,83 @@ export function useCountdown(seconds: number | undefined, since?: number): numbe
     return () => clearInterval(id);
   }, [seconds, from]);
   return left;
+}
+
+/** The longest a press waits out a cooldown: the drift sweep's own ceiling (sweepWaitCeiling, 2 × constants.cooldown_default). */
+export const RETRY_CEILING_S = 60;
+
+/**
+ * A person's press the add-on's cooldown refused, waited out and sent once more by itself (RFC 9110
+ * §10.2.3, Retry-After): "Check now" and the dormant removal, so one press completes on a live read
+ * (owner Q1). `press` is the person's own press; `refused` schedules the one retry after `retry_after`
+ * (at most RETRY_CEILING_S) and returns false when this press already had it, so the second refusal
+ * is shown as it is. `cancel` stops the wait; leaving the page does too. `left` counts it down.
+ */
+export function useRetryOnce() {
+  const [wait, setWait] = useState<{ seconds: number; since: number; takeFocus: boolean } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const retried = useRef(false);
+  const left = useCountdown(wait?.seconds, wait?.since);
+  // Focus follows the press only while the person has not moved on: the button pressed, or nothing
+  // (a button that goes off while pending drops focus to the page). After Stop waiting it goes back
+  // to that button as soon as it can take it, unless they have moved on by then.
+  const origin = useRef<HTMLElement | null>(null);
+  const [returnTo, setReturnTo] = useState<HTMLElement | null>(null);
+  const unmoved = () => {
+    const active = typeof document === "undefined" ? null : document.activeElement;
+    return !active || active === document.body || active === origin.current;
+  };
+  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => {
+    if (!returnTo) return;
+    // The button may still be off for its own count: looked at again each half second until it
+    // can take focus, or the person has moved on.
+    const settle = () => {
+      const active = document.activeElement;
+      if (active && active !== document.body && active !== returnTo) return true;
+      if ((returnTo as HTMLButtonElement).disabled) return false;
+      returnTo.focus();
+      return true;
+    };
+    if (settle()) return setReturnTo(null);
+    const id = setInterval(() => settle() && (clearInterval(id), setReturnTo(null)), 500);
+    return () => clearInterval(id);
+  }, [returnTo]);
+  function cancel() {
+    clearTimeout(timer.current);
+    timer.current = undefined;
+    setWait(null);
+  }
+  return {
+    waiting: wait !== null,
+    /** The whole wait, as it started: what is announced once (the count itself ticks silently). */
+    seconds: wait?.seconds ?? 0,
+    left,
+    /** Whether Stop waiting may take focus: the person is still on the button they pressed. */
+    takeFocus: wait?.takeFocus ?? false,
+    cancel,
+    /** The person's Stop waiting: cancel, and give focus back to the button they pressed. */
+    stop() {
+      cancel();
+      setReturnTo(origin.current);
+    },
+    press(send: () => void) {
+      cancel();
+      retried.current = false;
+      origin.current = typeof document === "undefined" ? null : (document.activeElement as HTMLElement | null);
+      send();
+    },
+    refused(retryAfter: number | undefined, send: () => void): boolean {
+      if (retried.current) return false;
+      retried.current = true;
+      const seconds = Math.min(Math.max(1, retryAfter ?? 1), RETRY_CEILING_S);
+      setWait({ seconds, since: Date.now(), takeFocus: unmoved() });
+      timer.current = setTimeout(() => {
+        timer.current = undefined;
+        setWait(null);
+        send();
+      }, seconds * 1000);
+      return true;
+    },
+  };
 }

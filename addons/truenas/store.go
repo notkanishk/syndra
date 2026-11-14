@@ -264,7 +264,18 @@ type Subject struct {
 	// Not on the wire: no mapping can explain them, so the backend never sees
 	// them. Kept so a convergence's full replace writes them back unchanged.
 	builtinGroups []apiID
+	// wantsSMB is SMB wanted on: the binding's Binding.WantsSMB (subjects,
+	// storage.status) or the request's own wish (plan, apply), so every
+	// standing sees the wait for a new password. Not on the wire, not stored.
+	wantsSMB bool
 }
+
+// needsNewPassword is an account that has had a password and is kept off SMB
+// until it gets a new one: access was taken away, which rotated the
+// password, and has since been given back, and TrueNAS turns SMB on only in
+// the call that sets a password. The one fact every standing reads
+// (standingOf), and storage.status's usable and needs_new_password with it.
+func (s *Subject) needsNewPassword() bool { return s.PasswordSet && !s.SMBEnabled && s.wantsSMB }
 
 var snapshotKey = []byte("latest")
 
@@ -438,6 +449,23 @@ func (s *Store) UIDBound(uid int64) (bool, error) {
 		})
 	})
 	return bound, err
+}
+
+// WantedSMB is, by uid, the bound accounts whose last apply asked for SMB
+// on (Binding.WantsSMB): the wish a new password waits on, which a standing
+// built from a read of the NAS alone cannot see (Subject.needsNewPassword).
+func (s *Store) WantedSMB() (map[int64]bool, error) {
+	out := map[int64]bool{}
+	err := s.db.View(func(tx *bolt.Tx) error {
+		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
+			var b Binding
+			if json.Unmarshal(v, &b) == nil && b.UID != 0 && b.WantsSMB != nil && *b.WantsSMB {
+				out[b.UID] = true
+			}
+			return nil
+		})
+	})
+	return out, err
 }
 
 // BoundUsernames is every name this add-on has claimed, so a collision check

@@ -191,16 +191,20 @@ func abandonQueuedWorkTx(ctx context.Context, tx pgx.Tx, target string) ([]Aband
 // migration 000088, design §3), and the stored fields that manifest no longer
 // declares (targets.retired_fields, 000090): kept so a name never returns
 // meaning something else, never sent, since the target no longer accepts them.
+// Shape is what that manifest says the target is (targets.accepted_shape,
+// 000095): the addons package's JSON, kept opaque here; nil before any
+// acceptance that saved it.
 type FieldRoleMap struct {
 	Roles   map[string]string
 	Retired []string
+	Shape   []byte
 }
 
 // TargetFieldRoles reads a target's role map. found is false before any
 // contract-2 manifest was accepted.
 func TargetFieldRoles(ctx context.Context, target string) (m FieldRoleMap, found bool, err error) {
 	var raw []byte
-	err = querier(ctx).QueryRow(ctx, `SELECT field_roles, retired_fields FROM targets WHERE target = $1`, target).Scan(&raw, &m.Retired)
+	err = querier(ctx).QueryRow(ctx, `SELECT field_roles, retired_fields, accepted_shape FROM targets WHERE target = $1`, target).Scan(&raw, &m.Retired, &m.Shape)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && raw == nil) {
 		return FieldRoleMap{}, false, nil
 	}
@@ -213,7 +217,7 @@ func TargetFieldRoles(ctx context.Context, target string) (m FieldRoleMap, found
 	return m, true, nil
 }
 
-// SaveTargetFieldRoles replaces a target's role map and retired fields, and,
+// SaveTargetFieldRoles replaces a target's role map, retired fields and shape, and,
 // in the same transaction, supersedes every queued row whose desired state
 // names a field this save newly retires. The caller has already refused a map
 // that changes an existing field's role.
@@ -252,7 +256,7 @@ func SaveTargetFieldRoles(ctx context.Context, target string, m FieldRoleMap) er
 	if err != nil {
 		return fmt.Errorf("save field roles of %s: %w", target, err)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE targets SET field_roles = $2::jsonb, retired_fields = $3 WHERE target = $1`, target, raw, retired); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE targets SET field_roles = $2::jsonb, retired_fields = $3, accepted_shape = $4::jsonb WHERE target = $1`, target, raw, retired, m.Shape); err != nil {
 		return fmt.Errorf("save field roles of %s: %w", target, err)
 	}
 	for _, field := range retired {

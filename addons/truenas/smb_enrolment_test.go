@@ -118,3 +118,62 @@ func TestThePlanDoesNotPromiseTheSMBOnlyAPasswordCanSwitchOn(t *testing.T) {
 		t.Fatalf("want the group change alone, got %s (%s)", out.Effect, out.Detail)
 	}
 }
+
+// One standing everywhere (7l): an account whose access was given back and
+// waits on a new password (password set, SMB off, SMB wanted) is "waiting on
+// the member" on the operator's target page (/subjects, from the binding's
+// wish), in a plan and in a no-change apply (from the request's wish), as in
+// storage.status; never "usable" beside a detail saying it waits.
+func TestEveryStandingSeesTheWaitForANewPassword(t *testing.T) {
+	waiting := func(where string, st *Standing) {
+		t.Helper()
+		if st == nil || st.Usable || st.WaitingOn != "member" || !strings.Contains(st.Next, "new storage password") {
+			t.Errorf("%s: standing %+v, want waiting on the member for a new password", where, st)
+		}
+	}
+	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":false,"groups":[42]}]`)
+	want := true
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &want}); err != nil {
+		t.Fatal(err)
+	}
+	subjects := func() *Standing {
+		rr := httptest.NewRecorder()
+		s.handleSubjects(rr, httptest.NewRequest(http.MethodGet, "/subjects?fresh=true", nil), nil)
+		var out SubjectsResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+			t.Fatalf("%d %s", rr.Code, rr.Body)
+		}
+		for _, v := range out.Subjects {
+			if v.Username == "charlotte" {
+				return v.Standing
+			}
+		}
+		t.Fatalf("charlotte is not served: %s", rr.Body)
+		return nil
+	}
+	waiting("subjects", subjects())
+
+	desired := `{"group":["lab_makers"],"enabled":true,"smb_enabled":true}`
+	rr := httptest.NewRecorder()
+	planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"charlotte@example.org","desired":`+desired+`}]}`)
+	var plan PlanResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
+		t.Fatalf("%d %s", rr.Code, rr.Body)
+	}
+	if !strings.Contains(plan.Outcomes[0].Detail, "set their password again") {
+		t.Fatalf("the plan's detail: %q", plan.Outcomes[0].Detail)
+	}
+	waiting("plan", plan.Outcomes[0].Standing)
+	out := decodeOutcome(t, postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":`+desired+`}`))
+	waiting("apply", out.Standing)
+
+	// SMB not wanted: the same account is ready, on every path.
+	off := false
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &off}); err != nil {
+		t.Fatal(err)
+	}
+	s.fresh.forget()
+	if st := subjects(); st == nil || !st.Usable {
+		t.Errorf("SMB not wanted: %+v, want usable", st)
+	}
+}
