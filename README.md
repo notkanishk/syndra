@@ -98,7 +98,7 @@ Full design: [`openspec/changes/syndra-core-architecture/design.md`](openspec/ch
 
 ## Quick start
 
-Requires Docker, Go 1.26+, and [Bun](https://bun.sh).
+Requires Docker, Go 1.27.4 and [Bun](https://bun.sh) 1.4.4 (pinned in [`.tool-versions`](.tool-versions)).
 
 ```bash
 git clone https://github.com/notkanishk/syndra.git

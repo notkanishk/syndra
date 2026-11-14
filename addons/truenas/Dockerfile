@@ -5,7 +5,7 @@
 # and physical access together. Everything below follows from treating this as
 # the least trusted component in the deployment.
 
-FROM golang:1.25-alpine AS build
+FROM golang:1.27.4-alpine3.24 AS build
 # The context is addons/, not addons/truenas: go.mod replaces
 # syndra/addons/strictjson with ../strictjson (the request decoder both
 # add-ons share), so the build needs that module beside this one.
@@ -22,7 +22,7 @@ COPY truenas .
 # carries no build-host paths.
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/truenas-addon .
 
-FROM alpine:3.22
+FROM alpine:3.24.4
 # Certificates for verifying the NAS's TLS. TrueNAS ships a self-signed one, so
 # a lab deployment sets TRUENAS_VERIFY_TLS=false explicitly — the roots are here
 # so that stays a deliberate choice rather than the only option.

@@ -1,5 +1,5 @@
 # Build Stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.27.4-alpine3.24 AS builder
 
 # The context is the repository root, not backend/: go.mod replaces
 # syndra/addons/strictjson with ../addons/strictjson (the JSON decoder the
@@ -24,7 +24,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o syndra ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -o syndra-world-export ./cmd/syndra-world-export
 
 # Final Stage (Minimal)
-FROM alpine:latest
+FROM alpine:3.24.4
 
 WORKDIR /app
 COPY --from=builder /src/backend/syndra .

@@ -251,8 +251,9 @@ func TestAllowUnknownSkipsVariantsAndStillRefusesDuplicates(t *testing.T) {
 }
 
 // No deeper than encoding/json goes (10000 levels), and the walk itself
-// stops there: it recurses per level, before encoding/json reads a byte, and
-// Go 1.25's json.Decoder.Token keeps no limit (1.27's does).
+// stops there: it recurses per level, before encoding/json decodes, on
+// json.Decoder.Token's own limit (Go 1.27's v2-backed decoder; Go 1.25's
+// Token kept none, and GOEXPERIMENT=nojsonv2 still keeps none: this fails).
 func TestNestingIsBoundedAsInEncodingJSON(t *testing.T) {
 	deep := []string{strings.Repeat("[", 10001) + strings.Repeat("]", 10001),
 		strings.Repeat(`{"a":`, 10001) + "1" + strings.Repeat("}", 10001)}

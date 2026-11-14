@@ -7,7 +7,7 @@ welcome.
 
 ## Getting set up
 
-Requires Docker, Go 1.26+, and [Bun](https://bun.sh). Versions are pinned in
+Requires Docker, Go 1.27.4 and [Bun](https://bun.sh) 1.4.4. Versions are pinned in
 [`.tool-versions`](.tool-versions).
 
 ```bash
