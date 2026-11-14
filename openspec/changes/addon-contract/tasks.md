@@ -2303,7 +2303,11 @@ per-person only) applied there.
   every id, `false` for `health.get` alone; the kit's loader and the
   backend's registry test refuse an entry without it,
   `TestTheRegistryMustSayWhetherAnOperationIsAboutASubject`), and the
-  dedicated code stays the owner's to add; an effect: read operation is no write, one rule for
+  dedicated code stays the owner's to add. The TrueNAS add-on answers a
+  binding its store cannot read 500 `STORE_UNREADABLE` on every operation
+  that resolves one (`boundAccount`, then `operateNow`/`readNow`; reads and writes, before
+  any NAS call), never the 422 of "no account"
+  (`TestAnUnreadableBindingIsTheAddOnsFaultNotNoAccount`); an effect: read operation is no write, one rule for
   the kit and its tests, `contract.writes`, so a reads-only run still reports
   "nothing written"),
   and ci.yml's every-feature reference is `-features freshness,calls,stats`.

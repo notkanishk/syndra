@@ -438,8 +438,11 @@ func (k *kit) readOps() []string {
 // (TARGET_VERSION_UNSUPPORTED), fails.
 //
 // ponytail: the registry has no code for "no account for this subject", so
-// OPERATION_FAILED on a subject read stands for it; a dedicated code is the
-// upgrade (an owner's decision).
+// 422 OPERATION_FAILED on a subject read stands for it. The add-on's own
+// faults are not 422 (TrueNAS answers a store it cannot read 500
+// STORE_UNREADABLE, boundAccount), but another subject-read refusal an
+// add-on answers 422 OPERATION_FAILED is skipped here too, and judged only
+// under -mutate; a dedicated code is the upgrade (an owner's decision).
 func (k *kit) results(c *check, owned bool) {
 	reads := k.readOps()
 	if len(reads) == 0 {

@@ -153,7 +153,9 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 	writeJSON(w, http.StatusOK, out)
 }
 
-// errStoreUnreadable is the add-on's own records failing to read during a plan.
+// errStoreUnreadable is the add-on's own records failing to read: a plan
+// refused whole (handlePlan), an operation's binding (boundAccount); 500
+// STORE_UNREADABLE, never a 4xx (handlePlan, operateNow, readNow).
 var errStoreUnreadable = errors.New("the add-on's own records could not be read")
 
 // planOne says what would happen to one subject, and issues no mutating call.

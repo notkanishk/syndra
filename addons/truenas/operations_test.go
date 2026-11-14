@@ -1064,3 +1064,32 @@ func TestAWriteOperationWithoutASubjectIsABadRequest(t *testing.T) {
 		t.Fatal("a write with no subject touched the NAS")
 	}
 }
+
+// A binding the add-on's own store cannot read is the add-on's fault, read
+// before anything is sent to the NAS: 500 STORE_UNREADABLE on every operation
+// that resolves one (reads through the fresher and writes alike), never the
+// 422 that means "no account", which a subject with no binding still answers.
+func TestAnUnreadableBindingIsTheAddOnsFaultNotNoAccount(t *testing.T) {
+	for _, tc := range []struct{ op, params string }{
+		{"storage.status", `{}`},
+		{"activity.get", `{}`},
+		{"password.set", `{"password":"` + theSecret + `"}`},
+		{"password.rotate", `{}`},
+		{"account.purge", `{"elevated_key":"` + theSecret + `"}`},
+	} {
+		s, m := opServer(t)
+		corrupt(t, s, bucketBindings, "sub-1")
+		before := len(m.fakeRPC.calls)
+		rr := postOperation(t, s, tc.op, `{"call_id":"c-`+tc.op+`","subject":"sub-1","params":`+tc.params+`}`)
+		if rr.Code != http.StatusInternalServerError || problemCode(t, rr) != CodeStoreUnreadable {
+			t.Errorf("%s with its binding unreadable: %d %s, want 500 %s", tc.op, rr.Code, rr.Body.String(), CodeStoreUnreadable)
+		}
+		if sent := m.fakeRPC.calls[before:]; len(sent) != 0 || len(m.updates) != 0 {
+			t.Errorf("%s with its binding unreadable sent %v to the NAS: the store is read first, so nothing happened", tc.op, sent)
+		}
+		rr = postOperation(t, s, tc.op, `{"call_id":"c2-`+tc.op+`","subject":"sub-nobody","params":`+tc.params+`}`)
+		if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeOperationFailed {
+			t.Errorf("%s for a subject with no binding: %d %s, want 422 %s", tc.op, rr.Code, rr.Body.String(), CodeOperationFailed)
+		}
+	}
+}
