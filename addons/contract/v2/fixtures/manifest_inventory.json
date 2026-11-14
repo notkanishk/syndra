@@ -5,7 +5,6 @@
   "kind": "inventory",
   "features": [
     "operations",
-    "results",
     "calls"
   ],
   "entitlement_schema": [

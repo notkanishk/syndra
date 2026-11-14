@@ -157,7 +157,7 @@ func TestTheCleanReferencePassesEveryCheck(t *testing.T) {
 			skipped = append(skipped, res.ID)
 		}
 	}
-	want := []string{"subjects.paged", "replay.29d", "results", "calls.unknown", "calls.recorded", "operations.physical", "calls.unsettled", "calls.serialised",
+	want := []string{"subjects.paged", "replay.29d", "calls.unknown", "calls.recorded", "operations.physical", "calls.unsettled", "calls.serialised",
 		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable"}
 	want = append(append(want, statsChecks...), "dangerous-scopes")
 	if !slices.Equal(skipped, want) {
@@ -239,8 +239,8 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.LogHeadEmpty:              "health",
 		reference.ReadsTakeCallID:           "operations.reads",
 		reference.StateShowsUnlisted:        "unlisted-hidden",
-		reference.ResultOffSchema:           "results",
-		reference.ResultInPocket:            "results",
+		reference.ResultOffSchema:           "operations.result",
+		reference.ResultInPocket:            "operations.result",
 		reference.CachedAsCurrent:           "freshness.cached",
 		reference.ReadsPerRequest:           "freshness.coalesce",
 		reference.CooldownIgnored:           "freshness.cooldown",
@@ -266,9 +266,9 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.CheckoutUnserialised: "(reference TestAConcurrentPairPassesTheLimitOnce)",
 	}
 	// A defect in a feature's half is served with that feature declared.
-	features := map[reference.Defect][]string{reference.ResultOffSchema: {"results"}, reference.ResultInPocket: {"results"},
+	features := map[reference.Defect][]string{
 		reference.CachedAsCurrent: {"freshness"}, reference.ReadsPerRequest: {"freshness"}, reference.CooldownIgnored: {"freshness"},
-		reference.PreviewRecorded: {"results", "calls"}, reference.NoChangeAsSucceeded: {"results", "calls"}, reference.CallsEchoParams: {"calls"}}
+		reference.PreviewRecorded: {"calls"}, reference.NoChangeAsSucceeded: {"calls"}, reference.CallsEchoParams: {"calls"}}
 	for _, d := range reference.Defects {
 		if strings.HasPrefix(string(d), "stats-") {
 			features[d] = []string{"stats"}
@@ -1652,38 +1652,34 @@ func TestANonEnumerableMembershipFailsTheValuesCheck(t *testing.T) {
 	}
 }
 
-// The results check (feature results) is a skip, with the reason, when the
-// feature is not declared, and a pass against the reference serving it, every
-// read's result held to its registry schema. A read with no pocket declared
-// without results fails: it has no shape to answer in.
-func TestTheResultsCheckJudgesOnlyWhatIsDeclared(t *testing.T) {
-	url, _ := serve(t, testSecret, nil)
+// The result check is core: against the reference with no feature it passes,
+// every read's result held to its registry schema. A read answered under the
+// key it had before contract 2 made result core (health.get's `health`) and
+// no result fails: that reply carries no reading.
+func TestEveryReadIsHeldToItsResult(t *testing.T) {
+	url, seen := serve(t, testSecret, nil)
 	r := run(t, config(url, true))
-	if got := r.Status("results"); got != "skip" {
-		t.Errorf("results says %s against a reference without the feature, want skip", got)
+	if got := r.Status("operations.result"); got != "pass" || r.Failed() {
+		t.Errorf("operations.result says %s against the reference (failed %v): %v", got, r.Failed(), failures(r))
 	}
-
-	url, seen := serveRewriting(t, testSecret, nil, nil, []string{"results"})
-	r = run(t, config(url, true))
-	if got := r.Status("results"); got != "pass" || r.Failed() {
-		t.Errorf("results says %s against the reference serving it (failed %v): %v", got, r.Failed(), failures(r))
-	}
-	if !slices.Contains(seen(), "POST /operations/holdings.list") {
-		t.Error("holdings.list was never read")
+	for _, read := range []string{"POST /operations/health.get", "POST /operations/holdings.list"} {
+		if !slices.Contains(seen(), read) {
+			t.Errorf("%s was never sent", read)
+		}
 	}
 
 	url, _ = serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
-		if r.URL.Path != "/capabilities" {
+		if r.URL.Path != "/operations/health.get" {
 			return reply
 		}
-		return bytes.Replace(reply, []byte(`,"results"]`), []byte(`]`), 1)
-	}, []string{"results"})
+		return bytes.Replace(reply, []byte(`"result":`), []byte(`"health":`), 1)
+	}, nil)
 	r, err := Run(context.Background(), config(url, true))
 	if err != nil && !errors.Is(err, ErrReadsFailed) {
 		t.Fatal(err)
 	}
-	if got := r.Status("results"); got != "fail" {
-		t.Errorf("holdings.list declared without results: results says %s, want fail", got)
+	if got := r.Status("operations.result"); got != "fail" {
+		t.Errorf("health.get answered under the old health key: operations.result says %s, want fail", got)
 	}
 }
 
@@ -1907,7 +1903,7 @@ func TestTheCallsChecksJudgeOnlyWhatIsDeclared(t *testing.T) {
 		}
 	}
 
-	features := []string{"results", "calls"}
+	features := []string{"calls"}
 	url, seen := serveRewriting(t, testSecret, nil, nil, features)
 	if r := run(t, config(url, false)); r.Status("calls.unknown") != "pass" || r.Failed() {
 		t.Errorf("reads-only: calls.unknown says %s (failed %v): %v", r.Status("calls.unknown"), r.Failed(), failures(r))
@@ -1959,7 +1955,7 @@ func TestALostConfirmStillNamesTheItemLeft(t *testing.T) {
 			return []byte("<html>bad gateway</html>")
 		}
 		return reply
-	}, []string{"results", "calls"})
+	}, []string{"calls"})
 	cfg := config(url, true)
 	cfg.Item = "item-0001"
 	r, err := Run(context.Background(), cfg)
@@ -1970,7 +1966,7 @@ func TestALostConfirmStillNamesTheItemLeft(t *testing.T) {
 		t.Errorf("a lost confirm: operations.physical %s, left %q", r.Status("operations.physical"), r.Left)
 	}
 
-	url, _ = serveRewriting(t, testSecret, nil, nil, []string{"results", "calls"})
+	url, _ = serveRewriting(t, testSecret, nil, nil, []string{"calls"})
 	cfg = config(url, true)
 	cfg.Item = "item-none-such"
 	if r, _ = Run(context.Background(), cfg); strings.Contains(r.Left, "item-none-such") {
@@ -1994,7 +1990,7 @@ func TestAPhysicalOperationDeclaredWithoutCallsOrConfirmFails(t *testing.T) {
 					t.Errorf("the rewrite %q found nothing in %s", edit[0], reply)
 				}
 				return out
-			}, []string{"results", "calls"})
+			}, []string{"calls"})
 			cfg := config(url, true)
 			cfg.Item = "item-0001"
 			r, err := Run(context.Background(), cfg)
@@ -2030,7 +2026,7 @@ func TestCallsAnswersAreHeldToWhatWasSent(t *testing.T) {
 					return reply
 				}
 				return bytes.Replace(reply, []byte(edit[0]), []byte(edit[1]), 1)
-			}, []string{"results", "calls"})
+			}, []string{"calls"})
 			r, err := Run(context.Background(), config(url, true))
 			if err != nil && !errors.Is(err, ErrReadsFailed) {
 				t.Fatal(err)
@@ -2075,7 +2071,7 @@ func TestThePhysicalCheckHoldsTheLogAndTheReplay(t *testing.T) {
 				i := n
 				mu.Unlock()
 				return tc.rewrite(i, reply)
-			}, []string{"results", "calls"}, tc.defects...)
+			}, []string{"calls"}, tc.defects...)
 			cfg := config(url, true)
 			cfg.Item = "item-0001"
 			r, err := Run(context.Background(), cfg)

@@ -91,16 +91,6 @@
       ],
       "health_fields": [],
       "reply_fields": []
-    },
-    "results": {
-      "meaning": "An effect: read operation's reply is one result object validated by the schema registry/operations.json names for it. Needed for every read id with no legacy pocket (holdings.list).",
-      "routes": [],
-      "request_fields": [],
-      "manifest_keys": [],
-      "health_fields": [],
-      "reply_fields": [
-        "operation_response.result"
-      ]
     }
   }
 }

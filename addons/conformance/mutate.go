@@ -87,9 +87,9 @@ func (k *kit) mutate() error {
 		{"limit-empty", []string{"limit-empty", "plan-equals-apply"}, func() { k.limitEmpty(k.at("limit-empty")) }},
 		{"operations", []string{"operations", "operations.secret", "strict-requests", "health"}, func() { k.operations(k.at("operations")) }},
 		{"calls", []string{"calls.recorded", "operations.physical", "health"}, func() { k.callsWrite() }},
-		{"reads", []string{"operations.reads", "results"}, func() {
+		{"reads", []string{"operations.reads", "operations.result"}, func() {
 			k.readOperations(k.at("operations.reads"), callID)
-			k.results(k.at("results"))
+			k.results(k.at("operations.result"))
 		}},
 		{"stats", []string{"stats.points", "stats.totals", "stats.since", "stats.gaps", "stats.unbound", "stats.no-people", "stats.no-people.ids"}, func() { k.statsAfterWrites() }},
 		{"lifecycle", []string{"lifecycle", "replay.refusal", "strict-requests"}, func() { k.lifecycle(k.at("lifecycle"), k.at("replay.refusal")) }},
@@ -422,25 +422,12 @@ func (k *kit) readOps() []string {
 	return reads
 }
 
-// results holds an add-on declaring feature results to its promise: every
-// read answers one `result`, valid against the schema the registry names for
-// the id (which also holds current false iff stale), or, for an id that
-// declares its own, an object. Without the feature, a read that had no pocket
-// to answer under before results (holdings.list) cannot be served at all, so
-// declaring it available is a failure; otherwise there is nothing to judge.
+// results holds every read to the core rule: it answers one `result`, valid
+// against the schema the registry names for the id (which also holds current
+// false iff stale), or, for an id that declares its own, an object. A read
+// answered under any other key carries no reading.
 func (k *kit) results(c *check) {
 	reads := k.readOps()
-	if !k.m.has("results") {
-		for _, id := range reads {
-			if k.c.operations[id].Pocket == "" {
-				c.fail("%s is declared available without feature results, and has no other shape to answer in", id)
-			}
-		}
-		if len(c.fails) == 0 {
-			c.skip("feature results not declared")
-		}
-		return
-	}
 	if len(reads) == 0 {
 		c.skip("no effect: read operation is declared available")
 		return
@@ -454,7 +441,7 @@ func (k *kit) results(c *check) {
 			continue
 		}
 		result, ok := doc["result"].(map[string]any)
-		if !c.expect(ok, "%s: an add-on declaring results answered no result object", id) {
+		if !c.expect(ok, "%s answered no result object", id) {
 			continue
 		}
 		if schema := k.c.operations[id].Result; schema != "" {

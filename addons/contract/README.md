@@ -75,7 +75,7 @@ because a list is a third place to forget something.
 | `GET /homes` | add-on | `homes.json` |
 | `POST /plan` | backend | `plan_request.json`; reply `plan_response.json` |
 | `POST /apply` | backend | `apply_request.json`; reply `apply_response.json` (a 200), `error_apply_blocked.json`, `error_binding_conflict.json` |
-| `POST /operations/{name}` | backend | `operation_request.json`; reply `operation_response.json` plus one per pocket: `_activity`, `_storage`, `_health`, and `_result` (feature results) |
+| `POST /operations/{name}` | backend | `operation_request.json`; reply `operation_response.json` plus one per read's `result`: `_result` (storage), `_activity_result`, `_health_result`, `_records` |
 | `POST /lifecycle` | backend | `lifecycle_request.json`; reply `lifecycle_response.json` |
 | any refusal | add-on | `error.json` |
 | request identity | both | `identity_{apply,operation,lifecycle,setting}.json` (RFC 8785 vectors) |
@@ -109,7 +109,7 @@ two modules until both ends move, which is the point.
 apply are the two problem fixtures. `plan_response.json` carries one of each
 kind of outcome. `operation_response.json` populates the scalar fields of the
 reply (`rotated` and `account_id` belong to different operations in practice) so
-that the whole document is held; the pocket fixtures are realistic. The fixtures
+that the whole document is held; the `result` fixtures are realistic. The fixtures
 are illustrative documents, not one add-on's recording: a producer is held to
 the SHAPE by marshalling a value built from a fixture's own values, and its real
 output to the schema.

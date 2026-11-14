@@ -15,10 +15,10 @@ import (
 	"syndra/internal/db"
 )
 
-// The one read path (feature results, design §4): every effect: read operation
-// goes through Read, which writes no row, takes no claim and asks nobody to
-// confirm; `result` is read only from an add-on declaring results; and a reply
-// missing what its schema requires is not a reading.
+// The one read path (design §4): every effect: read operation goes through
+// Read, which writes no row, takes no claim and asks nobody to confirm; the
+// reply is read from `result` alone; and a reply missing what its schema
+// requires is not a reading.
 
 // underManifest swaps the installed add-on's manifest for a fixture's, accepted
 // as Refresh accepts one: validated, then intersected with policy.
@@ -116,9 +116,9 @@ func TestCallRefusesARead(t *testing.T) {
 	}
 }
 
-// A read with no legacy pocket is unavailable on an add-on without results,
-// with a reason an operator reads, and is never sent.
-func TestAReadWithNoPocketNeedsResults(t *testing.T) {
+// A read needs no feature: `result` is core in contract 2, so holdings.list is
+// offered by an add-on declaring operations alone, and read.
+func TestAReadNeedsNoFeature(t *testing.T) {
 	got := addonAnswering(t, "operation_response_records.json")
 	underManifest(t, "manifest_inventory.json")
 	a, _ := Get("truenas")
@@ -129,36 +129,51 @@ func TestAReadWithNoPocketNeedsResults(t *testing.T) {
 	a.ops, _ = resolveOperations(m)
 	registryMu.Unlock()
 
-	var unavailable *ErrOperationUnavailable
-	if reply := Read(context.Background(), "truenas", "holdings.list", "s", "s", nil, false); !errors.As(reply.Err, &unavailable) ||
-		!strings.Contains(unavailable.Reason, "results") || got.method != "" {
-		t.Fatalf("holdings.list without results: %+v, sent %s", reply, got.path)
+	if v := Read(context.Background(), "truenas", "holdings.list", "s", "s", nil, false).View(); !v.Readable || got.path != "/operations/holdings.list" {
+		t.Fatalf("holdings.list from an add-on declaring operations alone: %+v, sent %s", v, got.path)
 	}
-	if reads := MemberReads("truenas"); len(reads) != 0 {
-		t.Errorf("member reads %v; an unavailable read is not read", reads)
+	if reads := MemberReads("truenas"); !slices.Contains(reads, "holdings.list") {
+		t.Errorf("member reads %v; holdings.list is offered", reads)
 	}
 }
 
-// `result` is read only from an add-on that declares results, and a results
-// add-on is not read from a pocket: the feature is the promise of the shape.
-func TestResultIsReadOnlyFromAResultsAddOn(t *testing.T) {
+// A read is answered under `result` and nothing else: a reply carrying only
+// the key that read had before contract 2 made result core (storage,
+// activity, health) is not a reading, refused like any reply missing what its
+// schema requires (indeterminate, with the reason), never guessed at. The same
+// reply under `result` is read, so the refusal is the key's alone.
+func TestAReplyUnderAnOldPerReadKeyIsNotAReading(t *testing.T) {
 	ctx := context.Background()
-	addonAnswering(t, "operation_response_result.json") // result, no pocket; goodManifest has no results
-	if st := Read(ctx, "truenas", "storage.status", "s", "s", nil, false).Storage(); st.Outcome != OutcomeIndeterminate {
-		t.Errorf("a result from an add-on without results was read: %+v", st)
-	}
-	addonAnswering(t, "operation_response_storage.json") // the pocket, from an add-on declaring results
-	declareResults(t)
-	if st := Read(ctx, "truenas", "storage.status", "s", "s", nil, false).Storage(); st.Outcome != OutcomeIndeterminate {
-		t.Errorf("a pocket from an add-on declaring results was read: %+v", st)
-	}
-	if v := Read(ctx, "truenas", "storage.status", "s", "s", nil, false).View(); v.Readable {
-		t.Errorf("a results add-on answering a pocket is readable: %+v", v)
+	for _, tc := range []struct {
+		fixture, op, old string
+		outcome          func(ReadReply) (Outcome, error)
+	}{
+		{"operation_response_result.json", "storage.status", "storage", func(r ReadReply) (Outcome, error) { s := r.Storage(); return s.Outcome, s.Err }},
+		{"operation_response_activity_result.json", "activity.get", "activity", func(r ReadReply) (Outcome, error) { a := r.Activity(); return a.Outcome, a.Err }},
+		{"operation_response_health_result.json", "health.get", "health", func(r ReadReply) (Outcome, error) { h := r.Health(); return h.Outcome, h.Err }},
+	} {
+		addonAnswering(t, tc.fixture)
+		if got, err := tc.outcome(Read(ctx, "truenas", tc.op, "s", "s", nil, false)); got != OutcomeSucceeded {
+			t.Fatalf("%s under result: %s %v, want it read", tc.op, got, err)
+		}
+		var doc map[string]json.RawMessage
+		_ = json.Unmarshal(contractFixture(t, tc.fixture), &doc)
+		doc[tc.old] = doc["result"]
+		delete(doc, "result")
+		body, _ := json.Marshal(doc)
+		addonServing(t, body)
+		reply := Read(ctx, "truenas", tc.op, "s", "s", nil, false)
+		if got, err := tc.outcome(reply); got != OutcomeIndeterminate || err == nil || !strings.Contains(err.Error(), `no "result"`) {
+			t.Errorf("%s under %q alone: %s %v, want indeterminate: the reply carries no result", tc.op, tc.old, got, err)
+		}
+		if v := reply.View(); v.Readable {
+			t.Errorf("%s under %q alone is readable: %+v", tc.op, tc.old, v)
+		}
 	}
 }
 
 // Absence is never a value: a result missing a key its schema requires is
-// not a reading, from a results add-on, for each shape.
+// not a reading, for each shape.
 func TestAResultMissingWhatItsSchemaRequiresIsNotAReading(t *testing.T) {
 	for _, tc := range []struct {
 		fixture, op, drop string
@@ -221,11 +236,11 @@ func TestAResultMissingWhatItsSchemaRequiresIsNotAReading(t *testing.T) {
 	}
 }
 
-// The TrueNAS add-on with results, against this reader: its manifest
-// (manifest_truenas.json declares results) and its answers (the *_result
+// The TrueNAS add-on, against this reader: its manifest
+// (manifest_truenas.json) and its answers (the *_result
 // fixtures its own suite encodes, contract_test.go) land as the card needs
 // them, and storage.status is the one member read.
-func TestTheTrueNASAddOnWithResultsLandsInTheReader(t *testing.T) {
+func TestTheTrueNASAddOnLandsInTheReader(t *testing.T) {
 	addonAnswering(t, "operation_response_result.json")
 	underManifest(t, "manifest_truenas.json")
 	if reads := MemberReads("truenas"); !slices.Equal(reads, []string{"storage.status"}) {
@@ -280,7 +295,7 @@ func TestARefusedReadCarriesItsStatus(t *testing.T) {
 // not be read in full reaches the card (view.storage) and the generic renderer
 // (reads) as quota_read false, with the meters that were read kept beside it,
 // so the page says "couldn't read" rather than drawing what it has as all
-// there is. The legacy pocket's usage_readable lands on the same field.
+// there is.
 func TestAnUnreadQuotaReachesThePageAsUnread(t *testing.T) {
 	var doc map[string]any
 	_ = json.Unmarshal(contractFixture(t, "operation_response_result.json"), &doc)
@@ -299,16 +314,6 @@ func TestAnUnreadQuotaReachesThePageAsUnread(t *testing.T) {
 		t.Errorf("reads: %s, want quota_read false beside the meter that was read", got)
 	}
 
-	for _, readable := range []bool{true, false} {
-		doc := map[string]any{}
-		_ = json.Unmarshal(contractFixture(t, "operation_response_storage.json"), &doc)
-		doc["storage"].(map[string]any)["usage_readable"] = readable
-		body, _ := json.Marshal(doc)
-		addonServing(t, body)
-		if st := Read(context.Background(), "truenas", "storage.status", "s", "s", nil, false).Storage(); st.QuotaRead != readable {
-			t.Errorf("legacy usage_readable %v landed as quota_read %v", readable, st.QuotaRead)
-		}
-	}
 }
 
 // What the add-on also says is capped whole: each entry, its key path

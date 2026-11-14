@@ -238,8 +238,8 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 	opOK := func(op, subject string) OperationResult {
 		return OperationResult{Operation: op, Subject: subject, Outcome: "succeeded"}
 	}
-	// The three reads answer `result` (feature results): the fixtures the
-	// backend's reader is held to (TestTheTrueNASAddOnWithResultsLandsInTheReader).
+	// The three reads answer `result`: the fixtures the
+	// backend's reader is held to (TestTheTrueNASAddOnLandsInTheReader).
 	activity := opOK("activity.get", "289471021834760193")
 	activity.Result = &ActivityReport{
 		Events:    []ActivityEvent{{At: "2026-11-10T08:12:30Z", Event: "CONNECT", Resource: "makers", Success: false, Address: "192.0.2.17", Detail: "NT_STATUS_NO_SUCH_USER"}},
@@ -523,8 +523,7 @@ func sameContractJSON(t *testing.T, got, want []byte, what string) {
 }
 
 // Every read this add-on declares answers, through its real handler, a result
-// the schema registry/operations.json names for the id accepts (feature
-// results), and health.get, which declares its own, an object. The fixtures
+// the schema registry/operations.json names for the id accepts, and health.get, which declares its own, an object. The fixtures
 // show the shape; this holds what is actually sent to it, including the
 // answers a schema cannot tell apart: a share with no quota has a meter with
 // no limit (never a limit of 0, a full bar), in bytes, and a log every share
@@ -585,11 +584,6 @@ func TestEveryReadAnswersTheSchemaItsRegistryNames(t *testing.T) {
 		var doc map[string]any
 		if err := json.Unmarshal(rr.Body.Bytes(), &doc); rr.Code != http.StatusOK || err != nil {
 			t.Fatalf("%s: %d %s", tc.id, rr.Code, rr.Body.String())
-		}
-		for _, pocket := range []string{"activity", "storage", "health"} {
-			if _, has := doc[pocket]; has {
-				t.Errorf("%s still answers the %s pocket beside result", tc.id, pocket)
-			}
 		}
 		answers = append(answers, answer{tc.id, doc["result"]})
 	}

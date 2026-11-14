@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://syndra.example.org/addon-contract/2/schema/profiles/storage/status.json",
   "title": "Storage status",
-  "description": "storage.status's result (feature results, kind storage): the common status shape, plus where the member can connect and what their password waits on. Every valid reply is also a valid common/status.json reply. Read live, never stored.",
+  "description": "storage.status's result (kind storage): the common status shape, plus where the member can connect and what their password waits on. Every valid reply is also a valid common/status.json reply. Read live, never stored.",
   "type": "object",
   "allOf": [
     {

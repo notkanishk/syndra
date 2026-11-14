@@ -28,7 +28,7 @@ the repository root. Code is cited by symbol (`decide` in
 `addons/reference/reference.go`), never by line.
 
 **What is live.** Syndra and the TrueNAS add-on speak contract 2 today,
-`results` ([chapter 7](#read-operations-and-result-feature-results)),
+reads answered under `result` ([chapter 7](#read-operations-and-result)),
 `freshness` ([Fresh reads](#fresh-reads-feature-freshness)) and `calls`
 ([Physical operations](#physical-operations-and-get-callscall_id-feature-calls))
 included. `stats` ([Statistics](#statistics-get-stats-feature-stats)) is
@@ -179,7 +179,6 @@ key, the designed features' included.
     "settings",
     "storage.reach",
     "storage.homes",
-    "results",
     "freshness",
     "calls",
     "stats"
@@ -1743,7 +1742,7 @@ Rules for the route:
   `readOperation` in `addons/truenas/operations.go` and `healthGet` in
   `addons/reference/reference.go` are the examples. Syndra sends every
   read through one path and never records one
-  ([Read operations and `result`](#read-operations-and-result-feature-results)).
+  ([Read operations and `result`](#read-operations-and-result)).
 - The reply is thin by design: `outcome` and a `detail`. There is no field
   for the app's own error payload.
 - The member credential operation is `password.set`. A PIN or a card is
@@ -1781,12 +1780,12 @@ them a conflict sits refused until someone does that.
 There is no destructive effect, because there is no destructive operation:
 removal disables, and `account.purge` is an admin act with a separately
 issued key. Syndra's policy reads it: a `read` goes through the one read
-path ([below](#read-operations-and-result-feature-results)), and a
+path ([below](#read-operations-and-result)), and a
 `physical` one is previewed, confirmed and settled as
 [Physical operations](#physical-operations-and-get-callscall_id-feature-calls)
 says.
 
-### Read operations and `result` (feature `results`)
+### Read operations and `result`
 
 An `effect: read` operation answers what the app says now about one subject
 (or, for `health.get`, about the app). Syndra sends every one through one
@@ -1796,9 +1795,9 @@ themself on their own page; an admin reads for any person on that person's
 page, where the person is the `subject` and the admin the `actor`. Your add-on
 answers both the same way, about the body's `subject`.
 
-An add-on that declares `results` answers each read with one `result`
-object, valid against the schema `v2/registry/operations.json` names for the
-id under `result`:
+Every read is answered with one `result` object, valid against the schema
+`v2/registry/operations.json` names for the id under `result`. This is
+core: no feature declares it.
 
 | Schema | What it is | Read by |
 |---|---|---|
@@ -1859,15 +1858,11 @@ it:
 
 Rules:
 
-- An add-on that declares `results` MUST answer every read with `result`
-  and SHOULD NOT also send a pocket. Syndra reads `result` only from an
-  add-on that declares `results`, and from one that does not, only the typed
-  pocket the three original reads had (`storage`, `activity`, `health`, the
-  registry's `pocket`), which goes at the next major. A new add-on declares
-  `results`.
-- A read the registry gives no `pocket` (`holdings.list`) can be answered
-  only under `result`: declared without `results`, Syndra shows it
-  unavailable with that reason, and the kit's `results` check fails.
+- Every read MUST answer under `result`, and under no other key. A reply
+  without `result` carries no reading: Syndra refuses it as it refuses a
+  result missing a required key (`answer` in
+  `backend/internal/addons/results.go`), and the kit's `operations.result`
+  check fails.
 - A new per-person list (holdings, bookings, jobs in a queue) is a read
   operation whose `result` is `common/records.json`: a registry entry and a
   policy entry ([chapter 14](#14-evolving)), and the page that lists it
@@ -1887,9 +1882,9 @@ world: stock leaves a shelf. `item.checkout` is the one registered (scope
 `format: target_id`, result `common/records.json`); the reference add-on
 serves it over a catalogue of four items (`checkout` in
 `addons/reference/checkout.go`). Syndra offers one only from an add-on that
-declares `calls` (and `results`, for its record); declared without them it
-is shown unavailable, with the reason, and never sent
-(`physicalNeeds` in `backend/internal/addons/policy.go`).
+declares `calls`; declared without it, it is shown unavailable, with the
+reason, and never sent (`resolveOperations` in
+`backend/internal/addons/policy.go`).
 
 **1. Previewed, then confirmed, and the confirmation names the thing.**
 Syndra first sends the operation with `preview: true` and no `call_id`
@@ -2188,8 +2183,8 @@ not a stale one.
 
 `addons/reference` is a complete contract-2 add-on over an in-memory print
 queue (`kind: machine`): accounts, one field of each role, a built-in
-`lobby` printer as the value Syndra never manages, `health.get` as its one
-read operation (two with `-features results`, which adds `holdings.list`),
+`lobby` printer as the value Syndra never manages, `health.get` and
+`holdings.list` as its read operations,
 `password.set` and one setting. CI runs the kit against it
 on every push. Read `addons/reference/reference.go` in this order; each row
 says what to take from it.
@@ -2211,7 +2206,7 @@ says what to take from it.
 | `parseDesired` | Each desired value checked against its field's role |
 | `fingerprint`, `username` | A fingerprint with its own value for "no account"; a name derived once, at create |
 | `operation`, `healthGet` | Path and body agree; a write with the secret outside the identity and the lifecycle gate; a read that ignores `call_id` |
-| `holdingsList`, `serves` | A read answering `common/records.json` under `result`, declared only with feature `results` |
+| `holdingsList` | A read answering `common/records.json` under `result` |
 | `checkout`, `decideLoan`, `reachableAndActive` (`checkout.go`) | A physical operation: the preview that writes nothing, every check before the write in one section, the intent before the loan, `CALL_UNSETTLED` while one is open, `no_change` for an item already held |
 | `callState`, `settle` (`checkout.go`) | `GET /calls`: recorded, in doubt or unknown, and an open intent settled by reading the target, never while it cannot be read |
 | `setLifecycle`, `putSetting` | Lifecycle and the one setting, both through the call record; `LIFECYCLE_REFUSAL` |
@@ -2249,12 +2244,12 @@ What the reference simplifies, and a real add-on MUST do in full:
 - It declares neither `account.adopt` nor `account.release`, though it can
   answer `BINDING_CONFLICT`; a real add-on MUST
   ([The account operations](#the-account-operations)).
-- It declares `results`, `freshness` and `calls` only when asked
-  (`Config.Features`, `-features results,freshness,calls`), so the kit's
+- It declares `freshness` and `calls` only when asked
+  (`Config.Features`, `-features freshness,calls`; `serves`), so the kit's
   checks for each are watched both ways. With `freshness`, `/subjects` is
   served from a mirror cleared by every write, the cooldown is `PT1S`, and
   `Config.Down` (test-only) holds the unreachable rule the kit cannot. With
-  `calls` and `results` it declares `item.checkout` over four items, one at
+  `calls` it declares `item.checkout` over four items, one at
   a time per member; `Config.LoseReply` (test-only) loses an answer before or
   after the loan, which the kit cannot. Its intents live in memory; a real
   add-on writes them to its mutation log.
@@ -2280,7 +2275,7 @@ has the full map.
 | `smb_enabled` | `channel` | SMB on the account; TrueNAS turns it on only together with a password, so it waits for the member's next `password.set`, and `standing` says so |
 
 - Features `operations`, `settings`, `storage.reach`, `storage.homes`,
-  `results`, `freshness`, `calls`, `stats` (`features` and `operationSet` in
+  `freshness`, `calls`, `stats` (`features` and `operationSet` in
   `addons/truenas/capabilities.go`). It has no physical operation: `calls`
   is declared for `GET /calls`, which answers every write from its call
   store, its lease and its mutation log (`handleCall` in
@@ -2299,7 +2294,7 @@ has the full map.
   the separate purge key is an audit separation, not a capability one.
 - Read operations (`storage.status`, `activity.get`, `health.get`) are never
   recorded, held or gated (`readOperation` in `addons/truenas/operations.go`),
-  and answer under `result` (feature `results`): `storage.status` the storage
+  and answer under `result`: `storage.status` the storage
   profile, `activity.get` the share as each event's `resource`, only when
   it is a known enabled share (`auditRow.share`, the collector's rule; on a
   `[homes]`-style share Samba's service is the username, so none).
@@ -2462,7 +2457,7 @@ manifest key, health field and reply field each one introduces.
 | a new route or request field beside the core | `v2/registry/features.json` and the schema | a feature |
 | a field role | `v2/registry/roles.json`, Syndra's resolver and UI | a core change, rare by design |
 | an effect class | `v2/registry/operations.json` and Syndra's retry rule | a core change, rare by design (`physical` was the last) |
-| a per-person list | a read operation with `result` `common/records.json` | a registry entry and a policy entry ([Read operations and `result`](#read-operations-and-result-feature-results)) |
+| a per-person list | a read operation with `result` `common/records.json` | a registry entry and a policy entry ([Read operations and `result`](#read-operations-and-result)) |
 | a metric | your manifest's `metrics[]` ([Statistics](#statistics-get-stats-feature-stats)) | nothing else: its descriptor says how Syndra keeps and draws it |
 
 Every contract change is an entry in `addons/contract/CHANGELOG.md` naming
@@ -2639,7 +2634,7 @@ tests the contract, not the product, and uses the operations of
 | overdue | `standing`, waiting on the member |
 | how much lending is used | `inventory.checkouts` (counter, `count`) and `inventory.items_on_loan` (gauge, `items`, `against: max_items`), both `per_subject`, dimension `category` |
 
-- Features `operations`, `results`, `calls`, `stats`. `account_id` is the
+- Features `operations`, `calls`, `stats`. `account_id` is the
   product's member id, `username` its member name; bind by its
   external-reference field if it has one, else by email at an operator's
   adoption. The first `/subjects` lists today's borrowers as unmanaged.

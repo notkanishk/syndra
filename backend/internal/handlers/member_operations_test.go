@@ -45,7 +45,7 @@ type actionHarness struct {
 func stubMemberAction(t *testing.T) *actionHarness {
 	t.Helper()
 	h := &actionHarness{storageHarness: &storageHarness{entitled: true, bound: true}, op: checkoutOp,
-		preview: addons.ReadReply{Operation: "item.checkout", Schema: "common/records.json", Results: true,
+		preview: addons.ReadReply{Operation: "item.checkout", Schema: "common/records.json",
 			Outcome: addons.OutcomeSucceeded, Body: []byte(recordsReply)}}
 	stubMyStorage(t, h.storageHarness)
 	resolve, ops, preview, dispatch, open := addonsResolveOperation, addonsOperations, addonopPreview, svcDispatchOperation, dbOpenCall

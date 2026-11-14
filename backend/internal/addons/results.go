@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// The one read path (feature results, design §4): every `effect: read`
+// The one read path (design §4): every `effect: read`
 // operation is sent by Read and by nothing else. Never dispatched, never
 // written to the operations log, never confirmed: it runs on an ordinary page
 // load, and a row per page view would fill the log with events that changed
@@ -21,9 +21,8 @@ import (
 // actor, the operator-only person page (GET /users/{id}/targets) the person it
 // shows as subject and the operator as actor.
 //
-// An add-on declaring `results` answers one `result`, read into the types
-// below; one without is read from its typed pocket (OperationPolicy.Pocket), and only
-// for the three reads that had one. No JSON Schema is compiled at runtime
+// Every add-on answers one `result`, read into the types below, and nothing
+// else: a reply without it is not a reading. No JSON Schema is compiled at runtime
 // (design §1): these hand-written types are held to the schema files by the
 // fixture tests, and a reply missing a key its schema requires is not a
 // reading (absence is never a value).
@@ -42,12 +41,8 @@ type ReadReply struct {
 	// Target is who answered, for what is said about its reply (takenAt).
 	Target string
 	// Schema is the registry's result schema for the id, "" when it declares
-	// its own; Pocket the key it was answered under before results.
-	Schema string
-	Pocket string
-	// Results is the add-on declaring feature results: its answer is
-	// `result`, and no pocket is read. Without it only the pocket is.
-	Results bool
+	// its own.
+	Schema  string
 	Body    []byte
 	Outcome Outcome
 	// Status is the add-on's HTTP status, so a caller can tell a specific
@@ -94,12 +89,7 @@ func Read(ctx context.Context, target, op, subject, actor string, params map[str
 		out.Err = err
 		return out
 	}
-	m, err := a.Manifest()
-	if err != nil {
-		out.Err = err
-		return out
-	}
-	out.Schema, out.Pocket, out.Results = eff.Result, eff.Pocket, m.Declares("results")
+	out.Schema = eff.Result
 	body := operationBody(op, subject, actor, params)
 	// Ignored by the add-on (a read is never deduplicated), and still sent:
 	// the request schema requires one.
@@ -168,13 +158,13 @@ func Preview(ctx context.Context, target, op, subject, actor string, params map[
 		out.Err = err
 		return out
 	}
-	// Resolved available means calls is declared (physicalNeeds); asked
+	// Resolved available means calls is declared (resolveOperations); asked
 	// again here because the field must never reach an add-on without it.
 	if err := a.declares("calls"); err != nil {
 		out.Err = err
 		return out
 	}
-	out.Schema, out.Results = eff.Result, true
+	out.Schema = eff.Result
 	body := operationBody(op, subject, actor, params)
 	body["preview"] = true
 	raw, err := json.Marshal(body)
@@ -198,28 +188,26 @@ func ViewOf(target, op string, body []byte, c Clock) ReadView {
 	if secretResult(op) {
 		return ReadView{Operation: op, Shape: shapes[p.Result].shape}
 	}
-	return ReadReply{Operation: op, Target: target, Schema: p.Result, Results: true, Body: body, Outcome: OutcomeSucceeded, Clock: c}.View()
+	return ReadReply{Operation: op, Target: target, Schema: p.Result, Body: body, Outcome: OutcomeSucceeded, Clock: c}.View()
 }
 
-// answer is the reply's payload: `result` from an add-on declaring results,
-// the legacy pocket from one that does not. An add-on without results that
-// sends `result` anyway is not read: the feature is the promise of its shape.
+// answer is the reply's payload: `result`, the one key a read is answered
+// under. A reply without it (an old per-read key such as `storage` in its
+// place) carries no reading, and is refused, never guessed at.
 func (r ReadReply) answer() (json.RawMessage, error) {
 	if r.Outcome != OutcomeSucceeded {
 		return nil, fmt.Errorf("read %s: %s: %w", r.Operation, r.Outcome, r.Err)
 	}
-	key := "result"
-	if !r.Results {
-		key = r.Pocket
-	}
+	// A map, not a struct: encoding/json matches a struct's keys without
+	// regard to case, and the key is `result`, exactly.
 	var env map[string]json.RawMessage
 	if err := json.Unmarshal(r.Body, &env); err != nil {
 		return nil, fmt.Errorf("read %s: %w", r.Operation, err)
 	}
-	if raw := env[key]; key != "" && len(raw) > 0 && string(raw) != "null" {
+	if raw := env["result"]; len(raw) > 0 && string(raw) != "null" {
 		return raw, nil
 	}
-	return nil, fmt.Errorf("read %s: the reply carries no %q", r.Operation, key)
+	return nil, fmt.Errorf("read %s: the reply carries no \"result\"", r.Operation)
 }
 
 // failed is a reply that did not decode: sent, answered, unreadable.
@@ -480,13 +468,12 @@ type ReadView struct {
 // component chooses its size.
 const rawResultCap = 4 << 10
 
-// View is the reply for a generic renderer. Only a results add-on's reply has
-// one; a legacy pocket is read by its own typed reader alone.
+// View is the reply for a generic renderer.
 func (r ReadReply) View() ReadView {
 	sh := shapes[r.Schema]
 	v := ReadView{Operation: r.Operation, Shape: sh.shape, RetryAfter: r.RetryAfter}
 	raw, err := r.answer()
-	if err != nil || !r.Results {
+	if err != nil {
 		return v
 	}
 	if sh.shape == "" {

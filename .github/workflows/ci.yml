@@ -112,7 +112,7 @@ jobs:
           kit
           kit -mutate -json "$RUNNER_TEMP/conformance.json"
           kit -mutate -mutate-settings -subject "conformance-ci-settings-$GITHUB_RUN_ID"
-          port=8444; reference $port -features results,freshness,calls,stats
+          port=8444; reference $port -features freshness,calls,stats
           kit
           kit -mutate -item item-0001 -subject "conformance-ci-all-$GITHUB_RUN_ID"
           kit

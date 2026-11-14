@@ -68,7 +68,7 @@ type OperationResult struct {
 	// here and is nowhere else either: rotation is the credential half of a
 	// revocation, and returning what it minted would defeat the point.
 	Rotated bool `json:"rotated,omitempty"`
-	// Result is a read operation's answer (feature results), in the shape
+	// Result is a read operation's answer, in the shape
 	// registry/operations.json names for it: *ActivityReport
 	// (common/activity.json), *StorageStatus (profiles/storage/status.json),
 	// *TargetHealth (health.get's own).
