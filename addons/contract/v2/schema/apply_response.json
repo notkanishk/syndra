@@ -37,7 +37,7 @@
       "type": "boolean"
     },
     "conflict": {
-      "$ref": "#/$defs/BindingConflict"
+      "$ref": "common/binding_conflict.json"
     }
   },
   "required": [
@@ -52,30 +52,5 @@
     "standing": [
       "account_id"
     ]
-  },
-  "$defs": {
-    "BindingConflict": {
-      "type": "object",
-      "description": "An unbound target account already holds the derived name.",
-      "properties": {
-        "username": {
-          "type": "string"
-        },
-        "account_id": {
-          "$ref": "common/field.json#/$defs/AccountId"
-        },
-        "adoptable": {
-          "type": "boolean"
-        },
-        "bound_to": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "username",
-        "account_id",
-        "adoptable"
-      ]
-    }
   }
 }

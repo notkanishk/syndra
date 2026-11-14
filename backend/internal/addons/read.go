@@ -70,16 +70,29 @@ type SubjectOutcome struct {
 	Conflict *BindingConflict `json:"conflict,omitempty"`
 }
 
-// BindingConflict is an unbound target account holding a derived name.
+// BindingConflict is a binding that names no account because another account
+// holds its name or number (common/binding_conflict.json). Username and
+// AccountID are the HOLDER's, never the subject's account.
 type BindingConflict struct {
 	Username  string `json:"username"`
 	AccountID string `json:"account_id"`
-	// Adoptable says no other subject already claims this account. A conflict
-	// that is not adoptable is a bug somewhere else and must not be offered as
-	// a one-click resolution.
+	// Adoptable says account.adopt would bind the holder to this subject as
+	// things stand. A conflict that is not adoptable must not be offered as a
+	// one-click resolution.
 	Adoptable bool `json:"adoptable"`
 	// BoundTo names the subject already holding it, when one does.
 	BoundTo string `json:"bound_to,omitempty"`
+	// Detail and Next are the add-on's words: what the conflict is, and what
+	// an operator does next. Shown as written.
+	Detail string `json:"detail,omitempty"`
+	Next   string `json:"next,omitempty"`
+}
+
+// SubjectConflict is one entry of /subjects' conflicts: a subject whose
+// binding names no account in that read (subjects.json#/$defs/Conflict).
+type SubjectConflict struct {
+	Subject string `json:"subject"`
+	BindingConflict
 }
 
 // PlanResult is the whole answer, plus what the backend learned about the call.
@@ -335,11 +348,18 @@ func planChunk(ctx context.Context, a *Addon, target string, subjects []PlanSubj
 // lives here that Syndra did not put there.
 type TargetAccount struct {
 	Username string `json:"username"`
-	// AccountID is the target's stable identity for the account (contract 2's
-	// account_id), which survives a rename. It is what a binding is matched
-	// on, so that an account renamed out of band is recognised rather than
-	// reported as somebody else's.
+	// AccountID is the app's own id for the account (contract 2's
+	// account_id): unique within this read and kept across a rename, but not
+	// an identity across reads. An app can hand a deleted account's id to a
+	// new one, so it is never what attributes an account to a person; Subject
+	// is (AUTHORING, chapter 2).
 	AccountID string `json:"account_id"`
+	// Subject is the subject the add-on's binding names this account for,
+	// empty when it is bound to nobody: the add-on is the one that knows
+	// (it holds the bindings), as a SCIM service provider says externalId
+	// (RFC 7643 §3.1). Decoded and kept; the drift sweep's matching moves
+	// onto it in slice 7t-3.
+	Subject string `json:"subject,omitempty"`
 	// Standing is whether the account can be used yet and who is waited on
 	// (design §6): an account Syndra created has no password until its member
 	// sets one, which is a legitimate pending state, not nothing having
@@ -367,6 +387,10 @@ type TargetAccount struct {
 // SubjectsResult is a full state read.
 type SubjectsResult struct {
 	Accounts []TargetAccount
+	// Conflicts are the bindings that name no account in this read because
+	// another account holds their name or number, in the add-on's words. A
+	// subject here is on no account: neither bound there nor absent.
+	Conflicts []SubjectConflict
 	// Current says the read is live rather than served from the add-on's mirror.
 	// A stale read may be shown to an operator, labelled with its age; it must
 	// never be diffed, because every change made during the outage would be
@@ -422,11 +446,12 @@ func (r SubjectsResult) Usable() bool {
 // does not say it is current is not, and one that does not say it is complete
 // is truncated, so neither can be concluded from.
 type subjectsWire struct {
-	Subjects  []TargetAccount `json:"subjects"`
-	Current   *bool           `json:"current"`
-	TakenAt   *string         `json:"taken_at"`
-	Truncated *bool           `json:"truncated"`
-	Stale     *Stale          `json:"stale"`
+	Subjects  []TargetAccount   `json:"subjects"`
+	Current   *bool             `json:"current"`
+	TakenAt   *string           `json:"taken_at"`
+	Truncated *bool             `json:"truncated"`
+	Stale     *Stale            `json:"stale"`
+	Conflicts []SubjectConflict `json:"conflicts"`
 }
 
 // Subjects reads every account the target holds.
@@ -460,7 +485,7 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 		out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode subjects: %w", target, err)
 		return out
 	}
-	out.Accounts, out.Stale = decoded.Subjects, decoded.Stale
+	out.Accounts, out.Stale, out.Conflicts = decoded.Subjects, decoded.Stale, decoded.Conflicts
 	out.Current = decoded.Current != nil && *decoded.Current
 	out.Truncated = decoded.Truncated == nil || *decoded.Truncated
 	if err := staleInvariant(resp.Body); err != nil {

@@ -3,6 +3,39 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## The add-on says whose account is whose (slice 7t-2, 15 Nov 2026)
+
+A change to major 2 before its release, not a new major or a feature (no
+contract-2 add-on has shipped; pending owner Q4). Each `/subjects` row
+carries `subject`, the subject the add-on's binding names that account for,
+absent when none does; the reply carries `conflicts`, every binding that
+names no account because another account holds its name or number, with the
+holder and the add-on's own `detail` and `next`. `account_id` keeps its
+value (the uid on TrueNAS; pending owner Q1) and loses a claim it could not
+keep: it is unique within one read and survives a rename, but it is not an
+identity across reads, since an app can hand a deleted account's id to a new
+one (SCIM, RFC 7643 §3.1: `subject` plays `externalId`).
+
+- Schema files: `common/binding_conflict.json` (new; the conflict's one
+  shape, with `detail` and `next` required), `subjects.json` (`subject`,
+  `conflicts`, `$defs/Conflict`), `apply_response.json` and `error.json`
+  (`conflict` refers to the common shape; `apply_response.json#/$defs/BindingConflict`
+  is gone), `common/field.json` (`AccountId`'s description).
+- Registry: `BINDING_CONFLICT` covers a recorded name or number now held by
+  another account, besides the derived name.
+- Fixtures: `subjects.json` (a bound row, one conflict),
+  `plan_response.json` and `error_binding_conflict.json` (the conflict's
+  words).
+- Guide: chapter 2 step 3 (the `account_id` rule), `GET /subjects`
+  (`subject`, `conflicts`), the glossary.
+- Kit: `subjects.subject`, `subjects.conflicts`, and `identity.not-reused`
+  (advisory; with `-mutate` and `-elevated-key-file`, it purges the kit's
+  own account and creates it again).
+- Go: the backend decodes both (`TargetAccount.Subject`,
+  `SubjectsResult.Conflicts`); nothing reads them yet (slice 7t-3).
+- Deploy and rollback: additive on the wire; a backend before this ignores
+  both keys.
+
 ## Syndra reads reply member names exactly, and once (slice 7p, 14 Nov 2026)
 
 The same rule from Syndra's side (owner ruling, 14 Nov 2026: "use the same

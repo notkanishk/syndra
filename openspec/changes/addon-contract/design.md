@@ -1306,7 +1306,7 @@ whether a member's usage grew. `storage.sessions` from the audit log is the
 second TrueNAS metric and reports a `gap` for every share auditing does not
 cover (`uncovered` today, as a gap reason).
 
-### 9.4b Which account a binding names (the TrueNAS add-on, slices 7r and 7t-1)
+### 9.4b Which account a binding names (the TrueNAS add-on, slices 7r, 7t-1 and 7t-2)
 
 A binding records the account's uid and what that uid is (`uid_kind`). `"account"` says it is a real
 NAS uid: written by create, both adoptions and `boundAccount`'s rewrite. Absent is a contract-1
@@ -1316,9 +1316,15 @@ binding, whose uid may be the NAS record key. `boundAccount` says which account 
 its uid and name (apply's `locate`, which then names the account's groups to converge them, the account operations set-password, rotate
 and purge, `storage.status`, `activity.get`, and adoption's repeat check) and `resolveIn` over one read
 (the plan, and the wishes behind the standing, the statistics and `accountBound`). `recordID` is gone.
-It is **not yet** what the backend's drift matching uses: that matches on `account_id`, and saying
-the attribution on `/subjects` is slice 7t-2 (wire) and 7t-3 (backend). Below, "never written",
-"never attributed" and "names no account" are about the add-on:
+Since 7t-2 the add-on also says the attribution on the wire. `attribute` runs `resolveIn` over every
+binding once, and `/subjects` carries each row's `subject` (the account a binding names) and
+`conflicts[]` (a binding that names nothing because another account holds its name or number, with
+the holder and the add-on's `detail` and `next`: `common/binding_conflict.json`, the apply's conflict
+shape). Syndra reads three states off one reply: bound, conflict, and gone (neither). `account_id`
+stays the uid and is a key within one read, not an identity across reads (AUTHORING ch. 2; SCIM
+RFC 7643 §3.1, with `subject` as `externalId`). The backend decodes both but does **not yet** match
+on them: its drift matching still uses `account_id` until 7t-3. Below, "never written", "never
+attributed" and "names no account" are about the add-on:
 
 - The name is the anchor. A name that finds an account with the recorded uid names it; a name held by
   a different uid is a conflict (the original was deleted and the name reused). An unmarked binding
@@ -1340,7 +1346,9 @@ the attribution on `/subjects` is slice 7t-2 (wire) and 7t-3 (backend). Below, "
 - An operation refuses rather than guesses: 422 when the subject has no binding or its account is
   gone, 409 on a conflict (the conflict's own detail and next step, `OPERATION_FAILED`; no wire
   change in 7t-1) and on two accounts holding one key, 500 `STORE_UNREADABLE` when the add-on's store
-  cannot be read; 502 when an absence is read from a cut-short list. On a conflict no write is sent and
+  cannot be read; 502 when an absence is read from a cut-short list. An operation's conflict stays
+  `OPERATION_FAILED` after 7t-2: `BINDING_CONFLICT` carries an apply outcome (`effect: blocked`),
+  which an operation has no vocabulary for, and the same conflict is on `/subjects`. On a conflict no write is sent and
   nothing is logged (the lookups are reads): no write ever goes to an
   account `resolveLive` did not return. A purge's self check and `activity.get`'s audit filter use the
   account's name now (the audit log is keyed by name), so an in-range rename finds its log.

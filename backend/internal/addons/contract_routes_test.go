@@ -202,6 +202,20 @@ func TestSubjectsReplyLands(t *testing.T) {
 	if !r.Accounts[1].Self || r.Accounts[1].Standing == nil || !r.Accounts[1].Standing.Usable {
 		t.Error("the add-on's own account is not marked self and usable")
 	}
+	// The attribution is the add-on's (slice 7t-2): the bound row carries its
+	// subject, the unbound one none, and a binding that names nothing is a
+	// conflict with the holder and the add-on's words, on no row.
+	if a.Subject != "289471021834760193" || r.Accounts[1].Subject != "" {
+		t.Errorf("subject did not land: bound %q, self %q", a.Subject, r.Accounts[1].Subject)
+	}
+	want := SubjectConflict{Subject: "289471021834760196", BindingConflict: BindingConflict{
+		Username: "kofi_kingston", AccountID: "3012",
+		Detail: "The account finn_balor, recorded for this person, is gone, and its number is now held by a different account, kofi_kingston.",
+		Next:   "Stop tracking this person's old account; the next change creates a new one for them. Adopt kofi_kingston instead only if it is theirs.",
+	}}
+	if len(r.Conflicts) != 1 || r.Conflicts[0] != want {
+		t.Errorf("conflicts did not land: %+v", r.Conflicts)
+	}
 
 	addonAnswering(t, "subjects_stale.json")
 	if r := Subjects(context.Background(), "truenas", false); r.Outcome != OutcomeSucceeded || r.Current || r.Usable() {

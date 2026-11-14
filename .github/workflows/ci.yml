@@ -105,6 +105,7 @@ jobs:
           go build -C addons/reference -o "$RUNNER_TEMP/reference-addon" ./cmd/reference-addon
           go build -C addons/conformance -o "$RUNNER_TEMP/syndra-addon-conform" ./cmd/syndra-addon-conform
           printf '%s' conformance-ci-test-secret-not-a-credential > "$RUNNER_TEMP/addon-secret"
+          printf '%s' conformance-ci-elevated-key-not-a-credential > "$RUNNER_TEMP/elevated-key"
           trap 'kill $(jobs -p) 2>/dev/null' EXIT
           reference() { "$RUNNER_TEMP/reference-addon" -listen "127.0.0.1:$1" -target reference -secret-file "$RUNNER_TEMP/addon-secret" "${@:2}" &
                         for _ in $(seq 50); do (: </dev/tcp/127.0.0.1/$1) 2>/dev/null && return; sleep 0.2; done
@@ -113,7 +114,8 @@ jobs:
                     -secret-file "$RUNNER_TEMP/addon-secret" "$@"; }
           port=8443; reference $port
           kit
-          kit -mutate -json "$RUNNER_TEMP/conformance.json"
+          # The one run that purges its own account and makes it again (identity.not-reused).
+          kit -mutate -elevated-key-file "$RUNNER_TEMP/elevated-key" -json "$RUNNER_TEMP/conformance.json"
           kit -mutate -mutate-settings -subject "conformance-ci-settings-$GITHUB_RUN_ID"
           port=8444; reference $port -features freshness,calls,stats
           kit

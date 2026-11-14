@@ -49,6 +49,12 @@ func (k *kit) mutate() error {
 		return ErrReadsFailed
 	}
 	k.before = idsOf(doc)
+	// The plan proved the subject unbound, so no row may carry it yet.
+	k.attribution(k.at("subjects.subject"), k.at("subjects.conflicts"), doc)
+	for _, s := range objects(doc["subjects"]) {
+		k.at("subjects.subject").expect(s["subject"] != k.cfg.Subject,
+			"before its create, account_id %s already carries the kit's subject, which no binding names yet", display(s))
+	}
 	defer k.finish()
 
 	var callID string
@@ -86,6 +92,7 @@ func (k *kit) mutate() error {
 		}},
 	}
 	withAccount := []step{
+		{"attribution", []string{"subjects.subject", "subjects.conflicts"}, func() { k.attributed(k.at("subjects.subject"), k.at("subjects.conflicts")) }},
 		{"read-back", []string{"read-back"}, func() { k.readBack(k.at("read-back"), created.doc()) }},
 		{"limits", []string{"limit-combine"}, func() { k.limits(k.at("limit-combine")) }},
 		{"replay", []string{"replay"}, func() { k.replay(k.at("replay"), callID, created) }},
@@ -102,6 +109,8 @@ func (k *kit) mutate() error {
 		{"withdraw", []string{"withdraw-only.existing", "channel-follows-account", "standing.off", "plan-equals-apply"}, func() {
 			k.withdrawExisting(k.at("withdraw-only.existing"), k.at("channel-follows-account"), k.at("standing.off"))
 		}},
+		// Last: it deletes the kit's account (off by now) and makes it again.
+		{"not-reused", []string{"identity.not-reused", "plan-equals-apply", "create-is-new"}, func() { k.notReused(k.at("identity.not-reused")) }},
 	}
 	all := append(steps, withAccount...)
 	stop := func(from int, why string) {
@@ -291,6 +300,63 @@ func (k *kit) state(c *check) map[string]any {
 	}
 	c.fail("/subjects does not list the kit's account %s", k.created.id)
 	return nil
+}
+
+// attributed reads /subjects once the kit owns its account: that row, and no other, carries the
+// kit's subject (the add-on's binding names it), and the subject is no conflict.
+func (k *kit) attributed(subj, conf *check) {
+	doc := k.ok(subj, k.send(request{method: http.MethodGet, target: "/subjects"}), "subjects.json")
+	if doc == nil {
+		return
+	}
+	k.attribution(subj, conf, doc)
+	listed := false
+	for _, s := range objects(doc["subjects"]) {
+		mine := k.owner(s, false) == ours
+		listed = listed || mine
+		subj.expect(mine == (s["subject"] == k.cfg.Subject), "account_id %s carries subject %v; the kit's subject is bound to account_id %s, and only to it",
+			display(s), s["subject"], k.created.id)
+	}
+	subj.expect(listed, "/subjects does not list the kit's account %s", k.created.id)
+	for _, cf := range objects(doc["conflicts"]) {
+		conf.expect(cf["subject"] != k.cfg.Subject, "the kit's subject is listed as a conflict while bound to account_id %s", k.created.id)
+	}
+	conf.mark() // the kit's own subject was looked for, conflicts or none
+}
+
+// notReused purges the kit's own account, which the withdraw step turned off, and creates it
+// again: the new account answers an account_id the purged one did not have. It runs only with
+// the operator's elevated key and account.purge offered, and sends the purge only after a plan
+// names the kit's account (viaOwned), so nothing but the kit's own is ever deleted.
+func (k *kit) notReused(c *check) {
+	switch {
+	case k.cfg.ElevatedKey == "":
+		c.skip("deletes the kit's own account: needs -elevated-key-file")
+		return
+	case !k.m.has("operations") || !k.m.ops["account.purge"]:
+		c.skip("account.purge is not declared available")
+		return
+	case k.state(&check{})[k.m.account] != false:
+		c.skip("the kit's account is not off, and only an account that is off is purged")
+		return
+	}
+	old := k.created.id
+	k.canaries = append(k.canaries, k.cfg.ElevatedKey)
+	ex := k.viaOwned(c)(request{method: http.MethodPost, target: "/operations/account.purge", schema: "operation_request.json",
+		body: k.operationBody("account.purge", k.callID(), map[string]any{"elevated_key": k.cfg.ElevatedKey})})
+	if doc := k.ok(c, ex, "operation_response.json"); doc == nil || str(doc, "outcome") != "succeeded" {
+		c.fail("account.purge of the kit's own account answered %d %s", ex.status, ex.code())
+		return
+	}
+	k.purged = old
+	// Gone: the kit owns nothing until its create answers again (owner's rule 1).
+	k.created.id, k.created.username, k.created.off, k.created.none = "", "", false, false
+	k.converge(k.at("plan-equals-apply"), k.callID(), k.full(), true)
+	if k.created.id == "" {
+		c.fail("the create after the purge answered no account the kit could own")
+		return
+	}
+	c.expect(k.created.id != old, "the create after account.purge answered account_id %s, the purged account's own: an id handed out again", old)
 }
 
 // offStanding reads the kit's own account, which Syndra has just asked to be off and which the app

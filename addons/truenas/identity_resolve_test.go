@@ -333,6 +333,35 @@ func TestEveryCallerResolvesOneIdentity(t *testing.T) {
 						t.Errorf("accountBound: %s bound=%t, want %t", a.Username, got, isWant)
 					}
 				}
+
+				// /subjects says it on the wire (slice 7t-2), from the same rule: the account named
+				// carries the subject and no other row does; a conflict is listed with its holder and
+				// the add-on's words, and the holder is never a row of the subject's.
+				rr, got := getSubjects(t, s, true)
+				if rr.Code != http.StatusOK {
+					t.Fatalf("/subjects: %d %s", rr.Code, rr.Body.String())
+				}
+				for _, v := range got.Subjects {
+					want := ""
+					if v.Username == c.want {
+						want = "sub-1"
+					}
+					if v.Subject != want {
+						t.Errorf("/subjects: %s carries subject %q, want %q", v.Username, v.Subject, want)
+					}
+				}
+				switch {
+				case c.conflict:
+					if len(got.Conflicts) != 1 {
+						t.Fatalf("/subjects: want the one conflict, got %+v", got.Conflicts)
+					}
+					cf := got.Conflicts[0]
+					if cf.Subject != "sub-1" || cf.AccountID != itoa(c.holderUID(t)) || cf.Adoptable || cf.Detail == "" || cf.Next == "" {
+						t.Errorf("/subjects: conflict %+v, want sub-1's with holder uid %d and its words", cf, c.holderUID(t))
+					}
+				case len(got.Conflicts) != 0:
+					t.Errorf("/subjects: no conflict here, got %+v", got.Conflicts)
+				}
 			}
 		})
 	}
@@ -445,6 +474,65 @@ func TestPlanAndApplyAgreeOnTwoAccountsOnOneUID(t *testing.T) {
 	rr = postApply(t, s, oneApply)
 	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), detail+" "+next) || len(m.updates)+len(m.creates) != 0 {
 		t.Fatalf("apply: want 409 in the same words and nothing written, got %d %s", rr.Code, rr.Body.String())
+	}
+
+	// /subjects names neither row for the subject, whichever is listed first: two accounts on the
+	// key are a question, and there is no one holder to list as a conflict either.
+	rr, got := getSubjects(t, s, true)
+	if rr.Code != http.StatusOK || len(got.Conflicts) != 0 {
+		t.Fatalf("/subjects: %d, conflicts %+v", rr.Code, got.Conflicts)
+	}
+	for _, v := range got.Subjects {
+		if v.Subject != "" {
+			t.Errorf("/subjects: %s carries subject %q; two accounts on one key name neither", v.Username, v.Subject)
+		}
+	}
+}
+
+// The name finds the account even where another row shares its uid, and only that row carries the
+// subject: one subject on one row, never every row on the number.
+func TestASharedUIDPutsTheSubjectOnTheNamedRowOnly(t *testing.T) {
+	c := idCase{binding: Binding{Username: "bob_a", UID: 300001, UIDKind: uidKindAccount}, nas: `[
+		{"username":"bob_a","id":11,"uid":300001,"locked":false,"smb":false,"groups":[]},
+		{"username":"bob_b","id":12,"uid":300001,"locked":false,"smb":false,"groups":[]}]`}
+	s, _ := c.server(t)
+	rr, got := getSubjects(t, s, true)
+	if rr.Code != http.StatusOK || len(got.Subjects) != 2 {
+		t.Fatalf("/subjects: %d %s", rr.Code, rr.Body.String())
+	}
+	for _, v := range got.Subjects {
+		if want := map[string]string{"bob_a": "sub-1"}[v.Username]; v.Subject != want {
+			t.Errorf("%s carries subject %q, want %q", v.Username, v.Subject, want)
+		}
+	}
+}
+
+// A release forgets the binding, and with it the attribution: the account stays, bound to nobody,
+// on the very next read (every write forgets the copy, so no earlier read's subject survives).
+func TestAReleasedAccountCarriesNoSubject(t *testing.T) {
+	c := idCases[0] // in range, found
+	s, _ := c.server(t)
+	if _, got := getSubjects(t, s, false); len(got.Subjects) != 1 || got.Subjects[0].Subject != "sub-1" {
+		t.Fatalf("before the release: %+v", got.Subjects)
+	}
+	if rr := postOperation(t, s, "account.release", `{"call_id":"c-rel","subject":"sub-1"}`); rr.Code != http.StatusOK {
+		t.Fatalf("release: %d %s", rr.Code, rr.Body.String())
+	}
+	_, got := getSubjects(t, s, false)
+	if len(got.Subjects) != 1 || got.Subjects[0].Subject != "" || len(got.Conflicts) != 0 {
+		t.Errorf("after the release: %+v, conflicts %+v; want bob listed, bound to nobody", got.Subjects, got.Conflicts)
+	}
+}
+
+// A binding that cannot be read is no attribution at all: 500 STORE_UNREADABLE, never a read with
+// that person's row unbound and no conflict, which says their account is gone. Another subject's
+// unreadable binding counts the same: which row is whose cannot be said for the read.
+func TestSubjectsWithAnUnreadableBindingAreRefused(t *testing.T) {
+	s, _ := idCases[0].server(t)
+	corrupt(t, s, bucketBindings, "sub-2")
+	rr, _ := getSubjects(t, s, true)
+	if rr.Code != http.StatusInternalServerError || problemCode(t, rr) != CodeStoreUnreadable {
+		t.Fatalf("want 500 %s, got %d %s", CodeStoreUnreadable, rr.Code, rr.Body.String())
 	}
 }
 

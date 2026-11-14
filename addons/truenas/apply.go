@@ -73,11 +73,11 @@ type ApplyOutcome struct {
 	// Username is the derived or bound account name, reported so no separate
 	// creation call has to be sequenced before this one to learn it.
 	Username string `json:"username,omitempty"`
-	// AccountID is the target's stable identity for that account (the uid,
-	// as contract 2's string account_id). Reported beside the name because the
-	// name can move out of band and this cannot: a backend recording only the
-	// name would lose track of the account the first time somebody renamed it
-	// in the web UI.
+	// AccountID is that account's uid, as contract 2's string account_id.
+	// Reported beside the name because the name can move out of band and this
+	// cannot. It is a key within this reply's read, not an identity across
+	// reads: TrueNAS can hand a deleted account's uid outside this add-on's
+	// range to a new one (identity_resolve.go).
 	AccountID string `json:"account_id,omitempty"`
 	// Standing is whether that account can be used yet, and who is waited on
 	// (design §6). It travels with AccountID, and only when an account exists.
@@ -208,6 +208,11 @@ type BindingConflict struct {
 	// adoption action can act on.
 	Adoptable bool   `json:"adoptable"`
 	BoundTo   string `json:"bound_to,omitempty"`
+	// Detail and Next are words(), carried with the conflict wherever it travels (an outcome, a
+	// BINDING_CONFLICT problem, /subjects' conflicts: common/binding_conflict.json). Set once, by
+	// worded, where a conflict is made.
+	Detail string `json:"detail"`
+	Next   string `json:"next"`
 	// serviceAccount is the add-on's own account holding the name, which
 	// account.adopt refuses (refuseSelfAccount). Not on the wire: adoptable
 	// false already says the one thing Syndra acts on, and words says why.
@@ -228,11 +233,17 @@ type BindingConflict struct {
 func (s *server) unboundConflict(account *Subject, owner string) *BindingConflict {
 	_, _, known := s.nas.Self()
 	self := s.refuseSelfAccount(account.Username) != nil
-	return &BindingConflict{
+	return (&BindingConflict{
 		Username: account.Username, AccountID: accountID(account.UID),
 		Adoptable: owner == "" && known && !self, BoundTo: owner,
 		serviceAccount: self, selfUnknown: !known,
-	}
+	}).worded()
+}
+
+// worded sets the conflict's Detail and Next from words, once, where it is made.
+func (c *BindingConflict) worded() *BindingConflict {
+	c.Detail, c.Next = c.words()
+	return c
 }
 
 // leftByCrashedCreate is design §5's one adoption without a person (5.3d):

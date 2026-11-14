@@ -37,7 +37,7 @@
         409
       ],
       "retry": "never",
-      "meaning": "An unbound target account already holds the derived name; the conflict rides as an extension member. An operator adopts or renames."
+      "meaning": "Another account holds what the subject's account would be named by: the name an unbound subject derives, the name its binding is recorded under, or a recorded number the app can hand out again. The holder is never acted on. The conflict (common/binding_conflict.json, the holder and the add-on's words) rides as an extension member; GET /subjects lists the same conflict under conflicts. An operator adopts, releases or renames."
     },
     "CALL_ID_REUSED": {
       "title": "Call id reused",

@@ -261,7 +261,39 @@ func (k *kit) subjects(c *check) map[string]any {
 			k.shape(c, "subject "+id+" state", name, v)
 		}
 	}
+	bound := k.attribution(k.at("subjects.subject"), k.at("subjects.conflicts"), doc)
+	if !k.cfg.Mutate && bound == 0 { // -mutate judges it on the kit's own account
+		k.at("subjects.subject").skip("no row carries a subject, so there is nothing to judge without -mutate")
+	}
+	if !k.cfg.Mutate && len(objects(doc["conflicts"])) == 0 {
+		k.at("subjects.conflicts").skip("no conflict listed, and the kit cannot stage one")
+	}
 	return doc
+}
+
+// attribution judges who a read says each account belongs to (subject, conflicts): a subject is
+// on one row at most and never on the add-on's own account, and a conflict names a subject that
+// is on no row, once. A binding names one account or none. It returns how many rows carry one.
+// The shape of each is the subjects check's (subjects.json).
+func (k *kit) attribution(subj, conf *check, doc map[string]any) int {
+	rowOf := map[string]string{}
+	for _, s := range objects(doc["subjects"]) {
+		id, has := s["subject"].(string)
+		if !has {
+			continue
+		}
+		subj.expect(rowOf[id] == "", "subject %q is on two rows, account_id %s and %s", id, rowOf[id], display(s))
+		subj.expect(s["self"] != true, "the add-on's own account %s carries subject %q", display(s), id)
+		rowOf[id] = display(s)
+	}
+	conflicted := map[string]bool{}
+	for _, cf := range objects(doc["conflicts"]) {
+		id := str(cf, "subject")
+		conf.expect(rowOf[id] == "", "subject %q is a conflict and also the subject of account_id %s: a binding names one account or none", id, rowOf[id])
+		conf.expect(!conflicted[id], "subject %q is listed as a conflict twice", id)
+		conflicted[id] = true
+	}
+	return len(rowOf)
 }
 
 // dated: the read carries a Date (RFC 9110 §6.6.1) from the clock that stamped

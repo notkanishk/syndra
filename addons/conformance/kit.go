@@ -51,6 +51,11 @@ type Config struct {
 	// a physical operation (feature calls), and leave checked out: it is
 	// named by the operator, never guessed. Empty skips operations.physical.
 	Item string
+	// ElevatedKey is account.purge's elevated_key, handed over by the operator.
+	// With it, a -mutate run purges the kit's own account once it is off and
+	// creates it again (identity.not-reused); the kit never purges anything
+	// else. Empty skips that check, and nothing is deleted.
+	ElevatedKey string
 }
 
 // spansTheRun are the checks judged across several steps or over every reply
@@ -193,6 +198,7 @@ type kit struct {
 	// and reply, which /calls must answer recorded (calls.recorded).
 	passwordCall  string
 	passwordReply []byte
+	purged        string // the kit's first account, purged by identity.not-reused
 	lent          string // Config.Item, once a physical operation checked it out or may have
 	lentUnsure    bool   // the confirm's answer was lost or unreadable
 	since         int    // index into log of the first canary's request
@@ -383,6 +389,9 @@ func (k *kit) report() *Report {
 
 func (k *kit) left() string {
 	s := k.leftAccount()
+	if k.purged != "" {
+		s += fmt.Sprintf("; account_id %s, the kit's first, was purged to check identity.not-reused", k.purged)
+	}
 	if len(k.foreign) > 0 && k.created.id != "" {
 		s += "; NOT confirmed: " + k.foreignLine()
 	}

@@ -141,7 +141,7 @@ func (a *Addon) freshSubjects(fresh bool) reply {
 			f.failed = false
 		}
 		a.keep(list, at, gen)
-		return ok(map[string]any{"subjects": list, "current": true, "taken_at": at, "truncated": false})
+		return ok(map[string]any{"subjects": list, "current": true, "taken_at": at, "truncated": false, "conflicts": noConflicts})
 	}
 }
 
@@ -160,7 +160,7 @@ func (a *Addon) mirrored(reason string) reply {
 	if reason == "cooldown" {
 		stale["retry_after"] = retryAfter(time.Since(a.fresh.began))
 	}
-	return ok(map[string]any{"subjects": a.fresh.list, "current": false, "stale": stale, "taken_at": a.fresh.at, "truncated": false})
+	return ok(map[string]any{"subjects": a.fresh.list, "current": false, "stale": stale, "taken_at": a.fresh.at, "truncated": false, "conflicts": noConflicts})
 }
 
 // retryAfter is the whole seconds left of the cooldown, rounded up so a

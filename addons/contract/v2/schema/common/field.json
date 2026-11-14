@@ -51,7 +51,7 @@
     "AccountId": {
       "type": "string",
       "minLength": 1,
-      "description": "The target's own stable, opaque id for an account (a uid, a UUID); survives a rename."
+      "description": "The app's own opaque id for an account (a uid, a UUID): non-empty, unique among the accounts of one read, and kept across a rename. A key within one read, not an identity across reads: which subject an account belongs to is the add-on's to say (GET /subjects: subject, conflicts)."
     }
   }
 }

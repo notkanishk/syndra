@@ -4,6 +4,7 @@
       "id": 17,
       "username": "rey_mysterio",
       "account_id": "3051",
+      "subject": "289471021834760193",
       "groups": [
         "fabrication",
         "lab_makers"
@@ -54,5 +55,15 @@
   ],
   "current": true,
   "taken_at": "2026-11-10T09:30:00Z",
-  "truncated": false
+  "truncated": false,
+  "conflicts": [
+    {
+      "subject": "289471021834760196",
+      "username": "kofi_kingston",
+      "account_id": "3012",
+      "adoptable": false,
+      "detail": "The account finn_balor, recorded for this person, is gone, and its number is now held by a different account, kofi_kingston.",
+      "next": "Stop tracking this person's old account; the next change creates a new one for them. Adopt kofi_kingston instead only if it is theirs."
+    }
+  ]
 }

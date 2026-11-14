@@ -491,14 +491,17 @@ type Wish struct {
 
 // Bindings is every binding, as stored, each with its uid read from account_id when that is all it
 // kept. Which NAS account one names is the server's rule, not this list's (identity_resolve.go).
+// A binding that cannot be decoded is an error, as GetBinding answers it: left out, its subject
+// would read as bound to nothing, and /subjects would say that person's account is gone.
 func (s *Store) Bindings() ([]Binding, error) {
 	var out []Binding
 	err := s.db.View(func(tx *bolt.Tx) error {
-		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
+		return tx.Bucket(bucketBindings).ForEach(func(k, v []byte) error {
 			var b Binding
-			if json.Unmarshal(v, &b) == nil {
-				out = append(out, b)
+			if err := json.Unmarshal(v, &b); err != nil {
+				return fmt.Errorf("binding %s: %w", k, err)
 			}
+			out = append(out, b)
 			return nil
 		})
 	})

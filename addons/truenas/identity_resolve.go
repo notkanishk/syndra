@@ -18,8 +18,9 @@ import (
 //     in-range rename followed); operatedAccount is resolveLive with an operation's refusals: 422 no
 //     binding or account gone, 409 a conflict or two accounts on one key, 502 an absence read from
 //     a cut-short list, 500 STORE_UNREADABLE.
-//   - resolveIn asks it of one read of the accounts (plan, wishes, statistics, a contract-1 reply's
-//     standing).
+//   - resolveIn asks it of one read of the accounts (plan, a contract-1 reply's standing), and
+//     attribute asks it of every binding over one read: /subjects says it on the wire (each row's
+//     subject, and the conflicts), and the wishes, the statistics and accountBound are views of it.
 //
 // The name is asked first. A name that finds the recorded uid names that account, even when another
 // account shares the uid; the uid is asked only when the name is gone, and two accounts on whichever
@@ -34,8 +35,9 @@ import (
 // resolve-then-act for applies and write operations; a read operation runs outside it and outside
 // the lifecycle gate, so it resolves without rewriting anything.
 //
-// Not yet here: /subjects saying the attribution on the wire (each row's subject, the conflicts) is
-// slice 7t-2, and the backend's matching on account_id is 7t-3.
+// account_id is the uid and nothing else (AUTHORING, chapter 2): a key within one read, not an
+// identity across reads. Which subject an account belongs to is said by attribute, never by a uid
+// matched elsewhere; the backend's matching moves off account_id in slice 7t-3.
 
 // accountIndex looks accounts up by exact key, as accountWhere does against the target: a key two
 // accounts hold is marked, so a lookup of it refuses as the live one does.
@@ -138,7 +140,7 @@ func boundAccount(binding Binding, floor, ceiling int64,
 			// A name some other account now holds (the original was deleted
 			// and the name reused). Converging it would hand this subject's
 			// entitlements to a stranger, so it halts like any foreign name.
-			return nil, binding, &BindingConflict{Username: found.Username, AccountID: accountID(found.UID)}, nil
+			return nil, binding, (&BindingConflict{Username: found.Username, AccountID: accountID(found.UID)}).worded(), nil
 		}
 		if !owned {
 			// A legacy binding holding a record key (or a real uid it never said was one): the name
@@ -166,8 +168,8 @@ func boundAccount(binding Binding, floor, ceiling int64,
 			// A number outside the range may have been handed to a new account since this one was
 			// deleted: not a rename, whatever else is true, marked or not (policy B). An operator
 			// decides; nothing is written to the account that holds the number and nothing is created.
-			return nil, binding, &BindingConflict{Username: renamed.Username, AccountID: accountID(renamed.UID),
-				numberHeld: true, was: binding.Username}, nil
+			return nil, binding, (&BindingConflict{Username: renamed.Username, AccountID: accountID(renamed.UID),
+				numberHeld: true, was: binding.Username}).worded(), nil
 		}
 		binding.Username = renamed.Username
 		binding.UIDKind = uidKindAccount
@@ -286,62 +288,114 @@ func liveRefusal(err error) (int, error) {
 }
 
 // conflictRefusal is a conflict as an operation's refusal: the words the apply and plan say it in.
+// It stays 409 OPERATION_FAILED, not BINDING_CONFLICT: the schema has BINDING_CONFLICT carry an
+// apply outcome (subject, effect blocked, conflict: error.json), and an operation has no effect to
+// carry. The same conflict is on /subjects (conflicts), with the holder, for Syndra to act on.
 func conflictRefusal(c *BindingConflict) error {
 	detail, next := c.words()
 	return errors.New(detail + " " + next)
 }
 
-// boundAccounts is every account a binding names in this read, by uid, with its subject. A binding
-// whose uid is in range and whose account is not in the read (or whose name another account holds)
-// still names that uid by number, since an in-range number is never reused. An out-of-range one
-// names an account only when boundAccount found it.
-func (s *server) boundAccounts(subjects []Subject) (map[int64]string, map[int64]Binding, error) {
+// attribution is every binding over one read of the accounts, by resolveIn and no other rule.
+type attribution struct {
+	// subjectOf is the subject of each account in the read that a binding names (resolveIn's
+	// Account): what /subjects says as the row's subject. A binding names one account at most, and
+	// one that names none is absent here, so a subject is on one row at most. Keyed by uid and name
+	// together: a uid two rows share names neither alone (a name two rows share is never resolved).
+	subjectOf map[rowKey]string
+	// bindingOf is every uid a binding names by this read, with the binding: subjectOf's accounts,
+	// and the own uid of an in-range binding that names none here (its account is not in the read,
+	// or another account holds its name), since an in-range number is never reused. What usage and
+	// the wishes behind a standing are keyed by; never said on the wire as a row's subject.
+	bindingOf map[int64]Binding
+	// conflicts are the bindings that name nothing because another account holds their name or
+	// number, in store order (by subject): /subjects' conflicts, the holder never a row's subject.
+	conflicts []SubjectConflict
+}
+
+// rowKey is one row of a read: the uid and the name together.
+type rowKey struct {
+	uid      int64
+	username string
+}
+
+func rowOf(a *Subject) rowKey { return rowKey{a.UID, a.Username} }
+
+// SubjectConflict is one entry of /subjects' conflicts (subjects.json#/$defs/Conflict): the
+// subject whose binding names nothing, and the holder with the apply's own words.
+type SubjectConflict struct {
+	Subject string `json:"subject"`
+	*BindingConflict
+}
+
+// attribute is every binding over one read of the accounts. Its error is the store's.
+//
+// A binding whose lookup is ambiguous (two accounts in the read on the key boundAccount asked,
+// errAmbiguousAccount) names no account and is no conflict either: there is no one holder to name.
+// It is logged; the plan and the apply refuse it in their own words (ambiguityWords).
+func (s *server) attribute(subjects []Subject) (attribution, error) {
 	bindings, err := s.store.Bindings()
 	if err != nil {
-		return nil, nil, err
+		return attribution{}, err
 	}
 	ix := indexAccounts(subjects)
 	floor, ceiling := s.idRange()
-	subjectOf, bindingOf := map[int64]string{}, map[int64]Binding{}
+	at := attribution{subjectOf: map[rowKey]string{}, bindingOf: map[int64]Binding{}, conflicts: []SubjectConflict{}}
 	for _, b := range bindings {
+		r, err := s.resolveIn(b, ix)
 		uid := int64(0)
-		if r, _ := s.resolveIn(b, ix); r.Account != nil {
+		switch {
+		case err != nil:
+			log.Printf("[SUBJECTS] the binding of %s names no one account: %v", b.SubjectID, err)
+		case r.Account != nil:
 			uid = r.Account.UID
-		} else if inIDRange(b.UID, floor, ceiling) {
+			at.subjectOf[rowOf(r.Account)] = b.SubjectID
+		case r.Conflict != nil:
+			at.conflicts = append(at.conflicts, SubjectConflict{Subject: b.SubjectID, BindingConflict: r.Conflict})
+		}
+		if uid == 0 && inIDRange(b.UID, floor, ceiling) {
 			uid = b.UID
 		}
 		if uid != 0 {
-			subjectOf[uid], bindingOf[uid] = b.SubjectID, b
+			at.bindingOf[uid] = b
 		}
 	}
-	return subjectOf, bindingOf, nil
+	return at, nil
 }
 
-// wishesFor is the bindings' wishes by account uid, over a read of the accounts, or nil when the
-// store cannot be read: the standing then says what the NAS shows, as it always could. An account
-// absent from the map is bound to nobody.
-func (s *server) wishesFor(subjects []Subject) map[int64]Wish {
-	_, bindingOf, err := s.boundAccounts(subjects)
-	if err != nil {
-		logStoreFailure("binding", "subjects", err)
-		return nil
-	}
-	out := make(map[int64]Wish, len(bindingOf))
-	for uid, b := range bindingOf {
+// wishes is the bindings' wishes by account uid. An account absent from the map is bound to nobody.
+func (at attribution) wishes() map[int64]Wish {
+	out := make(map[int64]Wish, len(at.bindingOf))
+	for uid, b := range at.bindingOf {
 		out[uid] = Wish{SMB: b.WantsSMB != nil && *b.WantsSMB, Enabled: b.WantsEnabled}
 	}
 	return out
 }
 
+// wishesFor is attribute's wishes over a read of the accounts, or nil when the store cannot be
+// read: the standing then says what the NAS shows, as it always could.
+func (s *server) wishesFor(subjects []Subject) map[int64]Wish {
+	at, err := s.attribute(subjects)
+	if err != nil {
+		logStoreFailure("binding", "subjects", err)
+		return nil
+	}
+	return at.wishes()
+}
+
 // boundUIDs is every bound account's uid with its subject: how usage on the NAS is told to a person.
 func (s *server) boundUIDs(subjects []Subject) (map[int64]string, error) {
-	subjectOf, _, err := s.boundAccounts(subjects)
-	return subjectOf, err
+	at, err := s.attribute(subjects)
+	out := make(map[int64]string, len(at.bindingOf))
+	for uid, b := range at.bindingOf {
+		out[uid] = b.SubjectID
+	}
+	return out, err
 }
 
 // accountBound says whether any subject's binding names this account.
 func (s *server) accountBound(account *Subject) (bool, error) {
-	_, bindingOf, err := s.boundAccounts([]Subject{*account})
-	_, bound := bindingOf[account.UID]
+	at, err := s.attribute([]Subject{*account})
+	_, bound := at.bindingOf[account.UID]
 	return bound, err
 }

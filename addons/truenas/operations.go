@@ -73,8 +73,8 @@ type OperationResult struct {
 	// (common/activity.json), *StorageStatus (profiles/storage/status.json),
 	// *TargetHealth (health.get's own).
 	Result any `json:"result,omitempty"`
-	// AccountID is the identity (the unix uid, as contract 2's string
-	// account_id) of the account an adoption bound.
+	// AccountID is the uid (contract 2's string account_id) of the account an
+	// adoption bound.
 	//
 	// Returned because the backend keeps its own copy of the binding and had no
 	// way to learn this: it knows the NAME the operator clicked, and a name is
