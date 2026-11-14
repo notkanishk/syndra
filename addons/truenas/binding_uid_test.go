@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -20,35 +21,104 @@ func putRaw(t *testing.T, s *server, subject string, b Binding) {
 	}
 }
 
-func TestAnAdoptedAccountOutsideTheRangeIsStillFoundByNumberAfterARename(t *testing.T) {
-	// Adopted: account.adopt writes a marked binding, whatever the uid.
-	s, m := applyServer(t, `[{"username":"rey_renamed","id":11,"uid":3051,"locked":false,"smb":false,"groups":[]}]`)
-	if lo, _ := s.idRange(); lo != defaultIDFloor {
-		t.Fatalf("this test is about the production default range, got floor %d", lo)
+// A number outside the range this add-on hands out can come back after a delete (TrueNAS gives a
+// new account the next free uid), so it is never believed on its own: only beside the recorded
+// name. In range, numbers are never reused and a rename is followed.
+
+const oneApply = `{"call_id":"c1","subject":"sub-1","email":"bob@example.edu","desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":false}}`
+
+func TestAnOutOfRangeNumberHeldByAnotherNameIsAConflictNeverARename(t *testing.T) {
+	for _, tc := range []struct{ name, holder, nas string }{
+		{"renamed by hand", "bob_renamed", `[{"username":"bob_renamed","id":11,"uid":3051,"locked":false,"smb":false,"groups":[]}]`},
+		{"bob deleted, eve got the number", "eve", `[{"username":"eve","id":12,"uid":3051,"locked":false,"smb":false,"groups":[]}]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, m := applyServer(t, tc.nas)
+			if lo, _ := s.idRange(); lo != defaultIDFloor {
+				t.Fatalf("this is about the production default range, got floor %d", lo)
+			}
+			bound := Binding{SubjectID: "sub-1", Username: "bob", UID: 3051, UIDKind: uidKindAccount}
+			if err := s.store.PutBinding(bound); err != nil {
+				t.Fatal(err)
+			}
+			out := decodeOutcome(t, postApply(t, s, oneApply))
+			if out.Effect != EffectBlocked || out.Conflict == nil || !strings.Contains(out.Detail, "its number is now held by a different account, "+tc.holder) {
+				t.Fatalf("want a conflict an operator decides, got %+v", out)
+			}
+			if len(m.updates) != 0 || len(m.creates) != 0 {
+				t.Fatalf("nothing is written to the account that holds the number, and nothing is created: %d updates, %d creates", len(m.updates), len(m.creates))
+			}
+			if b, _, _ := s.store.GetBinding("sub-1"); b.Username != "bob" || b.UID != 3051 {
+				t.Fatalf("the binding is left as it was, got %+v", b)
+			}
+			// The plan says the same, and says it to the operator in words.
+			rr := httptest.NewRecorder()
+			planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"bob@example.edu","desired":{"group":["lab_makers"],"enabled":true}}]}`)
+			var plan PlanResponse
+			if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 || plan.Outcomes[0].Effect != EffectBlocked ||
+				!strings.Contains(plan.Outcomes[0].Detail, "is now held by a different account") {
+				t.Fatalf("plan: %v %s", err, rr.Body.String())
+			}
+			// And the holder is never bob's: not for stats, not for standing, not for adoption.
+			subjects := []Subject{{Username: tc.holder, UID: 3051, Enabled: true}}
+			if _, ok := s.wishesFor(subjects)[3051]; ok {
+				t.Error("standing: the holder of the number is not bob")
+			}
+			if u, _ := s.boundUIDs(subjects); len(u) != 0 {
+				t.Errorf("stats: nobody's usage is the holder's, got %+v", u)
+			}
+			if b, _ := s.accountBound(&subjects[0]); b {
+				t.Error("accountBound: the holder is bound to nobody")
+			}
+		})
 	}
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-rey", Username: "rey_old_name", UID: 3051, UIDKind: uidKindAccount}); err != nil {
+}
+
+func TestAnInRangeRenameIsStillFollowed(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"bob_renamed","id":11,"uid":300001,"locked":false,"smb":false,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "bob", UID: 300001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
-	subjects := []Subject{{Username: "rey_renamed", UID: 3051, Enabled: true}}
-
-	if _, ok := s.wishesFor(subjects)[3051]; !ok {
-		t.Error("standing: the renamed account is bound")
+	subjects := []Subject{{Username: "bob_renamed", UID: 300001, Enabled: true}}
+	if _, ok := s.wishesFor(subjects)[300001]; !ok {
+		t.Error("standing: a renamed in-range account is still bound")
 	}
-	if u, _ := s.boundUIDs(subjects); u[3051] != "sub-rey" {
-		t.Errorf("stats: the renamed account is its subject's, got %+v", u)
+	out := decodeOutcome(t, postApply(t, s, oneApply))
+	if out.Effect == EffectBlocked || len(m.creates) != 0 || len(m.updates) != 1 {
+		t.Fatalf("a rename of an in-range account is followed: %+v, %d updates, %d creates", out, len(m.updates), len(m.creates))
 	}
-	if bound, _ := s.accountBound(&subjects[0]); !bound {
-		t.Error("accountBound: the renamed account is bound")
-	}
-
-	// And an apply finds it by number: no second account, the member's data stays where it is.
-	out := decodeOutcome(t, postApply(t, s, `{"call_id":"c1","subject":"sub-rey","email":"rey@example.edu",
-		"desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":false}}`))
-	if len(m.creates) != 0 {
-		t.Fatalf("a renamed adopted account was not found: the apply created %d new account(s), %+v", len(m.creates), out)
-	}
-	if b, _, _ := s.store.GetBinding("sub-rey"); b.Username != "rey_renamed" || b.UID != 3051 {
+	if b, _, _ := s.store.GetBinding("sub-1"); b.Username != "bob_renamed" || b.UID != 300001 {
 		t.Fatalf("the binding follows the rename, got %+v", b)
+	}
+}
+
+func TestAnOutOfRangeBindingWhoseNameStillMatchesKeepsWorking(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"bob","id":11,"uid":3051,"locked":false,"smb":false,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "bob", UID: 3051, UIDKind: uidKindAccount}); err != nil {
+		t.Fatal(err)
+	}
+	subjects := []Subject{{Username: "bob", UID: 3051, Enabled: true}}
+	if _, ok := s.wishesFor(subjects)[3051]; !ok {
+		t.Error("standing: bob is bound")
+	}
+	if u, _ := s.boundUIDs(subjects); u[3051] != "sub-1" {
+		t.Errorf("stats: bob's usage is his, got %+v", u)
+	}
+	out := decodeOutcome(t, postApply(t, s, oneApply))
+	if out.Effect == EffectBlocked || len(m.creates) != 0 || len(m.updates) != 1 {
+		t.Fatalf("an adopted account whose name still matches converges: %+v, %d updates, %d creates", out, len(m.updates), len(m.creates))
+	}
+}
+
+// Name and number both gone: the account was deleted, and the apply re-creates it as it always has.
+func TestAnOutOfRangeBindingWhoseAccountIsGoneIsRecreated(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "bob", UID: 3051, UIDKind: uidKindAccount}); err != nil {
+		t.Fatal(err)
+	}
+	decodeOutcome(t, postApply(t, s, oneApply))
+	if len(m.creates) != 1 {
+		t.Fatalf("want today's re-create, got %d creates", len(m.creates))
 	}
 }
 
@@ -122,22 +192,6 @@ func TestAStrangerHoldingTheRecordKeyNumberIsNeverMatched(t *testing.T) {
 	}
 	if bound, _ := s.accountBound(&subjects[0]); bound {
 		t.Error("accountBound: the stranger is bound to nobody")
-	}
-}
-
-// A binding a later binary wrote with account_id alone holds a real uid: it reads as bound, for the
-// wishes and the standing alike.
-func TestABindingWithAccountIDAloneReadsAsBound(t *testing.T) {
-	s, _ := applyServer(t, `[]`)
-	putRaw(t, s, "sub-old", Binding{SubjectID: "sub-old", Username: "old", AccountID: accountID(3051)})
-	subjects := []Subject{{Username: "old_renamed", UID: 3051, Enabled: false}}
-	if _, ok := s.wishesFor(subjects)[3051]; !ok {
-		t.Fatal("wishesFor: account_id alone is a real uid, matched by number")
-	}
-	for _, v := range subjectViews(subjects, nil, s.wishesFor(subjects)) {
-		if strings.Contains(v.Standing.Note, "No one in Syndra is assigned") || v.Standing.Note != "Switched off on TrueNAS." {
-			t.Errorf("a bound account with no known wish makes no claim, and is not unassigned: %+v", v.Standing)
-		}
 	}
 }
 

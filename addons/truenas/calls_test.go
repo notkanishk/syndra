@@ -436,20 +436,6 @@ func TestAContractOneReaderOpensThisStore(t *testing.T) {
 	}
 }
 
-// A binding a later binary wrote with account_id alone is read by it.
-func TestABindingWithAccountIDAloneIsRead(t *testing.T) {
-	s, _ := applyServer(t, fixtureUsers)
-	if err := s.store.db.Update(func(tx *bolt.Tx) error {
-		return tx.Bucket(bucketBindings).Put([]byte("sub-7"), []byte(`{"subject_id":"sub-7","username":"seth","account_id":"3002"}`))
-	}); err != nil {
-		t.Fatal(err)
-	}
-	b, found, err := s.store.GetBinding("sub-7")
-	if err != nil || !found || b.UID != 3002 {
-		t.Fatalf("got %+v %v %v", b, found, err)
-	}
-}
-
 // Every route not served, authenticated like the rest, is a registered 404.
 func TestAnUnknownRouteIsARegisteredRefusal(t *testing.T) {
 	s, _ := applyServer(t, fixtureUsers)

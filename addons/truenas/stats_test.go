@@ -104,9 +104,10 @@ func statsServer(t *testing.T) (*server, *statsNAS, *time.Time) {
 	s.nas.version, s.nas.probed, s.nas.selfName = "25.04.2", true, "syndra"
 	at := day0
 	s.stats = statsClock{zone: kolkata, now: func() time.Time { return at }}
-	// Bound by uid, under the name the account had when it was bound: an adopted, hand-made account,
-	// whose uid 3051 is far below the range this add-on hands out (the production default), so it is
-	// named by number because the binding says it is a real uid (uid_kind), not by guessing from the range.
+	// Bound by uid, under the name the account had when it was bound. A rename is followed by number
+	// only for a number this add-on hands out (never reused), so the fixture's range holds 3051 and
+	// 3077; an adopted account outside the range is a conflict instead (binding_uid_test.go).
+	s.idFloor, s.idCeiling = 3000, 3999
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-rey", Username: "rey_old_name", UID: 3051, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}

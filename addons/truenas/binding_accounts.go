@@ -1,10 +1,11 @@
 package main
 
 // Which NAS account a binding names, asked of a read of the accounts: boundAccount's rule and no
-// other, so locate, the plan, the wishes, the one-time derivation, the statistics and the adoption
-// check can never disagree. An uid inside this add-on's id range names its account by number; a
-// contract-1 record key, or 0, is outside it and names none by number, only the account the NAME
-// finds (a stranger who happens to hold that number is never matched).
+// other, so locate, the plan, the wishes, the statistics and the adoption check can never disagree.
+// An uid inside this add-on's id range names its account by number (those numbers are never reused);
+// any other uid (an adopted hand-made account's, or a contract-1 record key) is only believed beside
+// the recorded name, and a binding whose name is gone while its number is held by another name names
+// no account at all (a conflict): the holder is never its account.
 
 // accountIndex looks accounts up by exact key, as the apply's lookups do against the target.
 type accountIndex struct {
@@ -22,16 +23,16 @@ func indexAccounts(subjects []Subject) accountIndex {
 }
 
 // boundTo is one binding as resolved against a read: the binding as boundAccount says it now reads
-// (a record key replaced by the account's real uid, a rename followed), and the uid of the account
-// it names ("" subject never occurs; uid is 0 when it names no account that read could show).
+// (a record key replaced by the account's real uid, an in-range rename followed), and the uid of the
+// account it names (0 when it names no account that read could show).
 type boundTo struct {
 	binding Binding
 	uid     int64
 }
 
 // resolveBinding is boundAccount over a read. A binding whose uid is in range and whose account is
-// not in the read (or whose name another account holds) still names that uid by number: that is what
-// boundAccount's `owned` means.
+// not in the read (or whose name another account holds) still names that uid by number, since an
+// in-range number is never reused. An out-of-range one names an account only when boundAccount found it.
 func (s *server) resolveBinding(b Binding, ix accountIndex) boundTo {
 	floor, ceiling := s.idRange()
 	found, resolved, _, _ := boundAccount(b, floor, ceiling,
@@ -40,7 +41,7 @@ func (s *server) resolveBinding(b Binding, ix accountIndex) boundTo {
 	switch {
 	case found != nil:
 		return boundTo{binding: resolved, uid: found.UID}
-	case b.ownsUID(floor, ceiling):
+	case inIDRange(b.UID, floor, ceiling):
 		return boundTo{binding: resolved, uid: b.UID}
 	}
 	return boundTo{binding: resolved}

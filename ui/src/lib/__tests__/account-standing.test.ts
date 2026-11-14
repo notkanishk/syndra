@@ -42,14 +42,22 @@ describe("an account that is switched off", () => {
 
   // An add-on that knows says so, in its own words, shown as written.
   it("shows what an add-on that knows says, as written", () => {
-    for (const known of [
-      { next: "Nothing for you to do. Syndra keeps it off while its person is on hold, deactivated or has no role that reaches TrueNAS." },
-      { note: "Switched off on TrueNAS.", next: "If no one in Syndra asked for this, use Check for differences on the system's Mappings page." },
-    ]) {
-      const w = standingWords({ usable: false, waiting_on: "none", ...known }, "TrueNAS", "operator");
+    const known = { next: "Nothing for you to do. It stays off while the person it belongs to is on hold or deactivated, or holds no role that reaches TrueNAS." };
+    for (const audience of ["operator", "member"] as const) {
+      const w = standingWords({ usable: false, waiting_on: "none", ...known }, "TrueNAS", audience);
       expect(w.next).toBe(known.next);
-      expect(w.note).toBe(known.note);
     }
+  });
+
+  // The add-on says only that it is switched off, and leaves `next` for the UI, which knows who is reading.
+  it("gives an off account of unknown intent the line that is right for whoever reads it", () => {
+    const unknown: Standing = { usable: false, waiting_on: "none", note: "Switched off on TrueNAS." };
+    const operator = standingWords(unknown, "TrueNAS", "operator");
+    const member = standingWords(unknown, "TrueNAS", "member");
+    expect(operator.note).toBe(member.note);
+    expect(operator.next).toBe("If no one in Syndra asked for this, use Check for differences on the system's Mappings page.");
+    expect(member.next).toBe("Ask makerspace staff if you did not expect this.");
+    expect(member.next).not.toMatch(/Check for differences|Mappings/);
   });
 
   it("does not repeat the add-on's own 'switched off' note beside the state", () => {

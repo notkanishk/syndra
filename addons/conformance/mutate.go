@@ -309,6 +309,7 @@ func (k *kit) offStanding(c *check) {
 			// Back on in this read: nothing to judge a standing of (withdraw-only.existing judges the
 			// apply), so this check is not judged rather than failed.
 			c.skip("the account was off a read ago and is %v in this one (state.%s)", state[k.m.account], k.m.account)
+			c.unjudged() // k.ok above marked the check run: a skip alone would report a pass
 			return
 		}
 		st, _ := s["standing"].(map[string]any)

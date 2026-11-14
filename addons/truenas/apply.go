@@ -212,6 +212,10 @@ type BindingConflict struct {
 	// account.adopt refuses (refuseSelfAccount). Not on the wire: adoptable
 	// false already says the one thing Syndra acts on, and words says why.
 	serviceAccount bool
+	// numberHeld is the recorded name gone and its uid (outside the add-on's range, which can be
+	// handed out again) now held by another name, which was: not on the wire.
+	numberHeld bool
+	was        string
 	// selfUnknown is the add-on not yet knowing its own account (auth.me),
 	// while account.adopt refuses everything; not on the wire either.
 	selfUnknown bool
@@ -315,6 +319,9 @@ func (c BindingConflict) words() (detail, next string) {
 	case c.BoundTo != "":
 		return fmt.Sprintf("An account named %s already exists and is bound to another subject.", c.Username),
 			"If it is not theirs, release it from that subject, then adopt it here."
+	case c.numberHeld:
+		return fmt.Sprintf("The account %s was bound to this subject is gone, and its number is now held by a different account, %s.", c.was, c.Username),
+			"Release this subject's binding first, then adopt that account only if it is theirs."
 	case c.selfUnknown:
 		return fmt.Sprintf("An account named %s already exists, and Syndra can't check yet whether it is the account this add-on signs in to the app with.", c.Username),
 			"Try again shortly."
@@ -786,9 +793,9 @@ func (s *server) rememberWishes(req ApplyRequest, desired desiredState, out Appl
 	}
 }
 
-// inIDRange is whether n is a number this add-on hands out (identity.go). A
-// binding's uid outside it is a legacy one holding the NAS record key, never
-// an account's uid (boundAccount).
+// inIDRange is whether n is a number this add-on hands out (identity.go). Those numbers are never
+// handed out twice (ClaimID's high-water mark), so one names the same account for good; a number
+// outside it can come back after a delete, so it never names an account by itself (boundAccount).
 func inIDRange(n, floor, ceiling int64) bool { return n >= floor && n <= ceiling }
 
 // boundAccount is the one rule for which account a binding names. Plan asks
@@ -796,7 +803,15 @@ func inIDRange(n, floor, ceiling int64) bool { return n >= floor && n <= ceiling
 // (or "creates") for an account the apply would find, or the other way round.
 // byName and byUID look up one account by an exact key. It returns the account
 // (nil when there is none), the binding as it should now read, and a conflict
-// when the name is held by a different account of ours.
+// when the name is held by a different account of ours, or, for a uid outside this add-on's range,
+// when the recorded name is gone and the number is held by another name.
+//
+// What a binding's uid means decides the rest. In range, it is a real uid that is never reused: the
+// account it names is that one, so a rename is followed. Outside the range (an adopted hand-made
+// account, uid_kind "account"; or a contract-1 record key, which names nothing by number) a number
+// can be handed to a new account after a delete, so it is only ever believed alongside the
+// recorded name: name and number agree, or the binding halts for an operator (BindingConflict) and
+// is never rebound to whoever holds the number.
 func boundAccount(binding Binding, floor, ceiling int64,
 	byName func(string) (*Subject, error), byUID func(int64) (*Subject, error),
 ) (*Subject, Binding, *BindingConflict, error) {
@@ -834,6 +849,13 @@ func boundAccount(binding Binding, floor, ceiling int64,
 		return nil, binding, nil, err
 	}
 	if renamed != nil {
+		if !inIDRange(binding.UID, floor, ceiling) {
+			// A number outside the range may have been handed to a new account since this one was
+			// deleted: not a rename, whatever else is true. An operator decides; nothing is written
+			// to the account that holds the number and nothing is created.
+			return nil, binding, &BindingConflict{Username: renamed.Username, AccountID: accountID(renamed.UID),
+				numberHeld: true, was: binding.Username}, nil
+		}
 		binding.Username = renamed.Username
 		binding.UIDKind = uidKindAccount
 		return renamed, binding, nil, nil

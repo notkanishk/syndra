@@ -373,22 +373,12 @@ type Binding struct {
 // uidKindAccount marks Binding.UID as a real NAS uid.
 const uidKindAccount = "account"
 
-// ownsUID is whether this binding names its account by number: a marked uid always, an unmarked
-// one (contract 1) only inside the range this add-on hands out, since outside it the number may be
-// a NAS record key and matching it would match a stranger. boundAccount's `owned`.
+// ownsUID is whether this binding's uid is a real one to hold the recorded name against: a marked
+// uid always, an unmarked one (contract 1) only inside the range this add-on hands out, since outside
+// it the number may be a NAS record key. It decides refusal (a name held by a different number is a
+// conflict), never a rename: only an in-range number is followed to a new name (boundAccount).
 func (b Binding) ownsUID(floor, ceiling int64) bool {
 	return b.UIDKind == uidKindAccount || inIDRange(b.UID, floor, ceiling)
-}
-
-// readFromStore is b as read: a binding that kept account_id alone (written by a later binary, which
-// only ever holds a real uid) reads with that uid, marked.
-func (b Binding) readFromStore() Binding {
-	if b.UID == 0 && b.AccountID != "" {
-		if uid, err := strconv.ParseInt(b.AccountID, 10, 64); err == nil {
-			b.UID, b.UIDKind = uid, uidKindAccount
-		}
-	}
-	return b
 }
 
 // encodeBinding is the one place a binding is written, so both ids always are.
@@ -472,7 +462,6 @@ func (s *Store) GetBinding(subjectID string) (Binding, bool, error) {
 		if err := json.Unmarshal(raw, &b); err != nil {
 			return fmt.Errorf("stored binding for %s is unreadable: %w", subjectID, err)
 		}
-		b = b.readFromStore()
 		found = true
 		return nil
 	})
@@ -495,7 +484,7 @@ func (s *Store) Bindings() ([]Binding, error) {
 		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
 			var b Binding
 			if json.Unmarshal(v, &b) == nil {
-				out = append(out, b.readFromStore())
+				out = append(out, b)
 			}
 			return nil
 		})

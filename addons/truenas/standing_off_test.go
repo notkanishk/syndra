@@ -29,13 +29,12 @@ func TestAnAccountThatIsOffSaysWhoSwitchedItOff(t *testing.T) {
 		got[v.Username] = v.Standing
 	}
 
-	if s := got["held"]; s.Usable || s.WaitingOn != "none" || !strings.Contains(s.Next, "Syndra keeps it off") {
-		t.Errorf("Syndra asked for it off: want none and a next that says so, got %+v", s)
+	if s := got["held"]; s.Usable || s.WaitingOn != "none" || !strings.Contains(s.Next, "stays off while the person it belongs to") || strings.Contains(s.Next, "Check for differences") {
+		t.Errorf("Syndra asked for it off: want none and a next that reads right to a member too, got %+v", s)
 	}
 	// A bound account whose wish is unknown (a legacy binding never applied since wishes were kept):
 	// no claim either way, and the step is Syndra's own comparison.
-	if s := got["never_recorded"]; s.Usable || s.WaitingOn != "none" || s.Note != "Switched off on TrueNAS." ||
-		s.Next != "If no one in Syndra asked for this, use Check for differences on the system's Mappings page." {
+	if s := got["never_recorded"]; s.Usable || s.WaitingOn != "none" || s.Note != "Switched off on TrueNAS." || s.Next != "" {
 		t.Errorf("an unknown wish makes no claim, got %+v", s)
 	}
 	by := got["by_hand"]

@@ -371,14 +371,16 @@ func standingOf(s *Subject) *Standing {
 			Next: "Makerspace staff can use Check for differences on the system's Mappings page to bring it back in line."}
 	case !s.Enabled && s.wantsEnabled != nil:
 		// Syndra asked for it off: what it asked for is what it has, so nobody is waited on.
+		// `next` is shown to the member whose account it is as well as to the operator, so it reads
+		// right to both.
 		return &Standing{WaitingOn: "none",
-			Next: "Nothing for you to do. Syndra keeps it off while its person is on hold, deactivated or has no role that reaches TrueNAS."}
+			Next: "Nothing for you to do. It stays off while the person it belongs to is on hold or deactivated, or holds no role that reaches TrueNAS."}
 	case !s.Enabled:
 		// A bound account whose wish is unknown (a binding never applied since wishes were kept): no
-		// claim either way. The wish fills in on its next apply (rememberWishes); until then who
-		// switched it off is not known, and the step is Syndra's own comparison.
-		return &Standing{WaitingOn: "none", Note: "Switched off on TrueNAS.",
-			Next: "If no one in Syndra asked for this, use Check for differences on the system's Mappings page."}
+		// claim either way. The wish fills in on its next apply (rememberWishes). No `next` of ours:
+		// Syndra supplies one for each audience (an operator is sent to the comparison, a member to
+		// makerspace staff), which a line written once here could not do.
+		return &Standing{WaitingOn: "none", Note: "Switched off on TrueNAS."}
 	case !s.PasswordSet:
 		return &Standing{WaitingOn: "member", Note: smbWaiting(s), Next: "Set a storage password on your storage page."}
 	case s.needsNewPassword():
