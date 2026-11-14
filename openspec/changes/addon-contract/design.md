@@ -1340,7 +1340,8 @@ in the totals". No local name crosses the wire for an unbound account.
   case, NFC, `\pM` part of a word; a display name or username needs a
   letter and two characters); its name set grows from the people bound on
   the target to everyone in the directory (every current user's id,
-  display name and username, plus a binding's account name and id), so a
+  display name and username, plus a binding's account name and id; never a
+  machine user, which is no person: a "backup" share names nobody), so a
   member never reads the name of someone not bound there either. One
   shared pattern says whether a text names anyone (about 0.1 ms a value at
   600 people, each text asked once a collection); a per-person pattern,
@@ -1467,16 +1468,17 @@ this contract carries.
   share named after its own owner is on the owner's page as stored. Such a
   series is left out, saying how many (`left_out`, "1 more line is not
   shown here, as the add-on named a person in it."), and such a gap keeps
-  its window with the reason "The add-on's reason named a person." and no
-  dimensions, in the backend response, not only the UI. Left out rather
+  its window and dimensions with the reason "The add-on's reason named a
+  person.", in the backend response, not only the UI. Left out rather
   than relabelled: what is named is the series', not one dimension's, so a
   relabelled row would be a number under a label that is neither the
   add-on's nor true, and two such rows could not be told apart; leaving it
-  out and saying so keeps every word true. The gap without its dimensions
-  rather than dropped: dropped, its days would read as counted (a
-  counter's as 0); without dimensions it covers the member's whole metric
-  on those days, which overstates only what was not counted. A gap on a
-  series left out is not shown either (it is on no series of theirs). A person's page carries only the gaps whose dimensions are `{}`
+  out and saying so keeps every word true. The gap keeps its dimensions: a
+  member is shown only a gap whose dimensions sit inside one of their
+  displayed series, which names nobody else, so they reveal nothing new;
+  dropped, its days would read as counted (a counter's as 0), and without
+  dimensions it would hatch every line of the metric. A gap on a series
+  left out is not shown either (it is on no series of theirs). A person's page carries only the gaps whose dimensions are `{}`
   or a subset of one of that person's own series (every key=value of the
   gap in that series: `{"share":"makers"}` is on their
   `{"share":"makers","protocol":"smb"}`), never a gap on a resource only

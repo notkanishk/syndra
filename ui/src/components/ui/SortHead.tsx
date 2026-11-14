@@ -37,11 +37,20 @@ const isSortOf =
     return typeof v === "object" && v !== null && keys.includes(v.key) && (v.dir === 1 || v.dir === -1);
   };
 
+/**
+ * Where a list keeps its sort. A list with a heading that starts descending
+ * keeps it apart ("sort.v2"): before those headings descended, the same lists
+ * stored a newest-first time as ascending, and that value read now would open
+ * oldest first. Read once and dropped, it costs one press.
+ */
+const sortSlot = (descending: readonly string[]) => (descending.length > 0 ? "sort.v2" : "sort");
+
 export function useSort<K extends string>(initial: K, remember?: RememberSort<K>, descending: readonly K[] = []) {
   const first = (key: K): 1 | -1 => (descending.includes(key) ? -1 : 1);
+  const slot = sortSlot(descending);
   const [sort, setSort] = useState<Sort<K>>(() => {
     const kept =
-      remember && remember.when !== false ? recallView(remember.list, "sort", isSortOf(remember.keys)) : undefined;
+      remember && remember.when !== false ? recallView(remember.list, slot, isSortOf(remember.keys)) : undefined;
     return kept ?? { key: initial, dir: first(initial) };
   });
   // Only the reader's own press is a preference; the starting order is not.
@@ -52,8 +61,8 @@ export function useSort<K extends string>(initial: K, remember?: RememberSort<K>
   };
   const list = remember?.list;
   useEffect(() => {
-    if (list && pressed.current) keepView(list, "sort", sort);
-  }, [list, sort]);
+    if (list && pressed.current) keepView(list, slot, sort);
+  }, [list, slot, sort]);
 
   // A re-sort (A-05 §2.10): the heading turns at once, but the list fades out,
   // re-orders while nobody can see it, and fades back in. Rows never travel.

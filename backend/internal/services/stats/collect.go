@@ -17,7 +17,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -224,7 +223,9 @@ func finalThrough(reported, now time.Time) (time.Time, error) {
 // finds whether a text names anyone; one per person says who, compiled the
 // first time a text names someone (rare: a conformant add-on never does), as
 // compiling one per person for a few hundred costs some 60 ms a collection
-// against 2 ms for the shared one.
+// against 2 ms for the shared one. A collection is one goroutine, so the lazy
+// compile needs no lock. A machine user (a service account: "backup",
+// "kiosk") is no person, so its names are not in the set.
 type people struct {
 	bound map[string]bool
 	named *regexp.Regexp
@@ -238,12 +239,13 @@ type people struct {
 type person struct {
 	subject string
 	quoted  []string
-	once    sync.Once
 	named   *regexp.Regexp
 }
 
 func (p *person) pattern() *regexp.Regexp {
-	p.once.Do(func() { p.named = namePattern(p.quoted) })
+	if p.named == nil {
+		p.named = namePattern(p.quoted)
+	}
 	return p.named
 }
 
@@ -287,6 +289,9 @@ func peopleOn(bindings []db.TargetBinding, users []models.UserProfile) people {
 	// characters or more: "--" or "42" or one letter is no name, and would
 	// name every text that carries it as a token.
 	for _, u := range users {
+		if u.Kind == models.UserKindMachine {
+			continue
+		}
 		add(u.ID, u.ID)
 		for _, name := range []string{u.Name, u.Username} {
 			if name = strings.TrimSpace(name); nameable(name) {

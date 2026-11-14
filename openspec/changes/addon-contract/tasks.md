@@ -2310,8 +2310,8 @@ record of each view.
     `stats.keep` records a point's from its values and `keepGaps` a gap's
     from its values or reason (`people.names`, `people.namesIn`; the rule
     of a match unchanged). The name set is everyone in the directory (id,
-    display name, username; a binding's account name and id too), not only
-    who is bound on the target; whom is asked per person, so overlapping
+    display name, username; a binding's account name and id too; never a
+    machine user), not only who is bound on the target; whom is asked per person, so overlapping
     names are both found. `DropPersonInDimension`, the collector's
     `reasonWithheld` and the UI's `person_in_dimension` line are gone
     (`TestWhatNamesAPersonIsKeptWithWhomItNames`,
@@ -2324,8 +2324,9 @@ record of each view.
     names someone other than the member (`namesOther`) is hidden; their
     own name hides nothing of theirs. Such a series (any point read, days
     or months) is left out and counted in `left_out`; such a gap keeps its
-    window with "The add-on's reason named a person." and no dimensions; a
-    gap on a series left out is on none of theirs
+    window and dimensions (inside a displayed series, so nothing new) with
+    "The add-on's reason named a person."; a gap on a series left out is on
+    none of theirs
     (`TestAMemberNeverSeesWhatNamesAPerson`,
     `TestAMembersOwnNameHidesNothingOfTheirs`,
     `TestOnlyTheMembersOwnPageIsMasked`). The card says "{n} more lines are
@@ -2352,9 +2353,10 @@ record of each view.
     `orderBy` puts a null last whichever way. Moved off the negated-key
     trick: Insights' people, Requests' When, Operations' Time, Withdrawn's
     When, Drift's Found (`sortDrift`), People's Joined, Records' dates
-    (`SortHead.test.tsx`, `drift-filters.test.ts`). A sort a browser
-    remembered for one of those lists from before reads the other way
-    round once; one press sets it.
+    (`SortHead.test.tsx`, `drift-filters.test.ts`). A list with a heading
+    that starts descending keeps its sort in `sort.v2`, so a sort stored
+    before (newest first stored as ascending) is never read back the wrong
+    way round; those lists open on their default once.
   - Migration round trip on the live engine
     (`TestLiveMigration94RunsUpDownUp`, `TestMigration94IsExpandOnly`).
   - Decided while building: people are per series, not per metric (a
@@ -2362,8 +2364,9 @@ record of each view.
     12 months but none in the 30 days is listed and not in the spread
     (a breakdown with only such people says "Nobody used it in the last 30
     days."); a member's series naming someone else is left out rather than
-    relabelled (design §9.7), and such a gap loses its dimensions rather
-    than its window; whom a row names is recorded at collection, so a name
+    relabelled (design §9.7), and such a gap keeps its window and
+    dimensions and loses only its reason (review round 2 reversed blanking
+    the dimensions, which hatched every line); whom a row names is recorded at collection, so a name
     added later is recorded from its next collection on, and a series
     counts as naming someone when any point read for it does.
   - Not built: paging of a long people table (every person is listed).

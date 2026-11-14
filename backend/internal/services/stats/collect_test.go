@@ -193,6 +193,8 @@ func TestEveryoneInTheDirectoryIsAName(t *testing.T) {
 			{ID: "sub-jr", Name: "Cena Jr", Username: "cenajr"},
 			{ID: "sub-taker", Name: "The Undertaker", Username: "deadman"},
 			{ID: "sub-x", Name: "x", Username: "7"}, // no letter or one character: no name, the id still is
+			// A service account is no person: "backup" names nobody, nor its id.
+			{ID: "sub-backup", Name: "Backup", Username: "backup", Kind: models.UserKindMachine},
 		})
 	for text, want := range map[string]string{
 		"home-deadman":                "sub-taker",
@@ -206,6 +208,9 @@ func TestEveryoneInTheDirectoryIsAName(t *testing.T) {
 		"x 7 sub-x":                   "sub-x",
 		"x and 7":                     "",
 		"makers":                      "",
+		"backup":                      "",
+		"nightly backup share":        "",
+		"sub-backup":                  "",
 	} {
 		if got := strings.Join(who.names(text), " "); got != want {
 			t.Errorf("%q names %q, want %q", text, got, want)

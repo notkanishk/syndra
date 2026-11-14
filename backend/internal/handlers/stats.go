@@ -22,7 +22,7 @@ import (
 //   - a member, their own per-person points, on /me/targets (usage), the
 //     subject always the actor and never a parameter, less what names anyone
 //     but them (named_subjects): such a series is left out and counted, such
-//     a gap's reason replaced and its dimensions dropped (memberView);
+//     a gap's reason replaced (memberView);
 //   - an admin, everything as stored: one person on GET /users/{id}/targets
 //     (the same view, personalUsage), the target-wide series on GET
 //     /targets/{target}/stats, and on GET /insights/stats each per-person
@@ -137,17 +137,18 @@ func namesOther(named []string, subject string) bool {
 // only that person's points; the totals page every metric and the collection
 // line. memberView is the member's own page: a series with a point that names
 // anyone but them is left out (and counted in LeftOut), and such a gap's
-// reason is replaced and its dimensions dropped; an admin's page shows
-// everything as stored.
+// reason is replaced; an admin's page shows everything as stored.
 //
 // A series left out, not relabelled: what is named is the series', not one
 // dimension's, so a relabelled row would be a number under a label that is
 // neither the add-on's nor true, and two would be indistinguishable. Leaving
 // it out and saying how many keeps every word on the page true.
 //
-// A gap that names someone else keeps its window with no dimensions: the days
-// stay said as uncounted (dropped, they would read as counted, a counter's as
-// 0), at the cost of covering the member's whole metric rather than one line.
+// A gap that names someone else keeps its window and its dimensions: a member
+// is shown only a gap whose dimensions sit inside one of their displayed
+// series, which itself names nobody else, so they say nothing new; dropped,
+// its days would read as counted, and without dimensions it would cover the
+// member's whole metric. Only its reason, which may name someone, is withheld.
 func statsUsageFor(ctx context.Context, target, subject string, memberView bool, now time.Time) (statsUsage, error) {
 	stored, err := dbStatsMetrics(ctx, target)
 	if err != nil || len(stored) == 0 {
@@ -254,7 +255,7 @@ func statsUsageFor(ctx context.Context, target, subject string, memberView bool,
 			}
 			gap := statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Reason: g.Reason}
 			if memberView && namesOther(g.NamedSubjects, subject) {
-				gap.Dimensions, gap.Reason = nil, reasonWithheld
+				gap.Reason = reasonWithheld
 			}
 			view.Gaps = append(view.Gaps, gap)
 		}

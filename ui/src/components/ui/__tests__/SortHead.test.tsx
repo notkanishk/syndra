@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RunLabel, SortHead, orderBy, runStarts, useSort } from "@/components/ui/SortHead";
+import { keepView } from "@/lib/place";
 import { motionInTests } from "@/test-utils/motion";
 
 type Key = "who" | "ends";
@@ -21,8 +22,8 @@ function Heads() {
 const arrow = (name: string) => screen.getByRole("button", { name }).querySelector("span")!;
 
 /** A table whose numbers start largest first, as Insights' people and Requests' newest. */
-function Amounts() {
-  const [sort, flip, view] = useSort<"who" | "used">("used", undefined, ["used"]);
+function Amounts({ list }: { list?: string }) {
+  const [sort, flip, view] = useSort<"who" | "used">("used", list ? { list, keys: ["who", "used"] } : undefined, ["used"]);
   const rows = orderBy([{ who: "Edge", used: 3 }, { who: "Lita", used: null }, { who: "Kane", used: 9 }], view.sort, { who: (r) => r.who, used: (r) => r.used });
   return (
     <>
@@ -79,6 +80,19 @@ describe("sorting by a heading", () => {
     expect(cell("Sort by who")).toHaveAttribute("aria-sort", "ascending");
     fireEvent.click(screen.getByRole("button", { name: "Sort by used" }));
     expect(cell("Sort by used")).toHaveAttribute("aria-sort", "descending");
+  });
+
+  it("never reopens a list on a sort it kept before its heading descended, and keeps the new one", () => {
+    // What such a list stored before: newest first was ascending then.
+    keepView("amounts", "sort", { key: "used", dir: 1 });
+    const { unmount } = render(<Amounts list="amounts" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Kane Edge Lita");
+    fireEvent.click(screen.getByRole("button", { name: "Sort by used" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Edge Kane Lita");
+    unmount();
+    render(<Amounts list="amounts" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Edge Kane Lita");
+    localStorage.clear();
   });
 
   it("puts a row with no value last whichever way", () => {

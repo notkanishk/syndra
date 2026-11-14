@@ -444,7 +444,7 @@ func TestInsightsStatsNameThePeopleForAdmins(t *testing.T) {
 // What names someone (named_subjects, set at collection) is an admin's to see:
 // a member's own page leaves out a series with any point naming anyone but
 // them and says how many, and gives such a gap Syndra's sentence for its
-// reason and no dimensions; an admin on
+// reason, on its own line; an admin on
 // that person's page, and the totals, see every value and reason as stored.
 func TestAMemberNeverSeesWhatNamesAPerson(t *testing.T) {
 	stubStats(t, &statsStore{})
@@ -466,9 +466,9 @@ func TestAMemberNeverSeesWhatNamesAPerson(t *testing.T) {
 		return []db.StatsGapRow{
 			{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{}, Start: "2026-11-08", End: "2026-11-09", Reason: "John Cena's home is offline", NamedSubjects: []string{"sub-cena"}}},
 			{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{"share": "home-john_cena"}, Start: "2026-11-05", End: "2026-11-06", Reason: "Auditing was off", NamedSubjects: []string{"sub-cena"}}},
-			// Names someone else, on a line the member keeps (a name bound
-			// after the line's points were read): the window stays, nothing
-			// that names anyone does.
+			// Names someone else by its reason, on a line the member keeps:
+			// the window and its dimensions stay (they are the line's own),
+			// the reason does not.
 			{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{"share": "makers"}, Start: "2026-11-03", End: "2026-11-04", Reason: "Auditing was off", NamedSubjects: []string{"sub-makers"}}},
 			{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{"share": "makers"}, Start: "2026-11-01", End: "2026-11-02", Reason: "Auditing was off"}},
 		}, nil
@@ -495,9 +495,9 @@ func TestAMemberNeverSeesWhatNamesAPerson(t *testing.T) {
 		gaps = append(gaps, g.Start+" "+dimsText(g.Dimensions)+" "+g.Reason)
 	}
 	if want := []string{
-		"2026-11-08 null " + reasonWithheld,             // the whole metric's, its reason withheld
-		"2026-11-03 null " + reasonWithheld,             // names someone else: no dimensions, no reason
-		`2026-11-01 {"share":"makers"} Auditing was off`, // as stored
+		"2026-11-08 {} " + reasonWithheld,                 // the whole metric's, its reason withheld
+		`2026-11-03 {"share":"makers"} ` + reasonWithheld, // names someone else: on its own line, reason withheld
+		`2026-11-01 {"share":"makers"} Auditing was off`,  // as stored
 	}; !slices.Equal(gaps, want) {
 		t.Errorf("the member's gaps %q, want %q (none on a series left out)", gaps, want)
 	}
