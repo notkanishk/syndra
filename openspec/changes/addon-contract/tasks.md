@@ -1006,6 +1006,25 @@ settings with the full §5 rules.
     reported;
   - a stopped backend left stopped;
   - refusal off staging and with a production `.env`.
+  *Run (14 Nov 2026, TrueNAS 25.10.7, add-on at `85ebaba9`): 48 pass, 1
+  fail, `limit-combine` (`home_quota` held nil). Slice 7k:* the kit's
+  account got no home folder (deduced: staging's add-on has no `home_root`
+  chosen, as its create succeeded, which TrueNAS refuses for any create carrying a
+  home, below), so no home folder limit was read and `state` left
+  `home_quota` out, "not known". The add-on was right; the kit judged an
+  unreported limit as a fail (`limit-combine`) and as a pass on its way in
+  (`limit-empty`). Now both skip a limit `state` leaves out, naming it, and
+  with none read the check is a skip (`check.unjudged`, `kit.limits`,
+  `kit.limitEmpty`; `TestTheKitSkipsALimitThisAddOnDoesNotReport`). Found
+  beside it, a real defect the fake hid: TrueNAS's `home_create` takes
+  `home` as the parent and makes `<home>/<username>` itself, refusing a
+  parent that is not a folder (middlewared `plugins/account.py`, TS-25.04
+  to TS-25.10.7). The add-on sent `<place>/<name>`, so every home it made on
+  the real NAS was refused. `homeFields` now sends the place, and the fake
+  (`mutatingRPC.homeFor`, `folders`) behaves as TrueNAS does
+  (`TestTheConformanceKitPassesThisAddOn`, `TestARoleMakesAPrivateHomeFolder`).
+  Still open: a `-mutate` re-run with a `home_root` chosen on staging is
+  the only proof `limit-combine` passes on the real NAS #ready-for-human
 
 ## 5. The guide
 

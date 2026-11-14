@@ -26,8 +26,10 @@ import (
 // TrueNAS add-on before the deploy (1.10).
 
 const (
-	kitTarget = "truenas"
-	kitSecret = "conformance-truenas-test-secret-not-a-credential"
+	// kitHomeRoot is reachFake's main › home_dir, a dataset of its own.
+	kitHomeRoot = "/mnt/tank/main/home_dir"
+	kitTarget   = "truenas"
+	kitSecret   = "conformance-truenas-test-secret-not-a-credential"
 )
 
 // conformanceKit builds the kit binary into the test's own temporary
@@ -45,8 +47,9 @@ func conformanceKit(t *testing.T) string {
 
 // kitAddOn is the add-on as main.go builds it, over a NAS fake that holds the
 // accounts a run creates and changes: one member account already there, the
-// shares and folders of reachFake, and a place chosen for home folders.
-func kitAddOn(t *testing.T) string {
+// shares and folders of reachFake, and homeRoot as the place chosen for home
+// folders ("" for none chosen, as on a NAS where nobody has chosen one yet).
+func kitAddOn(t *testing.T, homeRoot string) string {
 	t.Helper()
 	fake := reachFake()
 	fake.users = `[{"username":"rey_mysterio","id":11,"uid":3051,"locked":false,"smb":true,"groups":[51],"home":"/var/empty"}]`
@@ -61,7 +64,7 @@ func kitAddOn(t *testing.T) string {
 		"service_data":{"service":"main"}}]`, time.Now().Unix())
 	fake.answers["pool.dataset.get_quota tank/main"] = `[{"id":3051,"used_bytes":1234}]`
 	fake.answers["pool.dataset.get_quota tank/open"] = `[]`
-	m := &mutatingRPC{fakeRPC: *fake}
+	m := &mutatingRPC{fakeRPC: *fake, folders: []string{kitHomeRoot}}
 	s := testServer(t, &m.fakeRPC)
 	s.nas = newNAS(func() (rpc, error) { return m, nil }, []string{"25.04"})
 	s.nas.version, s.nas.probed = "25.04.2", true
@@ -77,8 +80,10 @@ func kitAddOn(t *testing.T) string {
 	// freshness checks.
 	s.stats = statsClock{zone: kolkata}
 	s.collectStatsOnce()
-	if err := s.store.PutSetting(settingHomeRoot, Setting{Value: "/mnt/tank/main/home_dir", SetBy: "operator", SetAt: time.Now().UTC()}); err != nil {
-		t.Fatal(err)
+	if homeRoot != "" {
+		if err := s.store.PutSetting(settingHomeRoot, Setting{Value: homeRoot, SetBy: "operator", SetAt: time.Now().UTC()}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	priv, err := deriveTLSKey([]byte(kitSecret), kitTarget)
@@ -140,7 +145,7 @@ func TestTheConformanceKitPassesThisAddOn(t *testing.T) {
 		t.Skip("no go toolchain to build the kit with")
 	}
 	bin := conformanceKit(t)
-	url := kitAddOn(t)
+	url := kitAddOn(t, kitHomeRoot)
 
 	reads := runKit(t, bin, url)
 	mutate := runKit(t, bin, url, "-mutate", "-subject", "conformance-truenas-1")
@@ -171,5 +176,36 @@ func TestTheConformanceKitPassesThisAddOn(t *testing.T) {
 	}
 	if !strings.HasPrefix(mutate.Left, "one disabled account") {
 		t.Errorf("-mutate left %q, want one disabled account", mutate.Left)
+	}
+}
+
+// The staging run of 14 Nov 2026 against TrueNAS 25.10.7: no place chosen for
+// home folders, so the kit's account got none, and with no home there is no
+// limit to read. Its state carries no home_quota, which is "not known", never
+// "no limit" (homeLimits), so neither limit check can judge it: each is a skip
+// that says why, never the FAIL that run reported for limit-combine, and never
+// the pass it reported for limit-empty on reads that saw no limit.
+func TestTheKitSkipsALimitThisAddOnDoesNotReport(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds and runs the conformance kit")
+	}
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("no go toolchain to build the kit with")
+	}
+	mutate := runKit(t, conformanceKit(t), kitAddOn(t, ""), "-mutate", "-subject", "conformance-truenas-3")
+	for _, id := range []string{"limit-combine", "limit-empty"} {
+		found := false
+		for _, res := range mutate.Results {
+			if res.ID != id {
+				continue
+			}
+			found = true
+			if res.Status != "skip" || !strings.Contains(strings.Join(res.Detail, " "), "home_quota is not in the kit's account's state") {
+				t.Errorf("%s with no home folder: %s %v, want a skip saying home_quota is not read", id, res.Status, res.Detail)
+			}
+		}
+		if !found {
+			t.Errorf("%s did not run", id)
+		}
 	}
 }

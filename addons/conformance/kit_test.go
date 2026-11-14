@@ -2133,3 +2133,61 @@ func TestThePhysicalCheckHoldsTheLogAndTheReplay(t *testing.T) {
 		})
 	}
 }
+
+// A limit the add-on leaves out of state is "not known", never "no limit"
+// (TrueNAS reads a home folder limit only for an account with a home folder;
+// the staging run of 14 Nov 2026). Neither limit check can judge it: each is a
+// skip naming it, never a fail on a value nobody reported and never a pass on
+// the reads that found none. The reference here leaves job_seconds out of
+// every state and observed it answers.
+func TestALimitLeftOutOfStateIsSkippedNeverJudged(t *testing.T) {
+	url, _ := serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
+		if r.URL.Path != "/subjects" && r.URL.Path != "/apply" {
+			return reply
+		}
+		dec := json.NewDecoder(bytes.NewReader(reply))
+		dec.UseNumber()
+		var doc any
+		if err := dec.Decode(&doc); err != nil {
+			return reply
+		}
+		var drop func(v any)
+		drop = func(v any) {
+			switch v := v.(type) {
+			case map[string]any:
+				delete(v, "job_seconds")
+				for _, e := range v {
+					drop(e)
+				}
+			case []any:
+				for _, e := range v {
+					drop(e)
+				}
+			}
+		}
+		drop(doc)
+		out, err := json.Marshal(doc)
+		if err != nil {
+			return reply
+		}
+		return out
+	}, nil)
+	r := run(t, config(url, true))
+	if r.Failed() {
+		t.Errorf("a limit left out of state failed the run: %v", failures(r))
+	}
+	for _, id := range []string{"limit-combine", "limit-empty"} {
+		found := false
+		for _, res := range r.Results {
+			if res.ID == id {
+				found = true
+				if res.Status != "skip" || !strings.Contains(strings.Join(res.Detail, " "), "job_seconds is not in the kit's account's state") {
+					t.Errorf("%s: %s %v, want a skip naming job_seconds as not read", id, res.Status, res.Detail)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("no %s result", id)
+		}
+	}
+}

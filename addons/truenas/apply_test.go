@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -64,6 +65,27 @@ type mutatingRPC struct {
 	// beforeUserCreate runs as an account create arrives, and refuses it when
 	// it answers true.
 	beforeUserCreate func() (refuse bool)
+	// folders are the folders that exist on the NAS, for home_create (homeFor).
+	folders []string
+}
+
+// homeFor is TrueNAS's `home_create`, as middlewared plugins/account.py has it
+// from TS-25.04 to TS-25.10.7 (validate_homedir_path, setup_homedir, and
+// do_update's join): `home` names the PARENT, which must already be a folder,
+// and TrueNAS makes <home>/<username> itself. It answers the home the account
+// ends up with, or TrueNAS's refusal. The fake once kept `home` as sent, which
+// agreed with an add-on sending the home itself: on the real NAS that create
+// is refused, and an update to an existing folder nests one more level.
+func (m *mutatingRPC) homeFor(schema string, fields map[string]any, username any) (string, json.RawMessage) {
+	home, _ := fields["home"].(string)
+	if create, _ := fields["home_create"].(bool); !create {
+		return home, nil
+	}
+	if !slices.Contains(m.folders, home) {
+		return "", errorEnvelope(schema + ".home: " + home + ": path specified to use for home directory creation does not exist. " +
+			"TrueNAS uses the provided path as the parent directory of the newly-created home directory.")
+	}
+	return path.Join(home, fmt.Sprint(username)), nil
 }
 
 // editGroups changes the group table the next group.query reads, the way the
@@ -104,8 +126,8 @@ func (m *mutatingRPC) remember(params any) {
 		"id": m.nextID, "username": create["username"], "uid": m.nextUID,
 		"locked": locked, "smb": smb, "groups": create["groups"], "password_disabled": passwordDisabled,
 	}
-	if home, ok := create["home"]; ok {
-		row["home"] = home
+	if _, ok := create["home"]; ok {
+		row["home"], _ = m.homeFor("user_create", create, create["username"])
 	}
 	if row["groups"] == nil {
 		row["groups"] = []apiID{}
@@ -148,6 +170,9 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		args, _ := params.([]any)
 		if len(args) == 2 {
 			if u, ok := args[1].(map[string]any); ok {
+				if _, refused := m.homeFor("user_update", u, ""); refused != nil {
+					return refused, nil
+				}
 				m.updates = append(m.updates, u)
 				m.applyUpdate(args[0], u)
 			}
@@ -190,6 +215,9 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		args, _ := params.([]any)
 		if len(args) == 1 {
 			if c, ok := args[0].(map[string]any); ok {
+				if _, refused := m.homeFor("user_create", c, c["username"]); refused != nil {
+					return refused, nil
+				}
 				m.creates = append(m.creates, c)
 			}
 		}
@@ -276,8 +304,10 @@ func (m *mutatingRPC) applyUpdate(id any, update map[string]any) {
 				}
 			}
 			switch k {
-			case "locked", "smb", "groups", "home":
+			case "locked", "smb", "groups":
 				rows[i][k] = v
+			case "home":
+				rows[i][k], _ = m.homeFor("user_update", map[string]any{"home": v, "home_create": update["home_create"]}, rows[i]["username"])
 			}
 		}
 	}

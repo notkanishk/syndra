@@ -343,16 +343,38 @@ func (k *kit) readBack(c *check, out map[string]any) {
 	}
 }
 
+// limits judges each limit the creating apply gave as max(unlimited, 5 GiB)
+// from what the account now holds. A limit absent from its state is one the
+// add-on did not read, "not known", never "no limit" (AUTHORING.md#get-subjects):
+// it is skipped and named, like limitEmpty's, and with none read the check is
+// a skip, not a fail on a value nobody reported.
 func (k *kit) limits(c *check) {
-	state := k.state(c)
-	for _, f := range k.m.fields {
-		if f.Role == "limit" {
-			c.expect(same(state[f.Name], []string{f.Unlimited}), "%s given [%q, \"5368709120\"] holds %v, want [%q]: unlimited dominates",
-				f.Name, f.Unlimited, state[f.Name], f.Unlimited)
-		}
-	}
-	if !c.ran {
+	limits := k.m.withRole("limit")
+	if len(limits) == 0 {
 		c.skip("the manifest declares no limit field")
+		return
+	}
+	state := k.state(c)
+	if state == nil { // state failed c already, or the run halted
+		c.unjudged()
+		return
+	}
+	judged := false
+	for _, f := range k.m.fields {
+		if f.Role != "limit" {
+			continue
+		}
+		held, reported := state[f.Name]
+		if !reported {
+			c.skip("%s is not in the kit's account's state (not read), so what [%q, \"5368709120\"] combined to cannot be seen", f.Name, f.Unlimited)
+			continue
+		}
+		judged = true
+		c.expect(same(held, []string{f.Unlimited}), "%s given [%q, \"5368709120\"] holds %v, want [%q]: unlimited dominates",
+			f.Name, f.Unlimited, held, f.Unlimited)
+	}
+	if !judged {
+		c.unjudged()
 	}
 }
 
@@ -367,6 +389,7 @@ func (k *kit) limitEmpty(c *check) {
 	if len(limits) == 0 {
 		c.skip("the manifest declares no limit field")
 	}
+	judged := false
 	for _, name := range limits {
 		k.converge(c, k.callID(), map[string]any{k.m.account: true, name: []string{fiveGiB}}, false)
 		state := k.state(c)
@@ -377,12 +400,17 @@ func (k *kit) limitEmpty(c *check) {
 		case !reported:
 			c.skip("%s is not in the kit's account's state (not read), so what [] does to it cannot be seen", name)
 			continue
-		case !c.expect(same(before, []string{fiveGiB}), "%s: an apply giving it [%q] left it %v", name, fiveGiB, before):
+		}
+		judged = true
+		if !c.expect(same(before, []string{fiveGiB}), "%s: an apply giving it [%q] left it %v", name, fiveGiB, before) {
 			continue
 		}
 		k.converge(c, k.callID(), map[string]any{k.m.account: true, name: []string{}}, false)
 		after := k.state(c)[name]
 		c.expect(same(after, before), "%s: an apply giving it [] changed it from %v to %v; [] sets nothing", name, before, after)
+	}
+	if !judged { // the applies and reads that found no limit are not a pass
+		c.unjudged()
 	}
 }
 
