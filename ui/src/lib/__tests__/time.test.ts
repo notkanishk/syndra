@@ -1,9 +1,10 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { formatClock, formatClockSeconds } from "@/lib/format";
+import { effectiveZone } from "@/lib/zone-effective";
 import {
   addDays,
   civilDay,
@@ -13,6 +14,7 @@ import {
   endOfDayISO,
   isSameDay,
   makerspaceZone,
+  resetMakerspaceZoneForTests,
   setMakerspaceZone,
   zoneTag,
 } from "@/lib/time";
@@ -90,22 +92,26 @@ describe("days and end dates", () => {
  */
 describe("the zone the backend names", () => {
   // The suite's own zone is test config (vitest.config.ts); the product writes none.
-  beforeEach(() => setMakerspaceZone("Asia/Kolkata"));
-  afterEach(() => setMakerspaceZone("Asia/Kolkata"));
+  const adopt = (zone: string) => {
+    resetMakerspaceZoneForTests();
+    setMakerspaceZone(zone);
+  };
+  beforeEach(() => adopt("Asia/Kolkata"));
+  afterEach(() => adopt("Asia/Kolkata"));
 
   it("moves the day, the end of a day and the clock together", () => {
-    setMakerspaceZone("America/Santiago"); // UTC-3 in November (DST)
+    adopt("America/Santiago"); // UTC-3 in November (DST)
     const at = new Date("2026-11-05T01:00:00Z"); // 22:00 on the 4th there, 06:30 on the 5th in IST
     expect(civilDay(at)).toBe("2026-11-04");
     expect(endOfDayISO("2026-11-30")).toBe("2026-12-01T02:59:59.000Z");
     expect(formatClock(at.toISOString())).toBe("22:00");
-    setMakerspaceZone("UTC");
+    adopt("UTC");
     expect(formatClock(at.toISOString())).toBe("01:00");
   });
 
-  it("shows UTC, labelled, when the backend's zone is unknown: never a guessed zone", () => {
+  it("shows UTC, labelled, until a valid zone is learned: never a guessed zone", () => {
     for (const unknown of [undefined, null, "", "Not/AZone"]) {
-      setMakerspaceZone("Europe/London");
+      resetMakerspaceZoneForTests();
       setMakerspaceZone(unknown);
       expect(makerspaceZone()).toBe("UTC");
       expect(zoneTag()).toBe(" UTC");
@@ -114,8 +120,35 @@ describe("the zone the backend names", () => {
     }
   });
 
+  it("is write-once: a fallback never overwrites a zone that was learned", () => {
+    adopt("Europe/London");
+    for (const bad of [undefined, null, "", "Not/AZone"]) setMakerspaceZone(bad);
+    expect(makerspaceZone()).toBe("Europe/London");
+    expect(zoneTag()).toBe("");
+  });
+
+  it("is write-once: a second, different valid zone is ignored, and said once", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    adopt("Europe/London");
+    setMakerspaceZone("Europe/London"); // same: no-op
+    setMakerspaceZone("America/Santiago");
+    setMakerspaceZone("Asia/Tokyo");
+    expect(makerspaceZone()).toBe("Europe/London");
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it("hands the client exactly the zone the server used", () => {
+    resetMakerspaceZoneForTests();
+    expect(effectiveZone(undefined)).toBeUndefined(); // cold start, backend down: UTC, labelled
+    expect(effectiveZone("Asia/Tokyo")).toBe("Asia/Tokyo");
+    expect(effectiveZone(undefined)).toBe("Asia/Tokyo"); // a later failed read renders the learned zone
+    expect(effectiveZone("Europe/London")).toBe("Asia/Tokyo"); // a different answer is ignored, and so is not sent
+    expect(makerspaceZone()).toBe("Asia/Tokyo");
+  });
+
   it("says nothing extra when the zone is known, even UTC itself", () => {
-    setMakerspaceZone("UTC");
+    adopt("UTC");
     expect(zoneTag()).toBe("");
     expect(formatClock("2026-11-05T01:00:00Z")).toBe("01:00");
   });

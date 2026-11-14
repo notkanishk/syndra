@@ -44,22 +44,43 @@ const wallClockIn = (timeZone: string) =>
   });
 let wallClock = wallClockIn(zone);
 
-/** Adopt the backend's zone; nothing or a name Intl cannot read means "unknown": UTC, labelled. */
+/**
+ * Adopt the backend's zone. The zone is one deployment value (a TZ change is a
+ * redeploy, which restarts the UI), so this is WRITE-ONCE from a VALIDATED
+ * name: the first valid name is kept, the same name again is a no-op, a
+ * different valid name is logged once and ignored, and a missing or invalid
+ * name does nothing at all. A failed read therefore never overwrites a zone
+ * already learned; it renders with whatever is held (the right zone after one
+ * good read, UTC labelled before).
+ */
 export function setMakerspaceZone(name: string | null | undefined): void {
-  let next = "UTC";
-  let ok = false;
-  if (name) {
-    try {
-      wallClockIn(name); // throws RangeError on an unknown zone
-      next = name;
-      ok = true;
-    } catch {
-      /* unknown: UTC, labelled */
-    }
+  if (!name) return;
+  try {
+    wallClockIn(name); // throws RangeError on an unknown zone
+  } catch {
+    return;
   }
-  if (next === zone && ok === known) return;
-  zone = next;
-  known = ok;
+  if (known) {
+    if (name !== zone && !warned) {
+      warned = true;
+      console.warn(`[zone] backend now names ${name}; keeping ${zone} until the UI restarts`);
+    }
+    return;
+  }
+  zone = name;
+  known = true;
+  wallClock = wallClockIn(zone);
+}
+let warned = false;
+
+/** The zone this process is actually using, or undefined while it is UTC-and-labelled. What the layout hands the client, so both render the same. */
+export const knownMakerspaceZone = (): string | undefined => (known ? zone : undefined);
+
+/** Test-only: forget the zone, as a fresh process. */
+export function resetMakerspaceZoneForTests(): void {
+  zone = "UTC";
+  known = false;
+  warned = false;
   wallClock = wallClockIn(zone);
 }
 
