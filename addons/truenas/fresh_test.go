@@ -37,15 +37,6 @@ func at(s *server, start time.Time) *time.Time {
 	return &now
 }
 
-// wishesDerived marks the one-time wish derivation done, so a test about freshness is not the first
-// live read that derives them (its writes make every copy a read of the past, by design).
-func wishesDerived(t *testing.T, s *server) {
-	t.Helper()
-	if err := s.store.PutSetting(settingWishesDerived, Setting{Value: "done"}); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func getSubjects(t *testing.T, s *server, fresh bool) (*httptest.ResponseRecorder, SubjectsResponse) {
 	t.Helper()
 	target := "/subjects"
@@ -69,7 +60,6 @@ func userReads(f *fakeRPC) int { return strings.Count(strings.Join(f.calls, " ")
 func TestAReadWithoutFreshIsTheCopyAndTouchesNothing(t *testing.T) {
 	fake := &fakeRPC{users: fixtureUsers, groups: fixtureGroups}
 	s := testServer(t, fake)
-	wishesDerived(t, s)
 	if _, first := getSubjects(t, s, true); !first.Current || first.Stale != nil {
 		t.Fatalf("a fresh read is current with no stale: %+v", first.Observed)
 	}
@@ -91,7 +81,6 @@ func TestAReadWithoutFreshIsTheCopyAndTouchesNothing(t *testing.T) {
 func TestAFreshReadInsideTheCooldownIsTheCopySaidSo(t *testing.T) {
 	fake := &fakeRPC{users: fixtureUsers, groups: fixtureGroups}
 	s := testServer(t, fake)
-	wishesDerived(t, s)
 	now := at(s, time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC))
 	getSubjects(t, s, true)
 	reads := userReads(fake)
@@ -298,7 +287,6 @@ func TestOneSubjectsCooldownIsNotAnothers(t *testing.T) {
 func TestAnUnreadableNASAnswersTheCopyNotAnError(t *testing.T) {
 	fake := &fakeRPC{users: fixtureUsers, groups: fixtureGroups}
 	s := testServer(t, fake)
-	wishesDerived(t, s)
 	now := at(s, time.Now())
 	getSubjects(t, s, true)
 	*now = now.Add(time.Minute)
@@ -518,7 +506,7 @@ func TestFreshnessIsDeclaredWithItsCooldownAndItsCount(t *testing.T) {
 // cannot be read yields the copy.
 func TestARefusalIsNotCoveredByTheCopy(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"password_disabled":false,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	now := at(s, time.Now())
@@ -553,7 +541,7 @@ func TestStorageStatusIsNoFresherThanItsPlaces(t *testing.T) {
 			"groups":[41,50],"home":"/mnt/tank/main/home_dir/charlotte"}]`
 		fake.answers["pool.dataset.get_quota"] = `[]`
 		s := testServer(t, fake)
-		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001, UIDKind: uidKindAccount}); err != nil {
 			t.Fatal(err)
 		}
 		start := time.Now().UTC().Truncate(time.Second)

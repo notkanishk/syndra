@@ -220,7 +220,7 @@ func TestAMembersPlacesAreTheirOwnGroupsWithHomeFirst(t *testing.T) {
 	fake.answers["pool.dataset.get_quota tank/main/waddle"] = `[{"id":200001,"used_bytes":5000,"quota_type":"USER"}]`
 	fake.answers["pool.dataset.get_quota tank/main/home_dir"] = `[{"id":200001,"used_bytes":0,"quota":1000000,"quota_type":"USER"}]`
 	s := testServer(t, fake)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -253,7 +253,7 @@ func TestAGroupThatOpensNothingLeavesTheMemberAnEmptyReadList(t *testing.T) {
 	fake := reachFake()
 	fake.users = `[{"username":"ida","id":12,"uid":200002,"locked":false,"smb":true,"password_disabled":false,"groups":[52],"home":""}]`
 	s := testServer(t, fake)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "ida", UID: 200002}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "ida", UID: 200002, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	res, _, err := s.storageStatus(OperationRequest{Subject: "sub-2"})
@@ -311,7 +311,7 @@ func TestReachFallsBackToTheLastReadAndSaysSo(t *testing.T) {
 func TestAccessGivenBackNeedsANewPassword(t *testing.T) {
 	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":false,"groups":[]}]`)
 	want := true
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &want}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount, WantsSMB: &want}); err != nil {
 		t.Fatal(err)
 	}
 	res, _, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
@@ -330,7 +330,7 @@ func TestAccessGivenBackNeedsANewPassword(t *testing.T) {
 	}
 
 	off := false
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &off}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount, WantsSMB: &off}); err != nil {
 		t.Fatal(err)
 	}
 	res, _, _ = s.storageStatus(OperationRequest{Subject: "sub-1"})

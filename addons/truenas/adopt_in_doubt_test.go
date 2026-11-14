@@ -177,13 +177,13 @@ func TestOnlyThisSubjectsUnknownCreateOfThatAccountIsAdopted(t *testing.T) {
 		}},
 		{name: "bound to another subject", users: inRange, routedAround: true, setup: func(t *testing.T, s *server) {
 			unknownCreate(t, s)
-			if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "charlotte", UID: 200001}); err != nil {
+			if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "charlotte", UID: 200001, UIDKind: uidKindAccount}); err != nil {
 				t.Fatal(err)
 			}
 		}},
 		{name: "bound to another subject under an older name", users: inRange, setup: func(t *testing.T, s *server) {
 			unknownCreate(t, s)
-			if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "lita", UID: 200001}); err != nil {
+			if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "lita", UID: 200001, UIDKind: uidKindAccount}); err != nil {
 				t.Fatal(err)
 			}
 		}},

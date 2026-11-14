@@ -61,7 +61,7 @@ func TestBuiltinGroupIsNotReportedOnASubject(t *testing.T) {
 func TestConvergeCarriesBuiltinMembershipsThrough(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41]}]`)
 	m.fakeRPC.groups = groupsWithAdmin
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -82,7 +82,7 @@ func TestConvergeCarriesBuiltinMembershipsThrough(t *testing.T) {
 func TestConvergeIsANoOpWhenOnlyBuiltinGroupsDiffer(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]}]`)
 	m.fakeRPC.groups = groupsWithAdmin
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -98,7 +98,7 @@ func TestConvergeIsANoOpWhenOnlyBuiltinGroupsDiffer(t *testing.T) {
 func TestDesiringABuiltinGroupIsRefused(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	m.fakeRPC.groups = groupsWithAdmin
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 

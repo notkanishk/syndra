@@ -487,7 +487,7 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 	// legacy binding, whose uid may be the NAS record key (boundAccount):
 	// Syndra then compares the name.
 	released := ""
-	if floor, ceiling := s.idRange(); inIDRange(binding.UID, floor, ceiling) {
+	if floor, ceiling := s.idRange(); binding.ownsUID(floor, ceiling) {
 		released = accountID(binding.UID)
 	}
 	return OperationResult{
@@ -1334,7 +1334,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 
 	if err := s.mutate(opCaller("account.adopt", req).on(account.UID), "store.bind", func() error {
 		return s.store.BindIfFree(Binding{
-			SubjectID: req.Subject, Username: account.Username, UID: account.UID,
+			SubjectID: req.Subject, Username: account.Username, UID: account.UID, UIDKind: uidKindAccount,
 			// Who decided it. An adoption that turns out to be wrong hands
 			// somebody else's data to a member, and the actor is the first
 			// thing asked for.

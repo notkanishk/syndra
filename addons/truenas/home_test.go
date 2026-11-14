@@ -21,7 +21,7 @@ func homeServer(t *testing.T, users string, answers map[string]string, refuse ma
 	m.folders = []string{homePlace}
 	m.fakeRPC.answers = answers
 	m.fakeRPC.refuse = refuse
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.store.PutSetting(settingHomeRoot, Setting{Value: homePlace}); err != nil {

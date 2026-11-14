@@ -14,7 +14,7 @@ import (
 // it on yet. Every account Syndra created stayed off SMB for good.
 func TestTheFirstPasswordSwitchesOnTheSMBTheEntitlementWants(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -37,7 +37,7 @@ func TestTheFirstPasswordSwitchesOnTheSMBTheEntitlementWants(t *testing.T) {
 
 func TestThePasswordNeverSwitchesOnSMBNobodyWants(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu",
@@ -58,7 +58,7 @@ func TestThePasswordNeverSwitchesOnSMBNobodyWants(t *testing.T) {
 // TrueNAS and took the group change in the same update down with it.
 func TestSMBIsNeverSwitchedOnAloneAndTheGroupsStillLand(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":false,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu",
@@ -89,7 +89,7 @@ func TestSMBIsNeverSwitchedOnAloneAndTheGroupsStillLand(t *testing.T) {
 func TestThePlanDoesNotPromiseTheSMBOnlyAPasswordCanSwitchOn(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
 	m.fakeRPC.groups = `[{"id":42,"gid":900,"group":"lab_makers"},{"id":44,"gid":901,"group":"staff"}]`
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
@@ -133,7 +133,7 @@ func TestEveryStandingSeesTheWaitForANewPassword(t *testing.T) {
 	}
 	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":false,"groups":[42]}]`)
 	want := true
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &want}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount, WantsSMB: &want}); err != nil {
 		t.Fatal(err)
 	}
 	subjects := func() *Standing {
@@ -169,7 +169,7 @@ func TestEveryStandingSeesTheWaitForANewPassword(t *testing.T) {
 
 	// SMB not wanted: the same account is ready, on every path.
 	off := false
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &off}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount, WantsSMB: &off}); err != nil {
 		t.Fatal(err)
 	}
 	s.fresh.forget()

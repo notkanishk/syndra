@@ -340,11 +340,18 @@ func (s *Store) GetSnapshot() (Snapshot, bool, error) {
 // binding by uid, so rollback restores nothing. Both are filled on every write
 // (putBinding) and either is read (GetBinding).
 type Binding struct {
-	SubjectID string    `json:"subject_id"`
-	Username  string    `json:"username"`
-	UID       int64     `json:"uid"`
-	AccountID string    `json:"account_id,omitempty"`
-	BoundAt   time.Time `json:"bound_at"`
+	SubjectID string `json:"subject_id"`
+	Username  string `json:"username"`
+	UID       int64  `json:"uid"`
+	AccountID string `json:"account_id,omitempty"`
+	// UIDKind says what UID is. "account" is a real uid on the NAS, which the binding then names by
+	// number whatever range it is in (an adopted hand-made account has uid 3051, far below the range
+	// this add-on hands out). Absent is a binding from before it (contract 1): its UID may be the NAS
+	// record key, so it is matched by name until the apply that finds its account rewrites it
+	// with the real uid and this marker. Every binding contract-2 code writes carries it
+	// (create, adoption, boundAccount's rewrite).
+	UIDKind string    `json:"uid_kind,omitempty"`
+	BoundAt time.Time `json:"bound_at"`
 	// BoundBy records whether an operator adopted an existing account or the
 	// apply created one. Adoption hands somebody else's account to a subject if
 	// it is wrong, so who decided it survives.
@@ -363,19 +370,25 @@ type Binding struct {
 	WantsEnabled *bool `json:"wants_enabled,omitempty"`
 }
 
-// uid is the account's uid as the binding names it: UID, or the account_id of a binding written by a
-// binary that keeps that alone. The one reading of a binding's account, so every question asked of
-// "is this account bound" (UIDBound, Wishes, BoundUIDs, GetBinding) agrees. 0 is "names none".
-func (b Binding) uid() int64 {
-	if b.UID != 0 {
-		return b.UID
-	}
-	if b.AccountID != "" {
+// uidKindAccount marks Binding.UID as a real NAS uid.
+const uidKindAccount = "account"
+
+// ownsUID is whether this binding names its account by number: a marked uid always, an unmarked
+// one (contract 1) only inside the range this add-on hands out, since outside it the number may be
+// a NAS record key and matching it would match a stranger. boundAccount's `owned`.
+func (b Binding) ownsUID(floor, ceiling int64) bool {
+	return b.UIDKind == uidKindAccount || inIDRange(b.UID, floor, ceiling)
+}
+
+// readFromStore is b as read: a binding that kept account_id alone (written by a later binary, which
+// only ever holds a real uid) reads with that uid, marked.
+func (b Binding) readFromStore() Binding {
+	if b.UID == 0 && b.AccountID != "" {
 		if uid, err := strconv.ParseInt(b.AccountID, 10, 64); err == nil {
-			return uid
+			b.UID, b.UIDKind = uid, uidKindAccount
 		}
 	}
-	return 0
+	return b
 }
 
 // encodeBinding is the one place a binding is written, so both ids always are.
@@ -383,8 +396,10 @@ func (s *Store) encodeBinding(b Binding) ([]byte, error) {
 	if b.BoundAt.IsZero() {
 		b.BoundAt = s.now().UTC()
 	}
+	// account_id says "this is the account's stable id", so only a marked uid is stamped: a contract-1
+	// record key must not read as one.
 	b.AccountID = ""
-	if b.UID != 0 {
+	if b.UID != 0 && b.UIDKind == uidKindAccount {
 		b.AccountID = accountID(b.UID)
 	}
 	return json.Marshal(b)
@@ -457,7 +472,7 @@ func (s *Store) GetBinding(subjectID string) (Binding, bool, error) {
 		if err := json.Unmarshal(raw, &b); err != nil {
 			return fmt.Errorf("stored binding for %s is unreadable: %w", subjectID, err)
 		}
-		b.UID = b.uid() // a later binary may keep account_id alone
+		b = b.readFromStore()
 		found = true
 		return nil
 	})
@@ -480,63 +495,10 @@ func (s *Store) Bindings() ([]Binding, error) {
 		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
 			var b Binding
 			if json.Unmarshal(v, &b) == nil {
-				b.UID = b.uid()
-				out = append(out, b)
+				out = append(out, b.readFromStore())
 			}
 			return nil
 		})
-	})
-	return out, err
-}
-
-// wishOutcome is what DeriveWish did.
-type wishOutcome int
-
-const (
-	wishWritten wishOutcome = iota
-	wishGone                // the binding is no longer there (released, purged): nothing to write
-	wishSet                 // somebody has set the wish since: not overwritten
-	wishChanged             // the binding names another account or name since it was read
-)
-
-// DeriveWish sets a binding's unset wishes to enabled and smb, in one transaction that first checks
-// the binding is still what it was read as (same account, same name) and that each wish is still
-// unset. A binding released, purged, renamed or given a wish since is left exactly as it is. Called
-// while holding the subject's lock (the writers of a binding hold it), so it also serialises against
-// rememberWishes; the check here is what keeps a writer that does not hold it from being overwritten.
-func (s *Store) DeriveWish(was Binding, enabled, smb bool) (wishOutcome, error) {
-	out := wishGone
-	err := s.db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(bucketBindings)
-		raw := bucket.Get([]byte(was.SubjectID))
-		if raw == nil {
-			return nil
-		}
-		var now Binding
-		if err := json.Unmarshal(raw, &now); err != nil {
-			return err
-		}
-		now.UID = now.uid()
-		if now.UID != was.UID || now.Username != was.Username {
-			out = wishChanged
-			return nil
-		}
-		if now.WantsEnabled != nil && now.WantsSMB != nil {
-			out = wishSet
-			return nil
-		}
-		if now.WantsEnabled == nil {
-			now.WantsEnabled = &enabled
-		}
-		if now.WantsSMB == nil {
-			now.WantsSMB = &smb
-		}
-		encoded, err := s.encodeBinding(now)
-		if err != nil {
-			return err
-		}
-		out = wishWritten
-		return bucket.Put([]byte(was.SubjectID), encoded)
 	})
 	return out, err
 }

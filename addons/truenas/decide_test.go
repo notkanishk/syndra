@@ -44,7 +44,7 @@ func TestPlanAndApplyAgreeOnEveryConvergence(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,`+c.current+`}]`)
-			if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+			if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 				t.Fatal(err)
 			}
 

@@ -40,7 +40,7 @@ func (s *server) resolveBinding(b Binding, ix accountIndex) boundTo {
 	switch {
 	case found != nil:
 		return boundTo{binding: resolved, uid: found.UID}
-	case inIDRange(b.UID, floor, ceiling):
+	case b.ownsUID(floor, ceiling):
 		return boundTo{binding: resolved, uid: b.UID}
 	}
 	return boundTo{binding: resolved}

@@ -47,14 +47,14 @@ func TestAReplayedRefusalIsRunAgainNotRememberedAsAnApply(t *testing.T) {
 
 func TestOneUsernameBindsToOneSubject(t *testing.T) {
 	s, _ := applyServer(t, `[]`)
-	if err := s.store.BindIfFree(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 1}); err != nil {
+	if err := s.store.BindIfFree(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 1, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	// The same subject again is fine; another subject is refused.
-	if err := s.store.BindIfFree(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 1}); err != nil {
+	if err := s.store.BindIfFree(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 1, UIDKind: uidKindAccount}); err != nil {
 		t.Fatalf("rebinding the same subject: %v", err)
 	}
-	err := s.store.BindIfFree(Binding{SubjectID: "sub-2", Username: "charlotte", UID: 1})
+	err := s.store.BindIfFree(Binding{SubjectID: "sub-2", Username: "charlotte", UID: 1, UIDKind: uidKindAccount})
 	var taken ErrUsernameBound
 	if !errors.As(err, &taken) || taken.Owner != "sub-1" {
 		t.Fatalf("want ErrUsernameBound naming sub-1, got %v", err)

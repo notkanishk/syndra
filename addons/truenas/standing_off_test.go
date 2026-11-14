@@ -1,11 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
-
-	bolt "go.etcd.io/bbolt"
 )
 
 // An account that is off is off for one of three reasons, and a standing says only the one that is
@@ -32,11 +29,14 @@ func TestAnAccountThatIsOffSaysWhoSwitchedItOff(t *testing.T) {
 		got[v.Username] = v.Standing
 	}
 
-	if s := got["held"]; s.Usable || s.WaitingOn != "none" || s.Next != "" {
-		t.Errorf("Syndra holds it off: want none and no next of its own, got %+v", s)
+	if s := got["held"]; s.Usable || s.WaitingOn != "none" || !strings.Contains(s.Next, "Syndra keeps it off") {
+		t.Errorf("Syndra asked for it off: want none and a next that says so, got %+v", s)
 	}
-	if s := got["never_recorded"]; s.WaitingOn != "none" {
-		t.Errorf("a binding with no wish keeps the rule it always had, got %+v", s)
+	// A bound account whose wish is unknown (a legacy binding never applied since wishes were kept):
+	// no claim either way, and the step is Syndra's own comparison.
+	if s := got["never_recorded"]; s.Usable || s.WaitingOn != "none" || s.Note != "Switched off on TrueNAS." ||
+		s.Next != "If no one in Syndra asked for this, use Check for differences on the system's Mappings page." {
+		t.Errorf("an unknown wish makes no claim, got %+v", s)
 	}
 	by := got["by_hand"]
 	if by.WaitingOn != "operator" || !strings.Contains(by.Note, "outside Syndra") || !strings.Contains(by.Next, "Makerspace staff can use Check for differences") {
@@ -83,7 +83,7 @@ func TestAnApplyKeepsWhetherItWantedTheAccountOn(t *testing.T) {
 
 func TestWishesOnlyListsBoundAccounts(t *testing.T) {
 	s, _ := applyServer(t, `[]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	w := s.wishesFor([]Subject{{Username: "charlotte", UID: 300001}, {Username: "root", UID: 0}})
@@ -107,7 +107,7 @@ func TestAWishIsRecordedOnlyWhenItCannotAccuseAnyone(t *testing.T) {
 	}
 	setup := func(t *testing.T, users string, kept *bool) (*server, *mutatingRPC) {
 		s, m := applyServer(t, users)
-		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsEnabled: kept}); err != nil {
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount, WantsEnabled: kept}); err != nil {
 			t.Fatal(err)
 		}
 		return s, m
@@ -186,99 +186,4 @@ func TestAWishIsRecordedOnlyWhenItCannotAccuseAnyone(t *testing.T) {
 			t.Fatalf("one lock write, got %d", len(m.updates))
 		}
 	})
-}
-
-// Bindings from before wishes were kept (contract 1's) arrive with none. A hand switch-off of such an
-// account is a difference nothing converges, so no apply would ever write its wish: at the first
-// complete read each unset wish is set to what the NAS holds, logged like every binding change,
-// once; after that a hand switch-off reads as outside Syndra.
-func TestLegacyBindingsGetTheirWishesOnceFromTheFirstCompleteRead(t *testing.T) {
-	s, _ := applyServer(t, `[]`)
-	for _, b := range []Binding{
-		{SubjectID: "sub-on", Username: "on_acct", UID: 300001},
-		{SubjectID: "sub-off", Username: "off_acct", UID: 300002},
-		{SubjectID: "sub-gone", Username: "gone", UID: 300009}, // no longer on the NAS
-	} {
-		if err := s.store.PutBinding(b); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// Legacy shape, written as an older or later binary would: account_id alone, no uid.
-	raw, _ := json.Marshal(Binding{SubjectID: "sub-idonly", Username: "idonly", AccountID: accountID(300003)})
-	if err := s.store.db.Update(func(tx *bolt.Tx) error { return tx.Bucket(bucketBindings).Put([]byte("sub-idonly"), raw) }); err != nil {
-		t.Fatal(err)
-	}
-	snap := Snapshot{Subjects: []Subject{
-		{Username: "on_acct", UID: 300001, Enabled: true, SMBEnabled: true},
-		{Username: "off_acct", UID: 300002, Enabled: false},
-		{Username: "idonly", UID: 300003, Enabled: true},
-	}}
-	before := len(records(t, s))
-
-	s.deriveWishes(Snapshot{Subjects: snap.Subjects, Truncated: true})
-	if _, done, _ := s.store.GetSetting(settingWishesDerived); done || len(records(t, s)) != before {
-		t.Fatal("a truncated read proves nothing and decides nothing")
-	}
-
-	s.deriveWishes(snap)
-	w := s.wishesFor(snap.Subjects)
-	if e := w[300001].Enabled; e == nil || !*e || !w[300001].SMB {
-		t.Errorf("an account that is on: want an on wish and SMB, got %+v", w[300001])
-	}
-	if e := w[300002].Enabled; e == nil || *e {
-		t.Errorf("an account that is off: want an off wish, got %+v", w[300002])
-	}
-	if e := w[300003].Enabled; e == nil || !*e {
-		t.Errorf("a binding that kept account_id alone is bound and derived, got %+v", w[300003])
-	}
-	if g, ok := w[300009]; !ok || g.Enabled != nil {
-		t.Errorf("an account no longer on the NAS keeps no wish, got %+v", g)
-	}
-	if _, done, _ := s.store.GetSetting(settingWishesDerived); !done {
-		t.Fatal("the marker is recorded")
-	}
-	logged := 0
-	for _, r := range records(t, s)[before:] {
-		if r.Operation == "wishes.derive" {
-			logged++
-		}
-	}
-	// Three bindings, each an intent and a result, and the marker's.
-	if logged != 8 {
-		t.Errorf("every derived write goes through the mutation log: want 8 records, got %d", logged)
-	}
-
-	// Never again: a changed account, a new read, and nothing is written or rewritten.
-	after := len(records(t, s))
-	snap.Subjects[0].Enabled = false // switched off by hand on TrueNAS
-	s.deriveWishes(snap)
-	if len(records(t, s)) != after {
-		t.Fatal("the marker stops a second pass")
-	}
-	standing := map[string]*Standing{}
-	for _, v := range subjectViews(snap.Subjects, nil, s.wishesFor(snap.Subjects)) {
-		standing[v.Username] = v.Standing
-	}
-	if st := standing["on_acct"]; st.WaitingOn != "operator" || !strings.Contains(st.Note, "outside Syndra") {
-		t.Errorf("a later hand switch-off reads as outside Syndra, got %+v", st)
-	}
-	if st := standing["off_acct"]; st.WaitingOn != "none" {
-		t.Errorf("an account Syndra left off stays Syndra's, got %+v", st)
-	}
-}
-
-// The derivation runs from the first live read of the NAS a request makes, after it has answered; the
-// next read then carries the wish.
-func TestTheFirstLiveSubjectsReadDerivesTheWishes(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":true,"smb":false,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
-		t.Fatal(err)
-	}
-	getSubjects(t, s, true)
-	if w := s.wishesFor([]Subject{{Username: "charlotte", UID: 3001}})[3001]; w.Enabled == nil || *w.Enabled {
-		t.Fatalf("an account left off gets an off wish from the first live read, got %+v", w)
-	}
-	if _, done, _ := s.store.GetSetting(settingWishesDerived); !done {
-		t.Fatal("and the marker")
-	}
 }

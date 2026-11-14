@@ -413,7 +413,7 @@ func problemCode(t *testing.T, rr *httptest.ResponseRecorder) string {
 // reports both, since both were converged.
 func TestSwitchingTheAccountOffTakesSMBWithIt(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	for i, desired := range []string{`{"enabled":false}`, `{"enabled":false,"smb_enabled":true}`} {
@@ -475,7 +475,7 @@ func TestAnAbsentAccountIsCreatedByTheApplyItself(t *testing.T) {
 // would rewrite every account on every pass.
 func TestReApplyingAnUnchangedSetIssuesNoMutatingCall(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -495,7 +495,7 @@ func TestReApplyingAnUnchangedSetIssuesNoMutatingCall(t *testing.T) {
 // same path restores it, with no second account.
 func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -520,7 +520,7 @@ func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
 
 	// And back, through the same path, with no second account created.
 	s2, m2 := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":true,"smb":false,"groups":[]}]`)
-	if err := s2.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s2.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	on := postApply(t, s2, `{"call_id":"c2","subject":"sub-1","email":"charlotte@example.edu",
@@ -584,7 +584,7 @@ func TestACollidingUnboundAccountHaltsAndSurfacesTheDecision(t *testing.T) {
 // Renaming disturbs its home directory, its ACL entries and its SMB identity.
 func TestAnEmailChangeDoesNotRenameAnExistingAccount(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -614,7 +614,7 @@ func TestAnEmailChangeDoesNotRenameAnExistingAccount(t *testing.T) {
 // original kept the home data.
 func TestAnOutOfBandRenameIsRecognisedRatherThanRecreated(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte_renamed","id":11,"uid":300001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -637,7 +637,7 @@ func TestAnOutOfBandRenameIsRecognisedRatherThanRecreated(t *testing.T) {
 // fallback must not read that as an account: uid 0 is root.
 func TestALegacyBindingUIDNeverMatchesRootOrABuiltIn(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"root","id":1,"uid":0,"locked":false,"smb":false,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 0}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 0, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -655,7 +655,7 @@ func TestALegacyBindingUIDNeverMatchesRootOrABuiltIn(t *testing.T) {
 // that reused the name, not this subject's.
 func TestAReusedUsernameIsNotThisSubjectsAccount(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":19,"uid":300777,"locked":false,"smb":false,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -695,8 +695,8 @@ func TestALegacyBindingIsUpgradedToTheRealUIDOnANameHit(t *testing.T) {
 
 	postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu",
 		"desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":true}}`)
-	if b, _, _ := s.store.GetBinding("sub-1"); b.UID != 300001 {
-		t.Fatalf("the binding must carry the real uid, got %d", b.UID)
+	if b, _, _ := s.store.GetBinding("sub-1"); b.UID != 300001 || b.UIDKind != uidKindAccount {
+		t.Fatalf("the binding must carry the real uid and say it is one, got %d %q", b.UID, b.UIDKind)
 	}
 }
 
@@ -704,7 +704,7 @@ func TestALegacyBindingIsUpgradedToTheRealUIDOnANameHit(t *testing.T) {
 // refusal with that subject named, and nothing is applied.
 func TestAMovedSubjectRefusesTheApplyAndMutatesNothing(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -725,7 +725,7 @@ func TestAMovedSubjectRefusesTheApplyAndMutatesNothing(t *testing.T) {
 // without which the test above would pass for an apply that refuses everything.
 func TestAMatchingFingerprintProceeds(t *testing.T) {
 	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	current := Subject{Username: "charlotte", UID: 3001, Groups: []string{"lab_makers"}, Enabled: true, SMBEnabled: true}
@@ -795,7 +795,7 @@ func TestAnUnholdableDesiredStateIsBlockedByPlanAndApplyAlike(t *testing.T) {
 		for _, users := range []string{`[]`, existing} {
 			s, m := applyServer(t, users)
 			if users == existing {
-				if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+				if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -921,7 +921,7 @@ func TestAGroupTableThatCannotBeReadIsNotABlockedApply(t *testing.T) {
 // produces a fingerprint that changes when the subject's target state changes.
 func TestPlanningMutatesNothingAndFingerprintsWhatItRead(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	const body = `{"subjects":[{"subject":"sub-1","email":"charlotte@example.edu","desired":{"group":[]}}]}`
@@ -949,7 +949,7 @@ func TestPlanningMutatesNothingAndFingerprintsWhatItRead(t *testing.T) {
 
 	// The subject moves on the target; the fingerprint must move with it.
 	moved, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":true,"smb":true,"groups":[42]}]`)
-	if err := moved.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := moved.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	rr2 := httptest.NewRecorder()
@@ -1026,7 +1026,7 @@ func readSource(name string) (string, error) {
 // and the instruction it invents is "remove them from every group".
 func TestAnUnnamedFieldIsLeftAloneRatherThanZeroed(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1075,7 +1075,7 @@ func TestThePlanAndTheApplyAgreeOnTheDerivedName(t *testing.T) {
 	const users = `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`
 
 	s, _ := applyServer(t, users)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-other", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-other", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	const planBody = `{"subjects":[{"subject":"sub-1","email":"charlotte@example.edu","desired":{"group":["lab_makers"]}}]}`
@@ -1139,7 +1139,7 @@ func TestThePlanReportsAConflictRatherThanPlanningAroundIt(t *testing.T) {
 // by omitting a field is not that.
 func TestAnApplyWithoutAFingerprintIsRefused(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1160,7 +1160,7 @@ func TestAnApplyWithoutAFingerprintIsRefused(t *testing.T) {
 // calls it converged.
 func TestGroupsAreWrittenAsTheIdsTheReadResolves(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1193,7 +1193,7 @@ func TestGroupsAreWrittenAsTheIdsTheReadResolves(t *testing.T) {
 // a smaller set than the one that was approved and reports it as converged.
 func TestAnUnknownGroupIsRefusedRatherThanDropped(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1276,7 +1276,7 @@ func TestAnApplyFindsAnAccountPastTheListCap(t *testing.T) {
 
 	t.Run("bound: found and converged, nothing created", func(t *testing.T) {
 		s, rpc := applyServer(t, users)
-		if err := s.store.PutBinding(Binding{SubjectID: "sub-charlotte", Username: "charlotte", UID: 5500}); err != nil {
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-charlotte", Username: "charlotte", UID: 5500, UIDKind: uidKindAccount}); err != nil {
 			t.Fatal(err)
 		}
 		rr := postApply(t, s, `{"call_id":"c2","subject":"sub-charlotte","email":"charlotte@example.edu",
@@ -1330,7 +1330,7 @@ func TestATruncatedReadStillConvergesASubjectItFound(t *testing.T) {
 	users := `[{"username":"charlotte","uid":5500,"locked":false,"smb":true,"groups":[42]},` +
 		strings.TrimPrefix(cappedUsers(), "[")
 	s, _ := applyServer(t, users)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-charlotte", Username: "charlotte", UID: 5500}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-charlotte", Username: "charlotte", UID: 5500, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1360,7 +1360,7 @@ func TestTheFingerprintComesFromTheReadAndNotFromTheRequest(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":true,"smb":false,"groups":[42]}]`)
 	// The write says unlock; the target keeps it locked.
 	m.divergeOn = map[string]any{"locked": true}
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1392,7 +1392,7 @@ func TestTheFingerprintComesFromTheReadAndNotFromTheRequest(t *testing.T) {
 // never set.
 func TestObservedCarriesOnlyTheFieldsTheApplyManages(t *testing.T) {
 	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":true,"smb":true,"groups":[41,42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1418,7 +1418,7 @@ func TestObservedCarriesOnlyTheFieldsTheApplyManages(t *testing.T) {
 func TestAWriteThatCannotBeReadBackIsReportedAsUnverified(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":true,"smb":false,"groups":[42]}]`)
 	m.failReadAfterUpdate = true
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1459,7 +1459,7 @@ func TestNoAccountIsMadeForASubjectWantedOff(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s, m := applyServer(t, `[]`)
 			if tc.bound {
-				if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+				if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -1504,7 +1504,7 @@ func TestThePlanFindsABoundAccountAsTheApplyDoes(t *testing.T) {
 	planFor := func(t *testing.T, users, desired string) (ApplyOutcome, *mutatingRPC) {
 		t.Helper()
 		s, m := applyServer(t, users)
-		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001}); err != nil {
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001, UIDKind: uidKindAccount}); err != nil {
 			t.Fatal(err)
 		}
 		rr := httptest.NewRecorder()
@@ -1600,7 +1600,7 @@ func TestAnApplyThatReachedNothingIsTargetUnreachable(t *testing.T) {
 // NAS is afterwards.
 func TestAWriteLostOnTheWireIsApplyFailed(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	m.resetOn = "user.update"

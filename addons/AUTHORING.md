@@ -844,8 +844,12 @@ mirror holds no limits: absent in `state` is "not known".
     wants it on is a difference made outside Syndra: report it
     `waiting_on: operator` with a note that says so and a next step that
     stays in Syndra, never `waiting_on: target` or a next step that asks
-    the operator to change it in the app. Syndra shows `note` and `next`
-    as written, so it cannot know which of the three this is. The TrueNAS add-on keeps what each apply asked
+    the operator to change it in the app. An off account whose intent
+    the add-on does not know (it never recorded what Syndra asked for it)
+    makes no claim either way: `waiting_on: none`, a note that says only
+    that it is switched off, and a next step that sends the operator to
+    Syndra's own check for differences. Syndra shows `note` and `next`
+    as written, so it cannot know which of these this is. The TrueNAS add-on keeps what each apply asked
     (`Binding.WantsEnabled`) to tell them apart (`standingOf` in
     `addons/truenas/server.go`).
   - A difference the app imposes and Syndra cannot change (an invitation not

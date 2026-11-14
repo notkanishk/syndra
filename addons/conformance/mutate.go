@@ -305,7 +305,10 @@ func (k *kit) offStanding(c *check) {
 		// The off state and the standing are judged from this one document, never a state read
 		// before it: a standing is only wrong for an account that is off in the same read.
 		state, _ := s["state"].(map[string]any)
-		if !c.expect(state[k.m.account] == false, "the account was off a read ago and is %v in this one (state.%s)", state[k.m.account], k.m.account) {
+		if state[k.m.account] != false {
+			// Back on in this read: nothing to judge a standing of (withdraw-only.existing judges the
+			// apply), so this check is not judged rather than failed.
+			c.skip("the account was off a read ago and is %v in this one (state.%s)", state[k.m.account], k.m.account)
 			return
 		}
 		st, _ := s["standing"].(map[string]any)

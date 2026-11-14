@@ -104,7 +104,7 @@ func (acct *account) shown() map[string]any {
 func (acct *account) standing() *standing {
 	switch {
 	case acct.state["enabled"] != true:
-		return &standing{WaitingOn: "none", Note: "The account is off."}
+		return &standing{WaitingOn: "none", Note: "The account is off.", Next: "Nothing for you to do. Syndra asked for it to be off."}
 	case !acct.password:
 		return &standing{WaitingOn: "member", Note: "No password set yet.", Next: "Set a password on your page."}
 	}

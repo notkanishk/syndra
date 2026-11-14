@@ -32,14 +32,24 @@ describe("standing, in words", () => {
 describe("an account that is switched off", () => {
   const off: Standing = { usable: false, waiting_on: "none", note: "The account is switched off." };
 
-  it("is expected, in one statement that stays in Syndra, and does not promise 'yet'", () => {
+  it("makes no claim of its own where the add-on says nothing more, and does not promise 'yet'", () => {
     const w = standingWords(off, "TrueNAS", "operator");
     expect(w.state).toBe("Switched off");
     expect(w.state).not.toMatch(/yet/i);
-    expect(w.next).toBe(
-      `${NOTHING_TO_DO} Syndra keeps it off while the person is on hold, deactivated or has no role that reaches TrueNAS.`,
-    );
-    expect(w.next).not.toMatch(/on on|switch it back on|by hand/i);
+    expect(w.next).toBe("If no one in Syndra asked for this, use Check for differences on the system's Mappings page.");
+    expect(w.next).not.toMatch(/Syndra keeps it off|on on|switch it back on|by hand/i);
+  });
+
+  // An add-on that knows says so, in its own words, shown as written.
+  it("shows what an add-on that knows says, as written", () => {
+    for (const known of [
+      { next: "Nothing for you to do. Syndra keeps it off while its person is on hold, deactivated or has no role that reaches TrueNAS." },
+      { note: "Switched off on TrueNAS.", next: "If no one in Syndra asked for this, use Check for differences on the system's Mappings page." },
+    ]) {
+      const w = standingWords({ usable: false, waiting_on: "none", ...known }, "TrueNAS", "operator");
+      expect(w.next).toBe(known.next);
+      expect(w.note).toBe(known.note);
+    }
   });
 
   it("does not repeat the add-on's own 'switched off' note beside the state", () => {
@@ -52,9 +62,7 @@ describe("an account that is switched off", () => {
   });
 
   it("tells a member to ask staff rather than wait", () => {
-    expect(standingWords(off, "TrueNAS", "member").next).toBe(
-      "It stays off while you are on hold or deactivated. Ask makerspace staff if you did not expect this.",
-    );
+    expect(standingWords(off, "TrueNAS", "member").next).toBe("Ask makerspace staff if you did not expect this.");
   });
 
   // The add-on tells the three apart (TrueNAS: Binding.WantsEnabled) and says each in its own note and

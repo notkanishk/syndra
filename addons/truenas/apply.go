@@ -804,7 +804,7 @@ func boundAccount(binding Binding, floor, ceiling int64,
 	if err != nil {
 		return nil, binding, nil, err
 	}
-	owned := inIDRange(binding.UID, floor, ceiling)
+	owned := binding.ownsUID(floor, ceiling)
 	if found != nil {
 		if owned && found.UID != binding.UID {
 			// A name some other account now holds (the original was deleted
@@ -812,11 +812,12 @@ func boundAccount(binding Binding, floor, ceiling int64,
 			// entitlements to a stranger, so it halts like any foreign name.
 			return nil, binding, &BindingConflict{Username: found.Username, AccountID: accountID(found.UID)}, nil
 		}
-		if !owned && inIDRange(found.UID, floor, ceiling) {
-			// A legacy binding holding a record key, not a uid: the real one,
-			// so the next pass is guarded by the check above.
+		if !owned {
+			// A legacy binding holding a record key (or a real uid it never said was one): the name
+			// found the account, so the real uid, marked, and the next pass is guarded by the check above.
 			binding.UID = found.UID
 		}
+		binding.UIDKind = uidKindAccount
 		return found, binding, nil, nil
 	}
 	if !owned {
@@ -834,6 +835,7 @@ func boundAccount(binding Binding, floor, ceiling int64,
 	}
 	if renamed != nil {
 		binding.Username = renamed.Username
+		binding.UIDKind = uidKindAccount
 		return renamed, binding, nil, nil
 	}
 	// Bound, and neither the name nor the uid is there. The account was
@@ -875,9 +877,9 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		if err != nil {
 			return nil, Binding{}, nil, false, false, err
 		}
-		if resolved.Username != binding.Username || resolved.UID != binding.UID {
-			// A rename, or a legacy binding's real uid: recorded so the next
-			// pass finds the account by name and is guarded by its uid.
+		if resolved.Username != binding.Username || resolved.UID != binding.UID || resolved.UIDKind != binding.UIDKind {
+			// A rename, or a legacy binding's real uid and marker: recorded once, so the next
+			// pass finds the account by number and is guarded by its uid.
 			if err := s.mutate(applyCaller(req).on(resolved.UID), "store.bind", func() error { return s.store.PutBinding(resolved) }); err != nil {
 				logStoreFailure("binding", req.Subject, err)
 			}
@@ -924,7 +926,7 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 			return nil, Binding{}, conflict, false, false, nil
 		}
 		// Not bound here: the apply binds it once the plan is verified.
-		return existing, Binding{SubjectID: req.Subject, Username: existing.Username, UID: existing.UID, BoundBy: "apply"}, nil, false, true, nil
+		return existing, Binding{SubjectID: req.Subject, Username: existing.Username, UID: existing.UID, UIDKind: uidKindAccount, BoundBy: "apply"}, nil, false, true, nil
 	}
 	return nil, Binding{SubjectID: req.Subject, Username: derived}, nil, cut, false, nil
 }
@@ -1325,7 +1327,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	if readErr == nil {
 		uid = created.UID
 	}
-	binding.SubjectID, binding.UID, binding.BoundBy = req.Subject, uid, "apply"
+	binding.SubjectID, binding.UID, binding.UIDKind, binding.BoundBy = req.Subject, uid, uidKindAccount, "apply"
 	if err := s.mutate(who.on(uid), "store.bind", func() error { return s.store.BindIfFree(binding) }); err != nil {
 		// The account exists and the record of whose it is did not land. Not a
 		// silent success: the next apply would derive the same name, find it

@@ -117,12 +117,8 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		}
 		snap, current = cached, false
 	}
-	byName := make(map[string]*Subject, len(snap.Subjects))
-	byUID := make(map[int64]*Subject, len(snap.Subjects))
-	for i := range snap.Subjects {
-		byName[snap.Subjects[i].Username] = &snap.Subjects[i]
-		byUID[snap.Subjects[i].UID] = &snap.Subjects[i]
-	}
+	ix := indexAccounts(snap.Subjects) // the one lookup of accounts the wishes and the stats use too
+	byName, byUID := ix.byName, ix.byUID
 	claimed, err := s.store.BoundUsernames()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, "The add-on's bindings could not be read.", nil)

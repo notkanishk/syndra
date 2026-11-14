@@ -46,13 +46,11 @@ export function standingWords(standing: Standing, system: string, audience: "mem
   }
   if (waiting === "none") {
     // Nobody is waited on, and it is still not usable: it is switched off, and that does not end by
-    // itself, so "yet" is not said. The contract makes `none` Syndra's own doing: an account the
-    // `account` field holds off is `waiting_on: none` because off is what Syndra asked for
-    // (addons/AUTHORING.md). An add-on that can tell otherwise (TrueNAS: an account no subject is
-    // bound to, or off while Syndra wants it on) says so in its own `note` and `next`, which are
-    // shown as written; these words are only for the contract's case, where the add-on said
-    // nothing more. The add-on's own "The account is switched off." only repeats the state, so it
-    // is not shown beside it.
+    // itself, so "yet" is not said. Whether Syndra asked for it is the add-on's to say, in its own
+    // `note` and `next`, shown as written (TrueNAS says it for an account Syndra holds off, one
+    // nobody is assigned to, and one whose intent it does not know). Where it says nothing more,
+    // these words make no claim either way, and send the operator to Syndra's own comparison.
+    // The add-on's "The account is switched off." only repeats the state, so it is not shown beside it.
     const repeats = !note || /^the account is switched off\.?$/i.test(note.trim());
     return {
       state: "Switched off",
@@ -61,8 +59,8 @@ export function standingWords(standing: Standing, system: string, audience: "mem
       next:
         standing.next ||
         (you
-          ? "It stays off while you are on hold or deactivated. Ask makerspace staff if you did not expect this."
-          : `${NOTHING_TO_DO} Syndra keeps it off while the person is on hold, deactivated or has no role that reaches ${system}.`),
+          ? "Ask makerspace staff if you did not expect this."
+          : "If no one in Syndra asked for this, use Check for differences on the system's Mappings page."),
     };
   }
   return { state: "Not usable yet", tone: "neutral", note, next: standing.next || NOTHING_TO_DO };

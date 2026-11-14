@@ -65,7 +65,7 @@ func TestTheGuardIsCaseInsensitive(t *testing.T) {
 func TestPurgingABindingOntoTheOwnAccountIsRefused(t *testing.T) {
 	s, _ := applyServer(t, `[{"username":"syndra","id":9,"uid":3001,"locked":false,"smb":false,"groups":[]}]`)
 	s.nas.selfName, s.nas.selfUID = "syndra", 3001
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "syndra", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "syndra", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 

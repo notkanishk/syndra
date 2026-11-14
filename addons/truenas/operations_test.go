@@ -26,7 +26,7 @@ const theSecret = "correct-horse-battery-staple"
 func opServer(t *testing.T) (*server, *mutatingRPC) {
 	t.Helper()
 	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 	// Known, because a purge refuses while the add-on does not know its own
@@ -675,7 +675,7 @@ func TestTheRecordedActorIsTheOneWhoAsked(t *testing.T) {
 func TestAnOutOfBandRenameDoesNotBreakTheOperationPath(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte_renamed","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	// The binding still names the account as it was.
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -734,7 +734,7 @@ func TestAnAmbiguousUidRefusesRatherThanResolvingByName(t *testing.T) {
 		{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
 		{"username":"charlotte_clone","id":12,"uid":3001,"locked":false,"smb":true,"groups":[42]}
 	]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -779,7 +779,7 @@ func TestTheFakeAppliesTheFiltersTheLookupSends(t *testing.T) {
 func TestAMissingBoundAccountIsRefusedRatherThanLeftUnknown(t *testing.T) {
 	rpc := &fakeRPC{users: `[]`, groups: fixtureGroups}
 	s := testServer(t, rpc)
-	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -817,7 +817,7 @@ func TestAnAmbiguousBindingIsItsOwnRefusal(t *testing.T) {
 		groups: fixtureGroups,
 	}
 	s := testServer(t, rpc)
-	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "charlotte", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1022,8 +1022,8 @@ func TestAdoptingTheSameAccountTwiceAnswersItsIDBothTimes(t *testing.T) {
 		t.Fatalf("a legacy binding: want the account's uid 200123, got %d %s", rr.Code, rr.Body.String())
 	}
 
-	// Out of the add-on's range (adopted, not made here): boundAccount never
-	// rewrites the record key, so the answer is the account found, as apply's.
+	// Out of the add-on's range (adopted, not made here): the name finds the account, as apply's,
+	// and the answer is the account found.
 	s, _ = applyServer(t, `[{"username":"becky_lynch","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "becky_lynch", UID: 11}); err != nil {
 		t.Fatal(err)

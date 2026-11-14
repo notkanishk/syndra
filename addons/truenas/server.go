@@ -369,9 +369,16 @@ func standingOf(s *Subject) *Standing {
 		// Syndra's own check for differences, which re-sends what it wants.
 		return &Standing{WaitingOn: "operator", Note: "Switched off on TrueNAS, outside Syndra.",
 			Next: "Makerspace staff can use Check for differences on the system's Mappings page to bring it back in line."}
+	case !s.Enabled && s.wantsEnabled != nil:
+		// Syndra asked for it off: what it asked for is what it has, so nobody is waited on.
+		return &Standing{WaitingOn: "none",
+			Next: "Nothing for you to do. Syndra keeps it off while its person is on hold, deactivated or has no role that reaches TrueNAS."}
 	case !s.Enabled:
-		// Syndra asked for it off (or has no record of asking for it on).
-		return &Standing{WaitingOn: "none", Note: "The account is switched off."}
+		// A bound account whose wish is unknown (a binding never applied since wishes were kept): no
+		// claim either way. The wish fills in on its next apply (rememberWishes); until then who
+		// switched it off is not known, and the step is Syndra's own comparison.
+		return &Standing{WaitingOn: "none", Note: "Switched off on TrueNAS.",
+			Next: "If no one in Syndra asked for this, use Check for differences on the system's Mappings page."}
 	case !s.PasswordSet:
 		return &Standing{WaitingOn: "member", Note: smbWaiting(s), Next: "Set a storage password on your storage page."}
 	case s.needsNewPassword():
@@ -450,7 +457,6 @@ type subjectsRead struct {
 // or the mirror on disk when the NAS cannot be read and nothing newer is kept
 // (fresh.go) — labelled whichever it is.
 func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte) {
-	var live *Snapshot // set only when this request read the NAS itself
 	val, obs, err := s.fresh.read("subjects", wantsFresh(r), func() (any, time.Time, error) {
 		snap, err := s.readSubjects()
 		if err != nil {
@@ -462,7 +468,6 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 			// which of the two matters.
 			log.Printf("[STORE] could not persist snapshot: %v", putErr)
 		}
-		live = &snap
 		return subjectsRead{subjectViews(snap.Subjects, s.homeLimits(snap.Subjects), s.wishesFor(snap.Subjects)), snap.Truncated}, snap.TakenAt, nil
 	})
 	if writeCooldown(w, err) {
@@ -471,12 +476,6 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 	if err == nil {
 		read := val.(subjectsRead)
 		writeJSON(w, http.StatusOK, SubjectsResponse{Subjects: read.views, Truncated: read.truncated, Observed: obs})
-		if live != nil && s.fresh.keeps("subjects", live.TakenAt) {
-			// After the answer, not inside the read: its writes make every copy a read of the past
-			// (mutate), which would stop this very read being kept. Only a read the fresher did keep (a write
-			// that began during it makes it a read of the past); the next read has the wishes.
-			s.deriveWishes(*live)
-		}
 		return
 	}
 
