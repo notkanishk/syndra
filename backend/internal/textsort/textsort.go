@@ -14,15 +14,23 @@ import (
 
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
+
+	"syndra/internal/locale"
 )
 
-// The same options as the UI's Intl.Collator({sensitivity: "base", numeric:
-// true}). A collate.Collator reuses an internal buffer, so it is not safe to
-// share without the lock.
+// The same options and the same locale as the UI's Intl.Collator(displayLocale(),
+// {sensitivity: "base", numeric: true}): the deployment's LOCALE (Und, the root
+// order, when unset), because an order is a display too (in sv, å sorts after
+// z). A collate.Collator reuses an internal buffer, so it is not safe to share
+// without the lock.
 var (
 	mu       sync.Mutex
-	collator = collate.New(language.Und, collate.Loose, collate.Numeric)
+	collator = newCollator(locale.Language())
 )
+
+func newCollator(tag language.Tag) *collate.Collator {
+	return collate.New(tag, collate.Loose, collate.Numeric)
+}
 
 // Compare orders two names: negative, zero or positive, like strings.Compare.
 func Compare(a, b string) int {

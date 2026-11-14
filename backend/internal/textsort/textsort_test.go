@@ -2,7 +2,10 @@ package textsort
 
 import (
 	"reflect"
+	"sort"
 	"testing"
+
+	"golang.org/x/text/language"
 )
 
 // The cases mirror ui/src/lib/__tests__/sort.test.ts: the backend and the
@@ -32,5 +35,23 @@ func TestByNameBreaksTiesByTheTieKey(t *testing.T) {
 	want := []row{{"Aa", "z"}, {"lab", "a"}, {"Lab", "b"}}
 	if !reflect.DeepEqual(rows, want) {
 		t.Fatalf("got %v, want %v", rows, want)
+	}
+}
+
+// An order is a display: in Swedish å sorts after z, in the root order it
+// sits with the As. The collator takes the deployment's locale.
+func TestTheOrderFollowsTheLocale(t *testing.T) {
+	names := []string{"Åsa", "Zoe", "Anna"}
+	order := func(tag language.Tag) []string {
+		c := newCollator(tag)
+		out := append([]string(nil), names...)
+		sort.SliceStable(out, func(i, j int) bool { return c.CompareString(out[i], out[j]) < 0 })
+		return out
+	}
+	if got := order(language.Und); got[0] != "Anna" || got[1] != "Åsa" {
+		t.Errorf("root order = %v; want Anna, Åsa, Zoe", got)
+	}
+	if got := order(language.MustParse("sv")); got[2] != "Åsa" {
+		t.Errorf("sv order = %v; want Anna, Zoe, Åsa", got)
 	}
 }

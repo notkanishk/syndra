@@ -51,7 +51,7 @@ export function ClockTime({ at }: { at?: number | null }) {
   // the expensive one.
   //
   // It formatted with the BROWSER's locale while every other time in the
-  // product uses `formatClock` — en-GB, 24-hour, fixed so a row never renders
+  // product uses `formatClock` — 24-hour, fixed so a row never renders
   // "2:05" ambiguously between morning and afternoon. So one page said
   // "12:08 AM" where the rest of the product would say "00:08". Two clocks in
   // one product is the same defect as two counts.

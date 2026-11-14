@@ -32,8 +32,10 @@ export const makerspaceZone = (): string => zone;
 export const zoneTag = (): string => (known ? "" : " UTC");
 
 const wallClockIn = (timeZone: string) =>
-  new Intl.DateTimeFormat("en-US", {
+  new Intl.DateTimeFormat("en-US", { // locale: not displayed, only formatToParts' numbers are read
     timeZone,
+    calendar: "gregory", // the parts are read as Gregorian numbers in Latin digits, whatever the display locale is
+    numberingSystem: "latn",
     hourCycle: "h23",
     year: "numeric",
     month: "2-digit",
@@ -82,6 +84,20 @@ export function resetMakerspaceZoneForTests(): void {
   known = false;
   warned = false;
   wallClock = wallClockIn(zone);
+}
+
+/**
+ * Order two RFC 3339 instants by the moment they name (Date.parse), not by their
+ * characters: "15:00+05:30" is "10:00Z", ".12Z" is after ".1Z". `dir` is 1 for
+ * earliest first, -1 for latest first. A missing or unreadable instant sorts
+ * LAST in either direction (nothing known is not the earliest or the latest),
+ * and two of those are equal. Never localeCompare: that is a locale's order.
+ */
+export function compareInstants(a: string | null | undefined, b: string | null | undefined, dir: 1 | -1 = 1): number {
+  const x = a ? Date.parse(a) : NaN;
+  const y = b ? Date.parse(b) : NaN;
+  if (Number.isNaN(x) || Number.isNaN(y)) return Number.isNaN(x) === Number.isNaN(y) ? 0 : Number.isNaN(x) ? 1 : -1;
+  return dir * (x - y);
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");

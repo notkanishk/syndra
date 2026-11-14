@@ -1,3 +1,5 @@
+import { formatDecimal } from "@/lib/locale";
+
 import { ApiError } from "@/lib/api-client";
 import { fieldNoun, type EntitlementField, type MappingFields } from "@/lib/fields";
 import { describeFailure, sentence } from "@/lib/outcome";
@@ -214,7 +216,7 @@ const GB = 1024 ** 3;
 export function limitWords(quota: string | undefined | null): string {
   if (!quota || quota === "0") return "no limit";
   const n = Number(quota) / GB;
-  return `up to ${Number.isInteger(n) ? n : n.toFixed(1)} GB`;
+  return `up to ${Number.isInteger(n) ? n : formatDecimal(n)} GB`;
 }
 
 export function gbToBytes(gb: string): string {

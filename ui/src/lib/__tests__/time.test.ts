@@ -7,6 +7,7 @@ import { formatClock, formatClockSeconds, formatShortDate, formatWeekday } from 
 import { effectiveZone } from "@/lib/zone-effective";
 import {
   addDays,
+  compareInstants,
   civilDay,
   daysBetween,
   daysFromToday,
@@ -18,6 +19,24 @@ import {
   setMakerspaceZone,
   zoneTag,
 } from "@/lib/time";
+
+describe("compareInstants orders by the moment, not the characters", () => {
+  it("reads offsets and fraction digits", () => {
+    expect(compareInstants("2026-11-05T15:30:00+05:30", "2026-11-05T10:00:00Z")).toBe(0);
+    expect(compareInstants("2026-11-05T10:00:00Z", "2026-11-05T10:00:00.5Z")).toBeLessThan(0);
+    expect(compareInstants("2026-11-05T10:00:00.12Z", "2026-11-05T10:00:00.1Z")).toBeGreaterThan(0);
+    expect(compareInstants("2026-11-05T10:00:00+05:30", "2026-11-05T10:00:00Z")).toBeLessThan(0); // 04:30Z is earlier
+  });
+  it("takes a direction, and sorts a missing or unreadable one last in either", () => {
+    expect(compareInstants("2026-11-05T10:00:00Z", "2026-11-06T10:00:00Z", -1)).toBeGreaterThan(0);
+    for (const dir of [1, -1] as const) {
+      expect(compareInstants(undefined, "2026-11-05T10:00:00Z", dir)).toBeGreaterThan(0);
+      expect(compareInstants("2026-11-05T10:00:00Z", null, dir)).toBeLessThan(0);
+      expect(compareInstants("nonsense", "2026-11-05T10:00:00Z", dir)).toBeGreaterThan(0);
+      expect(compareInstants("", undefined, dir)).toBe(0);
+    }
+  });
+});
 
 describe("the makerspace's day", () => {
   it("is the IST day, not the UTC one: 23:00 UTC is 04:30 the next morning", () => {
@@ -168,6 +187,21 @@ describe("the zone the backend names", () => {
  * toLocaleDateString and Intl.DateTimeFormat call names its zone (timeZone, or
  * inZone() which is makerspaceZone()).
  */
+const callsIn = (text: string, call: RegExp) => {
+  const out: { at: number; name: string; text: string }[] = [];
+  for (const m of text.matchAll(call)) {
+    let depth = 1;
+    let end = m.index + m[0].length;
+    for (; end < text.length && depth > 0; end++) {
+      if (text[end] === "(") depth++;
+      else if (text[end] === ")") depth--;
+    }
+    out.push({ at: m.index, name: m[1], text: text.slice(m.index, end) });
+  }
+  return out;
+};
+const line = (text: string, at: number) => text.slice(0, at).split("\n").length;
+
 describe("a time is never shown in the browser's zone", () => {
   // A zone is named when timeZone has a value (not `timeZone: undefined`, which
   // is the browser's zone again) or the call spreads inZone().
@@ -184,17 +218,71 @@ describe("a time is never shown in the browser's zone", () => {
     const found: string[] = [];
     for (const file of sources(SRC)) {
       const text = readFileSync(file, "utf8");
-      for (const m of text.matchAll(CALL)) {
-        let depth = 1;
-        let end = m.index + m[0].length;
-        for (; end < text.length && depth > 0; end++) {
-          if (text[end] === "(") depth++;
-          else if (text[end] === ")") depth--;
-        }
-        if (!namesAZone(text.slice(m.index, end))) {
-          found.push(`${file.slice(SRC.length + 1)}:${text.slice(0, m.index).split("\n").length} ${m[1]} without a zone`);
+      for (const c of callsIn(text, CALL)) {
+        if (!namesAZone(c.text)) found.push(`${file.slice(SRC.length + 1)}:${line(text, c.at)} ${c.name} without a zone`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
+});
+
+/**
+ * The locale is the deployment's (lib/locale.ts), never a literal: a date,
+ * number or order in a locale written in code ignores LOCALE, and one with no
+ * locale argument reads the browser's, so server and client disagree. Every
+ * toLocale*String, every Intl.<Name>( constructor and every localeCompare
+ * passes displayLocale(). A call whose output is never shown to a person (its
+ * parts are parsed for numbers) says so with `locale: not displayed` on the
+ * same line.
+ */
+describe("a date, number or order is never shown in a locale written in code", () => {
+  const namesTheLocale = (call: string) =>
+    /^\s*(?:\.)?localeCompare\b/.test(call) || /\blocaleCompare\s*\(/.test(call)
+      ? /,\s*displayLocale\(\)\s*[,)]/.test(call)
+      : /^[^(]*\(\s*displayLocale\(\)/.test(call);
+  it("recognises the shared accessor, and refuses a literal, undefined or nothing", () => {
+    expect(namesTheLocale("toLocaleDateString(displayLocale(), { })")).toBe(true);
+    expect(namesTheLocale("toLocaleDateString(\n  displayLocale(),")).toBe(true);
+    expect(namesTheLocale("Intl.Collator(displayLocale(), { })")).toBe(true);
+    expect(namesTheLocale("a.localeCompare(b, displayLocale())")).toBe(true);
+    expect(namesTheLocale('toLocaleDateString("en-GB", { })')).toBe(false);
+    expect(namesTheLocale('Intl.Collator("sv")')).toBe(false);
+    expect(namesTheLocale("toLocaleString(undefined, { })")).toBe(false);
+    expect(namesTheLocale("toLocaleString()")).toBe(false);
+    expect(namesTheLocale("Intl.NumberFormat(someLocale)")).toBe(false);
+    expect(namesTheLocale("Intl.PluralRules()")).toBe(false);
+    expect(namesTheLocale("a.localeCompare(b)")).toBe(false);
+    expect(namesTheLocale("a.localeCompare(b, undefined, { sensitivity: 'base' })")).toBe(false);
+  });
+  // Intl.getCanonicalLocales and supportedValuesOf take no locale to display in.
+  const CALL = /(toLocale(?:Time|Date)?String|\blocaleCompare|Intl\.(?!getCanonicalLocales\b|supportedValuesOf\b)[A-Za-z]+)\s*\(/g;
+  it("passes displayLocale() at every call", () => {
+    const found: string[] = [];
+    for (const file of sources(SRC)) {
+      if (file.endsWith("lib/locale.ts")) continue; // the accessor itself asks the runtime for its default
+      const text = readFileSync(file, "utf8");
+      for (const c of callsIn(text, CALL)) {
+        const lineText = text.split("\n")[line(text, c.at) - 1];
+        if (!namesTheLocale(c.text) && !/locale: not displayed/.test(lineText)) {
+          found.push(`${file.slice(SRC.length + 1)}:${line(text, c.at)} ${c.name} without displayLocale()`);
         }
       }
+    }
+    expect(found).toEqual([]);
+  });
+  // Any language tag written as a string in the product, not just en-GB / en-US.
+  const TAG = /["'`][a-z]{2,3}(?:-[A-Z][a-z]{3})?-[A-Z]{2}["'`]/;
+  it("leaves no locale literal in the product", () => {
+    expect(TAG.test('"sv-SE"')).toBe(true);
+    expect(TAG.test('"zh-Hant-TW"')).toBe(true);
+    expect(TAG.test('"data-state"')).toBe(false);
+    const found: string[] = [];
+    for (const file of sources(SRC)) {
+      if (file.endsWith("src/test-setup.ts")) continue; // tests state their locale
+      const text = readFileSync(file, "utf8");
+      text.split("\n").forEach((l, i) => {
+        if (TAG.test(l) && !/locale: not displayed/.test(l)) found.push(`${file.slice(SRC.length + 1)}:${i + 1}`);
+      });
     }
     expect(found).toEqual([]);
   });

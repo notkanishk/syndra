@@ -1,3 +1,4 @@
+import { compareInstants } from "@/lib/time";
 import { formatShortDate, formatSignIn } from "@/lib/format";
 import type { PersonSignIns } from "@/lib/queries/useSignIns";
 
@@ -23,7 +24,7 @@ export function projectSignInLine(
   if (own.length === 0 || !signIns?.receiving) return null;
   const last = signIns.usage
     .filter((r) => r.kind === "sign_in" && r.project_id === projectId)
-    .sort((a, b) => b.last_at.localeCompare(a.last_at))[0];
+    .sort((a, b) => compareInstants(a.last_at, b.last_at, -1))[0];
   if (last) {
     const app = own.find((a) => a.id === last.app_id);
     return `Last sign-in ${formatSignIn(last.last_at, now)}${app ? `, to ${app.name}` : ""}`;

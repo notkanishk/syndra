@@ -31,6 +31,15 @@ if [ "$DEPLOYMENT_TZ" != "UTC" ] && ! [ -f "/usr/share/zoneinfo/$DEPLOYMENT_TZ" 
   echo "error: DEPLOYMENT_TZ=$DEPLOYMENT_TZ is not an IANA time zone name (no /usr/share/zoneinfo/$DEPLOYMENT_TZ)" >&2
   exit 1
 fi
+# The deployment's display locale (the UI formats dates and numbers in it), a BCP 47
+# tag (RFC 5646) such as en-GB. Unset would leave dates in whatever format the UI
+# server's runtime defaults to. The backend validates the tag in full at start;
+# this catches an obvious slip (underscore, space) before it is written.
+: "${DEPLOYMENT_LOCALE:?set DEPLOYMENT_LOCALE to the BCP 47 language tag of this deployment, e.g. en-GB}"
+if ! printf '%s' "$DEPLOYMENT_LOCALE" | grep -Eq '^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$'; then
+  echo "error: DEPLOYMENT_LOCALE=$DEPLOYMENT_LOCALE is not a BCP 47 language tag (for example en-GB)" >&2
+  exit 1
+fi
 
 if [ -e .env ]; then
   echo "error: .env already exists in $(pwd)" >&2
@@ -81,6 +90,8 @@ ZITADEL_DOMAIN=${ZITADEL_DOMAIN}
 
 # The deployment's time zone (IANA). Every service and the UI read it.
 TZ=${DEPLOYMENT_TZ}
+# The deployment's display locale (BCP 47). The backend hands it to the UI.
+LOCALE=${DEPLOYMENT_LOCALE}
 ZITADEL_ADMIN_ROLE_KEY=admin
 ZITADEL_MACHINE_KEY_PATH=./zitadel-machine-key.json
 

@@ -1,6 +1,7 @@
 import { addDays, dayLabel, daysBetween, dayLong, today } from "@/components/insights/days";
 import { formatLimit } from "@/lib/fields";
 import { formatBytes } from "@/lib/format";
+import { displayLocale } from "@/lib/locale";
 import type { StatsDay, StatsGap, StatsMetric, StatsSeries, StatsUnit } from "@/lib/queries/useStats";
 
 /**
@@ -15,7 +16,7 @@ export const WINDOW_DAYS = 30;
 /** A value in its unit: bytes in binary steps (as the storage card), the rest as a limit is said. */
 export function formatValue(value: number, unit: StatsUnit): string {
   if (unit === "bytes") return formatBytes(value);
-  if (unit === "count") return value.toLocaleString("en-GB", { maximumFractionDigits: 1 });
+  if (unit === "count") return value.toLocaleString(displayLocale(), { maximumFractionDigits: 1 });
   if (unit === "seconds") {
     const [n, word] = value >= 3600 ? [value / 3600, "hour"] : value >= 60 ? [value / 60, "minute"] : [value, "second"];
     const shown = Math.round(n * 10) / 10;

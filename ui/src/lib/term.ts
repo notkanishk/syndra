@@ -1,4 +1,4 @@
-import { addDays, civilDay, daysBetween, endOfDayISO } from "@/lib/time";
+import { compareInstants, addDays, civilDay, daysBetween, endOfDayISO } from "@/lib/time";
 
 type TermDates = { name: string; start: string; end: string };
 
@@ -9,7 +9,7 @@ type TermDates = { name: string; start: string; end: string };
  */
 export function currentTermEnd(terms: TermDates[], now: Date = new Date()): string | null {
   const today = civilDay(now);
-  const sorted = [...terms].sort((a, b) => a.start.localeCompare(b.start));
+  const sorted = [...terms].sort((a, b) => compareInstants(a.start, b.start));
   const hit =
     sorted.find((t) => t.start <= today && today <= t.end) ??
     sorted.find((t) => t.start > today);
@@ -69,7 +69,7 @@ export function keepOptions(
   const reach = (days: number): KeepChoice => ({ days, until: endOfDayISO(addDays(endDay, days)), day: addDays(endDay, days) });
 
   const today = civilDay(now);
-  const sorted = [...terms].sort((a, b) => a.start.localeCompare(b.start));
+  const sorted = [...terms].sort((a, b) => compareInstants(a.start, b.start));
   const within = sorted.findIndex((t) => t.start <= today && today <= t.end);
   const next = within >= 0 ? sorted[within + 1] : sorted.find((t) => t.start > today);
 
