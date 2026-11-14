@@ -18,22 +18,22 @@ import (
 // TrueNAS; "door" has neither.
 func stubNames(t *testing.T) {
 	t.Helper()
-	name, manifest, get := dbTargetName, addonsAcceptedManifest, addonsGet
-	t.Cleanup(func() { dbTargetName, addonsAcceptedManifest, addonsGet = name, manifest, get })
+	name, manifest, get := dbTargetName, addonsAcceptedShape, addonsGet
+	t.Cleanup(func() { dbTargetName, addonsAcceptedShape, addonsGet = name, manifest, get })
 	dbTargetName = func(_ context.Context, target string) (string, error) {
 		if target == "laser" {
 			return "Big laser", nil
 		}
 		return "", nil
 	}
-	addonsAcceptedManifest = func(target string) (addons.Manifest, error) {
+	addonsAcceptedShape = func(ctx context.Context, target string) (addons.Shape, error) {
 		switch target {
 		case "truenas":
-			return addons.Manifest{Product: "TrueNAS", Kind: "storage", EntitlementSchema: truenasSchema}, nil
+			return addons.Shape{Product: "TrueNAS", Kind: "storage", EntitlementSchema: truenasSchema}, nil
 		case "laser":
-			return addons.Manifest{Product: "Ruby"}, nil
+			return addons.Shape{Product: "Ruby"}, nil
 		}
-		return addons.Manifest{}, addons.ErrNoManifest
+		return addons.Shape{}, addons.ErrNoManifest
 	}
 	addonsGet = func(target string) (*addons.Addon, error) {
 		if target == "zitadel" || target == "ghost" {
@@ -157,13 +157,13 @@ func TestNamingASystem(t *testing.T) {
 // byte order would reverse), and never calls an add-on.
 func TestAMemberMeetsOnlySystemsWhoseKindIsKnown(t *testing.T) {
 	stubNames(t)
-	manifest, reg := addonsAcceptedManifest, addonsRegistered
-	t.Cleanup(func() { addonsAcceptedManifest, addonsRegistered = manifest, reg })
-	addonsAcceptedManifest = func(target string) (addons.Manifest, error) {
+	manifest, reg := addonsAcceptedShape, addonsRegistered
+	t.Cleanup(func() { addonsAcceptedShape, addonsRegistered = manifest, reg })
+	addonsAcceptedShape = func(ctx context.Context, target string) (addons.Shape, error) {
 		if target == "mill" {
-			return addons.Manifest{Product: "big mill", Kind: "machine"}, nil
+			return addons.Shape{Product: "big mill", Kind: "machine"}, nil
 		}
-		return manifest(target)
+		return manifest(ctx, target)
 	}
 	// laser has a product but no kind, door no manifest at all: both not read.
 	// Out of name order, so the order the rail gets is the sort's.

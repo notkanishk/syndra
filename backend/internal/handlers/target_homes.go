@@ -63,8 +63,9 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	// The home folder's limit field, by role: none known, no limit is shown.
-	schema, _ := addonsEntitlementSchema(target)
+	// The home folder's limit field, by role and unit, from the saved schema
+	// (acceptedShape): none known, no limit is shown.
+	_, schema := acceptedShape(r.Context(), target)
 	limit, _ := kinds.HomeLimit(schema)
 	homes := addonsReadHomes(r.Context(), target, wantsFresh(r))
 	byName := map[string]addons.HomeUsage{}

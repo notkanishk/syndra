@@ -218,10 +218,12 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	res := AddonReconcileResult{Target: target}
 
 	// Always fresh: the sweep is the one scheduled sender (design §4) and it
-	// needs a current read. Answered inside the cooldown, the scheduled sweep
-	// waits sweepWait and asks once more; a second cooldown answer is a
-	// skipped pass, recorded as a stale read (no new reason, no migration;
-	// B6), never as unreachable. One wait, not a loop: someone else reading
+	// needs a current read. A copy read live within the cooldown window is
+	// current (addons.Subjects, 7l), so "Check now" just after the page's
+	// dormant list runs. Answered inside the cooldown with an older one, the
+	// scheduled sweep waits sweepWait and asks once more; a second cooldown
+	// answer is a skipped pass, recorded as a stale read (no new reason, no
+	// migration; B6), never as unreachable. One wait, not a loop: someone else reading
 	// the target that often is not the sweep's to outlast.
 	read := addonSubjects(ctx, target, true)
 	if retry, cooled := read.CooledDown(); cooled && patient && waitOut(ctx, sweepWait(target, retry)) {

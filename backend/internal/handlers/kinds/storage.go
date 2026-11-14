@@ -28,8 +28,9 @@ func Storage(roles addons.Roles) StorageFields {
 
 // HomeLimit is the home folder's limit: the target's one `limit` field
 // counted in bytes, which the storage profile's usage (`used_bytes`) is
-// compared against. Read from the accepted manifest's schema, because the
-// persisted role map carries no unit; false when there is no such field.
+// compared against. Read from the accepted schema the caller holds (saved at
+// acceptance, handlers.acceptedShape), because the role map carries no unit;
+// false when there is no such field.
 func HomeLimit(schema []addons.EntitlementField) (addons.EntitlementField, bool) {
 	var found []addons.EntitlementField
 	for _, f := range schema {

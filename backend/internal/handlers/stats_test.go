@@ -127,10 +127,10 @@ func sessionsOf(t *testing.T, u statsUsage) statsMetricView {
 func TestMyUsageIsTheActorsOwn(t *testing.T) {
 	h := &personStorageHarness{storageHarness: storageHarness{entitled: true, bound: true}}
 	stubPersonStorage(t, h)
-	manifest := addonsAcceptedManifest
-	t.Cleanup(func() { addonsAcceptedManifest = manifest })
-	addonsAcceptedManifest = func(string) (addons.Manifest, error) {
-		return addons.Manifest{Kind: "storage", EntitlementSchema: truenasSchema}, nil
+	manifest := addonsAcceptedShape
+	t.Cleanup(func() { addonsAcceptedShape = manifest })
+	addonsAcceptedShape = func(context.Context, string) (addons.Shape, error) {
+		return addons.Shape{Kind: "storage", EntitlementSchema: truenasSchema}, nil
 	}
 	s := &statsStore{}
 	stubStats(t, s)
@@ -554,10 +554,10 @@ func TestAMembersOwnNameHidesNothingOfTheirs(t *testing.T) {
 func TestOnlyTheMembersOwnPageIsMasked(t *testing.T) {
 	h := &personStorageHarness{storageHarness: storageHarness{entitled: true, bound: true}}
 	stubPersonStorage(t, h)
-	manifest := addonsAcceptedManifest
-	t.Cleanup(func() { addonsAcceptedManifest = manifest })
-	addonsAcceptedManifest = func(string) (addons.Manifest, error) {
-		return addons.Manifest{Kind: "storage", EntitlementSchema: truenasSchema}, nil
+	manifest := addonsAcceptedShape
+	t.Cleanup(func() { addonsAcceptedShape = manifest })
+	addonsAcceptedShape = func(context.Context, string) (addons.Shape, error) {
+		return addons.Shape{Kind: "storage", EntitlementSchema: truenasSchema}, nil
 	}
 	stubStats(t, &statsStore{})
 	dbStatsGaps = func(context.Context, string, string) ([]db.StatsGapRow, error) {

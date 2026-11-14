@@ -295,6 +295,21 @@ func (m Manifest) RoleMap() map[string]string {
 	return out
 }
 
+// Shape is what a target's accepted manifest says the target is: its kind,
+// its product name and its entitlement schema, saved with the role map at
+// every acceptance (targets.accepted_shape) so a page reads them while the
+// add-on is down and across a backend restart (design §3).
+type Shape struct {
+	Kind              string             `json:"kind"`
+	Product           string             `json:"product,omitempty"`
+	EntitlementSchema []EntitlementField `json:"entitlement_schema"`
+}
+
+// Shape is the manifest's Shape.
+func (m Manifest) Shape() Shape {
+	return Shape{Kind: m.Kind, Product: m.Product, EntitlementSchema: m.EntitlementSchema}
+}
+
 // Declares reports whether the manifest declares a feature.
 func (m Manifest) Declares(feature string) bool { return slices.Contains(m.Features, feature) }
 

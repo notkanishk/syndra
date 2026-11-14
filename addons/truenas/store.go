@@ -264,7 +264,18 @@ type Subject struct {
 	// Not on the wire: no mapping can explain them, so the backend never sees
 	// them. Kept so a convergence's full replace writes them back unchanged.
 	builtinGroups []apiID
+	// wantsSMB is the binding's Binding.WantsSMB, where the binding was read
+	// beside the account (storage.status); false elsewhere, where a standing
+	// cannot see the wait for a new password. Not on the wire, not stored.
+	wantsSMB bool
 }
+
+// needsNewPassword is an account that has had a password and is kept off SMB
+// until it gets a new one: access was taken away, which rotated the
+// password, and has since been given back, and TrueNAS turns SMB on only in
+// the call that sets a password. The one fact storage.status's usable,
+// needs_new_password and standing all read (standingOf).
+func (s *Subject) needsNewPassword() bool { return s.PasswordSet && !s.SMBEnabled && s.wantsSMB }
 
 var snapshotKey = []byte("latest")
 

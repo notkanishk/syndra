@@ -375,17 +375,17 @@ func TestReconcilingAnUnregisteredTargetIsRefused(t *testing.T) {
 // nothing at all before a manifest is accepted (addon-contract slice 2, for
 // task 3.7).
 func TestATargetSaysItsKindAndFieldsOnlyOnceAManifestIsAccepted(t *testing.T) {
-	origGet, origManifest := addonsGet, addonsAcceptedManifest
-	t.Cleanup(func() { addonsGet, addonsAcceptedManifest = origGet, origManifest })
+	origGet, origManifest := addonsGet, addonsAcceptedShape
+	t.Cleanup(func() { addonsGet, addonsAcceptedShape = origGet, origManifest })
 	addonsGet = func(string) (*addons.Addon, error) { return &addons.Addon{}, nil }
-	addonsAcceptedManifest = func(target string) (addons.Manifest, error) {
+	addonsAcceptedShape = func(ctx context.Context, target string) (addons.Shape, error) {
 		if target != "truenas" {
-			return addons.Manifest{}, addons.ErrNoManifest
+			return addons.Shape{}, addons.ErrNoManifest
 		}
-		return addons.Manifest{Kind: "storage", EntitlementSchema: truenasSchema}, nil
+		return addons.Shape{Kind: "storage", EntitlementSchema: truenasSchema}, nil
 	}
 
-	raw, _ := json.Marshal(describeTarget(addons.Registration{Target: "truenas"}, addons.TransportCredential{}))
+	raw, _ := json.Marshal(describeTarget(context.Background(), addons.Registration{Target: "truenas"}, addons.TransportCredential{}))
 	var got struct {
 		Kind   string           `json:"kind"`
 		Schema []map[string]any `json:"entitlement_schema"`
@@ -403,7 +403,7 @@ func TestATargetSaysItsKindAndFieldsOnlyOnceAManifestIsAccepted(t *testing.T) {
 		}
 	}
 
-	silent, _ := json.Marshal(describeTarget(addons.Registration{Target: "unifi"}, addons.TransportCredential{}))
+	silent, _ := json.Marshal(describeTarget(context.Background(), addons.Registration{Target: "unifi"}, addons.TransportCredential{}))
 	if strings.Contains(string(silent), `"kind"`) || strings.Contains(string(silent), "entitlement_schema") {
 		t.Fatalf("no accepted manifest must say nothing, not guess: %s", silent)
 	}

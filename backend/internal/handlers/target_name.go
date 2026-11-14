@@ -28,7 +28,8 @@ const (
 )
 
 // systemName is the operator's name for a target, else its accepted
-// manifest's product, else its id title-cased; from says which.
+// manifest's product (saved at acceptance, so it holds while the add-on is
+// down), else its id title-cased; from says which.
 func systemName(ctx context.Context, target string) (name, from string) {
 	stored, err := dbTargetName(ctx, target)
 	if err != nil {
@@ -38,8 +39,8 @@ func systemName(ctx context.Context, target string) (name, from string) {
 	if stored != "" {
 		return stored, nameFromOperator
 	}
-	if m, err := addonsAcceptedManifest(target); err == nil && strings.TrimSpace(m.Product) != "" {
-		return m.Product, nameFromProduct
+	if shape, err := addonsAcceptedShape(ctx, target); err == nil && strings.TrimSpace(shape.Product) != "" {
+		return shape.Product, nameFromProduct
 	}
 	return titleCased(target), nameFromID
 }
@@ -86,11 +87,13 @@ func handleSetTargetName(w http.ResponseWriter, r *http.Request) {
 }
 
 // memberMeets says whether members meet a registration at all, and its kind:
-// only once a manifest is accepted and the kind is known. One not read yet is
-// operators-only (owner, 11 Nov 2026), so both member reads (GET /me/systems,
-// GET /me/targets) skip it here and neither payload ever carries it.
-func memberMeets(target string) (kind string, ok bool) {
-	kind, _ = acceptedShape(target)
+// only once a manifest has been accepted and the kind is known. One never
+// accepted is operators-only (owner, 11 Nov 2026), so both member reads
+// (GET /me/systems, GET /me/targets) skip it here and neither payload ever
+// carries it. One accepted before and unreachable now is still met: the kind
+// is the saved one (acceptedShape), and its page says what it could not read.
+func memberMeets(ctx context.Context, target string) (kind string, ok bool) {
+	kind, _ = acceptedShape(ctx, target)
 	return kind, kind != ""
 }
 
@@ -108,7 +111,7 @@ type mySystem struct {
 func handleMySystems(w http.ResponseWriter, r *http.Request) {
 	out := []mySystem{}
 	for _, reg := range addonsRegistered() {
-		kind, ok := memberMeets(reg.Target)
+		kind, ok := memberMeets(r.Context(), reg.Target)
 		if !ok {
 			continue
 		}

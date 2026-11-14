@@ -17,6 +17,7 @@ import (
 var memRoles = struct {
 	sync.Mutex
 	byTarget map[string]db.FieldRoleMap
+	saves    int
 }{byTarget: map[string]db.FieldRoleMap{}}
 
 // memMetrics stands in for addon_metrics: the stored descriptors by target,
@@ -32,12 +33,13 @@ func TestMain(m *testing.M) {
 		memRoles.Lock()
 		defer memRoles.Unlock()
 		m, found := memRoles.byTarget[target]
-		return db.FieldRoleMap{Roles: maps.Clone(m.Roles), Retired: slices.Clone(m.Retired)}, found, nil
+		return db.FieldRoleMap{Roles: maps.Clone(m.Roles), Retired: slices.Clone(m.Retired), Shape: slices.Clone(m.Shape)}, found, nil
 	}
 	dbSaveTargetFieldRoles = func(_ context.Context, target string, m db.FieldRoleMap) error {
 		memRoles.Lock()
 		defer memRoles.Unlock()
-		memRoles.byTarget[target] = db.FieldRoleMap{Roles: maps.Clone(m.Roles), Retired: slices.Clone(m.Retired)}
+		memRoles.byTarget[target] = db.FieldRoleMap{Roles: maps.Clone(m.Roles), Retired: slices.Clone(m.Retired), Shape: slices.Clone(m.Shape)}
+		memRoles.saves++
 		return nil
 	}
 	dbStatsDescriptors = func(_ context.Context, target string) (map[string]json.RawMessage, error) {

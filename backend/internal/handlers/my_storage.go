@@ -210,7 +210,7 @@ func handleMyTargets(w http.ResponseWriter, r *http.Request) {
 	registrations := addonsRegistered()
 	views := make([]myTargetView, 0, len(registrations))
 	for _, reg := range registrations {
-		if _, ok := memberMeets(reg.Target); !ok {
+		if _, ok := memberMeets(r.Context(), reg.Target); !ok {
 			continue
 		}
 		view, err := describeMyTarget(r, reg.Target, subject)
@@ -241,7 +241,7 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 func describeTargetFor(r *http.Request, target, subject string) (myTargetView, services.EntitlementSet, error) {
 	view := myTargetView{Target: target}
 	view.Name, _ = systemName(r.Context(), target)
-	view.Kind, view.EntitlementSchema = acceptedShape(target)
+	view.Kind, view.EntitlementSchema = acceptedShape(r.Context(), target)
 
 	set, err := svcResolveEntitlementSet(r.Context(), subject, target)
 	switch {

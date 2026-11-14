@@ -115,12 +115,15 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 			fmt.Errorf("the account this binding names is not on the target")
 	}
 	account := accounts[0]
+	// One account, one standing: usable and needs_new_password are read off
+	// the same Subject the standing is, so the reply never says both.
+	subject := Subject{Username: binding.Username, UID: account.UID,
+		Enabled: !account.Locked, SMBEnabled: account.SMB, PasswordSet: !account.PasswordDisabled,
+		wantsSMB: binding.WantsSMB != nil && *binding.WantsSMB}
+	status.Standing = standingOf(&subject)
+	status.Usable = status.Standing.Usable
 	status.NeedsPassword = account.PasswordDisabled
-	status.NeedsNewPassword = !account.PasswordDisabled && !account.SMB &&
-		binding.WantsSMB != nil && *binding.WantsSMB
-	status.Usable = !account.PasswordDisabled && !account.Locked && !status.NeedsNewPassword
-	status.Standing = standingOf(&Subject{Username: binding.Username, UID: account.UID,
-		Enabled: !account.Locked, SMBEnabled: account.SMB, PasswordSet: !account.PasswordDisabled})
+	status.NeedsNewPassword = subject.needsNewPassword()
 
 	// Best-effort like usage: whether the account works is the urgent half.
 	if places, seen, err := s.memberPlaces(req.Fresh, account.UID, account.Groups, homeOf(account.Home)); err == nil {

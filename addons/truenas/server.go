@@ -362,6 +362,8 @@ func standingOf(s *Subject) *Standing {
 		return &Standing{WaitingOn: "none", Note: "The account is switched off."}
 	case !s.PasswordSet:
 		return &Standing{WaitingOn: "member", Note: smbWaiting(s), Next: "Set a storage password on your storage page."}
+	case s.needsNewPassword():
+		return &Standing{WaitingOn: "member", Note: smbWaiting(s), Next: "Set a new storage password on your storage page."}
 	}
 	return &Standing{Usable: true, WaitingOn: "none"}
 }

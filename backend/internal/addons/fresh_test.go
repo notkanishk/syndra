@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // Fresh reads (feature freshness, design §4): `fresh` reaches the wire only
@@ -166,6 +167,48 @@ func TestACooldownAnswerIsCooledDownAndNotUsable(t *testing.T) {
 	r := Subjects(context.Background(), "truenas", true)
 	if wait, ok := r.CooledDown(); !ok || wait != 20 || r.Usable() {
 		t.Errorf("a cooldown answer: wait %d cooled %t usable %t", wait, ok, r.Usable())
+	}
+}
+
+// A cooldown answer to a fresh read whose copy was read live within the
+// cooldown window is current (7l): the same data a second live read would
+// return. "Check now" seconds after the page's dormant list, and Remove
+// seconds after listing, go ahead instead of being skipped or refused once.
+// Older than the window, or to a read that did not ask fresh, the copy is
+// the cooldown it says; a reply breaking a rule is never made current.
+func TestACooldownCopyReadWithinTheWindowIsCurrentForAFreshRead(t *testing.T) {
+	taken := ts(t, "2026-11-10T08:00:00Z")
+	for _, tc := range []struct {
+		name    string
+		age     time.Duration
+		fresh   bool
+		edit    func(map[string]any)
+		current bool
+		cooled  bool
+	}{
+		{"read live 5 s ago, asked fresh", 5 * time.Second, true, nil, true, false},
+		{"at the window's edge", FreshCooldown("truenas"), true, nil, true, false},
+		{"older than the window", FreshCooldown("truenas") + time.Second, true, nil, false, true},
+		{"not asked fresh", 5 * time.Second, false, nil, false, true},
+		{"another reason", 5 * time.Second, true, func(d map[string]any) { d["stale"] = map[string]any{"reason": "unreachable"} }, false, false},
+		{"an account with no standing", 5 * time.Second, true, func(d map[string]any) {
+			delete(d["subjects"].([]any)[0].(map[string]any), "standing")
+		}, false, true},
+	} {
+		withClock(t, taken.Add(tc.age))
+		body := contractFixture(t, "subjects_cooldown.json")
+		if tc.edit != nil {
+			body = withJSON(t, body, tc.edit)
+		}
+		addonServing(t, body)
+		r := Subjects(context.Background(), "truenas", tc.fresh)
+		_, cooled := r.CooledDown()
+		if r.Current != tc.current || cooled != tc.cooled || r.Usable() != tc.current || (r.Stale == nil) != tc.current {
+			t.Errorf("%s: current %t cooled %t usable %t stale %+v, want current %t cooled %t", tc.name, r.Current, cooled, r.Usable(), r.Stale, tc.current, tc.cooled)
+		}
+		if tc.current && !r.TakenAt.Equal(taken) {
+			t.Errorf("%s: dated %s, want the copy's own %s", tc.name, r.TakenAt, taken)
+		}
 	}
 }
 

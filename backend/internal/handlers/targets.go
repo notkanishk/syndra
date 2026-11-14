@@ -101,19 +101,24 @@ type targetSummary struct {
 	// combine, unlimited and per_person, so a page renders fields by role
 	// (design §3) and never from a list of its own. Both absent until a
 	// manifest is accepted: the page then says "not read" rather than guess.
+	// Saved at acceptance, so they stay while the add-on is down.
 	Kind              string                    `json:"kind,omitempty"`
 	EntitlementSchema []addons.EntitlementField `json:"entitlement_schema,omitempty"`
 }
 
-// acceptedShape is a target's kind and entitlement schema from its accepted
-// manifest, the one source every page reads them from; both empty when no
-// manifest has been accepted.
-func acceptedShape(target string) (string, []addons.EntitlementField) {
-	m, err := addonsAcceptedManifest(target)
+// acceptedShape is a target's kind and entitlement schema as its last
+// accepted manifest declared them (addons.AcceptedShape, saved at acceptance),
+// the one source every page reads them from: they hold while the add-on is
+// down and across a restart. Both empty when no manifest has been accepted.
+func acceptedShape(ctx context.Context, target string) (string, []addons.EntitlementField) {
+	shape, err := addonsAcceptedShape(ctx, target)
 	if err != nil {
+		if !errors.Is(err, addons.ErrNoManifest) {
+			log.Printf("[TARGETS] could not read %s's accepted shape: %v (non-fatal)", target, err)
+		}
 		return "", nil
 	}
-	return m.Kind, m.EntitlementSchema
+	return shape.Kind, shape.EntitlementSchema
 }
 
 type targetProjectRef struct {
@@ -163,7 +168,7 @@ func handleListTargets(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]targetSummary, 0, len(registrations))
 	for _, reg := range registrations {
-		s := describeTarget(reg, transport[reg.Target])
+		s := describeTarget(r.Context(), reg, transport[reg.Target])
 		s.Name, s.NameFrom = systemName(r.Context(), reg.Target)
 		if id, ok := projects[reg.Target]; ok {
 			s.Project = &targetProjectRef{ID: id, Name: names[id]}
@@ -288,7 +293,7 @@ type targetHealthWithAnchor struct {
 	Status string `json:"status"`
 }
 
-func describeTarget(reg addons.Registration, transport addons.TransportCredential) targetSummary {
+func describeTarget(ctx context.Context, reg addons.Registration, transport addons.TransportCredential) targetSummary {
 	s := targetSummary{Target: reg.Target, Registered: true, AuthMode: reg.AuthMode(), Health: addonsHealthOf(reg.Target)}
 	s.TransportStatus, s.TransportError = transport.Status, transport.Error
 
@@ -305,7 +310,7 @@ func describeTarget(reg addons.Registration, transport addons.TransportCredentia
 		s.LastError = lastErr.Error()
 	}
 	s.AlsoSays = a.AlsoSays()
-	s.Kind, s.EntitlementSchema = acceptedShape(reg.Target)
+	s.Kind, s.EntitlementSchema = acceptedShape(ctx, reg.Target)
 	for _, op := range a.Operations() {
 		s.Operations = append(s.Operations, operationSummary{
 			ID: op.ID, Scope: string(op.Scope), Confirm: op.Confirm,

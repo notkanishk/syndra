@@ -1,0 +1,12 @@
+-- 000095_target_accepted_shape (addon-contract 7l)
+--
+-- What a target's accepted manifest says it is: its kind, its product name
+-- and its entitlement schema (each field's name, role, label, unit, combine,
+-- unlimited, per_person), saved beside field_roles at every acceptance
+-- (addons.acceptRoles), so the pages that read a target's kind and its limit's
+-- unit read them from here (addons.AcceptedShape, design §3) and keep them
+-- while the add-on is down and across a backend restart, as production's
+-- constants did. NULL until a contract-2 manifest is accepted: a system never
+-- accepted stays operators-only (owner, 11 Nov). Additive: an older backend
+-- ignores it.
+ALTER TABLE targets ADD COLUMN IF NOT EXISTS accepted_shape JSONB;

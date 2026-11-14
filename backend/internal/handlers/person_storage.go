@@ -147,9 +147,9 @@ func describePersonTarget(r *http.Request, target, subject string, hasProject bo
 		}
 	}
 
-	// The home folder's limit field, by role and unit (kinds.HomeLimit).
-	schema, _ := addonsEntitlementSchema(target)
-	limit, _ := kinds.HomeLimit(schema)
+	// The home folder's limit field, by role and unit (kinds.HomeLimit), from
+	// the schema the view already carries: the saved one (acceptedShape).
+	limit, _ := kinds.HomeLimit(view.EntitlementSchema)
 	if view.Account != nil {
 		home := accountHome{SubjectID: subject, Username: view.Account.Username}
 		roleLimits(&home, set, limit)

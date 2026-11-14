@@ -2,8 +2,15 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
 	"testing"
+
+	"github.com/golang-migrate/migrate/v4"
+	pgx5 "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 // The live half of 000088 (task 1.7). Gated on SYNDRA_TEST_DATABASE_URL.
@@ -16,7 +23,7 @@ func seedAddonTarget(t *testing.T, ctx context.Context) {
 	clean := func() {
 		_, _ = PG.Exec(context.Background(), `DELETE FROM target_binding_conflicts WHERE target = 'truenas'`)
 		_, _ = PG.Exec(context.Background(), `DELETE FROM target_account_bindings WHERE target = 'truenas'`)
-		_, _ = PG.Exec(context.Background(), `UPDATE targets SET field_roles = NULL, retired_fields = '{}' WHERE target = 'truenas'`)
+		_, _ = PG.Exec(context.Background(), `UPDATE targets SET field_roles = NULL, retired_fields = '{}', accepted_shape = NULL WHERE target = 'truenas'`)
 	}
 	clean()
 	t.Cleanup(clean)
@@ -159,5 +166,78 @@ func TestTargetFieldRolesArePersisted(t *testing.T) {
 	}
 	if err := SaveTargetFieldRoles(ctx, "no-such-target", want); err == nil {
 		t.Error("saving roles for a target that does not exist must fail")
+	}
+	// The accepted shape (000095) rides the same write, kept opaque: none
+	// saved reads back nil, one saved reads back the same JSON value.
+	if got, _, _ := TargetFieldRoles(ctx, "truenas"); got.Shape != nil {
+		t.Fatalf("no shape saved must read nil, got %s", got.Shape)
+	}
+	want.Shape = []byte(`{"kind":"storage","product":"TrueNAS","entitlement_schema":[{"name":"home_quota","role":"limit","unit":"bytes"}]}`)
+	if err := SaveTargetFieldRoles(ctx, "truenas", want); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = TargetFieldRoles(ctx, "truenas")
+	var shape struct {
+		Kind   string `json:"kind"`
+		Schema []struct {
+			Unit string `json:"unit"`
+		} `json:"entitlement_schema"`
+	}
+	if err != nil || json.Unmarshal(got.Shape, &shape) != nil || shape.Kind != "storage" || len(shape.Schema) != 1 || shape.Schema[0].Unit != "bytes" {
+		t.Fatalf("the shape did not round-trip: %s %v", got.Shape, err)
+	}
+}
+
+// 000095 runs down and up on the real engine: down drops accepted_shape and
+// nothing it does not own, up brings it back empty. Left where it began.
+func TestLiveMigration95RunsDownAndUp(t *testing.T) {
+	ctx := liveDB(t)
+	var version int64
+	var dirty bool
+	if err := PG.QueryRow(ctx, `SELECT version, dirty FROM schema_migrations`).Scan(&version, &dirty); err != nil {
+		t.Fatal(err)
+	}
+	if version < 95 || dirty {
+		t.Skipf("the test database is at %d (dirty %t), before this branch's 95", version, dirty)
+	}
+	config, err := pgxpool.ParseConfig(os.Getenv("SYNDRA_TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	driver, err := pgx5.WithInstance(stdlib.OpenDB(*config.ConnConfig), &pgx5.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := migrate.NewWithDatabaseInstance("file://../../db/migrations", "postgres", driver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if v, _, _ := m.Version(); v != uint(version) {
+			_ = m.Migrate(uint(version))
+		}
+	})
+	seedAddonTarget(t, ctx)
+	if err := SaveTargetFieldRoles(ctx, "truenas", FieldRoleMap{Roles: map[string]string{"enabled": "account"}, Shape: []byte(`{"kind":"storage"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	column := func() (has bool) {
+		if err := PG.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'targets' AND column_name = 'accepted_shape')`).Scan(&has); err != nil {
+			t.Fatal(err)
+		}
+		return has
+	}
+	if err := m.Migrate(94); err != nil {
+		t.Fatalf("000095 down: %v", err)
+	}
+	var roles string
+	if err := PG.QueryRow(ctx, `SELECT field_roles::text FROM targets WHERE target = 'truenas'`).Scan(&roles); column() || err != nil || roles == "" {
+		t.Fatalf("after down: column %t, the role map %q (%v), want the column gone and the roles kept", column(), roles, err)
+	}
+	if err := m.Migrate(95); err != nil {
+		t.Fatalf("000095 up: %v", err)
+	}
+	if got, found, err := TargetFieldRoles(ctx, "truenas"); !column() || err != nil || !found || got.Shape != nil {
+		t.Fatalf("after up: column %t, found %t, shape %s (%v), want it back and empty", column(), found, got.Shape, err)
 	}
 }

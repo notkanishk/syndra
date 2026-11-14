@@ -18,11 +18,15 @@ import (
 // which role gives it, its own limit when one is in force, what is saved there,
 // and an own limit that ended with the folder still over the roles' limit.
 func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
-	bindings, resolve, inForce, all, homes, schema := dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsEntitlementSchema
+	bindings, resolve, inForce, all, homes, shape := dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsAcceptedShape
 	t.Cleanup(func() {
-		dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsEntitlementSchema = bindings, resolve, inForce, all, homes, schema
+		dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsAcceptedShape = bindings, resolve, inForce, all, homes, shape
 	})
-	addonsEntitlementSchema = func(string) ([]addons.EntitlementField, error) { return truenasSchema, nil }
+	// The limit's unit as saved at acceptance (acceptedShape), not the
+	// manifest held in memory.
+	addonsAcceptedShape = func(context.Context, string) (addons.Shape, error) {
+		return addons.Shape{Kind: "storage", EntitlementSchema: truenasSchema}, nil
+	}
 	const gb = int64(1 << 30)
 	dbListTargetBindings = func(context.Context, string) ([]db.TargetBinding, error) {
 		return []db.TargetBinding{{SubjectID: "u-charlotte", Username: "charlotte"}, {SubjectID: "u-booker", Username: "booker"}}, nil
