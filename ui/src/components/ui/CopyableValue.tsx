@@ -24,7 +24,7 @@ const clipboardWorks = () =>
 function copyViaTextarea(value: string): boolean {
   const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const selection = window.getSelection?.();
-  const ranges = selection ? Array.from({ length: selection.rangeCount }, (_, i) => selection.getRangeAt(i)) : [];
+  const ranges = selection ? Array.from({ length: selection.rangeCount }, (_, i) => selection.getRangeAt(i).cloneRange()) : [];
   const area = document.createElement("textarea");
   area.value = value;
   area.readOnly = true; // no on-screen keyboard on a phone
@@ -38,9 +38,10 @@ function copyViaTextarea(value: string): boolean {
     return document.execCommand("copy");
   } finally {
     area.remove();
+    // Focus first: giving an element focus moves the selection, so the reader's ranges go back after it.
+    active?.focus({ preventScroll: true });
     selection?.removeAllRanges();
     for (const range of ranges) selection?.addRange(range);
-    active?.focus({ preventScroll: true });
   }
 }
 
