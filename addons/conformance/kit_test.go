@@ -1677,6 +1677,10 @@ func TestEveryReadIsHeldToItsResult(t *testing.T) {
 	}) {
 		t.Errorf("reads-only sent %v: want health.get read and nothing written", seen())
 	}
+	// A partial verdict says so: judged and skipped ids ride beside the pass.
+	if d := result(r, "operations.result").Detail; len(d) != 1 || !strings.HasPrefix(d[0], "judged health.get; skipped holdings.list: no account") {
+		t.Errorf("reads-only: operations.result's detail %q, want what it judged and skipped", d)
+	}
 	r = run(t, config(url, true))
 	if got := r.Status("operations.result"); got != "pass" || r.Failed() {
 		t.Errorf("-mutate: operations.result says %s against the reference (failed %v): %v", got, r.Failed(), failures(r))
@@ -1684,6 +1688,30 @@ func TestEveryReadIsHeldToItsResult(t *testing.T) {
 	for _, read := range []string{"POST /operations/health.get", "POST /operations/holdings.list"} {
 		if !slices.Contains(seen(), read) {
 			t.Errorf("%s was never sent", read)
+		}
+	}
+
+	// Only a read about a subject, refused OPERATION_FAILED, is excused: the
+	// read about the target refused, or any other 422, fails reads-only.
+	for _, tc := range []struct{ path, code string }{
+		{"/operations/health.get", "OPERATION_FAILED"},
+		{"/operations/holdings.list", "TARGET_VERSION_UNSUPPORTED"},
+	} {
+		url, _ := wrapped(t, func(w http.ResponseWriter, r *http.Request, _ http.Handler) bool {
+			if r.URL.Path != tc.path {
+				return false
+			}
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = fmt.Fprintf(w, `{"type":"urn:syndra:addon:error:%s","title":"Refused","status":422,"detail":"Refused.","code":%q,"retry":"never"}`, tc.code, tc.code)
+			return true
+		})
+		r, err := Run(context.Background(), config(url, false))
+		if err != nil && !errors.Is(err, ErrReadsFailed) {
+			t.Fatal(err)
+		}
+		if got := r.Status("operations.result"); got != "fail" {
+			t.Errorf("reads-only: %s refused 422 %s: operations.result says %s, want fail", tc.path, tc.code, got)
 		}
 	}
 

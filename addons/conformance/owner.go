@@ -94,7 +94,8 @@ func (k *kit) about(r request) (about, write bool) {
 	body, _ := r.body.(map[string]any)
 	switch path, _, _ := strings.Cut(r.target, "?"); {
 	case path == "/apply" || strings.HasPrefix(path, "/operations/"):
-		return body["subject"] == k.cfg.Subject, true
+		// An effect: read operation is no write (contract.writes, the one rule).
+		return body["subject"] == k.cfg.Subject, k.c.writes(r.method, r.target)
 	case path == "/plan":
 		if subjects, _ := body["subjects"].([]any); len(subjects) == 1 {
 			s, _ := subjects[0].(map[string]any)
@@ -113,7 +114,7 @@ func (k *kit) observe(r request, ex *exchange) {
 		return
 	}
 	doc := ex.doc()
-	if !write { // a plan: the subject's account is its one outcome's
+	if path, _, _ := strings.Cut(r.target, "?"); path == "/plan" { // the subject's account is its one outcome's
 		outs := objects(doc["outcomes"])
 		doc = nil
 		if len(outs) == 1 {

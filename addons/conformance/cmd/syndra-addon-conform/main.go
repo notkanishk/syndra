@@ -5,7 +5,8 @@
 //	syndra-addon-conform -url https://addon.example.org:8443 -target truenas -secret-file ./secret \
 //	                     [-subject conformance-<run>] [-email conformance-<run>@example.org] [-mutate [-mutate-settings]] [-json report.json]
 //
-// Reads only unless -mutate. Exit 0: every MUST holds. 1: a MUST failed.
+// Reads only unless -mutate: GET routes, /plan, and signed POST
+// /operations/{id} for each operation the registry gives effect: read. Exit 0: every MUST holds. 1: a MUST failed.
 // 2: the run could not start, or -mutate was refused. 130: interrupted, after
 // putting back what the run had changed (a second interrupt kills at once).
 package main

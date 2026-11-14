@@ -2363,7 +2363,9 @@ Steps, in order; each ends on a check.
    the same secret into both containers. *Done when:* the system's page in
    Syndra shows your manifest accepted.
 
-Against production, the kit runs reads only.
+Against production, the kit runs reads only: GET routes, `/plan`, and
+signed `POST /operations/{id}` for each operation the registry gives
+`effect: read`, all of which write nothing by contract.
 
 ### What the kit cannot check
 

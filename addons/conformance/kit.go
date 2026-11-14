@@ -2,8 +2,9 @@
 // openspec/changes/addon-contract): it drives an add-on black-box over the real
 // transport and says, check by check, whether it may be connected to Syndra.
 //
-// Without Mutate it sends reads only (GET routes and /plan, which mutates
-// nothing). With Mutate it creates and converges one throwaway subject named
+// Without Mutate it sends reads only (GET routes, /plan, and signed
+// POST /operations/{id} for each operation the registry gives effect: read,
+// all of which mutate nothing by contract). With Mutate it creates and converges one throwaway subject named
 // conformance-..., and leaves exactly one disabled, labelled account, which
 // Report.Left names. MutateSettings also writes a target-wide setting back.
 package conformance
@@ -340,7 +341,9 @@ func (k *kit) report() *Report {
 		case c.notJudged != "":
 			res.Status, res.Detail = "skip", []string{c.notJudged}
 		case c.ran:
-			res.Status = "pass"
+			// What it skipped rides beside the pass, so a partial run never
+			// reads as a whole one.
+			res.Status, res.Detail = "pass", c.skips
 		case len(c.skips) > 0:
 			res.Status, res.Detail = "skip", c.skips
 		case k.halted != "":

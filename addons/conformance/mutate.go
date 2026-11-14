@@ -429,9 +429,16 @@ func (k *kit) readOps() []string {
 //
 // A read writes nothing, so a reads-only run judges it too (owned false): the
 // same reads about the kit's subject, sent without the plan that precedes a
-// write. A member read about a subject the add-on has no account for answers
-// 422, which says nothing about its result's shape; that read is skipped, and
-// -mutate (owned true) reads the account it made.
+// write. A read about a subject the add-on has no account for refuses it (422
+// OPERATION_FAILED, the registry's code for an operation that could not be
+// done), which says nothing about its result's shape: that read is skipped,
+// and named, and -mutate (owned true) reads the account it made. Only a read
+// about a subject is excused: health.get, about the target, refused at all,
+// or any other code (TARGET_VERSION_UNSUPPORTED), fails.
+//
+// ponytail: the registry has no code for "no account for this subject" and
+// no marker for a read about the target, so the kit names health.get; a
+// registry code and marker are the upgrade (an owner's decision).
 func (k *kit) results(c *check, owned bool) {
 	reads := k.readOps()
 	if len(reads) == 0 {
@@ -442,13 +449,21 @@ func (k *kit) results(c *check, owned bool) {
 	if owned {
 		send = k.viaOwned(c)
 	}
+	var judged, skipped []string
+	defer func() {
+		if len(skipped) > 0 {
+			c.skip("judged %s; skipped %s: no account for the kit's subject; -mutate reads the account it makes",
+				orNone(judged), strings.Join(skipped, ", "))
+		}
+	}()
 	for _, id := range reads {
 		ex := send(request{method: http.MethodPost, target: "/operations/" + id,
 			body: k.operationBody(id, k.callID(), map[string]any{}), schema: "operation_request.json"})
-		if !owned && ex.err == nil && ex.status == http.StatusUnprocessableEntity {
-			c.skip("%s: the kit's subject has no account here (422), so there is nothing to read; -mutate reads the account it makes", id)
+		if !owned && id != readAboutTarget && ex.err == nil && ex.status == http.StatusUnprocessableEntity && ex.code() == "OPERATION_FAILED" {
+			skipped = append(skipped, id)
 			continue
 		}
+		judged = append(judged, id)
 		doc := k.ok(c, ex, "operation_response.json")
 		if doc == nil {
 			continue
@@ -463,6 +478,17 @@ func (k *kit) results(c *check, owned bool) {
 			}
 		}
 	}
+}
+
+// readAboutTarget is the one read about the target, not a subject (the guide:
+// Syndra sends it with an empty subject).
+const readAboutTarget = "health.get"
+
+func orNone(ids []string) string {
+	if len(ids) == 0 {
+		return "none"
+	}
+	return strings.Join(ids, ", ")
 }
 
 func (k *kit) replay(c *check, callID string, first *exchange) {

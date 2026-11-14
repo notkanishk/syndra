@@ -2295,8 +2295,12 @@ per-person only) applied there.
   `results` check is the core `operations.result`
   (`TestEveryReadIsHeldToItsResult`, a `health.get` under `health` fails),
   judged in a reads-only run too (`results(c, owned)`: the reads go without
-  the owned-account plan, and a member read answering 422 for a subject with
-  no account is skipped; an effect: read operation is no write, one rule for
+  the owned-account plan, and a read about a subject answering 422
+  `OPERATION_FAILED` for a subject with no account is skipped and named
+  beside the pass ("judged …; skipped …"); `health.get` refused, or any other
+  code, fails. The registry has no "no account" code and no "about the
+  target" marker, so the kit names `health.get` (`readAboutTarget`): both are
+  the owner's to add; an effect: read operation is no write, one rule for
   the kit and its tests, `contract.writes`, so a reads-only run still reports
   "nothing written"),
   and ci.yml's every-feature reference is `-features freshness,calls,stats`.
