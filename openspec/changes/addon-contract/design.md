@@ -110,6 +110,9 @@ would hide exactly the version skew the contract version exists to surface")
 for the one benefit, less typing, that a fixture already pays for. A
 `replace ../contract` directive would make both ends build against the working
 tree and hide skew exactly where it starts.
+The two Go add-ons do share one module, the dependency-free `addons/strictjson`
+(slice 7o): the RFC 8259 §4 / RFC 7493 §2.3 decoding rule only, no contract
+type or fact, so it cannot hide contract skew; `addons/contract` stays files only.
 
 **Rejected: Go types as truth with schemas emitted.** Truth would live in one
 compiler, the add-on author would read Go to learn JSON, and emitted schemas
