@@ -1,9 +1,21 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { addDays, civilDay, daysBetween, daysFromToday, endAfterDaysISO, endOfDayISO, isSameDay } from "@/lib/time";
+import { formatClock } from "@/lib/format";
+import {
+  DEFAULT_ZONE,
+  addDays,
+  civilDay,
+  daysBetween,
+  daysFromToday,
+  endAfterDaysISO,
+  endOfDayISO,
+  isSameDay,
+  makerspaceZone,
+  setMakerspaceZone,
+} from "@/lib/time";
 
 describe("the makerspace's day", () => {
   it("is the IST day, not the UTC one: 23:00 UTC is 04:30 the next morning", () => {
@@ -67,6 +79,64 @@ describe("days and end dates", () => {
         .forEach((line, i) => {
           for (const [why, re] of BANNED) if (re.test(line)) found.push(`${file.slice(SRC.length + 1)}:${i + 1} ${why}`);
         });
+    }
+    expect(found).toEqual([]);
+  });
+});
+
+/**
+ * The zone is the backend's TZ (clock.Name), handed over by the layout. Every
+ * reader (day, end of day, clock) follows it; none keeps a zone of its own.
+ */
+describe("the zone the backend names", () => {
+  afterEach(() => setMakerspaceZone(DEFAULT_ZONE));
+
+  it("starts as the backend's own default", () => {
+    expect(makerspaceZone()).toBe("Asia/Kolkata");
+  });
+
+  it("moves the day, the end of a day and the clock together", () => {
+    setMakerspaceZone("America/Santiago"); // UTC-3 in November (DST)
+    const at = new Date("2026-11-05T01:00:00Z"); // 22:00 on the 4th there, 06:30 on the 5th in IST
+    expect(civilDay(at)).toBe("2026-11-04");
+    expect(endOfDayISO("2026-11-30")).toBe("2026-12-01T02:59:59.000Z");
+    expect(formatClock(at.toISOString())).toBe("22:00");
+    setMakerspaceZone("UTC");
+    expect(formatClock(at.toISOString())).toBe("01:00");
+  });
+
+  it("refuses a name it cannot read, and keeps the zone it had", () => {
+    setMakerspaceZone("Europe/London");
+    setMakerspaceZone("Not/AZone");
+    expect(makerspaceZone()).toBe("Europe/London");
+    setMakerspaceZone(undefined);
+    expect(makerspaceZone()).toBe("Europe/London");
+  });
+});
+
+/**
+ * A time shown with no zone named is read in the browser's, so an admin abroad
+ * saw different hours from the rest of the makerspace. Every toLocaleTimeString,
+ * toLocaleDateString and Intl.DateTimeFormat call names its zone (timeZone, or
+ * inZone() which is makerspaceZone()).
+ */
+describe("a time is never shown in the browser's zone", () => {
+  const CALL = /(toLocale(?:Time|Date)String|Intl\.DateTimeFormat)\s*\(/g;
+  it("names a zone at every call", () => {
+    const found: string[] = [];
+    for (const file of sources(SRC)) {
+      const text = readFileSync(file, "utf8");
+      for (const m of text.matchAll(CALL)) {
+        let depth = 1;
+        let end = m.index + m[0].length;
+        for (; end < text.length && depth > 0; end++) {
+          if (text[end] === "(") depth++;
+          else if (text[end] === ")") depth--;
+        }
+        if (!/timeZone|inZone\(\)/.test(text.slice(m.index, end))) {
+          found.push(`${file.slice(SRC.length + 1)}:${text.slice(0, m.index).split("\n").length} ${m[1]} without a zone`);
+        }
+      }
     }
     expect(found).toEqual([]);
   });

@@ -4,6 +4,7 @@ import localFont from 'next/font/local';
 import { AppShell } from '@/components/shell/AppShell';
 import { Providers } from '@/components/providers';
 import { getSession } from '@/lib/session';
+import { fetchMakerspaceZone } from '@/lib/zone';
 import { THEME_SCRIPT } from '@/lib/theme-script';
 import { VIEW_COOKIE, parseUiView } from '@/lib/ui-view-cookie';
 import './globals.css';
@@ -75,6 +76,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await getSession();
+  const timeZone = await fetchMakerspaceZone();
   // The view is rendered by the server, so the first paint is already the right one.
   const initialView = parseUiView((await cookies()).get(VIEW_COOKIE)?.value);
   const fontVars = `${bricolage.variable} ${figtree.variable} ${jetbrains.variable}`;
@@ -85,7 +87,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="bg-ground text-ink antialiased">
-        <Providers hasSession={Boolean(session)} isOperator={session?.role === "admin"}>
+        <Providers timeZone={timeZone} hasSession={Boolean(session)} isOperator={session?.role === "admin"}>
           {session ? <AppShell session={session} initialView={initialView}>{children}</AppShell> : children}
         </Providers>
       </body>

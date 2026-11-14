@@ -14,21 +14,46 @@
  * through `toISOString()`: repoguard-ui's time guard refuses both.
  */
 
-/** The makerspace's zone. backend/internal/clock.Default. */
-export const MAKERSPACE_TZ = "Asia/Kolkata";
+/**
+ * The makerspace's zone is the backend's `TZ` (backend/internal/clock.Name),
+ * the one source. The root layout reads it from /healthz on the server and
+ * hands it to <MakerspaceZone>, which calls setMakerspaceZone while rendering,
+ * before any child formats a time: no date is ever drawn in a zone the backend
+ * did not name. DEFAULT_ZONE is only what the backend itself falls back to
+ * (clock.Default) and what the layout uses if /healthz cannot be read.
+ */
+export const DEFAULT_ZONE = "Asia/Kolkata";
+
+let zone = DEFAULT_ZONE;
+
+/** The zone every date and clock is read in; pass as `{ timeZone: makerspaceZone() }`. */
+export const makerspaceZone = (): string => zone;
+
+const wallClockIn = (timeZone: string) =>
+  new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+let wallClock = wallClockIn(zone);
+
+/** Adopt the backend's zone. An unknown name is refused (kept as is), never half-applied. */
+export function setMakerspaceZone(name: string | null | undefined): void {
+  if (!name || name === zone) return;
+  try {
+    wallClock = wallClockIn(name); // throws RangeError on an unknown zone
+  } catch {
+    return;
+  }
+  zone = name;
+}
 
 const pad = (n: number) => String(n).padStart(2, "0");
-
-const wallClock = new Intl.DateTimeFormat("en-US", {
-  timeZone: MAKERSPACE_TZ,
-  hourCycle: "h23",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-});
 
 function wall(at: Date): Record<string, number> {
   const out: Record<string, number> = {};

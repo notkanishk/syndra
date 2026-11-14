@@ -5,11 +5,13 @@ import (
 	"log"
 	"os"
 	"time"
+
+	"syndra/internal/clock"
 )
 
 // Every log line in every Syndra service starts with one stamp: RFC 3339 with
-// milliseconds and an explicit offset, in the deployment's zone (time.Local,
-// which follows TZ; unset is "Z"). It is unambiguous in any reader's zone, it
+// milliseconds and an explicit offset, in the deployment's zone (clock.Loc: TZ,
+// else the makerspace default). It is unambiguous in any reader's zone, it
 // sorts, and it converts exactly to unix time: date -d <stamp> +%s.
 // Instants stored and sent are separate: timestamptz and RFC 3339 in JSON.
 //
@@ -32,5 +34,5 @@ func (s stampWriter) Write(p []byte) (int, error) {
 // Install stamps the standard logger and anything that writes through it.
 func Install() {
 	log.SetFlags(0)
-	log.SetOutput(stampWriter{os.Stderr, time.Now})
+	log.SetOutput(stampWriter{os.Stderr, clock.Now})
 }

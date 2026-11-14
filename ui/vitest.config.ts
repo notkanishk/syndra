@@ -2,9 +2,10 @@ import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 import { defineConfig } from "vitest/config";
 
-// Tests run in the makerspace's zone (src/lib/time.ts), whatever the machine's:
-// a fixture written as `new Date(2026, 9, 2)` is then the same day the product
-// reads it as, on a laptop in India and on a CI runner in UTC.
+// Tests run in the makerspace's default zone (src/lib/time.ts DEFAULT_ZONE),
+// whatever the machine's: a fixture written as `new Date(2026, 9, 2)` is then
+// the same day the product reads it as, on a laptop in India and on a CI runner
+// in UTC. The product itself takes the zone from the backend's TZ.
 process.env.TZ = "Asia/Kolkata";
 
 // Per-file environment: tests opt into "jsdom" via a `// @vitest-environment jsdom`

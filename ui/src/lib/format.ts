@@ -4,7 +4,7 @@
 // centralizes the human-readable formatting so every view does it the same way.
 
 import { humanizeKey, roleName } from "@/lib/names";
-import { MAKERSPACE_TZ, civilDay, daysFromToday, endAfterDaysISO, isSameDay } from "@/lib/time";
+import { civilDay, makerspaceZone, daysFromToday, endAfterDaysISO, isSameDay } from "@/lib/time";
 
 export { humanizeKey };
 
@@ -124,7 +124,7 @@ export function formatAgoShort(iso: string | null | undefined, now: Date = new D
 const DATE_LOCALE = "en-GB";
 
 /** Every date and clock is read in the makerspace's zone, never the browser's (lib/time.ts). */
-const IN_ZONE = { timeZone: MAKERSPACE_TZ } as const;
+const inZone = () => ({ timeZone: makerspaceZone() });
 
 /**
  * "2 Aug" — the form a deadline is spoken in. The year appears only when the
@@ -139,7 +139,7 @@ export function formatShortDate(
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString(DATE_LOCALE, {
-    ...IN_ZONE,
+    ...inZone(),
     day: "numeric",
     month: "short",
     ...(civilDay(date).slice(0, 4) === civilDay(now).slice(0, 4) ? {} : { year: "numeric" }),
@@ -155,7 +155,7 @@ export function formatClock(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleTimeString(DATE_LOCALE, { ...IN_ZONE, hour: "2-digit", minute: "2-digit", hour12: false });
+  return date.toLocaleTimeString(DATE_LOCALE, { ...inZone(), hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 /**
@@ -190,7 +190,7 @@ export function formatClockSeconds(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleTimeString(DATE_LOCALE, { ...IN_ZONE, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  return date.toLocaleTimeString(DATE_LOCALE, { ...inZone(), hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 }
 
 /** "Friday 31 July" — the line under a greeting. */
@@ -199,7 +199,7 @@ export function formatWeekday(date: Date = new Date()): string {
   // September" beside a feed of "18 Sept" rows is the same product speaking
   // two dialects on one screen.
   return date.toLocaleDateString(DATE_LOCALE, {
-    ...IN_ZONE,
+    ...inZone(),
     weekday: "long",
     day: "numeric",
     month: "short",

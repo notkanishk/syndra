@@ -71,7 +71,7 @@ func TestTheWatermarkIsHeldWhileTheAppIsDown(t *testing.T) {
 	a := statsAddon(t, down.Load, &at)
 	since := day1.AddDate(0, 0, -3)
 	first, _ := readAll(t, a, "machine.jobs", since)
-	if first.Watermark != "2026-11-09T00:00:00+05:30" {
+	if first.Watermark != nov(9) {
 		t.Fatalf("watermark %s, want the start of the day read", first.Watermark)
 	}
 
@@ -81,7 +81,7 @@ func TestTheWatermarkIsHeldWhileTheAppIsDown(t *testing.T) {
 	if dark.Watermark != first.Watermark {
 		t.Errorf("with the app down the watermark moved to %s", dark.Watermark)
 	}
-	want := gap{Start: "2026-11-10T00:00:00+05:30", End: "2026-11-12T00:00:00+05:30", Reason: failureReason}
+	want := gap{Start: nov(10), End: nov(12), Reason: failureReason}
 	if n := len(dark.Gaps); n == 0 || !equal(dark.Gaps[n-1], want) {
 		t.Errorf("gaps %+v, want the days since the last read as one gap %+v", dark.Gaps, want)
 	}
@@ -93,7 +93,7 @@ func TestTheWatermarkIsHeldWhileTheAppIsDown(t *testing.T) {
 
 	down.Store(false)
 	back, points := readAll(t, a, "machine.jobs", since)
-	if back.Watermark != "2026-11-11T00:00:00+05:30" {
+	if back.Watermark != nov(11) {
 		t.Errorf("back up, watermark %s, want the start of today", back.Watermark)
 	}
 	for _, g := range back.Gaps {
@@ -103,7 +103,7 @@ func TestTheWatermarkIsHeldWhileTheAppIsDown(t *testing.T) {
 	}
 	filled := false
 	for _, p := range points {
-		filled = filled || p.Start == "2026-11-10T00:00:00+05:30"
+		filled = filled || p.Start == nov(10)
 	}
 	if !filled {
 		t.Error("the day the app was down was not filled from its log")
@@ -238,3 +238,7 @@ func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
 		}
 	}
 }
+
+// nov is midnight of a November 2026 day in the add-on's zone, as /stats sends
+// it: the fixtures hold for whatever TZ the add-on runs under.
+func nov(d int) string { return stamp3339(time.Date(2026, 11, d, 0, 0, 0, 0, statsZone)) }

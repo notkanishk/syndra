@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -29,7 +30,8 @@ import (
 // where it was while the app cannot be read (Config.Down).
 
 const (
-	statsZoneName = "Asia/Kolkata"
+	// defaultStatsZone is the reference's zone when TZ is unset.
+	defaultStatsZone = "Asia/Kolkata"
 	// statsBufferDays is limits.stats_buffer (P30D): a day stays while its end
 	// is within it.
 	statsBufferDays = 30
@@ -47,13 +49,23 @@ const (
 	offReason     = "The xl-1 printer's job log could not be read"
 )
 
-var statsZone = func() *time.Location {
-	loc, err := time.LoadLocation(statsZoneName)
-	if err != nil {
-		panic(err) // unreachable: time/tzdata is embedded
+// statsZoneName is TZ (POSIX allows a leading colon), else the default: the
+// zone every deployment of Syndra's services follows, so the day buckets here
+// agree with the container's own clock. The TrueNAS add-on reads TZ the same
+// way (loadZone). An unreadable TZ is a misconfiguration, refused at start.
+var statsZoneName, statsZone = zoneFromTZ(os.Getenv("TZ"))
+
+func zoneFromTZ(tz string) (string, *time.Location) {
+	name := strings.TrimPrefix(strings.TrimSpace(tz), ":")
+	if name == "" {
+		name = defaultStatsZone
 	}
-	return loc
-}()
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		panic("reference add-on: TZ=" + name + " is not an IANA zone: " + err.Error())
+	}
+	return name, loc
+}
 
 // statsMetrics are the manifest's descriptors, and the one list /stats
 // answers for.

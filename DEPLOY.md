@@ -716,7 +716,7 @@ docker compose up -d backend
 docker compose exec postgres psql -U syndra syndradb
 ```
 
-**Reading timestamps.** Every log line of every Go service (backend, claims, the TrueNAS add-on, the reference add-on) starts with one stamp: RFC 3339 with milliseconds and an explicit offset, in the deployment's zone (`TZ`, `Asia/Kolkata` under Compose), for example `2026-11-14T15:38:34.123+05:30`. It reads the same in any reader's zone, sorts as text, and converts exactly to unix time: `date -d 2026-11-14T15:38:34.123+05:30 +%s` (GNU date; on macOS `date -j -f %Y-%m-%dT%H:%M:%S%z "2026-11-14T15:38:34+0530" +%s`). Stored and sent instants are separate and unchanged: Postgres `timestamptz`, JSON RFC 3339. The UI displays them in the makerspace zone.
+**Reading timestamps.** Every log line of every Go service (backend, claims, the TrueNAS add-on, the reference add-on) starts with one stamp: RFC 3339 with milliseconds and an explicit offset, in the deployment's zone (`TZ`, `Asia/Kolkata` under Compose), for example `2026-11-14T15:38:34.123+05:30`. It reads the same in any reader's zone, sorts as text, and converts exactly to unix time: `date -d 2026-11-14T15:38:34.123+05:30 +%s` (GNU date; on macOS `date -j -f %Y-%m-%dT%H:%M:%S%z "2026-11-14T15:38:34+0530" +%s`). Stored and sent instants are separate and unchanged: Postgres `timestamptz`, JSON RFC 3339. The UI displays them in the same zone: it reads the backend's `TZ` (`time_zone` on `/healthz`), so setting `TZ` once in `.env` moves every service and every screen together.
 
 All commands run from `/opt/syndra` as the `runner` user.
 
