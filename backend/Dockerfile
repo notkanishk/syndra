@@ -7,20 +7,16 @@ FROM golang:1.25-alpine AS builder
 # .dockerignore keeps the context to the two.
 WORKDIR /src/backend
 
-# Copy Go mod files and resolve dependencies first
+# Exactly what go.mod and go.sum pin, downloaded before the source so an edit
+# does not re-download the module graph. Never `go get` or `go mod tidy`
+# here: either resolves versions at build time, so the image would build
+# code CI never tested (repoguard TestNoImageResolvesItsOwnDependencies).
+COPY addons/strictjson/go.mod /src/addons/strictjson/go.mod
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+
 COPY addons/strictjson /src/addons/strictjson
-COPY backend/go.mod ./
-# RUN go mod download # Uncomment once go.sum exists
-
 COPY backend .
-
-# Fetch dependencies
-RUN go get github.com/jackc/pgx/v5/pgxpool
-RUN go get github.com/jackc/pgx/v5/stdlib
-RUN go get github.com/redis/go-redis/v9
-RUN go get github.com/golang-migrate/migrate/v4/database/pgx/v5
-RUN go get github.com/golang-migrate/migrate/v4/source/file
-RUN go mod tidy
 
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux go build -o syndra ./cmd/api

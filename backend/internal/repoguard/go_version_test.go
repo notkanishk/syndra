@@ -50,23 +50,11 @@ func TestEveryGoBuildUsesTheModulesGoMinor(t *testing.T) {
 		}
 	}
 	// Every Go Dockerfile is listed above, so a new image cannot slip by.
-	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if d.Name() == "node_modules" || d.Name() == ".git" || d.Name() == ".claude" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		rel, _ := filepath.Rel(root, path)
-		if strings.HasPrefix(d.Name(), "Dockerfile") && !strings.HasSuffix(d.Name(), ".dockerignore") &&
-			from.MatchString(read(rel)) && images[rel] == "" {
+	for _, rel := range dockerfiles(t, root) {
+		if from.MatchString(read(rel)) && images[rel] == "" {
 			t.Errorf("%s builds Go and is not in this test's list", rel)
 		}
-		return nil
-	})
+	}
 
 	ci := read(".github/workflows/ci.yml")
 	if regexp.MustCompile(`(?m)^\s*go-version:`).MatchString(ci) {
@@ -82,4 +70,51 @@ func TestEveryGoBuildUsesTheModulesGoMinor(t *testing.T) {
 			t.Errorf("CI's %s is Go %s, the backend's is %s", f[1], got, want)
 		}
 	}
+}
+
+// An image builds exactly what go.mod and go.sum pin, as CI tests it: no
+// `go get` and no `go mod tidy` in any Dockerfile, either of which resolves
+// versions at build time. backend/Dockerfile ran both until 7p's review,
+// so production built newer dependencies than CI ever ran, and broke the day
+// one of them (go-redis v9.23) needed a newer Go than the image's.
+func TestNoImageResolvesItsOwnDependencies(t *testing.T) {
+	root := repoRoot(t)
+	resolve := regexp.MustCompile(`\bgo\s+(get|mod\s+tidy|install\s+\S+@)`)
+	for _, rel := range dockerfiles(t, root) {
+		b, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range strings.Split(string(b), "\n") {
+			if l := strings.TrimSpace(line); !strings.HasPrefix(l, "#") && resolve.MatchString(l) {
+				t.Errorf("%s:%d resolves dependencies at build time (%s); copy go.mod and go.sum and `go mod download`", rel, i+1, l)
+			}
+		}
+	}
+}
+
+// dockerfiles is every Dockerfile in the repository, by path from its root.
+func dockerfiles(t *testing.T, root string) []string {
+	t.Helper()
+	var out []string
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if d.Name() == "node_modules" || d.Name() == ".git" || d.Name() == ".claude" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasPrefix(d.Name(), "Dockerfile") && !strings.HasSuffix(d.Name(), ".dockerignore") {
+			rel, _ := filepath.Rel(root, path)
+			out = append(out, rel)
+		}
+		return nil
+	})
+	if len(out) == 0 {
+		t.Fatal("no Dockerfile found")
+	}
+	return out
 }
