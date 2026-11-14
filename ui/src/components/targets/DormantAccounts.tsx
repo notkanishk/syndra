@@ -74,6 +74,12 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   // that wait's closure, no longer than it already sits in the field, and a fresh box is made for
   // the second send. A second refusal is shown as it is.
   const retry = useRetryOnce();
+  // The refusal a wait is holding back: Stop waiting shows it, so there is always a next step.
+  const [held, setHeld] = useState<unknown>(null);
+  function stopWaiting() {
+    retry.cancel();
+    setResult({ outcome: { ...outcomeFromError(held), retryAfter: retry.left }, word: "Not removed" });
+  }
   function removeNow(accounts: string[], key: string) {
     setResult(null);
     remove.mutate(
@@ -87,7 +93,10 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         },
         onError: (error) => {
           const cooled = cooldownOf(error);
-          if (cooled && retry.refused(cooled.retry_after, () => removeNow(accounts, key))) return;
+          if (cooled && retry.refused(cooled.retry_after, () => removeNow(accounts, key))) {
+            setHeld(error);
+            return;
+          }
           setResult({ outcome: outcomeFromError(error), word: "Not removed" });
         },
       },
@@ -193,15 +202,6 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
       </ListStates>
       )}
 
-      {retry.waiting && (
-        <div className="flex flex-wrap items-center gap-3 border-t border-line px-5 py-4">
-          <span className="flex-1 text-[14px] text-warn-text">{retryingLine(name, retry.left)}</span>
-          <Button variant="outline" size="sm" onClick={retry.cancel}>
-            {STOP_WAITING}
-          </Button>
-        </div>
-      )}
-
       {result && (
         <div className="border-t border-line px-5 py-4">
           <ActionOutcome outcome={result.outcome} word={result.word} />
@@ -244,10 +244,12 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
             <Button
               variant="danger"
               size="sm"
-              disabled={!acknowledged || !elevatedKey}
+              disabled={!acknowledged || !elevatedKey || retry.waiting}
               isPending={remove.isPending}
               reason={
-                !remove.isPending
+                retry.waiting
+                  ? retryingLine(name, retry.left)
+                  : !remove.isPending
                   ? !acknowledged
                     ? "Check the box above to confirm you understand what this removes."
                     : !elevatedKey
@@ -259,10 +261,17 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
             >
               {`Remove ${chosen.length} ${chosen.length === 1 ? "account" : "accounts"}`}
             </Button>
+            {retry.waiting && (
+              <Button variant="outline" size="sm" onClick={stopWaiting}>
+                {STOP_WAITING}
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
+                // Nothing chosen is nothing to send: a wait for one stops with it.
+                retry.cancel();
                 setSelected(new Set());
                 setAcknowledged(false);
               }}

@@ -710,11 +710,13 @@ Every read of a system carries when it was read, and an add-on may answer from i
 | When | Says |
 |---|---|
 | A copy the add-on kept (the control is the next step) | {name} was read {age} |
-| Read again, or a page load, refused inside the cooldown, with a copy or without (the control waits, then the line above; this is the whole message, there is no refusal block and no "nothing was changed", because nothing was read) | {name} was read moments ago; you can read again in {n} s |
+| Read again, or a page load, refused inside the cooldown, with a copy or without (the control waits, then the line above; this is the whole message, there is no refusal block and no "nothing was changed", because nothing was read); and a "Check now" pass skipped inside the cooldown that is not going again by itself (a second skip, or **Stop waiting**), followed by its step | {name} was read moments ago; you can read again in {n} s |
+| That "Check now" step, while the count runs | Press Check now again when the count ends. |
+| That "Check now" step, once the count is over | Press Check now again. |
 | Read again failed for any reason but the cooldown (the line stays as it was; nothing was read, so the failure is said beside the press, in the outcome every refusal wears: under the line on a single-card page, above the cards where one press refreshes several, as on the storage, member-system and person-systems pages) | **Not read**, then the failure's own sentence and step (`failureMessage`, never a status code) |
 | The system cannot be reached, to a member (no control) | {name} can't be reached right now; this is what it said at {time}. Try again in a minute. If it keeps failing, ask makerspace staff. |
 | The system cannot be reached, to an operator (no control) | {name} can't be reached right now; this is what it said at {time}. Try again in a minute. If it keeps failing, check the add-on's health on its system page. |
-| "Check now" or a removal refused inside the cooldown, waiting to go again by itself, once (the **Stop waiting** control beside it stops it; a second refusal is shown as below) | {name} was read moments ago; trying again by itself in {n} s |
+| "Check now" or a removal refused inside the cooldown, waiting to go again by itself, once: the reason under the control, which is off until then (the **Stop waiting** control beside it stops it, and the refusal is then shown as the rows around this one say; so is a second refusal) | {name} was read moments ago; trying again by itself in {n} s |
 | A removal refused inside the cooldown (a write; the one place a refusal block is shown): the refusal | That system was read moments ago, so nothing was changed |
 | The same refusal: its next step, counting down | You can try again in {n} s. |
 | The same refusal: its next step once the count is over | Press the same button once more. |

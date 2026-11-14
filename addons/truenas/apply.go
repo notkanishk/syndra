@@ -332,8 +332,6 @@ var errStaleFingerprint = errors.New("the subject's state on the target has chan
 // subject id — valid, stable, and not the name the plan predicted.
 var errNoIdentityToDeriveFrom = errors.New("no identity to derive a username from")
 
-// desiredState is the request's fields, decoded once into the shapes this
-// add-on actually converges.
 // standingOf is s's standing with the SMB this request asks for as its wish
 // (Subject.wantsSMB), so a plan or an apply waiting on the member's new
 // password says so in its standing as its detail does (smbWaiting).
@@ -343,6 +341,8 @@ func (d desiredState) standingOf(s *Subject) *Standing {
 	return standingOf(&w)
 }
 
+// desiredState is the request's fields, decoded once into the shapes this
+// add-on actually converges.
 type desiredState struct {
 	groups     []string
 	enabled    bool

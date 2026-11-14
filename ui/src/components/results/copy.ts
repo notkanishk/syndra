@@ -70,5 +70,8 @@ export const cooldownLine = (name: string, seconds: number) => `${name} was read
 /** "Check now" or a removal the cooldown refused, going again by itself once the count ends (useRetryOnce); STOP_WAITING stops it. */
 export const retryingLine = (name: string, seconds: number) => `${name} was read moments ago; trying again by itself in ${seconds} s`;
 export const STOP_WAITING = "Stop waiting";
+/** "Check now"'s step once a skipped pass is not going again by itself: while its count runs, and after. */
+export const checkAgainNext = (seconds: number) =>
+  seconds > 0 ? "Press Check now again when the count ends." : "Press Check now again.";
 export const unreachableLine = (name: string, time: string, who: Reader) =>
   `${name} can't be reached right now; this is what it said at ${time}. ${notReadableNext(who)}`;

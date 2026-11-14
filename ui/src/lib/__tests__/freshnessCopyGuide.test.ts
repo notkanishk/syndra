@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { MEMBER, cooldownLine, copyLine, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
+import { MEMBER, checkAgainNext, cooldownLine, copyLine, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
 import { COOLDOWN_REFUSED, cooldownNext } from "@/lib/outcome";
 
 /**
@@ -19,6 +19,8 @@ const SAID = [
   copyLine("{name}", "{age}"),
   cooldownLine("{name}", 0).replace("0", "{n}"),
   retryingLine("{name}", 0).replace("0", "{n}"),
+  checkAgainNext(1),
+  checkAgainNext(0),
   unreachableLine("{name}", "{time}", MEMBER),
   unreachableLine("{name}", "{time}", OPERATOR),
   COOLDOWN_REFUSED,

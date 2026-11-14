@@ -2479,7 +2479,13 @@ end to end) found no missing function; three regressions with one root cause
     (`TargetOverview` `ReconcileControl`) and the dormant removal (a fresh
     one-shot box for the key). Owner Q1 met literally: the removal runs on
     a live read (`ReconcileRetry.test.tsx`, `DormantAccounts.test.tsx`;
-    copy guide §13 row "trying again by itself in {n} s").
+    copy guide §13 row "trying again by itself in {n} s"). Both controls are
+    off while it waits, the line their reason; leaving the page cancels it.
+    When nothing goes again (a second refusal, or Stop waiting), Check now
+    says `cooldownLine` counting from the skipped pass with
+    `checkAgainNext` ("Press Check now again when the count ends."), never
+    the pass's raw reason, and Remove shows the refusal it held ("Not
+    removed", its countdown, "Press the same button once more.").
   - One standing everywhere (parity A W5): `Subject.needsNewPassword`
     (password set, SMB off, SMB wanted) is the one fact and `standingOf`
     answers it "waiting on the member, set a new password". The wish
@@ -2489,7 +2495,8 @@ end to end) found no missing function; three regressions with one root cause
     apply (`desiredState.standingOf`, so a no-change outcome's standing
     matches its `smbWaiting` detail); `storage.status` takes `usable` from
     its standing (`TestAccessGivenBackNeedsANewPassword` extended,
-    `TestEveryStandingSeesTheWaitForANewPassword`).
+    `TestEveryStandingSeesTheWaitForANewPassword`,
+    `TestALegacyReplaysStandingSeesTheWaitForANewPassword`).
   - Production's own `state.db`: `addons/truenas/testdata/state-contract-1.db`
     written by 981efba3's store code (`testdata/state-contract-1.gen.go`,
     `//go:build ignore`, with how to write it again): three bindings, the

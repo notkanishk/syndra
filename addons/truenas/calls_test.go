@@ -221,6 +221,42 @@ func TestAContractOneEntryReplaysInContractTwoWords(t *testing.T) {
 	}
 }
 
+// A contract-1 apply entry replayed takes its standing from the mirror and
+// the binding's SMB wish together (7l): an account whose access was given
+// back waits on the member's new password, as every other standing says; the
+// same account with SMB not wanted is ready.
+func TestALegacyReplaysStandingSeesTheWaitForANewPassword(t *testing.T) {
+	for _, tc := range []struct {
+		wants   bool
+		usable  bool
+		waiting string
+	}{{true, false, "member"}, {false, true, "none"}} {
+		s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"groups":[42],"password_disabled":false}]`)
+		wants := tc.wants
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &wants}); err != nil {
+			t.Fatal(err)
+		}
+		snap, err := s.readSubjects()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.store.PutSnapshot(snap); err != nil {
+			t.Fatal(err)
+		}
+		entry := fmt.Sprintf(`{"stored_at":%q,"kind":%q,"result":{"subject":"sub-1","effect":"no_change","detail":"Done.","username":"charlotte","uid":3001}}`,
+			time.Now().UTC().Format(time.RFC3339Nano), kindApply)
+		if err := s.store.db.Update(func(tx *bolt.Tx) error {
+			return tx.Bucket(bucketIdempotency).Put([]byte("v1-apply"), []byte(entry))
+		}); err != nil {
+			t.Fatal(err)
+		}
+		out := decodeOutcome(t, postApply(t, s, `{"call_id":"v1-apply","subject":"sub-1","fingerprint":"anything","desired":{"enabled":true}}`))
+		if st := out.Standing; st == nil || st.Usable != tc.usable || st.WaitingOn != tc.waiting {
+			t.Errorf("SMB wanted %t: replayed standing %+v, want usable %t waiting on %s", tc.wants, st, tc.usable, tc.waiting)
+		}
+	}
+}
+
 // The forward half on a file production's binary wrote: testdata/
 // state-contract-1.db, written by 981efba3's own store code
 // (testdata/state-contract-1.gen.go), as testdata/mutations-before-intents.log

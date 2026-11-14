@@ -285,16 +285,35 @@ describe("inside the add-on's cooldown", () => {
     vi.useRealTimers();
   });
 
-  it("Stop waiting cancels the retry, and the wait never runs past the 60 s ceiling", () => {
+  it("Stop waiting cancels the retry and shows the refusal it held, with its step; the wait never passes 60 s", () => {
     vi.useFakeTimers();
     state.sweepError = cooling(3600);
     renderDormant();
     pressRemove();
     expect(screen.getByText(/trying again by itself in 60 s/)).toBeInTheDocument();
+    // Off while it waits, the line its reason (§13).
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toBeDisabled();
+    act(() => void vi.advanceTimersByTime(20_000));
     fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+    expect(screen.getByText("Not removed")).toBeInTheDocument();
+    expect(screen.getByText("That system was read moments ago, so nothing was changed.")).toBeInTheDocument();
+    expect(screen.getByText("You can try again in 40 s.")).toBeInTheDocument();
     act(() => void vi.advanceTimersByTime(120_000));
     expect(state.swept).toHaveLength(1);
     expect(screen.queryByText(/trying again by itself/)).toBeNull();
+    expect(screen.getByText("Press the same button once more.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toBeEnabled();
+    vi.useRealTimers();
+  });
+
+  it("leaving the page cancels the wait", () => {
+    vi.useFakeTimers();
+    state.sweepError = cooling(2);
+    const page = renderDormant();
+    pressRemove();
+    page.unmount();
+    act(() => void vi.advanceTimersByTime(60_000));
+    expect(state.swept).toHaveLength(1);
     vi.useRealTimers();
   });
 
