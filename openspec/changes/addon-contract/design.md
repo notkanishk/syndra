@@ -1322,7 +1322,12 @@ binding once, and `/subjects` carries each row's `subject` (the account a bindin
 `number_held`, `ambiguous` with every holder listed, or `claimed_twice` when two bindings name one
 account and neither gets it; with the holder and the add-on's `detail` and `next`:
 `common/binding_conflict.json`, the apply's conflict shape). Every binding is in exactly one of three
-states on one reply: attributed, a conflict, or gone (neither), and nothing else is left in neither. `account_id`
+states on one reply: attributed, a conflict, or gone (neither), and nothing else is left in neither.
+The verdict is one judgement, `attributeOver`, of a binding with every other binding over the same
+read. `/subjects` and the plan run it over a whole read. `resolveLive`, and so the apply and every
+operation, runs it over the accounts on the keys of the subject's binding and of every binding that
+could name the same account. So a `claimed_twice` account is refused to both claimants everywhere,
+never changed for whichever one asked. `account_id`
 stays the uid and is a key within one read, not an identity across reads (AUTHORING ch. 2; SCIM
 RFC 7643 §3.1, with `subject` as `externalId`). The backend decodes both but does **not yet** match
 on them: its drift matching still uses `account_id` until 7t-3. Below, "never written", "never

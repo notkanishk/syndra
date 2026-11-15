@@ -490,11 +490,13 @@ type Wish struct {
 
 // decodeBinding is the one way every reader decodes a stored binding. One that cannot be decoded
 // is an error, never a binding that is not there: skipped, its name would read as free to claim and
-// its subject as bound to nothing, and /subjects would say that person's account is gone.
+// its subject as bound to nothing, and /subjects would say that person's account is gone. The error
+// is errStoreUnreadable, whoever reads it, so every route answers it alike: 500 STORE_UNREADABLE,
+// in its own sentence (storeUnreadableDetail), never this one, which names a record by subject id.
 func decodeBinding(subjectID, raw []byte) (Binding, error) {
 	var b Binding
 	if err := json.Unmarshal(raw, &b); err != nil {
-		return Binding{}, fmt.Errorf("stored binding for %s is unreadable: %w", subjectID, err)
+		return Binding{}, unreadable(fmt.Errorf("the binding of %s does not decode: %w", subjectID, err))
 	}
 	return b, nil
 }

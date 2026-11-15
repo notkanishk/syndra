@@ -119,8 +119,13 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 	}
 	ix := indexAccounts(snap.Subjects) // the one lookup of accounts the wishes and the stats use too
 	claimed, err := s.store.BoundUsernames()
+	var at attribution
+	if err == nil {
+		// Every binding judged over this read, once: the plan says what the apply's resolveLive will.
+		at, err = s.attribute(snap.Subjects)
+	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, "The add-on's bindings could not be read.", nil)
+		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, planStoreUnreadable, nil)
 		return
 	}
 
@@ -134,10 +139,10 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		out.Stale = unreachableSince(snap.TakenAt)
 	}
 	for _, subject := range req.Subjects {
-		outcome, err := s.planOne(subject, ix, claimed, snap, current)
+		outcome, err := s.planOne(subject, ix, at, claimed, snap, current)
 		switch {
 		case errors.Is(err, errStoreUnreadable):
-			writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, "The add-on's own records could not be read, so nothing was planned.", nil)
+			writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, planStoreUnreadable, nil)
 			return
 		case err != nil:
 			writeError(w, statusFor(err), CodeTargetUnreadable, err.Error(), nil)
@@ -153,6 +158,25 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 // STORE_UNREADABLE, never a 4xx (handlePlan, operateNow, readNow).
 var errStoreUnreadable = errors.New("the add-on's own records could not be read")
 
+// unreadable is the one wrapper: a failure of the add-on's own store as errStoreUnreadable, once,
+// so every route answers it 500 STORE_UNREADABLE (applyNow, operateNow, readNow, handlePlan,
+// handleSubjects) and never as the NAS's fault.
+func unreadable(err error) error {
+	if errors.Is(err, errStoreUnreadable) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", errStoreUnreadable, err)
+}
+
+// The sentences a STORE_UNREADABLE says (copy guide): never the store's own error, which names a
+// record by subject id. One for a write or read about one person (apply, operations, adoption, a
+// create's binding), one for a plan, which is about many.
+const (
+	storeUnreadableDetail   = "Syndra's record of this person's account on TrueNAS can't be read. Check the add-on's storage, then try again."
+	planStoreUnreadable     = "Syndra's records of who has which account on TrueNAS can't be read, so nothing was planned. Check the add-on's storage, then try again."
+	subjectsStoreUnreadable = "Syndra's records of who has which account on TrueNAS can't be read. Check the add-on's storage, then try again."
+)
+
 // planOne says what would happen to one subject, and issues no mutating call.
 //
 // `blocked` is only ever a state this app cannot hold (unholdable), a conflict
@@ -166,7 +190,7 @@ var errStoreUnreadable = errors.New("the add-on's own records could not be read"
 // folder's stat, as it skips the group check, and leaves both to the apply:
 // with the NAS down, one subject's home would otherwise turn the whole
 // stored-copy answer into a 5xx.
-func (s *server) planOne(req PlanSubject, ix accountIndex, claimed map[string]string, snap Snapshot, live bool) (ApplyOutcome, error) {
+func (s *server) planOne(req PlanSubject, ix accountIndex, at attribution, claimed map[string]string, snap Snapshot, live bool) (ApplyOutcome, error) {
 	truncated := snap.Truncated
 	desired, err := s.decodeDesired(req.Desired)
 	var u unholdable
@@ -177,28 +201,16 @@ func (s *server) planOne(req PlanSubject, ix accountIndex, claimed map[string]st
 			Detail: err.Error(), Consequence: "Nothing would change.",
 		}, nil
 	case err != nil:
-		return ApplyOutcome{}, fmt.Errorf("%w: %w", errStoreUnreadable, err)
+		return ApplyOutcome{}, unreadable(err)
 	}
 
-	binding, bound, err := s.store.GetBinding(req.Subject)
-	if err != nil {
-		return ApplyOutcome{}, fmt.Errorf("%w: %w", errStoreUnreadable, err)
-	}
+	// The verdict the apply's resolveLive reaches: this binding judged with every other over this read.
+	r, bound := at.of(req.Subject)
 
 	var current *Subject
-	name := binding.Username
+	name := r.Binding.Username
 	adopts := false // leftByCrashedCreate, as the apply decides it
 	if bound {
-		// The rule the apply's locate uses, read from this snapshot.
-		r, err := s.resolveIn(binding, ix)
-		if err != nil {
-			// Two accounts on the key: the apply refuses it in these words.
-			detail, next := ambiguityWords()
-			return ApplyOutcome{
-				Subject: req.Subject, Effect: EffectBlocked,
-				Detail: detail, Consequence: "Nothing would change. " + next,
-			}, nil
-		}
 		if conflict := r.Conflict; conflict != nil {
 			detail, next := conflict.words()
 			return ApplyOutcome{
@@ -225,7 +237,7 @@ func (s *server) planOne(req PlanSubject, ix accountIndex, claimed map[string]st
 			conflict := s.unboundConflict(existing, claimed[name])
 			adopts, err = s.leftByCrashedCreate(req.Subject, name, existing, conflict)
 			if err != nil {
-				return ApplyOutcome{}, fmt.Errorf("%w: %w", errStoreUnreadable, err)
+				return ApplyOutcome{}, unreadable(err)
 			}
 			if !adopts {
 				detail, next := conflict.words()

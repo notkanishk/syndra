@@ -473,7 +473,7 @@ type subjectsRead struct {
 func (s *server) attributed(subjects []Subject, limits map[int64]string, truncated bool) (subjectsRead, error) {
 	at, err := s.attribute(subjects)
 	if err != nil {
-		return subjectsRead{}, fmt.Errorf("%w: %w", errStoreUnreadable, err)
+		return subjectsRead{}, unreadable(err)
 	}
 	return subjectsRead{subjectViews(subjects, limits, at.wishes(), at.subjectOf), at.conflicts, truncated}, nil
 }
@@ -543,7 +543,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 func writeStoreUnreadable(w http.ResponseWriter, err error) {
 	log.Printf("[STORE] the bindings could not be read for /subjects: %v", err)
 	writeError(w, http.StatusInternalServerError, CodeStoreUnreadable,
-		"The add-on's record of whose account is whose could not be read.", nil)
+		subjectsStoreUnreadable, nil)
 }
 
 // The idempotency namespace's type tags. One namespace so a call id reused

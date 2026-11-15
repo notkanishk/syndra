@@ -472,9 +472,17 @@ func TestPlanAndApplyAgreeOnTwoAccountsOnOneUID(t *testing.T) {
 		t.Fatalf("plan: want blocked in the ambiguity's words, got %+v", out)
 	}
 
+	// The apply resolves the same way (resolveLive is attributeOver too): BINDING_CONFLICT, the
+	// ambiguous conflict, the same words, nothing written.
 	s, m := c.server(t)
 	rr = postApply(t, s, oneApply)
-	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), detail+" "+next) || len(m.updates)+len(m.creates) != 0 {
+	var refused struct {
+		Code, Detail, Consequence string
+		Conflict                  BindingConflict
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &refused)
+	if rr.Code != http.StatusConflict || refused.Code != CodeBindingConflict || refused.Conflict.Reason != reasonAmbiguous ||
+		refused.Detail != detail || refused.Consequence != "Nothing was changed. "+next || len(m.updates)+len(m.creates) != 0 {
 		t.Fatalf("apply: want 409 in the same words and nothing written, got %d %s", rr.Code, rr.Body.String())
 	}
 
@@ -533,6 +541,67 @@ func TestTwoBindingsOnOneAccountGiveItToNeither(t *testing.T) {
 	if bound, _ := s.accountBound(&snap.Subjects[0]); !bound {
 		t.Error("accountBound: bob is free, so a third subject could adopt it")
 	}
+
+	// And every caller judges it the same, for either claimant: the apply and the plan are blocked
+	// on the claimed_twice conflict, each operation answers 409 in the same words, and nothing is
+	// sent to bob or logged.
+	detail, next := got.Conflicts[0].Detail, got.Conflicts[0].Next
+	twice := func(t *testing.T) (*server, *mutatingRPC, *deleteRecorder) {
+		s, m := c.server(t)
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "bob", UID: 300001, UIDKind: uidKindAccount}); err != nil {
+			t.Fatal(err)
+		}
+		del := &deleteRecorder{}
+		s.elevated = func(string) (rpc, error) { return del, nil }
+		return s, m, del
+	}
+	for _, subject := range []string{"sub-1", "sub-2"} {
+		s, m, del := twice(t)
+		rr := postApply(t, s, strings.Replace(oneApply, `"sub-1"`, `"`+subject+`"`, 1))
+		var refused struct {
+			Code, Detail, Consequence string
+			Conflict                  BindingConflict
+		}
+		_ = json.Unmarshal(rr.Body.Bytes(), &refused)
+		if rr.Code != http.StatusConflict || refused.Code != CodeBindingConflict || refused.Conflict.Reason != reasonClaimedTwice ||
+			refused.Detail != detail || refused.Consequence != "Nothing was changed. "+next {
+			t.Errorf("apply for %s: %d %s", subject, rr.Code, rr.Body.String())
+		}
+		if w := writesTo(m, del); len(w) != 0 {
+			t.Errorf("apply for %s wrote %v", subject, w)
+		}
+
+		rr = httptest.NewRecorder()
+		planInto(t, s, rr, `{"subjects":[{"subject":"`+subject+`","email":"bob@example.edu","desired":{"group":["lab_makers"],"enabled":true}}]}`)
+		var plan PlanResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
+			t.Fatalf("plan for %s: %v %s", subject, err, rr.Body.String())
+		}
+		if out := plan.Outcomes[0]; out.Effect != EffectBlocked || out.Conflict == nil || out.Conflict.Reason != reasonClaimedTwice ||
+			out.Detail != detail || out.Consequence != "Nothing would change. "+next {
+			t.Errorf("plan for %s: %+v", subject, out)
+		}
+
+		for _, op := range []struct{ name, params string }{
+			{"password.set", `{"password":"` + theSecret + `"}`}, {"password.rotate", `{}`},
+			{"account.purge", `{"elevated_key":"k"}`}, {"storage.status", `{}`}, {"activity.get", `{}`},
+		} {
+			s, m, del := twice(t)
+			rr := postOperation(t, s, op.name, `{"call_id":"c-op","subject":"`+subject+`","actor":"op_1","params":`+op.params+`}`)
+			if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), detail+" "+next) {
+				t.Errorf("%s for %s: want 409 in the same words, got %d %s", op.name, subject, rr.Code, rr.Body.String())
+			}
+			if w := writesTo(m, del); len(w) != 0 {
+				t.Errorf("%s for %s wrote %v", op.name, subject, w)
+			}
+			if logged := loggedWrites(t, s); len(logged) != 0 {
+				t.Errorf("%s for %s logged %+v", op.name, subject, logged)
+			}
+			if op.name == "activity.get" && auditFilter(m) != "" {
+				t.Errorf("activity.get for %s read bob's audit log", subject)
+			}
+		}
+	}
 }
 
 // The name finds the account even where another row shares its uid, and only that row carries the
@@ -583,6 +652,64 @@ func TestAStoreFailureIsNeverServedAsAnUnreachableNAS(t *testing.T) {
 	rr, _ := getSubjects(t, s, true)
 	if rr.Code != http.StatusInternalServerError || problemCode(t, rr) != CodeStoreUnreadable {
 		t.Fatalf("want 500 %s, got %d %s", CodeStoreUnreadable, rr.Code, rr.Body.String())
+	}
+}
+
+// One rule for a binding the store cannot decode, whichever route meets it: 500 STORE_UNREADABLE
+// in the one sentence (never the store's own error, which names a record by subject id, and never
+// a 502 that blames the NAS), and nothing written or created.
+func TestAnUnreadableBindingIsStoreUnreadableOnEveryRoute(t *testing.T) {
+	newcomer := `{"call_id":"c-new","subject":"sub-new","email":"carol@example.edu","desired":{"group":["lab_makers"],"enabled":true}}`
+	for _, tc := range []struct {
+		name string
+		send func(*server) *httptest.ResponseRecorder
+		want string
+	}{
+		// The apply that would create: it reads the claimed names (BoundUsernames) before anything.
+		{"apply that creates", func(s *server) *httptest.ResponseRecorder { return postApply(t, s, newcomer) }, storeUnreadableDetail},
+		// The apply for a bound subject: its binding is judged with every other (resolveLive).
+		{"apply to an account", func(s *server) *httptest.ResponseRecorder { return postApply(t, s, oneApply) }, storeUnreadableDetail},
+		{"plan", func(s *server) *httptest.ResponseRecorder {
+			rr := httptest.NewRecorder()
+			planInto(t, s, rr, `{"subjects":[{"subject":"sub-new","email":"carol@example.edu","desired":{"enabled":true}}]}`)
+			return rr
+		}, planStoreUnreadable},
+		{"adopt", func(s *server) *httptest.ResponseRecorder {
+			return postOperation(t, s, "account.adopt", `{"call_id":"a-new","subject":"sub-new","actor":"op_1","params":{"username":"bob"}}`)
+		}, storeUnreadableDetail},
+		{"password.set", func(s *server) *httptest.ResponseRecorder {
+			return postOperation(t, s, "password.set", `{"call_id":"p1","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
+		}, storeUnreadableDetail},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, m := idCases[0].server(t)
+			corrupt(t, s, bucketBindings, "sub-2")
+			rr := tc.send(s)
+			var body struct{ Code, Detail string }
+			_ = json.Unmarshal(rr.Body.Bytes(), &body)
+			if rr.Code != http.StatusInternalServerError || body.Code != CodeStoreUnreadable || body.Detail != tc.want {
+				t.Errorf("want 500 %s %q, got %d %s", CodeStoreUnreadable, tc.want, rr.Code, rr.Body.String())
+			}
+			if len(m.updates)+len(m.creates) != 0 {
+				t.Errorf("wrote %v, created %v", m.updates, m.creates)
+			}
+			if _, bound, _ := s.store.GetBinding("sub-new"); bound {
+				t.Error("a binding was written for the newcomer")
+			}
+		})
+	}
+}
+
+// Adoption asks whether the account is somebody's by the one rule over the same read, not by the
+// names on file: an account a binding still names by its number after a rename is not free.
+func TestAdoptRefusesAnAccountABindingNamesByNumber(t *testing.T) {
+	s, m := idCases[1].server(t) // sub-1's bob, renamed bob_renamed on TrueNAS, uid 300001 in range
+	rr := postOperation(t, s, "account.adopt", `{"call_id":"a3","subject":"sub-3","actor":"op_1","params":{"username":"bob_renamed"}}`)
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "already bound to another subject (sub-1)") {
+		t.Fatalf("want 409, bound to sub-1; got %d %s", rr.Code, rr.Body.String())
+	}
+	if _, bound, _ := s.store.GetBinding("sub-3"); bound || len(m.updates) != 0 {
+		t.Error("bob_renamed was handed to a third person")
 	}
 }
 

@@ -881,7 +881,13 @@ mirror holds no limits: absent in `state` is "not known".
   `username` and `account_id` (`holders` instead for `ambiguous`),
   `adoptable`, `bound_to` when another subject holds it, and the add-on's
   own `detail` and `next` for an operator. A subject in `conflicts` MUST
-  be on no row: the holder is never its account. So every binding is in
+  be on no row: the holder is never its account. The verdict is the
+  same wherever the binding is asked: an apply or plan for that subject
+  MUST answer the same conflict (`blocked`), and an operation MUST refuse
+  it, never act on the holder. A binding is judged with every other
+  binding over the same read (`attributeOver` in
+  `addons/truenas/identity_resolve.go`), or a `claimed_twice` account
+  would still be changed for whichever claimant asked. So every binding is in
   exactly one of three states, read off one reply: attributed (a row
   with `subject`), a conflict (in `conflicts`, any reason), or gone
   (neither: the account was deleted in the app). An add-on MUST NOT leave

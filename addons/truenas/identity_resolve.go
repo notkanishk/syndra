@@ -1,9 +1,11 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -12,17 +14,20 @@ import (
 // One account identity (slice 7t): which NAS account a binding names, by boundAccount's rule and no
 // other. Every caller asks it here: the apply (locate), the plan, the account operations (set, rotate,
 // purge), storage.status, activity.get, adoption's repeat check, and the views over a read (the
-// wishes behind a standing, the statistics, accountBound). Two adapters, one rule:
+// wishes behind a standing, the statistics, accountBound). One judgement, attributeOver, gives
+// every binding its verdict with every other binding over the same read (so two bindings naming one
+// account are claimed_twice for both, wherever either is asked), and every caller reads it:
 //
-//   - resolveLive asks it of the target now, one account by an exact key per lookup (accountWhere:
-//     the user table alone, since naming an account needs only its uid and name), and rewrites the
-//     binding once when it should now read differently (a legacy binding's real uid and marker, an
-//     in-range rename followed); operatedAccount is resolveLive with an operation's refusals: 422 no
-//     binding or account gone, 409 a conflict or two accounts on one key, 502 an absence read from
-//     a cut-short list, 500 STORE_UNREADABLE.
-//   - resolveIn asks it of one read of the accounts (plan, a contract-1 reply's standing), and
-//     attribute asks it of every binding over one read: /subjects says it on the wire (each row's
-//     subject, and the conflicts), and the wishes, the statistics and accountBound are views of it.
+//   - resolveLive asks it of the target now, reading only the accounts on the keys of the
+//     subject's binding and of every binding that could name the same account (keyRows: the user
+//     table alone, since naming an account needs only its uid and name), and rewrites the binding
+//     once when it should now read differently (a legacy binding's real uid and marker, an in-range
+//     rename followed); operatedAccount is resolveLive with an operation's refusals: 422 no binding
+//     or account gone, 409 a conflict (any reason), 502 an absence read from a cut-short list, 500
+//     STORE_UNREADABLE.
+//   - attribute asks it of every binding over one whole read: /subjects says it on the wire (each
+//     row's subject, and the conflicts), the plan and a contract-1 reply's standing pick one
+//     subject's verdict, and the wishes, the statistics and accountBound are views of it.
 //
 // The name is asked first. A name that finds the recorded uid names that account, even when another
 // account shares the uid; the uid is asked only when the name is gone, and two accounts on whichever
@@ -192,8 +197,10 @@ type resolved struct {
 	Account *Subject
 	// Conflict is set when it names nothing because another account holds the name or the number.
 	Conflict *BindingConflict
-	// Cut is an absence concluded from a cut-short read (subjectWhere): not an absence at all.
+	// Cut is an absence concluded from a cut-short read: not an absence at all.
 	Cut bool
+	// stored is the binding as the store holds it, which resolveLive compares Binding with.
+	stored Binding
 }
 
 // resolveIn is boundAccount over one read of the accounts. Its only error is errAmbiguousAccount:
@@ -207,8 +214,17 @@ func (s *server) resolveIn(b Binding, ix accountIndex) (resolved, error) {
 	return resolved{Binding: now, Account: found, Conflict: conflict}, nil
 }
 
-// resolveLive is boundAccount against the target now, for the subject's binding; bound is false
-// when the subject has none. A store that cannot be read is errStoreUnreadable.
+// resolveLive is the subject's entry in attributeOver against the target now, judged with every
+// binding that could name the same account, so two bindings on one account are claimed_twice here
+// exactly as on /subjects, and neither one's apply or operation reaches it. bound is false when the
+// subject has none.
+//
+// The store is read first (a store that cannot be read is errStoreUnreadable, and nothing is asked
+// of the NAS). Then the NAS, from the user table alone, by exact key (keyRows): the subject's
+// binding's name and number, and those of every other binding holding the name or number of an
+// account found. A binding's verdict depends only on the accounts on its own two keys, so the
+// verdicts over these rows are the verdicts over the whole table, without reading it, and an
+// account past the whole list's cap is still found.
 //
 // who is the write the binding's rewrite is logged under (store.bind), recorded once so the next
 // pass finds the account by number and is guarded by its uid. nil is a read, which never writes:
@@ -216,33 +232,87 @@ func (s *server) resolveIn(b Binding, ix accountIndex) (resolved, error) {
 func (s *server) resolveLive(subject string, who *caller) (r resolved, bound bool, err error) {
 	b, bound, err := s.store.GetBinding(subject)
 	if err != nil {
-		return resolved{}, false, fmt.Errorf("%w: %w", errStoreUnreadable, err)
+		return resolved{}, false, unreadable(err)
 	}
 	if !bound {
 		return resolved{}, false, nil
 	}
-	// Each lookup is one account by an exact key; a cut-short answer only
-	// matters when the conclusion is that the account is not there.
-	lookup := func(field string, value any) (*Subject, error) {
-		found, cut, err := s.accountWhere(field, value)
-		r.Cut = r.Cut || cut
-		return found, err
+	bindings, err := s.store.Bindings()
+	if err != nil {
+		return resolved{}, true, unreadable(err)
 	}
-	floor, ceiling := s.idRange()
-	found, now, conflict, err := boundAccount(b, floor, ceiling,
-		func(name string) (*Subject, error) { return lookup("username", name) },
-		func(uid int64) (*Subject, error) { return lookup("uid", uid) })
+	rows := map[rowID]Subject{}
+	cut, err := s.keyRows(b, rows)
 	if err != nil {
 		return resolved{}, true, err
 	}
-	r.Binding, r.Account, r.Conflict = now, found, conflict
-	r.Cut = r.Cut && found == nil && conflict == nil
-	if who != nil && (now.Username != b.Username || now.UID != b.UID || now.UIDKind != b.UIDKind) {
+	// Every other binding that could name an account the subject's could: one holding its name or
+	// its number. Asked of the subject's own rows only; a binding's further rows change no verdict
+	// on these accounts.
+	own := slices.Collect(maps.Values(rows))
+	judged := []Binding{b}
+	for _, other := range bindings {
+		if other.SubjectID != subject && holdsAKeyOf(other, own) {
+			c, err := s.keyRows(other, rows)
+			if err != nil {
+				return resolved{}, true, err
+			}
+			cut = cut || c
+			judged = append(judged, other)
+		}
+	}
+	read := slices.SortedFunc(maps.Values(rows), func(x, y Subject) int { // one order, so holders read the same
+		return cmp.Or(cmp.Compare(x.UID, y.UID), strings.Compare(x.Username, y.Username), strings.Compare(string(x.ID.raw), string(y.ID.raw)))
+	})
+	r, _ = s.attributeOver(judged, read).of(subject)
+	// A cut-short read only matters when the conclusion is that the account is not there.
+	r.Cut = cut && r.Account == nil && r.Conflict == nil
+	now := r.Binding
+	if who != nil && r.Conflict == nil && (now.Username != b.Username || now.UID != b.UID || now.UIDKind != b.UIDKind) {
 		if err := s.mutate(who.on(now.UID), "store.bind", func() error { return s.store.PutBinding(now) }); err != nil {
 			logStoreFailure("binding", subject, err)
 		}
 	}
 	return r, true, nil
+}
+
+// rowID is one account of a read, however many keys it was found by.
+type rowID struct {
+	id string // the record key, which two accounts never share
+	rowKey
+}
+
+// keyRows reads, from the user table alone, every account on a binding's two keys: its recorded
+// name, and its number unless that is 0 (root, never looked up). That is everything boundAccount
+// can ask of the binding. Each read is filtered at the target, and the key is compared on this
+// side too, so a target that ignored the filter cannot add an account to the verdict; cut is such
+// a read coming back capped.
+func (s *server) keyRows(b Binding, into map[rowID]Subject) (cut bool, err error) {
+	keys := [][]any{{"username", "=", b.Username}}
+	if b.UID != 0 {
+		keys = append(keys, []any{"uid", "=", b.UID})
+	}
+	for _, key := range keys {
+		accounts, c, err := s.readAccountsWhere([]any{key})
+		if err != nil {
+			return cut, err
+		}
+		cut = cut || c
+		for _, a := range accounts {
+			if a.Username == b.Username || (b.UID != 0 && a.UID == b.UID) {
+				into[rowID{string(a.ID.raw), rowOf(&a)}] = a
+			}
+		}
+	}
+	return cut, nil
+}
+
+// holdsAKeyOf says whether a binding's name or number is one of these accounts': whether its
+// lookups can reach any of them.
+func holdsAKeyOf(b Binding, accounts []Subject) bool {
+	return slices.ContainsFunc(accounts, func(a Subject) bool {
+		return a.Username == b.Username || (b.UID != 0 && a.UID == b.UID)
+	})
 }
 
 // operatedAccount resolves the subject's account for an operation, refusing rather than guessing:
@@ -313,6 +383,8 @@ type attribution struct {
 	// claimedTwice is every uid two bindings name: given to neither (subjectOf, bindingOf), and
 	// still bound for accountBound, so no third subject can adopt it.
 	claimedTwice map[int64]bool
+	// bySubject is every binding's verdict, by subject (of).
+	bySubject map[string]resolved
 	// conflicts are the bindings that name no account, by subject (store order): another account
 	// holds their name or number, two accounts hold their key, or two bindings name one account.
 	// /subjects' conflicts; the holder is never a row's subject.
@@ -334,63 +406,78 @@ type SubjectConflict struct {
 	*BindingConflict
 }
 
+// of is the subject's own entry: what its binding names judged with every other binding over the
+// same read. bound is false when the subject has no binding.
+func (at attribution) of(subject string) (resolved, bool) {
+	r, bound := at.bySubject[subject]
+	return r, bound
+}
+
 // attribute is every binding over one read of the accounts. Its error is the store's.
-//
-// Every binding ends in one of three places, never none: its account's row (subjectOf), the
-// conflicts, or neither because its account is gone. A binding whose lookup is ambiguous (two
-// accounts in the read on the key boundAccount asked, errAmbiguousAccount) is a conflict listing
-// every holder; two bindings naming one account are both conflicts and neither gets the row.
-// Each fails closed: no rule picks a winner.
 func (s *server) attribute(subjects []Subject) (attribution, error) {
 	bindings, err := s.store.Bindings()
 	if err != nil {
 		return attribution{}, err
 	}
+	return s.attributeOver(bindings, subjects), nil
+}
+
+// attributeOver judges every binding over one read of the accounts, and is the only place that
+// does: /subjects, the plan, resolveLive (so the apply and every operation), the wishes, the
+// statistics and accountBound all read its verdicts.
+//
+// Every binding ends in one of three places, never none: its account's row (subjectOf), the
+// conflicts, or neither because its account is gone. A binding whose lookup is ambiguous (two
+// accounts in the read on the key boundAccount asked, errAmbiguousAccount) is a conflict listing
+// every holder; two bindings naming one account are both claimed_twice conflicts and neither gets
+// the row, so neither one's apply or operation reaches it. Each fails closed: no rule picks a winner.
+func (s *server) attributeOver(bindings []Binding, subjects []Subject) attribution {
 	ix := indexAccounts(subjects)
 	floor, ceiling := s.idRange()
 	at := attribution{subjectOf: map[rowKey]string{}, bindingOf: map[int64]Binding{}, claimedTwice: map[int64]bool{},
-		conflicts: []SubjectConflict{}}
-	named := map[rowKey][]Binding{} // each row in the read, with every binding that names it
-	rows := map[rowKey]*Subject{}
+		bySubject: map[string]resolved{}, conflicts: []SubjectConflict{}}
+	named := map[rowKey][]string{} // each row in the read, with every subject whose binding names it
 	for _, b := range bindings {
 		r, err := s.resolveIn(b, ix)
-		uid := int64(0)
-		switch {
-		case err != nil: // errAmbiguousAccount, resolveIn's only error
-			at.conflicts = append(at.conflicts, SubjectConflict{Subject: b.SubjectID,
-				BindingConflict: (&BindingConflict{Holders: holdersOf(subjects, b, ix)}).worded()})
-		case r.Account != nil:
-			uid = r.Account.UID
-			named[rowOf(r.Account)] = append(named[rowOf(r.Account)], b)
-			rows[rowOf(r.Account)] = r.Account
-		case r.Conflict != nil:
-			at.conflicts = append(at.conflicts, SubjectConflict{Subject: b.SubjectID, BindingConflict: r.Conflict})
+		if err != nil { // errAmbiguousAccount, resolveIn's only error
+			r.Conflict = (&BindingConflict{Holders: holdersOf(subjects, b, ix)}).worded()
 		}
-		if uid == 0 && inIDRange(b.UID, floor, ceiling) {
+		r.stored = b
+		at.bySubject[b.SubjectID] = r
+		uid := int64(0)
+		if r.Account != nil {
+			uid = r.Account.UID
+			named[rowOf(r.Account)] = append(named[rowOf(r.Account)], b.SubjectID)
+		} else if inIDRange(b.UID, floor, ceiling) {
 			uid = b.UID
 		}
 		if uid != 0 {
 			at.bindingOf[uid] = b
 		}
 	}
-	for row, bs := range named {
-		if len(bs) == 1 {
-			at.subjectOf[row] = bs[0].SubjectID
+	for row, claimants := range named {
+		if len(claimants) == 1 {
+			at.subjectOf[row] = claimants[0]
 			continue
 		}
-		account := rows[row]
-		at.claimedTwice[account.UID] = true
-		delete(at.bindingOf, account.UID)
-		for i, b := range bs {
-			c := &BindingConflict{Username: account.Username, AccountID: accountID(account.UID), claimedTwice: true}
-			if len(bs) == 2 {
-				c.BoundTo = bs[1-i].SubjectID
+		at.claimedTwice[row.uid] = true
+		delete(at.bindingOf, row.uid)
+		for i, subject := range claimants {
+			c := &BindingConflict{Username: row.username, AccountID: accountID(row.uid), claimedTwice: true}
+			if len(claimants) == 2 {
+				c.BoundTo = claimants[1-i]
 			}
-			at.conflicts = append(at.conflicts, SubjectConflict{Subject: b.SubjectID, BindingConflict: c.worded()})
+			r := at.bySubject[subject]
+			r.Account, r.Conflict = nil, c.worded()
+			at.bySubject[subject] = r
 		}
 	}
-	slices.SortStableFunc(at.conflicts, func(x, y SubjectConflict) int { return strings.Compare(x.Subject, y.Subject) })
-	return at, nil
+	for _, b := range bindings { // store order, which is by subject
+		if c := at.bySubject[b.SubjectID].Conflict; c != nil {
+			at.conflicts = append(at.conflicts, SubjectConflict{Subject: b.SubjectID, BindingConflict: c})
+		}
+	}
+	return at
 }
 
 // holdersOf is every account in the read on the key a binding's lookup found ambiguous, as
@@ -442,6 +529,12 @@ func (s *server) boundUIDs(subjects []Subject) (map[int64]string, error) {
 // accountBound says whether any subject's binding names this account.
 func (s *server) accountBound(account *Subject) (bool, error) {
 	at, err := s.attribute([]Subject{*account})
-	_, bound := at.bindingOf[account.UID]
-	return bound || at.claimedTwice[account.UID], err
+	return at.bound(account.UID), err
+}
+
+// bound says whether any binding names this uid in the read (by name or by number), or two do:
+// accountBound's rule, for a caller that already holds the attribution of a whole read.
+func (at attribution) bound(uid int64) bool {
+	_, named := at.bindingOf[uid]
+	return named || at.claimedTwice[uid]
 }

@@ -633,6 +633,11 @@ func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 		// drops ErrNotSent from those (acted).
 		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
 			"The NAS could not be reached, so nothing was sent to it.", nil)
+	case errors.Is(err, errStoreUnreadable):
+		// The add-on's own records, never the NAS (which a 502 would blame): one rule and one
+		// sentence for every route (decodeBinding). 500, which Syndra reads as possibly acted:
+		// true of a create whose binding could not then be written, and harmless otherwise.
+		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, storeUnreadableDetail, nil)
 	case errors.Is(err, errNotLogged):
 		// 500, which Syndra reads as "may have acted". Conservative, not a
 		// claim: the write that could not be recorded was not sent, and usually
@@ -1322,6 +1327,11 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		// unbound, and halt as a binding conflict — which is recoverable but
 		// needs an operator, so it is reported now rather than discovered then.
 		logStoreFailure("binding", req.Subject, err)
+		if errors.Is(err, errStoreUnreadable) {
+			// Another binding could not be read, so whether the name is free could not be told:
+			// STORE_UNREADABLE, as every route answers it; the create is in the mutation log.
+			return ApplyOutcome{}, http.StatusInternalServerError, err
+		}
 		return ApplyOutcome{}, http.StatusInternalServerError,
 			fmt.Errorf("account %s was created and its binding could not be recorded: %v", binding.Username, err)
 	}
