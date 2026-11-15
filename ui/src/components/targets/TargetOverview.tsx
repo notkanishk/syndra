@@ -1574,7 +1574,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
       {inventory.data?.halted && (
         // A pass that stopped has an empty list it never measured; the add-on's words (or the reason's) say why instead.
         <CardRow>
-          <span className="text-[13.5px] text-warn-text">{inventoryNotRead(inventory.data.detail, inventory.data.reason)}</span>
+          <span className="text-[13.5px] text-warn-text">{inventoryNotRead(name, inventory.data.detail, inventory.data.reason)}</span>
         </CardRow>
       )}
       {(!inventory.data && refused) || inventory.data?.halted ? null : (

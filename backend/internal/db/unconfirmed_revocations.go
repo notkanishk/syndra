@@ -113,7 +113,8 @@ func ListUnconfirmedRevocations(ctx context.Context, limit int) ([]UnconfirmedRe
 		       -- the difference. NULL on a row nothing cascaded into.
 		       COALESCE(p.cascade_id::text, ''),
 		       EXTRACT(EPOCH FROM (NOW() - p.created_at))::bigint,
-		       p.status = 'failed'
+		       p.status = 'failed',
+		       COALESCE(p.wait_reason, '')
 		  FROM propagation_outbox p
 		 WHERE ` + unconfirmedRevocationPredicate + `
 		 ORDER BY p.created_at
@@ -132,7 +133,7 @@ func ListUnconfirmedRevocations(ctx context.Context, limit int) ([]UnconfirmedRe
 		var lastError *string
 		if err := rows.Scan(&r.ID, &r.OpType, &r.UserID, &r.ProjectID, &r.RoleKeys, &r.Status,
 			&r.Attempts, &lastError, &r.CreatedAt, &r.Target, &r.CascadeID, &ageSeconds,
-			&r.Spent); err != nil {
+			&r.Spent, &r.WaitReason); err != nil {
 			return nil, fmt.Errorf("scan unconfirmed revocation: %w", err)
 		}
 		if lastError != nil {

@@ -1359,8 +1359,8 @@ no write is ever sent to an account `resolveLive` did not return. A refusal is o
   ch. 2): unique within one read, survives a rename, **not an identity across reads**. SCIM RFC 7643
   §3.1: the add-on is the service provider, `subject` plays `externalId`.
 - Deploy order: `conflicts` is required (`[]` when none). A reply without it (an add-on before 7t-2,
-  or contract 1) is `Outdated`, the one test (`addons.Outdated`, remembered per add-on, asked by
-  `/homes` too). The sweep and the inventory stop as `addon_outdated` (`SubjectsResult.Halt()`), so
+  or contract 1) is `Outdated`, the one test (`SubjectsResult.Outdated`; the verdict is remembered per add-on and
+  `addons.Outdated` answers it, asked by `/homes` too). The sweep and the inventory stop as `addon_outdated` (`SubjectsResult.Halt()`), so
   a backend ahead of its add-on says to update the add-on instead of reading every binding as
   deleted. The add-on goes out with or before the backend, from one commit.
 
@@ -1382,8 +1382,14 @@ nothing about that pass.
   (`raiseConflicts`), so such a subject is never planned, never queued, never offered "recreate". And
   by the drain (pending owner Q6): a rejected apply or a blocking re-plan carrying `conflict`
   (`raiseConflict`), only for a subject with a binding on the target; a create blocked because its
-  name is taken is no binding's conflict and keeps its refused row. The row's `last_error` is the
-  add-on's `detail` then `consequence`, as written, no prefix.
+  name is taken is no binding's conflict and keeps its refused row. The row's `last_error` is, for a
+  refusal, the add-on's `detail` then `consequence`, as written, no prefix; for a change the add-on
+  applied that Syndra could not attribute (`ErrBindingConflict`, which also records the
+  `target_binding_conflicts` finding naming the row's `outbox_id`) it is Syndra's own plain sentence
+  (`bindingConflictReason`: "{system} applied the change, but two of Syndra's records disagree about
+  whose account {name} is. Decide whose it is before changing anything else for them."), with the
+  ids and the store's error in the log only. Both settle as `target_refused`; the pages say the second
+  as stored, never behind "refused it".
 - **Closed** `agreed` on every whole read for each subject the add-on no longer lists
   (`ClearMergeFindingsOutside`), and by the account-slot clear when the subject's own row is back; a
   conflict that ends with the account gone becomes `deleted_upstream`. A new outcome in a slot drops
@@ -1393,14 +1399,22 @@ nothing about that pass.
 - **Shown (7t-4).** `MergeFindings` renders the add-on's `detail` then `next` as written, the
   holders of an `ambiguous` conflict, the other person of a `claimed_twice` one by name, and the
   one action **Stop tracking** (the system page's own `account.release` control) through the
-  decision form, whose consequence line says the next change creates a new account for them. The
-  holder's number is Advanced's Technical detail. A resolved row leaves with the list's leaving
-  motion. The Pending changes page shows a refusal's stored `last_error` after "{system} refused
-  it:" (never twice), and for a bound person's conflict its next step is the link "Decide it under
-  Waiting on you". The account list card says why a stopped pass was not read, from `detail`, not
-  as an empty list. Copy: `plain-language-copy/design.md` §16, `bindingConflictCopyGuide.test.ts`.
+  decision form, whose line says only what stopping does to the system (nothing on it is changed):
+  whether to adopt the holder, or what the next change does, is the add-on's `next`, said once and
+  never inferred from `reason`. The holder's number is Advanced's Technical detail. A resolved row leaves with the list's leaving
+  motion. Pending changes and Withdrawn access say why a change stopped through one helper
+  (`stoppedLine`), a refusal's stored `last_error` after "{system} refused it:" (never twice). A
+  bound person's conflict, from a standing finding (matched by person: no link joins an outbox row to
+  it) or from a `target_binding_conflicts` record (matched by the row's own id), has the next step
+  "Decide it under Waiting on you", linking the system page's `#waiting` region; while those are read
+  the seat says so rather than showing a step and swapping it. The account list card says why a
+  stopped pass was not read: a halted pass answers 503 with the inventory as its body, which the
+  reader takes as data (`readInventory`; any other 503 or failure still throws), and the card shows
+  its `detail`, not an empty list. Copy: `plain-language-copy/design.md` §16, `bindingConflictCopyGuide.test.ts`.
 - **A refused read is not an outage.** 500 `STORE_UNREADABLE` is `read_refused` with the add-on's
-  sentence and next step as `detail`; every other failure is `target_unreachable`.
+  sentence and next step as `detail`; a refusal inside the add-on's cooldown is `read_stale` (with
+  `retry_after`); every other failure is `target_unreachable` (`SubjectsResult.Halt()` is the one
+  mapping).
 
 Name-based attribution remains in one place by design: the statistics' record text (§9.6 `peopleOn`)
 is free text with no account key. Left to slice 7t-6 with the mirror's unique indexes.

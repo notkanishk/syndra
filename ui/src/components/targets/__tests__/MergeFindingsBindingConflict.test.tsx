@@ -88,13 +88,18 @@ describe("a binding conflict", () => {
     }
   });
 
-  it("says what pressing does, truthfully, and where adopting happens", () => {
-    state.findings = [conflict(numberHeld)];
-    renderFindings();
-    fireEvent.click(screen.getByText("Decide"));
-    expect(
-      screen.getByText(/Nothing on TrueNAS is changed\. The next change creates a new account for them\. If rey2 is theirs, adopt it from Not created by Syndra before then\./),
-    ).toBeTruthy();
+  it("says only what stopping does to the system, and leaves the next step to the add-on's words", () => {
+    // Adoptable or not, the page never advises on adoption: that is the add-on's `next`, once.
+    for (const adoptable of [true, false]) {
+      state.findings = [conflict({ ...numberHeld, adoptable })];
+      const view = renderFindings();
+      fireEvent.click(screen.getByText("Decide"));
+      expect(screen.getByText("Syndra stops tracking this person's account on TrueNAS. Nothing on TrueNAS is changed.")).toBeTruthy();
+      expect(screen.queryByText(/adopt it from Not created by Syndra/)).toBeNull();
+      // Said once: on the row, by the add-on.
+      expect(screen.getAllByText(/the next change creates a new one for them/)).toHaveLength(1);
+      view.unmount();
+    }
   });
 
   it("sends `unbound` with the reason, and the row leaves the list", () => {
@@ -161,7 +166,7 @@ describe("a binding conflict", () => {
   it("still ends in a next step when the report carries no words", () => {
     state.findings = [conflict({ reason: "number_held", username: "rey2" })];
     renderFindings();
-    expect(screen.getByText(/can't be matched to one account\. Stop tracking it to have Syndra start again\./)).toBeTruthy();
+    expect(screen.getByText(/can't be matched to one account\. Stop tracking it; the next change creates a new account for them\./)).toBeTruthy();
   });
 
   it("keeps the holder's number for Advanced only", () => {

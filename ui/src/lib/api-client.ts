@@ -107,8 +107,10 @@ type RequestInitJSON = Omit<RequestInit, "body"> & {
    * When true, a non-2xx response resolves with the parsed body (typed as T)
    * instead of throwing ApiError. Used by diagnostic probes (e.g. Zitadel
    * health) where the error envelope IS the payload the caller wants to read.
+   * A list of statuses preserves only those (the inventory's 503 carries the
+   * halted result), so every other failure, a 429's cooldown included, still throws.
    */
-  preserveErrorBody?: boolean;
+  preserveErrorBody?: boolean | number[];
 };
 
 /**
@@ -188,7 +190,8 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
   }
 
   if (!res.ok) {
-    if (init?.preserveErrorBody) return parsed as T;
+    const keep = init?.preserveErrorBody;
+    if (keep === true || (Array.isArray(keep) && keep.includes(res.status))) return parsed as T;
     // Session expired mid-SPA-session: /api/proxy is outside the middleware
     // matcher, so without this the user is stuck on a failing screen until
     // their next full navigation (SC9).

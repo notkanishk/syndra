@@ -8,7 +8,6 @@ import {
   CONFLICT_NEXT_FALLBACK,
   OTHER_PERSON,
   STOP_TRACKING,
-  adoptInstead,
   conflictDetailFallback,
   conflictReport,
   holdersLine,
@@ -171,7 +170,7 @@ export function MergeFindings({ target }: { target: string }) {
                       )
                     }}
                   >
-                    Finish: stop managing it
+                    Finish: stop tracking it
                   </Button>
                 </CardRow>
               ) : f.decision ? (
@@ -351,7 +350,6 @@ function DecisionForm({
   const gone = finding.outcome === "deleted_upstream";
   // A conflict over which account a person's record names has one action: stop tracking it.
   const conflict = finding.outcome === "binding_conflict";
-  const holder = conflictReport(finding.theirs);
   // A limit the target changed: taking its value saves it as this person's own
   // limit, which needs an end or a review date, chosen here (design §3, 3.8).
   const schema = schemaState.schema;
@@ -374,12 +372,7 @@ function DecisionForm({
       {conflict && (
         // What pressing does, beside the button that does it: the system is left as it is,
         // and the next change makes the new account.
-        <p className="text-[13px] text-muted">
-          {stopTrackingConsequence(name)}
-          {holder.username && holder.reason !== "ambiguous" && holder.reason !== "claimed_twice"
-            ? ` ${adoptInstead(holder.username)}`
-            : ""}
-        </p>
+        <p className="text-[13px] text-muted">{stopTrackingConsequence(name)}</p>
       )}
       <div className="flex flex-wrap gap-2">
         {conflict ? (

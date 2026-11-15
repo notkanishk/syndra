@@ -231,7 +231,7 @@ it("offers to finish an unbind that did not complete", () => {
   renderFindings();
 
   expect(screen.getByText(/may already have let go of this account/i)).toBeTruthy();
-  fireEvent.click(screen.getByText("Finish: stop managing it"));
+  fireEvent.click(screen.getByText("Finish: stop tracking it"));
   expect(state.resolved).toHaveLength(1);
   expect(state.resolved[0].resolution).toBe("unbound");
 });

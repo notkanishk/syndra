@@ -38,10 +38,12 @@ vi.mock("@/lib/queries/usePropagation", () => ({
   useDrainPropagations: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-const findings = vi.hoisted(() => ({ data: [] as { id: string; subject_id: string; outcome: string }[] }));
+const findings = vi.hoisted(() => ({ data: [] as { id: string; subject_id: string; outcome: string }[], loading: false }));
+const health = vi.hoisted(() => ({ conflicts: [] as { outbox_id: string }[], loading: false }));
 vi.mock("@/lib/queries/useTargets", async (orig) => ({
   ...(await orig<typeof import("@/lib/queries/useTargets")>()),
-  useMergeFindings: () => ({ data: findings.data }),
+  useMergeFindings: () => ({ data: findings.data, isLoading: findings.loading }),
+  useTargetHealth: () => ({ data: { binding_conflicts: health.conflicts }, isLoading: health.loading }),
 }));
 
 vi.mock("@/lib/queries/useBundles", () => ({
@@ -88,6 +90,9 @@ beforeEach(() => {
   pending.data = [];
   gaveUp.data = [];
   findings.data = [];
+  findings.loading = false;
+  health.conflicts = [];
+  health.loading = false;
   summary.reachable = true;
   bundles.data = [];
   rules.data = [];
@@ -162,9 +167,36 @@ describe("Pending changes", () => {
     other.unmount();
     findings.data = [{ id: "f1", subject_id: "u1", outcome: "binding_conflict" }];
     renderPending();
-    expect(screen.getByRole("link", { name: /Decide it under Waiting on you/ })).toHaveAttribute("href", "/system/targets/truenas");
+    expect(screen.getByRole("link", { name: /Decide it under Waiting on you/ })).toHaveAttribute("href", "/system/targets/truenas#waiting");
     expect(screen.getByText(/Waiting on you is on TrueNAS.s page\./)).toBeInTheDocument();
     expect(screen.queryByText(/Give it again from their page/)).not.toBeInTheDocument();
+  });
+
+  // Two records disagree about whose account a change landed on (`target_binding_conflicts`): the
+  // sentence is Syndra's own, shown as stored with no "refused it" before it, and the record names
+  // the row it came from, so the match is the row's and not the person's.
+  const applied = "TrueNAS applied the change, but two of Syndra's records disagree about whose account rey is. Decide whose it is before changing anything else for them.";
+  const appliedRow = (id: string, user: string) =>
+    row({ id, user_id: user, target: "truenas", status: "failed", wait_reason: "target_refused", last_error: applied, cascade_id: `c-${id}` });
+
+  it("says an applied-but-unattributed change as stored, and links the record that names this very row", () => {
+    gaveUp.data = [appliedRow("t1", "u1"), appliedRow("t2", "u1")];
+    health.conflicts = [{ outbox_id: "t1" }];
+    renderPending();
+    expect(screen.getAllByText(applied)).toHaveLength(2);
+    expect(screen.queryByText(/refused it/)).not.toBeInTheDocument();
+    // The same person, the same system: only the row the record names gets the link.
+    expect(screen.getAllByRole("link", { name: /Decide it under Waiting on you/ })).toHaveLength(1);
+    expect(screen.getAllByText(/Give it again from their page/)).toHaveLength(1);
+  });
+
+  it("shows a neutral line, not the generic step and then a swap, while the conflicts are read", () => {
+    gaveUp.data = [appliedRow("t1", "u1")];
+    findings.loading = true;
+    renderPending();
+    expect(screen.getByText(/Looking up what to do next\./)).toBeInTheDocument();
+    expect(screen.queryByText(/Give it again from their page/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Decide it under Waiting on you/ })).not.toBeInTheDocument();
   });
 
   it("says two writes belong to one cascade rather than leaving them looking unrelated", () => {

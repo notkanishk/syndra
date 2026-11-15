@@ -666,14 +666,20 @@ func TestARefusedBindingDoesNotSettleApplied(t *testing.T) {
 	// The mutation LANDED. Every other terminal failure on this path means it
 	// did not, so an operator who reads this as "the change did not go through"
 	// re-drives it onto the same account belonging to the same other person.
-	if !strings.Contains(reason, "was applied") {
+	if !strings.Contains(reason, "applied the change") {
 		t.Errorf("the reason must say the change landed: %q", reason)
 	}
-	if !strings.Contains(reason, "charlotte") || !strings.Contains(reason, "another subject") {
+	if !strings.Contains(reason, "charlotte") || !strings.Contains(reason, "disagree about whose account") {
 		t.Errorf("it must name the account and what is wrong with it: %q", reason)
 	}
-	if !strings.Contains(reason, "Do not retry") {
-		t.Errorf("and that retrying is the wrong move: %q", reason)
+	// Plain words for a person: nothing internal, and it ends in a next step.
+	for _, raw := range []string{"subject", "binding", "3001", "Do not retry", "charlotte on truenas"} {
+		if strings.Contains(reason, raw) {
+			t.Errorf("the reason must not carry %q: %q", raw, reason)
+		}
+	}
+	if !strings.HasSuffix(reason, "Decide whose it is before changing anything else for them.") {
+		t.Errorf("and it must end in the next step: %q", reason)
 	}
 }
 

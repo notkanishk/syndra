@@ -237,7 +237,11 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 				log.Printf("[ADDON-DRAIN] binding conflict on %s for %s could not be recorded: %v",
 					intent.Target, intent.SubjectID, cerr)
 			}
-			if err := markTargetRefused(ctx, row.ID, bindingConflictReason(intent, resp, err)); err != nil {
+			// The technical account (ids, the store's error) is for the log; the row's
+			// reason is the plain one a person reads on Pending changes.
+			log.Printf("[ADDON-DRAIN] %s applied %s's change to %s but could not attribute it: %v",
+				intent.Target, intent.SubjectID, resp.Username, err)
+			if err := markTargetRefused(ctx, row.ID, bindingConflictReason(systemName(ctx, row.Target), resp)); err != nil {
 				res.settleFailure(row.ID, "mark failed", err)
 				return false
 			}
@@ -598,16 +602,18 @@ func recordConflict(ctx context.Context, intent db.EntitlementIntent, resp addon
 	return saveConflict(ctx, conflict)
 }
 
-// bindingConflictReason is what an operator reads on the failed row.
+// bindingConflictReason is what a person reads on the failed row.
 //
 // It has to say the mutation LANDED, because every other terminal failure on
-// this path means it did not, and an operator who reads this as "the change did
-// not go through" will re-drive it — onto the same account belonging to the
-// same other person.
-func bindingConflictReason(intent db.EntitlementIntent, resp addons.ApplyResponse, err error) string {
+// this path means it did not, and somebody who reads this as "the change did
+// not go through" will re-drive it onto the same account belonging to the
+// same other person. Plain words only: no ids, no subject, no Go error (those
+// are in the log), and it ends in the next step, since the row is shown on
+// surfaces that cannot say one of their own. It is the finding in
+// target_binding_conflicts that the pending page links to, by this row's id.
+func bindingConflictReason(system string, resp addons.ApplyResponse) string {
 	return fmt.Sprintf(
-		"the change was applied on %s and could not be attributed: %s already belongs to another subject here. "+
-			"%s now has entitlements written to an account Syndra records against somebody else. "+
-			"Do not retry — decide who the account belongs to first (%v)",
-		intent.Target, resp.Username, intent.SubjectID, err)
+		"%s applied the change, but two of Syndra's records disagree about whose account %s is. "+
+			"Decide whose it is before changing anything else for them.",
+		system, resp.Username)
 }

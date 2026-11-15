@@ -1,7 +1,7 @@
 ## ADR-007: `account_id` is a key within a read, not an identity
 
 **Date:** 2026-11-15
-**Status:** Accepted for the rule and the wire (design 7t, D1-D6). Three points pend the owner: Q1 `account_id` stays the uid, Q2 legacy policy B, Q4 `subject` and `conflicts` core in contract 2 (and Q5, Q6 below). Change: `openspec/changes/addon-contract` (slices 7r, 7t).
+**Status:** Accepted for the rule and the wire (design 7t, D1-D6). Five points pend the owner: Q1 `account_id` stays the uid, Q2 legacy policy B, Q4 `subject` and `conflicts` core in contract 2, Q5 only `unbound` resolves a conflict finding, Q6 the drain raises the finding too. Change: `openspec/changes/addon-contract` (slices 7r, 7t).
 
 ### Context
 
@@ -24,4 +24,4 @@ RFC 7643 §3.1 names the distinction. `id` is "a stable, non-reassignable identi
 - A hand rename of an adopted account is a conflict with the right next step, not a duplicate account, and a reused number is never attributed to the wrong person (stats, standing, drift, homes).
 - Contract 2 grows `subject` and `conflicts` as core, so an add-on older than the backend reads as `addon_outdated` and halts rather than reading every binding as deleted. The add-on ships with or before the backend, from one commit.
 - A conformance add-on can no longer lean on `account_id` as an identity; the guide says so.
-- Left to 7t-6: the backend mirror still holds unique indexes on `(target, account_uid)` and `(target, account_id)`, which a reused number can trip. The mirror is not an identity, so those indexes go, and the add-on's answer on a write is authority.
+- Left to 7t-6: the backend mirror still holds unique indexes on `(target, username)`, `(target, account_uid)` and `(target, account_id)`, which a reused number can trip. The mirror is not an identity, so the number and id indexes go (the name's, 7t-6 decides), only `(target, subject_id)` stays unique, and the add-on's answer on a write is authority.

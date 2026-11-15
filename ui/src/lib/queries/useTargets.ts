@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { request } from "@/lib/api-client";
+import { ApiError, request } from "@/lib/api-client";
 import type { EntitlementField } from "@/lib/fields";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
@@ -316,12 +316,25 @@ export interface TargetInventory {
 
 /** "Read again" on the inventory: the same GET, asking the target itself. */
 export const useTargetInventoryAgain = (target: string | undefined) =>
-  useReadAgain<TargetInventory>(["targets", target, "inventory"], `/targets/${target}/inventory`);
+  useReadAgain<TargetInventory>(["targets", target, "inventory"], `/targets/${target}/inventory`, readInventory);
+
+/**
+ * A pass that stopped answers 503 with the inventory itself (`halted`, `reason`, `detail`), never an
+ * empty list (handlers/inventory.go). Read as data, so the card can say why. Only such a body: any
+ * other 503 (an unreachable system's envelope, a gateway's page) and every other failure, a 429's
+ * cooldown included, still throws as it did.
+ */
+async function readInventory(path: string): Promise<TargetInventory> {
+  const body = await request<TargetInventory>(path, { preserveErrorBody: [503] });
+  // An inventory (a 200's, or the halted 503's) always counts its bound accounts; an error envelope never does.
+  if (typeof body === "object" && body !== null && "bound" in body) return body;
+  throw new ApiError(503, body as unknown as ConstructorParameters<typeof ApiError>[1]);
+}
 
 export function useTargetInventory(target: string | undefined) {
   return useQuery({
     queryKey: ["targets", target, "inventory"],
-    queryFn: () => request<TargetInventory>(`/targets/${target}/inventory`),
+    queryFn: () => readInventory(`/targets/${target}/inventory`),
     enabled: Boolean(target),
   });
 }

@@ -59,7 +59,7 @@ export function cooldownOf(error: unknown, since?: number): Stale | undefined {
  * backend refused (a 429 cooldown is `cooldownOf`), and keeps it in `error`
  * until the next press.
  */
-export function useReadAgain<T>(queryKey: QueryKey, path: string) {
+export function useReadAgain<T>(queryKey: QueryKey, path: string, read: (path: string) => Promise<T> = (p) => request<T>(p)) {
   // Not `useQueryClient`, which throws without a provider: a page that never presses needs none.
   const client = useContext(QueryClientContext);
   const [error, setError] = useState<unknown>(null);
@@ -73,7 +73,7 @@ export function useReadAgain<T>(queryKey: QueryKey, path: string) {
       // worth protecting: cancelling a first load with nothing cached reverts it to idle, with no data
       // and no error, which a list draws as empty.
       if (client?.getQueryData(queryKey) !== undefined) await client.cancelQueries({ queryKey });
-      client?.setQueryData(queryKey, await request<T>(withFresh(path)));
+      client?.setQueryData(queryKey, await read(withFresh(path)));
     } catch (e) {
       setError(e);
       setErrorAt(Date.now());

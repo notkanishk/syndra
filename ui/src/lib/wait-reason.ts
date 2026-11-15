@@ -75,6 +75,34 @@ export function targetRefusedLine(system: string, said: string): string {
   return `${system} refused it: ${sentence(said)} Syndra stopped sending it.`;
 }
 
+/**
+ * Why Syndra stopped sending a change, in one sentence, for every surface that lists one
+ * (Pending changes, Withdrawn access). One path, so none of them prints a stored reason bare:
+ * - out of tries: the system did not answer;
+ * - a connected system's own refusal (`target_refused`): after "{system} refused it:", the words
+ *   as stored; a record that disagrees about whose account it is says it applied the change, so
+ *   it is shown as stored, with no "refused it" in front of it (`bindingConflictReason`);
+ * - Zitadel's `refused:<cause>`: the cause in words;
+ * - any other stop: "{system} refused it", with no reason said that is not its own.
+ */
+export function stoppedLine(
+  system: string,
+  row: { last_error?: string; wait_reason?: string; attempts: number },
+): string {
+  if ((row.last_error ?? "").startsWith("out of retries")) {
+    return `${system} didn't answer after ${row.attempts} ${row.attempts === 1 ? "try" : "tries"}, so Syndra stopped sending it.`;
+  }
+  if (row.wait_reason === TARGET_REFUSED && row.last_error) {
+    return row.last_error.startsWith(`${system} applied the change`)
+      ? sentence(row.last_error)
+      : targetRefusedLine(system, row.last_error);
+  }
+  return `${system} refused it${isRefused(row.wait_reason) ? `: ${refusalCause(row.wait_reason ?? "")}` : ""}, so Syndra stopped sending it.`;
+}
+
+/** The next-step seat while the two places a conflict is kept are being read; the generic step is never shown first and then swapped. */
+export const LOOKING_UP_NEXT = "Looking up what to do next.";
+
 /** A wait the operator chose (the role, or before the switch its mode), not a send that stopped. */
 export function waitIsChosen(reason: string | undefined | null): boolean {
   return reason === "role_waits" || reason === "manual";

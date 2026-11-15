@@ -112,6 +112,21 @@ describe("what has not gone away yet", () => {
   });
 });
 
+describe("why a given-up revocation stopped", () => {
+  // The same helper as Pending changes (`stoppedLine`): a stored reason is never printed bare.
+  it("says it in a sentence, never the stored text of an out-of-retries or a refusal alone", async () => {
+    payload = listing([
+      row("r1", true, { user_id: "u1", attempts: 5, last_error: "out of retries after 5 attempts: Zitadel could not be reached" }),
+      row("r2", true, { user_id: "u2", wait_reason: "refused:not_found", last_error: "zitadel api 404" }),
+    ]);
+    await renderPage();
+    expect(screen.getByText("Zitadel didn't answer after 5 tries, so Syndra stopped sending it.")).toBeInTheDocument();
+    expect(screen.getByText("Zitadel refused it: it no longer has this person, project or role, so Syndra stopped sending it.")).toBeInTheDocument();
+    expect(screen.queryByText(/out of retries/)).toBeNull();
+    expect(screen.queryByText(/zitadel api 404/)).toBeNull();
+  });
+});
+
 describe("the board's anatomy", () => {
   beforeEach(() => {
     payload = listing([
@@ -168,7 +183,7 @@ describe("the board's anatomy", () => {
     const link = screen.getByRole("link", { name: /Revoke it from Drift/ });
     expect(link.getAttribute("href")).toBe("/governance/drift");
     expect(screen.queryByRole("link", { name: /Revoke again on/ })).toBeNull();
-    expect(screen.getByText("Zitadel says this person no longer exists there.")).toBeInTheDocument();
+    expect(screen.getByText("Zitadel refused it, so Syndra stopped sending it.")).toBeInTheDocument();
     // A queued row says how many tries, and claims neither a limit nor a next time.
     expect(screen.getByText("Tried 2 times")).toBeInTheDocument();
     expect(screen.getByText("Not tried yet")).toBeInTheDocument();

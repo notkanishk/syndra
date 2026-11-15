@@ -47,7 +47,7 @@ export function conflictReport(theirs: unknown): BindingConflictReport {
 /** Said when the add-on's report has no sentence (an older record). */
 export const conflictDetailFallback = (system: string) =>
   `This person's account on ${system} can't be matched to one account.`;
-export const CONFLICT_NEXT_FALLBACK = "Stop tracking it to have Syndra start again.";
+export const CONFLICT_NEXT_FALLBACK = "Stop tracking it; the next change creates a new account for them.";
 
 /** `claimed_twice`: the other person, named by the row beside it. */
 export const OTHER_PERSON = "The other person is";
@@ -58,11 +58,9 @@ export const holdersLine = (system: string, names: string[]) =>
 
 /** What the one action does, in the sentence next to the button that does it. */
 export const stopTrackingConsequence = (system: string) =>
-  `Syndra stops tracking this person's account on ${system}. Nothing on ${system} is changed. The next change creates a new account for them.`;
-
-/** Added when the holder could be theirs (a name or number held): its way out is the Adopt control, once. */
-export const adoptInstead = (holder: string) =>
-  `If ${holder} is theirs, adopt it from Not created by Syndra before then.`;
+  `Syndra stops tracking this person's account on ${system}. Nothing on ${system} is changed.`;
+// What to do next, adopt the holder or not, is the add-on's `next`: this line adds only what stopping
+// does to the system, so nothing is said twice and adoptability is never guessed from `reason`.
 
 /** The one action's label: the system page's own control for `account.release` says it the same way. */
 export const STOP_TRACKING = "Stop tracking";

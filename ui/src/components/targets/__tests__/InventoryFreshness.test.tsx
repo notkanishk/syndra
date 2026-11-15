@@ -177,9 +177,19 @@ describe("an account list whose pass stopped", () => {
   it("words the reason and ends in a step when the add-on said nothing", () => {
     stopped({ reason: "target_unreachable" });
     renderTarget();
+    // The system is the one that did not answer, not the list.
     expect(
-      screen.getByText("The account list could not be read. It did not answer when Syndra last tried. Read again once that is fixed."),
+      screen.getByText(/^The account list could not be read\. Truenas did not answer when Syndra last tried\. Read again once that is fixed\.$/i),
     ).toBeInTheDocument();
+  });
+
+  it("never shows a reason's code, and still says a next step", () => {
+    stopped({ reason: "some_new_reason" });
+    renderTarget();
+    expect(
+      screen.getByText(/^The account list could not be read\. Truenas could not be checked, and Syndra has no words for why\. Read again once that is fixed\.$/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/some_new_reason/)).toBeNull();
   });
 
   it("says nothing of a stop for a pass that concluded", () => {

@@ -115,7 +115,8 @@ describe("the home queue and a target nobody can read", () => {
     expect(screen.getByText(/could not check/i)).toBeTruthy();
     // The reason travels: "unreachable" and "answered and refused" send an
     // operator to different machines.
-    expect(screen.getByText(/connection refused/)).toBeTruthy();
+    expect(screen.getByText(/no words for why/)).toBeTruthy();
+    expect(screen.queryByText(/connection refused/)).toBeNull();
     // The claims line holds its seat whether or not anything needs you.
     expect(screen.getByRole("button", { name: "Claims" })).toBeTruthy();
   });
