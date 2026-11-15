@@ -54,10 +54,15 @@ function listing(revocations: Row[], total?: { spent: number; queued: number }) 
 }
 
 let payload: unknown = listing([]);
+// A system's standing findings, for the one read the page makes per system (7t-6).
+let findings: Array<{ subject_id: string; outcome: string }> = [];
 
 vi.mock("@/lib/api-client", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api-client")>("@/lib/api-client");
-  return { ...actual, request: vi.fn(async () => payload) };
+  return {
+    ...actual,
+    request: vi.fn(async (path: string) => (path.endsWith("/merge-findings") ? { findings } : payload)),
+  };
 });
 
 async function renderPage() {
@@ -124,6 +129,36 @@ describe("why a given-up revocation stopped", () => {
     expect(screen.getByText("Zitadel refused it: it no longer has this person, project or role, so Syndra stopped sending it.")).toBeInTheDocument();
     expect(screen.queryByText(/out of retries/)).toBeNull();
     expect(screen.queryByText(/zitadel api 404/)).toBeNull();
+  });
+
+  // 7t-6: a revocation the system blocked on the person's binding conflict carries its wait reason,
+  // so while that conflict stands it is sent where it is decided, not to the person's account; once
+  // it is decided or closed, the row has its ordinary link.
+  it("sends a revocation blocked by a binding conflict to Waiting on you while the conflict stands", async () => {
+    const said = "The account rey, recorded for this person, is gone, and its number is now held by a different account, kofi.";
+    findings = [{ subject_id: "u1", outcome: "binding_conflict" }, { subject_id: "u2", outcome: "conflict" }];
+    payload = listing([
+      row("r1", true, { user_id: "u1", target: "truenas", project_id: "", role_keys: [], reason: "Remove from the members share", wait_reason: "binding_conflict", last_error: said }),
+      row("r2", true, { user_id: "u2", target: "truenas", project_id: "", role_keys: [], reason: "Remove from the members share", wait_reason: "target_refused", last_error: "It is held." }),
+    ]);
+    await renderPage();
+    expect(screen.getByText(`TrueNAS refused it: ${said} Syndra stopped sending it.`)).toBeInTheDocument();
+    const decide = await screen.findAllByRole("link", { name: "Decide it under Waiting on you" });
+    expect(decide).toHaveLength(1);
+    expect(decide[0]).toHaveAttribute("href", "/system/targets/truenas#waiting");
+    // The plain refusal keeps its own step.
+    expect(screen.getByRole("link", { name: /Check Jimmy’s account on TrueNAS/ })).toBeInTheDocument();
+    findings = [];
+  });
+
+  it("gives a decided binding conflict's revocation its ordinary link", async () => {
+    findings = [];
+    payload = listing([
+      row("r1", true, { user_id: "u1", target: "truenas", project_id: "", role_keys: [], reason: "Remove from the members share", wait_reason: "binding_conflict", last_error: "Held." }),
+    ]);
+    await renderPage();
+    expect(await screen.findByRole("link", { name: /Check Iyo’s account on TrueNAS/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Decide it under Waiting on you" })).toBeNull();
   });
 });
 

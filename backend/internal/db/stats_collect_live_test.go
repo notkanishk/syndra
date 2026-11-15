@@ -359,6 +359,35 @@ func TestLiveEachDropIsCountedByReason(t *testing.T) {
 	}
 }
 
+// 7t-6: TrueNAS hands john_cena's freed uid 1001 to randy_orton's new account
+// and the add-on binds sub-orton to it. The mirror follows the add-on's answer
+// (db.RecordTargetBinding clears sub-cena's stale row), so a record naming
+// account 1001 names its holder now, never the person who had it before, and
+// sub-cena, who holds no account here any more, may not be named by a point.
+func TestLiveAReusedNumberNamesItsNewHolder(t *testing.T) {
+	ctx := collectLive(t)
+	t.Cleanup(func() {
+		_, _ = db.PG.Exec(context.Background(), `DELETE FROM audit_logs WHERE action = 'binding.' || $1 || '.stale_cleared'`, collectTarget)
+	})
+	account := "1001"
+	if err := db.RecordTargetBinding(ctx, db.TargetBinding{Target: collectTarget, SubjectID: "sub-orton", Username: "randy_orton", AccountID: &account, BoundBy: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	s := &script{replies: [][]any{{page(t, day(1), []addons.StatPoint{pt(t, day(3), "sub-cena", share("makers"), 1)},
+		gp(t, day(3), day(2), share("makers"), "account 1001 is locked"), gp(t, day(3), day(2), share("home-randy_orton"), "Off"))}}}
+	if dropped := collect(t, ctx, sessions, s); !reflect.DeepEqual(dropped, map[string]int{stats.DropUnboundSubject: 1}) {
+		t.Errorf("a point for the person whose number moved is unbound now: dropped %v", dropped)
+	}
+	rows, err := db.PG.Query(ctx, `SELECT dims::text || ' ' || named_subjects::text FROM addon_metric_gaps WHERE target_id = $1 AND metric = $2 ORDER BY 1`, collectTarget, sessions.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gaps, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if want := []string{`{"share": "home-randy_orton"} {sub-orton}`, `{"share": "makers"} {sub-orton}`}; err != nil || !reflect.DeepEqual(gaps, want) {
+		t.Errorf("gaps %q (%v), want %q", gaps, err, want)
+	}
+}
+
 // What names a person is kept as the add-on sent it, and whom it names is
 // recorded in the row at collection (named_subjects, the subject ids): a
 // bound person by their subject id, account name or account id, anyone in the

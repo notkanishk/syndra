@@ -204,50 +204,14 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 
 	switch {
 	case resp.Outcome == addons.OutcomeSucceeded:
-		// Recorded before the row is settled. A transient write failure is
-		// non-fatal — the binding is the backend's copy of a decision the add-on
-		// already made and already persisted, so failing to write it does not
-		// un-apply anything.
-		//
-		// A CONFLICT is not that, and treating the two alike is what made this
-		// path lie. `ErrBindingConflict` means the account the add-on just wrote
-		// to is one the backend attributes to a DIFFERENT subject: the two
-		// stores have diverged, and the add-on has converged this subject's
-		// entitlements onto somebody else's account. Settled `applied`, that
-		// disagreement surfaces nowhere — the other subject still shows as
-		// holding the account, this one shows as having none, `convergeBound`
-		// iterates bindings so it is never revisited, and the detection that
-		// exists to catch exactly this sits in a log line.
-		if err := recordBinding(ctx, intent, resp, row.InitiatedBy); errors.Is(err, db.ErrBindingConflict) {
-			// Terminal, and deliberately NOT phrased as "nothing happened": the
-			// mutation landed. What failed is the attribution, and no retry
-			// resolves it — a re-drive converges the same wrong account again.
-			// An operator has to decide which subject the account belongs to.
-			// Persisted before the row is settled, because the row is not a
-			// surface: retention prunes it, and an operator who was not
-			// watching this pass never sees the drain report at all. The
-			// finding has to outlive the moment that produced it, the way the
-			// log anchor's does.
-			//
-			// Non-fatal if it cannot be written — the row still settles
-			// terminally with the reason, which is strictly better than the
-			// `applied` this replaced — but loud, because a finding that failed
-			// to persist is a disagreement nothing will surface again.
-			if cerr := recordConflict(ctx, intent, resp); cerr != nil {
-				log.Printf("[ADDON-DRAIN] binding conflict on %s for %s could not be recorded: %v",
-					intent.Target, intent.SubjectID, cerr)
-			}
-			// The technical account (ids, the store's error) is for the log; the row's
-			// reason is the plain one a person reads on Pending changes.
-			log.Printf("[ADDON-DRAIN] %s applied %s's change to %s but could not attribute it: %v",
-				intent.Target, intent.SubjectID, resp.Username, err)
-			if err := markBindingConflict(ctx, row.ID, bindingConflictReason(resp)); err != nil {
-				res.settleFailure(row.ID, "mark failed", err)
-				return false
-			}
-			res.Failed++
-			return false
-		}
+		// Recorded before the row is settled, and non-fatal: the binding is the
+		// backend's mirror of a decision the add-on already made and persisted,
+		// so failing to copy it does not un-apply anything. It is never a
+		// conflict either: the add-on's answer is the authority, so the mirror
+		// follows it and clears another subject's stale row on the same account
+		// (db.RecordTargetBinding). Two live claims on one account are the
+		// add-on's to report (/subjects claimed_twice), and it refuses them.
+		recordBinding(ctx, intent, resp, row.InitiatedBy)
 		recordMergeBase(ctx, intent, resp)
 		if err := markApplied(ctx, row.ID); err != nil {
 			res.settleFailure(row.ID, "apply", err)
@@ -275,17 +239,21 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		// The add-on validated the call and refused; it did not act. Terminal,
 		// because retrying a deterministic refusal changes nothing.
 		// A stale plan is not the target refusing the change: the subject moved
-		// since the approval, and a fresh plan may well be accepted. Only a
-		// refusal a retry would repeat is marked as one, because only that
-		// holds the person's next withdrawal (db.WaitReasonTargetRefused).
+		// since the approval, and a fresh plan may well be accepted, so it holds
+		// nobody's next withdrawal (db.WaitReasonPlanStale). A binding conflict
+		// is a standing decision for an operator, not only this row's reason:
+		// the same finding the sweep raises, now, and the row's own wait reason
+		// (db.WaitReasonBindingConflict) is what sends every page that lists it
+		// to Waiting on you. Any other refusal a retry would repeat holds the
+		// person's next withdrawal (db.WaitReasonTargetRefused).
 		settle := markTargetRefused
-		if resp.Code == addons.CodePlanStale {
-			settle = markFailed
+		switch {
+		case resp.Code == addons.CodePlanStale:
+			settle = markPlanStale
+		case raiseConflict(ctx, intent.Target, intent.SubjectID, resp.Conflict):
+			settle = markBindingConflict
 		}
-		// A binding conflict is a standing decision for an operator, not only
-		// this row's reason: the same finding the sweep raises, now.
-		raiseConflict(ctx, intent.Target, intent.SubjectID, resp.Conflict)
-		if err := settle(ctx, row.ID, refusalReason(resp)); err != nil {
+		if err := settle(ctx, row.ID, refusalReason(resp, intent.WithdrawsOnly)); err != nil {
 			res.settleFailure(row.ID, "mark failed", err)
 			return false
 		}
@@ -358,14 +326,20 @@ func unreachedWhy(system string, resp addons.ApplyResponse) string {
 // after "{system} refused it:". So it is the add-on's words as written: what
 // happened (detail) and what to do next (consequence), the next step a blocked
 // apply carries (apply_response.json), never lost.
-func refusalReason(resp addons.ApplyResponse) string {
+func refusalReason(resp addons.ApplyResponse, withdraws bool) string {
 	if resp.Code == addons.CodePlanStale {
-		// Named, because it is the one refusal whose next step is a re-plan
-		// rather than a fix. §8's proper answer here is a distinct stale-plan
-		// outcome that names the subjects that moved; the plan is already spent
-		// by the time this row is dispatched, so what the drain can do is say
-		// which of the two things happened in a form a surface can match on.
-		return "PLAN_STALE: the subject moved on the target since the plan was approved; re-plan and re-approve"
+		// The one refusal nobody has to fix or repeat: the person's desired
+		// state still says the change, so the drift sweep's next pass queues it
+		// again (a fast-forward, merge.Convergeable) unless the target changed
+		// the same field, which it raises as a finding. A withdrawal it queues
+		// sends on its own (db.sendsOnItsOwn); anything else waits in Pending
+		// changes. Plain words, no code (the row's wait_reason,
+		// db.WaitReasonPlanStale, is what a page switches on), and no system
+		// name, so a renamed system cannot make it wrong.
+		if withdraws {
+			return planStaleWithdrawal
+		}
+		return planStaleChange
 	}
 	if words := addonWords(resp.Detail, resp.Consequence); words != "" {
 		return words
@@ -374,6 +348,15 @@ func refusalReason(resp addons.ApplyResponse) string {
 	// wait_reason says it was the system's refusal; the page words the absence.
 	return ""
 }
+
+// A PLAN_STALE row's last_error (copy guide §16): a withdrawal's, and any
+// other change's.
+const (
+	planStaleWithdrawal = "Their account changed after this change was approved, so it was not sent. " +
+		"Syndra sends it again on its own after its next check, or asks you under Waiting on you if the change there touched the same thing."
+	planStaleChange = "Their account changed after this change was approved, so it was not sent. " +
+		"Syndra's next check puts it back in Pending changes, or asks you under Waiting on you if the change there touched the same thing."
+)
 
 // addonWords is an add-on's refusal as it said it: what happened, then what to
 // do next, each shown as written.
@@ -388,28 +371,17 @@ func addonWords(detail, next string) string {
 // than at the next sweep, and the sweep then refreshes this one row rather than
 // adding a second. Nil is no conflict. Non-fatal: the row still settles with the
 // add-on's words, and the next sweep raises it again.
-func raiseConflict(ctx context.Context, target, subject string, conflict *addons.BindingConflict) {
-	if conflict == nil {
-		return
-	}
-	// Only a subject with a binding on the target. An apply for one without is
-	// a create, and its conflict (the name it would be made under is taken) is
-	// no binding's: it is never in /subjects' conflicts, so the sweep would
-	// never close it, and `unbound` would release nothing, so it would loop.
-	// That refusal keeps its own path: the refused row and the add-on's words.
-	// The backend's mirror answers which; one it lacks the next sweep raises
-	// from /subjects.
-	if _, bound, err := getBinding(ctx, target, subject); err != nil || !bound {
-		if err != nil {
-			log.Printf("[ADDON-DRAIN] could not read %s's binding on %s; the next sweep raises its conflict: %v",
-				subject, target, err)
-		}
-		return
+//
+// It reports whether the conflict is a binding's, which is what makes the row a
+// binding conflict (db.WaitReasonBindingConflict) rather than a plain refusal.
+func raiseConflict(ctx context.Context, target, subject string, conflict *addons.BindingConflict) bool {
+	if conflict == nil || !bindingsConflict(ctx, target, subject, conflict) {
+		return false
 	}
 	report, err := json.Marshal(addons.SubjectConflict{Subject: subject, BindingConflict: *conflict})
 	if err != nil {
-		log.Printf("[ADDON-DRAIN] the conflict for %s on %s could not be encoded: %v", subject, target, err)
-		return
+		log.Printf("[ADDON-DRAIN] the conflict for %s on %s could not be encoded: %v (the next sweep raises it)", subject, target, err)
+		return true
 	}
 	for _, f := range merge.Conflicted(subject, report).Findings() {
 		if err := saveMergeFinding(ctx, db.MergeFinding{
@@ -419,6 +391,32 @@ func raiseConflict(ctx context.Context, target, subject string, conflict *addons
 				subject, target, err)
 		}
 	}
+	return true
+}
+
+// bindingsConflict says whether a conflict is a recorded binding's, rather than
+// a create's (the name a new account would be made under is taken). Only a
+// binding's is in /subjects' conflicts, so only it is a finding: a create's
+// would never be listed, and `unbound` would release nothing. That refusal
+// keeps its own path: the refused row and the add-on's words.
+//
+// The contract says which (common/binding_conflict.json): number_held is a
+// recorded number, ambiguous the key a binding is looked up by, claimed_twice
+// two bindings on one account, so each is a binding's whatever the mirror
+// holds (the mirror may already have cleared the row, db.RecordTargetBinding,
+// when another person's account took the number). Only name_held is also a
+// create's, and for it the mirror answers; a subject it lacks, or cannot be
+// read for, the next sweep raises from /subjects if it is a binding's.
+func bindingsConflict(ctx context.Context, target, subject string, c *addons.BindingConflict) bool {
+	if c.Reason != addons.ConflictNameHeld {
+		return true
+	}
+	_, bound, err := getBinding(ctx, target, subject)
+	if err != nil {
+		log.Printf("[ADDON-DRAIN] could not read %s's binding on %s; the next sweep raises its conflict: %v",
+			subject, target, err)
+	}
+	return err == nil && bound
 }
 
 // fingerprintFor decides what this row verifies against.
@@ -478,11 +476,11 @@ func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.Entitlemen
 		// into somebody else's account. Terminal, because no retry resolves a
 		// conflict; an operator does.
 		out := answer.Outcomes[0]
-		raiseConflict(ctx, intent.Target, intent.SubjectID, out.Conflict)
-		reason := addonWords(out.Detail, out.Consequence)
-		if reason == "" {
+		settle := markTargetRefused
+		if raiseConflict(ctx, intent.Target, intent.SubjectID, out.Conflict) {
+			settle = markBindingConflict
 		}
-		if err := markTargetRefused(ctx, intent.OutboxID, reason); err != nil {
+		if err := settle(ctx, intent.OutboxID, addonWords(out.Detail, out.Consequence)); err != nil {
 			res.settleFailure(intent.OutboxID, "mark failed", err)
 		} else {
 			res.Failed++
@@ -502,12 +500,12 @@ func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.Entitlemen
 // Non-fatal, and logged rather than returned. The convergence happened; refusing
 // to record it as applied because a mirror write failed would leave the row
 // claimable and re-drive a mutation that already landed.
-func recordBinding(ctx context.Context, intent db.EntitlementIntent, resp addons.ApplyResponse, actor string) error {
+func recordBinding(ctx context.Context, intent db.EntitlementIntent, resp addons.ApplyResponse, actor string) {
 	if resp.Username == "" {
 		// An outcome that reported no account name. Nothing to record, and
 		// nothing wrong: a `no_change` on a subject the add-on could not name is
 		// already an outcome the surface shows.
-		return nil
+		return
 	}
 	binding := db.TargetBinding{
 		Target: intent.Target, SubjectID: intent.SubjectID,
@@ -520,12 +518,7 @@ func recordBinding(ctx context.Context, intent db.EntitlementIntent, resp addons
 	if err := saveBinding(ctx, binding); err != nil {
 		log.Printf("[ADDON-DRAIN] converged %s on %s but could not record the binding: %v",
 			intent.SubjectID, intent.Target, err)
-		// Returned as well as logged, because the caller has to tell a
-		// transient write failure from a finding. They used to travel through
-		// one `err != nil` branch and one log line.
-		return err
 	}
-	return nil
 }
 
 // recordMergeBase stores what the target reported after this write.
@@ -564,53 +557,4 @@ func recordMergeBase(ctx context.Context, intent db.EntitlementIntent, resp addo
 		log.Printf("[ADDON-DRAIN] converged %s on %s and could not record its merge base: %v (non-fatal)",
 			intent.SubjectID, intent.Target, err)
 	}
-}
-
-// recordConflict persists the disagreement, naming both claimants.
-//
-// The subject Syndra's binding attributes the account to is read back rather
-// than inferred: the conflict was raised by a unique index, and which of the
-// two indexes fired decides whether the existing binding matches on the name or
-// on the account id. Guessing from the reported username would name the wrong person
-// on the half of the cases where the account was renamed out of band.
-func recordConflict(ctx context.Context, intent db.EntitlementIntent, resp addons.ApplyResponse) error {
-	holder, found, err := bindingHolder(ctx, intent.Target, resp.Username, resp.AccountID)
-	if err != nil {
-		return err
-	}
-	if !found {
-		// The conflict was raised and the binding is gone by the time this
-		// reads — a concurrent purge, most likely. Not recorded: a finding that
-		// cannot name the other claimant is a warning without a subject, and
-		// the failed row already carries the account name and the reason.
-		return fmt.Errorf("the conflicting binding on %s is no longer there", intent.Target)
-	}
-	conflict := db.BindingConflict{
-		Target: intent.Target, Username: resp.Username,
-		ConvergedSubjectID: intent.SubjectID, BoundSubjectID: holder,
-		OutboxID: intent.OutboxID,
-	}
-	if resp.AccountID != "" {
-		id := resp.AccountID
-		conflict.AccountID = &id
-	}
-	return saveConflict(ctx, conflict)
-}
-
-// bindingConflictReason is what a person reads on the failed row.
-//
-// It has to say the mutation LANDED, because every other terminal failure on
-// this path means it did not, and somebody who reads this as "the change did
-// not go through" will re-drive it onto the same account belonging to the
-// same other person. That is said by the row's wait_reason
-// (db.WaitReasonBindingConflict), which the pages word with the system's current
-// name; this sentence names no system, so a rename cannot make it wrong. Plain
-// words only: no ids, no subject, no Go error (those are in the log), and it
-// ends in the next step. It is the finding in target_binding_conflicts that the
-// pending page links to, by this row's id.
-func bindingConflictReason(resp addons.ApplyResponse) string {
-	return fmt.Sprintf(
-		"Two of Syndra's records disagree about whose account %s is. "+
-			"Decide whose it is before changing anything else for them.",
-		resp.Username)
 }

@@ -64,10 +64,14 @@ var (
 	// markTargetRefused is markFailed for an add-on's deterministic refusal,
 	// which a retry would not change (db.WaitReasonTargetRefused).
 	markTargetRefused = db.MarkPropagationTargetRefused
-	// markBindingConflict settles a change that landed and could not be attributed
+	// markBindingConflict is markTargetRefused for a refusal or block on the
+	// add-on's binding conflict, decided under Waiting on you
 	// (db.WaitReasonBindingConflict).
 	markBindingConflict = db.MarkPropagationBindingConflict
-	requeue           = db.RequeuePropagation
+	// markPlanStale is markFailed for a PLAN_STALE refusal, which holds nothing
+	// (db.WaitReasonPlanStale).
+	markPlanStale = db.MarkPropagationPlanStale
+	requeue       = db.RequeuePropagation
 	// markSending stamps an add-on row's started_at as its calls go out
 	// (dispatchEntitlement), not when its batch was claimed.
 	markSending = db.MarkPropagationSending
@@ -254,12 +258,6 @@ var (
 	// the drain records it at all — the failure it prevents is invisible from
 	// the drain's own result, since the row settles either way.
 	saveBinding = db.RecordTargetBinding
-
-	// The conflict half. Separate seams from saveBinding, because a test that
-	// stubs the write must be able to assert what the finding recorded — the
-	// two used to be one log line.
-	bindingHolder = db.BindingHolder
-	saveConflict  = db.RecordBindingConflict
 
 	// The add-on's own binding conflict on a blocked apply or plan: the same
 	// standing finding the drift sweep raises from /subjects (7t-3), so the

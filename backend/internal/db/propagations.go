@@ -828,11 +828,21 @@ func SendsOnTheirOwnTx(ctx context.Context, tx pgx.Tx, ids []string) (map[string
 	return out, rows.Err()
 }
 
-// MarkPropagationBindingConflict is MarkPropagationFailed for an add-on row
-// whose change landed and could not be attributed (WaitReasonBindingConflict).
+// MarkPropagationBindingConflict is MarkPropagationTargetRefused for an add-on
+// row refused or blocked on the person's binding conflict
+// (WaitReasonBindingConflict).
 func MarkPropagationBindingConflict(ctx context.Context, id, errMsg string) error {
-	return settleOne(ctx, "mark propagation as applied but unattributed", id,
+	return settleOne(ctx, "mark propagation stopped on a binding conflict", id,
 		`UPDATE propagation_outbox SET status='failed', completed_at=NOW(), last_error=$2, wait_reason='`+WaitReasonBindingConflict+`'
+		 WHERE id=$1 AND status='in_flight'`, errMsg)
+}
+
+// MarkPropagationPlanStale is MarkPropagationFailed for an add-on row the
+// add-on refused because the subject moved since the approval
+// (WaitReasonPlanStale).
+func MarkPropagationPlanStale(ctx context.Context, id, errMsg string) error {
+	return settleOne(ctx, "mark propagation stale", id,
+		`UPDATE propagation_outbox SET status='failed', completed_at=NOW(), last_error=$2, wait_reason='`+WaitReasonPlanStale+`'
 		 WHERE id=$1 AND status='in_flight'`, errMsg)
 }
 

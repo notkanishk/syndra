@@ -42,7 +42,6 @@ const state = {
   reconcile: undefined as undefined | Record<string, unknown>,
   released: [] as string[],
   releaseResult: { status: "released" } as Record<string, unknown>,
-  ownerDecided: [] as Array<{ id: string; owner: string; note: string }>,
   adopted: [] as Array<{ username: string; subjectId: string }>,
   adoptResult: { status: "adopted", detail: "The account is now bound to that person." } as unknown,
   projectSet: [] as string[],
@@ -140,15 +139,6 @@ vi.mock("@/lib/queries/useTargets", async () => {
       mutate: vi.fn(),
       isPending: false,
       data: state.reconcile,
-      error: null,
-    }),
-    useResolveBindingConflict: () => ({
-      mutate: (input: { id: string; owner: string; note: string }, opts?: { onSuccess?: () => void }) => {
-        state.ownerDecided.push(input);
-        opts?.onSuccess?.();
-      },
-      reset: vi.fn(),
-      isPending: false,
       error: null,
     }),
     useResolveLogFinding: () => ({
@@ -846,91 +836,6 @@ describe("resolving a log finding", () => {
     expect(screen.queryByRole("textbox", { name: /type the system name/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /accept this log and start over/i })).toBeNull();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
-  });
-});
-
-/**
- * §29's surface — two of Syndra's own records disagreeing about who owns an
- * account.
- *
- * It used to land among ordinary drain failures, where "the target refused this
- * call" and this read the same to anybody scanning. Those want different places
- * and different actions: one is retried after fixing the target, and this one
- * is never retried at all.
- */
-describe("a disputed account", () => {
-  function renderWithConflict() {
-    state.ownerDecided = [];
-    state.roster = [summary([])];
-    state.health = {
-      target: "truenas",
-      reachable: true,
-      binding_conflicts: [
-        {
-          id: "c1",
-          target: "truenas",
-          username: "charlotte",
-          account_id: "3001",
-          converged_subject_id: "u-converged",
-          bound_subject_id: "u-bound",
-          outbox_id: "o1",
-          detected_at: "2026-08-10T00:00:00Z",
-        },
-      ],
-    } as TargetHealth;
-    return renderTarget();
-  }
-
-  it("names both claimants and calls neither correct", () => {
-    renderWithConflict();
-    expect(screen.getByText(/Two records disagree about who owns/)).toBeInTheDocument();
-    // The change LANDED. Every other terminal failure on that path means it did
-    // not, and an operator reading this as "it did not go through" retries it.
-    expect(screen.getByText(/The change reached TrueNAS/)).toBeInTheDocument();
-  });
-
-  it("offers the two claimants and no third, and takes rung 3", () => {
-    renderWithConflict();
-    fireEvent.click(screen.getByRole("button", { name: /decide who owns it/i }));
-
-    const record = screen.getByRole("button", { name: /record the owner/i });
-    expect(record).toBeDisabled();
-    // Radios, not a free field: assigning it to somebody the finding does not
-    // name is a different decision, and the backend refuses it.
-    expect(screen.getAllByRole("radio")).toHaveLength(2);
-
-    fireEvent.click(screen.getAllByRole("radio")[0]);
-    fireEvent.change(screen.getByLabelText(/How you know/), {
-      target: { value: "checked the home directory with her" },
-    });
-    expect(record).toBeDisabled(); // the name is still untyped
-
-    fireEvent.change(screen.getByRole("textbox", { name: /type the account/i }), {
-      target: { value: "charlotte" },
-    });
-    // Re-queried for the same reason as the log-finding dialog above: losing
-    // its reason swaps the button's DOM node, not just its `disabled` attribute.
-    const armed = screen.getByRole("button", { name: /record the owner/i });
-    expect(armed).toBeEnabled();
-
-    fireEvent.click(armed);
-    expect(state.ownerDecided).toEqual([
-      { id: "c1", owner: "u-bound", note: "checked the home directory with her" },
-    ]);
-    expect(screen.getByText("Recorded")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /record the owner/i })).toBeNull();
-    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
-  });
-
-  it("says the other person loses it without being told", () => {
-    renderWithConflict();
-    fireEvent.click(screen.getByRole("button", { name: /decide who owns it/i }));
-    expect(screen.getByText(/without\s+being told/)).toBeInTheDocument();
-    // And that the account is not right yet. The change that caused the
-    // conflict overwrote one person's entitlements with the other's, so a
-    // convergence is queued for both — and until it drains the account still
-    // holds what that change wrote.
-    expect(screen.getByText(/Fixes for both people wait in Pending changes/)).toBeInTheDocument();
   });
 });
 

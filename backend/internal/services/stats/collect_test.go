@@ -71,6 +71,20 @@ func TestWhatNamesAPersonIsKeptWithWhomItNames(t *testing.T) {
 // that is neither a letter nor a digit ("_" included), never inside a longer
 // word or number. Containment would drop real data — the add-on's own reason
 // "Too much activity to count yet" holds "ty" and "ch".
+// 7t-6: a name two people's records both carry (A renamed on the NAS, the
+// mirror still saying "alice"; B's new account given that freed name) names
+// both. named_subjects is a list of whom a member's own view must not show the
+// record to anyone else (handlers/stats.go namesOther), so naming both hides
+// it from each of them and from everyone else: closed. Crediting neither would
+// leave the list empty and show it to every member.
+func TestANameTwoRecordsCarryNamesBoth(t *testing.T) {
+	a, b := "3001", "3077"
+	who := peopleOn([]db.TargetBinding{{SubjectID: "sub-a", Username: "alice", AccountID: &a}, {SubjectID: "sub-b", Username: "alice", AccountID: &b}}, nil)
+	if got := who.names("home-alice"); !slices.Equal(got, []string{"sub-a", "sub-b"}) {
+		t.Fatalf("an ambiguous name must name everyone who carries it, got %v", got)
+	}
+}
+
 func TestANameIsAWholeToken(t *testing.T) {
 	who := func(names ...string) people {
 		var b []db.TargetBinding

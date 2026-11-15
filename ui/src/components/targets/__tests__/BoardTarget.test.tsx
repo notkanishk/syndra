@@ -68,7 +68,6 @@ vi.mock("@/lib/queries/useTargets", async () => {
     useReconcileTarget: inert,
     useReleaseBinding: inert,
     useAdoptAccount: inert,
-    useResolveBindingConflict: inert,
     useResolveLogFinding: inert,
   };
 });

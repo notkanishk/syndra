@@ -1374,6 +1374,46 @@ A subject with an apply in flight since the read began (`db.AppliesInFlightSince
 `addons.ApplyWindow()`; a row is stamped when sent, `db.MarkPropagationSending`) is concluded
 nothing about that pass.
 
+**The mirror is not an identity (7t-6, migration 000098).** The mirror has no unique index but its
+key, `(target, subject_id)`: the ones on `(target, username)`, `(target, account_uid)` and
+`(target, account_id)` are dropped, because TrueNAS hands a freed name or number to a new account and
+the add-on rightly binds a second person to it. On every write (an apply's result, an adoption) the
+add-on's answer is authority: `db.RecordTargetBinding` clears another subject's row on the same
+account (the same id where both rows carry one, the same name only where either has none: a row on
+the same name with another id is another account whose mirrored name is out of date, renamed on the
+target and followed by number in the add-on, and is kept) in the same transaction, logs it and audits it
+against that subject (`binding.<target>.stale_cleared`, the writer as actor, `now_bound_to` in the
+details), and records the write. Nothing on this path is a conflict any more; two live claims on one
+account are the add-on's to report (`claimed_twice`, the finding below). The cleared subject's merge
+base is left: it goes with the binding when the conflict the add-on reports for them is resolved
+(`unbound` forgets both). No advisory lock: a race needs the add-on to give one account to two
+people, which it refuses, and `ResolveBindingCall` locks the binding row before it reaches this
+write, so a per-target lock taken here would invert that order. The down migration puts the three unique indexes back, and first resolves
+duplicates by the same rule, deterministically (the row last seen kept; then `bound_at`, then
+`subject_id`), each clear audited by `system:migration`: refusing would block a rollback in the hour it
+is needed, over rows the add-on's next answer re-records anyway.
+
+`target_binding_conflicts` (000039, "two of Syndra's records disagree about whose account it is")
+is retired: its only writer was the unique violation above. Its readers and writers are gone
+(`RecordBindingConflict`, `StandingBindingConflicts`, `ResolveBindingConflict`, `BindingHolder`, the
+drain's `recordConflict`, `health.binding_conflicts`, `POST /targets/{target}/binding-conflicts/{id}/resolve`,
+the system page's "Two records disagree" notice and its owner dialog, the pending page's `outbox_id`
+match). The table is kept, unread and unwritten, for one release so a rollback to the contract-1
+backend (which reads it, and is never run with migrations down, task 1.10) still finds it; it is
+dropped with `account_uid` (task 1.7b). A rollback depends on the indexes too, not only the table:
+the contract-1 backend's guard against two people on one account is the unique violation, and the
+forward deploy after a rollback re-runs 000088, whose unique index fails on duplicates written
+meanwhile. So a rollback to a backend before 000098 MUST first run 000098's down by hand, with
+`scripts/rollback-mirror-indexes.sh` (that SQL byte for byte, held equal by
+`TestTheRollbackScriptIsMigration98Down`; idempotent, audited; dry run by default), and again before
+any forward deploy that re-runs 000088 (DEPLOY.md, Rollback). A late settle of an adoption
+(`ResolveBindingCall`, from the add-on's `/calls` record) never clears another person's copy written
+after the call began: the add-on gave that account to them since, so half is not run; an older copy
+is the stale one and is cleared. Production runs contract 1 and has the table: any open row is
+resolved in the contract-1 UI before the cutover (NEXT.md, read-only check); one left open is not
+migrated into a finding, because the sweep raises from the add-on's own `conflicts` whatever still
+stands and closes any finding the add-on does not report.
+
 **The finding lifecycle (D5).** One standing row in `target_merge_findings`, outcome
 `binding_conflict` (`merge.BindingConflict`, account-level like `deleted_upstream`; migration
 000096), keyed `(target, subject, "")`, `theirs` the add-on's whole report.
@@ -1381,19 +1421,25 @@ nothing about that pass.
 - **Raised** by the sweep from `/subjects.conflicts` before anything is classified
   (`raiseConflicts`), so such a subject is never planned, never queued, never offered "recreate". And
   by the drain (pending owner Q6): a rejected apply or a blocking re-plan carrying `conflict`
-  (`raiseConflict`), only for a subject with a binding on the target; a create blocked because its
-  name is taken is no binding's conflict and keeps its refused row. The row's `last_error` is, for a
-  refusal, the add-on's `detail` then `consequence`, as written, no prefix; for a change the add-on
-  applied that Syndra could not attribute (`ErrBindingConflict`, which also records the
-  `target_binding_conflicts` finding naming the row's `outbox_id`) it is Syndra's own plain sentence
-  (`bindingConflictReason`: "Two of Syndra's records disagree about whose account {name} is. Decide
-  whose it is before changing anything else for them."), which names no system, with the ids and the
-  store's error in the log only. That row settles with its own `wait_reason`, `binding_conflict`
-  (migration 000097; down maps it back to `target_refused`), which holds the person's next
-  withdrawal like a refusal (`runnerSends`). A refusal with no words stores none, under
-  `target_refused`. The pages switch on the `wait_reason`, never on what `last_error` says: "{system}
-  applied the change." then the stored sentence for the first, never "refused it"; "{system} refused
-  it and gave no reason" for the second.
+  (`raiseConflict`), only for a binding's conflict: a create blocked because its name is taken is no
+  binding's and keeps its refused row. Which is the contract's to say (`bindingsConflict`,
+  `common/binding_conflict.json`): `number_held`, `ambiguous` and `claimed_twice` are a recorded
+  binding's whatever the mirror holds (it may already have cleared the row when another person's
+  account took the number); `name_held`, which a create shares, is a binding's when the mirror
+  records one. The row's `last_error` is the add-on's `detail` then `consequence`, as written, no
+  prefix, and a binding's conflict settles with its own `wait_reason`, `binding_conflict` (migration
+  000097, meaning narrowed by 000099 in 7t-6: before, it was a change applied that the mirror could
+  not attribute, which 000098 ended), which holds the person's next withdrawal like a refusal
+  (`runnerSends`). Any other refusal settles `target_refused`, with no words stored as none.
+  `PLAN_STALE` settles `plan_stale` (000099), which holds nothing, with a plain sentence that names
+  no code and no system and says what happens next: the person's access still says the change, so
+  the sweep's next pass queues it again (a fast-forward) unless the target changed the same field
+  (a finding); a withdrawal it queues sends on its own, anything else waits in Pending changes
+  (`planStaleWithdrawal`, `planStaleChange`; the pages' `planStaleStep` by the row's
+  `sends_on_its_own`). The pages switch on the `wait_reason`,
+  never on what `last_error` says: "{system} refused it:" then the stored words for the first two,
+  "{system} refused it and gave no reason" with none, "{system} refused it: their account there
+  changed after this change was approved" for the third.
 - **Closed** `agreed` on every whole read for each subject the add-on no longer lists
   (`ClearMergeFindingsOutside`), and by the account-slot clear when the subject's own row is back; a
   conflict that ends with the account gone becomes `deleted_upstream`. A new outcome in a slot drops
@@ -1408,10 +1454,13 @@ nothing about that pass.
   never inferred from `reason`. The holder's number is Advanced's Technical detail. A resolved row leaves with the list's leaving
   motion. Pending changes and Withdrawn access say why a change stopped through one helper
   (`stoppedLine`), a refusal's stored `last_error` after "{system} refused it:" (never twice). A
-  bound person's conflict, from a standing finding (matched by person: no link joins an outbox row to
-  it) or from a `target_binding_conflicts` record (matched by the row's own id), has the next step
-  "Decide it under Waiting on you", linking the system page's `#waiting` region; while those are read
-  the seat says so rather than showing a step and swapping it. The account list card says why a
+  row stopped on a binding's conflict says so by its own `wait_reason`, and while a `binding_conflict`
+  finding still stands for that person on that system (`decideAt`, 7t-6; the system's findings read
+  once per page, `useStandingBindingConflicts`) both pages give it the next step "Decide it under
+  Waiting on you", linking the system page's `#waiting` region; once it is decided or closed the row
+  has its ordinary next step, and while the findings are read the seat says "Looking up what to do
+  next." A revocation the conflict blocked carries it on Withdrawn access too
+  (`unconfirmed-revocations` sends `wait_reason`). The account list card says why a
   stopped pass was not read: a halted pass answers 503 with the inventory as its body, which the
   reader takes as data (`readInventory`: a 503 whose body says `halted: true`, which `ApiError.body`
   keeps; any other 503, a null body or any other failure still throws), and the card shows
@@ -1422,7 +1471,21 @@ nothing about that pass.
   mapping).
 
 Name-based attribution remains in one place by design: the statistics' record text (§9.6 `peopleOn`)
-is free text with no account key. Left to slice 7t-6 with the mirror's unique indexes.
+is free text with no account key, matched against the mirror's names. 7t-6 looked and kept the
+mirror: the collector has no `/subjects` read, and adding one would either spend the fresh-read
+cooldown every hour (the sweep's and "Read again"'s) or answer from the add-on's kept copy, which can
+be older than the mirror, so a subject bound since would read as unbound and its points be dropped for
+good. A reused number moves to its new holder on the add-on's next answer (`RecordTargetBinding`'s
+clear; `TestLiveAReusedNumberNamesItsNewHolder`), so a record naming it names the holder now. A name
+is not fixed that way, and is not claimed to be: an account renamed on the target keeps its old name
+in the mirror until its person's next apply (the clear keeps a same-name row on another id). If a
+new account now carries that old name, a record naming it names both people. That fails closed:
+`named_subjects` is what a member's own view must not show to anyone else (`namesOther`), so listing
+both leaves the record out of every member's view, each of theirs included, and counts it as left out;
+an admin sees it as stored (`TestANameTwoRecordsCarryNamesBoth`,
+`TestARecordNamingTwoPeopleIsLeftOutForEveryMember`). Crediting neither would empty the list and show
+the record to every member. The renamed account's new name is missed meanwhile unless the directory's
+own names carry it.
 
 ### 9.5 Identity
 

@@ -34,12 +34,17 @@ const (
 	// withdrawal wait for an operator (runnerSends). Kept apart from
 	// refused:<cause>, which the screens say as Zitadel's refusal.
 	WaitReasonTargetRefused = "target_refused"
-	// WaitReasonBindingConflict is an add-on row whose change the target
-	// applied but Syndra could not attribute, because two of its own records
-	// disagree about whose account it landed on (ErrBindingConflict). Its own
-	// value so no page has to read last_error's wording to tell it from a
-	// refusal; holds the person's next withdrawal like one (migration 000097).
+	// WaitReasonBindingConflict is an add-on row refused or blocked because the
+	// person's binding names no account: the add-on's binding conflict, raised
+	// as the binding_conflict finding and decided under Waiting on you on the
+	// system's page. Its own value so every page that lists the row says where
+	// it is decided without asking anything else (migration 000097, meaning
+	// narrowed by 000099); holds the person's next withdrawal like a refusal.
 	WaitReasonBindingConflict = "binding_conflict"
+	// WaitReasonPlanStale is an add-on row the add-on refused because the
+	// person's account moved after the change was approved (PLAN_STALE). Holds
+	// nothing: a fresh plan may well be accepted (migration 000099).
+	WaitReasonPlanStale = "plan_stale"
 )
 
 // WaitReasonHalted is a row that was meant to go and whose send stopped.

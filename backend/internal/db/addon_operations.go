@@ -567,6 +567,12 @@ var BindingOperations = []string{"account.adopt", "account.release", "account.pu
 //     account than the recorded reply. An older copy naming another account
 //     is stale (the add-on accepted the adoption, so it held no binding for
 //     the subject) and is rewritten;
+//   - for an adoption: ANOTHER subject's copy names the recorded account and
+//     was written or seen at or after the call (7t-6). The add-on has given
+//     that account to them since, so their copy is the newer answer; running
+//     half would clear it as stale (RecordTargetBinding) and record this
+//     subject on an account that is no longer theirs. An older such copy is
+//     the stale one, and half clears it;
 //   - for a release: the copy names another account than the one released
 //     (by the reply's account id, else the row's `about`); with neither to
 //     compare, when the copy was written or seen at or after the call.
@@ -618,6 +624,16 @@ func ResolveBindingCall(ctx context.Context, target, id, accountID string, grace
 				later = later || username != about
 			default:
 				later = later || newer
+			}
+		}
+		if operation == "account.adopt" && accountID != "" && !later {
+			// Read, not locked: half is skipped on it, so nothing here writes
+			// that row, and a lock on another subject's row would add a second
+			// order to the one above.
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM target_account_bindings
+				 WHERE target = $1 AND subject_id <> $2 AND `+accountIDColumn+` = $3 AND last_seen_at >= $4)`,
+				target, subject, accountID, sent).Scan(&later); err != nil {
+				return fmt.Errorf("read the account's newer binding: %w", err)
 			}
 		}
 		joined := context.WithValue(ctx, txKey, tx)

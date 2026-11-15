@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"testing"
 
@@ -21,7 +20,6 @@ func seedAddonTarget(t *testing.T, ctx context.Context) {
 		t.Fatal(err)
 	}
 	clean := func() {
-		_, _ = PG.Exec(context.Background(), `DELETE FROM target_binding_conflicts WHERE target = 'truenas'`)
 		_, _ = PG.Exec(context.Background(), `DELETE FROM target_account_bindings WHERE target = 'truenas'`)
 		_, _ = PG.Exec(context.Background(), `UPDATE targets SET field_roles = NULL, retired_fields = '{}', accepted_shape = NULL WHERE target = 'truenas'`)
 	}
@@ -89,16 +87,6 @@ func TestAccountIDIsDualWrittenAndBackfilled(t *testing.T) {
 		t.Fatalf("a contract-2 id must survive the backfill: %v %v %v", id, uid, err)
 	}
 
-	// The unique index on the id: one account, one subject.
-	err = RecordTargetBinding(ctx, TargetBinding{Target: "truenas", SubjectID: "u-other", Username: "someone_else",
-		AccountID: strp("3051"), BoundBy: "apply"})
-	if !errors.Is(err, ErrBindingConflict) {
-		t.Fatalf("a second subject on one account id must conflict, got %v", err)
-	}
-	if holder, found, err := BindingHolder(ctx, "truenas", "renamed", "3051"); err != nil || !found || holder != "u-rey" {
-		t.Fatalf("the holder is found by account id: %q %v %v", holder, found, err)
-	}
-
 	// A UUID-shaped id has no account_uid.
 	if err := RecordTargetBinding(ctx, TargetBinding{Target: "truenas", SubjectID: "u-uuid", Username: "bianca",
 		AccountID: strp("7f3a2c1b-0d4e-4f5a-8b6c-1d2e3f4a5b6c"), BoundBy: "apply"}); err != nil {
@@ -106,37 +94,6 @@ func TestAccountIDIsDualWrittenAndBackfilled(t *testing.T) {
 	}
 	if err := PG.QueryRow(ctx, `SELECT account_uid FROM target_account_bindings WHERE subject_id = 'u-uuid'`).Scan(&uid); err != nil || uid != nil {
 		t.Fatalf("a non-numeric id must leave account_uid NULL: %v %v", uid, err)
-	}
-}
-
-// target_binding_conflicts keeps resolved history: a second conflict on the
-// same account inserts once the first is resolved (the account_id index is on
-// the bindings table only).
-func TestASecondConflictOnAnAccountInsertsAfterTheFirstIsResolved(t *testing.T) {
-	ctx := liveDB(t)
-	seedAddonTarget(t, ctx)
-	if err := RecordTargetBinding(ctx, TargetBinding{Target: "truenas", SubjectID: "u-a", Username: "rey_mysterio",
-		AccountID: strp("3051"), BoundBy: "apply"}); err != nil {
-		t.Fatal(err)
-	}
-	conflict := BindingConflict{Target: "truenas", Username: "rey_mysterio", AccountID: strp("3051"),
-		ConvergedSubjectID: "u-b", BoundSubjectID: "u-a", OutboxID: "6f1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"}
-	if err := RecordBindingConflict(ctx, conflict); err != nil {
-		t.Fatal(err)
-	}
-	standing, err := StandingBindingConflicts(ctx, "truenas")
-	if err != nil || len(standing) != 1 || standing[0].AccountID == nil || *standing[0].AccountID != "3051" {
-		t.Fatalf("the conflict must carry its account id: %+v %v", standing, err)
-	}
-	if _, err := ResolveBindingConflict(ctx, standing[0].ID, "u-a", "operator", "Rey keeps it."); err != nil {
-		t.Fatal(err)
-	}
-	conflict.OutboxID = "7a2c3d4e-5f6a-4b7c-9d8e-0f1a2b3c4d5e"
-	if err := RecordBindingConflict(ctx, conflict); err != nil {
-		t.Fatalf("a second conflict on the account must insert after the first is resolved: %v", err)
-	}
-	if standing, _ := StandingBindingConflicts(ctx, "truenas"); len(standing) != 1 {
-		t.Fatalf("want the new conflict standing, got %d", len(standing))
 	}
 }
 

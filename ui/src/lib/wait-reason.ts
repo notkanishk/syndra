@@ -65,14 +65,17 @@ export function refusalCause(reason: string): string {
 export const TARGET_REFUSED = "target_refused";
 
 /**
- * The wait reason of a change the system applied and Syndra could not attribute, because two of
- * Syndra's own records disagree about whose account it landed on (db.WaitReasonBindingConflict).
- * Its own value so no page reads wording to tell it from a refusal.
+ * The wait reason of a change the connected system refused or blocked because the person's binding
+ * names no account (its binding conflict, db.WaitReasonBindingConflict). The conflict is a standing
+ * finding, decided in one place: Waiting on you on the system's page (`decideAt`).
  */
 export const BINDING_CONFLICT = "binding_conflict";
 
-/** A refusal by the connected system itself, or a change it applied that Syndra could not attribute: the two rows that can be a person's account conflict. */
-export const isSystemStop = (reason: string | undefined | null) => reason === TARGET_REFUSED || reason === BINDING_CONFLICT;
+/**
+ * The wait reason of a change the system refused because the person's account there changed after
+ * the change was approved (PLAN_STALE, db.WaitReasonPlanStale). Nothing to fix: give it again.
+ */
+export const PLAN_STALE = "plan_stale";
 
 /**
  * "{system} refused it: {its words} Syndra stopped sending it." The system's
@@ -87,9 +90,9 @@ export function targetRefusedLine(system: string, said: string): string {
  * (Pending changes, Withdrawn access). One path, so none of them prints a stored reason bare, and
  * it switches on the row's `wait_reason`, never on what `last_error` says (the system's name is
  * the page's current one, not the one a stored sentence was written with):
- * - `binding_conflict`: the system applied the change, and Syndra's stored sentence says what is
- *   wrong; never "refused it";
- * - `target_refused`: after "{system} refused it:", the system's words as stored, or none;
+ * - `target_refused` or `binding_conflict`: after "{system} refused it:", the system's words as
+ *   stored, or none;
+ * - `plan_stale`: the person's account there changed after the change was approved;
  * - Zitadel's `refused:<cause>`: the cause in words;
  * - out of tries: the system did not answer;
  * - any other stop: "{system} refused it", with no reason said that is not its own.
@@ -98,13 +101,13 @@ export function stoppedLine(
   system: string,
   row: { last_error?: string; wait_reason?: string; attempts: number },
 ): string {
-  if (row.wait_reason === BINDING_CONFLICT) {
-    return `${system} applied the change. ${sentence(row.last_error ?? "") || "Two of Syndra's records disagree about whose account it is. Decide whose it is before changing anything else for them."}`;
-  }
-  if (row.wait_reason === TARGET_REFUSED) {
+  if (row.wait_reason === TARGET_REFUSED || row.wait_reason === BINDING_CONFLICT) {
     return row.last_error
       ? targetRefusedLine(system, row.last_error)
       : `${system} refused it and gave no reason, so Syndra stopped sending it.`;
+  }
+  if (row.wait_reason === PLAN_STALE) {
+    return `${system} refused it: their account there changed after this change was approved, so Syndra stopped sending it.`;
   }
   if ((row.last_error ?? "").startsWith("out of retries")) {
     return `${system} didn't answer after ${row.attempts} ${row.attempts === 1 ? "try" : "tries"}, so Syndra stopped sending it.`;
@@ -112,8 +115,46 @@ export function stoppedLine(
   return `${system} refused it${isRefused(row.wait_reason) ? `: ${refusalCause(row.wait_reason ?? "")}` : ""}, so Syndra stopped sending it.`;
 }
 
-/** The next-step seat while the two places a conflict is kept are being read; the generic step is never shown first and then swapped. */
+/**
+ * Where a stopped change is decided, when it is a person's binding conflict that still waits:
+ * Waiting on you on the system's page. The row's own `wait_reason` says it stopped on one, and the
+ * system's standing findings say one still waits for this person (`stands`, one read per system,
+ * useStandingBindingConflicts); once it is decided or closed the row has its ordinary next step, so
+ * the link never opens an empty region. Null for any other stop. Every page that lists the row
+ * (Pending changes, Withdrawn access) says it through this one helper.
+ */
+export function decideAt(
+  row: { wait_reason?: string; target?: string; user_id: string },
+  stands: (target: string | undefined, subject: string) => boolean,
+): string | null {
+  return row.wait_reason === BINDING_CONFLICT && row.target && stands(row.target, row.user_id)
+    ? `/system/targets/${encodeURIComponent(row.target)}#waiting`
+    : null;
+}
+
+/** A binding conflict's row while its system's findings are read: its seat says so, never a step then a swap. */
 export const LOOKING_UP_NEXT = "Looking up what to do next.";
+
+/** Whether a row's next step waits on its system's findings being read. */
+export const lookingUp = (row: { wait_reason?: string; target?: string }, loading: (target: string | undefined) => boolean) =>
+  row.wait_reason === BINDING_CONFLICT && loading(row.target);
+
+/**
+ * A stale plan's next step (PLAN_STALE, db.WaitReasonPlanStale): nothing to fix or repeat. The
+ * person's access still says the change, so Syndra's next check of the system queues it again,
+ * unless the system changed the same thing, which waits under Waiting on you. Queued again, a change
+ * that sends on its own (the row's `sends_on_its_own`, db.sendsOnItsOwn: a withdrawal) goes by
+ * itself; any other comes back to Pending changes.
+ */
+export function planStaleStep(system: string, sendsOnItsOwn: boolean): string {
+  return sendsOnItsOwn
+    ? `Syndra sends it again on its own after its next check of ${system}, or asks you under Waiting on you if ${system} changed the same thing.`
+    : `It comes back here after Syndra's next check of ${system}, or under Waiting on you if ${system} changed the same thing.`;
+}
+
+/** The link to `decideAt`, and the next step beside it. */
+export const DECIDE_IT = "Decide it under Waiting on you";
+export const decideStep = (system: string) => `Waiting on you is on ${system}'s page.`;
 
 /** A wait the operator chose (the role, or before the switch its mode), not a send that stopped. */
 export function waitIsChosen(reason: string | undefined | null): boolean {
