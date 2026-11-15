@@ -25,6 +25,18 @@ vi.mock("@/lib/queries/useTargetSystemHealth", () => ({
   }),
 }));
 
+// The pass the card shows; a test may swap it before rendering.
+const pass = vi.hoisted(() => ({
+  data: {
+    target: "truenas",
+    bound: 0,
+    queued: 0,
+    current: false,
+    halted: true,
+    reason: "target unreachable",
+  } as Record<string, unknown>,
+}));
+
 // Every helper lives INSIDE the factory: `vi.mock` is hoisted above every
 // const in the file, so a top-level one is not yet initialised when it runs.
 vi.mock("@/lib/queries/useTargets", () => {
@@ -55,17 +67,7 @@ vi.mock("@/lib/queries/useTargets", () => {
     useSetLifecycle: inert,
     useReleaseBinding: inert,
     useAdoptAccount: inert,
-    useReconcileTarget: () => ({
-      ...inert(),
-      data: {
-        target: "truenas",
-        bound: 0,
-        queued: 0,
-        current: false,
-        halted: true,
-        reason: "target unreachable",
-      },
-    }),
+    useReconcileTarget: () => ({ ...inert(), data: pass.data }),
   };
 });
 
@@ -108,5 +110,48 @@ describe("a reconcile pass that halted", () => {
     // able to render it.
     expect(screen.queryByText(/0 people with a managed account/)).toBeNull();
     expect(screen.queryByText(/fixes waiting for you to send/)).toBeNull();
+  });
+
+  // 7t-3: the add-on answered and refused the read because its own records
+  // failed (STORE_UNREADABLE → read_refused). Its sentence carries the next
+  // step; "once it is reachable" and the raw reason would both be untrue.
+  it("says the add-on's own words when it refused the read", () => {
+    const detail =
+      "Syndra's records of who has which account on TrueNAS can't be read. Check the add-on's storage, then try again.";
+    pass.data = { ...pass.data, reason: "read_refused", detail };
+    renderTarget();
+
+    expect(
+      screen.getByText(`The check stopped before it concluded anything. ${detail}`),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/once it is reachable/)).toBeNull();
+    expect(screen.queryByText(/read_refused/)).toBeNull();
+  });
+
+  // Without the add-on's words the reason is still said in words, never its
+  // code, with a next step true of it: a refused read is fixed, not waited out.
+  it("words a refused read with no sentence, and never as an outage", () => {
+    pass.data = { ...pass.data, reason: "read_refused", detail: undefined };
+    renderTarget();
+
+    expect(screen.getByText(/would not serve the read/)).toBeInTheDocument();
+    expect(screen.getByText(/add-on, then check again\./)).toBeInTheDocument();
+    expect(screen.queryByText(/read_refused/)).toBeNull();
+    expect(screen.queryByText(/once it is reachable/)).toBeNull();
+  });
+
+  // 7t-3: an add-on older than this Syndra. Waiting never ends it, so the
+  // Check now line names the system and says to update the add-on.
+  it("says the add-on is older than Syndra and to update it", () => {
+    pass.data = { ...pass.data, reason: "addon_outdated", detail: undefined };
+    renderTarget();
+
+    expect(
+      screen.getByText(
+        /add-on is older than this Syndra, so Syndra stopped checking it\. Update the add-on from the same release as Syndra, then check again\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/addon_outdated/)).toBeNull();
+    expect(screen.queryByText(/once it is reachable|older copy/)).toBeNull();
   });
 });

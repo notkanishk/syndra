@@ -56,8 +56,11 @@ func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
 	}
 	addonsReadHomes = func(context.Context, string, bool) addons.Homes {
 		return addons.Homes{Read: true, UsageRead: true, Homes: []addons.HomeUsage{
-			{Username: "charlotte", Home: "/mnt/p/main/home_dir/charlotte", UsedBytes: 18 * gb},
-			{Username: "booker", Home: "/mnt/p/main/home_dir/booker", UsedBytes: 34 * gb},
+			{Username: "charlotte", Subject: "u-charlotte", Home: "/mnt/p/main/home_dir/charlotte", UsedBytes: 18 * gb},
+			// booker's account was renamed on the NAS; a stranger took the
+			// name Syndra's copy recorded. The home is matched by subject.
+			{Username: "booker.t", Subject: "u-booker", Home: "/mnt/p/main/home_dir/booker", UsedBytes: 34 * gb},
+			{Username: "booker", Home: "/mnt/p/main/home_dir/stranger", UsedBytes: 1 * gb},
 		}}
 	}
 
@@ -81,8 +84,8 @@ func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
 	if booker.Own != nil || booker.OwnEnded == nil || booker.OwnEnded.Bytes != 50*gb {
 		t.Errorf("booker's own limit ended at 50 GB with 34 GB in a 20 GB home: %+v", booker.OwnEnded)
 	}
-	if booker.UsedBytes == nil || *booker.UsedBytes != 34*gb {
-		t.Errorf("booker's use: %v", booker.UsedBytes)
+	if booker.UsedBytes == nil || *booker.UsedBytes != 34*gb || booker.Username != "booker.t" || booker.Home != "/mnt/p/main/home_dir/booker" {
+		t.Errorf("booker's home is the one the add-on attributes to him, under its own name: %q %q %v", booker.Username, booker.Home, booker.UsedBytes)
 	}
 }
 
@@ -119,5 +122,45 @@ func TestTheHomeLimitIsReadByRoleAndUnit(t *testing.T) {
 	counted.Unit = "count"
 	if _, ok := kinds.HomeLimit([]addons.EntitlementField{counted}); ok {
 		t.Fatal("a limit not in bytes is not a home folder's limit")
+	}
+}
+
+// An add-on older than attribution: its homes say whose none is, so none is
+// shown as anybody's. Not read, with the same addon_outdated state the
+// reconcile pass records, never blank homes read as nobody's.
+func TestHomesFromAnOutdatedAddOnAreNotShownAsAnybodys(t *testing.T) {
+	bindings, resolve, inForce, all, homes, shape := dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsAcceptedShape
+	t.Cleanup(func() {
+		dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsAcceptedShape = bindings, resolve, inForce, all, homes, shape
+	})
+	addonsAcceptedShape = func(context.Context, string) (addons.Shape, error) {
+		return addons.Shape{Kind: "storage", EntitlementSchema: truenasSchema}, nil
+	}
+	dbListTargetBindings = func(context.Context, string) ([]db.TargetBinding, error) {
+		return []db.TargetBinding{{SubjectID: "u-booker", Username: "booker"}}, nil
+	}
+	dbAllowancesInForce = func(context.Context, string, string) ([]db.Allowance, error) { return nil, nil }
+	dbAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) { return nil, nil }
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{Roles: truenasRoles}, nil
+	}
+	addonsReadHomes = func(context.Context, string, bool) addons.Homes {
+		return addons.Homes{Reason: db.UnreconciledAddonOutdated}
+	}
+
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/homes", nil)
+	r.SetPathValue("target", "truenas")
+	rr := httptest.NewRecorder()
+	handleTargetHomes(rr, r)
+	var body struct {
+		Read     bool          `json:"read"`
+		Reason   string        `json:"reason"`
+		Accounts []accountHome `json:"accounts"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Read || body.Reason != db.UnreconciledAddonOutdated || len(body.Accounts) != 1 || body.Accounts[0].Home != "" {
+		t.Fatalf("want not read, addon_outdated, no home shown: %s", rr.Body.String())
 	}
 }

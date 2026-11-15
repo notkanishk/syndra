@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -127,6 +128,55 @@ func TargetServingProject(ctx context.Context, projectID string) (string, bool, 
 		return "", false, fmt.Errorf("read target serving %s: %w", projectID, err)
 	}
 	return target, true, nil
+}
+
+// DatabaseNow is the database's clock, the one started_at and completed_at
+// are written on, so a moment compared against them is taken on the same
+// clock (AppliesInFlightSince).
+func DatabaseNow(ctx context.Context) (time.Time, error) {
+	var now time.Time
+	if err := querier(ctx).QueryRow(ctx, `SELECT now()`).Scan(&now); err != nil {
+		return time.Time{}, fmt.Errorf("read the database clock: %w", err)
+	}
+	return now, nil
+}
+
+// AppliesInFlightSince is every subject with an apply on this target that
+// could have landed at some moment since `since` (a DatabaseNow): settled after
+// it, or claimed and not settled (in_flight, which is also where an apply
+// whose answer was lost stays) and started no earlier than `since - window`,
+// where window is the longest a claimed apply's calls can run. An older
+// in_flight row's calls had all ended before `since` (a drain that crashed
+// mid-row leaves one): it cannot land during the read, so it never hides a
+// real deletion.
+//
+// The reconcile pass asks it after reading the target. An add-on reads the
+// app before its own bindings, so an apply that lands between the two leaves
+// its subject on no row and in no conflict for that one read; settled before
+// the pass asks, it would no longer be in flight, which is why a row settled
+// after the read began counts too. Such a subject is never concluded deleted
+// from that read.
+func AppliesInFlightSince(ctx context.Context, target string, since time.Time, window time.Duration) (map[string]bool, error) {
+	const q = `SELECT DISTINCT user_id FROM propagation_outbox
+		 WHERE op_type = 'apply' AND target = $1
+		   AND (completed_at >= $2 OR (status = 'in_flight' AND started_at >= $3))`
+	rows, err := querier(ctx).Query(ctx, q, target, since, since.Add(-window))
+	if err != nil {
+		return nil, fmt.Errorf("applies in flight on %s: %w", target, err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var subject string
+		if err := rows.Scan(&subject); err != nil {
+			return nil, fmt.Errorf("applies in flight on %s: %w", target, err)
+		}
+		out[subject] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("applies in flight on %s: %w", target, err)
+	}
+	return out, nil
 }
 
 // PendingApplyWants reports whether a convergence for this subject on this

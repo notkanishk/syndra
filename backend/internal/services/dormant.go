@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 )
 
@@ -115,9 +116,14 @@ func DormantAccounts(ctx context.Context, target string) (DormantReport, error) 
 	}
 	report.StateReadAt, report.Truncated = read.TakenAt, read.Truncated
 
-	onTarget := make(map[string]int64, len(read.Accounts))
+	// Whose each account is, by the add-on's attribution (design 7t D3): never
+	// the name Syndra's copy recorded, which a rename moves and a stranger can
+	// take. Offering a stranger's account for removal is the worst wrong row.
+	onTarget := make(map[string]addons.TargetAccount, len(read.Accounts))
 	for _, account := range read.Accounts {
-		onTarget[account.Username] = 0
+		if account.Subject != "" {
+			onTarget[account.Subject] = account
+		}
 	}
 
 	bindings, err := dormantBindings(ctx, target)
@@ -126,7 +132,8 @@ func DormantAccounts(ctx context.Context, target string) (DormantReport, error) 
 	}
 
 	for _, binding := range bindings {
-		if _, present := onTarget[binding.Username]; !present {
+		onAccount, present := onTarget[binding.SubjectID]
+		if !present {
 			// Bound to an account that is not there. Not dormant — nothing to
 			// remove — and the reconcile pass is what repairs the binding.
 			continue
@@ -145,7 +152,7 @@ func DormantAccounts(ctx context.Context, target string) (DormantReport, error) 
 		}
 
 		account := DormantAccount{
-			Account:    binding.Username,
+			Account:    onAccount.Username, // the account's own name now
 			SubjectID:  binding.SubjectID,
 			LastSeenAt: binding.LastSeenAt,
 		}

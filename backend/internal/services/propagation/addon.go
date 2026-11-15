@@ -2,13 +2,16 @@ package propagation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/services/merge"
 )
 
 // The add-on dispatcher (design §4, §15).
@@ -111,6 +114,16 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		} else {
 			res.Failed++
 		}
+		return false
+	}
+
+	// Its calls start now, whatever the claim stamped for the whole batch: the
+	// drift sweep reads started_at as when this row's calls began
+	// (db.AppliesInFlightSince), and a row sent minutes after its batch was
+	// claimed must not fall outside that window while it can still land. Not
+	// stamped, not sent: it stays in flight and the next pass claims it again.
+	if err := markSending(ctx, row.ID); err != nil {
+		res.settleFailure(row.ID, "mark sending", err)
 		return false
 	}
 
@@ -248,7 +261,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		// attempted — the add-on declined before doing anything — and a window
 		// long enough to be worth having would otherwise exhaust the budget of
 		// every queued row and halt the drain on rows that were never sent.
-		if err := release(ctx, row.ID, "the target is not accepting mutations"); err != nil {
+		if err := release(ctx, row.ID, systemName(ctx, row.Target)+" is not taking changes right now"); err != nil {
 			res.settleFailure(row.ID, "release", err)
 			return false
 		}
@@ -265,7 +278,10 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		if resp.Code == addons.CodePlanStale {
 			settle = markFailed
 		}
-		if err := settle(ctx, row.ID, refusalReason(resp)); err != nil {
+		// A binding conflict is a standing decision for an operator, not only
+		// this row's reason: the same finding the sweep raises, now.
+		raiseConflict(ctx, intent.Target, intent.SubjectID, resp.Conflict)
+		if err := settle(ctx, row.ID, refusalReason(systemName(ctx, row.Target), resp)); err != nil {
 			res.settleFailure(row.ID, "mark failed", err)
 			return false
 		}
@@ -277,7 +293,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			// drain follows, and for the same reason: a row left non-terminal
 			// at the head of the queue is one every later pass re-claims and
 			// halts on, which stops everything behind it without saying so.
-			reason := fmt.Sprintf("out of retries after %d attempts: %s", row.Attempts, unreachedWhy(resp))
+			reason := fmt.Sprintf("out of retries after %d attempts: %s", row.Attempts, unreachedWhy(systemName(ctx, row.Target), resp))
 			if err := markFailed(ctx, row.ID, reason); err != nil {
 				res.settleFailure(row.ID, "mark failed", err)
 				return false
@@ -286,7 +302,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			res.Exhausted++
 			return false
 		}
-		if _, err := requeue(ctx, row.ID, unreachedWhy(resp)); err != nil {
+		if _, err := requeue(ctx, row.ID, unreachedWhy(systemName(ctx, row.Target), resp)); err != nil {
 			res.settleFailure(row.ID, "requeue", err)
 			return false
 		}
@@ -319,21 +335,26 @@ func (res *DrainResult) settleFailure(id, step string, err error) {
 	}
 }
 
-// unreachedWhy is why an unreached row waits, in words true of its code. TARGET_CHANGED is
-// unreached like TARGET_UNREACHABLE (addons.classifyStatus, one path); only the reason differs.
-func unreachedWhy(resp addons.ApplyResponse) string {
+// unreachedWhy is why an unreached row waits, in words true of its code and in the copy
+// guide's voice: the system by its name (system, addons.SystemNameOf), never "the target".
+// TARGET_CHANGED is unreached like TARGET_UNREACHABLE (addons.classifyStatus, one path); only
+// the reason differs. It lands in last_error, which the pages show.
+func unreachedWhy(system string, resp addons.ApplyResponse) string {
 	if resp.Code == addons.CodeTargetChanged {
 		// The add-on read the target and it changed underneath: reached, and still nothing sent.
-		return "the target changed while it was being read"
+		return system + " changed while Syndra was reading it"
 	}
-	return "the target could not be reached"
+	return system + " could not be reached"
 }
 
 // refusalReason is the add-on's own answer, never its response body.
 //
 // The body is whatever the least trusted component chose to send back, and this
-// string lands in `last_error`, which an operator reads and a surface renders.
-func refusalReason(resp addons.ApplyResponse) string {
+// string lands in `last_error`, which an operator reads and a surface renders
+// after "{system} refused it:". So it is the add-on's words as written: what
+// happened (detail) and what to do next (consequence), the next step a blocked
+// apply carries (apply_response.json), never lost.
+func refusalReason(system string, resp addons.ApplyResponse) string {
 	if resp.Code == addons.CodePlanStale {
 		// Named, because it is the one refusal whose next step is a re-plan
 		// rather than a fix. §8's proper answer here is a distinct stale-plan
@@ -342,10 +363,62 @@ func refusalReason(resp addons.ApplyResponse) string {
 		// which of the two things happened in a form a surface can match on.
 		return "PLAN_STALE: the subject moved on the target since the plan was approved; re-plan and re-approve"
 	}
-	if resp.Detail != "" {
-		return "the target refused it: " + resp.Detail
+	if words := addonWords(resp.Detail, resp.Consequence); words != "" {
+		return words
 	}
-	return fmt.Sprintf("the target refused it (status %d)", resp.Status)
+	return noReason(system)
+}
+
+// noReason is a refusal the add-on gave no words for. Never the HTTP status
+// (copy guide §8): the page that shows it adds the next step.
+func noReason(system string) string {
+	return system + " gave no reason."
+}
+
+// addonWords is an add-on's refusal as it said it: what happened, then what to
+// do next, each shown as written.
+func addonWords(detail, next string) string {
+	return strings.TrimSpace(detail + " " + next)
+}
+
+// raiseConflict records an add-on's binding conflict from a blocked apply or
+// plan as the standing finding the drift sweep raises from /subjects: the same
+// outcome, the same (target, subject, "") slot, the same report as theirs
+// (merge.Conflicted), so the operator sees it under Waiting on you now rather
+// than at the next sweep, and the sweep then refreshes this one row rather than
+// adding a second. Nil is no conflict. Non-fatal: the row still settles with the
+// add-on's words, and the next sweep raises it again.
+func raiseConflict(ctx context.Context, target, subject string, conflict *addons.BindingConflict) {
+	if conflict == nil {
+		return
+	}
+	// Only a subject with a binding on the target. An apply for one without is
+	// a create, and its conflict (the name it would be made under is taken) is
+	// no binding's: it is never in /subjects' conflicts, so the sweep would
+	// never close it, and `unbound` would release nothing, so it would loop.
+	// That refusal keeps its own path: the refused row and the add-on's words.
+	// The backend's mirror answers which; one it lacks the next sweep raises
+	// from /subjects.
+	if _, bound, err := getBinding(ctx, target, subject); err != nil || !bound {
+		if err != nil {
+			log.Printf("[ADDON-DRAIN] could not read %s's binding on %s; the next sweep raises its conflict: %v",
+				subject, target, err)
+		}
+		return
+	}
+	report, err := json.Marshal(addons.SubjectConflict{Subject: subject, BindingConflict: *conflict})
+	if err != nil {
+		log.Printf("[ADDON-DRAIN] the conflict for %s on %s could not be encoded: %v", subject, target, err)
+		return
+	}
+	for _, f := range merge.Conflicted(subject, report).Findings() {
+		if err := saveMergeFinding(ctx, db.MergeFinding{
+			Target: target, SubjectID: f.SubjectID, Field: f.Field, Outcome: string(f.Outcome), Theirs: f.Theirs,
+		}); err != nil {
+			log.Printf("[ADDON-DRAIN] the conflict for %s on %s could not be recorded: %v (the next sweep raises it)",
+				subject, target, err)
+		}
+	}
 }
 
 // fingerprintFor decides what this row verifies against.
@@ -404,7 +477,13 @@ func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.Entitlemen
 		// one case where the apply might succeed and be wrong: it would write
 		// into somebody else's account. Terminal, because no retry resolves a
 		// conflict; an operator does.
-		if err := markTargetRefused(ctx, intent.OutboxID, "the target refused: "+answer.Outcomes[0].Detail); err != nil {
+		out := answer.Outcomes[0]
+		raiseConflict(ctx, intent.Target, intent.SubjectID, out.Conflict)
+		reason := addonWords(out.Detail, out.Consequence)
+		if reason == "" {
+			reason = noReason(systemName(ctx, intent.Target))
+		}
+		if err := markTargetRefused(ctx, intent.OutboxID, reason); err != nil {
 			res.settleFailure(intent.OutboxID, "mark failed", err)
 		} else {
 			res.Failed++

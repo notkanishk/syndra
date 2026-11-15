@@ -40,6 +40,11 @@ type addonHarness struct {
 	// assertions on it are mostly negative: an apply the add-on could not read
 	// back must record NOTHING here.
 	bases []db.MergeBase
+	// findings is the standing findings the drain raised (a blocked apply's
+	// binding conflict, 7t-3).
+	findings []db.MergeFinding
+	// bound is the backend's recorded bindings by subject.
+	bound map[string]db.TargetBinding
 }
 
 func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarness {
@@ -70,6 +75,16 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 		return "", false, nil
 	}))
 	t.Cleanup(swap(&saveConflict, func(context.Context, db.BindingConflict) error { return nil }))
+	t.Cleanup(swap(&saveMergeFinding, func(_ context.Context, f db.MergeFinding) error {
+		h.findings = append(h.findings, f)
+		return nil
+	}))
+	t.Cleanup(swap(&systemName, func(context.Context, string) string { return "TrueNAS" }))
+	// Nobody has a binding unless a test says so: an apply is then a create.
+	t.Cleanup(swap(&getBinding, func(_ context.Context, target, subject string) (db.TargetBinding, bool, error) {
+		b, ok := h.bound[subject]
+		return b, ok, nil
+	}))
 	t.Cleanup(swap(&saveMergeBase, func(_ context.Context, b db.MergeBase) error {
 		h.bases = append(h.bases, b)
 		return nil
@@ -236,7 +251,7 @@ func TestATargetThatChangedMidReadIsRequeuedNotInDoubt(t *testing.T) {
 	var reason string
 	requeue = func(_ context.Context, _, why string) (int, error) { reason = why; return 1, nil }
 	res, _ := DrainAddon(context.Background(), "truenas")
-	if res.Requeued != 1 || res.Errored != 0 || res.Failed != 0 || reason != "the target changed while it was being read" {
+	if res.Requeued != 1 || res.Errored != 0 || res.Failed != 0 || reason != "TrueNAS changed while Syndra was reading it" {
 		t.Fatalf("recorded as %+v, reason %q", res, reason)
 	}
 }

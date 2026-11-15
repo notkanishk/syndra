@@ -14,7 +14,7 @@ import { request } from "@/lib/api-client";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { formatLimit } from "@/lib/fields";
 import { useFieldSchemaState, useMappingFields, useSystemNames } from "@/lib/queries/useFieldSchema";
-import { formatBytes, formatShortDate } from "@/lib/format";
+import { formatBytes, formatShortDate, whyNotChecked } from "@/lib/format";
 import { useLiftHold } from "@/lib/queries/useHolds";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { AccountHome } from "@/lib/queries/useTargets";
@@ -277,5 +277,17 @@ export function LimitDialog({
         )}
       </ModalFooter>
     </Modal>
+  );
+}
+
+/**
+ * Why no home folder is shown as anybody's although the system answered
+ * (`/homes` read false with a reason: `addon_outdated`, or whose they are could
+ * not be learned; slice 7t-3): the reason in words, never homes shown empty and
+ * never the reason's code.
+ */
+export function HomesReason({ reason }: { reason: string }) {
+  return (
+    <span className="text-[13.5px] text-warn-text">Home folders aren&apos;t shown. {whyNotChecked(reason)}</span>
   );
 }

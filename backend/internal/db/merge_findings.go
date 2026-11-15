@@ -97,7 +97,9 @@ type MergeFinding struct {
 // can MOVE — somebody edits the target again while it is open — and an operator
 // deciding from the values first recorded would be deciding about a state that
 // no longer exists. `detected_at` does not move: when this first became true is
-// the age the surface sorts on.
+// the age the surface sorts on. Unless the outcome changes (a deleted account
+// that is now a binding conflict): that is a different question, so it is
+// detected now and any decision about the old one is dropped.
 func RecordMergeFinding(ctx context.Context, f MergeFinding) error {
 	switch {
 	case strings.TrimSpace(f.Target) == "":
@@ -118,7 +120,15 @@ func RecordMergeFinding(ctx context.Context, f MergeFinding) error {
 			base_value   = EXCLUDED.base_value,
 			ours_value   = EXCLUDED.ours_value,
 			theirs_value = EXCLUDED.theirs_value,
-			last_seen_at = NOW()`
+			last_seen_at = NOW(),
+			-- A new outcome in the same slot is a new question: what was
+			-- decided about the old one (re-provision a deleted account, say)
+			-- does not answer it, and it became true now.
+			detected_at     = CASE WHEN target_merge_findings.outcome = EXCLUDED.outcome THEN target_merge_findings.detected_at ELSE NOW() END,
+			decision        = CASE WHEN target_merge_findings.outcome = EXCLUDED.outcome THEN target_merge_findings.decision END,
+			decided_by      = CASE WHEN target_merge_findings.outcome = EXCLUDED.outcome THEN target_merge_findings.decided_by END,
+			decided_at      = CASE WHEN target_merge_findings.outcome = EXCLUDED.outcome THEN target_merge_findings.decided_at END,
+			decision_reason = CASE WHEN target_merge_findings.outcome = EXCLUDED.outcome THEN target_merge_findings.decision_reason END`
 	if _, err := querier(ctx).Exec(ctx, q, f.Target, f.SubjectID, f.Field, f.Outcome,
 		nullableJSON(f.Base), nullableJSON(f.Ours), nullableJSON(f.Theirs)); err != nil {
 		return fmt.Errorf("record merge finding for %s on %s: %w", f.SubjectID, f.Target, err)
@@ -317,6 +327,31 @@ func isMergeResolution(v string) bool {
 		return true
 	}
 	return false
+}
+
+// ClearMergeFindingsOutside closes every standing finding of one outcome on a
+// target whose subject is not in keep, attributed as ClearMergeFinding does.
+//
+// The sweep's close for an account-level finding the target itself reports:
+// a binding_conflict ends when the add-on stops listing it, which is a fact
+// about the whole read rather than about any one recorded binding (the
+// subject may have none here). Only from a whole read; the caller decides.
+func ClearMergeFindingsOutside(ctx context.Context, target, outcome string, keep []string, actor string) (int64, error) {
+	if keep == nil {
+		keep = []string{} // NULL would make NOT (x = ANY(NULL)) unknown, closing nothing
+	}
+	const q = `
+		UPDATE target_merge_findings
+		SET resolved_at = NOW(),
+		    resolved_by = COALESCE(NULLIF(decided_by, ''), $4),
+		    resolution  = COALESCE(decision, $5)
+		WHERE target = $1 AND outcome = $2 AND resolved_at IS NULL
+		  AND NOT (subject_id = ANY($3::text[]))`
+	tag, err := querier(ctx).Exec(ctx, q, target, outcome, keep, actor, ResolutionAgreed)
+	if err != nil {
+		return 0, fmt.Errorf("close %s findings on %s: %w", outcome, target, err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // ClearMergeFinding closes a finding whose difference no longer exists.

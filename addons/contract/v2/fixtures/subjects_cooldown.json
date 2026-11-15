@@ -56,5 +56,6 @@
     "reason": "cooldown",
     "retry_after": 20,
     "note": "The NAS was read moments ago, at 08:00; it can be read again in 20 s."
-  }
+  },
+  "conflicts": []
 }

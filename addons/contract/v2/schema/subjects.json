@@ -29,7 +29,7 @@
     },
     "conflicts": {
       "type": "array",
-      "description": "Every binding that names no account in this read because another account holds its name or number. Absent or empty: none. A subject listed here is on no row.",
+      "description": "Every binding that names no account in this read because another account holds its name or number. Empty: none. A subject listed here is on no row. Required, even empty, so a reply says it carries attribution: Syndra reads a binding on no row and in no conflict as deleted, and an add-on from before attribution says neither.",
       "items": {
         "$ref": "#/$defs/Conflict"
       }
@@ -39,7 +39,8 @@
     "subjects",
     "current",
     "taken_at",
-    "truncated"
+    "truncated",
+    "conflicts"
   ],
   "allOf": [
     {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"sort"
 	"time"
 
@@ -110,6 +111,11 @@ type AddonReconcileResult struct {
 	// naming which of the target's failures it was.
 	Halted bool   `json:"halted,omitempty"`
 	Reason string `json:"reason,omitempty"`
+	// Detail is the add-on's own sentence for a read it refused (Reason
+	// read_refused), with its next step, shown as written: "Syndra's records
+	// of who has which account on TrueNAS can't be read. Check the add-on's
+	// storage, then try again." Empty when it gave none.
+	Detail string `json:"detail,omitempty"`
 }
 
 // Inventory is the read-only half: what lives on the target and which of it
@@ -130,11 +136,12 @@ func Inventory(ctx context.Context, target string, fresh bool) (AddonReconcileRe
 	res := AddonReconcileResult{Target: target}
 
 	read := addonSubjects(ctx, target, fresh)
-	if read.Outcome != addons.OutcomeSucceeded {
-		res.Halted, res.Reason, res.RetryAfter = true, db.UnreconciledUnreachable, read.RetryAfter
-		if read.RetryAfter > 0 {
-			// Inside the cooldown with nothing to serve: not an outage.
-			res.Reason = db.UnreconciledStaleRead
+	// The one mapping (SubjectsResult.Halt) decides, cooldown included: an
+	// outdated add-on stays outdated inside its cooldown.
+	if reason, detail, halted := read.Halt(); halted {
+		res.Halted, res.Reason, res.Detail = true, reason, detail
+		if reason == db.UnreconciledStaleRead {
+			res.RetryAfter = read.RetryAfter // the cooldown's wait, and only its
 		}
 		return res, nil
 	}
@@ -143,26 +150,18 @@ func Inventory(ctx context.Context, target string, fresh bool) (AddonReconcileRe
 		return res, fmt.Errorf("read bindings for %s: %w", target, err)
 	}
 	res.Bound = len(bindings)
+	// Each recorded binding's account is the row the add-on attributes to its
+	// subject (design 7t D3), never one matched here by name or number.
 	standing := map[string]*addons.Standing{}
-	byName := map[string]*addons.Standing{}
 	for _, a := range read.Accounts {
-		if a.AccountID != "" {
-			standing[a.AccountID] = a.Standing
+		if a.Subject != "" {
+			standing[a.Subject] = a.Standing
 		}
-		byName[a.Username] = a.Standing
 	}
 	for _, b := range bindings {
-		// Matched as every binding is: the account id first, then the name.
-		s, found := (*addons.Standing)(nil), false
-		if b.AccountID != nil {
-			s, found = standing[*b.AccountID]
-		}
-		if !found {
-			s = byName[b.Username]
-		}
-		res.Accounts = append(res.Accounts, BoundAccount{TargetBinding: b, Standing: s})
+		res.Accounts = append(res.Accounts, BoundAccount{TargetBinding: b, Standing: standing[b.SubjectID]})
 	}
-	res.Unmanaged = unmanaged(read.Accounts, bindings)
+	res.Unmanaged = unmanaged(read.Accounts)
 	res.ReadAt, res.Current, res.Truncated, res.ReadStale = read.TakenAt, read.Current, read.Truncated, read.Stale
 	if !read.Current {
 		// Shown, and labelled. An operator asking what else lives on the target
@@ -225,19 +224,37 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	// skipped pass, recorded as a stale read (no new reason, no migration;
 	// B6), never as unreachable. One wait, not a loop: someone else reading
 	// the target that often is not the sweep's to outlast.
+	//
+	// readBegan is taken before the first read, so it is never later than the
+	// read concluded from: what was in flight since then (appliesInFlight)
+	// covers every apply that could have landed mid-read. On the database's
+	// clock, which the outbox's started_at and completed_at are written on.
+	readBegan, err := databaseNow(ctx)
+	if err != nil {
+		return res, err
+	}
 	read := addonSubjects(ctx, target, true)
 	if retry, cooled := read.CooledDown(); cooled && patient && waitOut(ctx, sweepWait(target, retry)) {
 		read = addonSubjects(ctx, target, true)
 	}
-	if wait, cooled := read.CooledDown(); cooled {
+	// The one mapping (SubjectsResult.Halt) first, so a cooldown never masks
+	// what it says (an outdated add-on, a store it cannot read); a refusal
+	// inside the cooldown is its read_stale, with the wait.
+	wait, cooled := read.CooledDown()
+	if reason, detail, halted := read.Halt(); halted {
+		res.Detail = detail
+		if reason == db.UnreconciledStaleRead {
+			res.RetryAfter = max(1, wait) // the cooldown's wait, and only its
+		}
+		return halt(ctx, res, reason, fmt.Sprintf("the target's read concludes nothing (%s): %v", reason, read.Err))
+	}
+	if cooled {
+		// Answered with its copy inside the cooldown.
 		res.RetryAfter = max(1, wait)
 		return halt(ctx, res, db.UnreconciledStaleRead,
 			fmt.Sprintf("skipped: the target was read moments ago and can be read again in %d s", wait))
 	}
 	switch {
-	case read.Outcome != addons.OutcomeSucceeded:
-		return halt(ctx, res, db.UnreconciledUnreachable,
-			fmt.Sprintf("the target could not be read: %v", read.Err))
 	case !read.Current:
 		// The add-on answered from its mirror. Every conclusion drawn from it
 		// would be about an earlier moment, and the convergences queued from one
@@ -259,13 +276,29 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	// target. What a truncated read cannot support is the opposite conclusion —
 	// that a bound subject has no account — and the partition below draws it
 	// only from a whole read: a truncated one yields no absence findings.
-	res.Unmanaged = unmanaged(read.Accounts, bindings)
+	res.Unmanaged = unmanaged(read.Accounts)
 	res.Truncated = read.Truncated
+	// Asked after the read, of everything since it began: an apply that landed
+	// between the add-on's read of the app and its read of its bindings leaves
+	// its subject on no row and in no conflict, and is not a deleted account.
+	inFlight, err := appliesInFlight(ctx, target, readBegan, applyWindow())
+	if err != nil {
+		return res, fmt.Errorf("read applies in flight on %s: %w", target, err)
+	}
 
 	// Before the convergences, because it is a statement about the record of
 	// everything the add-on has already done — and because if the log has been
 	// trimmed, that is what an operator needs to see first.
 	res.LogVerdict = anchorLog(ctx, target)
+
+	// The add-on's conflicts (design 7t §3): a binding that names no account
+	// because another account holds its name or number. Raised before anything
+	// is classified or planned, and never planned: its plan is a create the
+	// add-on refuses, and read as a missing row it was once a deleted_upstream
+	// offered a re-create. Every one the add-on reports, recorded here or not:
+	// which subject a binding is for is the add-on's to say.
+	unrecorded := 0
+	conflicted, findings := raiseConflicts(ctx, target, read.Conflicts, !read.Truncated, inFlight, &unrecorded)
 
 	// A binding whose account is not on the target is not a convergence, it is
 	// a finding.
@@ -282,7 +315,7 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	// The rest are separated out and reported, because "this binding points at
 	// nothing" is an operator's decision — re-provision, or unbind — and not one
 	// a sweep may take by writing.
-	live, stale := partitionByPresence(bindings, read.Accounts)
+	live, stale := partitionByPresence(bindings, read.Accounts, conflicted, inFlight)
 	if read.Truncated {
 		// The cap cut the list, so a binding missing from it may simply be past
 		// the cut. Absence is only ever concluded from a whole read; those
@@ -291,15 +324,15 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	}
 	res.Stale = stale
 
-	unrecorded := 0
-	queued, findings, convergeErr := convergeBound(ctx, target, live, read.Accounts, &unrecorded)
+	queued, bound, convergeErr := convergeBound(ctx, target, live, read.Accounts, &unrecorded)
+	findings = append(findings, bound...)
 	res.Queued = queued
 	// And the people this pass would otherwise never see: they hold a mapped
 	// role and have no account here yet. A path that skipped the cascade — or
 	// one that failed to queue after its grant committed — is healed here
 	// within one pass, rather than waiting for an operator to apply by hand.
 	if convergeErr == nil {
-		created, err := convergeUnbound(ctx, target, bindings)
+		created, err := convergeUnbound(ctx, target, bindings, conflicted)
 		res.Queued += created
 		convergeErr = err
 	}
@@ -371,28 +404,63 @@ func halt(ctx context.Context, res AddonReconcileResult, reason, detail string) 
 	return res, nil
 }
 
-// unmanaged is every account on the target that no binding claims.
+// raiseConflicts records each conflict the add-on reported as a standing
+// binding_conflict finding in its subject's account-level slot, carrying the
+// add-on's report (reason, holder, detail, next) as theirs, and returns the
+// subjects it names: they are neither planned nor concluded absent this pass.
 //
-// Matched on the account id first and the name second, in that order and for
-// the reason design §11 gives: a rename moves the name and leaves the id, so
-// matching by name alone would report a renamed member's own account as
-// unmanaged and invite an operator to adopt it for somebody else.
-func unmanaged(accounts []addons.TargetAccount, bindings []db.TargetBinding) []UnmanagedAccount {
-	byID := make(map[string]struct{}, len(bindings))
-	byName := make(map[string]struct{}, len(bindings))
-	for _, b := range bindings {
-		if b.AccountID != nil {
-			byID[*b.AccountID] = struct{}{}
+// Refreshed while it stands (one row per subject, RecordMergeFinding). On a
+// whole read, every standing binding_conflict whose subject this read does
+// not list is closed (`agreed`, or what was decided): the add-on stopped
+// reporting it, whether or not the subject has a binding recorded here.
+// Before the stale loop, so a conflict that ended with the account gone is
+// closed and then raised again as a new deleted_upstream. Never a subject
+// with an apply in flight since the read began (inFlight): the drain may have
+// raised its conflict after the add-on read, and this read says nothing of it.
+func raiseConflicts(ctx context.Context, target string, conflicts []addons.SubjectConflict,
+	whole bool, inFlight map[string]bool, unrecorded *int) (map[string]bool, []merge.SubjectFinding) {
+	conflicted := make(map[string]bool, len(conflicts))
+	findings := make([]merge.SubjectFinding, 0, len(conflicts))
+	if whole {
+		keep := make([]string, 0, len(conflicts)+len(inFlight))
+		for _, c := range conflicts {
+			keep = append(keep, c.Subject)
 		}
-		byName[b.Username] = struct{}{}
+		for subject := range inFlight {
+			keep = append(keep, subject)
+		}
+		sort.Strings(keep)
+		if _, err := clearFindingsOutside(ctx, target, string(merge.BindingConflict), keep, reconcileActor); err != nil {
+			log.Printf("[ADDON-RECONCILE] %s: could not close the conflicts it no longer reports: %v", target, err)
+			*unrecorded++
+		}
 	}
-
-	out := make([]UnmanagedAccount, 0)
-	for _, a := range accounts {
-		if _, bound := byID[a.AccountID]; bound && a.AccountID != "" {
+	for _, c := range conflicts {
+		conflicted[c.Subject] = true
+		report, err := json.Marshal(c)
+		if err != nil {
+			log.Printf("[ADDON-RECONCILE] %s: the conflict for %s could not be encoded: %v", target, c.Subject, err)
+			*unrecorded++
 			continue
 		}
-		if _, bound := byName[a.Username]; bound {
+		state := merge.Conflicted(c.Subject, report)
+		found := state.Findings()
+		findings = append(findings, found...)
+		*unrecorded += persistFindings(ctx, target, state, found)
+	}
+	return conflicted, findings
+}
+
+// unmanaged is every account on the target that no binding claims: the rows
+// the add-on attributes to no subject (design 7t D3).
+//
+// The add-on holds the bindings and says whose each account is; matching rows
+// here against the backend's own copy by name or number is what let a reused
+// number hand one person's binding to a stranger's account.
+func unmanaged(accounts []addons.TargetAccount) []UnmanagedAccount {
+	out := make([]UnmanagedAccount, 0)
+	for _, a := range accounts {
+		if a.Subject != "" {
 			continue
 		}
 		out = append(out, UnmanagedAccount{
@@ -441,7 +509,7 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		return 0, findings, fmt.Errorf("the target's field roles could not be read: %w", err)
 	}
 	schema, _ := entitlementSchema(target)
-	current := stateByBinding(accounts)
+	current := statesBySubject(accounts)
 
 	subjects := make([]addons.PlanSubject, 0, len(bindings))
 	desired := make(map[string]services.EntitlementSet, len(bindings))
@@ -455,7 +523,7 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		// The classification, before anything is planned. A subject whose
 		// difference this pass may not resolve is never asked about: planning it
 		// would produce an `apply` effect, and the loop below queues those.
-		theirs := current.of(b)
+		theirs := current[b.SubjectID]
 		base := baseOf(bases, b.SubjectID)
 		if theirs == nil {
 			// The add-on reported no current state for this account — an add-on
@@ -575,17 +643,18 @@ func persistFindings(ctx context.Context, target string, state merge.Subject, fo
 			failed++
 		}
 	}
-	if state.Absent {
-		// Nothing to close. An absent account has no fields, and the loop below
-		// would clear nothing — but running it would also clear the
-		// account-level finding this call just raised.
+	if state.AccountLevel() {
+		// Nothing to close. An absent or conflicted account has no fields, and
+		// the loop below would clear nothing — but running it would also clear
+		// the account-level finding this call just raised.
 		return failed
 	}
-	// The account is present, so whatever said it was gone is over. Cleared
-	// here rather than by any field: `deleted_upstream` occupies the empty-field
-	// slot, and the loop below only ever names real fields.
+	// The account is present and the add-on names it this subject's, so
+	// whatever said it was gone or held by another is over. Cleared here
+	// rather than by any field: `deleted_upstream` and `binding_conflict`
+	// occupy the empty-field slot, and the loop below only names real fields.
 	if err := clearMergeFinding(ctx, target, state.SubjectID, "", reconcileActor); err != nil {
-		log.Printf("[ADDON-RECONCILE] could not close a settled deleted-upstream finding for %s on %s: %v",
+		log.Printf("[ADDON-RECONCILE] could not close a settled account-level finding for %s on %s: %v",
 			state.SubjectID, target, err)
 		failed++
 	}
@@ -633,34 +702,17 @@ func observeState(ctx context.Context, target, subjectID string,
 	}
 }
 
-// accountState indexes the target's current values by the identity a binding is
-// matched on.
-//
-// UID first and name second, in that order and for the reason every other match
-// in this file uses it: a rename moves the name and leaves the uid, and matching
-// by name alone would compare one member's binding against another account.
-type accountState struct {
-	byID   map[string]map[string]json.RawMessage
-	byName map[string]map[string]json.RawMessage
-}
-
-// stateByBinding indexes each account's state, as the add-on reported it. A
-// limit is the effective one the add-on holds (design §3); comparable puts
-// the intent in the same terms.
-func stateByBinding(accounts []addons.TargetAccount) accountState {
-	out := accountState{
-		byID:   make(map[string]map[string]json.RawMessage, len(accounts)),
-		byName: make(map[string]map[string]json.RawMessage, len(accounts)),
-	}
+// statesBySubject indexes each bound account's state, as the add-on reported
+// it, by the subject the add-on attributes it to (design 7t D3). Never by
+// account_id or name: a number TrueNAS hands out again would compare one
+// member's intent against a stranger's account. A limit is the effective one
+// the add-on holds (design §3); comparable puts the intent in the same terms.
+func statesBySubject(accounts []addons.TargetAccount) map[string]map[string]json.RawMessage {
+	out := make(map[string]map[string]json.RawMessage, len(accounts))
 	for _, a := range accounts {
-		if a.State == nil {
-			continue
+		if a.Subject != "" && a.State != nil {
+			out[a.Subject] = a.State
 		}
-		state := a.State
-		if a.AccountID != "" {
-			out.byID[a.AccountID] = state
-		}
-		out.byName[a.Username] = state
 	}
 	return out
 }
@@ -698,15 +750,6 @@ func comparable(intent, theirs map[string]json.RawMessage, roles addons.Roles, s
 	return out
 }
 
-func (s accountState) of(b db.TargetBinding) map[string]json.RawMessage {
-	if b.AccountID != nil {
-		if state, ok := s.byID[*b.AccountID]; ok {
-			return state
-		}
-	}
-	return s.byName[b.Username]
-}
-
 // baseOf is one subject's last observed state, or nil.
 //
 // Nil is a legitimate answer and never an error: every binding made before this
@@ -720,36 +763,41 @@ func baseOf(bases map[string]db.MergeBase, subjectID string) map[string]json.Raw
 	return base.Base
 }
 
-// partitionByPresence splits bindings into those whose account is still on the
-// target and those whose is not.
+// partitionByPresence splits the recorded bindings by what the add-on said of
+// each subject in this read (design 7t §2.1): bound (a row carries the
+// subject) is live; in conflicts is neither, raised on its own
+// (raiseConflicts); on no row and in no conflict is absent, a stale binding.
 //
-// Matched on the account id first and username second, in that order and for
-// the same reason the binding records both: a rename keeps the id, and a
-// recreated account keeps the name. A binding that matches on neither names an
-// account that is not there.
+// Except a subject with an apply in flight while the target was read: the
+// add-on reads the app before its bindings, so an apply landing between the
+// two leaves its subject on no row for that one read. This read says nothing
+// about it, so it is neither converged nor concluded absent.
 //
-// A binding with no recorded id is treated as present when the name matches,
-// because the alternative — calling it stale — would report every
-// operator-adopted binding from before ids were recorded as broken.
-func partitionByPresence(bindings []db.TargetBinding, accounts []addons.TargetAccount) (live []db.TargetBinding, stale []StaleBinding) {
-	byID := make(map[string]struct{}, len(accounts))
-	byName := make(map[string]struct{}, len(accounts))
+// The add-on attributes; this side never matches a row to a binding by
+// account_id or name (AUTHORING ch. 2): an id TrueNAS hands out again would
+// call a stranger's account this member's, and the recorded name would call
+// a renamed member's account gone.
+func partitionByPresence(bindings []db.TargetBinding, accounts []addons.TargetAccount,
+	conflicted, inFlight map[string]bool) (live []db.TargetBinding, stale []StaleBinding) {
+	bound := make(map[string]bool, len(accounts))
 	for _, a := range accounts {
-		byID[a.AccountID] = struct{}{}
-		byName[a.Username] = struct{}{}
+		if a.Subject != "" {
+			bound[a.Subject] = true
+		}
 	}
 	for _, b := range bindings {
-		if b.AccountID != nil {
-			if _, ok := byID[*b.AccountID]; ok {
-				live = append(live, b)
-				continue
-			}
-		}
-		if _, ok := byName[b.Username]; ok {
+		switch {
+		case conflicted[b.SubjectID]:
+			// A finding of its own, first: a reply that both attributed a row
+			// to the subject and listed it in conflict contradicts itself
+			// (the contract forbids it), and the conflict is the safe reading.
+		case bound[b.SubjectID]:
 			live = append(live, b)
-			continue
+		case inFlight[b.SubjectID]:
+			// Unknown this read.
+		default:
+			stale = append(stale, StaleBinding{SubjectID: b.SubjectID, Username: b.Username, AccountID: b.AccountID})
 		}
-		stale = append(stale, StaleBinding{SubjectID: b.SubjectID, Username: b.Username, AccountID: b.AccountID})
 	}
 	return live, stale
 }
@@ -814,13 +862,16 @@ func anchorLog(ctx context.Context, target string) string {
 // Not someone with an unsent convergence already waiting for the same thing:
 // one row in Pending changes per person, not a new one every pass. Not someone whose resolved
 // access is disabled (held, but suspended): an account made only to be switched
-// off is a stranger's name on the NAS for nothing.
-func convergeUnbound(ctx context.Context, target string, bindings []db.TargetBinding) (int, error) {
+// off is a stranger's name on the NAS for nothing. Not someone the add-on
+// reports in conflict (conflicted): their create is the one it refuses, and
+// the finding already waits on an operator.
+func convergeUnbound(ctx context.Context, target string, bindings []db.TargetBinding, conflicted map[string]bool) (int, error) {
 	mappings, err := listMappings(ctx, target)
 	if err != nil {
 		return 0, fmt.Errorf("read mappings for %s: %w", target, err)
 	}
-	bound := make(map[string]bool, len(bindings))
+	bound := make(map[string]bool, len(bindings)+len(conflicted))
+	maps.Copy(bound, conflicted)
 	for _, b := range bindings {
 		bound[b.SubjectID] = true
 	}

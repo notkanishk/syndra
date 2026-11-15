@@ -56,5 +56,6 @@
     "reason": "cached",
     "retry_after": 20,
     "note": "Answered from the add-on's mirror; the NAS was last read at 08:00."
-  }
+  },
+  "conflicts": []
 }

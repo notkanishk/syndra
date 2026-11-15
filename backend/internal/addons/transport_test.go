@@ -85,6 +85,13 @@ func signedAddon(t *testing.T, srvURL, secret string) {
 		Target: "truenas", BaseURL: srvURL,
 		Secret: []byte(secret), SecretPath: path,
 	}, goodManifest())
+	// An add-on that says whose accounts are whose, as every test before 7t-3
+	// assumed; the outdated cases say otherwise (Outdated).
+	a, err := Get("truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.attribution.Store(attributionSaid)
 }
 
 // signingKeyFor is what the add-on side of a test must use to verify.

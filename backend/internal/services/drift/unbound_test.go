@@ -18,7 +18,7 @@ func TestThePassCreatesAccountsForUnboundHolders(t *testing.T) {
 		read:     addons.SubjectsResult{Outcome: addons.OutcomeSucceeded, Current: true},
 		mappings: []db.RoleMapping{{ProjectID: "pNet", RoleKey: "community"}, {ProjectID: "pNet", RoleKey: "staff"}},
 		holders: map[string][]string{
-			"pNet/community": {"u_new", "u_bound", "u_waiting", "u_held"},
+			"pNet/community": {"u_new", "u_bound", "u_waiting", "u_held", "u_conflicted"},
 			"pNet/staff":     {"u_new"},
 		},
 		bindings: []db.TargetBinding{{SubjectID: "u_bound", Username: "bound"}},
@@ -35,7 +35,7 @@ func TestThePassCreatesAccountsForUnboundHolders(t *testing.T) {
 		}, nil
 	}
 
-	n, err := convergeUnbound(context.Background(), "truenas", h.bindings)
+	n, err := convergeUnbound(context.Background(), "truenas", h.bindings, map[string]bool{"u_conflicted": true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,8 +50,8 @@ func TestThePassCreatesAccountsForUnboundHolders(t *testing.T) {
 func TestAPassDoesNotQueueASecondRowForABoundSubjectAlreadyWaiting(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(
-			addons.TargetAccount{Username: "charlotte", AccountID: "3001"},
-			addons.TargetAccount{Username: "booker", AccountID: "3002"},
+			addons.TargetAccount{Username: "charlotte", AccountID: "3001", Subject: "u_waiting"},
+			addons.TargetAccount{Username: "booker", AccountID: "3002", Subject: "u_new"},
 		),
 		bindings: []db.TargetBinding{
 			{Target: "truenas", SubjectID: "u_waiting", Username: "charlotte", AccountID: uid(3001)},
@@ -82,7 +82,7 @@ func TestAPassDoesNotQueueASecondRowForABoundSubjectAlreadyWaiting(t *testing.T)
 // apply the older state (an account enabled for someone deactivated since).
 func TestAPassQueuesANewRowWhenTheWaitingOneWantsSomethingElse(t *testing.T) {
 	h := &addonReconcileHarness{
-		read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001"}),
+		read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001", Subject: "u1"}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountID: uid(3001)}},
 		plan: addons.PlanResult{
 			Outcome: addons.OutcomeSucceeded, Current: true,

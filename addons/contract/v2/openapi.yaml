@@ -155,6 +155,8 @@ paths:
                 $ref: schema/profiles/storage/homes.json
         "401":
           $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
         "429":
           $ref: "#/components/responses/Error"
         "502":

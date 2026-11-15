@@ -44,6 +44,13 @@ const (
 	// account-level state rather than a field one, and the only one of these
 	// that a sweep could "resolve" by creating something.
 	DeletedUpstream Outcome = "deleted_upstream"
+	// BindingConflict: the binding names no account because another account
+	// holds its name or number, as the add-on said it (its /subjects
+	// conflicts, or a blocked apply's conflict). Account-level like
+	// DeletedUpstream, and never "deleted": the account it named may be there
+	// under another subject, and recreating it is exactly what the add-on
+	// refuses. Its one answer is to stop tracking (`unbound`).
+	BindingConflict Outcome = "binding_conflict"
 )
 
 // AllOutcomes is every verdict this package can reach.
@@ -66,6 +73,7 @@ var AllOutcomes = []Outcome{
 	Conflict,
 	NoBase,
 	DeletedUpstream,
+	BindingConflict,
 }
 
 // SubjectFinding is one difference an unattended pass may not resolve, carrying
@@ -106,7 +114,16 @@ type Subject struct {
 	// Classified before any field is, because a field comparison against an
 	// account that does not exist is a comparison against nothing.
 	Absent bool `json:"absent,omitempty"`
+	// Conflict is the add-on's binding conflict for this subject, as it sent
+	// it: set when the binding names no account because another holds its
+	// name or number. Account-level, like Absent, and for the same reason.
+	Conflict json.RawMessage `json:"conflict,omitempty"`
 }
+
+// AccountLevel says the classification is about the account rather than its
+// fields (gone, or named by nobody because of a conflict), so it has no field
+// to compare and none to close.
+func (s Subject) AccountLevel() bool { return s.Absent || len(s.Conflict) > 0 }
 
 // Convergeable reports whether an unattended pass may apply this subject.
 //
@@ -125,11 +142,12 @@ type Subject struct {
 // fields alone, the add-on leaves the rest as they are, and the merge base
 // keeps what it last saw of them (db.RecordMergeBase updates per field).
 func (s Subject) Convergeable() bool {
-	if s.Absent {
+	if s.AccountLevel() {
 		// Never. The plan for an absent account says "create", and an
 		// unattended pass acting on it recreates an account somebody deleted.
 		// This is the case that already bit: stub-era bindings queueing a
-		// create every six hours against a production NAS.
+		// create every six hours against a production NAS. A conflicted one
+		// is the add-on refusing, and an operator's to decide.
 		return false
 	}
 	for _, f := range s.Fields {
@@ -151,6 +169,9 @@ func (s Subject) Convergeable() bool {
 // the three.
 func (s Subject) Findings() []SubjectFinding {
 	out := make([]SubjectFinding, 0)
+	if len(s.Conflict) > 0 {
+		return append(out, SubjectFinding{SubjectID: s.SubjectID, Outcome: BindingConflict, Theirs: s.Conflict})
+	}
 	if s.Absent {
 		return append(out, SubjectFinding{SubjectID: s.SubjectID, Outcome: DeletedUpstream})
 	}
@@ -243,6 +264,14 @@ func Classify(subjectID string, ours, theirs, base map[string]json.RawMessage) S
 // against nothing would report every managed field as changed by somebody.
 func Absent(subjectID string) Subject {
 	return Subject{SubjectID: subjectID, Absent: true}
+}
+
+// Conflicted is the classification for a binding the add-on reports as naming
+// no account because another holds its name or number. conflict is the
+// add-on's own report (reason, holder, detail, next), kept as the finding's
+// theirs: what the target side says, never something Syndra decided.
+func Conflicted(subjectID string, conflict json.RawMessage) Subject {
+	return Subject{SubjectID: subjectID, Conflict: conflict}
 }
 
 // sameValue compares two JSON values for MEANING, not for bytes.

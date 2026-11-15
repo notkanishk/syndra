@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -178,9 +179,12 @@ func containsOutcome(all []Outcome, want Outcome) bool {
 
 // accountLevel names the outcomes that describe the ACCOUNT rather than one of
 // its fields. `Classify` never assigns these to a field and `Findings` reports
-// them from `Absent` before it looks at fields at all, so the checks below have
-// to ask about them differently rather than skip them.
-var accountLevel = map[Outcome]bool{DeletedUpstream: true}
+// them from `Absent` or `Conflicted` before it looks at fields at all, so the
+// checks below ask each through the subject that reaches it rather than skip it.
+var accountLevel = map[Outcome]Subject{
+	DeletedUpstream: Absent("u1"),
+	BindingConflict: Conflicted("u1", json.RawMessage(`{"reason":"name_held","username":"seth_rollins"}`)),
+}
 
 // ── 3. Auto-resolution has a ceiling, and it is not "anything unambiguous" ──
 //
@@ -220,6 +224,10 @@ func TestOnlyTheseOutcomesEverResolveUnattended(t *testing.T) {
 		// CREATING something, which is the worst thing an unattended pass could
 		// decide to do.
 		DeletedUpstream: false,
+		// The add-on says another account holds the binding's name or number.
+		// Converging it would either be refused or, worse, write to the holder:
+		// an operator decides whose the account is.
+		BindingConflict: false,
 	}
 
 	for _, o := range AllOutcomes {
@@ -235,20 +243,14 @@ func TestOnlyTheseOutcomesEverResolveUnattended(t *testing.T) {
 	}
 
 	for _, o := range AllOutcomes {
-		if accountLevel[o] {
-			continue // asserted below; these never appear as a field
-		}
 		s := Subject{SubjectID: "u1", Fields: []FieldOutcome{{Field: "group", Outcome: o}}}
+		if account, ok := accountLevel[o]; ok {
+			s = account // these never appear as a field
+		}
 		if got := s.Convergeable(); got != permitted[o] {
 			t.Errorf("outcome %q: convergeable=%v, want %v. Widening this set is how an "+
 				"unattended pass starts granting access nobody approved.", o, got, permitted[o])
 		}
-	}
-
-	absent := Subject{SubjectID: "u1", Absent: true}
-	if absent.Convergeable() {
-		t.Error("a subject whose account is gone must never converge unattended: the only " +
-			"way to 'resolve' it is to create the account somebody deleted")
 	}
 }
 
@@ -266,13 +268,12 @@ func TestOnlyTheseOutcomesEverResolveUnattended(t *testing.T) {
 // decision that did not take.
 func TestEveryOutcomeEitherResolvesOrSurfaces(t *testing.T) {
 	for _, o := range AllOutcomes {
-		if accountLevel[o] {
-			absent := Subject{SubjectID: "u1", Absent: true}
-			found := absent.Findings()
-			if len(found) != 1 || found[0].Outcome != o {
-				t.Errorf("account-level outcome %q must raise its own finding, got %v", o, found)
+		if account, ok := accountLevel[o]; ok {
+			found := account.Findings()
+			if len(found) != 1 || found[0].Outcome != o || found[0].Field != "" {
+				t.Errorf("account-level outcome %q must raise its own finding in the account's slot, got %v", o, found)
 			}
-			if absent.Convergeable() {
+			if account.Convergeable() {
 				t.Errorf("account-level outcome %q raises a finding and also converges", o)
 			}
 			continue

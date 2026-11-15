@@ -230,6 +230,19 @@ func TestSubjectsReplyLands(t *testing.T) {
 	}
 }
 
+// A read the add-on refused lands with its code and its own sentence (7t-3):
+// STORE_UNREADABLE is the add-on's records failing, never TrueNAS silent, and
+// the sentence carries the next step the sweep's result shows.
+func TestARefusedSubjectsReadLandsWithTheAddOnsWords(t *testing.T) {
+	const detail = "Syndra's records of who has which account on TrueNAS can't be read. Check the add-on's storage, then try again."
+	addonServingStatus(t, http.StatusInternalServerError, []byte(`{"type":"urn:syndra:addon:error:STORE_UNREADABLE",
+		"title":"Store unreadable","status":500,"code":"STORE_UNREADABLE","retry":"backoff","detail":"`+detail+`"}`))
+	r := Subjects(context.Background(), "truenas", true)
+	if r.Outcome == OutcomeSucceeded || r.Code != "STORE_UNREADABLE" || r.Detail != detail {
+		t.Fatalf("the refusal lost its code or its words: %+v", r)
+	}
+}
+
 // Absence is never a value (design §2(b)): each field the §4 table lists for a
 // reply, removed, makes that read one nothing may be concluded from — never Go's
 // zero value, which would read a forgotten `truncated` as "complete".
@@ -254,11 +267,17 @@ func TestAnAbsentReplyFieldMakesTheReadUnusable(t *testing.T) {
 			t.Errorf("a current plan with no readable taken_at was issued: %+v", r)
 		}
 	}
-	for _, key := range []string{"current", "truncated"} {
+	// conflicts too (7t-3): a reply without it is from an add-on that says no
+	// attribution, and every binding would read as deleted.
+	for _, key := range []string{"current", "truncated", "conflicts"} {
 		addonServing(t, edit("subjects.json", drop(key)))
 		if r := Subjects(context.Background(), "truenas", false); r.Usable() {
 			t.Errorf("subjects without %s is usable: %+v", key, r)
 		}
+	}
+	addonServing(t, edit("subjects.json", func(d map[string]any) { d["conflicts"] = []any{} }))
+	if r := Subjects(context.Background(), "truenas", false); !r.Usable() {
+		t.Errorf("subjects with no conflict, said, is usable: %+v", r)
 	}
 	addonServing(t, edit("subjects.json", func(d map[string]any) {
 		delete(d["subjects"].([]any)[0].(map[string]any)["standing"].(map[string]any), "usable")
@@ -413,7 +432,7 @@ func TestSettingsAndHomesRepliesLand(t *testing.T) {
 	if got.method != http.MethodGet || got.path != "/homes" || !h.Read || !h.UsageRead || len(h.Homes) != 1 {
 		t.Fatalf("homes: sent %s %s, %+v", got.method, got.path, h)
 	}
-	if u := h.Homes[0]; u.Username != "rey_mysterio" || u.AccountID != "3051" || u.Home == "" || u.UsedBytes != 19756849561 || u.QuotaBytes != 53687091200 {
+	if u := h.Homes[0]; u.Username != "rey_mysterio" || u.AccountID != "3051" || u.Subject != "289471021834760193" || u.Home == "" || u.UsedBytes != 19756849561 || u.QuotaBytes != 53687091200 {
 		t.Errorf("a home did not land: %+v", u)
 	}
 }

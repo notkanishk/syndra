@@ -65,6 +65,9 @@ var (
 	// which a retry would not change (db.WaitReasonTargetRefused).
 	markTargetRefused = db.MarkPropagationTargetRefused
 	requeue           = db.RequeuePropagation
+	// markSending stamps an add-on row's started_at as its calls go out
+	// (dispatchEntitlement), not when its batch was claimed.
+	markSending = db.MarkPropagationSending
 	// release returns a row to pending without spending a retry, for the one
 	// case where nothing was attempted at all.
 	release = db.ReleasePropagation
@@ -254,6 +257,21 @@ var (
 	// two used to be one log line.
 	bindingHolder = db.BindingHolder
 	saveConflict  = db.RecordBindingConflict
+
+	// The add-on's own binding conflict on a blocked apply or plan: the same
+	// standing finding the drift sweep raises from /subjects (7t-3), so the
+	// operator sees it now rather than at the next sweep.
+	saveMergeFinding = db.RecordMergeFinding
+	// Whether the subject has a binding on the target, which decides whether a
+	// conflict is a binding's (a finding) or a create's (the row alone).
+	getBinding = db.GetTargetBinding
+
+	// What the system is called, for the sentences the drain writes on a row:
+	// addons.SystemNameOf, the one path the pages use too.
+	systemName = func(ctx context.Context, target string) string {
+		name, _ := addons.SystemNameOf(ctx, target)
+		return name
+	}
 
 	// The merge base, written from what the add-on OBSERVED after the write.
 	// Its own seam because the assertion that matters is negative: an apply the

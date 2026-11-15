@@ -505,6 +505,11 @@ const (
 // differ where a person is told (handlers).
 const CodeTargetChanged = "TARGET_CHANGED"
 
+// CodeStoreUnreadable is the add-on's own local store failing to read: the
+// add-on answered, its records failed, and the target may be fine (the drift
+// sweep's read_refused).
+const CodeStoreUnreadable = "STORE_UNREADABLE"
+
 // refusalOf is a refusal's code and what it names, in one decode: the
 // problem's `code` (contract 2), else a contract-1 add-on's `error`. The
 // fallback is for classification only and only until the next major: a
@@ -540,6 +545,20 @@ func refusalOf(body []byte) (string, Refusal) {
 	}
 	code, _ := p.Error.(string)
 	return code, r
+}
+
+// problemDetail is a refusal's `detail` (RFC 9457 §3.1.4): the add-on's own
+// sentence for the person who asked, with its next step. Empty when the body is
+// not a problem or carries no string detail.
+func problemDetail(body []byte) string {
+	var p struct {
+		Detail any `json:"detail"`
+	}
+	if DecodeReply(body, &p) != nil {
+		return ""
+	}
+	detail, _ := p.Detail.(string)
+	return detail
 }
 
 // classifyStatus maps a status and the add-on's code to what the add-on may

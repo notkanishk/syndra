@@ -208,6 +208,22 @@ func TestABlockedApplyLandsAsARejectionWithItsOutcome(t *testing.T) {
 		if out.Fingerprint != "" || out.Observed != nil {
 			t.Errorf("%s: a refusal must carry no observation: %+v", tc.fixture, out)
 		}
+		if out.Consequence == "" {
+			t.Errorf("%s: the add-on's next step was lost: %+v", tc.fixture, out)
+		}
+	}
+}
+
+// A conflicting apply carries the conflict itself, whole and in the add-on's
+// words, so the drain can raise the same finding the sweep raises (7t-3).
+func TestAConflictingApplyCarriesItsConflict(t *testing.T) {
+	out := applyAgainst(t, 409, contractFixture(t, "error_binding_conflict.json"))
+	c := out.Conflict
+	if c == nil {
+		t.Fatalf("the conflict did not land: %+v", out)
+	}
+	if c.Reason != "name_held" || c.Username != "seth_rollins" || c.AccountID != "3077" || c.BoundTo == "" || c.Detail == "" || c.Next == "" {
+		t.Errorf("the conflict lost a member: %+v", c)
 	}
 }
 
