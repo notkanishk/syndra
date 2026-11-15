@@ -91,6 +91,12 @@ type Addon struct {
 	// accounts are whose (Outdated): 0 not read yet, 1 it says (conflicts
 	// present), 2 it is older than attribution.
 	attribution atomic.Int32
+	// attributionAsk lets one caller at a time read /subjects to learn it
+	// (Attribution), attributionAskedAt is when one last did, and
+	// attributionWhy is why that read could not say.
+	attributionAsk     sync.Mutex
+	attributionAskedAt atomic.Int64
+	attributionWhy     atomic.Pointer[string]
 }
 
 var (

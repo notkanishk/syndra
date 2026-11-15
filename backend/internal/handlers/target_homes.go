@@ -99,10 +99,11 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 	}
 	textsort.ByName(out, func(r accountHome) string { return r.Username }, nil)
 	body := map[string]any{"read": homes.Read, "usage_read": homes.UsageRead, "accounts": out}
-	if homes.Outdated {
-		// Its homes say whose none is, so none is shown as anybody's: the same
-		// state, by the same test, the reconcile pass records (addons.Outdated).
-		body["reason"] = db.UnreconciledAddonOutdated
+	if homes.Reason != "" {
+		// None is shown as anybody's: addon_outdated (the same state, by the
+		// same test, the reconcile pass records), or whose they are could not
+		// be learned (addons.Attribution).
+		body["reason"] = homes.Reason
 	}
 	// When the add-on read them, and whether this is that read or its copy;
 	// or, inside its cooldown with nothing kept, when it may read again.

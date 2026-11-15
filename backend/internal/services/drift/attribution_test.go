@@ -175,6 +175,35 @@ func TestAnOutdatedAddOnStopsThePassAsOutdated(t *testing.T) {
 	}
 }
 
+// Inside the add-on's cooldown an outdated add-on is still outdated: the pass
+// (a person's Check now, which never waits) and the inventory say
+// addon_outdated with no cooldown wait, never read_stale.
+func TestAnOutdatedAddOnStaysOutdatedInsideItsCooldown(t *testing.T) {
+	retry := 20
+	read := currentRead()
+	read.Outdated, read.Current, read.Truncated = true, false, true
+	read.Stale = &addons.Stale{Reason: addons.StaleCooldown, RetryAfter: &retry}
+	h := &addonReconcileHarness{read: read}
+	stubAddonReconcile(t, h)
+	res, err := ReconcileAddonNow(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reason != db.UnreconciledAddonOutdated || res.RetryAfter != 0 || len(h.marked) != 1 || h.marked[0] != db.UnreconciledAddonOutdated {
+		t.Fatalf("want addon_outdated and no wait, got %+v marked %v", res, h.marked)
+	}
+	read.RetryAfter = retry // a cooldown refusal's wait, which Outdated outranks
+	h2 := &addonReconcileHarness{read: read}
+	stubAddonReconcile(t, h2)
+	inv, err := Inventory(context.Background(), "truenas", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.Reason != db.UnreconciledAddonOutdated || inv.RetryAfter != 0 {
+		t.Fatalf("the inventory too: %+v", inv)
+	}
+}
+
 // A conflict the drain raised for a subject whose apply was in flight while the
 // add-on read is not closed by that read: the read says nothing of it.
 func TestTheCloseKeepsASubjectWithAnApplyInFlight(t *testing.T) {
@@ -280,7 +309,7 @@ func TestAnUnreadableStoreIsARefusedReadNeverAnOutage(t *testing.T) {
 		{Outcome: addons.OutcomeIndeterminate, Status: 502, Code: "TARGET_UNREADABLE"},
 		{Outcome: addons.OutcomeIndeterminate, Status: 502},
 	} {
-		if reason, words, halted := readHalt(read); !halted || reason != db.UnreconciledUnreachable || words != "" {
+		if reason, words, halted := read.Halt(); !halted || reason != db.UnreconciledUnreachable || words != "" {
 			t.Errorf("%+v: got %q %q, want target_unreachable", read, reason, words)
 		}
 	}

@@ -136,12 +136,12 @@ func Inventory(ctx context.Context, target string, fresh bool) (AddonReconcileRe
 	res := AddonReconcileResult{Target: target}
 
 	read := addonSubjects(ctx, target, fresh)
-	if reason, detail, halted := readHalt(read); halted {
-		res.Halted, res.RetryAfter = true, read.RetryAfter
-		res.Reason, res.Detail = reason, detail
-		if read.RetryAfter > 0 {
-			// Inside the cooldown with nothing to serve: not an outage.
-			res.Reason = db.UnreconciledStaleRead
+	// The one mapping (SubjectsResult.Halt) decides, cooldown included: an
+	// outdated add-on stays outdated inside its cooldown.
+	if reason, detail, halted := read.Halt(); halted {
+		res.Halted, res.Reason, res.Detail = true, reason, detail
+		if reason == db.UnreconciledStaleRead {
+			res.RetryAfter = read.RetryAfter // the cooldown's wait, and only its
 		}
 		return res, nil
 	}
@@ -237,14 +237,22 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	if retry, cooled := read.CooledDown(); cooled && patient && waitOut(ctx, sweepWait(target, retry)) {
 		read = addonSubjects(ctx, target, true)
 	}
-	if wait, cooled := read.CooledDown(); cooled {
+	// The one mapping (SubjectsResult.Halt) first, so a cooldown never masks
+	// what it says (an outdated add-on, a store it cannot read); a refusal
+	// inside the cooldown is its read_stale, with the wait.
+	wait, cooled := read.CooledDown()
+	if reason, detail, halted := read.Halt(); halted {
+		res.Detail = detail
+		if reason == db.UnreconciledStaleRead {
+			res.RetryAfter = max(1, wait) // the cooldown's wait, and only its
+		}
+		return halt(ctx, res, reason, fmt.Sprintf("the target's read concludes nothing (%s): %v", reason, read.Err))
+	}
+	if cooled {
+		// Answered with its copy inside the cooldown.
 		res.RetryAfter = max(1, wait)
 		return halt(ctx, res, db.UnreconciledStaleRead,
 			fmt.Sprintf("skipped: the target was read moments ago and can be read again in %d s", wait))
-	}
-	if reason, detail, halted := readHalt(read); halted {
-		res.Detail = detail
-		return halt(ctx, res, reason, fmt.Sprintf("the target's read concludes nothing (%s): %v", reason, read.Err))
 	}
 	switch {
 	case !read.Current:
@@ -394,32 +402,6 @@ func halt(ctx context.Context, res AddonReconcileResult, reason, detail string) 
 	res.Halted, res.Reason = true, reason
 	log.Printf("[ADDON-RECONCILE] %s halted: %s", res.Target, detail)
 	return res, nil
-}
-
-// readHalt is why a read concludes nothing at all, with the add-on's own
-// sentence when it refused it; halted false when the read may be shown. The
-// one mapping the sweep and the inventory share.
-//
-//   - STORE_UNREADABLE is the add-on's own records failing while the target
-//     may be fine: read_refused, something to fix rather than wait out, and
-//     the add-on's sentence carries the next step (check its storage).
-//   - Every other failure, answered or not (NO_CURRENT_READ,
-//     TARGET_UNREADABLE, a timeout), is the target not read:
-//     target_unreachable, which the pages word with the system's name and
-//     their own next step.
-//   - An add-on older than attribution (its /subjects carries no conflicts)
-//     answered, and says whose no account is: addon_outdated, which waiting
-//     never ends; it has to be updated.
-func readHalt(read addons.SubjectsResult) (reason, detail string, halted bool) {
-	switch {
-	case read.Outcome != addons.OutcomeSucceeded && read.Code == addons.CodeStoreUnreadable:
-		return db.UnreconciledReadRefused, read.Detail, true
-	case read.Outcome != addons.OutcomeSucceeded:
-		return db.UnreconciledUnreachable, "", true
-	case read.Outdated:
-		return db.UnreconciledAddonOutdated, "", true
-	}
-	return "", "", false
 }
 
 // raiseConflicts records each conflict the add-on reported as a standing

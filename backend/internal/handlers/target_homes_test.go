@@ -144,7 +144,9 @@ func TestHomesFromAnOutdatedAddOnAreNotShownAsAnybodys(t *testing.T) {
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
 		return services.EntitlementSet{Roles: truenasRoles}, nil
 	}
-	addonsReadHomes = func(context.Context, string, bool) addons.Homes { return addons.Homes{Outdated: true} }
+	addonsReadHomes = func(context.Context, string, bool) addons.Homes {
+		return addons.Homes{Reason: db.UnreconciledAddonOutdated}
+	}
 
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/homes", nil)
 	r.SetPathValue("target", "truenas")

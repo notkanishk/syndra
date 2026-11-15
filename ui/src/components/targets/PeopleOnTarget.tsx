@@ -19,7 +19,7 @@ import { formatShortDate } from "@/lib/format";
 import { glideTo } from "@/lib/motion";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetHomes, useTargetInventory, type AccountHome, type BoundAccount } from "@/lib/queries/useTargets";
-import { HomeLine, LimitDialog, limitVerb } from "@/components/kinds/storage/HomeLimit";
+import { HomeLine, HomesReason, LimitDialog, limitVerb } from "@/components/kinds/storage/HomeLimit";
 import { sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 
@@ -80,6 +80,13 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
         count={inventory.data?.bound}
         note="Put what a role gives them on hold, or revoke it"
       />
+      {homes.data && !homes.data.read && homes.data.reason && (
+        // Whose each one is could not be said: the reason in words (the
+        // storage kind's own line), never shown empty as though nobody's.
+        <CardRow>
+          <HomesReason reason={homes.data.reason} />
+        </CardRow>
+      )}
       <ListStates
         isLoading={inventory.isLoading}
         error={inventory.error}

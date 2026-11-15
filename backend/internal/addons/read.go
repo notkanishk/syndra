@@ -443,21 +443,74 @@ const (
 	attributionOutdated
 )
 
-// Outdated reports whether target's add-on is older than attribution (7t-3),
-// by the one test Subjects makes on its /subjects reply, remembered per add-on.
-// Another read of the same add-on that cannot tell from its own rows (/homes:
-// a row with no `subject` may simply be nobody's) asks here instead of
-// guessing. Not yet known, it reads /subjects once, the add-on's copy being
-// enough. A read that fails says nothing, and nothing is called outdated on it.
-func Outdated(ctx context.Context, target string) bool {
+// Halt is why a /subjects read concludes nothing at all, with the add-on's own
+// sentence when it refused it; halted false when the read may be shown. The
+// one mapping, used by the reconcile pass, the inventory and /homes, and
+// ahead of any cooldown or stale label: an outdated add-on stays outdated
+// inside its cooldown.
+//
+//   - An add-on older than attribution (no `conflicts`) says whose no account
+//     is: addon_outdated, which waiting never ends; it has to be updated.
+//   - STORE_UNREADABLE is the add-on's own records failing while the target
+//     may be fine: read_refused, something to fix rather than wait out, and
+//     the add-on's sentence carries the next step.
+//   - A fresh read refused inside the cooldown with nothing to serve is no
+//     outage: read_stale, readable again in RetryAfter seconds.
+//   - Every other failure, answered or not (NO_CURRENT_READ,
+//     TARGET_UNREADABLE, a timeout), is the target not read:
+//     target_unreachable, which the pages word with the system's name and
+//     their own next step.
+func (r SubjectsResult) Halt() (reason, detail string, halted bool) {
+	switch {
+	case r.Outdated:
+		return db.UnreconciledAddonOutdated, "", true
+	case r.Outcome == OutcomeSucceeded:
+		return "", "", false
+	case r.Code == CodeStoreUnreadable:
+		return db.UnreconciledReadRefused, r.Detail, true
+	case r.RetryAfter > 0:
+		return db.UnreconciledStaleRead, "", true
+	}
+	return db.UnreconciledUnreachable, "", true
+}
+
+// Attribution says whether target's add-on is older than attribution (7t-3),
+// by the one test Subjects makes on its /subjects reply, remembered per
+// add-on: another read of the same add-on that cannot tell from its own rows
+// (/homes: a row with no `subject` may simply be nobody's) asks here instead
+// of guessing.
+//
+// Not yet known, it reads /subjects (the add-on's copy is enough), one caller
+// at a time and at most once per the add-on's fresh-read cooldown, the
+// interval the add-on itself sets for reading its app again, so a page loaded
+// over and over never turns into a stream of reads at an add-on that does not
+// answer. While it is still unknown, why is the reason that read could not
+// say (Halt; the last one tried, or target_unreachable before any), and the
+// caller shows nothing as anybody's.
+func Attribution(ctx context.Context, target string) (outdated bool, why string) {
 	a, err := Get(target)
 	if err != nil {
-		return false
+		return false, db.UnreconciledUnreachable
 	}
-	if a.attribution.Load() == attributionUnknown {
-		Subjects(ctx, target, false)
+	if a.attribution.Load() == attributionUnknown && a.attributionAsk.TryLock() {
+		if last := a.attributionAskedAt.Load(); last == 0 || time.Since(time.Unix(0, last)) >= FreshCooldown(target) {
+			a.attributionAskedAt.Store(time.Now().UnixNano())
+			if reason, _, halted := Subjects(ctx, target, false).Halt(); halted && reason != db.UnreconciledAddonOutdated {
+				a.attributionWhy.Store(&reason)
+			}
+		}
+		a.attributionAsk.Unlock()
 	}
-	return a.attribution.Load() == attributionOutdated
+	switch a.attribution.Load() {
+	case attributionOutdated:
+		return true, db.UnreconciledAddonOutdated
+	case attributionSaid:
+		return false, ""
+	}
+	if last := a.attributionWhy.Load(); last != nil {
+		return false, *last
+	}
+	return false, db.UnreconciledUnreachable
 }
 
 // CooledDown reports a fresh read the add-on would not make yet, inside its
@@ -1019,9 +1072,10 @@ type Homes struct {
 	// RetryAfter is a fresh read refused inside the add-on's cooldown with
 	// nothing to serve (cooldownOf).
 	RetryAfter int `json:"retry_after,omitempty"`
-	// Outdated is the add-on being older than attribution (Outdated): its
-	// homes say whose none is, so none is shown as anybody's (Read false).
-	Outdated bool `json:"-"`
+	// Reason is why no home is shown as anybody's although the add-on
+	// answered (Read false): addon_outdated, or whose they are could not be
+	// learned (Attribution).
+	Reason string `json:"-"`
 }
 
 // homesWire is profiles/storage/homes.json as it travels.
@@ -1057,10 +1111,12 @@ func ReadHomes(ctx context.Context, target string, fresh bool) Homes {
 	if !ok {
 		return Homes{}
 	}
-	if Outdated(ctx, target) {
-		// Its rows carry no subject because it predates attribution, not
-		// because nobody's they are: not a reading of anybody's home.
-		return Homes{Outdated: true}
+	if _, why := Attribution(ctx, target); why != "" {
+		// Outdated: its rows carry no subject because it predates
+		// attribution, not because they are nobody's. Unknown: whose they
+		// are could not be learned. Either way, not a reading of anybody's
+		// home, and the reason says which.
+		return Homes{Reason: why}
 	}
 	// A reply that does not say the usage was read whole did not read it.
 	return Homes{Read: true, UsageRead: wire.QuotaRead != nil && *wire.QuotaRead, Homes: wire.Homes,
