@@ -74,9 +74,11 @@ func staleAudits(t *testing.T, ctx context.Context) []staleAudit {
 
 // TrueNAS hands A's freed uid to a new account and the add-on binds person B
 // to it: B's apply records, A's stale row on that number is cleared in the
-// same write, and the clear is audited against A, by B's write's actor. Then a
-// name reused the same way. A write that reports no id clears nothing on the
-// id, and never writes target_binding_conflicts.
+// same write, and the clear is audited against A, by B's write's actor. A row
+// on the same name with another id is another account whose mirrored name is
+// out of date, and is kept; a name is the key only where a side has no id. A
+// write that reports no id clears nothing on the id, and nothing writes
+// target_binding_conflicts.
 func TestLiveAReusedNumberOrNameMovesTheMirrorAndIsAudited(t *testing.T) {
 	ctx := liveDB(t)
 	seedAddonTarget(t, ctx)
@@ -106,10 +108,20 @@ func TestLiveAReusedNumberOrNameMovesTheMirrorAndIsAudited(t *testing.T) {
 		t.Fatalf("one audit entry naming A, its old account, and who it went to: %+v", audits)
 	}
 
-	// The name: C's account comes back under kofi_kingston with a new number.
+	// The same name on another id: B's account was renamed on the target and
+	// the add-on follows it by number; C's new account took the freed name.
 	record("sub-c", "kofi_kingston", strp("3099"), "apply")
-	if got := mirrored(t, ctx); got["sub-c"] != "kofi_kingston/3099" || got["sub-b"] != "" {
-		t.Fatalf("C's row is recorded and B's stale row on the name is gone: %v", got)
+	if got := mirrored(t, ctx); got["sub-c"] != "kofi_kingston/3099" || got["sub-b"] != "kofi_kingston/3051" {
+		t.Fatalf("C's row is recorded and B's row on another account is kept: %v", got)
+	}
+	// A name with no id on one side is the key: a contract-1 era row is cleared.
+	if _, err := PG.Exec(ctx, `INSERT INTO target_account_bindings (target, subject_id, username, bound_by)
+		VALUES ('truenas', 'sub-old', 'big_e', 'apply')`); err != nil {
+		t.Fatal(err)
+	}
+	record("sub-d", "big_e", strp("3111"), "apply")
+	if got := mirrored(t, ctx); got["sub-d"] != "big_e/3111" || got["sub-old"] != "" {
+		t.Fatalf("D's row is recorded and the id-less row on its name is gone: %v", got)
 	}
 
 	// No id reported: nothing is matched on the id, and the row with none stays.

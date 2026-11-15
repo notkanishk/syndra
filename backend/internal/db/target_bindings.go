@@ -44,16 +44,23 @@ type TargetBinding struct {
 //
 // The add-on's answer is the authority (design §9.4b, ADR-007): its binding is
 // the only link from a person to an account, and this table is the backend's
-// mirror of it. So another subject's row on the same name or account id is the
-// stale one (TrueNAS handed a freed uid or name to a new account, and the
-// add-on bound it to this subject), and it is cleared in the same transaction,
-// logged and audited (binding.<target>.stale_cleared, naming who it was), never
-// refused. Two LIVE claims on one account are the add-on's to report
-// (/subjects `claimed_twice`, the binding_conflict finding); it never answers
-// an apply or adoption for an account another binding names.
+// mirror of it. So another subject's row on the same account is the stale one
+// (TrueNAS handed a freed uid to a new account, and the add-on bound it to this
+// subject), and it is cleared in the same transaction, logged and audited
+// (binding.<target>.stale_cleared, naming who it was), never refused. "The same
+// account" is the account id where both rows carry one; the name only where
+// either has none. A row on the same name with a DIFFERENT id is another
+// account whose mirrored name is out of date (renamed on the target, the
+// add-on's binding following it by number), and it is kept: clearing it would
+// drop a person the add-on still binds from the sweep until their next apply.
+// Two LIVE claims on one account are the add-on's to report (/subjects
+// `claimed_twice`, the binding_conflict finding); it never answers an apply or
+// adoption for an account another binding names.
 //
-// The writes on one target are serialised (an advisory lock), so two writes
-// cannot each miss the other's row and leave two subjects on one name.
+// No lock beyond the rows': two writes for two subjects on one account at once
+// would need the add-on to give one account to both, which it refuses, and the
+// next write would clear the loser anyway. (A per-target advisory lock here
+// would invert the order ResolveBindingCall takes, row lock then this.)
 //
 // `bound_by` and `bound_at` survive an update. They record who first attached
 // this account to this person, which is the question asked after an adoption
@@ -84,12 +91,14 @@ func RecordTargetBinding(ctx context.Context, b TargetBinding) error {
 		       account_id   = COALESCE(EXCLUDED.account_id, target_account_bindings.account_id),
 		       account_uid  = CASE WHEN EXCLUDED.account_id IS NOT NULL THEN EXCLUDED.account_uid ELSE target_account_bindings.account_uid END,
 		       last_seen_at = NOW()`
-	// The id arm only when the write carries one: a write that reported none
-	// must not match every row that also has none.
+	// The same account: the same id when both carry one, the same name when
+	// either does not. A NULL $4 never matches on the id, so a write that
+	// reported none cannot match every row that also has none.
 	const clearStale = `
 		DELETE FROM target_account_bindings
 		 WHERE target = $1 AND subject_id <> $2
-		   AND (username = $3 OR ($4::text IS NOT NULL AND ` + accountIDColumn + ` = $4::text))
+		   AND (` + accountIDColumn + ` = $4::text
+		        OR (username = $3 AND ($4::text IS NULL OR ` + accountIDColumn + ` IS NULL)))
 		RETURNING subject_id, username, ` + accountIDColumn
 
 	tx, owned, err := beginOrJoin(ctx)
@@ -98,9 +107,6 @@ func RecordTargetBinding(ctx context.Context, b TargetBinding) error {
 	}
 	if owned {
 		defer tx.Rollback(ctx)
-	}
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "target_account_bindings:"+b.Target); err != nil {
-		return fmt.Errorf("lock bindings on %s: %w", b.Target, err)
 	}
 	rows, err := tx.Query(ctx, clearStale, b.Target, b.SubjectID, b.Username, b.AccountID)
 	if err != nil {

@@ -12,7 +12,9 @@
 -- the add-on's next answer re-records anyway.
 --
 -- Three keys, one after the other: a row kept on one key can still lose on
--- the next, and a cleared row is gone from the later passes.
+-- the next, and a cleared row is gone from the later passes. The name pass is
+-- stricter than the up's clear (which keeps a same-name row on another id),
+-- because the unique name index it restores allows no such pair.
 WITH ranked AS (
     SELECT target, subject_id,
            ROW_NUMBER() OVER (PARTITION BY target, username

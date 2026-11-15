@@ -1378,13 +1378,17 @@ nothing about that pass.
 key, `(target, subject_id)`: the ones on `(target, username)`, `(target, account_uid)` and
 `(target, account_id)` are dropped, because TrueNAS hands a freed name or number to a new account and
 the add-on rightly binds a second person to it. On every write (an apply's result, an adoption) the
-add-on's answer is authority: `db.RecordTargetBinding`, serialised per target by an advisory lock,
-clears another subject's row on the same name or id in the same transaction, logs it and audits it
+add-on's answer is authority: `db.RecordTargetBinding` clears another subject's row on the same
+account (the same id where both rows carry one, the same name only where either has none: a row on
+the same name with another id is another account whose mirrored name is out of date, renamed on the
+target and followed by number in the add-on, and is kept) in the same transaction, logs it and audits it
 against that subject (`binding.<target>.stale_cleared`, the writer as actor, `now_bound_to` in the
 details), and records the write. Nothing on this path is a conflict any more; two live claims on one
 account are the add-on's to report (`claimed_twice`, the finding below). The cleared subject's merge
 base is left: it goes with the binding when the conflict the add-on reports for them is resolved
-(`unbound` forgets both). The down migration puts the three unique indexes back, and first resolves
+(`unbound` forgets both). No advisory lock: a race needs the add-on to give one account to two
+people, which it refuses, and `ResolveBindingCall` locks the binding row before it reaches this
+write, so a per-target lock taken here would invert that order. The down migration puts the three unique indexes back, and first resolves
 duplicates by the same rule, deterministically (the row last seen kept; then `bound_at`, then
 `subject_id`), each clear audited by `system:migration`: refusing would block a rollback in the hour it
 is needed, over rows the add-on's next answer re-records anyway.
@@ -1456,7 +1460,7 @@ is free text with no account key, matched against the mirror's names. 7t-6 looke
 mirror: the collector has no `/subjects` read, and adding one would either spend the fresh-read
 cooldown every hour (the sweep's and "Read again"'s) or answer from the add-on's kept copy, which can
 be older than the mirror, so a subject bound since would read as unbound and its points be dropped for
-good. What made a mirror name wrong is gone instead: a reused name or number moves to its new holder on
+good. What made a mirror name wrong is gone instead: a reused number (or a name where no id says otherwise) moves to its new holder on
 the add-on's next answer (`RecordTargetBinding`'s clear; `TestLiveAReusedNumberNamesItsNewHolder`).
 What is left is an out-of-band rename between applies: the old name still matches (which hides more,
 never less) and the new one is missed unless the directory's own names carry it, until the next apply

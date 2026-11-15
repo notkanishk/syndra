@@ -12,9 +12,10 @@
 --
 -- So the three go. One subject, one mirror row stays (the primary key,
 -- (target, subject_id)). On a write the add-on's answer is the authority:
--- db.RecordTargetBinding clears another subject's row on the same name or
--- number in the same transaction, logged and audited
--- (binding.<target>.stale_cleared), instead of refusing.
+-- db.RecordTargetBinding clears another subject's row on the same account (the
+-- same id where both rows carry one, the name only where either has none) in
+-- the same transaction, logged and audited (binding.<target>.stale_cleared),
+-- instead of refusing.
 --
 -- No lookup index replaces them: the only read by name or number is that
 -- clear, scoped to one target, over a few hundred rows that the primary key's

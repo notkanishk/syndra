@@ -104,23 +104,25 @@ func TestABindingIsRefusedBeforeTheWrite(t *testing.T) {
 	}
 }
 
-// The write clears another subject's row on the same name or account id in
-// its own transaction, audits it, and is serialised per target; nothing on
-// this path reads a unique violation any more.
+// The write clears another subject's row on the same account in its own
+// transaction and audits it; nothing on this path reads a unique violation any
+// more, and it takes no advisory lock (ResolveBindingCall locks the row first).
 func TestABindingWriteClearsTheStaleRowInItsTransaction(t *testing.T) {
 	src := funcBody(t, readSource(t, "target_bindings.go"), "RecordTargetBinding")
-	lock := strings.Index(src, "pg_advisory_xact_lock")
 	clear := strings.Index(src, "clearStale, b.Target")
 	audit := strings.Index(src, `".stale_cleared"`)
 	write := strings.Index(src, "upsert, b.Target")
-	if lock < 0 || clear < 0 || audit < 0 || write < 0 || !(lock < clear && clear < audit && audit < write) {
-		t.Error("lock, clear, audit, then write, all on the one transaction")
+	if clear < 0 || audit < 0 || write < 0 || !(clear < audit && audit < write) {
+		t.Error("clear, audit, then write, all on the one transaction")
+	}
+	if strings.Contains(src, "pg_advisory_xact_lock") {
+		t.Error("a per-target lock taken after ResolveBindingCall's row lock inverts the lock order")
 	}
 	if strings.Contains(src, "IsUniqueViolation") {
 		t.Error("a binding write no longer meets a unique index to violate")
 	}
 	stale := between(t, src, "const clearStale", "RETURNING")
-	if !strings.Contains(stale, "subject_id <> $2") || !strings.Contains(stale, "$4::text IS NOT NULL AND") {
-		t.Error("only another subject's row, and the id arm only when the write carries an id")
+	if !strings.Contains(stale, "subject_id <> $2") || !strings.Contains(stale, "username = $3 AND ($4::text IS NULL OR") {
+		t.Error("only another subject's row, and the name only where either side has no id")
 	}
 }
