@@ -223,8 +223,11 @@ var notProduced = map[string]map[string]string{
 // holds, worded by the code that words every conflict (BindingConflict.words),
 // so a fixture's text cannot drift from what the add-on says.
 var (
-	sethConflict         = BindingConflict{Username: "seth_rollins", AccountID: "3077", BoundTo: "289471021834760195"}
-	sethDetail, sethNext = sethConflict.words()
+	sethConflict         = *(&BindingConflict{Username: "seth_rollins", AccountID: "3077", BoundTo: "289471021834760195"}).worded()
+	sethDetail, sethNext = sethConflict.Detail, sethConflict.Next
+	// kofiConflict is the subjects fixture's: a recorded name gone, and its number (outside the
+	// add-on's range) now held by another name.
+	kofiConflict = (&BindingConflict{Username: "kofi_kingston", AccountID: "3012", numberHeld: true, was: "finn_balor"}).worded()
 )
 
 func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
@@ -297,7 +300,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 		}},
 		{"GET /subjects", "subjects.json", "subjects.json", SubjectsResponse{
 			Subjects: []SubjectView{
-				{ID: apiID{raw: json.RawMessage(`17`)}, Username: "rey_mysterio", AccountID: "3051", Groups: []string{"fabrication", "lab_makers"},
+				{ID: apiID{raw: json.RawMessage(`17`)}, Username: "rey_mysterio", AccountID: "3051", Subject: "289471021834760193", Groups: []string{"fabrication", "lab_makers"},
 					Home: "/mnt/tank/homes/rey_mysterio", Enabled: true, SMBEnabled: true,
 					State: map[string]any{FieldGroup: []string{"fabrication", "lab_makers"}, FieldHome: []string{"true"},
 						FieldHomeQuota: []string{"5368709120"}, FieldEnabled: true, FieldSMBEnabled: true},
@@ -307,6 +310,9 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 					State:    map[string]any{FieldGroup: []string{}, FieldHome: []string{}, FieldEnabled: true, FieldSMBEnabled: false},
 					Standing: &Standing{Usable: true, WaitingOn: "none"}},
 			},
+			Conflicts: []SubjectConflict{{Subject: "289471021834760196", BindingConflict: kofiConflict},
+				{Subject: "289471021834760197", BindingConflict: (&BindingConflict{Holders: []Holder{
+					{Username: "big_e", AccountID: "3031"}, {Username: "big_e", AccountID: "3032"}}}).worded()}},
 			Observed: Observed{Current: true, TakenAt: "2026-11-10T09:30:00Z"},
 		}},
 		{"GET /subjects (from the mirror)", "subjects_stale.json", "subjects.json", nil}, // driven below

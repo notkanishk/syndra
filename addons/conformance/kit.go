@@ -51,6 +51,11 @@ type Config struct {
 	// a physical operation (feature calls), and leave checked out: it is
 	// named by the operator, never guessed. Empty skips operations.physical.
 	Item string
+	// ElevatedKey is account.purge's elevated_key, handed over by the operator.
+	// With it, a -mutate run purges the kit's own account once it is off and
+	// creates it again (identity.not-reused); the kit never purges anything
+	// else. Empty skips that check, and nothing is deleted.
+	ElevatedKey string
 }
 
 // spansTheRun are the checks judged across several steps or over every reply
@@ -193,6 +198,7 @@ type kit struct {
 	// and reply, which /calls must answer recorded (calls.recorded).
 	passwordCall  string
 	passwordReply []byte
+	purged        string // the kit's first account, purged by identity.not-reused
 	lent          string // Config.Item, once a physical operation checked it out or may have
 	lentUnsure    bool   // the confirm's answer was lost or unreadable
 	since         int    // index into log of the first canary's request
@@ -270,6 +276,10 @@ func newKit(ctx context.Context, cfg Config) (*kit, error) {
 	}
 	if strings.TrimSpace(cfg.Target) == "" || len(bytes.TrimSpace(cfg.Secret)) == 0 {
 		return nil, errors.New("-target and a non-empty -secret-file are required")
+	}
+	if cfg.ElevatedKey != "" && !cfg.Mutate {
+		return nil, errors.New("-elevated-key-file is only for -mutate (it lets the run delete the kit's own account); " +
+			"a reads-only run deletes nothing, so it must not be handed a delete-capable key")
 	}
 	c, err := loadContract(contractfiles.FS())
 	if err != nil {
@@ -383,6 +393,10 @@ func (k *kit) report() *Report {
 
 func (k *kit) left() string {
 	s := k.leftAccount()
+	if k.purged != "" {
+		s += fmt.Sprintf("; the kit's first account, account_id %s, was deleted with account.purge to check identity.not-reused "+
+			"(the operator's elevated key; the one deletion a run makes)", k.purged)
+	}
 	if len(k.foreign) > 0 && k.created.id != "" {
 		s += "; NOT confirmed: " + k.foreignLine()
 	}
@@ -410,8 +424,12 @@ func (k *kit) leftAccount() string {
 	case !k.wrote:
 		return "nothing; no write was sent"
 	case k.created.id != "" && k.created.off && k.finalRead && k.unknown == "":
-		return fmt.Sprintf("one disabled account %q (account_id %s) on target %q; removal disables, never deletes",
-			k.created.username, k.created.id, k.cfg.Target)
+		end := "removal disables, never deletes"
+		if k.purged != "" {
+			end = "the end of the run disabled it and did not delete it"
+		}
+		return fmt.Sprintf("one disabled account %q (account_id %s) on target %q; %s",
+			k.created.username, k.created.id, k.cfg.Target, end)
 	case k.created.id != "":
 		why := k.unknown
 		if why == "" && !k.finalRead {

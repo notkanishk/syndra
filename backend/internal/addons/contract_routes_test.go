@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -201,6 +202,26 @@ func TestSubjectsReplyLands(t *testing.T) {
 	}
 	if !r.Accounts[1].Self || r.Accounts[1].Standing == nil || !r.Accounts[1].Standing.Usable {
 		t.Error("the add-on's own account is not marked self and usable")
+	}
+	// The attribution is the add-on's (slice 7t-2): the bound row carries its
+	// subject, the unbound one none, and a binding that names nothing is a
+	// conflict with the holder and the add-on's words, on no row.
+	if a.Subject != "289471021834760193" || r.Accounts[1].Subject != "" {
+		t.Errorf("subject did not land: bound %q, self %q", a.Subject, r.Accounts[1].Subject)
+	}
+	want := SubjectConflict{Subject: "289471021834760196", BindingConflict: BindingConflict{
+		Reason: "number_held", Username: "kofi_kingston", AccountID: "3012",
+		Detail: "The account finn_balor, recorded for this person, is gone, and its number is now held by a different account, kofi_kingston.",
+		Next:   "Stop tracking this person's old account; the next change creates a new one for them. Adopt kofi_kingston instead only if it is theirs.",
+	}}
+	if len(r.Conflicts) != 2 || !reflect.DeepEqual(r.Conflicts[0], want) {
+		t.Fatalf("conflicts did not land: %+v", r.Conflicts)
+	}
+	// An ambiguous key lands as its holders, none of them the holder.
+	amb := r.Conflicts[1]
+	if amb.Subject != "289471021834760197" || amb.Reason != "ambiguous" || amb.Username != "" || amb.AccountID != "" ||
+		!reflect.DeepEqual(amb.Holders, []ConflictHolder{{"big_e", "3031"}, {"big_e", "3032"}}) || amb.Next == "" {
+		t.Errorf("the ambiguous conflict did not land: %+v", amb)
 	}
 
 	addonAnswering(t, "subjects_stale.json")

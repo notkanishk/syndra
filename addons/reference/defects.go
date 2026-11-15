@@ -82,6 +82,9 @@ const (
 	StatsDimensionNamesPerson Defect = "stats-dimension-names-person" // the mk4-a printer is named for the first account's username (with stats)
 	OffWaitsOnOperator        Defect = "off-waits-on-operator"        // an account that is off answers standing waiting_on: operator
 	FoldsNames                Defect = "folds-names"                  // decodes a request with encoding/json alone: names case-folded, the last of two kept
+	OmitsSubject              Defect = "omits-subject"                // /subjects names no row's subject, bound or not
+	ConflictAlsoAttributed    Defect = "conflict-also-attributed"     // /subjects lists every bound subject as a conflict too, its own account the holder
+	ReusedID                  Defect = "reused-id"                    // the create after a purge hands out the purged account's id again
 )
 
 // Defects lists every defect, for the kit's self-tests and the binary's help.
@@ -94,7 +97,8 @@ var Defects = []Defect{IgnoresFingerprint, CreatesOnWithdraw, EchoesSecret, Repl
 	CachedAsCurrent, ReadsPerRequest, CooldownIgnored, PreviewRecorded, ReexecutesInDoubt, CheckoutUnserialised,
 	NoChangeAsSucceeded, CallsEchoParams, StatsUndeclaredDimension, StatsLocalNameSubject, StatsZeroForGap,
 	StatsWatermarkAhead, StatsSubjectsAboveTotal, StatsSinceIgnored, StatsFinalMoves, StatsUnknownMetricOK,
-	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing, StatsDimensionNamesPerson, FoldsNames, OffWaitsOnOperator}
+	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing, StatsDimensionNamesPerson, FoldsNames, OffWaitsOnOperator,
+	OmitsSubject, ConflictAlsoAttributed, ReusedID}
 
 // ParseDefects turns names into a set, refusing any name it does not know.
 func ParseDefects(names []string) (map[Defect]bool, error) {
@@ -119,6 +123,20 @@ type deviations struct {
 	quiet    bool             // RebindsQuietly: rebound, and plans no longer name the account
 	params   map[string]any   // CallsEchoParams: each call's params, by call_id
 	reads    int              // StatsFinalMoves: /stats answered so far
+	purged   string           // ReusedID: the id of the account purged last, handed out again
+}
+
+// newID is a new account's id: one never handed out before, so an id names one account for
+// good. ReusedID hands out the last purged account's id again, as an app that recycles ids does.
+// Under a.mu.
+func (a *Addon) newID() string {
+	if a.cfg.Defects[ReusedID] && a.dev.purged != "" {
+		id := a.dev.purged
+		a.dev.purged = ""
+		return id
+	}
+	a.minted++
+	return strconv.Itoa(1000 + a.minted)
 }
 
 // openIntent is the subject's checkout in doubt, nil when none. Under a.mu.
@@ -219,7 +237,7 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 	acct := a.accounts[a.bindings[req.Subject]]
 	remembered, isRemembered := a.dev.refused[req.CallID]
 	if apply && d[CreatesOnWithdraw] && acct == nil && string(req.Desired["enabled"]) == "false" {
-		acct = &account{id: strconv.Itoa(1001 + len(a.accounts)), username: username(req.Subject, ""), state: map[string]any{
+		acct = &account{id: a.newID(), username: username(req.Subject, ""), state: map[string]any{
 			"enabled": false, "remote": false, "printers": []string{lobby}, "after_hours": []string{}, "job_seconds": []string{"0"}}}
 		a.accounts[acct.id], a.bindings[req.Subject] = acct, acct.id
 		a.record("apply " + acct.id)
@@ -238,7 +256,7 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 	if apply && d[CreateAnswersMember] && acct == nil && string(req.Desired["enabled"]) == "true" && req.Fingerprint == fingerprint(nil) {
 		// A member's account, made at that moment, answered as the create's,
 		// with no username in the reply.
-		member := &account{id: strconv.Itoa(1001 + len(a.accounts)), username: "kofi-kingston", state: map[string]any{
+		member := &account{id: a.newID(), username: "kofi-kingston", state: map[string]any{
 			"enabled": true, "remote": false, "printers": []string{lobby}, "after_hours": []string{}, "job_seconds": []string{"0"}}}
 		a.accounts[member.id], a.bindings[req.Subject] = member, member.id
 		out := outcome{Subject: req.Subject, Effect: "applied", Detail: "Done.", AccountID: member.id, Standing: member.standing(),
@@ -261,6 +279,10 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 		return rep
 	}
 	current, accounts, existed := fingerprint(acct), len(a.accounts), acct != nil
+	heldID := ""
+	if existed {
+		heldID = acct.id
+	}
 	a.mu.Unlock()
 
 	switch {
@@ -302,6 +324,9 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if d[ReusedID] && route == "POST /operations/{name}" && r.PathValue("name") == "account.purge" && rep.status == 200 && existed {
+		a.dev.purged = heldID
+	}
 	if d[CallsEchoParams] && route == "POST /operations/{name}" && req.CallID != "" {
 		if a.dev.params == nil {
 			a.dev.params = map[string]any{}
@@ -388,6 +413,24 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 				delete(doc, "stale")
 				doc["current"] = true
 			}
+		})
+	case route == "GET /subjects" && d[OmitsSubject]:
+		rewrite(func(doc map[string]any) {
+			for _, s := range doc["subjects"].([]any) {
+				delete(s.(map[string]any), "subject")
+			}
+		})
+	case route == "GET /subjects" && d[ConflictAlsoAttributed]:
+		rewrite(func(doc map[string]any) {
+			conflicts := []any{}
+			for _, s := range doc["subjects"].([]any) {
+				if m := s.(map[string]any); m["subject"] != nil {
+					conflicts = append(conflicts, map[string]any{"subject": m["subject"], "reason": "name_held", "username": m["username"],
+						"account_id": m["account_id"], "adoptable": false,
+						"detail": "Another account holds this name.", "next": "Release the binding, then adopt it if it is theirs."})
+				}
+			}
+			doc["conflicts"] = conflicts
 		})
 	case route == "GET /subjects" && d[OmitsTruncated]:
 		rewrite(func(doc map[string]any) { delete(doc, "truncated") })
@@ -476,7 +519,7 @@ func (a *Addon) readsAlone(cooled bool) reply {
 	defer a.mu.Unlock()
 	a.fresh.began = time.Now()
 	a.keep(list, at, gen)
-	return ok(map[string]any{"subjects": list, "current": true, "taken_at": at, "truncated": false})
+	return ok(map[string]any{"subjects": list, "current": true, "taken_at": at, "truncated": false, "conflicts": noConflicts})
 }
 
 func withField(body []byte, key string, value any) []byte {

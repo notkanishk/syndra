@@ -146,6 +146,7 @@ type Addon struct {
 	mu        sync.Mutex
 	accounts  map[string]*account // by account_id
 	bindings  map[string]string   // Syndra subject → account_id
+	minted    int                 // account ids handed out so far: never one twice (newID)
 	calls     map[string]*call    // by call_id
 	lifecycle string
 	reason    string
@@ -228,7 +229,8 @@ func (a *Addon) capabilities(*http.Request, []byte) reply {
 	ops := []map[string]any{
 		{"id": "health.get", "scope": "admin", "confirm": false, "available": true},
 		{"id": "password.set", "scope": "member", "confirm": false, "secret_params": []string{"password"}, "available": true},
-		{"id": "holdings.list", "scope": "member", "confirm": false, "available": true}}
+		{"id": "holdings.list", "scope": "member", "confirm": false, "available": true},
+		{"id": "account.purge", "scope": "admin", "confirm": true, "secret_params": []string{"elevated_key"}, "available": true}}
 	if a.serves("calls") {
 		// A physical operation needs calls (its preview and its settling)
 		// and answers its record under result.
@@ -278,12 +280,22 @@ func (a *Addon) health(*http.Request, []byte) reply {
 }
 
 type subject struct {
-	ID        string         `json:"id"`
-	Username  string         `json:"username"`
-	AccountID string         `json:"account_id"`
-	State     map[string]any `json:"state"`
-	Standing  *standing      `json:"standing"`
+	ID        string `json:"id"`
+	Username  string `json:"username"`
+	AccountID string `json:"account_id"`
+	// Subject is who the binding names this account for; absent when no one.
+	Subject  string         `json:"subject,omitempty"`
+	State    map[string]any `json:"state"`
+	Standing *standing      `json:"standing"`
 }
+
+// noConflicts is /subjects' conflicts here, always none, for every reason a conflict has: a
+// binding is the account's id itself, which this app hands out once (newID), so no name or
+// number can be held by another (name_held, number_held) and no key is shared by two accounts
+// (ambiguous); and only a create binds, to the account it made, so no two subjects name one
+// account (claimed_twice). An app where any can happen reports each such binding (AUTHORING,
+// GET /subjects).
+var noConflicts = []any{}
 
 // subjects reads the target now, so the answer is current (design §4: a read
 // that began after the request arrived) and complete, so never truncated.
@@ -294,15 +306,20 @@ func (a *Addon) subjects(r *http.Request, _ []byte) reply {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return ok(map[string]any{"subjects": a.list(), "current": true, "taken_at": now(), "truncated": false})
+	return ok(map[string]any{"subjects": a.list(), "current": true, "taken_at": now(), "truncated": false, "conflicts": noConflicts})
 }
 
-// list is every account as /subjects shows it; the caller holds a.mu.
+// list is every account as /subjects shows it, each with the subject its binding names it for;
+// the caller holds a.mu.
 func (a *Addon) list() []subject {
+	subjectOf := map[string]string{}
+	for subj, id := range a.bindings {
+		subjectOf[id] = subj
+	}
 	list := []subject{}
 	for _, id := range slices.Sorted(maps.Keys(a.accounts)) {
 		acct := a.accounts[id]
-		list = append(list, subject{acct.id, acct.username, acct.id, acct.shown(), acct.standing()})
+		list = append(list, subject{acct.id, acct.username, acct.id, subjectOf[id], acct.shown(), acct.standing()})
 	}
 	return list
 }
@@ -454,7 +471,8 @@ func (a *Addon) decide(subj, email string, raw map[string]json.RawMessage) (outc
 			if other.username == name {
 				out.Effect, out.Detail = "blocked", "The name this subject would get is taken."
 				out.Consequence = "An operator adopts " + name + " or renames it."
-				out.Conflict = map[string]any{"username": name, "account_id": other.id, "adoptable": true}
+				out.Conflict = map[string]any{"reason": "name_held", "username": name, "account_id": other.id, "adoptable": true,
+					"detail": out.Detail, "next": out.Consequence}
 				return out, nil, nil
 			}
 		}
@@ -535,7 +553,7 @@ func (a *Addon) commit(out outcome, acct *account, next map[string]any) reply {
 	}
 	if next != nil {
 		if acct.id == "" {
-			acct.id = strconv.Itoa(1001 + len(a.accounts))
+			acct.id = a.newID()
 			a.accounts[acct.id], a.bindings[out.Subject] = acct, acct.id
 		}
 		acct.state = next
@@ -648,7 +666,7 @@ type operationRequest struct {
 func (a *Addon) operation(r *http.Request, body []byte) reply {
 	name := r.PathValue("name")
 	checkout := name == "item.checkout" && a.serves("calls")
-	if name != "password.set" && name != "health.get" && name != "holdings.list" && !checkout {
+	if name != "password.set" && name != "health.get" && name != "holdings.list" && name != "account.purge" && !checkout {
 		return problem(404, "OPERATION_FAILED", "This add-on has no such operation.", nil)
 	}
 	var req operationRequest
@@ -675,6 +693,8 @@ func (a *Addon) operation(r *http.Request, body []byte) reply {
 		return a.healthGet(req)
 	case "holdings.list":
 		return a.holdingsList(req)
+	case "account.purge":
+		return a.purge(req)
 	}
 	switch password, _ := req.Params["password"].(string); {
 	case blank(req.CallID) || blank(req.Subject):
@@ -706,6 +726,40 @@ func (a *Addon) operation(r *http.Request, body []byte) reply {
 		acct.password = true
 		a.record("password.set " + acct.id)
 		return ok(map[string]any{"operation": req.Operation, "subject": req.Subject, "outcome": "succeeded", "detail": "Password set."})
+	})
+}
+
+// purge removes the subject's account, which must already be off, and its binding with it. Its
+// id is never handed out again (newID): the next create for the subject is a new account with a
+// new id, never the old one back.
+func (a *Addon) purge(req operationRequest) reply {
+	// ponytail: an in-memory target has no second credential, so elevated_key is required and
+	// never kept; a real add-on opens a session with it for this one call and closes it.
+	key, _ := req.Params["elevated_key"].(string)
+	switch {
+	case blank(req.CallID) || blank(req.Subject):
+		return problem(400, "BAD_REQUEST", "call_id and subject are required.", nil)
+	case blank(key) || len(req.Params) != 1:
+		return problem(400, "OPERATION_FAILED", "account.purge takes one parameter, elevated_key.", nil)
+	}
+	identity := map[string]any{"name": req.Operation, "subject": req.Subject, "params": map[string]any{}}
+	return a.once(req.CallID, "operation", identity, func() reply {
+		if refused := a.refuseUnlessActive(); refused != nil {
+			return *refused
+		}
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		acct := a.accounts[a.bindings[req.Subject]]
+		switch {
+		case acct == nil:
+			return problem(422, "OPERATION_FAILED", "This subject has no account here.", nil)
+		case acct.state["enabled"] != false:
+			return problem(409, "OPERATION_FAILED", "Only an account that is off is removed; turn it off first.", nil)
+		}
+		delete(a.accounts, acct.id)
+		delete(a.bindings, req.Subject)
+		a.record("account.purge " + acct.id)
+		return ok(map[string]any{"operation": req.Operation, "subject": req.Subject, "outcome": "succeeded", "detail": "Removed " + acct.username + "."})
 	})
 }
 

@@ -34,6 +34,7 @@ func main() {
 	flag.BoolVar(&cfg.Mutate, "mutate", false, "send writes: create, converge and finally disable one throwaway account")
 	flag.StringVar(&cfg.Item, "item", "", "with -mutate and feature calls, an item the kit may check out to its subject with a physical operation, and leave checked out")
 	flag.BoolVar(&cfg.MutateSettings, "mutate-settings", false, "with -mutate, also write the first target-wide setting's current value back")
+	elevatedFile := flag.String("elevated-key-file", "", "with -mutate, a file holding account.purge's elevated_key: the kit purges its own account once it is off and creates it again (identity.not-reused); without it nothing is deleted")
 	jsonOut := flag.String("json", "", "also write the report as JSON to this file; - writes JSON to stdout instead of text")
 	flag.Parse()
 
@@ -42,6 +43,13 @@ func main() {
 		fail("-secret-file must name a file holding the per-target secret")
 	}
 	cfg.Secret = []byte(strings.TrimSpace(string(secret)))
+	if *elevatedFile != "" {
+		key, err := os.ReadFile(*elevatedFile)
+		if err != nil || strings.TrimSpace(string(key)) == "" {
+			fail("-elevated-key-file must name a file holding account.purge's elevated_key")
+		}
+		cfg.ElevatedKey = strings.TrimSpace(string(key))
+	}
 
 	// The first SIGINT or SIGTERM stops the run between requests and lets it
 	// put back what it changed; the second gets the default: exit now.

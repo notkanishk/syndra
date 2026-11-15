@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -333,6 +335,35 @@ func TestEveryCallerResolvesOneIdentity(t *testing.T) {
 						t.Errorf("accountBound: %s bound=%t, want %t", a.Username, got, isWant)
 					}
 				}
+
+				// /subjects says it on the wire (slice 7t-2), from the same rule: the account named
+				// carries the subject and no other row does; a conflict is listed with its holder and
+				// the add-on's words, and the holder is never a row of the subject's.
+				rr, got := getSubjects(t, s, true)
+				if rr.Code != http.StatusOK {
+					t.Fatalf("/subjects: %d %s", rr.Code, rr.Body.String())
+				}
+				for _, v := range got.Subjects {
+					want := ""
+					if v.Username == c.want {
+						want = "sub-1"
+					}
+					if v.Subject != want {
+						t.Errorf("/subjects: %s carries subject %q, want %q", v.Username, v.Subject, want)
+					}
+				}
+				switch {
+				case c.conflict:
+					if len(got.Conflicts) != 1 {
+						t.Fatalf("/subjects: want the one conflict, got %+v", got.Conflicts)
+					}
+					cf := got.Conflicts[0]
+					if cf.Subject != "sub-1" || cf.AccountID != itoa(c.holderUID(t)) || cf.Adoptable || cf.Detail == "" || cf.Next == "" {
+						t.Errorf("/subjects: conflict %+v, want sub-1's with holder uid %d and its words", cf, c.holderUID(t))
+					}
+				case len(got.Conflicts) != 0:
+					t.Errorf("/subjects: no conflict here, got %+v", got.Conflicts)
+				}
 			}
 		})
 	}
@@ -441,10 +472,373 @@ func TestPlanAndApplyAgreeOnTwoAccountsOnOneUID(t *testing.T) {
 		t.Fatalf("plan: want blocked in the ambiguity's words, got %+v", out)
 	}
 
+	// The apply resolves the same way (resolveLive is attributeOver too): BINDING_CONFLICT, the
+	// ambiguous conflict, the same words, nothing written.
 	s, m := c.server(t)
 	rr = postApply(t, s, oneApply)
-	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), detail+" "+next) || len(m.updates)+len(m.creates) != 0 {
+	var refused struct {
+		Code, Detail, Consequence string
+		Conflict                  BindingConflict
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &refused)
+	if rr.Code != http.StatusConflict || refused.Code != CodeBindingConflict || refused.Conflict.Reason != reasonAmbiguous ||
+		refused.Detail != detail || refused.Consequence != "Nothing was changed. "+next || len(m.updates)+len(m.creates) != 0 {
 		t.Fatalf("apply: want 409 in the same words and nothing written, got %d %s", rr.Code, rr.Body.String())
+	}
+
+	// /subjects names neither row for the subject, whichever is listed first, and says so: an
+	// ambiguous conflict listing both holders, in the same words. Silence would read as gone.
+	rr, got := getSubjects(t, s, true)
+	if rr.Code != http.StatusOK || len(got.Conflicts) != 1 {
+		t.Fatalf("/subjects: %d, conflicts %+v", rr.Code, got.Conflicts)
+	}
+	cf := got.Conflicts[0]
+	want := []Holder{{Username: "bob_a", AccountID: "300001"}, {Username: "bob_b", AccountID: "300001"}}
+	if cf.Subject != "sub-1" || cf.Reason != reasonAmbiguous || !slices.Equal(cf.Holders, want) || cf.Username != "" ||
+		cf.Adoptable || cf.Detail != detail || cf.Next != next {
+		t.Errorf("/subjects: conflict %+v, want sub-1 ambiguous between %v in the ambiguity's words", *cf.BindingConflict, want)
+	}
+	for _, v := range got.Subjects {
+		if v.Subject != "" {
+			t.Errorf("/subjects: %s carries subject %q; two accounts on one key name neither", v.Username, v.Subject)
+		}
+	}
+}
+
+// Two bindings naming one account give it to neither: both are conflicts, claimed twice, each
+// naming the other subject, and no write rule (stats, standing) picks a winner. The account stays
+// bound for adoption, so no third subject can take it.
+func TestTwoBindingsOnOneAccountGiveItToNeither(t *testing.T) {
+	c := idCases[0] // in range, found: bob, uid 300001, bound to sub-1
+	s, _ := c.server(t)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "bob", UID: 300001, UIDKind: uidKindAccount}); err != nil {
+		t.Fatal(err)
+	}
+	rr, got := getSubjects(t, s, true)
+	if rr.Code != http.StatusOK || len(got.Subjects) != 1 || got.Subjects[0].Subject != "" {
+		t.Fatalf("/subjects: %d %s; want bob listed, given to neither", rr.Code, rr.Body.String())
+	}
+	if len(got.Conflicts) != 2 {
+		t.Fatalf("want both bindings as conflicts, got %+v", got.Conflicts)
+	}
+	for i, other := range []string{"sub-2", "sub-1"} {
+		cf := got.Conflicts[i]
+		if cf.Subject != []string{"sub-1", "sub-2"}[i] || cf.Reason != reasonClaimedTwice || cf.Username != "bob" ||
+			cf.AccountID != "300001" || cf.BoundTo != other || cf.Adoptable || cf.Detail == "" || cf.Next == "" {
+			t.Errorf("conflict %d: %+v", i, *cf.BindingConflict)
+		}
+	}
+	snap, err := s.readSubjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u, _ := s.boundUIDs(snap.Subjects); len(u) != 0 {
+		t.Errorf("statistics attribute bob to %v; claimed twice is nobody's", u)
+	}
+	if _, ok := s.wishesFor(snap.Subjects)[300001]; ok {
+		t.Error("a wish applies to bob; claimed twice is nobody's")
+	}
+	if bound, _ := s.accountBound(&snap.Subjects[0]); !bound {
+		t.Error("accountBound: bob is free, so a third subject could adopt it")
+	}
+
+	// And every caller judges it the same, for either claimant: the apply and the plan are blocked
+	// on the claimed_twice conflict, each operation answers 409 in the same words, and nothing is
+	// sent to bob or logged.
+	detail, next := got.Conflicts[0].Detail, got.Conflicts[0].Next
+	twice := func(t *testing.T) (*server, *mutatingRPC, *deleteRecorder) {
+		s, m := c.server(t)
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "bob", UID: 300001, UIDKind: uidKindAccount}); err != nil {
+			t.Fatal(err)
+		}
+		del := &deleteRecorder{}
+		s.elevated = func(string) (rpc, error) { return del, nil }
+		return s, m, del
+	}
+	for _, subject := range []string{"sub-1", "sub-2"} {
+		s, m, del := twice(t)
+		rr := postApply(t, s, strings.Replace(oneApply, `"sub-1"`, `"`+subject+`"`, 1))
+		var refused struct {
+			Code, Detail, Consequence string
+			Conflict                  BindingConflict
+		}
+		_ = json.Unmarshal(rr.Body.Bytes(), &refused)
+		if rr.Code != http.StatusConflict || refused.Code != CodeBindingConflict || refused.Conflict.Reason != reasonClaimedTwice ||
+			refused.Detail != detail || refused.Consequence != "Nothing was changed. "+next {
+			t.Errorf("apply for %s: %d %s", subject, rr.Code, rr.Body.String())
+		}
+		if w := writesTo(m, del); len(w) != 0 {
+			t.Errorf("apply for %s wrote %v", subject, w)
+		}
+
+		rr = httptest.NewRecorder()
+		planInto(t, s, rr, `{"subjects":[{"subject":"`+subject+`","email":"bob@example.edu","desired":{"group":["lab_makers"],"enabled":true}}]}`)
+		var plan PlanResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
+			t.Fatalf("plan for %s: %v %s", subject, err, rr.Body.String())
+		}
+		if out := plan.Outcomes[0]; out.Effect != EffectBlocked || out.Conflict == nil || out.Conflict.Reason != reasonClaimedTwice ||
+			out.Detail != detail || out.Consequence != "Nothing would change. "+next {
+			t.Errorf("plan for %s: %+v", subject, out)
+		}
+
+		for _, op := range []struct{ name, params string }{
+			{"password.set", `{"password":"` + theSecret + `"}`}, {"password.rotate", `{}`},
+			{"account.purge", `{"elevated_key":"k"}`}, {"storage.status", `{}`}, {"activity.get", `{}`},
+		} {
+			s, m, del := twice(t)
+			rr := postOperation(t, s, op.name, `{"call_id":"c-op","subject":"`+subject+`","actor":"op_1","params":`+op.params+`}`)
+			if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), detail+" "+next) {
+				t.Errorf("%s for %s: want 409 in the same words, got %d %s", op.name, subject, rr.Code, rr.Body.String())
+			}
+			if w := writesTo(m, del); len(w) != 0 {
+				t.Errorf("%s for %s wrote %v", op.name, subject, w)
+			}
+			if logged := loggedWrites(t, s); len(logged) != 0 {
+				t.Errorf("%s for %s logged %+v", op.name, subject, logged)
+			}
+			if op.name == "activity.get" && auditFilter(m) != "" {
+				t.Errorf("activity.get for %s read bob's audit log", subject)
+			}
+		}
+	}
+}
+
+// The name finds the account even where another row shares its uid, and only that row carries the
+// subject: one subject on one row, never every row on the number.
+func TestASharedUIDPutsTheSubjectOnTheNamedRowOnly(t *testing.T) {
+	c := idCase{binding: Binding{Username: "bob_a", UID: 300001, UIDKind: uidKindAccount}, nas: `[
+		{"username":"bob_a","id":11,"uid":300001,"locked":false,"smb":false,"groups":[]},
+		{"username":"bob_b","id":12,"uid":300001,"locked":false,"smb":false,"groups":[]}]`}
+	s, _ := c.server(t)
+	rr, got := getSubjects(t, s, true)
+	if rr.Code != http.StatusOK || len(got.Subjects) != 2 {
+		t.Fatalf("/subjects: %d %s", rr.Code, rr.Body.String())
+	}
+	for _, v := range got.Subjects {
+		if want := map[string]string{"bob_a": "sub-1"}[v.Username]; v.Subject != want {
+			t.Errorf("%s carries subject %q, want %q", v.Username, v.Subject, want)
+		}
+	}
+}
+
+// A rename between keyRows' reads is a torn read, never judged: sub-1 (bob, uid 300001) finds the
+// account as bob, then TrueNAS renames it bob_b before sub-2's reads (its name gone, the same uid)
+// find it again. Held by record key, it is one account under two names: 503 in the one sentence,
+// nothing written. Judged as two rows, sub-2 would be ambiguous and sub-1 given an account a whole
+// read calls claimed_twice.
+func TestARenameBetweenKeyReadsIsATornReadNeverJudged(t *testing.T) {
+	for _, op := range []string{"apply", "password.set"} {
+		s, m := idCases[0].server(t)
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "carol", UID: 300001, UIDKind: uidKindAccount}); err != nil {
+			t.Fatal(err)
+		}
+		renamed := false
+		m.after = map[string]func(){"user.query": func() {
+			// Once sub-1's number has been read (its last key read); sub-2's reads are next.
+			last, _ := json.Marshal(m.fakeRPC.params[len(m.fakeRPC.params)-1])
+			if !renamed && strings.Contains(string(last), `["uid","=",300001]`) {
+				renamed = true
+				m.fakeRPC.users = strings.Replace(m.fakeRPC.users, `"username":"bob"`, `"username":"bob_b"`, 1)
+			}
+		}}
+		var rr *httptest.ResponseRecorder
+		if op == "apply" {
+			// Its own fingerprint, so the helper resolves nothing before the apply does.
+			rr = postApply(t, s, strings.Replace(oneApply, `"call_id":"c1",`, `"call_id":"c1","fingerprint":"from-the-plan",`, 1))
+		} else {
+			rr = postOperation(t, s, op, `{"call_id":"p1","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
+		}
+		var body struct{ Code, Detail, Retry string }
+		_ = json.Unmarshal(rr.Body.Bytes(), &body)
+		// TARGET_CHANGED, never APPLY_FAILED or OPERATION_FAILED, which Syndra reads as possibly acted.
+		if rr.Code != http.StatusServiceUnavailable || body.Code != CodeTargetChanged || body.Retry != "retry_after" ||
+			rr.Header().Get("Retry-After") != tornRetryAfter || body.Detail != errTornRead.Error() {
+			t.Errorf("%s: want 503 %s %q with Retry-After, got %d %v %s", op, CodeTargetChanged, errTornRead.Error(), rr.Code, rr.Header(), rr.Body.String())
+		}
+		assertSchema(t, "error.json", rr.Body.Bytes(), op+"'s torn-read refusal")
+		if len(m.updates)+len(m.creates) != 0 {
+			t.Errorf("%s: wrote %v %v on a torn read", op, m.updates, m.creates)
+		}
+	}
+}
+
+// The holders of an ambiguous key come in one order wherever they are said, whatever order TrueNAS
+// lists them in: by name, then account_id, on /subjects and on the apply's refusal alike.
+func TestAmbiguousHoldersAreInOneOrder(t *testing.T) {
+	c := idCase{binding: Binding{Username: "bob", UID: 300001, UIDKind: uidKindAccount}, nas: `[
+		{"username":"bob_b","id":12,"uid":300001,"locked":false,"smb":false,"groups":[]},
+		{"username":"bob_a","id":11,"uid":300001,"locked":false,"smb":false,"groups":[]}]`}
+	want := []Holder{{Username: "bob_a", AccountID: "300001"}, {Username: "bob_b", AccountID: "300001"}}
+	s, _ := c.server(t)
+	if _, got := getSubjects(t, s, true); len(got.Conflicts) != 1 || !slices.Equal(got.Conflicts[0].Holders, want) {
+		t.Errorf("/subjects: %+v", got.Conflicts)
+	}
+	var refused struct{ Conflict BindingConflict }
+	_ = json.Unmarshal(postApply(t, s, oneApply).Body.Bytes(), &refused)
+	if !slices.Equal(refused.Conflict.Holders, want) {
+		t.Errorf("apply: %+v", refused.Conflict.Holders)
+	}
+}
+
+// The ambiguous apply's refusal is a contract body: error.json, its conflict binding_conflict.json.
+func TestTheAmbiguousApplyRefusalSatisfiesTheSchema(t *testing.T) {
+	c := idCase{binding: Binding{Username: "bob", UID: 300001, UIDKind: uidKindAccount}, nas: `[
+		{"username":"bob_a","id":11,"uid":300001,"locked":false,"smb":false,"groups":[]},
+		{"username":"bob_b","id":12,"uid":300001,"locked":false,"smb":false,"groups":[]}]`}
+	s, _ := c.server(t)
+	rr := postApply(t, s, oneApply)
+	if rr.Code != http.StatusConflict || problemCode(t, rr) != CodeBindingConflict {
+		t.Fatalf("%d %s", rr.Code, rr.Body.String())
+	}
+	assertSchema(t, "error.json", rr.Body.Bytes(), "the ambiguous apply's 409")
+	var doc struct{ Conflict json.RawMessage }
+	_ = json.Unmarshal(rr.Body.Bytes(), &doc)
+	assertSchema(t, "common/binding_conflict.json", doc.Conflict, "its conflict")
+}
+
+// Where home folders go is the add-on's own setting: unreadable, the apply answers it as the plan
+// does, 500 STORE_UNREADABLE in the one sentence, never APPLY_FAILED with the store's own text.
+func TestAnUnreadableHomeSettingIsStoreUnreadableForPlanAndApply(t *testing.T) {
+	const existing = `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`
+	s, m := homeServer(t, existing, nil, nil)
+	corrupt(t, s, bucketSettings, settingHomeRoot)
+	rr := postApply(t, s, `{"call_id":"h1","subject":"sub-1","email":"charlotte@example.org","desired":{"home":["true"]}}`)
+	var body struct{ Code, Detail string }
+	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	if rr.Code != http.StatusInternalServerError || body.Code != CodeStoreUnreadable || body.Detail != storeUnreadableDetail {
+		t.Errorf("apply: %d %s", rr.Code, rr.Body.String())
+	}
+	rr = httptest.NewRecorder()
+	planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"charlotte@example.org","desired":{"home":["true"]}}]}`)
+	if rr.Code != http.StatusInternalServerError || problemCode(t, rr) != CodeStoreUnreadable {
+		t.Errorf("plan: %d %s", rr.Code, rr.Body.String())
+	}
+	if len(m.updates)+len(m.creates) != 0 {
+		t.Errorf("wrote %v %v", m.updates, m.creates)
+	}
+}
+
+// A release forgets the binding, and with it the attribution: the account stays, bound to nobody,
+// on the very next read (every write forgets the copy, so no earlier read's subject survives).
+func TestAReleasedAccountCarriesNoSubject(t *testing.T) {
+	c := idCases[0] // in range, found
+	s, _ := c.server(t)
+	if _, got := getSubjects(t, s, false); len(got.Subjects) != 1 || got.Subjects[0].Subject != "sub-1" {
+		t.Fatalf("before the release: %+v", got.Subjects)
+	}
+	if rr := postOperation(t, s, "account.release", `{"call_id":"c-rel","subject":"sub-1"}`); rr.Code != http.StatusOK {
+		t.Fatalf("release: %d %s", rr.Code, rr.Body.String())
+	}
+	_, got := getSubjects(t, s, false)
+	if len(got.Subjects) != 1 || got.Subjects[0].Subject != "" || len(got.Conflicts) != 0 {
+		t.Errorf("after the release: %+v, conflicts %+v; want bob listed, bound to nobody", got.Subjects, got.Conflicts)
+	}
+}
+
+// The NAS answered and the store failed: the copy kept from earlier is not served labelled
+// "unreachable", which would blame the NAS. The store's failure is the answer.
+func TestAStoreFailureIsNeverServedAsAnUnreachableNAS(t *testing.T) {
+	s, _ := idCases[0].server(t)
+	now := at(s, time.Now())
+	if rr, _ := getSubjects(t, s, true); rr.Code != http.StatusOK {
+		t.Fatalf("first read: %d", rr.Code)
+	}
+	*now = now.Add(time.Hour) // past the cooldown and the copy's age
+	corrupt(t, s, bucketBindings, "sub-2")
+	rr, _ := getSubjects(t, s, true)
+	if rr.Code != http.StatusInternalServerError || problemCode(t, rr) != CodeStoreUnreadable {
+		t.Fatalf("want 500 %s, got %d %s", CodeStoreUnreadable, rr.Code, rr.Body.String())
+	}
+}
+
+// One rule for a binding the store cannot decode, whichever route meets it: 500 STORE_UNREADABLE
+// in the one sentence (never the store's own error, which names a record by subject id, and never
+// a 502 that blames the NAS), and nothing written or created.
+func TestAnUnreadableBindingIsStoreUnreadableOnEveryRoute(t *testing.T) {
+	newcomer := `{"call_id":"c-new","subject":"sub-new","email":"carol@example.edu","desired":{"group":["lab_makers"],"enabled":true}}`
+	for _, tc := range []struct {
+		name string
+		send func(*server) *httptest.ResponseRecorder
+		want string
+	}{
+		// The apply that would create: it reads the claimed names (BoundUsernames) before anything.
+		{"apply that creates", func(s *server) *httptest.ResponseRecorder { return postApply(t, s, newcomer) }, storeUnreadableDetail},
+		// The apply for a bound subject: its binding is judged with every other (resolveLive).
+		{"apply to an account", func(s *server) *httptest.ResponseRecorder { return postApply(t, s, oneApply) }, storeUnreadableDetail},
+		{"plan", func(s *server) *httptest.ResponseRecorder {
+			rr := httptest.NewRecorder()
+			planInto(t, s, rr, `{"subjects":[{"subject":"sub-new","email":"carol@example.edu","desired":{"enabled":true}}]}`)
+			return rr
+		}, planStoreUnreadable},
+		{"adopt", func(s *server) *httptest.ResponseRecorder {
+			return postOperation(t, s, "account.adopt", `{"call_id":"a-new","subject":"sub-new","actor":"op_1","params":{"username":"bob"}}`)
+		}, storeUnreadableDetail},
+		{"password.set", func(s *server) *httptest.ResponseRecorder {
+			return postOperation(t, s, "password.set", `{"call_id":"p1","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
+		}, storeUnreadableDetail},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, m := idCases[0].server(t)
+			corrupt(t, s, bucketBindings, "sub-2")
+			rr := tc.send(s)
+			var body struct{ Code, Detail string }
+			_ = json.Unmarshal(rr.Body.Bytes(), &body)
+			if rr.Code != http.StatusInternalServerError || body.Code != CodeStoreUnreadable || body.Detail != tc.want {
+				t.Errorf("want 500 %s %q, got %d %s", CodeStoreUnreadable, tc.want, rr.Code, rr.Body.String())
+			}
+			if len(m.updates)+len(m.creates) != 0 {
+				t.Errorf("wrote %v, created %v", m.updates, m.creates)
+			}
+			if _, bound, _ := s.store.GetBinding("sub-new"); bound {
+				t.Error("a binding was written for the newcomer")
+			}
+		})
+	}
+}
+
+// Adoption asks whether the account is somebody's by the one rule over the same read, not by the
+// names on file: an account a binding still names by its number after a rename is not free.
+func TestAdoptRefusesAnAccountABindingNamesByNumber(t *testing.T) {
+	s, m := idCases[1].server(t) // sub-1's bob, renamed bob_renamed on TrueNAS, uid 300001 in range
+	rr := postOperation(t, s, "account.adopt", `{"call_id":"a3","subject":"sub-3","actor":"op_1","params":{"username":"bob_renamed"}}`)
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "already bound to another subject (sub-1)") {
+		t.Fatalf("want 409, bound to sub-1; got %d %s", rr.Code, rr.Body.String())
+	}
+	if _, bound, _ := s.store.GetBinding("sub-3"); bound || len(m.updates) != 0 {
+		t.Error("bob_renamed was handed to a third person")
+	}
+}
+
+// Every reader of the binding table fails closed on a binding it cannot decode: its name is never
+// read as free to claim (BindIfFree, BoundUsernames), nor its subject as bound to nothing.
+func TestAnUndecodableBindingIsNeverReadAsFree(t *testing.T) {
+	s, _ := idCases[0].server(t)
+	corrupt(t, s, bucketBindings, "sub-2")
+	if _, err := s.store.Bindings(); err == nil {
+		t.Error("Bindings skipped it")
+	}
+	if _, err := s.store.BoundUsernames(); err == nil {
+		t.Error("BoundUsernames skipped it, so its name reads as unclaimed")
+	}
+	err := s.store.BindIfFree(Binding{SubjectID: "sub-3", Username: "carol", UID: 300003, UIDKind: uidKindAccount})
+	if err == nil || errors.As(err, new(ErrUsernameBound)) {
+		t.Errorf("BindIfFree: %v; the name sub-2 holds is unknown, so no name is free", err)
+	}
+	if _, bound, _ := s.store.GetBinding("sub-3"); bound {
+		t.Error("BindIfFree wrote the binding anyway")
+	}
+}
+
+// A binding that cannot be read is no attribution at all: 500 STORE_UNREADABLE, never a read with
+// that person's row unbound and no conflict, which says their account is gone. Another subject's
+// unreadable binding counts the same: which row is whose cannot be said for the read.
+func TestSubjectsWithAnUnreadableBindingAreRefused(t *testing.T) {
+	s, _ := idCases[0].server(t)
+	corrupt(t, s, bucketBindings, "sub-2")
+	rr, _ := getSubjects(t, s, true)
+	if rr.Code != http.StatusInternalServerError || problemCode(t, rr) != CodeStoreUnreadable {
+		t.Fatalf("want 500 %s, got %d %s", CodeStoreUnreadable, rr.Code, rr.Body.String())
 	}
 }
 

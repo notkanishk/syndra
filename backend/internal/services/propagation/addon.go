@@ -277,7 +277,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			// drain follows, and for the same reason: a row left non-terminal
 			// at the head of the queue is one every later pass re-claims and
 			// halts on, which stops everything behind it without saying so.
-			reason := fmt.Sprintf("out of retries after %d attempts: the target could not be reached", row.Attempts)
+			reason := fmt.Sprintf("out of retries after %d attempts: %s", row.Attempts, unreachedWhy(resp))
 			if err := markFailed(ctx, row.ID, reason); err != nil {
 				res.settleFailure(row.ID, "mark failed", err)
 				return false
@@ -286,7 +286,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			res.Exhausted++
 			return false
 		}
-		if _, err := requeue(ctx, row.ID, "the target could not be reached"); err != nil {
+		if _, err := requeue(ctx, row.ID, unreachedWhy(resp)); err != nil {
 			res.settleFailure(row.ID, "requeue", err)
 			return false
 		}
@@ -317,6 +317,16 @@ func (res *DrainResult) settleFailure(id, step string, err error) {
 	if !res.abandoned(id, step, err) {
 		res.persistErr(id, step, err)
 	}
+}
+
+// unreachedWhy is why an unreached row waits, in words true of its code. TARGET_CHANGED is
+// unreached like TARGET_UNREACHABLE (addons.classifyStatus, one path); only the reason differs.
+func unreachedWhy(resp addons.ApplyResponse) string {
+	if resp.Code == addons.CodeTargetChanged {
+		// The add-on read the target and it changed underneath: reached, and still nothing sent.
+		return "the target changed while it was being read"
+	}
+	return "the target could not be reached"
 }
 
 // refusalReason is the add-on's own answer, never its response body.

@@ -500,6 +500,11 @@ const (
 	codeUnknownRoute            = "UNKNOWN_ROUTE"
 )
 
+// CodeTargetChanged is the target changing while the add-on read it: nothing was judged and
+// nothing sent, so it is unreached like TARGET_UNREACHABLE (classifyStatus), and only its words
+// differ where a person is told (handlers).
+const CodeTargetChanged = "TARGET_CHANGED"
+
 // refusalOf is a refusal's code and what it names, in one decode: the
 // problem's `code` (contract 2), else a contract-1 add-on's `error`. The
 // fallback is for classification only and only until the next major: a
@@ -551,7 +556,9 @@ func refusalOf(body []byte) (string, Refusal) {
 //     (design §11). A plain BAD_REQUEST — a missing call_id or subject — stays
 //     rejected, or a malformed row would requeue for ever.
 //   - CALL_IN_PROGRESS: the same call is executing now; this copy did nothing.
-//   - TARGET_UNREACHABLE, 429: it did not act and expects to be asked again.
+//   - TARGET_UNREACHABLE, TARGET_CHANGED, 429: it did not act and expects to be
+//     asked again (TARGET_CHANGED: the target changed while it was read, so
+//     nothing was judged or sent).
 //   - 408, 5xx: it may have acted. A 500 raised after a partial mutation looks
 //     exactly like one raised before validation.
 //   - 3xx: a contract violation, surfaced rather than followed (see
@@ -565,7 +572,7 @@ func classifyStatus(status int, code string) (outcome Outcome, lifecycle, shape 
 		return OutcomeUnreached, true, false
 	case code == codeContractVersionMismatch || code == codeUnknownRequestField:
 		return OutcomeUnreached, false, true
-	case code == codeCallInProgress || code == codeTargetUnreachable || status == http.StatusTooManyRequests:
+	case code == codeCallInProgress || code == codeTargetUnreachable || code == CodeTargetChanged || status == http.StatusTooManyRequests:
 		return OutcomeUnreached, false, false
 	case status == http.StatusRequestTimeout || status >= 500:
 		return OutcomeIndeterminate, false, false

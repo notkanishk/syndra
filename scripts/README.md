@@ -122,6 +122,9 @@ SECRET="$(docker volume inspect -f '{{.Mountpoint}}' syndra_truenas_addon_secret
 export SECRET
 kit='/tmp/syndra-addon-conform -url "https://$ADDON_IP:8443" -target truenas -secret-file "$SECRET"'
 scripts/addon-quiet-run.sh -- sh -c "$kit -json /tmp/conformance-reads.json"
+#    The -mutate run gets no -elevated-key-file, so identity.not-reused skips,
+#    and it must stay skipped here: staging's add-on reaches production's NAS,
+#    and account.purge sends user.delete to it.
 scripts/addon-quiet-run.sh --writes -- sh -c "$kit -mutate -json /tmp/conformance-mutate.json"
 # 4b. After the test, inside a --writes window: release the test subjects and
 #     clear home_root with the one-request command (it refuses anything else,

@@ -91,8 +91,8 @@ restored (`addons/README.md`).
 | Word | Meaning |
 |---|---|
 | subject | A person, by Syndra's id for them (`subject` on the wire). Never the app's name for them |
-| account | The subject's account on the app, found by its `account_id`: the app's own stable, opaque id (a uid, a UUID) |
-| binding | The add-on's record that a subject's account is a given `account_id` |
+| account | The subject's account on the app. Its `account_id` is the app's own opaque id (a uid, a UUID): a key within one read, not an identity across reads ([chapter 2](#2-before-you-write-a-line)) |
+| binding | The add-on's record that a subject's account is a given account: its `account_id`, and its name beside it where the app can hand an id out again. Said on the wire as a row's `subject` ([`GET /subjects`](#get-subjects)) |
 | desired state | What Syndra wants true for one subject, keyed by entitlement field. Level-triggered: sent again, it changes nothing |
 | observed | What the app reports after a write, read back |
 | role | What a field is, from `v2/registry/roles.json` ([chapter 3](#3-the-manifest-get-capabilities)) |
@@ -138,15 +138,37 @@ Four steps, in order. Each ends on something you can check.
    any read (`MajorSupported` in `addons/truenas/nas.go`). *Done when:* a
    test starts the add-on against an unrecorded version and sees an apply
    refused and `/subjects` and `/plan` answered.
-3. **Pick the stable id.** Find the app's own id for an account that
-   survives a rename. It travels as `account_id`, an opaque non-empty string
+3. **Pick the account id.** Find the app's own id for an account. It
+   travels as `account_id`, an opaque string
    (`v2/schema/common/field.json#/$defs/AccountId`); an integer id is
-   formatted as a string. A name is display, never identity. If the app has a
-   field you can write at create to hold the Syndra subject id, note it: it
-   is the second way to find an account after a crash
-   ([The one create](#the-one-create)). *Done when:* you can name the id
-   field and your evidence that a rename keeps it, or have listed that as
-   unverified.
+   formatted as a string. A name is display, never identity.
+   - `account_id` MUST be non-empty, MUST be unique among the accounts of
+     one read, and MUST survive a rename.
+   - It is a key within one read, not an identity across reads. Syndra
+     MUST NOT conclude from two reads carrying the same `account_id` that
+     they describe the same account, and MUST NOT attribute an account to
+     a subject by its `account_id`. Which subject an account belongs to
+     is the add-on's to say: `subject` on its row, and `conflicts` for a
+     binding that names no account ([`GET /subjects`](#get-subjects)).
+   - It SHOULD be an id the app never hands out again (a UUID, an
+     auto-increment key, a number from a range only the add-on hands out).
+     An add-on whose app can hand an id out again (TrueNAS gives a free uid
+     to the next account made by hand) MUST keep the recorded name beside
+     the number in its binding, and MUST report a binding whose name is
+     gone while its number is held by another name as a conflict, never as
+     that account (`boundAccount` in `addons/truenas/identity_resolve.go`).
+     The kit's `identity.not-reused` warns on an id handed out again.
+
+   This is SCIM's split (RFC 7643 §3.1): `id` is the service provider's
+   "stable, non-reassignable identifier", `externalId` the client's. The
+   add-on is the service provider and Syndra the client, so `subject`
+   plays `externalId`; an app id that can be reassigned cannot play `id`,
+   and the add-on's binding is what supplies the non-reassignable link.
+   If the app has a field you can write at create to hold the Syndra
+   subject id, note it: it is the second way to find an account after a
+   crash ([The one create](#the-one-create)). *Done when:* you can name the
+   id field, your evidence that a rename keeps it, and whether the app can
+   hand it out again, or have listed what is unverified.
 4. **Decide what the credential can do, and have it issued without the
    rest.** List the app scopes or roles your recorded reads and writes need,
    and nothing beyond them. The credential MUST NOT hold a scope that acts on
@@ -750,6 +772,7 @@ mirror holds no limits: absent in `state` is "not known".
       "id": 17,
       "username": "rey_mysterio",
       "account_id": "3051",
+      "subject": "289471021834760193",
       "groups": [
         "fabrication",
         "lab_makers"
@@ -800,19 +823,80 @@ mirror holds no limits: absent in `state` is "not known".
   ],
   "current": true,
   "taken_at": "2026-11-10T09:30:00Z",
-  "truncated": false
+  "truncated": false,
+  "conflicts": [
+    {
+      "subject": "289471021834760196",
+      "reason": "number_held",
+      "username": "kofi_kingston",
+      "account_id": "3012",
+      "adoptable": false,
+      "detail": "The account finn_balor, recorded for this person, is gone, and its number is now held by a different account, kofi_kingston.",
+      "next": "Stop tracking this person's old account; the next change creates a new one for them. Adopt kofi_kingston instead only if it is theirs."
+    },
+    {
+      "subject": "289471021834760197",
+      "reason": "ambiguous",
+      "holders": [
+        {
+          "username": "big_e",
+          "account_id": "3031"
+        },
+        {
+          "username": "big_e",
+          "account_id": "3032"
+        }
+      ],
+      "adoptable": false,
+      "detail": "More than one account on TrueNAS has the name or number this person's account is recorded under.",
+      "next": "Rename or remove one of them on TrueNAS, then try again."
+    }
+  ]
 }
 ```
 
 - The add-on MUST list every account the app holds, managed or not, in one
-  reply. Syndra matches accounts to people itself; an account nobody
-  manages is listed and left alone. The add-on's own service account, the
-  one its credential belongs to, MUST be marked `self: true`; a good way is
-  to ask the app who the credential is (`readSelf` in
-  `addons/truenas/nas.go`).
+  reply; an account nobody manages is listed and left alone. The add-on's
+  own service account, the one its credential belongs to, MUST be marked
+  `self: true`; a good way is to ask the app who the credential is
+  (`readSelf` in `addons/truenas/nas.go`).
 - `id` is the app's record key (it MAY equal `account_id` when the app has
-  one id), `account_id` the stable id
+  one id), `account_id` the app's id for the account within this read
   ([chapter 2](#2-before-you-write-a-line)), `username` display only.
+- **Who each account belongs to is the add-on's to say,** from its own
+  bindings and by the one rule its apply uses, never by a second one
+  (`attribute` in `addons/truenas/identity_resolve.go`). An account a
+  binding names in this read MUST carry that subject as `subject`; an
+  account no binding names MUST NOT carry one, and the add-on's own
+  account never does. A subject MUST be on one row at most.
+- A binding that names no account in this read for any other reason than
+  its account being gone MUST be listed in `conflicts`, with its `reason`
+  (`v2/schema/common/binding_conflict.json`, the same shape an apply's
+  conflict has): `name_held` (another account holds the name),
+  `number_held` (the recorded name is gone and a number the app can hand
+  out again is held by another name), `ambiguous` (two or more accounts
+  hold the key the binding is looked up by: list them all as `holders`,
+  never pick one), or `claimed_twice` (two bindings name one account:
+  list both, give the row to neither). Each carries the holder's
+  `username` and `account_id` (`holders` instead for `ambiguous`),
+  `adoptable`, `bound_to` when another subject holds it, and the add-on's
+  own `detail` and `next` for an operator. A subject in `conflicts` MUST
+  be on no row: the holder is never its account. The verdict is the
+  same wherever the binding is asked: an apply or plan for that subject
+  MUST answer the same conflict (`blocked`), and an operation MUST refuse
+  it, never act on the holder. A binding is judged with every other
+  binding over the same read (`attributeOver` in
+  `addons/truenas/identity_resolve.go`), or a `claimed_twice` account
+  would still be changed for whichever claimant asked. So every binding is in
+  exactly one of three states, read off one reply: attributed (a row
+  with `subject`), a conflict (in `conflicts`, any reason), or gone
+  (neither: the account was deleted in the app). An add-on MUST NOT leave
+  a binding in neither for any other cause; Syndra reads "neither" as
+  deleted. A store that cannot be read MUST be an error (500
+  `STORE_UNREADABLE`), never a reply with no row bound, which says every
+  person's account is gone, and never an earlier copy labelled as though
+  the app were unreachable. The kit checks this as `subjects.subject` and
+  `subjects.conflicts` (the shape per reason included).
   `groups`, `home`, `enabled` and `smb_enabled` on a subject are the storage
   add-on's own; every value Syndra reads is in `state`.
 - `state` MUST hold the account's current value for every field of your
@@ -966,10 +1050,13 @@ Schemas: `v2/schema/plan_request.json`, `v2/schema/plan_response.json`.
       "detail": "An account named seth_rollins already exists and is bound to another subject.",
       "consequence": "Nothing would change. If it is not theirs, release it from that subject, then adopt it here.",
       "conflict": {
+        "reason": "name_held",
         "username": "seth_rollins",
         "account_id": "3077",
         "adoptable": false,
-        "bound_to": "289471021834760195"
+        "bound_to": "289471021834760195",
+        "detail": "An account named seth_rollins already exists and is bound to another subject.",
+        "next": "If it is not theirs, release it from that subject, then adopt it here."
       }
     }
   ],
@@ -1087,10 +1174,13 @@ the state the write left.
   "effect": "blocked",
   "consequence": "Nothing was changed. If it is not theirs, release it from that subject, then adopt it here.",
   "conflict": {
+    "reason": "name_held",
     "username": "seth_rollins",
     "account_id": "3077",
     "adoptable": false,
-    "bound_to": "289471021834760195"
+    "bound_to": "289471021834760195",
+    "detail": "An account named seth_rollins already exists and is bound to another subject.",
+    "next": "If it is not theirs, release it from that subject, then adopt it here."
   }
 }
 ```
@@ -1194,7 +1284,8 @@ whole burden.
   holds it, and `adoptable`, `true` exactly when `account.adopt` for this
   subject would succeed: no other subject holds the account, the add-on
   knows its own service account and this is not it, and this subject has no
-  binding), and an
+  binding, and `detail` and `next`, the add-on's words for an operator:
+  `v2/schema/common/binding_conflict.json`), and an
   operator decides through the confirmed
   `account.adopt` operation, which every add-on that creates accounts
   therefore serves ([The account operations](#the-account-operations)).
@@ -1499,7 +1590,8 @@ metric is final, absence included.
   whole).
 - A point with `subject` MUST be on a `per_subject` metric and MUST carry
   the Syndra subject id, found through the binding the add-on recorded at
-  apply (by the account's stable id, never its name), never a local name.
+  apply (by the rule `subject` on `/subjects` is said by, never by a
+  name alone), never a local name.
 - Usage by an account you cannot bind (a local account, a shared desk
   login) MUST count in the totals and in `unbound.accounts` (distinct
   accounts across the reply's days), and never as a per-person point. **No
@@ -1671,12 +1763,12 @@ Schema: `v2/schema/error.json`; every code: `v2/registry/errors.json`.
 | 2xx to an operation with no `outcome`, or one outside `common/outcome.json` (or `no_change` without `calls`) | **possibly acted**, as a 5xx: absence is never a value |
 | `LIFECYCLE_REFUSAL` (by code alone) | not reached: a maintenance window; it waits |
 | `CONTRACT_VERSION_MISMATCH`, `UNKNOWN_REQUEST_FIELD`, or 404 `UNKNOWN_ROUTE` (or no code) on a feature route | not reached, and the manifest is read again: the add-on is not the one Syndra thought |
-| `CALL_IN_PROGRESS`, `TARGET_UNREACHABLE`, any 429 | not reached; the change stays queued and is asked again later |
+| `CALL_IN_PROGRESS`, `TARGET_UNREACHABLE`, `TARGET_CHANGED`, any 429 | not reached; the change stays queued and is asked again later |
 | 408, any other 5xx | **possibly acted**: never resent automatically, and shown to a person |
 | any other 4xx | it checked the request and did nothing; the change is dropped |
 
 So the add-on MUST answer a 4xx only when it wrote nothing, and SHOULD
-answer a write with a 5xx (other than `TARGET_UNREACHABLE` and
+answer a write with a 5xx (other than `TARGET_UNREACHABLE`, `TARGET_CHANGED` and
 `LIFECYCLE_REFUSAL`) only when it cannot tell whether the app acted: a 5xx
 sent before any write costs an operator a check for nothing. Which 5xx is
 yours; Syndra reads them alike.
@@ -1702,6 +1794,14 @@ yours; Syndra reads them alike.
   `TARGET_UNREACHABLE` only from the first, before any write, and send every
   failure after a write through one function (`acted` in
   `addons/truenas/apply.go`).
+- A write whose account reads disagree with each other (one account, read
+  more than once to judge a binding, comes back under another name or
+  number: the app changed in between) MUST NOT be judged from them and
+  MUST send nothing. It answers 503 `TARGET_CHANGED` with a short
+  `Retry-After`, and Syndra keeps the change queued, as for
+  `TARGET_UNREACHABLE`, never as possibly acted. Hold the accounts you
+  read by the app's record key to see it (`keyRows` and `writeTornRead` in
+  `addons/truenas/identity_resolve.go`).
 
 ## 7. Operations
 
@@ -2396,8 +2496,19 @@ Steps, in order; each ends on a check.
    writes only to an account whose `username` begins `conformance-`
    ([The one create](#the-one-create)). Add `-mutate-settings` if you serve
    `settings` and the instance can have a setting written back. Add
-   `-json report.json` for the report. *Done when:* it exits 0 and the last
-   line (`left:`) names the one disabled account.
+   `-json report.json` for the report.
+
+   `-elevated-key-file <file>` (with `-mutate` only; the kit refuses it on
+   a reads-only run) hands the kit the `elevated_key` your `account.purge`
+   takes. With it, and `account.purge` declared available, the advisory
+   check `identity.not-reused` runs last: once the withdraw step has turned
+   the kit's own account off, the kit purges that account (only that one,
+   after a plan for its subject names it), creates it again, and warns if
+   the new account answers the old `account_id`. It is the one deletion a
+   run makes, and the last line says so. Without the key the check skips
+   and nothing is deleted; leave it out wherever the instance is shared
+   with production (a purge is a real delete). *Done when:* it exits 0 and
+   the last line (`left:`) names the one disabled account.
    (Exit 1: a MUST failed. Exit 2: the run could not start or `-mutate` was
    refused, for example because the subject exists. Exit 130: interrupted,
    after it put back what it changed.)
@@ -2445,7 +2556,7 @@ own tests carry them:
   filled once it is back (the reference's `TestTheWatermarkIsHeldWhileTheAppIsDown`
   in `addons/reference/stats_test.go`); the buffer's size ceiling; usage by
   an account outside any binding (the kit can only make bound ones), and
-  per-person points owned by the account's stable id, not its name.
+  per-person points owned by the account the binding names, not by its name.
 
 ### What Syndra refuses at registration
 

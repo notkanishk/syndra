@@ -25,7 +25,7 @@ func TestAnAccountThatIsOffSaysWhoSwitchedItOff(t *testing.T) {
 		300003: {}, // bound before the wish was kept
 	}
 	got := map[string]*Standing{}
-	for _, v := range subjectViews(subs(), nil, wishes) {
+	for _, v := range subjectViews(subs(), nil, wishes, nil) {
 		got[v.Username] = v.Standing
 	}
 
@@ -52,7 +52,7 @@ func TestAnAccountThatIsOffSaysWhoSwitchedItOff(t *testing.T) {
 	}
 
 	// A wishes map that could not be read says nothing of who switched it off.
-	for _, v := range subjectViews(subs(), nil, nil) {
+	for _, v := range subjectViews(subs(), nil, nil, nil) {
 		if v.Standing.WaitingOn != "none" || strings.Contains(v.Standing.Note, "Syndra.") {
 			t.Errorf("%s: unread wishes must claim nothing, got %+v", v.Username, v.Standing)
 		}

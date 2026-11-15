@@ -73,8 +73,8 @@ type OperationResult struct {
 	// (common/activity.json), *StorageStatus (profiles/storage/status.json),
 	// *TargetHealth (health.get's own).
 	Result any `json:"result,omitempty"`
-	// AccountID is the identity (the unix uid, as contract 2's string
-	// account_id) of the account an adoption bound.
+	// AccountID is the uid (contract 2's string account_id) of the account an
+	// adoption bound.
 	//
 	// Returned because the backend keeps its own copy of the binding and had no
 	// way to learn this: it knows the NAME the operator clicked, and a name is
@@ -177,7 +177,11 @@ func (s *server) operateNow(w http.ResponseWriter, name string, req OperationReq
 		return
 	case errors.Is(err, errStoreUnreadable):
 		// The add-on's own store (operatedAccount): nothing was sent.
-		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, err.Error(), nil)
+		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, storeUnreadableDetail, nil)
+		return
+	case errors.Is(err, errTornRead):
+		// TrueNAS changed mid-read (operatedAccount): nothing judged or sent, as the apply answers it.
+		writeTornRead(w)
 		return
 	case err != nil:
 		// The error's text is this add-on's own, never the target's response
@@ -211,7 +215,11 @@ func (s *server) readNow(w http.ResponseWriter, name string, req OperationReques
 	if of := (opFailure{}); errors.As(err, &of) {
 		// The error's text is this add-on's own (operateNow).
 		if errors.Is(of.err, errStoreUnreadable) {
-			writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, of.err.Error(), nil)
+			writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, storeUnreadableDetail, nil)
+			return
+		}
+		if errors.Is(of.err, errTornRead) {
+			writeTornRead(w)
 			return
 		}
 		writeError(w, of.status, CodeOperationFailed, of.err.Error(), nil)
@@ -1223,7 +1231,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 	// screens — without a second mutation.
 	if existing, bound, err := s.store.GetBinding(req.Subject); err != nil {
 		// The module's mapping, as every operation answers an unreadable binding.
-		status, refusal := liveRefusal(fmt.Errorf("%w: %w", errStoreUnreadable, err))
+		status, refusal := liveRefusal(unreadable(err))
 		return OperationResult{}, status, refusal
 	} else if bound {
 		if existing.Username == username {
@@ -1267,18 +1275,6 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 			fmt.Errorf("this subject is already bound to %s", existing.Username)
 	}
 
-	claimed, err := s.store.BoundUsernames()
-	if err != nil {
-		return OperationResult{}, http.StatusInternalServerError, err
-	}
-	if owner, taken := claimed[username]; taken {
-		// Somebody else's. Refused rather than moved: this is the mistake the
-		// whole "adoption is an operator decision" rule exists to prevent, and
-		// making it recoverable by rebinding would make it silent.
-		return OperationResult{}, http.StatusConflict,
-			fmt.Errorf("%s is already bound to another subject (%s)", username, owner)
-	}
-
 	// Read from the target rather than trusted from the request. The inventory
 	// the operator was looking at is a snapshot, and an account deleted or
 	// renamed since would otherwise be bound by name to nothing.
@@ -1300,6 +1296,22 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		// misspelling does — and an operator who typed `root` deliberately is
 		// owed the reason rather than a puzzle.
 		return OperationResult{}, http.StatusNotFound, noAdoptableAccount(username)
+	}
+	// Somebody else's, by the one rule over this same read (attribution.bound, accountBound's):
+	// a binding that names the account by its name or by its number after a rename, or two that
+	// do. Refused rather than moved: this is the mistake the whole "adoption is an operator
+	// decision" rule exists to prevent, and making it recoverable by rebinding would make it
+	// silent. BindIfFree still holds the name against a binding whose account is gone.
+	at, err := s.attribute(snap.Subjects)
+	if err != nil {
+		return OperationResult{}, http.StatusInternalServerError, unreadable(err)
+	}
+	if at.bound(account.UID) {
+		if owner, one := at.bindingOf[account.UID]; one {
+			return OperationResult{}, http.StatusConflict,
+				fmt.Errorf("%s is already bound to another subject (%s)", username, owner.SubjectID)
+		}
+		return OperationResult{}, http.StatusConflict, fmt.Errorf("%s is already bound to two other subjects", username)
 	}
 
 	if err := s.mutate(opCaller("account.adopt", req).on(account.UID), "store.bind", func() error {

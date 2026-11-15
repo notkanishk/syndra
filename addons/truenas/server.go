@@ -324,6 +324,9 @@ type SubjectsResponse struct {
 	// unusable for concluding an ABSENCE, which is what half the drift diff
 	// does — so the flag travels separately from `Current`.
 	Truncated bool `json:"truncated"`
+	// Conflicts are the bindings that name no account in this read because another account holds
+	// their name or number (attribute): never absent, and never a row's subject.
+	Conflicts []SubjectConflict `json:"conflicts"`
 }
 
 // Stale is why a read reply is not current (common/stale.json): `unreachable`
@@ -389,8 +392,9 @@ func standingOf(s *Subject) *Standing {
 	return &Standing{Usable: true, WaitingOn: "none"}
 }
 
-// accountID is the target's stable id for an account, as contract 2 names it
-// (`account_id`, a string, decision 26): TrueNAS's is the unix uid.
+// accountID is the app's id for an account, as contract 2 names it (`account_id`, a string,
+// decision 26): TrueNAS's is the unix uid, and nothing else is ever stamped as one. Unique within
+// one read and kept across a rename; not an identity across reads (AUTHORING, chapter 2).
 func accountID(uid int64) string { return strconv.FormatInt(uid, 10) }
 
 // SubjectView is one account as served: what the NAS reports, plus the same
@@ -407,9 +411,12 @@ func accountID(uid int64) string { return strconv.FormatInt(uid, 10) }
 // (`account_id`, `standing`, no `uid` or `password_set`), and the snapshot in
 // the store keeps the shape an older binary reads.
 type SubjectView struct {
-	ID         apiID          `json:"id"`
-	Username   string         `json:"username"`
-	AccountID  string         `json:"account_id"`
+	ID        apiID  `json:"id"`
+	Username  string `json:"username"`
+	AccountID string `json:"account_id"`
+	// Subject is the subject this add-on's binding names the account for (attribute), absent when
+	// none does: SCIM's externalId to the add-on's id (RFC 7643 §3.1). Never inferred from a uid.
+	Subject    string         `json:"subject,omitempty"`
 	Groups     []string       `json:"groups"`
 	Home       string         `json:"home,omitempty"`
 	Enabled    bool           `json:"enabled"`
@@ -426,7 +433,8 @@ type SubjectView struct {
 // account waits on a new password, and whether an account that is off was
 // switched off by Syndra, as storage.status does. An account with no entry
 // is bound to nobody; a nil map is "not read", and says nothing of either.
-func subjectViews(subjects []Subject, limits map[int64]string, wishes map[int64]Wish) []SubjectView {
+// subjectOf is attribute's: the subject each row's account is bound to.
+func subjectViews(subjects []Subject, limits map[int64]string, wishes map[int64]Wish, subjectOf map[rowKey]string) []SubjectView {
 	out := make([]SubjectView, 0, len(subjects))
 	for i := range subjects {
 		s := subjects[i]
@@ -436,7 +444,7 @@ func subjectViews(subjects []Subject, limits map[int64]string, wishes map[int64]
 			state[FieldHomeQuota] = []string{limit}
 		}
 		out = append(out, SubjectView{
-			ID: s.ID, Username: s.Username, AccountID: accountID(s.UID),
+			ID: s.ID, Username: s.Username, AccountID: accountID(s.UID), Subject: subjectOf[rowOf(&s)],
 			Groups: append([]string{}, s.Groups...), Home: s.Home,
 			Enabled: s.Enabled, SMBEnabled: s.SMBEnabled, Self: s.Self,
 			State: state, Standing: standingOf(&s),
@@ -449,15 +457,32 @@ func subjectViews(subjects []Subject, limits map[int64]string, wishes map[int64]
 // feature freshness). Only the literal true asks.
 func wantsFresh(r *http.Request) bool { return r.URL.Query().Get("fresh") == "true" }
 
-// subjectsRead is one read of every account, as served.
+// subjectsRead is one read of every account, as served: the rows and the conflicts, attributed
+// over that read (attribute). Kept as the copy with it: every write forgets the copy (fresh.go),
+// a binding's included, so a copy never outlives the bindings it was attributed by.
 type subjectsRead struct {
 	views     []SubjectView
+	conflicts []SubjectConflict
 	truncated bool
+}
+
+// attributed is one read of the accounts with the bindings over it: each row's subject and the
+// conflicts. A store that cannot be read is errStoreUnreadable, never a read with no row bound and
+// no conflict, which would say every subject's account is gone (Syndra reads a missing account as
+// deleted on the NAS).
+func (s *server) attributed(subjects []Subject, limits map[int64]string, truncated bool) (subjectsRead, error) {
+	at, err := s.attribute(subjects)
+	if err != nil {
+		return subjectsRead{}, unreadable(err)
+	}
+	return subjectsRead{subjectViews(subjects, limits, at.wishes(), at.subjectOf), at.conflicts, truncated}, nil
 }
 
 // handleSubjects serves the full state read: the copy, a read of the NAS now,
 // or the mirror on disk when the NAS cannot be read and nothing newer is kept
-// (fresh.go) — labelled whichever it is.
+// (fresh.go) — labelled whichever it is. Bindings that cannot be read are 500
+// STORE_UNREADABLE, as /plan answers it, unless a copy attributed earlier is
+// kept (the copy, labelled unreachable).
 func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte) {
 	val, obs, err := s.fresh.read("subjects", wantsFresh(r), func() (any, time.Time, error) {
 		snap, err := s.readSubjects()
@@ -470,14 +495,19 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 			// which of the two matters.
 			log.Printf("[STORE] could not persist snapshot: %v", putErr)
 		}
-		return subjectsRead{subjectViews(snap.Subjects, s.homeLimits(snap.Subjects), s.wishesFor(snap.Subjects)), snap.Truncated}, snap.TakenAt, nil
+		read, err := s.attributed(snap.Subjects, s.homeLimits(snap.Subjects), snap.Truncated)
+		return read, snap.TakenAt, err
 	})
 	if writeCooldown(w, err) {
 		return
 	}
 	if err == nil {
 		read := val.(subjectsRead)
-		writeJSON(w, http.StatusOK, SubjectsResponse{Subjects: read.views, Truncated: read.truncated, Observed: obs})
+		writeJSON(w, http.StatusOK, SubjectsResponse{Subjects: read.views, Conflicts: read.conflicts, Truncated: read.truncated, Observed: obs})
+		return
+	}
+	if errors.Is(err, errStoreUnreadable) {
+		writeStoreUnreadable(w, err)
 		return
 	}
 
@@ -498,10 +528,22 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 		return
 	}
 	// The mirror holds no limits: they are read live or not reported.
+	read, err := s.attributed(cached.Subjects, nil, cached.Truncated)
+	if err != nil {
+		writeStoreUnreadable(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, SubjectsResponse{
-		Subjects: subjectViews(cached.Subjects, nil, s.wishesFor(cached.Subjects)), Truncated: cached.Truncated,
+		Subjects: read.views, Conflicts: read.conflicts, Truncated: read.truncated,
 		Observed: Observed{TakenAt: rfc3339(cached.TakenAt), Stale: unreachableSince(cached.TakenAt)},
 	})
+}
+
+// writeStoreUnreadable answers a read whose bindings could not be read.
+func writeStoreUnreadable(w http.ResponseWriter, err error) {
+	log.Printf("[STORE] the bindings could not be read for /subjects: %v", err)
+	writeError(w, http.StatusInternalServerError, CodeStoreUnreadable,
+		subjectsStoreUnreadable, nil)
 }
 
 // The idempotency namespace's type tags. One namespace so a call id reused

@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/common/binding_conflict.json",
+  "title": "Binding conflict",
+  "description": "A binding that names no account because the account it would name is not this subject's alone to have (registry BINDING_CONFLICT). One shape wherever it travels: an apply or plan outcome's conflict, a BINDING_CONFLICT problem's extension member, and an entry of GET /subjects' conflicts. The holder (username and account_id, or holders) is never the subject's account, and is never acted on for the subject.",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string",
+      "enum": [
+        "name_held",
+        "number_held",
+        "ambiguous",
+        "claimed_twice"
+      ],
+      "description": "name_held: another account holds the name (the derived one, or the one the binding is recorded under). number_held: the recorded name is gone and the recorded number, one the app can hand out again, is held by another name. ambiguous: two or more accounts hold the key the binding is looked up by, so none is named (holders lists them). claimed_twice: another subject's binding names the same account, so neither is given it (the holder is that account; bound_to the other subject when there is one)."
+    },
+    "username": {
+      "type": "string",
+      "description": "The holder's name. Every reason but ambiguous."
+    },
+    "account_id": {
+      "$ref": "field.json#/$defs/AccountId",
+      "description": "The holder's account_id, in the same read. Every reason but ambiguous."
+    },
+    "holders": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "$ref": "#/$defs/Holder"
+      },
+      "description": "ambiguous only: every account that holds the key, none of them named."
+    },
+    "adoptable": {
+      "type": "boolean",
+      "description": "account.adopt would bind the holder to this subject as things stand: no other subject holds it, it is not the add-on's own, and this subject has no binding. Never true for ambiguous or claimed_twice."
+    },
+    "bound_to": {
+      "type": "string",
+      "description": "The subject the holder is bound to, when one is."
+    },
+    "detail": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What the conflict is, as a sentence for an operator, in the add-on's words."
+    },
+    "next": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What the operator does next, as a sentence."
+    }
+  },
+  "required": [
+    "reason",
+    "adoptable",
+    "detail",
+    "next"
+  ],
+  "if": {
+    "properties": {
+      "reason": {
+        "const": "ambiguous"
+      }
+    },
+    "required": [
+      "reason"
+    ]
+  },
+  "then": {
+    "required": [
+      "holders"
+    ],
+    "properties": {
+      "adoptable": {
+        "const": false
+      }
+    },
+    "not": {
+      "anyOf": [
+        {
+          "required": [
+            "username"
+          ]
+        },
+        {
+          "required": [
+            "account_id"
+          ]
+        }
+      ]
+    }
+  },
+  "else": {
+    "required": [
+      "username",
+      "account_id"
+    ],
+    "not": {
+      "required": [
+        "holders"
+      ]
+    }
+  },
+  "$defs": {
+    "Holder": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "account_id": {
+          "$ref": "field.json#/$defs/AccountId"
+        }
+      },
+      "required": [
+        "username",
+        "account_id"
+      ]
+    }
+  }
+}

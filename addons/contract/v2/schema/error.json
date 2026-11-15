@@ -89,7 +89,7 @@
       "type": "string"
     },
     "conflict": {
-      "$ref": "apply_response.json#/$defs/BindingConflict"
+      "$ref": "common/binding_conflict.json"
     }
   },
   "required": [

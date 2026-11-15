@@ -21,10 +21,13 @@
       "detail": "An account named seth_rollins already exists and is bound to another subject.",
       "consequence": "Nothing would change. If it is not theirs, release it from that subject, then adopt it here.",
       "conflict": {
+        "reason": "name_held",
         "username": "seth_rollins",
         "account_id": "3077",
         "adoptable": false,
-        "bound_to": "289471021834760195"
+        "bound_to": "289471021834760195",
+        "detail": "An account named seth_rollins already exists and is bound to another subject.",
+        "next": "If it is not theirs, release it from that subject, then adopt it here."
       }
     }
   ],

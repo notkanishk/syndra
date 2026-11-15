@@ -101,8 +101,15 @@ func serveRewritingHeaders(t *testing.T, secret string, hook func(r *http.Reques
 }
 
 func config(url string, mutate bool) Config {
-	return Config{URL: url, Target: "reference", Secret: []byte(testSecret), Mutate: mutate, Subject: "conformance-self-test"}
+	cfg := Config{URL: url, Target: "reference", Secret: []byte(testSecret), Mutate: mutate, Subject: "conformance-self-test"}
+	if mutate {
+		cfg.ElevatedKey = testElevatedKey
+	}
+	return cfg
 }
+
+// testElevatedKey is the reference's account.purge credential: any value, which it never keeps.
+const testElevatedKey = "conformance-test-elevated-key"
 
 func run(t *testing.T, cfg Config) *Report {
 	t.Helper()
@@ -148,7 +155,11 @@ func lifecycleOf(t *testing.T, url string) string {
 	return str(k.send(request{method: http.MethodGet, target: "/health"}).doc(), "lifecycle")
 }
 
-const leftOne = `one disabled account "conformance-self-test" (account_id 1001) on target "reference"; removal disables, never deletes`
+// leftFirst is a run that ended before identity.not-reused, or ran without the elevated key.
+const leftFirst = `one disabled account "conformance-self-test" (account_id 1001) on target "reference"; removal disables, never deletes`
+
+const leftOne = `one disabled account "conformance-self-test" (account_id 1002) on target "reference"; the end of the run disabled it and did not delete it; ` +
+	`the kit's first account, account_id 1001, was deleted with account.purge to check identity.not-reused (the operator's elevated key; the one deletion a run makes)`
 
 // The clean reference passes every core check, and skips only what this kit
 // does not check yet. A check that quietly skipped against the reference
@@ -248,6 +259,82 @@ func TestWithoutMutateTheKitSendsReadsOnly(t *testing.T) {
 	}
 }
 
+// An add-on whose app hands a purged account's id out again is warned, never
+// failed: the guide lets an app recycle ids (the add-on then resolves bindings
+// by name beside the number), so identity.not-reused is advisory.
+func TestAReusedIDWarnsAndNeverFailsTheRun(t *testing.T) {
+	url, _ := serveRewriting(t, testSecret, nil, nil, nil, reference.ReusedID)
+	r := run(t, config(url, true))
+	var res Result
+	for _, x := range r.Results {
+		if x.ID == "identity.not-reused" {
+			res = x
+		}
+	}
+	if res.Status != "fail" || res.Level != "ADVISORY" || r.Failed() {
+		t.Errorf("identity.not-reused %s %s (run failed %v), want an advisory fail and exit 0: %v", res.Status, res.Level, r.Failed(), res.Detail)
+	}
+}
+
+// Without the operator's elevated key the kit deletes nothing: identity.not-reused
+// skips and the one account it made is left, disabled.
+func TestWithoutAnElevatedKeyNothingIsPurged(t *testing.T) {
+	url, seen := serve(t, testSecret, nil)
+	cfg := config(url, true)
+	cfg.ElevatedKey = ""
+	r := run(t, cfg)
+	if r.Status("identity.not-reused") != "skip" || r.Failed() {
+		t.Errorf("identity.not-reused %s, failed %v", r.Status("identity.not-reused"), r.Failed())
+	}
+	if slices.Contains(seen(), "POST /operations/account.purge") {
+		t.Error("account.purge was sent without an elevated key")
+	}
+	if want := leftFirst; r.Left != want {
+		t.Errorf("left %q, want %q", r.Left, want)
+	}
+}
+
+// A delete-capable key is refused on a reads-only run, before anything is sent.
+func TestAnElevatedKeyWithoutMutateIsRefused(t *testing.T) {
+	url, seen := serve(t, testSecret, nil)
+	cfg := config(url, false)
+	cfg.ElevatedKey = testElevatedKey
+	if r, err := Run(context.Background(), cfg); err == nil || r != nil || !strings.Contains(err.Error(), "-elevated-key-file is only for -mutate") {
+		t.Errorf("Run answered %v, %v", r, err)
+	}
+	if len(seen()) != 0 {
+		t.Errorf("sent %v", seen())
+	}
+}
+
+// Reads-only, the attribution rules judge whatever the add-on lists: a subject
+// on two rows, or a conflict that is also a row's subject, fails.
+func TestAttributionIsJudgedOnAReadsOnlyRun(t *testing.T) {
+	two := `{"subject":"wwe-the-rock","username":"rock","account_id":"9","state":{},"standing":{"usable":true,"waiting_on":"none"}}`
+	for _, tc := range []struct{ name, id, rows, conflicts string }{
+		{"a subject on two rows", "subjects.subject", two + "," + strings.Replace(two, `"9"`, `"10"`, 1), `[]`},
+		{"a conflict that is also a row's subject", "subjects.conflicts", two,
+			`[{"subject":"wwe-the-rock","reason":"name_held","username":"cena","account_id":"11","adoptable":false,"detail":"Held.","next":"Release it."}]`},
+		// An ambiguous key has no one holder: naming one is the guess the reason exists to refuse.
+		{"an ambiguous conflict naming one holder", "subjects.conflicts", "",
+			`[{"subject":"wwe-edge","reason":"ambiguous","username":"edge","account_id":"12","adoptable":false,"detail":"Two hold it.","next":"Rename one."}]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			url, _ := serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
+				if r.URL.Path != "/subjects" {
+					return reply
+				}
+				return []byte(`{"subjects":[` + tc.rows + `],"current":true,"taken_at":"` + time.Now().UTC().Format(time.RFC3339) +
+					`","truncated":false,"conflicts":` + tc.conflicts + `}`)
+			}, nil)
+			r := run(t, config(url, false))
+			if r.Status(tc.id) != "fail" {
+				t.Errorf("%s says %s", tc.id, r.Status(tc.id))
+			}
+		})
+	}
+}
+
 // Every defect the reference can be switched into fails the check written to
 // catch it. A defect with no row here fails the test, so the list cannot rot.
 func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
@@ -305,6 +392,10 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.StatsDimensionNamesPerson: "stats.no-people",
 		reference.FoldsNames:                "requests.exact-names",
 		reference.OffWaitsOnOperator:        "standing.off",
+		reference.OmitsSubject:              "subjects.subject",
+		reference.ConflictAlsoAttributed:    "subjects.conflicts",
+		// Advisory: an app may recycle ids (AUTHORING, chapter 2), so it warns and the run exits 0.
+		reference.ReusedID: "(TestAReusedIDWarnsAndNeverFailsTheRun)",
 		// A reply lost mid-call and two calls racing a limit are beyond a
 		// black-box kit (calls.unsettled, calls.serialised skip); the
 		// reference's own tests watch these two fail.
@@ -518,7 +609,7 @@ func TestAnInterruptedRunPutsBackWhatItChanged(t *testing.T) {
 	if got := lifecycleOf(t, url); got != "active" {
 		t.Errorf("the add-on was left %s", got)
 	}
-	if r.Left != leftOne {
+	if r.Left != leftFirst {
 		t.Errorf("left %q", r.Left)
 	}
 }
@@ -861,6 +952,9 @@ func TestAFrozenKitSendsNoWriteToItsSubject(t *testing.T) {
 func account(t *testing.T, url, id string) string {
 	for _, s := range subjects(t, url) {
 		if s["account_id"] == id {
+			// Who the add-on says it belongs to is not the account: a rebinding
+			// defect moves the subject, and no write of the kit's made that.
+			delete(s, "subject")
 			raw, _ := json.Marshal(s)
 			return string(raw)
 		}
@@ -1370,7 +1464,7 @@ func TestAnAddOnThatNeverDrainsLeavesTheAccountUnconfirmed(t *testing.T) {
 	if r.Status("withdraw-only.existing") != "pass" {
 		t.Errorf("withdraw-only.existing %s", r.Status("withdraw-only.existing"))
 	}
-	if !strings.HasPrefix(r.Left, `account "conformance-self-test" (account_id 1001) on target "reference", NOT confirmed disabled `+
+	if !strings.HasPrefix(r.Left, `account "conformance-self-test" (account_id 1002) on target "reference", NOT confirmed disabled `+
 		`(the add-on never reported in_flight 0, so a write may still land): disable it by hand`) {
 		t.Errorf("left %q", r.Left)
 	}

@@ -72,6 +72,8 @@ paths:
           $ref: "#/components/responses/Error"
         "429":
           $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
         "503":
           $ref: "#/components/responses/Error"
   /values/{field}:
@@ -460,7 +462,7 @@ components:
         secret; see transport_derivation.json, raw_query_signatures. Two minutes' tolerance.
   headers:
     RetryAfter:
-      description: Seconds to wait; present on CALL_IN_PROGRESS, FRESH_READ_COOLDOWN, TARGET_UNREACHABLE and LIFECYCLE_REFUSAL.
+      description: Seconds to wait; present on CALL_IN_PROGRESS, FRESH_READ_COOLDOWN, TARGET_UNREACHABLE, TARGET_CHANGED and LIFECYCLE_REFUSAL.
       schema:
         type: integer
   parameters:

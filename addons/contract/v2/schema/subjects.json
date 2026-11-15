@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://syndra.example.org/addon-contract/2/schema/subjects.json",
   "title": "Subjects",
-  "description": "GET /subjects. Every account the target holds, in entitlement vocabulary, and how far to trust the read. Every subject has an account, so every subject carries standing.",
+  "description": "GET /subjects. Every account the target holds, in entitlement vocabulary, which subject the add-on's bindings name each for, every binding that names none because another account holds its name or number, and how far to trust the read. Every subject has an account, so every subject carries standing.",
   "type": "object",
   "properties": {
     "subjects": {
@@ -26,6 +26,13 @@
     },
     "stale": {
       "$ref": "common/stale.json"
+    },
+    "conflicts": {
+      "type": "array",
+      "description": "Every binding that names no account in this read because another account holds its name or number. Absent or empty: none. A subject listed here is on no row.",
+      "items": {
+        "$ref": "#/$defs/Conflict"
+      }
     }
   },
   "required": [
@@ -56,6 +63,11 @@
         },
         "account_id": {
           "$ref": "common/field.json#/$defs/AccountId"
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The Syndra subject the add-on's binding names this account for: the role SCIM's externalId plays (RFC 7643 section 3.1). Absent: bound to nobody (unmanaged, or the add-on's own account). One subject is on one row at most."
         },
         "groups": {
           "type": "array",
@@ -90,6 +102,23 @@
         "account_id",
         "state",
         "standing"
+      ]
+    },
+    "Conflict": {
+      "description": "A binding that names nothing in this read: the subject, and the account that holds its name or number (the holder, never the subject's account).",
+      "allOf": [
+        {
+          "$ref": "common/binding_conflict.json"
+        }
+      ],
+      "properties": {
+        "subject": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "subject"
       ]
     }
   }

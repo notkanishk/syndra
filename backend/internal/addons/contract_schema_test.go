@@ -221,6 +221,47 @@ func TestSchemasRefuseWhatTheyShould(t *testing.T) {
 		{"desired list field null", "apply_request.json", "apply_request.json", func(d map[string]any) {
 			d["desired"].(map[string]any)["group"] = nil
 		}},
+		{"a subjects row bound to an empty subject", "subjects.json", "subjects.json", func(d map[string]any) {
+			d["subjects"].([]any)[0].(map[string]any)["subject"] = ""
+		}},
+		{"a subjects conflict naming no subject", "subjects.json", "subjects.json", func(d map[string]any) {
+			delete(d["conflicts"].([]any)[0].(map[string]any), "subject")
+		}},
+		{"a subjects conflict without its next step", "subjects.json", "subjects.json", func(d map[string]any) {
+			delete(d["conflicts"].([]any)[0].(map[string]any), "next")
+		}},
+		{"a conflict without a reason", "subjects.json", "subjects.json", func(d map[string]any) {
+			delete(d["conflicts"].([]any)[0].(map[string]any), "reason")
+		}},
+		{"a conflict with a reason outside the set", "subjects.json", "subjects.json", func(d map[string]any) {
+			d["conflicts"].([]any)[0].(map[string]any)["reason"] = "held"
+		}},
+		{"an ambiguous conflict naming one holder", "subjects.json", "subjects.json", func(d map[string]any) {
+			c := d["conflicts"].([]any)[1].(map[string]any)
+			c["username"], c["account_id"] = "big_e", "3031"
+		}},
+		{"an ambiguous conflict without its holders", "subjects.json", "subjects.json", func(d map[string]any) {
+			delete(d["conflicts"].([]any)[1].(map[string]any), "holders")
+		}},
+		{"an ambiguous conflict with one holder", "subjects.json", "subjects.json", func(d map[string]any) {
+			c := d["conflicts"].([]any)[1].(map[string]any)
+			c["holders"] = c["holders"].([]any)[:1]
+		}},
+		{"an ambiguous conflict offered for adoption", "subjects.json", "subjects.json", func(d map[string]any) {
+			d["conflicts"].([]any)[1].(map[string]any)["adoptable"] = true
+		}},
+		{"a held-name conflict with holders and no holder", "subjects.json", "subjects.json", func(d map[string]any) {
+			c := d["conflicts"].([]any)[0].(map[string]any)
+			c["holders"] = d["conflicts"].([]any)[1].(map[string]any)["holders"]
+			delete(c, "username")
+			delete(c, "account_id")
+		}},
+		{"a BINDING_CONFLICT whose conflict has no words", "error.json", "error_binding_conflict.json", func(d map[string]any) {
+			delete(d["conflict"].(map[string]any), "detail")
+		}},
+		{"a plan conflict without the holder", "plan_response.json", "plan_response.json", func(d map[string]any) {
+			delete(d["outcomes"].([]any)[1].(map[string]any)["conflict"].(map[string]any), "account_id")
+		}},
 		{"feature stats without stats_zone", "manifest.json", "manifest.json", set("stats_zone", nil)},
 		{"a meter (against) on a dimensioned metric", "manifest.json", "manifest.json", func(d map[string]any) {
 			d["metrics"].([]any)[1].(map[string]any)["against"] = "home_quota"

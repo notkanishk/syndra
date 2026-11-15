@@ -37,7 +37,7 @@
         409
       ],
       "retry": "never",
-      "meaning": "An unbound target account already holds the derived name; the conflict rides as an extension member. An operator adopts or renames."
+      "meaning": "The account the subject's binding would name is not the subject's alone to have (common/binding_conflict.json reason): another account holds the name an unbound subject derives or the name its binding is recorded under (name_held), a recorded number the app can hand out again is held by another name (number_held), two or more accounts hold the key it is looked up by (ambiguous), or another subject's binding names the same account (claimed_twice). The holder is never acted on. The conflict, with the add-on's words, rides as an extension member; GET /subjects lists the same conflicts under conflicts. An operator adopts, releases or renames."
     },
     "CALL_ID_REUSED": {
       "title": "Call id reused",
@@ -229,6 +229,14 @@
       ],
       "retry": "backoff",
       "meaning": "The add-on's local store could not be read."
+    },
+    "TARGET_CHANGED": {
+      "title": "Target changed",
+      "statuses": [
+        503
+      ],
+      "retry": "retry_after",
+      "meaning": "The target changed while the add-on was reading it (one account read twice under a different name or number), so nothing was judged and nothing was sent; Syndra keeps it queued and tries again. Retry-After is present. Answered by an apply or an operation, never for a write that may have reached the target."
     },
     "TARGET_UNREACHABLE": {
       "title": "Target unreachable",

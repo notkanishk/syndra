@@ -73,11 +73,11 @@ type ApplyOutcome struct {
 	// Username is the derived or bound account name, reported so no separate
 	// creation call has to be sequenced before this one to learn it.
 	Username string `json:"username,omitempty"`
-	// AccountID is the target's stable identity for that account (the uid,
-	// as contract 2's string account_id). Reported beside the name because the
-	// name can move out of band and this cannot: a backend recording only the
-	// name would lose track of the account the first time somebody renamed it
-	// in the web UI.
+	// AccountID is that account's uid, as contract 2's string account_id.
+	// Reported beside the name because the name can move out of band and this
+	// cannot. It is a key within this reply's read, not an identity across
+	// reads: TrueNAS can hand a deleted account's uid outside this add-on's
+	// range to a new one (identity_resolve.go).
 	AccountID string `json:"account_id,omitempty"`
 	// Standing is whether that account can be used yet, and who is waited on
 	// (design §6). It travels with AccountID, and only when an account exists.
@@ -194,20 +194,34 @@ const (
 	EffectApply    = "apply"
 )
 
-// BindingConflict is an unbound account already holding the derived name.
+// BindingConflict is a binding that names no account because the account it would name is not
+// this subject's alone to have (common/binding_conflict.json): another account holds the name or
+// the number, two accounts hold the key, or another subject's binding names the same account.
 //
 // Silently adopting it is the dangerous outcome: that account may belong to
 // somebody else entirely, and adopting it hands them a subject's entitlements
 // along with whatever is already in its home directory. So the operation stops
 // and an operator chooses (BindingConflict.words).
 type BindingConflict struct {
-	Username  string `json:"username"`
-	AccountID string `json:"account_id"`
+	// Reason is which of the four it is; set by worded from the flags below.
+	Reason string `json:"reason"`
+	// Username and AccountID are the holder's; Holders instead when the key is ambiguous.
+	Username  string   `json:"username,omitempty"`
+	AccountID string   `json:"account_id,omitempty"`
+	Holders   []Holder `json:"holders,omitempty"`
 	// Adoptable says the account exists, no other subject is bound to it and
 	// it is known not to be the add-on's own, which is the only case the
 	// adoption action can act on.
 	Adoptable bool   `json:"adoptable"`
 	BoundTo   string `json:"bound_to,omitempty"`
+	// Detail and Next are words(), carried with the conflict wherever it travels (an outcome, a
+	// BINDING_CONFLICT problem, /subjects' conflicts: common/binding_conflict.json). Set once, by
+	// worded, where a conflict is made.
+	Detail string `json:"detail"`
+	Next   string `json:"next"`
+	// claimedTwice is another subject's binding naming the same account (attribute): not on the
+	// wire, which says it as the reason.
+	claimedTwice bool
 	// serviceAccount is the add-on's own account holding the name, which
 	// account.adopt refuses (refuseSelfAccount). Not on the wire: adoptable
 	// false already says the one thing Syndra acts on, and words says why.
@@ -228,11 +242,41 @@ type BindingConflict struct {
 func (s *server) unboundConflict(account *Subject, owner string) *BindingConflict {
 	_, _, known := s.nas.Self()
 	self := s.refuseSelfAccount(account.Username) != nil
-	return &BindingConflict{
+	return (&BindingConflict{
 		Username: account.Username, AccountID: accountID(account.UID),
 		Adoptable: owner == "" && known && !self, BoundTo: owner,
 		serviceAccount: self, selfUnknown: !known,
+	}).worded()
+}
+
+// Holder is one account an ambiguous key names (common/binding_conflict.json#/$defs/Holder).
+type Holder struct {
+	Username  string `json:"username"`
+	AccountID string `json:"account_id"`
+}
+
+// The conflict reasons (common/binding_conflict.json).
+const (
+	reasonNameHeld     = "name_held"
+	reasonNumberHeld   = "number_held"
+	reasonAmbiguous    = "ambiguous"
+	reasonClaimedTwice = "claimed_twice"
+)
+
+// worded sets the conflict's Reason, Detail and Next, once, where it is made.
+func (c *BindingConflict) worded() *BindingConflict {
+	switch {
+	case len(c.Holders) > 0:
+		c.Reason = reasonAmbiguous
+	case c.claimedTwice:
+		c.Reason = reasonClaimedTwice
+	case c.numberHeld:
+		c.Reason = reasonNumberHeld
+	default:
+		c.Reason = reasonNameHeld
 	}
+	c.Detail, c.Next = c.words()
+	return c
 }
 
 // leftByCrashedCreate is design §5's one adoption without a person (5.3d):
@@ -310,6 +354,11 @@ func adoptionWords(out ApplyOutcome, planned bool) ApplyOutcome {
 // operator releases first.
 func (c BindingConflict) words() (detail, next string) {
 	switch {
+	case len(c.Holders) > 0:
+		return ambiguityWords()
+	case c.claimedTwice:
+		return fmt.Sprintf("The account %s is recorded for this person and for someone else, so Syndra changes it for neither.", c.Username),
+			"Stop tracking it for whichever of the two it does not belong to."
 	case c.serviceAccount:
 		return fmt.Sprintf("%s is the account this add-on signs in to the app with, so it is never adopted.", c.Username),
 			"Create this subject's account in the app under another name, then adopt that."
@@ -425,8 +474,12 @@ func (s *server) decodeDesired(raw map[string]json.RawMessage) (desiredState, er
 	if err != nil || !d.wantsHome {
 		return d, err
 	}
-	d.homeRoot, err = s.homeRoot()
-	return d, err
+	// Where home folders go is the add-on's own setting, in its store: a failure is the store's,
+	// answered alike by the plan and the apply (unreadable).
+	if d.homeRoot, err = s.homeRoot(); err != nil {
+		return d, unreadable(err)
+	}
+	return d, nil
 }
 
 func decodeDesiredFields(raw map[string]json.RawMessage) (desiredState, error) {
@@ -584,6 +637,14 @@ func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 		// drops ErrNotSent from those (acted).
 		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
 			"The NAS could not be reached, so nothing was sent to it.", nil)
+	case errors.Is(err, errTornRead):
+		// TrueNAS changed mid-read: nothing judged, nothing sent, queued again (TARGET_CHANGED).
+		writeTornRead(w)
+	case errors.Is(err, errStoreUnreadable):
+		// The add-on's own records, never the NAS (which a 502 would blame): one rule and one
+		// sentence for every route (decodeBinding). 500, which Syndra reads as possibly acted:
+		// true of a create whose binding could not then be written, and harmless otherwise.
+		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, storeUnreadableDetail, nil)
 	case errors.Is(err, errNotLogged):
 		// 500, which Syndra reads as "may have acted". Conservative, not a
 		// claim: the write that could not be recorded was not sent, and usually
@@ -1273,6 +1334,11 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		// unbound, and halt as a binding conflict — which is recoverable but
 		// needs an operator, so it is reported now rather than discovered then.
 		logStoreFailure("binding", req.Subject, err)
+		if errors.Is(err, errStoreUnreadable) {
+			// Another binding could not be read, so whether the name is free could not be told:
+			// STORE_UNREADABLE, as every route answers it; the create is in the mutation log.
+			return ApplyOutcome{}, http.StatusInternalServerError, err
+		}
 		return ApplyOutcome{}, http.StatusInternalServerError,
 			fmt.Errorf("account %s was created and its binding could not be recorded: %v", binding.Username, err)
 	}
@@ -1541,6 +1607,9 @@ func acted(err error) (ApplyOutcome, int, error) {
 
 func statusFor(err error) int {
 	switch {
+	case errors.Is(err, errTornRead):
+		// TrueNAS changed mid-read (keyRows): nothing was judged or sent, and a retry reads it whole.
+		return http.StatusServiceUnavailable
 	case errors.Is(err, ErrTargetUnreachable):
 		return http.StatusServiceUnavailable
 	case errors.Is(err, ErrRateLimited):
