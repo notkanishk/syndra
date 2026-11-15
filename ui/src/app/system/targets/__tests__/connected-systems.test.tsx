@@ -172,14 +172,14 @@ describe("connected systems", () => {
       expect(screen.queryByText("Nothing waiting")).toBeNull();
     });
 
-    it("counts a tampered change log and a disputed account as decisions", () => {
+    it("counts a tampered change log as a decision", () => {
       state.targets = [target()];
       state.inventory = { bound: 3, unmanaged: [], current: true };
       state.findings = [];
-      state.health = { log_anchor: { violation_reason: "edited" }, binding_conflicts: [{ id: "c1" }] };
+      state.health = { log_anchor: { violation_reason: "edited" } };
       render(<ConnectedSystemsPage />);
 
-      expect(screen.getByRole("link", { name: "2 things need a decision" })).toBeTruthy();
+      expect(screen.getByRole("link", { name: "1 thing needs a decision" })).toBeTruthy();
     });
 
     it("says nothing is waiting, so an empty cell never reads as unknown", () => {

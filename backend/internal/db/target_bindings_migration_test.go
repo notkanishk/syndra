@@ -19,28 +19,40 @@ func migration32(t *testing.T) string {
 	return string(raw)
 }
 
-// One account belongs to one subject. Without both indexes, two subjects could
-// be recorded against one account and both told it is theirs — and the second to
-// converge would take the first one's groups away.
-func TestOneAccountBelongsToOneSubject(t *testing.T) {
-	sql := migration32(t)
-
-	if !strings.Contains(sql, "PRIMARY KEY (target, subject_id)") {
+// The mirror is not an identity (7t-6, 000098): one row per subject (the
+// primary key, from 000032), and no unique index on the name or the number,
+// which made a reused uid refuse the add-on's correct answer. The down puts
+// all three back, and resolves duplicates first by the up's own rule (the
+// newest row wins), audited, or a rollback would fail on the rows a rolled-back
+// backend wrote.
+func TestTheMirrorIsNotAnIdentity(t *testing.T) {
+	if !strings.Contains(migration32(t), "PRIMARY KEY (target, subject_id)") {
 		t.Error("a subject may hold one account per target, and the primary key is what says so")
 	}
-	if !strings.Contains(sql, "idx_target_account_bindings_username\n    ON target_account_bindings(target, username)") {
-		t.Error("the name must be unique per target")
-	}
-	// Partial, because not every target has a stable identity to offer and NULLs
-	// are distinct in a plain unique index — which would let a second binding
-	// with no uid through while looking like it enforced something.
-	if !strings.Contains(sql, "ON target_account_bindings(target, account_uid)\n    WHERE account_uid IS NOT NULL") {
-		t.Error("the uid index must be partial, or every binding without one collides")
-	}
-	for _, index := range []string{"idx_target_account_bindings_username", "idx_target_account_bindings_uid"} {
-		if !strings.Contains(sql, "CREATE UNIQUE INDEX IF NOT EXISTS "+index) {
-			t.Errorf("%s must be UNIQUE — a non-unique index enforces nothing", index)
+	up, down := readMigrationPair(t, "000098_mirror_is_not_an_identity")
+	indexes := []string{"idx_target_account_bindings_username", "idx_target_account_bindings_uid", "idx_target_account_bindings_account_id"}
+	for _, index := range indexes {
+		if !strings.Contains(up, "DROP INDEX IF EXISTS "+index+";") {
+			t.Errorf("000098 up must drop %s", index)
 		}
+		if !strings.Contains(down, "CREATE UNIQUE INDEX IF NOT EXISTS "+index) {
+			t.Errorf("000098 down must restore %s as UNIQUE", index)
+		}
+	}
+	if strings.Contains(strings.ToUpper(up), "CREATE UNIQUE") || strings.Contains(up, "target_binding_conflicts;") {
+		t.Error("000098 up adds no unique index and leaves target_binding_conflicts for the rollback (dropped with 1.7b)")
+	}
+	// The duplicates go before the first index, newest kept, each audited.
+	first := strings.Index(down, "CREATE UNIQUE INDEX")
+	for _, key := range []string{"PARTITION BY target, username", "PARTITION BY target, account_uid", "PARTITION BY target, account_id"} {
+		at := strings.Index(down, key)
+		if at < 0 || at > first {
+			t.Errorf("000098 down must resolve duplicates on %q before it restores the indexes", key)
+		}
+	}
+	if strings.Count(down, "ORDER BY last_seen_at DESC, bound_at DESC, subject_id DESC") != 3 ||
+		strings.Count(down, "'binding.' || target || '.stale_cleared'") != 3 {
+		t.Error("each pass keeps the newest row (a total order) and audits what it clears")
 	}
 }
 
@@ -92,16 +104,23 @@ func TestABindingIsRefusedBeforeTheWrite(t *testing.T) {
 	}
 }
 
-// The conflict is reported as itself and not as a constraint name. A unique
-// violation quoted back describes the schema to whoever asked, and the operator
-// action for it — decide which of two people is meant to have the account — is
-// not "look at an index".
-func TestABindingConflictIsReportedAsADecision(t *testing.T) {
-	src := readSource(t, "target_bindings.go")
-	if !strings.Contains(src, "IsUniqueViolation(err)") {
-		t.Fatal("the unique violation is no longer translated")
+// The write clears another subject's row on the same name or account id in
+// its own transaction, audits it, and is serialised per target; nothing on
+// this path reads a unique violation any more.
+func TestABindingWriteClearsTheStaleRowInItsTransaction(t *testing.T) {
+	src := funcBody(t, readSource(t, "target_bindings.go"), "RecordTargetBinding")
+	lock := strings.Index(src, "pg_advisory_xact_lock")
+	clear := strings.Index(src, "clearStale, b.Target")
+	audit := strings.Index(src, `".stale_cleared"`)
+	write := strings.Index(src, "upsert, b.Target")
+	if lock < 0 || clear < 0 || audit < 0 || write < 0 || !(lock < clear && clear < audit && audit < write) {
+		t.Error("lock, clear, audit, then write, all on the one transaction")
 	}
-	if !strings.Contains(src, "ErrBindingConflict") {
-		t.Error("the conflict must have its own sentinel — its operator action is nothing like a failed write")
+	if strings.Contains(src, "IsUniqueViolation") {
+		t.Error("a binding write no longer meets a unique index to violate")
+	}
+	stale := between(t, src, "const clearStale", "RETURNING")
+	if !strings.Contains(stale, "subject_id <> $2") || !strings.Contains(stale, "$4::text IS NOT NULL AND") {
+		t.Error("only another subject's row, and the id arm only when the write carries an id")
 	}
 }

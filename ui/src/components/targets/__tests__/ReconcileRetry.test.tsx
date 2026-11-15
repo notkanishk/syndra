@@ -37,7 +37,6 @@ vi.mock("@/lib/queries/useTargets", async () => {
     useTargetInventory: idle,
     useTargetInventoryAgain: () => ({ press: async () => {}, pending: false, error: null }),
     useResolveLogFinding: inert,
-    useResolveBindingConflict: inert,
     useSetLifecycle: inert,
     useReleaseBinding: inert,
     useAdoptAccount: inert,

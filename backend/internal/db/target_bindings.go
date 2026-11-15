@@ -2,8 +2,10 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -18,13 +20,6 @@ import (
 // apply resolves a subject to an account through the add-on's own store; this
 // follows that decision rather than competing with it, which is why every writer
 // here is downstream of an add-on answer.
-
-// ErrBindingConflict is an account already recorded against somebody else.
-//
-// Its own error because its own operator action: adopting an account that is
-// already somebody's is not a retry, it is a question about which of the two
-// people is meant to have it.
-var ErrBindingConflict = errors.New("db: that account on that target is already bound to another subject")
 
 // TargetBinding is one subject's account on one target.
 //
@@ -45,9 +40,20 @@ type TargetBinding struct {
 // RecordTargetBinding writes what the target reported for a subject.
 //
 // Idempotent by design: an apply reports the account every time it converges,
-// and the common case is a binding that has not changed. What it must NOT do is
-// move an account from one subject to another silently — that is the conflict
-// above, and it is raised rather than resolved.
+// and the common case is a binding that has not changed.
+//
+// The add-on's answer is the authority (design §9.4b, ADR-007): its binding is
+// the only link from a person to an account, and this table is the backend's
+// mirror of it. So another subject's row on the same name or account id is the
+// stale one (TrueNAS handed a freed uid or name to a new account, and the
+// add-on bound it to this subject), and it is cleared in the same transaction,
+// logged and audited (binding.<target>.stale_cleared, naming who it was), never
+// refused. Two LIVE claims on one account are the add-on's to report
+// (/subjects `claimed_twice`, the binding_conflict finding); it never answers
+// an apply or adoption for an account another binding names.
+//
+// The writes on one target are serialised (an advisory lock), so two writes
+// cannot each miss the other's row and leave two subjects on one name.
 //
 // `bound_by` and `bound_at` survive an update. They record who first attached
 // this account to this person, which is the question asked after an adoption
@@ -70,7 +76,7 @@ func RecordTargetBinding(ctx context.Context, b TargetBinding) error {
 	// where a contract-1 backend wrote account_uid, which is exactly what
 	// BackfillAccountIDs corrects. An id, once recorded, is never erased by a
 	// write that reported none.
-	const q = `
+	const upsert = `
 		INSERT INTO target_account_bindings (target, subject_id, username, account_id, account_uid, bound_by)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (target, subject_id) DO UPDATE
@@ -78,6 +84,13 @@ func RecordTargetBinding(ctx context.Context, b TargetBinding) error {
 		       account_id   = COALESCE(EXCLUDED.account_id, target_account_bindings.account_id),
 		       account_uid  = CASE WHEN EXCLUDED.account_id IS NOT NULL THEN EXCLUDED.account_uid ELSE target_account_bindings.account_uid END,
 		       last_seen_at = NOW()`
+	// The id arm only when the write carries one: a write that reported none
+	// must not match every row that also has none.
+	const clearStale = `
+		DELETE FROM target_account_bindings
+		 WHERE target = $1 AND subject_id <> $2
+		   AND (username = $3 OR ($4::text IS NOT NULL AND ` + accountIDColumn + ` = $4::text))
+		RETURNING subject_id, username, ` + accountIDColumn
 
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
@@ -86,14 +99,34 @@ func RecordTargetBinding(ctx context.Context, b TargetBinding) error {
 	if owned {
 		defer tx.Rollback(ctx)
 	}
-	if _, err := tx.Exec(ctx, q, b.Target, b.SubjectID, b.Username, b.AccountID, legacyUID(b.AccountID), b.BoundBy); err != nil {
-		// The unique indexes on (target, username) and (target, uid) are what
-		// this can violate, and both mean the same thing: the account belongs to
-		// somebody else already. Reported as that rather than as a constraint
-		// name, which describes the schema to whoever asked.
-		if IsUniqueViolation(err) {
-			return fmt.Errorf("%w: %s on %s", ErrBindingConflict, b.Username, b.Target)
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "target_account_bindings:"+b.Target); err != nil {
+		return fmt.Errorf("lock bindings on %s: %w", b.Target, err)
+	}
+	rows, err := tx.Query(ctx, clearStale, b.Target, b.SubjectID, b.Username, b.AccountID)
+	if err != nil {
+		return fmt.Errorf("clear stale bindings on %s: %w", b.Target, err)
+	}
+	stale, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TargetBinding, error) {
+		var s TargetBinding
+		err := r.Scan(&s.SubjectID, &s.Username, &s.AccountID)
+		return s, err
+	})
+	if err != nil {
+		return fmt.Errorf("clear stale bindings on %s: %w", b.Target, err)
+	}
+	for _, s := range stale {
+		log.Printf("[TARGETS] %s on %s now belongs to %s; cleared %s's stale record on the same name or account id (it named %s)",
+			b.Username, b.Target, b.SubjectID, s.SubjectID, s.Username)
+		details, _ := json.Marshal(map[string]any{
+			"username": s.Username, "account_id": s.AccountID, "now_bound_to": b.SubjectID,
+		})
+		if _, err := tx.Exec(ctx, `INSERT INTO audit_logs
+			(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, details) VALUES ($1, $2, $3, $4, $5)`,
+			b.BoundBy, s.SubjectID, "binding."+b.Target+".stale_cleared", s.Username, details); err != nil {
+			return fmt.Errorf("audit the stale binding cleared on %s: %w", b.Target, err)
 		}
+	}
+	if _, err := tx.Exec(ctx, upsert, b.Target, b.SubjectID, b.Username, b.AccountID, legacyUID(b.AccountID), b.BoundBy); err != nil {
 		return fmt.Errorf("record binding for %s on %s: %w", b.SubjectID, b.Target, err)
 	}
 	if owned {
@@ -128,11 +161,9 @@ func legacyUID(accountID *string) *int64 {
 // uid). Re-runnable, and run at every start, so a rollback and a forward
 // deploy again lose nothing (task 1.7).
 func BackfillAccountIDs(ctx context.Context) error {
-	for _, table := range []string{"target_account_bindings", "target_binding_conflicts"} {
-		if _, err := querier(ctx).Exec(ctx, `UPDATE `+table+` SET account_id = account_uid::text
-			WHERE account_uid IS NOT NULL AND account_id IS DISTINCT FROM account_uid::text`); err != nil {
-			return fmt.Errorf("backfill account_id in %s: %w", table, err)
-		}
+	if _, err := querier(ctx).Exec(ctx, `UPDATE target_account_bindings SET account_id = account_uid::text
+		WHERE account_uid IS NOT NULL AND account_id IS DISTINCT FROM account_uid::text`); err != nil {
+		return fmt.Errorf("backfill account_id in target_account_bindings: %w", err)
 	}
 	return nil
 }

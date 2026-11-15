@@ -171,8 +171,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
   // What is waiting, each linking to where it is handled on the system's page.
   const unmanaged = inventory.data?.unmanaged?.length ?? 0;
   const changed = findings.data?.length ?? 0;
-  const decisions =
-    (health.data?.log_anchor?.violation_reason ? 1 : 0) + (health.data?.binding_conflicts?.length ?? 0);
+  const decisions = health.data?.log_anchor?.violation_reason ? 1 : 0;
   const needs: Array<{ text: string; href: string }> = [];
   if (answering) {
     if (unmanaged > 0)

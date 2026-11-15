@@ -28,7 +28,7 @@ import { formatShortDate, humanizeKey } from "@/lib/format";
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { sortByName } from "@/lib/sort";
-import { stoppedLine } from "@/lib/wait-reason";
+import { DECIDE_IT, decideAt, stoppedLine } from "@/lib/wait-reason";
 
 /**
  * Review › Unfinished revocations (9.9, 9.10).
@@ -56,7 +56,7 @@ interface UnconfirmedRevocation {
   status: string;
   attempts: number;
   last_error?: string;
-  /** Why it stopped, when the system itself refused it (db.WaitReasonTargetRefused) or Zitadel did (refused:cause). */
+  /** Why it stopped: the system itself refused it (db.WaitReasonTargetRefused, or WaitReasonBindingConflict for a person's binding conflict), or Zitadel did (refused:cause). */
   wait_reason?: string;
   created_at: string;
   target: string;
@@ -408,6 +408,7 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
   const resolver = useNameResolver();
   const first = resolver.resolveUser(row.user_id).value?.display_name?.split(" ")[0];
   const where = useSystemNames()(row.target);
+  const decide = decideAt(row);
   return (
     <div className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px]">
       <WhoSeat id={row.user_id} />
@@ -448,8 +449,12 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
           // Re-audit R11: Syndra's record of this access is already gone, so
           // the person's page has nothing left to revoke. Still held in
           // Zitadel, it is raised in Drift by the next check and revoked
-          // there; on a connected system, its page shows the account.
-          row.target === "zitadel" ? (
+          // there; on a connected system, its page shows the account, unless
+          // the stop is the person's binding conflict, which is decided in one
+          // place (decideAt, the row's own wait reason).
+          decide ? (
+            <ArrowLink href={decide}>{DECIDE_IT}</ArrowLink>
+          ) : row.target === "zitadel" ? (
             <ArrowLink href="/governance/drift">Revoke it from Drift</ArrowLink>
           ) : (
             <ArrowLink href={`/system/targets/${encodeURIComponent(row.target)}`}>{`Check ${first ? `${first}’s` : "their"} account on ${where}`}</ArrowLink>

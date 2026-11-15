@@ -42,10 +42,8 @@ import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/Projec
 import { TargetName } from "@/components/targets/TargetName";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
-import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, inventoryNotRead, personLine, versionLabel, whyNotChecked } from "@/lib/format";
 import { stamped, useCountdown, useRetryOnce } from "@/lib/queries/fresh";
-import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
   useAdoptAccount,
@@ -54,14 +52,12 @@ import {
   useReleaseBinding,
   useSetLifecycle,
   useTargetHealth,
-  useResolveBindingConflict,
   useResolveLogFinding,
   useTargetInventory,
   useTargetInventoryAgain,
   useTargets,
   useUnconfirmedOperations,
   type AdoptionResult,
-  type BindingConflict,
   type LogAnchor,
   type TargetHealth,
   type BoundAccount,
@@ -87,15 +83,13 @@ export function TargetOverview({ target }: { target: string }) {
   const registered = (roster.data ?? []).find((t) => t.target === target);
 
   const anchorFinding = health.data?.log_anchor?.violation_reason ? 1 : 0;
-  const conflicts = health.data?.binding_conflicts ?? [];
-  // Everything in region 1: differences reconciliation refused to resolve, a
-  // change record edited after it was queued, and two records disagreeing about
-  // an account. None of them is a status; each is a piece of work waiting on a
-  // human, which is why they are one region and not three places.
+  // Everything in region 1: differences reconciliation refused to resolve (a
+  // binding conflict among them), and a change record edited after it was
+  // queued. None of them is a status; each is a piece of work waiting on a
+  // human, which is why they are one region and not two places.
   // And changes the system never answered, which a person must settle (A-09 §3).
   const unconfirmed = useUnconfirmedOperations(target);
-  const waiting =
-    (findings.data?.length ?? 0) + anchorFinding + conflicts.length + (unconfirmed.data?.length ?? 0);
+  const waiting = (findings.data?.length ?? 0) + anchorFinding + (unconfirmed.data?.length ?? 0);
   const waitingKnown =
     !findings.isLoading && !findings.error && !health.isLoading && !health.error &&
     !unconfirmed.isLoading && !unconfirmed.error;
@@ -204,15 +198,11 @@ export function TargetOverview({ target }: { target: string }) {
                 }
               />
 
-              {waitingKnown && anchorFinding + conflicts.length > 0 && (
+              {waitingKnown && anchorFinding > 0 && (
                 <Notice
                   tone="danger"
-                  title={
-                    anchorFinding + conflicts.length === 1
-                      ? "One item under Waiting on you needs a decision."
-                      : `${anchorFinding + conflicts.length} items under Waiting on you need a decision.`
-                  }
-                  next="Decide each item under Waiting on you."
+                  title="One item under Waiting on you needs a decision."
+                  next="Decide it under Waiting on you."
                 >
                   Until this is settled, what {name} reports cannot be trusted.
                 </Notice>
@@ -293,9 +283,6 @@ export function TargetOverview({ target }: { target: string }) {
           {health.data?.log_anchor?.violation_reason && (
             <LogFinding anchor={health.data.log_anchor} />
           )}
-          {conflicts.map((conflict) => (
-            <BindingConflictFinding key={conflict.id} target={target} conflict={conflict} />
-          ))}
           <MergeFindings target={target} />
         </Region>
 
@@ -1173,198 +1160,6 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
         <ResolveFindingDialog target={anchor.target} anchor={anchor} onClose={() => setResolving(false)} />
       )}
     </Notice>
-  );
-}
-
-/**
- * Two of Syndra's own records disagreeing about who owns an account.
- *
- * Rendered apart from a drain failure, which is where it used to land. "The
- * target refused this call" and "two of your records disagree about who owns an
- * account" read the same in a failure list and want completely different
- * actions — one is retried after fixing the target, and this one is never
- * retried at all.
- *
- * Both claimants are named and neither is called correct, because Syndra does
- * not know. That is the whole content of the finding.
- */
-function BindingConflictFinding({
-  target,
-  conflict,
-}: {
-  target: string;
-  conflict: BindingConflict;
-}) {
-  const nameOf = useSystemNames();
-  const [deciding, setDeciding] = useState(false);
-  return (
-    <Notice
-      tone="danger"
-      title={`Two records disagree about who owns ${conflict.username}`}
-      action={{ label: "Decide who owns it", onClick: () => setDeciding(true) }}
-      next="Press Decide who owns it and choose the right person."
-    >
-      <p>
-        A change for{" "}
-        <UserName id={conflict.converged_subject_id} /> was
-        applied to this account, and Syndra records it as belonging to{" "}
-        <UserName id={conflict.bound_subject_id} />. The change
-        reached {nameOf(target)}, but whose account it is could not be recorded.
-      </p>
-      <p className="mt-1 text-[13px] text-faint">
-        Noticed <Relative iso={conflict.detected_at} />. Nothing else will resolve this: any
-        automatic fix for either person would act on whichever record it happens to read.
-      </p>
-      {deciding && (
-        <ResolveConflictDialog
-          target={target}
-          conflict={conflict}
-          onClose={() => setDeciding(false)}
-        />
-      )}
-    </Notice>
-  );
-}
-
-/**
- * Choosing between the two claimants.
- *
- * Rung 3, because it takes an account away from somebody who is not in the
- * room. The two names are radio options rather than a free field: an operator
- * assigning it to a third person is not resolving this disagreement, and the
- * backend refuses that, so a text box would let them try.
- */
-function ResolveConflictDialog({
-  target,
-  conflict,
-  onClose,
-}: {
-  target: string;
-  conflict: BindingConflict;
-  onClose: () => void;
-}) {
-  const nameOf = useSystemNames();
-  const resolve = useResolveBindingConflict(target);
-  const [owner, setOwner] = useState("");
-  const [note, setNote] = useState("");
-  const confirmation = useTypedConfirmation(conflict.username);
-  const ready = owner !== "" && note.trim() !== "" && confirmation.armed && !resolve.isPending;
-  const name = nameOf(target);
-  const [done, setDone] = useState<string | null>(null);
-  const owners = useNameResolver();
-
-  return (
-    <Modal
-      open
-      onClose={resolve.isPending ? () => {} : onClose}
-      busy={resolve.isPending}
-      size="md"
-      labelledBy="resolve-conflict-title"
-    >
-      <ModalHeader
-        titleId="resolve-conflict-title"
-        title={`Who owns ${conflict.username}?`}
-        lede={done ? undefined : "Syndra cannot tell. Both of these people are recorded as holding this account, in different places."}
-      />
-      {done ? (
-        <div className="grid gap-3 px-6">
-          <ActionOutcome
-            word="Recorded"
-            outcome={{
-              kind: "applied",
-              message: `${conflict.username} is ${owners.resolveUser(done).value ?? "that person"}'s account. Fixes for both people wait in Pending changes.`,
-            }}
-          />
-        </div>
-      ) : (
-      <div className="grid gap-4 px-6">
-        <fieldset className="grid gap-2">
-          <legend className="mb-1 text-[14px]">The account belongs to</legend>
-          {[
-            { id: conflict.bound_subject_id, why: "Syndra's ownership record says so." },
-            { id: conflict.converged_subject_id, why: "Their account changes were applied to it." },
-          ].map((claimant) => (
-            <ChoiceRow
-              key={claimant.id}
-              single
-              name="conflict-owner"
-              selected={owner === claimant.id}
-              onToggle={() => setOwner(claimant.id)}
-              title={<UserName id={claimant.id} />}
-              description={claimant.why}
-            />
-          ))}
-        </fieldset>
-
-        <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
-          <p className="text-[13.5px] text-danger-text">
-            The other person stops holding this account in Syndra, at once and without being
-            told. Their data on {name} is untouched. This changes who Syndra says it belongs
-            to, which is what every later action on it goes by. Account fixes for both people
-            are recorded as changes waiting for you to send, because the change that caused this
-            gave one person the other&rsquo;s settings.
-          </p>
-        </div>
-
-        <div>
-          <FieldLabel htmlFor="conflict-note">How you know</FieldLabel>
-          <Input
-            id="conflict-note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Checked the home directory contents with them"
-          />
-          <FieldHint>
-            The row somebody reads when the other person asks where their account went.
-          </FieldHint>
-        </div>
-
-        <ConfirmByTyping
-          expected={conflict.username}
-          value={confirmation.typed}
-          onChange={confirmation.setTyped}
-          noun="account"
-          disabled={resolve.isPending}
-        />
-        {resolve.error && <ActionOutcome word="Not recorded" outcome={outcomeFromError(resolve.error)} />}
-      </div>
-      )}
-      {done ? (
-        <ModalFooter>
-          <Button variant="outline" onClick={onClose}>
-            Close
-          </Button>
-        </ModalFooter>
-      ) : (
-      <ModalFooter
-        cancel={{ onClick: onClose, disabled: resolve.isPending }}
-        note="Fixes for both people wait in Pending changes. Until they are sent, the account keeps the settings the wrong change gave it."
-      >
-        <Button
-          variant="dangerConfirm"
-          disabled={!ready}
-          isPending={resolve.isPending}
-          reason={
-            !ready && !resolve.isPending
-              ? owner === ""
-                ? "Choose who the account belongs to."
-                : note.trim() === ""
-                  ? "Say how you know. This becomes the record."
-                  : !confirmation.armed
-                    ? `Type ${conflict.username} to confirm.`
-                    : undefined
-              : undefined
-          }
-          onClick={() => {
-            resolve.reset();
-            resolve.mutate({ id: conflict.id, owner, note }, { onSuccess: () => setDone(owner) });
-          }}
-        >
-          Record the owner
-        </Button>
-      </ModalFooter>
-      )}
-    </Modal>
   );
 }
 

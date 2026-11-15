@@ -26,7 +26,6 @@ vi.mock("@/lib/queries/useTargets", async () => {
     useMergeFindings: () => ({ ...idle(), data: [] }),
     useTargetHealth: () => ({ ...idle(), data: { reachable: true, lifecycle: "active" } }),
     useResolveLogFinding: inert,
-    useResolveBindingConflict: inert,
     useReconcileTarget: inert,
     useSetLifecycle: inert,
     useReleaseBinding: inert,

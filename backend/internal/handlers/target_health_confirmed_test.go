@@ -17,11 +17,8 @@ import (
 // on both paths: one failed read is not an outage, and the page must be able to
 // say which it is looking at.
 func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
-	health, healthOf, anchor, conflicts := addonsHealth, addonsHealthOf, dbGetLogAnchor, dbStandingBindingConflicts
-	t.Cleanup(func() {
-		addonsHealth, addonsHealthOf, dbGetLogAnchor, dbStandingBindingConflicts = health, healthOf, anchor, conflicts
-	})
-	dbStandingBindingConflicts = func(context.Context, string) ([]db.BindingConflict, error) { return nil, nil }
+	health, healthOf, anchor := addonsHealth, addonsHealthOf, dbGetLogAnchor
+	t.Cleanup(func() { addonsHealth, addonsHealthOf, dbGetLogAnchor = health, healthOf, anchor })
 	dbGetLogAnchor = func(context.Context, string) (db.LogAnchor, bool, error) { return db.LogAnchor{}, false, nil }
 	since := time.Date(2026, 10, 14, 9, 40, 0, 0, time.UTC)
 

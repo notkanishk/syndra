@@ -125,6 +125,23 @@ describe("why a given-up revocation stopped", () => {
     expect(screen.queryByText(/out of retries/)).toBeNull();
     expect(screen.queryByText(/zitadel api 404/)).toBeNull();
   });
+
+  // 7t-6: a revocation the system blocked on the person's binding conflict carries its wait reason,
+  // so it is sent where the conflict is decided, not to the person's account on the system's page.
+  it("sends a revocation blocked by a binding conflict to Waiting on you", async () => {
+    const said = "The account rey, recorded for this person, is gone, and its number is now held by a different account, kofi.";
+    payload = listing([
+      row("r1", true, { user_id: "u1", target: "truenas", project_id: "", role_keys: [], reason: "Remove from the members share", wait_reason: "binding_conflict", last_error: said }),
+      row("r2", true, { user_id: "u2", target: "truenas", project_id: "", role_keys: [], reason: "Remove from the members share", wait_reason: "target_refused", last_error: "It is held." }),
+    ]);
+    await renderPage();
+    expect(screen.getByText(`TrueNAS refused it: ${said} Syndra stopped sending it.`)).toBeInTheDocument();
+    const decide = screen.getAllByRole("link", { name: "Decide it under Waiting on you" });
+    expect(decide).toHaveLength(1);
+    expect(decide[0]).toHaveAttribute("href", "/system/targets/truenas#waiting");
+    // The plain refusal keeps its own step.
+    expect(screen.getByRole("link", { name: /Check Jimmy’s account on TrueNAS/ })).toBeInTheDocument();
+  });
 });
 
 describe("the board's anatomy", () => {

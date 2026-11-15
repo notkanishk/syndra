@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -236,43 +235,18 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 		if anchored && anchor.Compromised() {
 			body["log_anchor"] = anchor
 		}
-		// Carried on the unreachable path too. A disagreement about who owns an
-		// account is a fact about Syndra's own records, so it stands whether or
-		// not the target is answering — and hiding it during an outage would
-		// hide it exactly when somebody is looking at this page.
-		if conflicts := bindingConflicts(r, target); len(conflicts) > 0 {
-			body["binding_conflicts"] = conflicts
-		}
 		jsonResponse(w, http.StatusOK, body)
 		return
 	}
 
 	// Merged rather than nested under a second request, because the operator's
 	// question is one question: is this target all right.
-	merged := targetHealthWithAnchor{TargetHealth: health, BindingConflicts: bindingConflicts(r, target),
+	merged := targetHealthWithAnchor{TargetHealth: health,
 		Health: addonsHealthOf(target), Status: liveStatus(target)}
 	if anchored {
 		merged.LogAnchor = &anchor
 	}
 	jsonResponse(w, http.StatusOK, merged)
-}
-
-// bindingConflicts reads the standing findings for a target's health payload.
-//
-// Beside the log anchor rather than under a separate request, for the reason
-// that one governs the other: both answer "does this target need a decision",
-// and an operator asking that should not have to know there are two places it
-// can be answered.
-func bindingConflicts(r *http.Request, target string) []db.BindingConflict {
-	conflicts, err := dbStandingBindingConflicts(r.Context(), target)
-	if err != nil {
-		// Non-fatal and said out loud, matching the anchor's rule: the health
-		// of the target is the question asked, and an unavailable finding must
-		// not take the answer down with it.
-		log.Printf("[TARGETS] could not read %s's binding conflicts: %v (non-fatal)", target, err)
-		return nil
-	}
-	return conflicts
 }
 
 // targetHealthWithAnchor is the add-on's account of itself plus the backend's
@@ -281,11 +255,6 @@ func bindingConflicts(r *http.Request, target string) []db.BindingConflict {
 type targetHealthWithAnchor struct {
 	addons.TargetHealth
 	LogAnchor *db.LogAnchor `json:"log_anchor,omitempty"`
-	// BindingConflicts is where two of Syndra's own records disagree about who
-	// owns an account. Not the add-on's opinion and not drift: both stores were
-	// written by this system, and neither is authoritative, which is why it
-	// needs a person rather than a reconcile.
-	BindingConflicts []db.BindingConflict `json:"binding_conflicts,omitempty"`
 	// Health is the confirmed answer beside this live one: one failed read is
 	// not an outage, three in a row are, and this says which (addons.HealthOf).
 	Health addons.HealthState `json:"health"`
@@ -429,114 +398,6 @@ func handleResolveLogFinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, anchor)
-}
-
-// resolveConflictRequest is an operator deciding who owns a disputed account.
-type resolveConflictRequest struct {
-	// Owner must be one of the two subjects the finding names. A third party is
-	// not a resolution of this disagreement; it is a different decision with no
-	// rehearsal behind it, and the store refuses it.
-	Owner string `json:"owner"`
-	// Note is what they decided and why. The row somebody reads when the other
-	// subject asks where their account went.
-	Note      string `json:"note"`
-	Confirmed bool   `json:"confirmed"`
-}
-
-// resolveConflictCopy is the confirmation.
-//
-// It names the person who LOSES the account, because that is the half an
-// operator can get wrong and the half nobody is notified about. Resolving is
-// not filing the finding away — it moves an account from one person to another
-// in Syndra's records, and the loser's page stops showing it.
-const resolveConflictCopy = "Deciding who owns this account moves it in Syndra's records. " +
-	"The other subject stops holding it here, immediately and without being told. " +
-	"Their data on the target is untouched — this changes who Syndra says it belongs to, " +
-	"which is what every later revocation, sweep and convergence will act on."
-
-// handleResolveBindingConflict records who a disputed account belongs to.
-func handleResolveBindingConflict(w http.ResponseWriter, r *http.Request) {
-	var req resolveConflictRequest
-	if err := decodeJSONStrict(r.Body, &req); err != nil {
-		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
-		return
-	}
-	if strings.TrimSpace(req.Owner) == "" {
-		jsonValidationErrorResponse(w, "Nobody to give the account to",
-			map[string]string{"owner": "required"})
-		return
-	}
-	if strings.TrimSpace(req.Note) == "" {
-		jsonValidationErrorResponse(w, "Resolving a conflict takes an explanation",
-			map[string]string{"note": "required"})
-		return
-	}
-	if !req.Confirmed {
-		jsonErrorResponse(w, http.StatusUnprocessableEntity, "CONFIRMATION_REQUIRED", resolveConflictCopy)
-		return
-	}
-
-	// The rebind and the convergences in ONE transaction, and this is the half
-	// the first version left out. Agreeing Syndra's two records does not touch
-	// the target, and the target is wrong in both directions: the losing
-	// subject's groups were overwritten by the convergence that caused the
-	// conflict, so they hold a mapped role with no account — and the winning
-	// subject's account is carrying the OTHER person's resolved set, which is
-	// access they were never granted, sitting under a finding somebody has just
-	// marked resolved.
-	//
-	// Every other decision on this branch that changes who holds what enqueues
-	// in the same transaction it commits. A disclosure telling the operator to
-	// go and converge two people by hand would make this the one place a
-	// resolved decision leaves the work on a human.
-	actor := resolveActor(r, "")
-	var conflict db.BindingConflict
-	var queued []string
-	err := svcInTxLockingAccess(r.Context(), func(ctx context.Context) error {
-		var err error
-		conflict, err = dbResolveBindingConflict(ctx, r.PathValue("id"), req.Owner, actor, req.Note)
-		if err != nil {
-			return err
-		}
-		// Both claimants, always. Which one needs what depends on which way the
-		// operator decided, and resolving each is cheaper than reasoning about
-		// it — a convergence for somebody already correct is a no-op the add-on
-		// answers without writing.
-		for _, subject := range []string{conflict.ConvergedSubjectID, conflict.BoundSubjectID} {
-			set, resolveErr := svcResolveEntitlementSet(ctx, subject, conflict.Target)
-			if resolveErr != nil {
-				return fmt.Errorf("resolve %s on %s: %w", subject, conflict.Target, resolveErr)
-			}
-			if _, _, qerr := dbRecordSystemConvergence(ctx, set.Convergence(conflict.Target, subject, actor, "Their account was given an owner.")); qerr != nil {
-				return fmt.Errorf("queue convergence for %s: %w", subject, qerr)
-			}
-			queued = append(queued, subject)
-		}
-		return nil
-	})
-	switch {
-	case errors.Is(err, db.ErrNoSuchConflict):
-		jsonErrorResponse(w, http.StatusNotFound, "NO_SUCH_CONFLICT", err.Error())
-		return
-	case errors.Is(err, db.ErrInvalidTargetBinding):
-		// The third-party case, and it is a validation failure rather than a
-		// refusal to act: the operator named somebody the finding does not.
-		jsonValidationErrorResponse(w, err.Error(), map[string]string{"owner": "not_a_claimant"})
-		return
-	case err != nil:
-		jsonErrorResponse(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"resolved": true, "target": conflict.Target, "username": conflict.Username,
-		"owner": req.Owner, "queued": queued,
-		// Queued, not applied, and it says which. The convergence that caused
-		// the conflict left the account holding the other person's resolved set
-		// — access the owner was never granted — and it stays there until this
-		// drains. That is the sentence an operator needs, not "resolved".
-		"detail": "Syndra's records now agree, and a convergence is queued for both people. " +
-			"Until it drains the account still holds whatever the change that caused this wrote to it.",
-	})
 }
 
 // handleReconcileTarget runs one add-on target's reconciliation now.

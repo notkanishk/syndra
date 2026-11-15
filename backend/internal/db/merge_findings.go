@@ -15,8 +15,9 @@ import (
 // A pass that can name the CAUSE of a difference can also say which causes are
 // not its to act on: the target moved and Syndra did not, both moved
 // differently, or the account is gone. Each needs a person, and a state that
-// needs a person has to outlive the pass that found it — the same reason
-// `target_binding_conflicts` exists, learned again on the state that occurs most.
+// needs a person has to outlive the pass that found it. (A binding the add-on
+// reports as naming no account is one of these too, `binding_conflict`; the
+// older `target_binding_conflicts` table it replaces is retired, 7t-6.)
 
 // ErrNoSuchMergeFinding is a finding cited that does not exist or is already
 // resolved. Refused rather than treated as done: resolving one twice would let

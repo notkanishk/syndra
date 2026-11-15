@@ -60,7 +60,7 @@ function auditActionsWrittenByTheBackend(): Map<string, string> {
  */
 export function joinedActionsIn(source: string): string[] {
   const join = String.raw`["']\s*(?:\+|\|\|)\s*[\w.()]+\s*(?:\+|\|\|)\s*["']\.|%s\.`;
-  const re = new RegExp(String.raw`["'](entitlement|allowance)\.(?:${join})([a-z_]+)["']`, "g");
+  const re = new RegExp(String.raw`["'](entitlement|allowance|binding)\.(?:${join})([a-z_]+)["']`, "g");
   return [...source.matchAll(re)].map((m) => `${m[1]}.truenas.${m[2]}`);
 }
 
@@ -78,6 +78,8 @@ describe("joined audit actions (entitlement.<system>.*)", () => {
     const family = (f: string) => [...joined.keys()].filter((a) => a.startsWith(`${f}.`)).length;
     expect(family("entitlement")).toBeGreaterThanOrEqual(3);
     expect(family("allowance")).toBeGreaterThanOrEqual(1);
+    // binding stale_cleared (7t-6, db.RecordTargetBinding).
+    expect(family("binding")).toBeGreaterThanOrEqual(1);
     expect(unworded([...joined.keys()]), "these render as raw machine keys in Audit and Person Activity").toEqual([]);
   });
 

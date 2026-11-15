@@ -606,11 +606,9 @@ var (
 	svcConvergeProjectChange = services.ConvergeProjectChange
 	svcConvergeSubjectOn     = services.ConvergeSubjectOn
 
-	directoryUsers             = func(ctx context.Context) ([]models.UserProfile, error) { return directory.Default.Users(ctx) }
-	directoryProjects          = func(ctx context.Context) ([]models.ProjectCatalog, error) { return directory.Default.Projects(ctx) }
-	dbStandingBindingConflicts = db.StandingBindingConflicts
-	dbResolveBindingConflict   = db.ResolveBindingConflict
-	dbResolveLogViolation      = db.ResolveLogViolation
+	directoryUsers        = func(ctx context.Context) ([]models.UserProfile, error) { return directory.Default.Users(ctx) }
+	directoryProjects     = func(ctx context.Context) ([]models.ProjectCatalog, error) { return directory.Default.Projects(ctx) }
+	dbResolveLogViolation = db.ResolveLogViolation
 	// When a member's access to a target was written down, for the one sentence
 	// on their own page that would otherwise be a promise about a person.
 	dbEntitlementRecordedAt = db.EntitlementRecordedAt

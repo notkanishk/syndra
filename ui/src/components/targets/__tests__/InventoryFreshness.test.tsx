@@ -41,7 +41,6 @@ vi.mock("@/lib/queries/useTargets", () => {
       return { press: state.press, pending: false, error: state.again.error, errorAt: state.again.errorAt, cooldown };
     },
     useResolveLogFinding: inert,
-    useResolveBindingConflict: inert,
     useReconcileTarget: inert,
     useSetLifecycle: inert,
     useReleaseBinding: inert,

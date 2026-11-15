@@ -3,6 +3,7 @@ package propagation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -69,8 +70,8 @@ func TestABlockedApplyWithAConflictRaisesTheSweepsFinding(t *testing.T) {
 	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
 		t.Fatal(err)
 	}
-	if len(h.refused) != 1 || h.refused[0] != "o1" {
-		t.Fatalf("a conflict is the target's refusal: %v", h.refused)
+	if len(h.conflicted) != 1 || h.conflicted[0] != "o1" || len(h.refused) != 0 {
+		t.Fatalf("a binding's conflict settles as one, so the pages send it to Waiting on you: conflicted %v refused %v", h.conflicted, h.refused)
 	}
 	assertConflictFinding(t, h.findings)
 	if got := h.failed["o1"]; got != c.Detail+" "+c.Next {
@@ -89,11 +90,64 @@ func TestABlockedCreateRaisesNoFindingAndKeepsItsWords(t *testing.T) {
 	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
 		t.Fatal(err)
 	}
-	if len(h.findings) != 0 {
-		t.Fatalf("a create's conflict must raise no finding: %+v", h.findings)
+	if len(h.findings) != 0 || len(h.conflicted) != 0 {
+		t.Fatalf("a create's conflict must raise no finding and is no binding conflict: %+v %v", h.findings, h.conflicted)
 	}
 	if len(h.refused) != 1 || h.failed["o1"] != c.Detail+" "+c.Next {
 		t.Fatalf("the create is refused with the add-on's words and next step: %v %q", h.refused, h.failed["o1"])
+	}
+}
+
+// 7t-6: a revocation blocked because the person's recorded number now belongs
+// to somebody else. The mirror has already cleared their row (another person's
+// apply took the number, db.RecordTargetBinding), so the mirror cannot say they
+// have a binding; the conflict's own reason does (number_held is a recorded
+// number, common/binding_conflict.json). The finding is raised and the row
+// settles as a binding conflict, so Withdrawn access and Pending changes send
+// it to Waiting on you.
+func TestARevocationBlockedOnANumberHeldConflictIsABindingConflictWithNoMirrorRow(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.intent.WithdrawsOnly = true
+	c := numberHeld()
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeRejected, Status: 409, Code: "BINDING_CONFLICT",
+		Effect: "blocked", Detail: c.Detail, Consequence: c.Next, Conflict: c}
+
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.conflicted) != 1 || h.conflicted[0] != "o1" || len(h.refused) != 0 {
+		t.Fatalf("want o1 settled as a binding conflict: conflicted %v refused %v", h.conflicted, h.refused)
+	}
+	assertConflictFinding(t, h.findings)
+}
+
+// name_held is the one reason a create shares with a binding: for it the
+// mirror answers, and one that cannot be read answers "not a binding's" (the
+// sweep raises it if it is).
+func TestANameHeldConflictIsABindingsOnlyWhenTheMirrorSaysSo(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	boundSub1(h)
+	c := nameTaken()
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeRejected, Status: 409, Code: "BINDING_CONFLICT",
+		Effect: "blocked", Detail: c.Detail, Consequence: c.Next, Conflict: c}
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.conflicted) != 1 || len(h.findings) != 1 {
+		t.Fatalf("a bound subject's name_held is a binding's: conflicted %v findings %+v", h.conflicted, h.findings)
+	}
+
+	h = stubAddonDrain(t, addonRow("o2"))
+	t.Cleanup(swap(&getBinding, func(context.Context, string, string) (db.TargetBinding, bool, error) {
+		return db.TargetBinding{}, false, errors.New("connection reset")
+	}))
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeRejected, Status: 409, Code: "BINDING_CONFLICT",
+		Effect: "blocked", Detail: c.Detail, Consequence: c.Next, Conflict: c}
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.conflicted) != 0 || len(h.findings) != 0 || len(h.refused) != 1 {
+		t.Fatalf("an unreadable mirror is no binding's conflict: conflicted %v findings %+v refused %v", h.conflicted, h.findings, h.refused)
 	}
 }
 
@@ -152,6 +206,9 @@ func TestAReplanBlockedOnAConflictRaisesTheSameFinding(t *testing.T) {
 		t.Fatalf("a blocked plan must never be sent: %+v", h.dispatched)
 	}
 	assertConflictFinding(t, h.findings)
+	if len(h.conflicted) != 1 || len(h.refused) != 0 {
+		t.Fatalf("a blocked re-plan on a binding's conflict settles as one: conflicted %v refused %v", h.conflicted, h.refused)
+	}
 	if got := h.failed["o1"]; !strings.HasPrefix(got, c.Detail) || !strings.HasSuffix(got, c.Next) {
 		t.Fatalf("the row must carry the add-on's words and next step: %q", got)
 	}

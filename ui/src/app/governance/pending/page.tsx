@@ -30,7 +30,6 @@ import { RoleInPlace, RoleRef, UserName } from "@/components/names";
 import { machineName } from "@/lib/audit-vocabulary";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { useMergeFindings, useTargetHealth } from "@/lib/queries/useTargets";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useBundles, type BundleRow } from "@/lib/queries/useBundles";
@@ -42,7 +41,7 @@ import {
   type PendingPropagationRow,
 } from "@/lib/queries/usePropagation";
 import { Relative } from "@/components/ui/Time";
-import { LOOKING_UP_NEXT, isSystemStop, stoppedLine, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
+import { DECIDE_IT, PLAN_STALE, decideAt, decideStep, stoppedLine, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 
 /** Q2 (A-17): an empty queue still says "Send 0 changes". The owner's answer is a change to this one function. */
 const sendLabel = (known: boolean, n: number) => (known && n > 0 ? `Send ${n} ${n === 1 ? "change" : "changes"}` : "Send changes");
@@ -343,20 +342,9 @@ function StoppedRow({ row }: { row: PendingPropagationRow }) {
   const system = nameOf(row.target ?? "zitadel");
   const revocation = row.op_type === "revoke";
   const zitadel = (row.target ?? "zitadel") === "zitadel";
-  // The system's own stop (db.WaitReasonTargetRefused, or WaitReasonBindingConflict), as opposed to Zitadel's
-  // `refused:<cause>`. Only such a row can be a person's account conflict, so only it asks the two places one is kept.
-  const asks = isSystemStop(row.wait_reason) ? row.target : undefined;
-  const findings = useMergeFindings(asks);
-  const health = useTargetHealth(asks);
-  const looking = Boolean(asks) && (findings.isLoading || health.isLoading);
-  // Two sources, one answer. A standing finding is the person's, not the row's: there is no link from
-  // an outbox row to it, so this matches the person on that system. A recorded disagreement between
-  // two of Syndra's own records names the row that caused it (`outbox_id`), so it matches exactly.
-  const conflict =
-    Boolean(asks) &&
-    (Boolean(findings.data?.some((f) => f.outcome === "binding_conflict" && f.subject_id === row.user_id)) ||
-      Boolean(health.data?.binding_conflicts?.some((c) => c.outbox_id === row.id)));
-  const decideHere = `/system/targets/${encodeURIComponent(row.target ?? "")}#waiting`;
+  // A person's binding conflict says so by the row's own wait reason (db.WaitReasonBindingConflict),
+  // so the row needs nothing else read to say where it is decided.
+  const decideHere = decideAt(row);
   return (
             <CardRow>
               <span className="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
@@ -382,21 +370,21 @@ function StoppedRow({ row }: { row: PendingPropagationRow }) {
                   </span>
                 </span>
                 <span className="text-[12.5px] text-faint">
-                  {looking
-                    ? LOOKING_UP_NEXT
-                    : conflict
-                    ? `Waiting on you is on ${system}'s page.`
+                  {decideHere
+                    ? decideStep(system)
                     : revocation && zitadel
                     ? `They may still hold it in ${system}. It shows in Drift after Syndra's next check; revoke it there.`
                     : revocation
                       ? `They may still hold it in ${system}. Check their account on ${system}'s page.`
-                      : "Give it again from their page once the reason is fixed."}{" "}
+                      : row.wait_reason === PLAN_STALE
+                        ? "Give it again from their page."
+                        : "Give it again from their page once the reason is fixed."}{" "}
                   Then mark it seen on Home.
                 </span>
               </span>
               <span className="tablet:w-[140px] tablet:shrink-0 tablet:text-right">
-                {looking ? null : conflict ? (
-                  <ArrowLink href={decideHere}>Decide it under Waiting on you</ArrowLink>
+                {decideHere ? (
+                  <ArrowLink href={decideHere}>{DECIDE_IT}</ArrowLink>
                 ) : revocation && zitadel ? (
                   <ArrowLink href="/governance/drift">Drift</ArrowLink>
                 ) : revocation ? (

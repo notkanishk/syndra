@@ -148,28 +148,6 @@ export interface TargetHealth {
    * its own record has been edited.
    */
   log_anchor?: LogAnchor;
-  /**
-   * Where two of Syndra's own records disagree about who owns an account.
-   *
-   * Not the add-on's opinion and not drift: both stores were written by this
-   * system and neither is authoritative, which is why it needs a person rather
-   * than a reconcile.
-   */
-  binding_conflicts?: BindingConflict[];
-}
-
-export interface BindingConflict {
-  id: string;
-  target: string;
-  username: string;
-  /** The target's own id for the account (contract 2's account_id). */
-  account_id?: string;
-  /** Whose change landed on the account. */
-  converged_subject_id: string;
-  /** Who Syndra's own binding says owns it. Neither is authoritative. */
-  bound_subject_id: string;
-  outbox_id: string;
-  detected_at: string;
 }
 
 export interface LogAnchor {
@@ -214,25 +192,6 @@ export function useResolveLogFinding(target: string) {
         method: "POST",
         body: { head: input.head, note: input.note, confirmed: true },
       }),
-    onSuccess: () => invalidateAfter(client, "target", { target }),
-  });
-}
-
-/**
- * Deciding who owns a disputed account.
- *
- * It moves the account between people in Syndra's records and touches nothing
- * on the target — which is the distinction the copy has to carry, because an
- * operator who reads it as "fixed" will not converge.
- */
-export function useResolveBindingConflict(target: string) {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { id: string; owner: string; note: string }) =>
-      request<{ resolved: boolean; detail: string }>(
-        `/targets/${target}/binding-conflicts/${input.id}/resolve`,
-        { method: "POST", body: { owner: input.owner, note: input.note, confirmed: true } },
-      ),
     onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -33,11 +32,13 @@ type addonHarness struct {
 	applied    []string
 	failed     map[string]string
 	refused    []string
-	// conflicted are the rows settled as applied-but-unattributed (db.WaitReasonBindingConflict).
+	// conflicted are the rows settled on a binding's conflict (db.WaitReasonBindingConflict).
 	conflicted []string
-	requeued   []string
-	released   []string
-	attempts   int
+	// stale are the rows settled as PLAN_STALE (db.WaitReasonPlanStale).
+	stale    []string
+	requeued []string
+	released []string
+	attempts int
 	// bases is what the drain recorded as the target's observed state. The
 	// assertions on it are mostly negative: an apply the add-on could not read
 	// back must record NOTHING here.
@@ -69,14 +70,6 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 		return rows, nil
 	}))
 	t.Cleanup(swap(&addonReachable, func(context.Context, string) bool { return h.reachable }))
-	// The conflict path's reads, defaulted so a test about anything else does
-	// not reach the real database. "Nobody else holds it" is the ordinary case
-	// and makes the finding unrecordable, which is the right default: a test
-	// that wants a conflict recorded says so.
-	t.Cleanup(swap(&bindingHolder, func(context.Context, string, string, string) (string, bool, error) {
-		return "", false, nil
-	}))
-	t.Cleanup(swap(&saveConflict, func(context.Context, db.BindingConflict) error { return nil }))
 	t.Cleanup(swap(&saveMergeFinding, func(_ context.Context, f db.MergeFinding) error {
 		h.findings = append(h.findings, f)
 		return nil
@@ -110,6 +103,11 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 	t.Cleanup(swap(&markBindingConflict, func(_ context.Context, id, msg string) error {
 		h.failed[id] = msg
 		h.conflicted = append(h.conflicted, id)
+		return nil
+	}))
+	t.Cleanup(swap(&markPlanStale, func(_ context.Context, id, msg string) error {
+		h.failed[id] = msg
+		h.stale = append(h.stale, id)
 		return nil
 	}))
 	requeue = func(_ context.Context, id, _ string) (int, error) {
@@ -511,14 +509,15 @@ func TestAStalePlanIsWithheldAndSaysSo(t *testing.T) {
 	if len(h.requeued) != 0 {
 		t.Fatal("a stale approval must not be retried into a world it does not describe")
 	}
-	reason := h.failed["o1"]
-	if !strings.Contains(reason, addons.CodePlanStale) {
-		t.Errorf("the refusal must be distinguishable from an ordinary one: %q", reason)
+	// Distinguishable from an ordinary refusal by its wait reason
+	// (db.WaitReasonPlanStale), never by a code in the sentence.
+	if len(h.stale) != 1 || len(h.refused) != 0 {
+		t.Errorf("the refusal must be settled as stale: stale %v refused %v", h.stale, h.refused)
 	}
-	if !strings.Contains(reason, "re-plan") {
-		// Every other refusal means "fix it and retry". This one means "look at
-		// what moved, then approve it again", and an operator reading the queue
-		// has only this sentence to tell them apart.
+	if reason := h.failed["o1"]; !strings.Contains(reason, "Make the change again") {
+		// Every other refusal means "fix it and retry". This one means "make
+		// the change again", and an operator reading the queue has only this
+		// sentence and its wait reason to tell them apart.
 		t.Errorf("the refusal must name the operator's next action: %q", reason)
 	}
 }
@@ -637,66 +636,12 @@ func TestThePreflightProbesTheTargetRatherThanTheAddon(t *testing.T) {
 	}
 }
 
-// §29 — a refused binding is a FINDING, not a failed write.
-//
-// `recordBinding` swallowed every error into one log line and the row settled
-// `applied` regardless. The reasoning above it is right about the transient
-// case — the add-on already persisted the decision, so failing to copy it does
-// not un-apply anything — and wrong about this one, because a conflict is not a
-// failure to write.
-//
-// What it means: the account the add-on just wrote to is one the backend
-// attributes to a DIFFERENT subject. The two stores have diverged and this
-// subject's entitlements have landed on somebody else's account. Marked
-// applied, that surfaces nowhere — the other subject still shows as holding the
-// account, this one shows as having none, and `convergeBound` iterates bindings
-// so it is never revisited.
-func TestARefusedBindingDoesNotSettleApplied(t *testing.T) {
-	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001"}
-	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
-		return fmt.Errorf("%w: charlotte on truenas", db.ErrBindingConflict)
-	}))
-
-	res, err := DrainAddon(context.Background(), "truenas")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(h.applied) != 0 || res.Applied != 0 {
-		t.Fatalf("a convergence the backend cannot attribute must not be recorded as applied: %+v", res)
-	}
-	if res.Failed != 1 {
-		t.Fatalf("it must settle terminally — a retry converges the same wrong account again: %+v", res)
-	}
-
-	reason := h.failed["o1"]
-	// The mutation LANDED. Every other terminal failure on this path means it
-	// did not, so an operator who reads this as "the change did not go through"
-	// re-drives it onto the same account belonging to the same other person.
-	// Its own wait_reason says the change landed and is not a refusal, so no page
-	// has to read the wording; and it holds the next withdrawal like one.
-	if len(h.conflicted) != 1 || h.conflicted[0] != "o1" || len(h.refused) != 0 {
-		t.Errorf("want o1 settled as applied-but-unattributed and not as a refusal: conflicted %v refused %v", h.conflicted, h.refused)
-	}
-	if !strings.Contains(reason, "charlotte") || !strings.HasPrefix(reason, "Two of Syndra's records disagree about whose account") {
-		t.Errorf("it must name the account and what is wrong with it: %q", reason)
-	}
-	// Plain words for a person: nothing internal, and it ends in a next step.
-	// Names no system either: it is worded with the system's current name where it is read.
-	for _, raw := range []string{"subject", "binding", "3001", "Do not retry", "charlotte on truenas", "TrueNAS", "truenas"} {
-		if strings.Contains(reason, raw) {
-			t.Errorf("the reason must not carry %q: %q", raw, reason)
-		}
-	}
-	if !strings.HasSuffix(reason, "Decide whose it is before changing anything else for them.") {
-		t.Errorf("and it must end in the next step: %q", reason)
-	}
-}
-
-// A transient write failure keeps its old behaviour, which was correct. The
-// binding is the backend's copy of a decision the add-on already persisted, so
-// a connection blip must not convert a successful convergence into a terminal
-// failure an operator has to triage.
+// A failure to write the mirror never un-applies a convergence. The binding is
+// the backend's copy of a decision the add-on already persisted, so a write
+// that failed must not convert a successful convergence into a terminal
+// failure an operator has to triage. There is no conflict to raise either
+// (7t-6): the mirror follows the add-on and clears a stale row itself
+// (db.RecordTargetBinding), so a successful apply is never settled otherwise.
 func TestATransientBindingWriteFailureStillSettlesApplied(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
 	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001"}
@@ -713,76 +658,6 @@ func TestATransientBindingWriteFailureStillSettlesApplied(t *testing.T) {
 	}
 	if res.Failed != 0 {
 		t.Errorf("and it is not a finding: %+v", res)
-	}
-}
-
-// The finding is persisted, and it names BOTH claimants.
-//
-// The failed row carries the account name and the reason, and retention prunes
-// it — so an operator who was not watching that pass has nothing. The finding
-// has to outlive the drain that produced it, like the log anchor's does.
-func TestABindingConflictIsRecordedAsAStandingFinding(t *testing.T) {
-	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001"}
-	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
-		return fmt.Errorf("%w: charlotte on truenas", db.ErrBindingConflict)
-	}))
-	// The other claimant is READ BACK rather than inferred: the conflict may
-	// have been raised by the uid index on an account renamed out of band, and
-	// guessing from the reported name would put the wrong person on a screen.
-	t.Cleanup(swap(&bindingHolder, func(_ context.Context, target, username string, uid string) (string, bool, error) {
-		if target != "truenas" || username != "charlotte" || uid != "3001" {
-			t.Errorf("the holder lookup must carry both keys: %s %s %s", target, username, uid)
-		}
-		return "subject-a", true, nil
-	}))
-	var recorded []db.BindingConflict
-	t.Cleanup(swap(&saveConflict, func(_ context.Context, c db.BindingConflict) error {
-		recorded = append(recorded, c)
-		return nil
-	}))
-
-	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
-		t.Fatal(err)
-	}
-	if len(recorded) != 1 {
-		t.Fatalf("the disagreement must be persisted, got %d", len(recorded))
-	}
-	got := recorded[0]
-	if got.ConvergedSubjectID != "sub-1" || got.BoundSubjectID != "subject-a" {
-		t.Errorf("both claimants must be named: %+v", got)
-	}
-	if got.Username != "charlotte" || got.AccountID == nil || *got.AccountID != "3001" {
-		t.Errorf("the account must be identified by name and uid: %+v", got)
-	}
-	if got.OutboxID == "" {
-		t.Error("the finding must trace back to the change that caused it")
-	}
-}
-
-// A finding that cannot name the other claimant is not recorded, and the row
-// still settles terminally. A warning with no subject is worse than the failed
-// row's reason, which already carries the account name.
-func TestAConflictWithNoTraceableHolderStillSettlesTerminally(t *testing.T) {
-	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001"}
-	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
-		return fmt.Errorf("%w: charlotte on truenas", db.ErrBindingConflict)
-	}))
-	t.Cleanup(swap(&bindingHolder, func(context.Context, string, string, string) (string, bool, error) {
-		return "", false, nil
-	}))
-	t.Cleanup(swap(&saveConflict, func(context.Context, db.BindingConflict) error {
-		t.Error("a finding that cannot name the other claimant must not be recorded")
-		return nil
-	}))
-
-	res, err := DrainAddon(context.Background(), "truenas")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Failed != 1 || res.Applied != 0 {
-		t.Fatalf("the row still settles terminally whatever the finding did: %+v", res)
 	}
 }
 
@@ -891,16 +766,30 @@ func TestATargetsRefusalIsMarkedAsOne(t *testing.T) {
 }
 
 // A stale plan is not a refusal a retry would repeat: the subject moved since
-// the approval. Marked as a plain failure, so it holds nobody's next
-// withdrawal.
-func TestAStalePlanIsNotMarkedAsTheTargetsRefusal(t *testing.T) {
+// the approval. Settled as plan_stale, which holds nobody's next withdrawal,
+// with a plain sentence that names no code and no system and ends in the next
+// step (copy guide §16).
+func TestAStalePlanIsSettledAsStaleInPlainWords(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeRejected, Status: 409, Code: addons.CodePlanStale}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeRejected, Status: 409, Code: addons.CodePlanStale,
+		Detail: "PLAN_STALE: fingerprint mismatch"}
 	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
 		t.Fatal(err)
 	}
-	if len(h.refused) != 0 || !strings.Contains(h.failed["o1"], "PLAN_STALE") {
-		t.Fatalf("want a plain PLAN_STALE failure, got refused %v failed %v", h.refused, h.failed)
+	if len(h.refused) != 0 || len(h.conflicted) != 0 || len(h.stale) != 1 || h.stale[0] != "o1" {
+		t.Fatalf("want o1 settled as plan_stale only: stale %v refused %v conflicted %v", h.stale, h.refused, h.conflicted)
+	}
+	got := h.failed["o1"]
+	if got != planStaleReason {
+		t.Fatalf("want the plain sentence, got %q", got)
+	}
+	for _, raw := range []string{"PLAN_STALE", "plan", "subject", "target", "TrueNAS", "fingerprint"} {
+		if strings.Contains(got, raw) {
+			t.Errorf("the sentence must not carry %q: %q", raw, got)
+		}
+	}
+	if !strings.HasSuffix(got, "Make the change again to send it.") {
+		t.Errorf("it ends in the next step: %q", got)
 	}
 }
 

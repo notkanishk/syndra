@@ -92,6 +92,11 @@ type BindingConflict struct {
 	Next   string `json:"next,omitempty"`
 }
 
+// ConflictNameHeld is the one conflict reason a create shares with a binding
+// (common/binding_conflict.json: "the derived one, or the one the binding is
+// recorded under"); every other reason is a recorded binding's.
+const ConflictNameHeld = "name_held"
+
 // ConflictHolder is one account an ambiguous key names
 // (common/binding_conflict.json#/$defs/Holder).
 type ConflictHolder struct {

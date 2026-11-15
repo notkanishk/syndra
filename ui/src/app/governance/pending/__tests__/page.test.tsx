@@ -38,12 +38,16 @@ vi.mock("@/lib/queries/usePropagation", () => ({
   useDrainPropagations: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-const findings = vi.hoisted(() => ({ data: [] as { id: string; subject_id: string; outcome: string }[], loading: false }));
-const health = vi.hoisted(() => ({ conflicts: [] as { outbox_id: string }[], loading: false }));
+// A stopped row says where it is decided by its own wait_reason alone (7t-6): nothing about the
+// system is read for it, so any read of one fails the test.
 vi.mock("@/lib/queries/useTargets", async (orig) => ({
   ...(await orig<typeof import("@/lib/queries/useTargets")>()),
-  useMergeFindings: () => ({ data: findings.data, isLoading: findings.loading }),
-  useTargetHealth: () => ({ data: { binding_conflicts: health.conflicts }, isLoading: health.loading }),
+  useMergeFindings: () => {
+    throw new Error("a stopped row must not read the findings");
+  },
+  useTargetHealth: () => {
+    throw new Error("a stopped row must not read the system's health");
+  },
 }));
 
 vi.mock("@/lib/queries/useBundles", () => ({
@@ -89,10 +93,6 @@ function renderPending() {
 beforeEach(() => {
   pending.data = [];
   gaveUp.data = [];
-  findings.data = [];
-  findings.loading = false;
-  health.conflicts = [];
-  health.loading = false;
   summary.reachable = true;
   bundles.data = [];
   rules.data = [];
@@ -156,48 +156,35 @@ describe("Pending changes", () => {
     expect(screen.getAllByText(/Give it again from their page once the reason is fixed\./)).toHaveLength(2);
   });
 
-  it("sends a bound person's conflict to Waiting on you", () => {
+  // 7t-6: a refusal on a person's binding conflict says so by its wait_reason (binding_conflict),
+  // worded as the refusal it is, and sends that row, and only that row, to Waiting on you.
+  it("sends a binding conflict's row to Waiting on you by its wait reason alone", () => {
+    const said = "The account rey, recorded for this person, is gone, and its number is now held by a different account, kofi.";
     gaveUp.data = [
-      row({ id: "t1", target: "truenas", status: "failed", wait_reason: "target_refused", last_error: "The account rey is gone.", cascade_id: "c1" }),
+      row({ id: "t1", target: "truenas", status: "failed", wait_reason: "binding_conflict", last_error: said, cascade_id: "c1" }),
+      row({ id: "t2", user_id: "u1", target: "truenas", status: "failed", wait_reason: "target_refused", last_error: "It is held.", cascade_id: "c2" }),
     ];
-    // Another person's conflict on the same system is not this row's.
-    findings.data = [{ id: "f9", subject_id: "someone-else", outcome: "binding_conflict" }];
-    const other = renderPending();
-    expect(screen.queryByText("Decide it under Waiting on you")).not.toBeInTheDocument();
-    other.unmount();
-    findings.data = [{ id: "f1", subject_id: "u1", outcome: "binding_conflict" }];
     renderPending();
+    expect(screen.getByText(`TrueNAS refused it: ${said} Syndra stopped sending it.`)).toBeInTheDocument();
+    // The same person, the same system: only the conflict's own row gets the link.
+    expect(screen.getAllByRole("link", { name: /Decide it under Waiting on you/ })).toHaveLength(1);
     expect(screen.getByRole("link", { name: /Decide it under Waiting on you/ })).toHaveAttribute("href", "/system/targets/truenas#waiting");
     expect(screen.getByText(/Waiting on you is on TrueNAS.s page\./)).toBeInTheDocument();
-    expect(screen.queryByText(/Give it again from their page/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Give it again from their page once the reason is fixed\./)).toHaveLength(1);
   });
 
-  // Two records disagree about whose account a change landed on (`target_binding_conflicts`): the
-  // sentence is Syndra's own, shown as stored with no "refused it" before it, and the record names
-  // the row it came from, so the match is the row's and not the person's.
-  // What the backend stores (bindingConflictReason): no system's name in it, the row's wait_reason says what it is.
-  const stored = "Two of Syndra's records disagree about whose account rey is. Decide whose it is before changing anything else for them.";
-  const applied = `TrueNAS applied the change. ${stored}`;
-  const appliedRow = (id: string, user: string) =>
-    row({ id, user_id: user, target: "truenas", status: "failed", wait_reason: "binding_conflict", last_error: stored, cascade_id: `c-${id}` });
-
-  it("says an applied-but-unattributed change as stored, and links the record that names this very row", () => {
-    gaveUp.data = [appliedRow("t1", "u1"), appliedRow("t2", "u1")];
-    health.conflicts = [{ outbox_id: "t1" }];
+  // 7t-6: a stale plan in plain words, and its own next step: nothing to fix, give it again.
+  it("says a stale plan in plain words, with no code", () => {
+    gaveUp.data = [
+      row({ id: "t1", target: "truenas", status: "failed", wait_reason: "plan_stale",
+        last_error: "Their account changed after this change was approved, so it was not sent. Make the change again to send it.", cascade_id: "c1" }),
+    ];
     renderPending();
-    expect(screen.getAllByText(applied)).toHaveLength(2);
-    expect(screen.queryByText(/refused it/)).not.toBeInTheDocument();
-    // The same person, the same system: only the row the record names gets the link.
-    expect(screen.getAllByRole("link", { name: /Decide it under Waiting on you/ })).toHaveLength(1);
-    expect(screen.getAllByText(/Give it again from their page/)).toHaveLength(1);
-  });
-
-  it("shows a neutral line, not the generic step and then a swap, while the conflicts are read", () => {
-    gaveUp.data = [appliedRow("t1", "u1")];
-    findings.loading = true;
-    renderPending();
-    expect(screen.getByText(/Looking up what to do next\./)).toBeInTheDocument();
-    expect(screen.queryByText(/Give it again from their page/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("TrueNAS refused it: their account there changed after this change was approved, so Syndra stopped sending it."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/PLAN_STALE/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Give it again from their page\. Then mark it seen on Home\./)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Decide it under Waiting on you/ })).not.toBeInTheDocument();
   });
 

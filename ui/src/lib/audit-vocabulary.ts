@@ -185,6 +185,12 @@ const CHANGE_SUPERSEDED = /^entitlement\.([a-z0-9_-]+)\.superseded$/;
 const CHANGE_ABANDONED = /^entitlement\.([a-z0-9_-]+)\.abandoned$/;
 const HOLD_LAPSED = /^allowance\.([a-z0-9_-]+)\.lapsed$/;
 /**
+ * Syndra's copy of whose account is whose following the system (addon-contract 7t-6): the system
+ * gave the account this person's record named to somebody else, so the record was cleared
+ * (`binding.<system>.stale_cleared`, db.RecordTargetBinding). Nothing on the system changed.
+ */
+const BINDING_STALE = /^binding\.([a-z0-9_-]+)\.stale_cleared$/;
+/**
  * Changes sent to a connected system, and what was said about one it never
  * answered (A-09 §4, A-13 §4): `addon.<system>.<operation>.<dispatched|answered|read>`.
  */
@@ -249,6 +255,14 @@ export function describeAction(
   const lapsed = action.match(HOLD_LAPSED);
   if (lapsed) {
     return { verb: `A hold on ${nameOf(lapsed[1])} lifted itself on its date`, destructive: false };
+  }
+  const stale = action.match(BINDING_STALE);
+  if (stale) {
+    const system = nameOf(stale[1]);
+    return {
+      verb: `Stopped counting an account on ${system} as theirs: ${system} gave it to somebody else. Nothing on ${system} changed`,
+      destructive: false,
+    };
   }
   return { verb: action, destructive: /revoke|delete|remove/i.test(action) };
 }

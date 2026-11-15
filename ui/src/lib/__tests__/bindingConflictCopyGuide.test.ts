@@ -12,7 +12,7 @@ import {
   stopTrackingConsequence,
 } from "@/components/targets/bindingConflict";
 import { inventoryNotRead, whyNotChecked } from "@/lib/format";
-import { BINDING_CONFLICT, LOOKING_UP_NEXT, TARGET_REFUSED, refusalCause, stoppedLine } from "@/lib/wait-reason";
+import { BINDING_CONFLICT, DECIDE_IT, PLAN_STALE, TARGET_REFUSED, decideAt, decideStep, refusalCause, stoppedLine } from "@/lib/wait-reason";
 
 /**
  * The copy guide's section 16 rows for the binding conflict (addon-contract 7t-4)
@@ -33,11 +33,14 @@ describe("the binding conflict's copy guide rows", () => {
       holdersLine(S, ["{a}", "{b}"]),
       STOP_TRACKING,
       stopTrackingConsequence(S),
-      LOOKING_UP_NEXT,
+      decideStep(S),
+      DECIDE_IT,
       stoppedLine(S, { ...row, last_error: "out of retries after 5 attempts: x" }).replace("5 tries", "{n} tries"),
       stoppedLine(S, { ...row, wait_reason: TARGET_REFUSED, last_error: "{its words}." }).replace("{its words}.", "{its words}"),
       stoppedLine(S, { ...row, wait_reason: TARGET_REFUSED }),
-      stoppedLine(S, { ...row, wait_reason: "refused:not_found" }).replace(refusalCause("refused:not_found"), "{cause in words}"),      stoppedLine(S, { ...row, wait_reason: "halted:x" }),
+      stoppedLine(S, { ...row, wait_reason: "refused:not_found" }).replace(refusalCause("refused:not_found"), "{cause in words}"),
+      stoppedLine(S, { ...row, wait_reason: PLAN_STALE }),
+      stoppedLine(S, { ...row, wait_reason: "halted:x" }),
       inventoryNotRead(S, undefined, "target_unreachable"),
       whyNotChecked("a_reason_nobody_worded"),
       whyNotChecked("a_reason_nobody_worded", S),
@@ -55,25 +58,30 @@ describe("the binding conflict's copy guide rows", () => {
     expect(section).toContain("{system} did not answer when Syndra last tried.");
   });
 
-  it("says Syndra's own disagreement sentence the way the backend stores it, and the pages lead it with the system", () => {
-    const backend = readFileSync(resolve(__dirname, "../../../../backend/internal/services/propagation/addon.go"), "utf8");
-    // The whole stored sentence, both halves, against the Go source and the guide.
-    const first = "Two of Syndra's records disagree about whose account";
-    const last = "Decide whose it is before changing anything else for them.";
-    expect(backend).toContain(first);
-    expect(backend).toContain(last);
-    expect(section).toContain(`${first} {name} is. ${last}`);
-    expect(section).toContain("{system} applied the change. Two of Syndra's records disagree");
-    // The row's wait_reason decides, never wording: a renamed system, or one the page names another way,
-    // still reads as the applied change and never as a refusal.
-    const stored = `${first} rey is. ${last}`;
+  it("words a binding conflict's row as the refusal it is, and sends it to Waiting on you by its wait reason alone", () => {
+    // 7t-6: the row is the add-on's refusal or block on the person's binding conflict; its words are the
+    // add-on's, after "{system} refused it:", exactly as a target_refused row's.
     for (const system of ["TrueNAS", "Makerspace NAS"]) {
-      expect(stoppedLine(system, { attempts: 0, wait_reason: BINDING_CONFLICT, last_error: stored })).toBe(`${system} applied the change. ${stored}`);
+      expect(stoppedLine(system, { attempts: 0, wait_reason: BINDING_CONFLICT, last_error: "It is held." })).toBe(
+        stoppedLine(system, { attempts: 0, wait_reason: TARGET_REFUSED, last_error: "It is held." }),
+      );
     }
-    // And a refusal whose words happen to open the same way is still a refusal.
-    expect(stoppedLine("TrueNAS", { attempts: 0, wait_reason: TARGET_REFUSED, last_error: "TrueNAS applied the change" })).toBe(
-      "TrueNAS refused it: TrueNAS applied the change. Syndra stopped sending it.",
-    );
+    expect(decideAt({ wait_reason: BINDING_CONFLICT, target: "truenas" })).toBe("/system/targets/truenas#waiting");
+    expect(decideAt({ wait_reason: TARGET_REFUSED, target: "truenas" })).toBeNull();
+    expect(decideAt({ wait_reason: PLAN_STALE, target: "truenas" })).toBeNull();
+    // The backend's own sentence for the retired applied-but-unattributed row is gone everywhere.
+    const backend = readFileSync(resolve(__dirname, "../../../../backend/internal/services/propagation/addon.go"), "utf8");
+    expect(backend).not.toContain("Two of Syndra's records disagree");
+    expect(section).not.toContain("Two of Syndra's records disagree");
+  });
+
+  it("says a stale plan in plain words, the stored sentence as the backend stores it", () => {
+    const backend = readFileSync(resolve(__dirname, "../../../../backend/internal/services/propagation/addon.go"), "utf8");
+    const stored = "Their account changed after this change was approved, so it was not sent. Make the change again to send it.";
+    expect(backend).toContain(`planStaleReason = "${stored}"`);
+    expect(section).toContain(stored);
+    expect(backend).not.toContain('"PLAN_STALE: ');
+    expect(stoppedLine("TrueNAS", { attempts: 0, wait_reason: PLAN_STALE, last_error: stored })).not.toContain("PLAN_STALE");
   });
 
   it("quotes the sentences the pages and the card say that are not built from a helper", () => {
@@ -82,8 +90,7 @@ describe("the binding conflict's copy guide rows", () => {
     const pending = read("../../app/governance/pending/page.tsx");
     for (const [source, text] of [
       [findings, "Finish: stop tracking it"],
-      [pending, "Decide it under Waiting on you"],
-      [pending, "Waiting on you is on ${system}'s page."],
+      [pending, "Give it again from their page."],
     ] as const) {
       expect(source, `the page no longer says ${text}`).toContain(text);
       expect(section, `design.md §16 does not carry ${text}`).toContain(text.replace("${system}", "{system}"));
