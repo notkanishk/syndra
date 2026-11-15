@@ -551,6 +551,8 @@ export interface TargetReconcileResult {
    */
   halted?: boolean;
   reason?: string;
+  /** The add-on's own sentence for a read it refused (reason `read_refused`, e.g. its records can't be read), with its next step; shown as written. */
+  detail?: string;
   /** A pass skipped inside the add-on's cooldown: seconds until it may read again ("Check now" waits them out once). */
   retry_after?: number;
   unmanaged?: UnmanagedAccount[];

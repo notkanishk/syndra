@@ -368,8 +368,8 @@ type TargetAccount struct {
 	// Subject is the subject the add-on's binding names this account for,
 	// empty when it is bound to nobody: the add-on is the one that knows
 	// (it holds the bindings), as a SCIM service provider says externalId
-	// (RFC 7643 §3.1). Decoded and kept; the drift sweep's matching moves
-	// onto it in slice 7t-3.
+	// (RFC 7643 §3.1). The only thing that attributes an account to a
+	// person here: the drift sweep matches bindings on it (slice 7t-3).
 	Subject string `json:"subject,omitempty"`
 	// Standing is whether the account can be used yet and who is waited on
 	// (design §6): an account Syndra created has no password until its member
@@ -418,6 +418,13 @@ type SubjectsResult struct {
 	// RetryAfter is a fresh read refused inside the add-on's cooldown with
 	// nothing to serve (cooldownOf).
 	RetryAfter int
+	// Code and Detail are the add-on's own answer to a read it refused (a
+	// problem's `code` and `detail`, RFC 9457 §3.1): STORE_UNREADABLE says the
+	// add-on's records failed while the target may be fine. Detail is the
+	// add-on's sentence with its next step, shown as written. Empty on a 2xx
+	// and when the add-on did not answer at all.
+	Code   string
+	Detail string
 
 	Outcome Outcome
 	Status  int
@@ -487,6 +494,7 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 
 	out := SubjectsResult{Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err, RetryAfter: cooldownOf(resp)}
 	if resp.Outcome != OutcomeSucceeded {
+		out.Code, out.Detail = resp.Code, problemDetail(resp.Body)
 		log.Printf("[ADDON] %s/subjects outcome=%s status=%d err=%v", target, out.Outcome, out.Status, out.Err)
 		return out
 	}

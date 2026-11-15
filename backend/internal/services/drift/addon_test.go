@@ -58,6 +58,10 @@ type addonReconcileHarness struct {
 	// cooldown the pass waited out (never slept).
 	reads  []addons.SubjectsResult
 	waited []time.Duration
+	// inFlight is who had an apply in flight since the read began, and
+	// inFlightSince what the pass asked it from.
+	inFlight      map[string]bool
+	inFlightSince time.Time
 }
 
 func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
@@ -68,6 +72,12 @@ func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 	origBases := listMergeBases
 	origMappings, origHolders, origPending := listMappings, mappingHolders, pendingApply
 	t.Cleanup(func() { listMappings, mappingHolders, pendingApply = origMappings, origHolders, origPending })
+	origInFlight := appliesInFlight
+	t.Cleanup(func() { appliesInFlight = origInFlight })
+	appliesInFlight = func(_ context.Context, _ string, since time.Time) (map[string]bool, error) {
+		h.inFlightSince = since
+		return h.inFlight, nil
+	}
 	listMappings = func(context.Context, string) ([]db.RoleMapping, error) { return h.mappings, nil }
 	mappingHolders = func(_ context.Context, project, role string) ([]string, error) {
 		return h.holders[project+"/"+role], nil
@@ -211,7 +221,7 @@ func TestAFirstSweepRaisesNoDriftAndReportsInventory(t *testing.T) {
 func TestOnlyBoundSubjectsAreConverged(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(
-			addons.TargetAccount{Username: "charlotte", AccountID: "3001"},
+			addons.TargetAccount{Username: "charlotte", AccountID: "3001", Subject: "u1"},
 			addons.TargetAccount{Username: "root", AccountID: "0"},
 		),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountID: uid(3001)}},
@@ -242,7 +252,7 @@ func TestOnlyBoundSubjectsAreConverged(t *testing.T) {
 // decision it is forbidden from inferring.
 func TestABlockedSubjectIsNotConverged(t *testing.T) {
 	h := &addonReconcileHarness{
-		read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001"}),
+		read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001", Subject: "u1"}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountID: uid(3001)}},
 		plan: addons.PlanResult{
 			Outcome: addons.OutcomeSucceeded, Current: true,
@@ -265,7 +275,7 @@ func TestABlockedSubjectIsNotConverged(t *testing.T) {
 // for somebody else.
 func TestARenamedAccountIsStillRecognisedAsManaged(t *testing.T) {
 	h := &addonReconcileHarness{
-		read:     currentRead(addons.TargetAccount{Username: "charlotte-flair", AccountID: "3001"}),
+		read:     currentRead(addons.TargetAccount{Username: "charlotte-flair", AccountID: "3001", Subject: "u1"}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountID: uid(3001)}},
 		plan: addons.PlanResult{
 			Outcome: addons.OutcomeSucceeded, Current: true,
@@ -401,37 +411,21 @@ func TestAnchoringSkipsOnlyWhenTheHealthReadFailed(t *testing.T) {
 	}
 }
 
-// §29 — the account behind a refused binding is never offered for adoption,
-// and it is worth pinning why rather than adding a guard for it.
-//
-// `RecordTargetBinding` upserts on (target, subject_id), so the only unique
-// indexes it can violate are (target, username) and (target, uid) — which means
-// a conflict ALWAYS implies a binding to another subject already exists. That
-// binding is what `unmanaged` filters on, so the account is excluded by the
-// ordinary path and the adoption hazard §11 names is not reachable this way.
-//
-// Asserted rather than assumed, because the reasoning depends on the shape of
-// the upsert: change it to conflict on something else and the exclusion stops
-// following, silently.
-func TestAnAccountBoundToAnotherSubjectIsNeverOfferedForAdoption(t *testing.T) {
-	bindings := []db.TargetBinding{
-		{Target: "truenas", SubjectID: "subject-a", Username: "charlotte", AccountID: uid(3001)},
-	}
+// Which accounts are managed is the add-on's to say (design 7t D3): a row it
+// attributes to a subject is bound, whatever it is called now, and a row it
+// attributes to nobody is unmanaged even where its name and number are ones a
+// recorded binding holds. That second case is TrueNAS handing a freed number
+// to a new account: matching on the backend's copy would hide a stranger's
+// account behind a member's binding.
+func TestOnlyTheAddOnsAttributionMakesAnAccountManaged(t *testing.T) {
 	accounts := []addons.TargetAccount{
-		{Username: "charlotte", AccountID: "3001"},
+		{Username: "charlotte-renamed", AccountID: "3001", Subject: "subject-a"},
+		{Username: "becky", AccountID: "3002"},
 		{Username: "nobody-owns-this", AccountID: "4002"},
 	}
-
-	got := unmanaged(accounts, bindings)
-	if len(got) != 1 || got[0].Username != "nobody-owns-this" {
-		t.Fatalf("an account bound to another subject must not appear as adoptable: %+v", got)
-	}
-
-	// The uid arm too: a conflict can be raised by either index, and a binding
-	// whose username has drifted still owns the account.
-	renamed := []addons.TargetAccount{{Username: "charlotte-renamed", AccountID: "3001"}}
-	if got := unmanaged(renamed, bindings); len(got) != 0 {
-		t.Errorf("a bound uid owns the account whatever it is currently called: %+v", got)
+	got := unmanaged(accounts)
+	if len(got) != 2 || got[0].Username != "becky" || got[1].Username != "nobody-owns-this" {
+		t.Fatalf("want exactly the rows attributed to nobody, got %+v", got)
 	}
 }
 
@@ -445,13 +439,13 @@ func TestAnAccountBoundToAnotherSubjectIsNeverOfferedForAdoption(t *testing.T) {
 // creation. Fixing that bug turned them into three real accounts waiting for
 // somebody to press a button.
 func TestABindingWhoseAccountIsGoneIsReportedNotQueued(t *testing.T) {
-	present := []addons.TargetAccount{{Username: "charlotte", AccountID: "3001"}}
+	present := []addons.TargetAccount{{Username: "charlotte", AccountID: "3001", Subject: "sub-live"}}
 	bindings := []db.TargetBinding{
 		{SubjectID: "sub-live", Username: "charlotte", AccountID: uidPtr(3001)},
 		{SubjectID: "sub-gone", Username: "becky", AccountID: uidPtr(3999)},
 	}
 
-	live, stale := partitionByPresence(bindings, present)
+	live, stale := partitionByPresence(bindings, present, nil, nil)
 	if len(live) != 1 || live[0].SubjectID != "sub-live" {
 		t.Fatalf("live = %+v, want only sub-live", live)
 	}
@@ -460,27 +454,30 @@ func TestABindingWhoseAccountIsGoneIsReportedNotQueued(t *testing.T) {
 	}
 }
 
-// A rename keeps the uid; a recreated account keeps the name. Either is still
-// the account, and neither is stale.
-func TestAMatchOnEitherIdentityCountsAsPresent(t *testing.T) {
-	renamed := []addons.TargetAccount{{Username: "charlotte-smith", AccountID: "3001"}}
-	recreated := []addons.TargetAccount{{Username: "charlotte", AccountID: "4242"}}
+// Presence is the add-on's attribution, never this side's match (AUTHORING
+// ch. 2): an account renamed and renumbered is still the member's when the
+// add-on says so, and one holding the recorded name and number is not theirs
+// when it does not.
+func TestPresenceIsBySubjectNeverByNameOrNumber(t *testing.T) {
 	b := []db.TargetBinding{{SubjectID: "s", Username: "charlotte", AccountID: uidPtr(3001)}}
 
-	if live, stale := partitionByPresence(b, renamed); len(live) != 1 || len(stale) != 0 {
-		t.Error("a renamed account was reported as gone; the uid still matches")
+	moved := []addons.TargetAccount{{Username: "charlotte-smith", AccountID: "4242", Subject: "s"}}
+	if live, stale := partitionByPresence(b, moved, nil, nil); len(live) != 1 || len(stale) != 0 {
+		t.Error("the add-on attributes the account to the subject; it is present whatever it is called")
 	}
-	if live, stale := partitionByPresence(b, recreated); len(live) != 1 || len(stale) != 0 {
-		t.Error("a recreated account was reported as gone; the name still matches")
+	reused := []addons.TargetAccount{{Username: "charlotte", AccountID: "3001"}}
+	if live, stale := partitionByPresence(b, reused, nil, nil); len(live) != 0 || len(stale) != 1 {
+		t.Error("an account the add-on attributes to nobody is not the member's, whatever name and number it holds")
 	}
 }
 
-// A binding from before uids were recorded must not be condemned for it.
-func TestABindingWithNoRecordedUIDMatchesOnName(t *testing.T) {
-	b := []db.TargetBinding{{SubjectID: "s", Username: "charlotte"}}
-	live, stale := partitionByPresence(b, []addons.TargetAccount{{Username: "charlotte", AccountID: "3001"}})
-	if len(live) != 1 || len(stale) != 0 {
-		t.Fatalf("live=%d stale=%d; a uid-less binding whose name is present is present", len(live), len(stale))
+// A conflicted subject and one with an apply in flight are neither live nor
+// stale: the first is its own finding, the second unknown to this read.
+func TestAConflictOrAnApplyInFlightIsNeverLiveOrStale(t *testing.T) {
+	b := []db.TargetBinding{{SubjectID: "held"}, {SubjectID: "landing"}, {SubjectID: "gone"}}
+	live, stale := partitionByPresence(b, nil, map[string]bool{"held": true}, map[string]bool{"landing": true})
+	if len(live) != 0 || len(stale) != 1 || stale[0].SubjectID != "gone" {
+		t.Fatalf("live=%+v stale=%+v, want only gone stale", live, stale)
 	}
 }
 
@@ -518,7 +515,7 @@ func baseFor(subject string, fields map[string]any) map[string]db.MergeBase {
 func TestAHandEditOnTheTargetIsNotQueuedAndBecomesAFinding(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(addons.TargetAccount{
-			Username: "charlotte", AccountID: "3001", State: state(map[string]any{"enabled": false}),
+			Username: "charlotte", AccountID: "3001", Subject: "sub-1", State: state(map[string]any{"enabled": false}),
 		}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 		// Syndra wants enabled=true (the harness's resolveIntent), and the last
@@ -549,7 +546,7 @@ func TestAHandEditOnTheTargetIsNotQueuedAndBecomesAFinding(t *testing.T) {
 func TestAFastForwardIsStillQueued(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(addons.TargetAccount{
-			Username: "charlotte", AccountID: "3001", State: state(map[string]any{"enabled": false}),
+			Username: "charlotte", AccountID: "3001", Subject: "sub-1", State: state(map[string]any{"enabled": false}),
 		}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 		// The target still holds what it last reported; the desired state moved.
@@ -580,7 +577,7 @@ func TestAFastForwardIsStillQueued(t *testing.T) {
 func TestAConflictIsReportedWithAllThreeValues(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(addons.TargetAccount{
-			Username: "charlotte", AccountID: "3001", State: state(map[string]any{"enabled": false}),
+			Username: "charlotte", AccountID: "3001", Subject: "sub-1", State: state(map[string]any{"enabled": false}),
 		}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 		// Base differs from both: Syndra now wants true, the target now has
@@ -666,7 +663,7 @@ func TestATruncatedReadDrawsNoAbsenceFindings(t *testing.T) {
 func TestABaselessSubjectConvergesAndRaisesNothing(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(addons.TargetAccount{
-			Username: "charlotte", AccountID: "3001", State: state(map[string]any{"enabled": false}),
+			Username: "charlotte", AccountID: "3001", Subject: "sub-1", State: state(map[string]any{"enabled": false}),
 		}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 		plan: addons.PlanResult{Outcome: addons.OutcomeSucceeded, Outcomes: []addons.SubjectOutcome{
@@ -693,7 +690,7 @@ func TestABaselessSubjectConvergesAndRaisesNothing(t *testing.T) {
 // that did not happen.
 func TestAnAddOnThatReportsNoStateStillConverges(t *testing.T) {
 	h := &addonReconcileHarness{
-		read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001"}),
+		read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001", Subject: "sub-1"}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 		bases:    baseFor("sub-1", map[string]any{"enabled": true}),
 		plan: addons.PlanResult{Outcome: addons.OutcomeSucceeded, Outcomes: []addons.SubjectOutcome{
@@ -719,7 +716,7 @@ func TestAnAddOnThatReportsNoStateStillConverges(t *testing.T) {
 func TestAFindingOutlivesThePassThatFoundIt(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(addons.TargetAccount{
-			Username: "charlotte", AccountID: "3001", State: state(map[string]any{"enabled": false}),
+			Username: "charlotte", AccountID: "3001", Subject: "sub-1", State: state(map[string]any{"enabled": false}),
 		}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 		bases:    baseFor("sub-1", map[string]any{"enabled": true}),
@@ -754,7 +751,7 @@ func TestAFindingOutlivesThePassThatFoundIt(t *testing.T) {
 func TestASettledDifferenceClosesItsFinding(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(addons.TargetAccount{
-			Username: "charlotte", AccountID: "3001", State: state(map[string]any{"enabled": true}),
+			Username: "charlotte", AccountID: "3001", Subject: "sub-1", State: state(map[string]any{"enabled": true}),
 		}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 		bases:    baseFor("sub-1", map[string]any{"enabled": true}),
@@ -783,7 +780,7 @@ func TestASettledDifferenceClosesItsFinding(t *testing.T) {
 func TestAnAgreementIsObservedSoItIsNotRediscoveredForever(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(addons.TargetAccount{
-			Username: "charlotte", AccountID: "3001", State: state(map[string]any{"enabled": true}),
+			Username: "charlotte", AccountID: "3001", Subject: "sub-1", State: state(map[string]any{"enabled": true}),
 		}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 		// The last observation disagrees with both sides, which now agree.
@@ -814,7 +811,7 @@ func TestAnAgreementIsObservedSoItIsNotRediscoveredForever(t *testing.T) {
 func TestADepartedPersonsObservationKeepsTheRestOfTheBase(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(addons.TargetAccount{
-			Username: "charlotte", AccountID: "3001", State: state(map[string]any{"enabled": false}),
+			Username: "charlotte", AccountID: "3001", Subject: "sub-1", State: state(map[string]any{"enabled": false}),
 		}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 		bases:    baseFor("sub-1", map[string]any{"enabled": true, "group": []string{"lab_makers"}}),
@@ -877,7 +874,7 @@ func TestAnAbsentAccountsFindingIsPersisted(t *testing.T) {
 func TestAFindingThatCouldNotBeWrittenLeavesTheTargetUnreconciled(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(addons.TargetAccount{
-			Username: "charlotte", AccountID: "3001", State: state(map[string]any{"enabled": false}),
+			Username: "charlotte", AccountID: "3001", Subject: "sub-1", State: state(map[string]any{"enabled": false}),
 		}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 		bases:    baseFor("sub-1", map[string]any{"enabled": true}),
@@ -921,7 +918,7 @@ func TestADepartedPersonsDisableDrainsOnItsOwn(t *testing.T) {
 		} {
 			t.Run(shape.account+"/"+tc.name, func(t *testing.T) {
 				h := &addonReconcileHarness{
-					read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001"}),
+					read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001", Subject: "u1"}),
 					bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountID: uid(3001)}},
 					plan: addons.PlanResult{
 						Outcome: addons.OutcomeSucceeded, Current: true,
@@ -1009,7 +1006,7 @@ func TestAHandEditedLimitIsAFinding(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h := &addonReconcileHarness{
 				read: currentRead(addons.TargetAccount{
-					Username: "charlotte", AccountID: "3001", State: state(tc.theirs),
+					Username: "charlotte", AccountID: "3001", Subject: "sub-1", State: state(tc.theirs),
 				}),
 				bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 				bases:    baseFor("sub-1", map[string]any{"enabled": true, "home_quota": []string{"5368709120"}}),
@@ -1048,7 +1045,7 @@ func TestAHandEditedLimitIsAFinding(t *testing.T) {
 // the add-on to combine; only the comparison combines them.
 func TestTheLimitIsPlannedUncombined(t *testing.T) {
 	h := &addonReconcileHarness{
-		read: currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001",
+		read: currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001", Subject: "sub-1",
 			State: state(map[string]any{"enabled": true, "home_quota": []string{"0"}})}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
 		plan:     addons.PlanResult{Outcome: addons.OutcomeSucceeded, Current: true},
@@ -1072,15 +1069,16 @@ func TestTheLimitIsPlannedUncombined(t *testing.T) {
 }
 
 // The inventory's managed rows carry the standing the add-on reports for each
-// account in the same read, matched as a binding is (account id first, so a
-// renamed account keeps its own standing), and none when the read does not list
-// it (addon-contract slice 2, for task 3.7). Unmanaged rows already do.
+// account in the same read, by the subject the add-on attributes the row to (a
+// renamed account keeps its own standing, and an account that took the
+// recorded name is not the member's), and none when no row is theirs
+// (addon-contract slice 2, for task 3.7; 7t-3). Unmanaged rows already do.
 func TestTheInventorysBoundAccountsCarryTheirStanding(t *testing.T) {
 	waiting := &addons.Standing{WaitingOn: "member", Note: "Waiting for a password."}
 	usable := &addons.Standing{Usable: true, WaitingOn: "none"}
 	h := &addonReconcileHarness{
 		read: currentRead(
-			addons.TargetAccount{Username: "charlotte.flair", AccountID: "3001", Standing: waiting},
+			addons.TargetAccount{Username: "charlotte.flair", AccountID: "3001", Subject: "sub-1", Standing: waiting},
 			addons.TargetAccount{Username: "charlotte", AccountID: "3009", Standing: usable},
 			addons.TargetAccount{Username: "stray", AccountID: "4000", Standing: usable},
 		),
@@ -1096,14 +1094,14 @@ func TestTheInventorysBoundAccountsCarryTheirStanding(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(res.Accounts) != 2 || res.Accounts[0].Standing != waiting || res.Accounts[1].Standing != nil {
-		t.Fatalf("standing by account id, none for an account not listed: %+v", res.Accounts)
+		t.Fatalf("standing by the add-on's attribution, none for a subject on no row: %+v", res.Accounts)
 	}
 	raw, _ := json.Marshal(res.Accounts[0])
 	if !strings.Contains(string(raw), `"subject_id":"sub-1"`) || !strings.Contains(string(raw), `"standing":{`) {
 		t.Fatalf("the row is the binding plus its standing: %s", raw)
 	}
-	if len(res.Unmanaged) != 1 || res.Unmanaged[0].Standing != usable {
-		t.Fatalf("unmanaged rows keep theirs: %+v", res.Unmanaged)
+	if len(res.Unmanaged) != 2 || res.Unmanaged[0].Username != "charlotte" || res.Unmanaged[1].Standing != usable {
+		t.Fatalf("unmanaged rows keep theirs, and the account now on the recorded name is one: %+v", res.Unmanaged)
 	}
 }
 
@@ -1114,7 +1112,7 @@ func TestTheInventorysBoundAccountsCarryTheirStanding(t *testing.T) {
 func TestTheSweepRequeuesALockWithoutARetiredChannel(t *testing.T) {
 	current := addons.Roles{"group": addons.RoleMembership, "enabled": addons.RoleAccount, "web": addons.RoleChannel} // smb_enabled retired
 	h := &addonReconcileHarness{
-		read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001"}),
+		read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001", Subject: "u1"}),
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountID: uid(3001)}},
 		plan: addons.PlanResult{Outcome: addons.OutcomeSucceeded, Current: true,
 			Outcomes: []addons.SubjectOutcome{{Subject: "u1", Effect: db.PlanEffectApply}}},

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -127,6 +128,40 @@ func TargetServingProject(ctx context.Context, projectID string) (string, bool, 
 		return "", false, fmt.Errorf("read target serving %s: %w", projectID, err)
 	}
 	return target, true, nil
+}
+
+// AppliesInFlightSince is every subject with an apply on this target that was
+// in flight at some moment since `since`: claimed and not settled now
+// (in_flight, which is also where an apply whose answer was lost stays), or
+// settled after `since`.
+//
+// The reconcile pass asks it after reading the target. An add-on reads the
+// app before its own bindings, so an apply that lands between the two leaves
+// its subject on no row and in no conflict for that one read; settled before
+// the pass asks, it would no longer be in flight, which is why a row settled
+// after the read began counts too. Such a subject is never concluded deleted
+// from that read.
+func AppliesInFlightSince(ctx context.Context, target string, since time.Time) (map[string]bool, error) {
+	const q = `SELECT DISTINCT user_id FROM propagation_outbox
+		 WHERE op_type = 'apply' AND target = $1
+		   AND (status = 'in_flight' OR completed_at >= $2)`
+	rows, err := querier(ctx).Query(ctx, q, target, since)
+	if err != nil {
+		return nil, fmt.Errorf("applies in flight on %s: %w", target, err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var subject string
+		if err := rows.Scan(&subject); err != nil {
+			return nil, fmt.Errorf("applies in flight on %s: %w", target, err)
+		}
+		out[subject] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("applies in flight on %s: %w", target, err)
+	}
+	return out, nil
 }
 
 // PendingApplyWants reports whether a convergence for this subject on this

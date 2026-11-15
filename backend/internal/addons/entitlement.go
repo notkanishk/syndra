@@ -76,6 +76,13 @@ type ApplyResponse struct {
 	// Standing is whether the account can be used yet, and who is waited on.
 	Standing *Standing
 	Detail   string
+	// Consequence and Conflict are a blocked apply's next step and the binding
+	// conflict that blocked it (apply_response.json, carried as extension
+	// members of APPLY_BLOCKED and BINDING_CONFLICT), in the add-on's words.
+	// Kept so the operator is told what to do, and so the conflict becomes the
+	// same finding the sweep raises (design 7t §3).
+	Consequence string
+	Conflict    *BindingConflict
 	// Fingerprint is the subject's state afterwards, so the next plan starts
 	// from something current rather than from a read the backend has to make.
 	Fingerprint string
@@ -120,6 +127,8 @@ type applyWire struct {
 	AccountID   string                     `json:"account_id"`
 	Standing    *Standing                  `json:"standing"`
 	Detail      string                     `json:"detail"`
+	Consequence string                     `json:"consequence"`
+	Conflict    *BindingConflict           `json:"conflict"`
 	Fingerprint string                     `json:"fingerprint"`
 	Observed    map[string]json.RawMessage `json:"observed"`
 	Unverified  bool                       `json:"unverified"`
@@ -202,6 +211,7 @@ func Apply(ctx context.Context, req ApplyRequest) ApplyResponse {
 	decodeErr := DecodeReply(resp.Body, &wire)
 	if decodeErr == nil {
 		out.Username, out.AccountID, out.Standing, out.Detail = wire.Username, wire.AccountID, wire.Standing, wire.Detail
+		out.Consequence, out.Conflict = wire.Consequence, wire.Conflict
 		if wire.Effect != nil {
 			out.Effect = *wire.Effect
 		}

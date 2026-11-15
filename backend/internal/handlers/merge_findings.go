@@ -108,9 +108,10 @@ func decorate(ctx context.Context, target string, findings []db.MergeFinding) []
 	for _, f := range findings {
 		view := findingView{MergeFinding: f}
 		switch {
-		case f.Outcome == string(merge.DeletedUpstream):
+		case f.Outcome == string(merge.DeletedUpstream), f.Outcome == string(merge.BindingConflict):
 			// Neither adoptable nor a policy question: the account is gone, and
-			// the two answers are re-provision or stop managing it.
+			// the two answers are re-provision or stop managing it; or another
+			// holds it, and the one answer is to stop managing it.
 		case limits[f.Field]:
 			// A limit an operator may set for one person (compared since
 			// addon-contract 2.7): the target's value is adopted as their own
@@ -477,7 +478,20 @@ func writeResolutionError(w http.ResponseWriter, err error) {
 // disagreement they would stop Syndra managing an account that is sitting right
 // there, or queue a create for one that already exists, and the API accepted
 // both from any caller.
+//
+// A `binding_conflict` takes `unbound` alone (stop tracking: account.release,
+// the add-on's own next step; design 7t §3, pending owner Q5). Re-provisioning
+// is the create the add-on refuses, there is no account of the subject's to
+// keep or take a value on, and adopting the holder has its one place, Not
+// created by Syndra, once the binding is released.
 func resolutionFits(f db.MergeFinding, resolution string) error {
+	if f.Outcome == string(merge.BindingConflict) {
+		if resolution != db.ResolutionUnbound {
+			return fmt.Errorf("%w: %q does not answer a binding whose name or number another account holds; stopping tracking it does",
+				ErrResolutionNotExpressible, resolution)
+		}
+		return nil
+	}
 	gone := f.Outcome == string(merge.DeletedUpstream)
 	switch resolution {
 	case db.ResolutionUnbound, db.ResolutionReprovisioned:

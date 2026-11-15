@@ -132,6 +132,9 @@ var (
 	listMappings   = db.ListRoleMappings
 	mappingHolders = services.MappingHolders
 	pendingApply   = db.PendingApplyWants
+	// Who had an apply in flight while the target was read: never concluded
+	// deleted from that read (7t-3).
+	appliesInFlight = db.AppliesInFlightSince
 
 	// The mutation-log anchor (2.28). Two seams rather than one, because the
 	// read and the comparison fail differently: a health read that did not

@@ -230,6 +230,19 @@ func TestSubjectsReplyLands(t *testing.T) {
 	}
 }
 
+// A read the add-on refused lands with its code and its own sentence (7t-3):
+// STORE_UNREADABLE is the add-on's records failing, never TrueNAS silent, and
+// the sentence carries the next step the sweep's result shows.
+func TestARefusedSubjectsReadLandsWithTheAddOnsWords(t *testing.T) {
+	const detail = "Syndra's records of who has which account on TrueNAS can't be read. Check the add-on's storage, then try again."
+	addonServingStatus(t, http.StatusInternalServerError, []byte(`{"type":"urn:syndra:addon:error:STORE_UNREADABLE",
+		"title":"Store unreadable","status":500,"code":"STORE_UNREADABLE","retry":"backoff","detail":"`+detail+`"}`))
+	r := Subjects(context.Background(), "truenas", true)
+	if r.Outcome == OutcomeSucceeded || r.Code != "STORE_UNREADABLE" || r.Detail != detail {
+		t.Fatalf("the refusal lost its code or its words: %+v", r)
+	}
+}
+
 // Absence is never a value (design §2(b)): each field the §4 table lists for a
 // reply, removed, makes that read one nothing may be concluded from — never Go's
 // zero value, which would read a forgotten `truncated` as "complete".

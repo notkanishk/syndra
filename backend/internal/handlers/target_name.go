@@ -6,9 +6,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/textsort"
 )
@@ -20,36 +19,24 @@ import (
 // names. systemName is the one place the name is decided, and every roster
 // (GET /targets, GET /me/targets, a person's systems) carries what it says.
 
-// Where a system's name came from, for the System page's Name setting.
-const (
-	nameFromOperator = "operator"
-	nameFromProduct  = "product"
-	nameFromID       = "id"
-)
-
 // systemName is the operator's name for a target, else its accepted
 // manifest's product (saved at acceptance, so it holds while the add-on is
-// down), else its id title-cased; from says which.
+// down), else its id title-cased (the same rule the UI's targetLabel draws a
+// row with before any roster has loaded); from says which. The rule is
+// addons.SystemName; this reads its two values.
 func systemName(ctx context.Context, target string) (name, from string) {
 	stored, err := dbTargetName(ctx, target)
 	if err != nil {
 		// Non-fatal: a page that cannot read the name still has a true one.
 		log.Printf("[TARGETS] could not read %s's name: %v (non-fatal)", target, err)
 	}
-	if stored != "" {
-		return stored, nameFromOperator
+	product := ""
+	if stored == "" {
+		if shape, err := addonsAcceptedShape(ctx, target); err == nil {
+			product = shape.Product
+		}
 	}
-	if shape, err := addonsAcceptedShape(ctx, target); err == nil && strings.TrimSpace(shape.Product) != "" {
-		return shape.Product, nameFromProduct
-	}
-	return titleCased(target), nameFromID
-}
-
-// titleCased is the id with its first letter capital, the same rule the UI's
-// targetLabel draws a row with before any roster has loaded.
-func titleCased(id string) string {
-	r, size := utf8.DecodeRuneInString(id)
-	return string(unicode.ToUpper(r)) + id[size:]
+	return addons.SystemName(stored, product, target)
 }
 
 type targetNameRequest struct {

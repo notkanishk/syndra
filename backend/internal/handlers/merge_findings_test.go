@@ -397,6 +397,37 @@ func TestKeepingOursIsRefusedForAnAccountThatIsGone(t *testing.T) {
 	}
 }
 
+// A binding another account holds (7t-3) takes one answer, stop tracking:
+// unbound dispatches account.release, the add-on's own next step. Every other
+// resolution is refused before anything is reserved, sent or queued — a
+// re-provision is the create the add-on refuses, and there is no account of
+// the subject's to keep or take a value on.
+func TestABindingConflictTakesOnlyUnbound(t *testing.T) {
+	conflict := db.MergeFinding{ID: "f1", Target: "truenas", SubjectID: "sub-1", Outcome: "binding_conflict",
+		Theirs: []byte(`{"subject":"sub-1","reason":"name_held","username":"seth_rollins","account_id":"3077"}`)}
+	for _, resolution := range []string{"reprovisioned", "keep_ours", "take_theirs"} {
+		h := &findingHarness{finding: conflict}
+		stubFindings(t, h)
+		rr := resolveFinding(t, `{"resolution":"`+resolution+`","reason":"x"}`)
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("%s: want 422, got %d: %s", resolution, rr.Code, rr.Body.String())
+		}
+		if len(h.dispatched) != 0 || len(h.converged) != 0 || len(h.decided) != 0 || len(h.resolved) != 0 {
+			t.Fatalf("%s: a refused resolution must do nothing at all", resolution)
+		}
+	}
+
+	h := &findingHarness{finding: conflict}
+	stubFindings(t, h)
+	rr := resolveFinding(t, `{"resolution":"unbound","reason":"it is not theirs"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unbound: want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.dispatched) != 1 || h.dispatched[0].Operation != "account.release" || len(h.converged) != 0 {
+		t.Fatalf("unbound must release on the add-on and queue nothing: %+v %+v", h.dispatched, h.converged)
+	}
+}
+
 // What the surface has to render, computed here.
 //
 // Which fields have a per-subject home is a fact about the entitlement model —

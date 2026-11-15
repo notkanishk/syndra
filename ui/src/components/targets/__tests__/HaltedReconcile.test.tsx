@@ -25,6 +25,18 @@ vi.mock("@/lib/queries/useTargetSystemHealth", () => ({
   }),
 }));
 
+// The pass the card shows; a test may swap it before rendering.
+const pass = vi.hoisted(() => ({
+  data: {
+    target: "truenas",
+    bound: 0,
+    queued: 0,
+    current: false,
+    halted: true,
+    reason: "target unreachable",
+  } as Record<string, unknown>,
+}));
+
 // Every helper lives INSIDE the factory: `vi.mock` is hoisted above every
 // const in the file, so a top-level one is not yet initialised when it runs.
 vi.mock("@/lib/queries/useTargets", () => {
@@ -55,17 +67,7 @@ vi.mock("@/lib/queries/useTargets", () => {
     useSetLifecycle: inert,
     useReleaseBinding: inert,
     useAdoptAccount: inert,
-    useReconcileTarget: () => ({
-      ...inert(),
-      data: {
-        target: "truenas",
-        bound: 0,
-        queued: 0,
-        current: false,
-        halted: true,
-        reason: "target unreachable",
-      },
-    }),
+    useReconcileTarget: () => ({ ...inert(), data: pass.data }),
   };
 });
 
@@ -108,5 +110,21 @@ describe("a reconcile pass that halted", () => {
     // able to render it.
     expect(screen.queryByText(/0 people with a managed account/)).toBeNull();
     expect(screen.queryByText(/fixes waiting for you to send/)).toBeNull();
+  });
+
+  // 7t-3: the add-on answered and refused the read because its own records
+  // failed (STORE_UNREADABLE → read_refused). Its sentence carries the next
+  // step; "once it is reachable" and the raw reason would both be untrue.
+  it("says the add-on's own words when it refused the read", () => {
+    const detail =
+      "Syndra's records of who has which account on TrueNAS can't be read. Check the add-on's storage, then try again.";
+    pass.data = { ...pass.data, reason: "read_refused", detail };
+    renderTarget();
+
+    expect(
+      screen.getByText(`The check stopped before it concluded anything. ${detail}`),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/once it is reachable/)).toBeNull();
+    expect(screen.queryByText(/read_refused/)).toBeNull();
   });
 });

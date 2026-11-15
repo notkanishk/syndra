@@ -578,6 +578,13 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
             </span>
           ) : !result ? (
             "Syndra checks by itself every six hours."
+          ) : result.halted && result.detail ? (
+            // The add-on answered and refused the read (read_refused): its own
+            // sentence says what failed and what to do, so "once it is
+            // reachable" would be untrue.
+            <span className="text-warn-text">
+              The check stopped before it concluded anything. {result.detail}
+            </span>
           ) : result.halted ? (
             <span className="text-warn-text">
               The check stopped before it concluded anything
@@ -618,7 +625,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
         </CardRow>
       )}
 
-      {result && !result.current && !waiting && !skipped && (
+      {result && !result.current && !result.detail && !waiting && !skipped && (
         // A pass that concluded nothing must not read as a clean one.
         <CardRow>
           <span className="text-[13.5px] text-warn-text">

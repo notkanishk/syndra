@@ -255,6 +255,26 @@ var (
 	bindingHolder = db.BindingHolder
 	saveConflict  = db.RecordBindingConflict
 
+	// The add-on's own binding conflict on a blocked apply or plan: the same
+	// standing finding the drift sweep raises from /subjects (7t-3), so the
+	// operator sees it now rather than at the next sweep.
+	saveMergeFinding = db.RecordMergeFinding
+
+	// What the system is called, for the sentences the drain writes on a row
+	// (addons.SystemName's rule over the operator's name and the accepted
+	// product). Read failures fall to the next value, never to "the target".
+	systemName = func(ctx context.Context, target string) string {
+		operator, _ := db.TargetName(ctx, target)
+		product := ""
+		if operator == "" {
+			if shape, err := addons.AcceptedShape(ctx, target); err == nil {
+				product = shape.Product
+			}
+		}
+		name, _ := addons.SystemName(operator, product, target)
+		return name
+	}
+
 	// The merge base, written from what the add-on OBSERVED after the write.
 	// Its own seam because the assertion that matters is negative: an apply the
 	// add-on could not read back must record nothing here, and a test proving
