@@ -124,3 +124,41 @@ func TestTheHomeLimitIsReadByRoleAndUnit(t *testing.T) {
 		t.Fatal("a limit not in bytes is not a home folder's limit")
 	}
 }
+
+// An add-on older than attribution: its homes say whose none is, so none is
+// shown as anybody's. Not read, with the same addon_outdated state the
+// reconcile pass records, never blank homes read as nobody's.
+func TestHomesFromAnOutdatedAddOnAreNotShownAsAnybodys(t *testing.T) {
+	bindings, resolve, inForce, all, homes, shape := dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsAcceptedShape
+	t.Cleanup(func() {
+		dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsAcceptedShape = bindings, resolve, inForce, all, homes, shape
+	})
+	addonsAcceptedShape = func(context.Context, string) (addons.Shape, error) {
+		return addons.Shape{Kind: "storage", EntitlementSchema: truenasSchema}, nil
+	}
+	dbListTargetBindings = func(context.Context, string) ([]db.TargetBinding, error) {
+		return []db.TargetBinding{{SubjectID: "u-booker", Username: "booker"}}, nil
+	}
+	dbAllowancesInForce = func(context.Context, string, string) ([]db.Allowance, error) { return nil, nil }
+	dbAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) { return nil, nil }
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{Roles: truenasRoles}, nil
+	}
+	addonsReadHomes = func(context.Context, string, bool) addons.Homes { return addons.Homes{Outdated: true} }
+
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/homes", nil)
+	r.SetPathValue("target", "truenas")
+	rr := httptest.NewRecorder()
+	handleTargetHomes(rr, r)
+	var body struct {
+		Read     bool          `json:"read"`
+		Reason   string        `json:"reason"`
+		Accounts []accountHome `json:"accounts"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Read || body.Reason != db.UnreconciledAddonOutdated || len(body.Accounts) != 1 || body.Accounts[0].Home != "" {
+		t.Fatalf("want not read, addon_outdated, no home shown: %s", rr.Body.String())
+	}
+}

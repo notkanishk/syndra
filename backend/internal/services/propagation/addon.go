@@ -117,6 +117,16 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		return false
 	}
 
+	// Its calls start now, whatever the claim stamped for the whole batch: the
+	// drift sweep reads started_at as when this row's calls began
+	// (db.AppliesInFlightSince), and a row sent minutes after its batch was
+	// claimed must not fall outside that window while it can still land. Not
+	// stamped, not sent: it stays in flight and the next pass claims it again.
+	if err := markSending(ctx, row.ID); err != nil {
+		res.settleFailure(row.ID, "mark sending", err)
+		return false
+	}
+
 	intent, err := readIntent(ctx, row.ID)
 	if err != nil {
 		if !errors.Is(err, db.ErrNoApprovedIntent) {

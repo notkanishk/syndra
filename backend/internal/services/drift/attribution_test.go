@@ -145,6 +145,51 @@ func TestAWholeReadClosesTheConflictsItNoLongerLists(t *testing.T) {
 	}
 }
 
+// An add-on older than attribution says whose no account is: the pass and the
+// inventory stop as addon_outdated (never read_stale, which waiting would
+// end), concluding nothing: no binding stale, no account offered as unmanaged.
+func TestAnOutdatedAddOnStopsThePassAsOutdated(t *testing.T) {
+	read := currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001"})
+	read.Outdated, read.Current, read.Truncated = true, false, true
+	h := &addonReconcileHarness{
+		read:     read,
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
+	}
+	stubAddonReconcile(t, h)
+	res, err := ReconcileAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Halted || res.Reason != db.UnreconciledAddonOutdated || len(h.marked) != 1 || h.marked[0] != db.UnreconciledAddonOutdated {
+		t.Fatalf("want a pass stopped as addon_outdated, got %+v marked %v", res, h.marked)
+	}
+	if len(h.findingsWritten) != 0 || len(res.Unmanaged) != 0 || len(h.planAsked) != 0 {
+		t.Fatalf("nothing may be concluded: findings %+v unmanaged %+v", h.findingsWritten, res.Unmanaged)
+	}
+	inv, err := Inventory(context.Background(), "truenas", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inv.Halted || inv.Reason != db.UnreconciledAddonOutdated || len(inv.Unmanaged) != 0 {
+		t.Fatalf("the inventory too: %+v", inv)
+	}
+}
+
+// A conflict the drain raised for a subject whose apply was in flight while the
+// add-on read is not closed by that read: the read says nothing of it.
+func TestTheCloseKeepsASubjectWithAnApplyInFlight(t *testing.T) {
+	read := currentRead()
+	read.Conflicts = []addons.SubjectConflict{heldBy("sub-1")}
+	h := &addonReconcileHarness{read: read, inFlight: map[string]bool{"sub-9": true}}
+	stubAddonReconcile(t, h)
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.closedOutside) != 1 || h.closedOutside[0] != "binding_conflict:sub-1,sub-9" {
+		t.Fatalf("want sub-1 and the in-flight sub-9 kept, got %v", h.closedOutside)
+	}
+}
+
 // A reply that both attributes a row to a subject and lists it in conflict
 // contradicts itself; the conflict wins, so the subject is never planned.
 func TestAConflictWinsOverARowForTheSameSubject(t *testing.T) {
@@ -235,7 +280,7 @@ func TestAnUnreadableStoreIsARefusedReadNeverAnOutage(t *testing.T) {
 		{Outcome: addons.OutcomeIndeterminate, Status: 502, Code: "TARGET_UNREADABLE"},
 		{Outcome: addons.OutcomeIndeterminate, Status: 502},
 	} {
-		if reason, words := readFailure(read); reason != db.UnreconciledUnreachable || words != "" {
+		if reason, words, halted := readHalt(read); !halted || reason != db.UnreconciledUnreachable || words != "" {
 			t.Errorf("%+v: got %q %q, want target_unreachable", read, reason, words)
 		}
 	}

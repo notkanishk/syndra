@@ -65,6 +65,9 @@ var (
 	// which a retry would not change (db.WaitReasonTargetRefused).
 	markTargetRefused = db.MarkPropagationTargetRefused
 	requeue           = db.RequeuePropagation
+	// markSending stamps an add-on row's started_at as its calls go out
+	// (dispatchEntitlement), not when its batch was claimed.
+	markSending = db.MarkPropagationSending
 	// release returns a row to pending without spending a retry, for the one
 	// case where nothing was attempted at all.
 	release = db.ReleasePropagation

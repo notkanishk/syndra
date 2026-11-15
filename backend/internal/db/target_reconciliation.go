@@ -37,12 +37,17 @@ const (
 	// failure from every one above and the same operator consequence: what is
 	// on the surface understates what the sweep saw.
 	UnreconciledFindingsUnrecorded = "findings_unrecorded"
+	// UnreconciledAddonOutdated — the add-on is older than this backend in a
+	// way the read depends on: its /subjects says whose no account is (no
+	// `conflicts`, add-on contract 7t-3), so nothing it lists may be concluded
+	// from. Waiting does not end it; updating the add-on does.
+	UnreconciledAddonOutdated = "addon_outdated"
 )
 
 func validUnreconciledReason(r string) bool {
 	switch r {
 	case UnreconciledUnreachable, UnreconciledStaleRead, UnreconciledTruncated,
-		UnreconciledReadRefused, UnreconciledFindingsUnrecorded:
+		UnreconciledReadRefused, UnreconciledFindingsUnrecorded, UnreconciledAddonOutdated:
 		return true
 	default:
 		return false
@@ -53,7 +58,7 @@ func validUnreconciledReason(r string) bool {
 // vocabulary and never the value, so a caller that reached here holding
 // something it should not cannot write it into the error either.
 var ErrUnreconciledReason = errors.New(
-	"unreconciled reason must be one of: target_unreachable, read_stale, read_truncated, read_refused, findings_unrecorded")
+	"unreconciled reason must be one of: target_unreachable, read_stale, read_truncated, read_refused, findings_unrecorded, addon_outdated")
 
 // TargetReconciliation is how current Syndra's picture of a target is.
 //

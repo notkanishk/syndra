@@ -689,6 +689,20 @@ func settleOne(ctx context.Context, what, id, q string, args ...any) error {
 	return nil
 }
 
+// MarkPropagationSending stamps a claimed row's started_at with the database's
+// now(), immediately before its calls go out.
+//
+// A claim stamps a whole batch at once and the drain then sends its rows one
+// by one, so the claim's started_at says when the row was taken, not when it
+// was sent: row k of a batch goes out about k calls later. What reads
+// started_at as "its calls began here" (AppliesInFlightSince's window) needs
+// the send, so every add-on dispatch stamps it here first. Only a row still
+// in flight: one settled or abandoned meanwhile is not sent.
+func MarkPropagationSending(ctx context.Context, id string) error {
+	return settleOne(ctx, "mark propagation sending", id,
+		`UPDATE propagation_outbox SET started_at = now() WHERE id=$1 AND status='in_flight'`)
+}
+
 // MarkPropagationApplied marks a row as terminal success and clears any prior
 // transient error message.
 func MarkPropagationApplied(ctx context.Context, id string) error {

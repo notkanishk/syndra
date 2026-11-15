@@ -425,10 +425,39 @@ type SubjectsResult struct {
 	// and when the add-on did not answer at all.
 	Code   string
 	Detail string
+	// Outdated says the add-on is older than attribution: its reply carries no
+	// `conflicts`, so it says whose no account is (7t-3). Never concluded from
+	// (Current false, Truncated true), and named apart, because waiting does
+	// not end it: the add-on has to be updated.
+	Outdated bool
 
 	Outcome Outcome
 	Status  int
 	Err     error
+}
+
+// What an add-on's last /subjects reply said of attribution (Addon.attribution).
+const (
+	attributionUnknown int32 = iota
+	attributionSaid
+	attributionOutdated
+)
+
+// Outdated reports whether target's add-on is older than attribution (7t-3),
+// by the one test Subjects makes on its /subjects reply, remembered per add-on.
+// Another read of the same add-on that cannot tell from its own rows (/homes:
+// a row with no `subject` may simply be nobody's) asks here instead of
+// guessing. Not yet known, it reads /subjects once, the add-on's copy being
+// enough. A read that fails says nothing, and nothing is called outdated on it.
+func Outdated(ctx context.Context, target string) bool {
+	a, err := Get(target)
+	if err != nil {
+		return false
+	}
+	if a.attribution.Load() == attributionUnknown {
+		Subjects(ctx, target, false)
+	}
+	return a.attribution.Load() == attributionOutdated
 }
 
 // CooledDown reports a fresh read the add-on would not make yet, inside its
@@ -518,14 +547,15 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 		// An add-on from before attribution (contract before 7t-2, or a
 		// rollback to contract 1): no row carries `subject`, so every binding
 		// would read as on no row and in no conflict, which Syndra concludes
-		// is a deleted account. Served, labelled, never concluded from, the
-		// same as any reply that breaks the contract's invariants. This is
+		// is a deleted account. Outdated, and never concluded from. This is
 		// also what makes the add-on's deploy before this backend a matter of
 		// order, not of safety.
-		log.Printf("[ADDON] %s/subjects carries no conflicts, so no attribution; the read is not usable", target)
-		out.Current, out.Truncated = false, true
+		log.Printf("[ADDON] %s/subjects carries no conflicts: the add-on is older than attribution; the read is not usable", target)
+		out.Outdated, out.Current, out.Truncated = true, false, true
+		a.attribution.Store(attributionOutdated)
 	} else {
 		out.Conflicts = *decoded.Conflicts
+		a.attribution.Store(attributionSaid)
 	}
 	// Every subject is an account, so every one carries standing.usable; one
 	// that does not makes the read one nothing may be concluded from.
@@ -989,6 +1019,9 @@ type Homes struct {
 	// RetryAfter is a fresh read refused inside the add-on's cooldown with
 	// nothing to serve (cooldownOf).
 	RetryAfter int `json:"retry_after,omitempty"`
+	// Outdated is the add-on being older than attribution (Outdated): its
+	// homes say whose none is, so none is shown as anybody's (Read false).
+	Outdated bool `json:"-"`
 }
 
 // homesWire is profiles/storage/homes.json as it travels.
@@ -1023,6 +1056,11 @@ func ReadHomes(ctx context.Context, target string, fresh bool) Homes {
 	at, ok := takenAt(target, wire.TakenAt, resp.Clock)
 	if !ok {
 		return Homes{}
+	}
+	if Outdated(ctx, target) {
+		// Its rows carry no subject because it predates attribution, not
+		// because nobody's they are: not a reading of anybody's home.
+		return Homes{Outdated: true}
 	}
 	// A reply that does not say the usage was read whole did not read it.
 	return Homes{Read: true, UsageRead: wire.QuotaRead != nil && *wire.QuotaRead, Homes: wire.Homes,

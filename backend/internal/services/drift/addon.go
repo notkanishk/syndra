@@ -136,9 +136,9 @@ func Inventory(ctx context.Context, target string, fresh bool) (AddonReconcileRe
 	res := AddonReconcileResult{Target: target}
 
 	read := addonSubjects(ctx, target, fresh)
-	if read.Outcome != addons.OutcomeSucceeded {
+	if reason, detail, halted := readHalt(read); halted {
 		res.Halted, res.RetryAfter = true, read.RetryAfter
-		res.Reason, res.Detail = readFailure(read)
+		res.Reason, res.Detail = reason, detail
 		if read.RetryAfter > 0 {
 			// Inside the cooldown with nothing to serve: not an outage.
 			res.Reason = db.UnreconciledStaleRead
@@ -242,11 +242,11 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 		return halt(ctx, res, db.UnreconciledStaleRead,
 			fmt.Sprintf("skipped: the target was read moments ago and can be read again in %d s", wait))
 	}
-	switch {
-	case read.Outcome != addons.OutcomeSucceeded:
-		reason, detail := readFailure(read)
+	if reason, detail, halted := readHalt(read); halted {
 		res.Detail = detail
-		return halt(ctx, res, reason, fmt.Sprintf("the target could not be read: %v", read.Err))
+		return halt(ctx, res, reason, fmt.Sprintf("the target's read concludes nothing (%s): %v", reason, read.Err))
+	}
+	switch {
 	case !read.Current:
 		// The add-on answered from its mirror. Every conclusion drawn from it
 		// would be about an earlier moment, and the convergences queued from one
@@ -290,7 +290,7 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	// offered a re-create. Every one the add-on reports, recorded here or not:
 	// which subject a binding is for is the add-on's to say.
 	unrecorded := 0
-	conflicted, findings := raiseConflicts(ctx, target, read.Conflicts, !read.Truncated, &unrecorded)
+	conflicted, findings := raiseConflicts(ctx, target, read.Conflicts, !read.Truncated, inFlight, &unrecorded)
 
 	// A binding whose account is not on the target is not a convergence, it is
 	// a finding.
@@ -396,20 +396,30 @@ func halt(ctx context.Context, res AddonReconcileResult, reason, detail string) 
 	return res, nil
 }
 
-// readFailure is why a read that did not succeed concluded nothing, with the
-// add-on's own sentence when it refused it.
+// readHalt is why a read concludes nothing at all, with the add-on's own
+// sentence when it refused it; halted false when the read may be shown. The
+// one mapping the sweep and the inventory share.
 //
-// STORE_UNREADABLE is the add-on's own records failing while the target may
-// be fine: read_refused, something to fix rather than wait out, and the
-// add-on's sentence carries the next step (check its storage). Every other
-// failure, answered or not (NO_CURRENT_READ, TARGET_UNREADABLE, a timeout),
-// is the target not read: target_unreachable, which the pages word with the
-// system's name and their own next step.
-func readFailure(read addons.SubjectsResult) (reason, detail string) {
-	if read.Code == addons.CodeStoreUnreadable {
-		return db.UnreconciledReadRefused, read.Detail
+//   - STORE_UNREADABLE is the add-on's own records failing while the target
+//     may be fine: read_refused, something to fix rather than wait out, and
+//     the add-on's sentence carries the next step (check its storage).
+//   - Every other failure, answered or not (NO_CURRENT_READ,
+//     TARGET_UNREADABLE, a timeout), is the target not read:
+//     target_unreachable, which the pages word with the system's name and
+//     their own next step.
+//   - An add-on older than attribution (its /subjects carries no conflicts)
+//     answered, and says whose no account is: addon_outdated, which waiting
+//     never ends; it has to be updated.
+func readHalt(read addons.SubjectsResult) (reason, detail string, halted bool) {
+	switch {
+	case read.Outcome != addons.OutcomeSucceeded && read.Code == addons.CodeStoreUnreadable:
+		return db.UnreconciledReadRefused, read.Detail, true
+	case read.Outcome != addons.OutcomeSucceeded:
+		return db.UnreconciledUnreachable, "", true
+	case read.Outdated:
+		return db.UnreconciledAddonOutdated, "", true
 	}
-	return db.UnreconciledUnreachable, ""
+	return "", "", false
 }
 
 // raiseConflicts records each conflict the add-on reported as a standing
@@ -422,16 +432,22 @@ func readFailure(read addons.SubjectsResult) (reason, detail string) {
 // not list is closed (`agreed`, or what was decided): the add-on stopped
 // reporting it, whether or not the subject has a binding recorded here.
 // Before the stale loop, so a conflict that ended with the account gone is
-// closed and then raised again as a new deleted_upstream.
+// closed and then raised again as a new deleted_upstream. Never a subject
+// with an apply in flight since the read began (inFlight): the drain may have
+// raised its conflict after the add-on read, and this read says nothing of it.
 func raiseConflicts(ctx context.Context, target string, conflicts []addons.SubjectConflict,
-	whole bool, unrecorded *int) (map[string]bool, []merge.SubjectFinding) {
+	whole bool, inFlight map[string]bool, unrecorded *int) (map[string]bool, []merge.SubjectFinding) {
 	conflicted := make(map[string]bool, len(conflicts))
 	findings := make([]merge.SubjectFinding, 0, len(conflicts))
 	if whole {
-		keep := make([]string, 0, len(conflicts))
+		keep := make([]string, 0, len(conflicts)+len(inFlight))
 		for _, c := range conflicts {
 			keep = append(keep, c.Subject)
 		}
+		for subject := range inFlight {
+			keep = append(keep, subject)
+		}
+		sort.Strings(keep)
 		if _, err := clearFindingsOutside(ctx, target, string(merge.BindingConflict), keep, reconcileActor); err != nil {
 			log.Printf("[ADDON-RECONCILE] %s: could not close the conflicts it no longer reports: %v", target, err)
 			*unrecorded++

@@ -319,6 +319,8 @@ export function whyNotChecked(reason: string): string {
       return "The read hit its safety limit, so what is missing cannot be told from what is absent.";
     case "findings_unrecorded":
       return "The pass ran and its findings could not be written down.";
+    case "addon_outdated":
+      return "Its add-on is older than this Syndra, so Syndra stopped checking it. Update the add-on from the same release as Syndra.";
     default:
       return reason;
   }

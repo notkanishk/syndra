@@ -155,6 +155,33 @@ func TestAReplanBlockedOnAConflictRaisesTheSameFinding(t *testing.T) {
 	}
 }
 
+// Each row of a claimed batch is stamped as sent immediately before its own
+// call, never only when the batch was claimed: the drift sweep's in-flight
+// window measures from started_at, and row k goes out k calls after the claim.
+// A row the stamp could not mark (settled meanwhile) is not sent.
+func TestEachRowIsStampedAsItIsSent(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"), addonRow("o2"), addonRow("o3"))
+	var events []string
+	t.Cleanup(swap(&markSending, func(_ context.Context, id string) error {
+		events = append(events, "stamp "+id)
+		if id == "o3" {
+			return db.ErrPropagationNotInFlight
+		}
+		return nil
+	}))
+	t.Cleanup(swap(&applyEntitlement, func(_ context.Context, req addons.ApplyRequest) addons.ApplyResponse {
+		events = append(events, "send "+req.CallID)
+		return h.resp
+	}))
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	want := "stamp o1,send o1,stamp o2,send o2,stamp o3"
+	if got := strings.Join(events, ","); got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+}
+
 // The requeue reasons reach last_error, which the pages show: in the copy
 // guide's voice, the system by its name, never "the target".
 func TestUnreachedReasonsNameTheSystem(t *testing.T) {

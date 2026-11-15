@@ -585,6 +585,12 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
             <span className="text-warn-text">
               The check stopped before it concluded anything. {result.detail}
             </span>
+          ) : result.halted && result.reason === "addon_outdated" ? (
+            // Waiting never ends it: the add-on has to be updated.
+            <span className="text-warn-text">
+              {name}&apos;s add-on is older than this Syndra, so Syndra stopped checking it. Update
+              the add-on from the same release as Syndra, then check again.
+            </span>
           ) : result.halted ? (
             // The reason in words (whyNotChecked), never its code, and a next
             // step true of it: a refused read is fixed, not waited out.

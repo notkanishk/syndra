@@ -103,6 +103,15 @@ describe("why a system could not be checked", () => {
     expect(await screen.findByText(/something to fix rather than wait out/i)).toBeTruthy();
   });
 
+  // 7t-3: an add-on older than this Syndra is neither waited out nor fixed on
+  // the system: the add-on is updated.
+  it("says an outdated add-on is to be updated", async () => {
+    state.reason = "addon_outdated";
+    renderHome();
+
+    expect(await screen.findByText(/add-on is older than this Syndra.*Update the add-on from the same release/i)).toBeTruthy();
+  });
+
   // A reason nobody has worded yet is still more use than none, and it must
   // surface here rather than disappearing quietly.
   it("passes an unrecognised reason through rather than swallowing it", async () => {

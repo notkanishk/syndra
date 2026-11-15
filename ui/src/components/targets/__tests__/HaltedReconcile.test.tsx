@@ -139,4 +139,19 @@ describe("a reconcile pass that halted", () => {
     expect(screen.queryByText(/read_refused/)).toBeNull();
     expect(screen.queryByText(/once it is reachable/)).toBeNull();
   });
+
+  // 7t-3: an add-on older than this Syndra. Waiting never ends it, so the
+  // Check now line names the system and says to update the add-on.
+  it("says the add-on is older than Syndra and to update it", () => {
+    pass.data = { ...pass.data, reason: "addon_outdated", detail: undefined };
+    renderTarget();
+
+    expect(
+      screen.getByText(
+        /add-on is older than this Syndra, so Syndra stopped checking it\. Update the add-on from the same release as Syndra, then check again\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/addon_outdated/)).toBeNull();
+    expect(screen.queryByText(/once it is reachable|older copy/)).toBeNull();
+  });
 });

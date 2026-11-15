@@ -86,6 +86,11 @@ type Addon struct {
 	// own mutex rather than registryMu so a call in flight never holds the lock
 	// every read of the registry needs.
 	br breaker
+
+	// attribution is what this add-on's last /subjects reply said of whose
+	// accounts are whose (Outdated): 0 not read yet, 1 it says (conflicts
+	// present), 2 it is older than attribution.
+	attribution atomic.Int32
 }
 
 var (

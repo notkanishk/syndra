@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -147,6 +148,54 @@ func TestLiveAppliesInFlightSince(t *testing.T) {
 	}
 	if len(got) != 2 || !got["claimed"] || !got["settled-during"] {
 		t.Fatalf("want claimed and settled-during, got %v", got)
+	}
+}
+
+// A batch is claimed with one started_at and sent row by row. A row claimed
+// longer ago than the window and sent during the read is stamped as it is sent
+// (MarkPropagationSending), so the window still covers it; a row of the same
+// batch still waiting to be sent cannot have landed and is not covered; a row
+// no longer in flight is not stamped.
+func TestLiveARowSentLateInItsBatchIsStillInFlight(t *testing.T) {
+	ctx := liveDB(t)
+	seedAddonTarget(t, ctx)
+	const window = time.Minute
+	claim := func(user, status string) string {
+		t.Helper()
+		key, err := newOutboxIdempotencyKey()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var id string
+		if err := PG.QueryRow(ctx, `
+			INSERT INTO propagation_outbox
+				(op_type, user_id, payload_json, idempotency_key, initiated_by, source, target, status, started_at)
+			VALUES ('apply', $1, '{}', $2, 'tester', 'direct', 'truenas', $3, now() - interval '10 minutes')
+			RETURNING id`, user, key, status).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	sentLate := claim("sent-late", "in_flight")
+	claim("still-waiting", "in_flight")
+	settled := claim("settled", "applied")
+
+	since, err := DatabaseNow(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkPropagationSending(ctx, sentLate); err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkPropagationSending(ctx, settled); !errors.Is(err, ErrPropagationNotInFlight) {
+		t.Fatalf("a settled row must not be stamped as sent: %v", err)
+	}
+	got, err := AppliesInFlightSince(ctx, "truenas", since, window)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !got["sent-late"] {
+		t.Fatalf("want only the row sent during the read, got %v", got)
 	}
 }
 

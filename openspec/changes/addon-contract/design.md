@@ -1392,7 +1392,8 @@ reply: **bound** (live, classified and planned as before), **conflict** (in `con
   Only for a subject with a binding on the target (the backend's mirror): a create blocked because its
   name is taken is no binding's conflict, never in `/subjects`, and keeps its refused row and words.
   **Closed** `agreed` (or as decided) on every whole read for each subject the add-on no longer lists
-  (`db.ClearMergeFindingsOutside`, before the stale loop), and by the account-slot clear
+  (`db.ClearMergeFindingsOutside`, before the stale loop; a subject with an apply in flight is kept,
+  since the drain may have raised its conflict after the add-on read), and by the account-slot clear
   (`persistFindings`) when the subject's own row is back; if the conflict ends with the account gone,
   the slot becomes a new `deleted_upstream`. A new outcome in a slot drops any decision about the old
   one (`RecordMergeFinding`). **Resolved** only by `unbound` (stop tracking: `account.release`, the
@@ -1402,7 +1403,9 @@ reply: **bound** (live, classified and planned as before), **conflict** (in `con
   the two leaves its subject on no row and in no conflict for one read. The sweep asks which subjects
   had an apply in flight since the read began (`db.AppliesInFlightSince`: settled after the read
   began, or `in_flight` and started within `addons.ApplyWindow()` of it, so a row a crashed drain
-  left never hides a deletion; the read's start is the database's clock) and concludes nothing about
+  left never hides a deletion; the read's start is the database's clock). A row's `started_at` is
+  stamped as its calls go out (`db.MarkPropagationSending`, at the head of `dispatchEntitlement`,
+  which every add-on drain path sends through), not only when its batch was claimed and concludes nothing about
   them that pass: never `deleted_upstream`.
 - **The drain keeps the add-on's words.** `applyWire` decodes `consequence` and `conflict`. A refused
   row's `last_error` is the add-on's `detail` and then its `consequence` (the next step), as written,
@@ -1416,8 +1419,11 @@ reply: **bound** (live, classified and planned as before), **conflict** (in `con
   `target_unreachable`. The System page's Check now line shows that sentence, or the reason in words
   with a next step true of it, never the reason's code.
 - **Deploy order.** `conflicts` is required on `/subjects`; a reply without it (an add-on before
-  7t-2, or contract 1) is not usable, so a backend deployed ahead of its add-on stops drift as a stale
-  read rather than reading every binding as deleted. Both ship from one commit.
+  7t-2, or contract 1) is `Outdated`: the one test, made on `/subjects` and remembered per add-on
+  (`addons.Outdated`, which `/homes` asks too, reading `/subjects` once when nothing has said yet). The
+  pass and the inventory stop as `addon_outdated` (`readHalt`, the one mapping) and `/homes` answers
+  not read with that reason, so a backend deployed ahead of its add-on says to update the add-on
+  rather than reading every binding as deleted. Both ship from one commit.
 
 ### 9.5 Identity
 
