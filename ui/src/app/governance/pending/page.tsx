@@ -42,7 +42,7 @@ import {
   type PendingPropagationRow,
 } from "@/lib/queries/usePropagation";
 import { Relative } from "@/components/ui/Time";
-import { LOOKING_UP_NEXT, TARGET_REFUSED, stoppedLine, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
+import { LOOKING_UP_NEXT, isSystemStop, stoppedLine, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 
 /** Q2 (A-17): an empty queue still says "Send 0 changes". The owner's answer is a change to this one function. */
 const sendLabel = (known: boolean, n: number) => (known && n > 0 ? `Send ${n} ${n === 1 ? "change" : "changes"}` : "Send changes");
@@ -343,9 +343,9 @@ function StoppedRow({ row }: { row: PendingPropagationRow }) {
   const system = nameOf(row.target ?? "zitadel");
   const revocation = row.op_type === "revoke";
   const zitadel = (row.target ?? "zitadel") === "zitadel";
-  // The system's own refusal (db.WaitReasonTargetRefused), as opposed to Zitadel's `refused:<cause>`.
-  // Only such a row can be a person's account conflict, so only it asks the two places one is kept.
-  const asks = row.wait_reason === TARGET_REFUSED ? row.target : undefined;
+  // The system's own stop (db.WaitReasonTargetRefused, or WaitReasonBindingConflict), as opposed to Zitadel's
+  // `refused:<cause>`. Only such a row can be a person's account conflict, so only it asks the two places one is kept.
+  const asks = isSystemStop(row.wait_reason) ? row.target : undefined;
   const findings = useMergeFindings(asks);
   const health = useTargetHealth(asks);
   const looking = Boolean(asks) && (findings.isLoading || health.isLoading);

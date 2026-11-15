@@ -1386,10 +1386,14 @@ nothing about that pass.
   refusal, the add-on's `detail` then `consequence`, as written, no prefix; for a change the add-on
   applied that Syndra could not attribute (`ErrBindingConflict`, which also records the
   `target_binding_conflicts` finding naming the row's `outbox_id`) it is Syndra's own plain sentence
-  (`bindingConflictReason`: "{system} applied the change, but two of Syndra's records disagree about
-  whose account {name} is. Decide whose it is before changing anything else for them."), with the
-  ids and the store's error in the log only. Both settle as `target_refused`; the pages say the second
-  as stored, never behind "refused it".
+  (`bindingConflictReason`: "Two of Syndra's records disagree about whose account {name} is. Decide
+  whose it is before changing anything else for them."), which names no system, with the ids and the
+  store's error in the log only. That row settles with its own `wait_reason`, `binding_conflict`
+  (migration 000097; down maps it back to `target_refused`), which holds the person's next
+  withdrawal like a refusal (`runnerSends`). A refusal with no words stores none, under
+  `target_refused`. The pages switch on the `wait_reason`, never on what `last_error` says: "{system}
+  applied the change." then the stored sentence for the first, never "refused it"; "{system} refused
+  it and gave no reason" for the second.
 - **Closed** `agreed` on every whole read for each subject the add-on no longer lists
   (`ClearMergeFindingsOutside`), and by the account-slot clear when the subject's own row is back; a
   conflict that ends with the account gone becomes `deleted_upstream`. A new outcome in a slot drops
@@ -1409,7 +1413,8 @@ nothing about that pass.
   "Decide it under Waiting on you", linking the system page's `#waiting` region; while those are read
   the seat says so rather than showing a step and swapping it. The account list card says why a
   stopped pass was not read: a halted pass answers 503 with the inventory as its body, which the
-  reader takes as data (`readInventory`; any other 503 or failure still throws), and the card shows
+  reader takes as data (`readInventory`: a 503 whose body says `halted: true`, which `ApiError.body`
+  keeps; any other 503, a null body or any other failure still throws), and the card shows
   its `detail`, not an empty list. Copy: `plain-language-copy/design.md` §16, `bindingConflictCopyGuide.test.ts`.
 - **A refused read is not an outage.** 500 `STORE_UNREADABLE` is `read_refused` with the add-on's
   sentence and next step as `detail`; a refusal inside the add-on's cooldown is `read_stale` (with

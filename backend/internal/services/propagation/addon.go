@@ -241,7 +241,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			// reason is the plain one a person reads on Pending changes.
 			log.Printf("[ADDON-DRAIN] %s applied %s's change to %s but could not attribute it: %v",
 				intent.Target, intent.SubjectID, resp.Username, err)
-			if err := markTargetRefused(ctx, row.ID, bindingConflictReason(systemName(ctx, row.Target), resp)); err != nil {
+			if err := markBindingConflict(ctx, row.ID, bindingConflictReason(resp)); err != nil {
 				res.settleFailure(row.ID, "mark failed", err)
 				return false
 			}
@@ -285,7 +285,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		// A binding conflict is a standing decision for an operator, not only
 		// this row's reason: the same finding the sweep raises, now.
 		raiseConflict(ctx, intent.Target, intent.SubjectID, resp.Conflict)
-		if err := settle(ctx, row.ID, refusalReason(systemName(ctx, row.Target), resp)); err != nil {
+		if err := settle(ctx, row.ID, refusalReason(resp)); err != nil {
 			res.settleFailure(row.ID, "mark failed", err)
 			return false
 		}
@@ -358,7 +358,7 @@ func unreachedWhy(system string, resp addons.ApplyResponse) string {
 // after "{system} refused it:". So it is the add-on's words as written: what
 // happened (detail) and what to do next (consequence), the next step a blocked
 // apply carries (apply_response.json), never lost.
-func refusalReason(system string, resp addons.ApplyResponse) string {
+func refusalReason(resp addons.ApplyResponse) string {
 	if resp.Code == addons.CodePlanStale {
 		// Named, because it is the one refusal whose next step is a re-plan
 		// rather than a fix. §8's proper answer here is a distinct stale-plan
@@ -370,13 +370,9 @@ func refusalReason(system string, resp addons.ApplyResponse) string {
 	if words := addonWords(resp.Detail, resp.Consequence); words != "" {
 		return words
 	}
-	return noReason(system)
-}
-
-// noReason is a refusal the add-on gave no words for. Never the HTTP status
-// (copy guide §8): the page that shows it adds the next step.
-func noReason(system string) string {
-	return system + " gave no reason."
+	// No words: stored as none (never the HTTP status, copy guide §8). The row's
+	// wait_reason says it was the system's refusal; the page words the absence.
+	return ""
 }
 
 // addonWords is an add-on's refusal as it said it: what happened, then what to
@@ -485,7 +481,6 @@ func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.Entitlemen
 		raiseConflict(ctx, intent.Target, intent.SubjectID, out.Conflict)
 		reason := addonWords(out.Detail, out.Consequence)
 		if reason == "" {
-			reason = noReason(systemName(ctx, intent.Target))
 		}
 		if err := markTargetRefused(ctx, intent.OutboxID, reason); err != nil {
 			res.settleFailure(intent.OutboxID, "mark failed", err)
@@ -607,13 +602,15 @@ func recordConflict(ctx context.Context, intent db.EntitlementIntent, resp addon
 // It has to say the mutation LANDED, because every other terminal failure on
 // this path means it did not, and somebody who reads this as "the change did
 // not go through" will re-drive it onto the same account belonging to the
-// same other person. Plain words only: no ids, no subject, no Go error (those
-// are in the log), and it ends in the next step, since the row is shown on
-// surfaces that cannot say one of their own. It is the finding in
-// target_binding_conflicts that the pending page links to, by this row's id.
-func bindingConflictReason(system string, resp addons.ApplyResponse) string {
+// same other person. That is said by the row's wait_reason
+// (db.WaitReasonBindingConflict), which the pages word with the system's current
+// name; this sentence names no system, so a rename cannot make it wrong. Plain
+// words only: no ids, no subject, no Go error (those are in the log), and it
+// ends in the next step. It is the finding in target_binding_conflicts that the
+// pending page links to, by this row's id.
+func bindingConflictReason(resp addons.ApplyResponse) string {
 	return fmt.Sprintf(
-		"%s applied the change, but two of Syndra's records disagree about whose account %s is. "+
+		"Two of Syndra's records disagree about whose account %s is. "+
 			"Decide whose it is before changing anything else for them.",
-		system, resp.Username)
+		resp.Username)
 }

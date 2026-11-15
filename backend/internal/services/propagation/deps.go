@@ -64,6 +64,9 @@ var (
 	// markTargetRefused is markFailed for an add-on's deterministic refusal,
 	// which a retry would not change (db.WaitReasonTargetRefused).
 	markTargetRefused = db.MarkPropagationTargetRefused
+	// markBindingConflict settles a change that landed and could not be attributed
+	// (db.WaitReasonBindingConflict).
+	markBindingConflict = db.MarkPropagationBindingConflict
 	requeue           = db.RequeuePropagation
 	// markSending stamps an add-on row's started_at as its calls go out
 	// (dispatchEntitlement), not when its batch was claimed.

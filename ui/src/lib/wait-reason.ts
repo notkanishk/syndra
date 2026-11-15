@@ -65,37 +65,49 @@ export function refusalCause(reason: string): string {
 export const TARGET_REFUSED = "target_refused";
 
 /**
+ * The wait reason of a change the system applied and Syndra could not attribute, because two of
+ * Syndra's own records disagree about whose account it landed on (db.WaitReasonBindingConflict).
+ * Its own value so no page reads wording to tell it from a refusal.
+ */
+export const BINDING_CONFLICT = "binding_conflict";
+
+/** A refusal by the connected system itself, or a change it applied that Syndra could not attribute: the two rows that can be a person's account conflict. */
+export const isSystemStop = (reason: string | undefined | null) => reason === TARGET_REFUSED || reason === BINDING_CONFLICT;
+
+/**
  * "{system} refused it: {its words} Syndra stopped sending it." The system's
- * words are shown as stored (`last_error`, with no prefix), once. The sentence
- * stored when it had none ("{system} gave no reason.") would repeat the
- * system's name, so it is folded in.
+ * words are shown as stored (`last_error`, with no prefix), once.
  */
 export function targetRefusedLine(system: string, said: string): string {
-  if (said.trim() === `${system} gave no reason.`) return `${system} refused it and gave no reason, so Syndra stopped sending it.`;
   return `${system} refused it: ${sentence(said)} Syndra stopped sending it.`;
 }
 
 /**
  * Why Syndra stopped sending a change, in one sentence, for every surface that lists one
- * (Pending changes, Withdrawn access). One path, so none of them prints a stored reason bare:
- * - out of tries: the system did not answer;
- * - a connected system's own refusal (`target_refused`): after "{system} refused it:", the words
- *   as stored; a record that disagrees about whose account it is says it applied the change, so
- *   it is shown as stored, with no "refused it" in front of it (`bindingConflictReason`);
+ * (Pending changes, Withdrawn access). One path, so none of them prints a stored reason bare, and
+ * it switches on the row's `wait_reason`, never on what `last_error` says (the system's name is
+ * the page's current one, not the one a stored sentence was written with):
+ * - `binding_conflict`: the system applied the change, and Syndra's stored sentence says what is
+ *   wrong; never "refused it";
+ * - `target_refused`: after "{system} refused it:", the system's words as stored, or none;
  * - Zitadel's `refused:<cause>`: the cause in words;
+ * - out of tries: the system did not answer;
  * - any other stop: "{system} refused it", with no reason said that is not its own.
  */
 export function stoppedLine(
   system: string,
   row: { last_error?: string; wait_reason?: string; attempts: number },
 ): string {
+  if (row.wait_reason === BINDING_CONFLICT) {
+    return `${system} applied the change. ${sentence(row.last_error ?? "") || "Two of Syndra's records disagree about whose account it is. Decide whose it is before changing anything else for them."}`;
+  }
+  if (row.wait_reason === TARGET_REFUSED) {
+    return row.last_error
+      ? targetRefusedLine(system, row.last_error)
+      : `${system} refused it and gave no reason, so Syndra stopped sending it.`;
+  }
   if ((row.last_error ?? "").startsWith("out of retries")) {
     return `${system} didn't answer after ${row.attempts} ${row.attempts === 1 ? "try" : "tries"}, so Syndra stopped sending it.`;
-  }
-  if (row.wait_reason === TARGET_REFUSED && row.last_error) {
-    return row.last_error.startsWith(`${system} applied the change`)
-      ? sentence(row.last_error)
-      : targetRefusedLine(system, row.last_error);
   }
   return `${system} refused it${isRefused(row.wait_reason) ? `: ${refusalCause(row.wait_reason ?? "")}` : ""}, so Syndra stopped sending it.`;
 }

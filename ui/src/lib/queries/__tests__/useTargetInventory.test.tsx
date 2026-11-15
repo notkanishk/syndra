@@ -54,6 +54,18 @@ describe("the account list's reader", () => {
     expect(result.current.data).toBeUndefined();
   });
 
+  // The handler's reason for the 503 is `halted`; an inventory-shaped body without it, and a JSON null, are errors.
+  it.each([
+    ["an inventory-shaped body that is not halted", JSON.stringify({ target: "truenas", bound: 3, unmanaged: [] })],
+    ["a JSON null", "null"],
+  ])("does not read %s as a halted inventory", async (_name, text) => {
+    reply = () => new Response(text, { status: 503 });
+    const { Wrap } = wrapper();
+    const { result } = renderHook(() => useTargetInventory("truenas"), { wrapper: Wrap });
+    await waitFor(() => expect(result.current.error).toBeInstanceOf(ApiError));
+    expect(result.current.data).toBeUndefined();
+  });
+
   it("still fails on a 500", async () => {
     reply = () => new Response(JSON.stringify({ error: "INVENTORY_ERROR" }), { status: 500 });
     const { Wrap } = wrapper();

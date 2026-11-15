@@ -124,8 +124,10 @@ func TestARefusalWithNoWordsNamesNoStatus(t *testing.T) {
 	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
 		t.Fatal(err)
 	}
-	if got := h.failed["o1"]; got != "TrueNAS gave no reason." {
-		t.Fatalf("got %q", got)
+	// Stored as none, as a refusal by the system: the page words the absence with the
+	// system's current name, and no text is read to tell it from anything else.
+	if got, ok := h.failed["o1"]; !ok || got != "" || len(h.refused) != 1 {
+		t.Fatalf("want an empty reason on a refused row, got %q refused %v", got, h.refused)
 	}
 }
 

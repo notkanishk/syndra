@@ -142,7 +142,7 @@ describe("Pending changes", () => {
         last_error: "An account named rey already exists and is bound to another subject. If it is not theirs, release it from that subject, then adopt it here.",
         cascade_id: "c1",
       }),
-      row({ id: "t2", target: "truenas", status: "failed", wait_reason: "target_refused", last_error: "TrueNAS gave no reason.", cascade_id: "c2" }),
+      row({ id: "t2", target: "truenas", status: "failed", wait_reason: "target_refused", cascade_id: "c2" }),
     ];
     renderPending();
     expect(
@@ -175,9 +175,11 @@ describe("Pending changes", () => {
   // Two records disagree about whose account a change landed on (`target_binding_conflicts`): the
   // sentence is Syndra's own, shown as stored with no "refused it" before it, and the record names
   // the row it came from, so the match is the row's and not the person's.
-  const applied = "TrueNAS applied the change, but two of Syndra's records disagree about whose account rey is. Decide whose it is before changing anything else for them.";
+  // What the backend stores (bindingConflictReason): no system's name in it, the row's wait_reason says what it is.
+  const stored = "Two of Syndra's records disagree about whose account rey is. Decide whose it is before changing anything else for them.";
+  const applied = `TrueNAS applied the change. ${stored}`;
   const appliedRow = (id: string, user: string) =>
-    row({ id, user_id: user, target: "truenas", status: "failed", wait_reason: "target_refused", last_error: applied, cascade_id: `c-${id}` });
+    row({ id, user_id: user, target: "truenas", status: "failed", wait_reason: "binding_conflict", last_error: stored, cascade_id: `c-${id}` });
 
   it("says an applied-but-unattributed change as stored, and links the record that names this very row", () => {
     gaveUp.data = [appliedRow("t1", "u1"), appliedRow("t2", "u1")];

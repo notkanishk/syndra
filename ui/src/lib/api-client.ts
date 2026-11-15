@@ -60,12 +60,17 @@ export class ApiError extends Error {
   readonly retryAfter?: number;
   /** The request's method, so a failed write is told apart from a failed read. */
   readonly method?: string;
+  /**
+   * The body as parsed, for the rare read whose failure status carries a result and not an
+   * envelope (the inventory's 503 is the inventory, halted). Not a message: never shown.
+   */
+  readonly body?: unknown;
 
   constructor(status: number, body: ApiErrorBody | string, method?: string) {
     // A bare string is a gateway's page or an upstream's text, never the product's words: at 5xx
     // it is not shown. The envelope's `message` is the only copy that reaches the screen.
     const parsed: ApiErrorBody =
-      typeof body === "string" ? (status >= 500 ? {} : { message: body }) : body;
+      typeof body === "string" ? (status >= 500 ? {} : { message: body }) : (body ?? {}); // a JSON `null` is no envelope
     super(parsed.message ?? fallbackMessage(status));
     this.name = "ApiError";
     this.status = status;
@@ -73,6 +78,7 @@ export class ApiError extends Error {
     this.details = parsed.details;
     this.retryAfter = parsed.retry_after;
     this.method = method;
+    this.body = typeof body === "string" ? undefined : body;
   }
 }
 
@@ -107,10 +113,8 @@ type RequestInitJSON = Omit<RequestInit, "body"> & {
    * When true, a non-2xx response resolves with the parsed body (typed as T)
    * instead of throwing ApiError. Used by diagnostic probes (e.g. Zitadel
    * health) where the error envelope IS the payload the caller wants to read.
-   * A list of statuses preserves only those (the inventory's 503 carries the
-   * halted result), so every other failure, a 429's cooldown included, still throws.
    */
-  preserveErrorBody?: boolean | number[];
+  preserveErrorBody?: boolean;
 };
 
 /**
@@ -190,8 +194,7 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
   }
 
   if (!res.ok) {
-    const keep = init?.preserveErrorBody;
-    if (keep === true || (Array.isArray(keep) && keep.includes(res.status))) return parsed as T;
+    if (init?.preserveErrorBody) return parsed as T;
     // Session expired mid-SPA-session: /api/proxy is outside the middleware
     // matcher, so without this the user is stuck on a failing screen until
     // their next full navigation (SC9).

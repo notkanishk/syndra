@@ -325,10 +325,16 @@ export const useTargetInventoryAgain = (target: string | undefined) =>
  * cooldown included, still throws as it did.
  */
 async function readInventory(path: string): Promise<TargetInventory> {
-  const body = await request<TargetInventory>(path, { preserveErrorBody: [503] });
-  // An inventory (a 200's, or the halted 503's) always counts its bound accounts; an error envelope never does.
-  if (typeof body === "object" && body !== null && "bound" in body) return body;
-  throw new ApiError(503, body as unknown as ConstructorParameters<typeof ApiError>[1]);
+  try {
+    return await request<TargetInventory>(path);
+  } catch (e) {
+    // The handler's own reason for the 503 is `halted`: nothing else is read as an inventory.
+    const body = e instanceof ApiError && e.status === 503 ? e.body : undefined;
+    if (typeof body === "object" && body !== null && (body as { halted?: unknown }).halted === true) {
+      return body as TargetInventory;
+    }
+    throw e;
+  }
 }
 
 export function useTargetInventory(target: string | undefined) {
