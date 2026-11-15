@@ -308,6 +308,8 @@ export interface TargetInventory {
   truncated?: boolean;
   halted?: boolean;
   reason?: string;
+  /** The add-on's own sentence for a read it refused, with its next step; shown as written. */
+  detail?: string;
   /** Why this is the add-on's copy, when it is one (feature freshness). */
   read_stale?: Stale;
 }
@@ -406,7 +408,7 @@ export interface MergeFinding {
   /** Empty for an account-level finding — `deleted_upstream` is about the
    * account existing, not about any value. */
   field?: string;
-  outcome: "theirs_only" | "conflict" | "deleted_upstream";
+  outcome: "theirs_only" | "conflict" | "deleted_upstream" | "binding_conflict";
   /** What the target last reported, what Syndra wants, and what the target has
    * now. All three, because "what was it before" is the question asked first. */
   base?: unknown;

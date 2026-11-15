@@ -327,6 +327,17 @@ export function whyNotChecked(reason: string): string {
 }
 
 /**
+ * The account list when the pass stopped before it concluded anything: the
+ * add-on's own sentence and next step when it gave them (`detail`), else the
+ * reason in words and the one step true of every reason. The empty list such a
+ * pass returns is never shown as "nothing outside Syndra".
+ */
+export function inventoryNotRead(detail: string | undefined, reason: string | undefined): string {
+  const why = detail?.trim() || `${reason ? whyNotChecked(reason) : "It could not be read."} Read again once that is fixed.`;
+  return `The account list could not be read. ${why}`;
+}
+
+/**
  * Some add-ons report `product_version` already carrying the product name
  * ("TrueNAS-25.10.5"), which doubled the name wherever it was shown beside
  * one ("TrueNAS TrueNAS-25.10.5"). Stripped once, here, so every caller gets

@@ -43,7 +43,7 @@ import { TargetName } from "@/components/targets/TargetName";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
-import { formatBytes, formatClock, formatShortDate, personLine, versionLabel, whyNotChecked } from "@/lib/format";
+import { formatBytes, formatClock, formatShortDate, inventoryNotRead, personLine, versionLabel, whyNotChecked } from "@/lib/format";
 import { stamped, useCountdown, useRetryOnce } from "@/lib/queries/fresh";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
@@ -1571,7 +1571,13 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
         />
       </div>
       <ReadAgainError error={again.error} />
-      {!inventory.data && refused ? null : (
+      {inventory.data?.halted && (
+        // A pass that stopped has an empty list it never measured; the add-on's words (or the reason's) say why instead.
+        <CardRow>
+          <span className="text-[13.5px] text-warn-text">{inventoryNotRead(inventory.data.detail, inventory.data.reason)}</span>
+        </CardRow>
+      )}
+      {(!inventory.data && refused) || inventory.data?.halted ? null : (
       <ListStates
         isLoading={inventory.isLoading}
         error={inventory.error}

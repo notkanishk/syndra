@@ -3,6 +3,17 @@ import { personOr } from "@/lib/names";
 
 import { Term } from "@/components/ui/Term";
 import { useState } from "react";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
+import {
+  CONFLICT_NEXT_FALLBACK,
+  OTHER_PERSON,
+  STOP_TRACKING,
+  adoptInstead,
+  conflictDetailFallback,
+  conflictReport,
+  holdersLine,
+  stopTrackingConsequence,
+} from "@/components/targets/bindingConflict";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { ApiError } from "@/lib/api-client";
@@ -60,15 +71,17 @@ export function MergeFindings({ target }: { target: string }) {
   // same finish. Marked synchronously, same idiom as the request queues.
   const [finishing, setFinishing] = useState<Set<string>>(new Set());
 
-  const rows = findings.data ?? [];
+  // A resolved finding fades where it was and the gap closes after, rather than the list jumping.
+  const leaving = useLeavingRows(findings.data ?? [], (f) => f.id, !findings.isLoading && !findings.error);
+  const rows = leaving.rows;
   const name = nameOf(target);
   const advanced = useIsAdvanced();
 
   return (
-    <Card>
+    <Card {...leaving.listProps}>
       <CardHeader
         title="Waiting on a decision"
-        count={rows.length}
+        count={findings.data?.length}
         note={
           // The term and its definition are the machine's vocabulary: Advanced. Basic says the thing.
           advanced ? (
@@ -101,7 +114,8 @@ export function MergeFindings({ target }: { target: string }) {
       >
         <>
           {rows.map((f, i) => (
-            <div key={f.id}>
+            <LeavingRow key={f.id} {...leaving.props(f.id)}>
+            <div>
               <CardRow first={i === 0} className="flex-wrap">
                 <Person id={f.subject_id} />
                 {f.field ? <span className="text-[13.5px] text-muted">{fieldWords(f.field, schema)}</span> : null}
@@ -112,6 +126,7 @@ export function MergeFindings({ target }: { target: string }) {
               </CardRow>
               <div className="px-5 pb-3 text-[13.5px] text-muted">
                 {describe(f, name, schema)}
+                {f.outcome === "binding_conflict" && <ConflictWho finding={f} name={name} />}
                 {rawSides(f) && (
                   <AdvancedOnly>
                     <TechnicalDetail className="mt-2" placeKey={`finding:${f.id}`}>
@@ -201,6 +216,7 @@ export function MergeFindings({ target }: { target: string }) {
                 </CardRow>
               )}
             </div>
+            </LeavingRow>
           ))}
         </>
       </ListStates>
@@ -223,6 +239,11 @@ function describe(f: MergeFinding, name: string, schema: EntitlementField[] | un
   const was = show(f.base);
   const its = f.field ? `Its ${fieldWords(f.field, schema)}` : "It";
   switch (f.outcome) {
+    case "binding_conflict": {
+      // The add-on's own words, as written: what happened, then what to do.
+      const c = conflictReport(f.theirs);
+      return `${c.detail ?? conflictDetailFallback(name)} ${c.next ?? CONFLICT_NEXT_FALLBACK}`;
+    }
     case "deleted_upstream":
       return `This account is no longer on ${name}. Somebody deleted it there. Creating it again brings back what they deleted; stopping management leaves ${name} alone and Syndra forgets the account.`;
     case "theirs_only":
@@ -272,6 +293,26 @@ function showValue(value: unknown, limit: EntitlementField | undefined): string 
   return typeof value === "object" ? "a structured value" : String(value);
 }
 
+/**
+ * What the add-on's words leave to the page: the other person a twice-claimed
+ * account is recorded for (named, never an id), and every account an ambiguous
+ * name or number could mean. The holder's id is the machine's: Technical detail.
+ */
+function ConflictWho({ finding, name }: { finding: MergeFinding; name: string }) {
+  const c = conflictReport(finding.theirs);
+  if (c.reason === "claimed_twice" && c.bound_to) {
+    return (
+      <p className="mt-1">
+        {OTHER_PERSON} <Person id={c.bound_to} />.
+      </p>
+    );
+  }
+  if (c.reason === "ambiguous" && c.holders?.length) {
+    return <p className="mt-1">{holdersLine(name, c.holders.map((h) => h.username))}</p>;
+  }
+  return null;
+}
+
 /** The three sides of a finding, exact, for whoever runs the server. */
 function rawSides(f: MergeFinding): string | null {
   const sides = [f.base, f.ours, f.theirs];
@@ -308,11 +349,14 @@ function DecisionForm({
   const [reason, setReason] = useState("");
   const [resolution, setResolution] = useState<string | null>(null);
   const gone = finding.outcome === "deleted_upstream";
+  // A conflict over which account a person's record names has one action: stop tracking it.
+  const conflict = finding.outcome === "binding_conflict";
+  const holder = conflictReport(finding.theirs);
   // A limit the target changed: taking its value saves it as this person's own
   // limit, which needs an end or a review date, chosen here (design §3, 3.8).
   const schema = schemaState.schema;
   // Until the fields are known the button cannot tell a limit (a panel) from a switched-off account (one press).
-  const unknown = gone ? undefined : schemaReason(schemaState, name);
+  const unknown = gone || conflict ? undefined : schemaReason(schemaState, name);
   const limit = schema?.find((f) => f.name === finding.field && f.role === "limit");
   const [adopting, setAdopting] = useState(false);
   const [until, setUntil] = useState<Until>("ends");
@@ -327,7 +371,33 @@ function DecisionForm({
         value={reason}
         onChange={(e) => setReason(e.target.value)}
       />
+      {conflict && (
+        // What pressing does, beside the button that does it: the system is left as it is,
+        // and the next change makes the new account.
+        <p className="text-[13px] text-muted">
+          {stopTrackingConsequence(name)}
+          {holder.username && holder.reason !== "ambiguous" && holder.reason !== "claimed_twice"
+            ? ` ${adoptInstead(holder.username)}`
+            : ""}
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
+        {conflict ? (
+          <Button
+            size="sm"
+            variant="outline"
+            isPending={pending}
+            disabled={!reason.trim()}
+            reason={!reason.trim() ? "Say why. This becomes the record of the decision." : undefined}
+            onClick={() => {
+              setResolution("unbound");
+              onResolve({ id: finding.id, resolution: "unbound", reason });
+            }}
+          >
+            {STOP_TRACKING}
+          </Button>
+        ) : (
+        <>
         <Button
           size="sm"
           variant="outline"
@@ -368,6 +438,8 @@ function DecisionForm({
           >
             {gone ? "Stop managing it" : `Use ${name}'s value`}
           </Button>
+        )}
+        </>
         )}
         <span className="flex-1" />
         {/* Beside outline acts, Cancel is outline too: ghost only defers to a primary (G1). */}
@@ -417,7 +489,7 @@ function DecisionForm({
           </span>
         </div>
       )}
-      {!gone && !finding.adoptable && (
+      {!gone && !conflict && !finding.adoptable && (
         // The alternative to a button that cannot work. Adopting a group value
         // has nowhere to live — it belongs to a mapping that reaches every
         // holder of that role — so the surface says which mapping and how many

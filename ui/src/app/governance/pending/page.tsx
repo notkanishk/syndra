@@ -30,6 +30,7 @@ import { RoleInPlace, RoleRef, UserName } from "@/components/names";
 import { machineName } from "@/lib/audit-vocabulary";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { useMergeFindings } from "@/lib/queries/useTargets";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useBundles, type BundleRow } from "@/lib/queries/useBundles";
@@ -41,7 +42,7 @@ import {
   type PendingPropagationRow,
 } from "@/lib/queries/usePropagation";
 import { Relative } from "@/components/ui/Time";
-import { isRefused, refusalCause, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
+import { TARGET_REFUSED, isRefused, refusalCause, targetRefusedLine, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 
 /** Q2 (A-17): an empty queue still says "Send 0 changes". The owner's answer is a change to this one function. */
 const sendLabel = (known: boolean, n: number) => (known && n > 0 ? `Send ${n} ${n === 1 ? "change" : "changes"}` : "Send changes");
@@ -312,7 +313,6 @@ export default function PendingChangesPage() {
  * the next check and revoked there. A give is given again from their page.
  */
 function StoppedSending({ rows, loading }: { rows: PendingPropagationRow[]; loading: boolean }) {
-  const nameOf = useSystemNames();
   return (
     <Card id="stopped-sending">
       <CardHeader title="Syndra stopped sending" count={rows.length} />
@@ -325,13 +325,34 @@ function StoppedSending({ rows, loading }: { rows: PendingPropagationRow[]; load
           guidance="Every change Syndra stopped sending has been marked seen, or there were none this week."
         />
       ) : (
-        rows.map((row) => {
-          const system = nameOf(row.target ?? "zitadel");
-          const outOfTries = (row.last_error ?? "").startsWith("out of retries");
-          const revocation = row.op_type === "revoke";
-          const zitadel = (row.target ?? "zitadel") === "zitadel";
-          return (
-            <CardRow key={row.id}>
+        rows.map((row) => <StoppedRow key={row.id} row={row} />)
+      )}
+    </Card>
+  );
+}
+
+/**
+ * One thing Syndra stopped sending. A system's refusal says why in the system's
+ * own words (`last_error`, which the drain stores as the add-on said it, with no
+ * prefix: "{system} refused it:" is this line's). A refusal that is a person's
+ * account conflict has one place it is decided, Waiting on you on the system's
+ * page, so that is its next step and its link.
+ */
+function StoppedRow({ row }: { row: PendingPropagationRow }) {
+  const nameOf = useSystemNames();
+  const system = nameOf(row.target ?? "zitadel");
+  const outOfTries = (row.last_error ?? "").startsWith("out of retries");
+  const revocation = row.op_type === "revoke";
+  const zitadel = (row.target ?? "zitadel") === "zitadel";
+  // The system's own refusal (db.WaitReasonTargetRefused), as opposed to Zitadel's `refused:<cause>`.
+  const said = row.wait_reason === TARGET_REFUSED && row.last_error ? row.last_error : undefined;
+  const conflicts = useMergeFindings(said ? row.target : undefined);
+  const conflict = Boolean(
+    said && conflicts.data?.some((f) => f.outcome === "binding_conflict" && f.subject_id === row.user_id),
+  );
+  const decideHere = `/system/targets/${encodeURIComponent(row.target ?? "")}`;
+  return (
+            <CardRow>
               <span className="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
                 <UserName id={row.user_id} />
               </span>
@@ -353,11 +374,15 @@ function StoppedSending({ rows, loading }: { rows: PendingPropagationRow[]; load
                   <span className="text-danger-text">
                     {outOfTries
                       ? `${system} didn't answer after ${row.attempts} ${row.attempts === 1 ? "try" : "tries"}, so Syndra stopped sending it.`
-                      : `${system} refused it${isRefused(row.wait_reason) ? `: ${refusalCause(row.wait_reason ?? "")}` : ""}, so Syndra stopped sending it.`}
+                      : said
+                        ? targetRefusedLine(system, said)
+                        : `${system} refused it${isRefused(row.wait_reason) ? `: ${refusalCause(row.wait_reason ?? "")}` : ""}, so Syndra stopped sending it.`}
                   </span>
                 </span>
                 <span className="text-[12.5px] text-faint">
-                  {revocation && zitadel
+                  {conflict
+                    ? `Waiting on you is on ${system}'s page.`
+                    : revocation && zitadel
                     ? `They may still hold it in ${system}. It shows in Drift after Syndra's next check; revoke it there.`
                     : revocation
                       ? `They may still hold it in ${system}. Check their account on ${system}'s page.`
@@ -366,19 +391,17 @@ function StoppedSending({ rows, loading }: { rows: PendingPropagationRow[]; load
                 </span>
               </span>
               <span className="tablet:w-[140px] tablet:shrink-0 tablet:text-right">
-                {revocation && zitadel ? (
+                {conflict ? (
+                  <ArrowLink href={decideHere}>Decide it under Waiting on you</ArrowLink>
+                ) : revocation && zitadel ? (
                   <ArrowLink href="/governance/drift">Drift</ArrowLink>
                 ) : revocation ? (
-                  <ArrowLink href={`/system/targets/${encodeURIComponent(row.target ?? "")}`}>{`Open ${system}`}</ArrowLink>
+                  <ArrowLink href={decideHere}>{`Open ${system}`}</ArrowLink>
                 ) : (
                   <ArrowLink href={`/users/${encodeURIComponent(row.user_id)}`}>Their page</ArrowLink>
                 )}
               </span>
             </CardRow>
-          );
-        })
-      )}
-    </Card>
   );
 }
 

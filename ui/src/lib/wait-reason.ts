@@ -1,4 +1,5 @@
 import { formatClock } from "@/lib/format";
+import { sentence } from "@/lib/outcome";
 
 /**
  * Why a change waits for the operator, in words (proposed/NextStep.md), from
@@ -58,6 +59,20 @@ const REFUSAL_CAUSE: Record<string, string> = {
 
 export function refusalCause(reason: string): string {
   return REFUSAL_CAUSE[reason.slice("refused:".length)] ?? REFUSAL_CAUSE.other;
+}
+
+/** The outbox's wait reason for a refusal by the connected system itself (db.WaitReasonTargetRefused), not Zitadel's `refused:<cause>`. */
+export const TARGET_REFUSED = "target_refused";
+
+/**
+ * "{system} refused it: {its words} Syndra stopped sending it." The system's
+ * words are shown as stored (`last_error`, with no prefix), once. The sentence
+ * stored when it had none ("{system} gave no reason.") would repeat the
+ * system's name, so it is folded in.
+ */
+export function targetRefusedLine(system: string, said: string): string {
+  if (said.trim() === `${system} gave no reason.`) return `${system} refused it and gave no reason, so Syndra stopped sending it.`;
+  return `${system} refused it: ${sentence(said)} Syndra stopped sending it.`;
 }
 
 /** A wait the operator chose (the role, or before the switch its mode), not a send that stopped. */
