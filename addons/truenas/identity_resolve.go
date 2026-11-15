@@ -275,10 +275,21 @@ func (s *server) resolveLive(subject string, who *caller) (r resolved, bound boo
 
 // errTornRead is one account read twice, across keyRows' reads, under a different name or number:
 // TrueNAS changed between them. Judged from that, one account would count as two and a
-// claimed_twice could pass as ambiguous with one claimant given the account; so nothing is judged,
-// and the caller is asked to try again (503, which every write route answers: statusFor). The
-// sentence is shown as written (copy guide).
+// claimed_twice could pass as ambiguous with one claimant given the account; so nothing is judged
+// and nothing is sent. Every route answers it the same (writeTornRead): 503 TARGET_CHANGED, which
+// Syndra reads as not sent and keeps queued, never as possibly acted. The sentence is shown as
+// written (copy guide).
 var errTornRead = errors.New("TrueNAS changed while Syndra was reading it. Try again.")
+
+// tornRetryAfter is a torn read's Retry-After: a rename is over in moments, so the next read is
+// soon whole.
+const tornRetryAfter = "2"
+
+// writeTornRead answers a torn read, for the apply and every operation alike.
+func writeTornRead(w http.ResponseWriter) {
+	w.Header().Set("Retry-After", tornRetryAfter)
+	writeError(w, http.StatusServiceUnavailable, CodeTargetChanged, errTornRead.Error(), nil)
+}
 
 // recordID is an account's record key, which two accounts never share and a rename keeps: what
 // keyRows holds rows by, so one account read under two names is one account, seen torn.

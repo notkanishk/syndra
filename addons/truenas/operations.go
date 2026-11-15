@@ -179,6 +179,10 @@ func (s *server) operateNow(w http.ResponseWriter, name string, req OperationReq
 		// The add-on's own store (operatedAccount): nothing was sent.
 		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, storeUnreadableDetail, nil)
 		return
+	case errors.Is(err, errTornRead):
+		// TrueNAS changed mid-read (operatedAccount): nothing judged or sent, as the apply answers it.
+		writeTornRead(w)
+		return
 	case err != nil:
 		// The error's text is this add-on's own, never the target's response
 		// body: that body is where a submitted password comes back.
@@ -212,6 +216,10 @@ func (s *server) readNow(w http.ResponseWriter, name string, req OperationReques
 		// The error's text is this add-on's own (operateNow).
 		if errors.Is(of.err, errStoreUnreadable) {
 			writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, storeUnreadableDetail, nil)
+			return
+		}
+		if errors.Is(of.err, errTornRead) {
+			writeTornRead(w)
 			return
 		}
 		writeError(w, of.status, CodeOperationFailed, of.err.Error(), nil)

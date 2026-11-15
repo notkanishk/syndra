@@ -1763,12 +1763,12 @@ Schema: `v2/schema/error.json`; every code: `v2/registry/errors.json`.
 | 2xx to an operation with no `outcome`, or one outside `common/outcome.json` (or `no_change` without `calls`) | **possibly acted**, as a 5xx: absence is never a value |
 | `LIFECYCLE_REFUSAL` (by code alone) | not reached: a maintenance window; it waits |
 | `CONTRACT_VERSION_MISMATCH`, `UNKNOWN_REQUEST_FIELD`, or 404 `UNKNOWN_ROUTE` (or no code) on a feature route | not reached, and the manifest is read again: the add-on is not the one Syndra thought |
-| `CALL_IN_PROGRESS`, `TARGET_UNREACHABLE`, any 429 | not reached; the change stays queued and is asked again later |
+| `CALL_IN_PROGRESS`, `TARGET_UNREACHABLE`, `TARGET_CHANGED`, any 429 | not reached; the change stays queued and is asked again later |
 | 408, any other 5xx | **possibly acted**: never resent automatically, and shown to a person |
 | any other 4xx | it checked the request and did nothing; the change is dropped |
 
 So the add-on MUST answer a 4xx only when it wrote nothing, and SHOULD
-answer a write with a 5xx (other than `TARGET_UNREACHABLE` and
+answer a write with a 5xx (other than `TARGET_UNREACHABLE`, `TARGET_CHANGED` and
 `LIFECYCLE_REFUSAL`) only when it cannot tell whether the app acted: a 5xx
 sent before any write costs an operator a check for nothing. Which 5xx is
 yours; Syndra reads them alike.
@@ -1794,6 +1794,14 @@ yours; Syndra reads them alike.
   `TARGET_UNREACHABLE` only from the first, before any write, and send every
   failure after a write through one function (`acted` in
   `addons/truenas/apply.go`).
+- A write whose account reads disagree with each other (one account, read
+  more than once to judge a binding, comes back under another name or
+  number: the app changed in between) MUST NOT be judged from them and
+  MUST send nothing. It answers 503 `TARGET_CHANGED` with a short
+  `Retry-After`, and Syndra keeps the change queued, as for
+  `TARGET_UNREACHABLE`, never as possibly acted. Hold the accounts you
+  read by the app's record key to see it (`keyRows` and `writeTornRead` in
+  `addons/truenas/identity_resolve.go`).
 
 ## 7. Operations
 

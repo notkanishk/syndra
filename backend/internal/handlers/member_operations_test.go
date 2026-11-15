@@ -135,6 +135,18 @@ func TestAMemberActionIsPreviewedThenConfirmed(t *testing.T) {
 	}
 }
 
+// A confirm the add-on answered TARGET_CHANGED went nowhere: the member is told to try again,
+// never "checking" (which says it may have happened).
+func TestAConfirmAnsweredTargetChangedIsTryAgain(t *testing.T) {
+	h := stubMemberAction(t)
+	h.result = addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeUnreached, Code: addons.CodeTargetChanged}
+	rr, out := act(t, "item.checkout", confirmBody)
+	if rr.Code != http.StatusServiceUnavailable || out["error"] != addons.CodeTargetChanged || out["state"] == "checking" ||
+		!strings.Contains(rr.Body.String(), "Nothing went out. Try again.") {
+		t.Fatalf("%d %s", rr.Code, rr.Body.String())
+	}
+}
+
 // One of the two, always: neither, both, or a field the route does not know is
 // refused before anything is sent.
 func TestAMemberActionIsExactlyAPreviewOrAConfirm(t *testing.T) {

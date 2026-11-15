@@ -937,6 +937,8 @@ func TestALifecycleRefusalIsQueuedAndLeavesTheTargetHealthy(t *testing.T) {
 			"the add-on declined before doing anything, so the row stays queued and resumes"},
 		{"a target the add-on cannot reach", http.StatusServiceUnavailable, "TARGET_UNREACHABLE", OutcomeUnreached, false, false,
 			"nothing was done and it is asked again; it is not a maintenance window"},
+		{"the target changed while it was read", http.StatusServiceUnavailable, "TARGET_CHANGED", OutcomeUnreached, false, false,
+			"nothing was judged or sent; it is asked again, never parked as possibly acted"},
 		{"an add-on that fell over", http.StatusServiceUnavailable, "APPLY_FAILED", OutcomeIndeterminate, false, false,
 			"a 5xx that is not a refusal by code is a service that may have got halfway"},
 		{"a 503 with no code", http.StatusServiceUnavailable, "", OutcomeIndeterminate, false, false,
@@ -981,6 +983,8 @@ func TestOnlyALifecycleRefusalByCodeIsALifecycleRefusal(t *testing.T) {
 			"a rolled-back add-on's refusal is still a refusal, never in doubt"},
 		{"unreachable, with Retry-After", `{"type":"urn:syndra:addon:error:TARGET_UNREACHABLE","title":"Target unreachable","status":503,"code":"TARGET_UNREACHABLE","retry":"retry_after"}`, "30", OutcomeUnreached, false,
 			"the target is down; the add-on is not in a maintenance window"},
+		{"the target changed mid-read", `{"type":"urn:syndra:addon:error:TARGET_CHANGED","title":"Target changed","status":503,"code":"TARGET_CHANGED","retry":"retry_after","detail":"TrueNAS changed while Syndra was reading it. Try again."}`, "2", OutcomeUnreached, false,
+			"nothing was judged or sent: an operation to try again, never one that may have acted"},
 		{"fell over", ``, "30", OutcomeIndeterminate, false,
 			"a 5xx that names no refusal is a service that may have got halfway, Retry-After or not"},
 	} {
@@ -1051,6 +1055,25 @@ func TestApplyRefusesWithoutADeduplicationToken(t *testing.T) {
 	// dispatches without one.
 	if reached {
 		t.Fatal("nothing may be sent without a deduplication token")
+	}
+}
+
+// An apply the add-on answers 503 TARGET_CHANGED sent nothing: unreached and retryable, so the
+// outbox keeps it queued, never indeterminate (in doubt) or unconfirmed.
+func TestAnApplyAnsweredTargetChangedIsUnreached(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Retry-After", "2")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"type":"urn:syndra:addon:error:TARGET_CHANGED","title":"Target changed","status":503,"code":"TARGET_CHANGED","retry":"retry_after","detail":"TrueNAS changed while Syndra was reading it. Try again."}`))
+	}))
+	defer srv.Close()
+	signedAddon(t, srv.URL, "a-test-secret")
+	withBreaker(t, 1000, time.Minute)
+
+	out := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1", Fingerprint: "fp-1"})
+	if out.Outcome != OutcomeUnreached || !out.Outcome.Retryable() || out.Code != CodeTargetChanged {
+		t.Fatalf("want unreached, retryable, code %s; got %s retryable=%t code %q", CodeTargetChanged, out.Outcome, out.Outcome.Retryable(), out.Code)
 	}
 }
 

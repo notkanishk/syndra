@@ -227,6 +227,20 @@ func TestEachDispatchOutcomeIsRecordedAsItself(t *testing.T) {
 	}
 }
 
+// An apply the add-on answered TARGET_CHANGED (the target changed while it read it) sent
+// nothing: the row is requeued with that reason, never left errored as possibly applied, and
+// never failed.
+func TestATargetThatChangedMidReadIsRequeuedNotInDoubt(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Status: 503, Code: addons.CodeTargetChanged}
+	var reason string
+	requeue = func(_ context.Context, _, why string) (int, error) { reason = why; return 1, nil }
+	res, _ := DrainAddon(context.Background(), "truenas")
+	if res.Requeued != 1 || res.Errored != 0 || res.Failed != 0 || reason != "the target changed while it was being read" {
+		t.Fatalf("recorded as %+v, reason %q", res, reason)
+	}
+}
+
 // The add-on's own detail may reach `last_error`; its response body may not.
 func TestARefusalRecordsTheAddonsAnswerAndNotItsBody(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))

@@ -22,6 +22,13 @@ one (SCIM, RFC 7643 §3.1: `subject` plays `externalId`).
   bindings name one account; neither gets the row). Every binding is
   attributed, a conflict, or gone: never left in neither for another cause.
 - `/subjects` declares 500 (`STORE_UNREADABLE`) in `openapi.yaml`.
+- Registry: new code `TARGET_CHANGED` (503, `retry_after`): the target
+  changed while the add-on was reading it (one account read twice under a
+  different name or number), so nothing was judged and nothing sent.
+  Syndra classifies it unreached, as it does `TARGET_UNREACHABLE`, and keeps
+  the change queued; an operation is told to try again, never "may have
+  acted". `openapi.yaml` lists its `Retry-After`; the guide's error table
+  and its writes rules say it.
 - Schema files: `common/binding_conflict.json` (new; the conflict's one
   shape, with `reason`, `detail` and `next` required, and the holder or
   `holders` by `reason` through `if`/`then`/`else`), `subjects.json` (`subject`,

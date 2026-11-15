@@ -195,6 +195,12 @@ func confirmAction(w http.ResponseWriter, r *http.Request, req addonop.Request) 
 	case addons.OutcomeRejected:
 		writeRefusal(w, res.Code, res.Refusal)
 	case addons.OutcomeUnreached:
+		if res.Code == addons.CodeTargetChanged {
+			// Unreached like any other (nothing went out); it did answer, so it is not "not answering".
+			jsonErrorResponse(w, http.StatusServiceUnavailable, addons.CodeTargetChanged,
+				"That system changed while Syndra was reading it. Nothing went out. Try again.")
+			return
+		}
 		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREACHABLE", "That system is not answering right now. Nothing went out.")
 	default:
 		// 202 (RFC 9110 §15.3.3): accepted, and not known to be done. The

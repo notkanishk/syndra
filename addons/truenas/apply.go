@@ -637,6 +637,9 @@ func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 		// drops ErrNotSent from those (acted).
 		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
 			"The NAS could not be reached, so nothing was sent to it.", nil)
+	case errors.Is(err, errTornRead):
+		// TrueNAS changed mid-read: nothing judged, nothing sent, queued again (TARGET_CHANGED).
+		writeTornRead(w)
 	case errors.Is(err, errStoreUnreadable):
 		// The add-on's own records, never the NAS (which a 502 would blame): one rule and one
 		// sentence for every route (decodeBinding). 500, which Syndra reads as possibly acted:

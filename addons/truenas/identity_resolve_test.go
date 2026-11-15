@@ -649,11 +649,14 @@ func TestARenameBetweenKeyReadsIsATornReadNeverJudged(t *testing.T) {
 		} else {
 			rr = postOperation(t, s, op, `{"call_id":"p1","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
 		}
-		var body struct{ Detail string }
+		var body struct{ Code, Detail, Retry string }
 		_ = json.Unmarshal(rr.Body.Bytes(), &body)
-		if rr.Code != http.StatusServiceUnavailable || body.Detail != errTornRead.Error() {
-			t.Errorf("%s: want 503 %q, got %d %s", op, errTornRead.Error(), rr.Code, rr.Body.String())
+		// TARGET_CHANGED, never APPLY_FAILED or OPERATION_FAILED, which Syndra reads as possibly acted.
+		if rr.Code != http.StatusServiceUnavailable || body.Code != CodeTargetChanged || body.Retry != "retry_after" ||
+			rr.Header().Get("Retry-After") != tornRetryAfter || body.Detail != errTornRead.Error() {
+			t.Errorf("%s: want 503 %s %q with Retry-After, got %d %v %s", op, CodeTargetChanged, errTornRead.Error(), rr.Code, rr.Header(), rr.Body.String())
 		}
+		assertSchema(t, "error.json", rr.Body.Bytes(), op+"'s torn-read refusal")
 		if len(m.updates)+len(m.creates) != 0 {
 			t.Errorf("%s: wrote %v %v on a torn read", op, m.updates, m.creates)
 		}
