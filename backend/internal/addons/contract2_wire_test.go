@@ -286,6 +286,7 @@ func TestEveryReplyDecodesIntoAWireTypeOfContractFields(t *testing.T) {
 		{SubjectOutcome{}, "apply_response.json", nil},
 		{BindingConflict{}, "common/binding_conflict.json", nil},
 		{SubjectConflict{}, "subjects.json", []string{"$defs", "Conflict"}},
+		{ConflictHolder{}, "common/binding_conflict.json", []string{"$defs", "Holder"}},
 		{applyWire{}, "apply_response.json", nil},
 		{reachWire{}, "profiles/storage/reach.json", nil},
 		{homesWire{}, "profiles/storage/homes.json", nil},

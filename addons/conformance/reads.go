@@ -289,6 +289,9 @@ func (k *kit) attribution(subj, conf *check, doc map[string]any) int {
 	conflicted := map[string]bool{}
 	for _, cf := range objects(doc["conflicts"]) {
 		id := str(cf, "subject")
+		// Per reason: the holder's username and account_id, or for ambiguous the holders instead.
+		err := k.c.validate("subjects.json#/$defs/Conflict", cf)
+		conf.expect(err == nil, "the conflict for subject %q (reason %q) %v", id, str(cf, "reason"), err)
 		conf.expect(rowOf[id] == "", "subject %q is a conflict and also the subject of account_id %s: a binding names one account or none", id, rowOf[id])
 		conf.expect(!conflicted[id], "subject %q is listed as a conflict twice", id)
 		conflicted[id] = true

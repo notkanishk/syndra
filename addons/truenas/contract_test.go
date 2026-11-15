@@ -310,8 +310,10 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 					State:    map[string]any{FieldGroup: []string{}, FieldHome: []string{}, FieldEnabled: true, FieldSMBEnabled: false},
 					Standing: &Standing{Usable: true, WaitingOn: "none"}},
 			},
-			Conflicts: []SubjectConflict{{Subject: "289471021834760196", BindingConflict: kofiConflict}},
-			Observed:  Observed{Current: true, TakenAt: "2026-11-10T09:30:00Z"},
+			Conflicts: []SubjectConflict{{Subject: "289471021834760196", BindingConflict: kofiConflict},
+				{Subject: "289471021834760197", BindingConflict: (&BindingConflict{Holders: []Holder{
+					{Username: "big_e", AccountID: "3031"}, {Username: "big_e", AccountID: "3032"}}}).worded()}},
+			Observed: Observed{Current: true, TakenAt: "2026-11-10T09:30:00Z"},
 		}},
 		{"GET /subjects (from the mirror)", "subjects_stale.json", "subjects.json", nil}, // driven below
 		{"GET /values/{field}", "values.json", "values.json", ValuesResponse{

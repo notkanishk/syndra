@@ -37,7 +37,7 @@
         409
       ],
       "retry": "never",
-      "meaning": "Another account holds what the subject's account would be named by: the name an unbound subject derives, the name its binding is recorded under, or a recorded number the app can hand out again. The holder is never acted on. The conflict (common/binding_conflict.json, the holder and the add-on's words) rides as an extension member; GET /subjects lists the same conflict under conflicts. An operator adopts, releases or renames."
+      "meaning": "The account the subject's binding would name is not the subject's alone to have (common/binding_conflict.json reason): another account holds the name an unbound subject derives or the name its binding is recorded under (name_held), a recorded number the app can hand out again is held by another name (number_held), two or more accounts hold the key it is looked up by (ambiguous), or another subject's binding names the same account (claimed_twice). The holder is never acted on. The conflict, with the add-on's words, rides as an extension member; GET /subjects lists the same conflicts under conflicts. An operator adopts, releases or renames."
     },
     "CALL_ID_REUSED": {
       "title": "Call id reused",

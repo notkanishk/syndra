@@ -1318,9 +1318,11 @@ and purge, `storage.status`, `activity.get`, and adoption's repeat check) and `r
 (the plan, and the wishes behind the standing, the statistics and `accountBound`). `recordID` is gone.
 Since 7t-2 the add-on also says the attribution on the wire. `attribute` runs `resolveIn` over every
 binding once, and `/subjects` carries each row's `subject` (the account a binding names) and
-`conflicts[]` (a binding that names nothing because another account holds its name or number, with
-the holder and the add-on's `detail` and `next`: `common/binding_conflict.json`, the apply's conflict
-shape). Syndra reads three states off one reply: bound, conflict, and gone (neither). `account_id`
+`conflicts[]` (a binding that names no account, with a required `reason`: `name_held`,
+`number_held`, `ambiguous` with every holder listed, or `claimed_twice` when two bindings name one
+account and neither gets it; with the holder and the add-on's `detail` and `next`:
+`common/binding_conflict.json`, the apply's conflict shape). Every binding is in exactly one of three
+states on one reply: attributed, a conflict, or gone (neither), and nothing else is left in neither. `account_id`
 stays the uid and is a key within one read, not an identity across reads (AUTHORING ch. 2; SCIM
 RFC 7643 §3.1, with `subject` as `externalId`). The backend decodes both but does **not yet** match
 on them: its drift matching still uses `account_id` until 7t-3. Below, "never written", "never

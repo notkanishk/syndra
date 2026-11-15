@@ -425,7 +425,7 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 			conflicts := []any{}
 			for _, s := range doc["subjects"].([]any) {
 				if m := s.(map[string]any); m["subject"] != nil {
-					conflicts = append(conflicts, map[string]any{"subject": m["subject"], "username": m["username"],
+					conflicts = append(conflicts, map[string]any{"subject": m["subject"], "reason": "name_held", "username": m["username"],
 						"account_id": m["account_id"], "adoptable": false,
 						"detail": "Another account holds this name.", "next": "Release the binding, then adopt it if it is theirs."})
 				}

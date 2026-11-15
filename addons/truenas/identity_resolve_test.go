@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -476,16 +478,60 @@ func TestPlanAndApplyAgreeOnTwoAccountsOnOneUID(t *testing.T) {
 		t.Fatalf("apply: want 409 in the same words and nothing written, got %d %s", rr.Code, rr.Body.String())
 	}
 
-	// /subjects names neither row for the subject, whichever is listed first: two accounts on the
-	// key are a question, and there is no one holder to list as a conflict either.
+	// /subjects names neither row for the subject, whichever is listed first, and says so: an
+	// ambiguous conflict listing both holders, in the same words. Silence would read as gone.
 	rr, got := getSubjects(t, s, true)
-	if rr.Code != http.StatusOK || len(got.Conflicts) != 0 {
+	if rr.Code != http.StatusOK || len(got.Conflicts) != 1 {
 		t.Fatalf("/subjects: %d, conflicts %+v", rr.Code, got.Conflicts)
+	}
+	cf := got.Conflicts[0]
+	want := []Holder{{Username: "bob_a", AccountID: "300001"}, {Username: "bob_b", AccountID: "300001"}}
+	if cf.Subject != "sub-1" || cf.Reason != reasonAmbiguous || !slices.Equal(cf.Holders, want) || cf.Username != "" ||
+		cf.Adoptable || cf.Detail != detail || cf.Next != next {
+		t.Errorf("/subjects: conflict %+v, want sub-1 ambiguous between %v in the ambiguity's words", *cf.BindingConflict, want)
 	}
 	for _, v := range got.Subjects {
 		if v.Subject != "" {
 			t.Errorf("/subjects: %s carries subject %q; two accounts on one key name neither", v.Username, v.Subject)
 		}
+	}
+}
+
+// Two bindings naming one account give it to neither: both are conflicts, claimed twice, each
+// naming the other subject, and no write rule (stats, standing) picks a winner. The account stays
+// bound for adoption, so no third subject can take it.
+func TestTwoBindingsOnOneAccountGiveItToNeither(t *testing.T) {
+	c := idCases[0] // in range, found: bob, uid 300001, bound to sub-1
+	s, _ := c.server(t)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "bob", UID: 300001, UIDKind: uidKindAccount}); err != nil {
+		t.Fatal(err)
+	}
+	rr, got := getSubjects(t, s, true)
+	if rr.Code != http.StatusOK || len(got.Subjects) != 1 || got.Subjects[0].Subject != "" {
+		t.Fatalf("/subjects: %d %s; want bob listed, given to neither", rr.Code, rr.Body.String())
+	}
+	if len(got.Conflicts) != 2 {
+		t.Fatalf("want both bindings as conflicts, got %+v", got.Conflicts)
+	}
+	for i, other := range []string{"sub-2", "sub-1"} {
+		cf := got.Conflicts[i]
+		if cf.Subject != []string{"sub-1", "sub-2"}[i] || cf.Reason != reasonClaimedTwice || cf.Username != "bob" ||
+			cf.AccountID != "300001" || cf.BoundTo != other || cf.Adoptable || cf.Detail == "" || cf.Next == "" {
+			t.Errorf("conflict %d: %+v", i, *cf.BindingConflict)
+		}
+	}
+	snap, err := s.readSubjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u, _ := s.boundUIDs(snap.Subjects); len(u) != 0 {
+		t.Errorf("statistics attribute bob to %v; claimed twice is nobody's", u)
+	}
+	if _, ok := s.wishesFor(snap.Subjects)[300001]; ok {
+		t.Error("a wish applies to bob; claimed twice is nobody's")
+	}
+	if bound, _ := s.accountBound(&snap.Subjects[0]); !bound {
+		t.Error("accountBound: bob is free, so a third subject could adopt it")
 	}
 }
 
@@ -521,6 +567,42 @@ func TestAReleasedAccountCarriesNoSubject(t *testing.T) {
 	_, got := getSubjects(t, s, false)
 	if len(got.Subjects) != 1 || got.Subjects[0].Subject != "" || len(got.Conflicts) != 0 {
 		t.Errorf("after the release: %+v, conflicts %+v; want bob listed, bound to nobody", got.Subjects, got.Conflicts)
+	}
+}
+
+// The NAS answered and the store failed: the copy kept from earlier is not served labelled
+// "unreachable", which would blame the NAS. The store's failure is the answer.
+func TestAStoreFailureIsNeverServedAsAnUnreachableNAS(t *testing.T) {
+	s, _ := idCases[0].server(t)
+	now := at(s, time.Now())
+	if rr, _ := getSubjects(t, s, true); rr.Code != http.StatusOK {
+		t.Fatalf("first read: %d", rr.Code)
+	}
+	*now = now.Add(time.Hour) // past the cooldown and the copy's age
+	corrupt(t, s, bucketBindings, "sub-2")
+	rr, _ := getSubjects(t, s, true)
+	if rr.Code != http.StatusInternalServerError || problemCode(t, rr) != CodeStoreUnreadable {
+		t.Fatalf("want 500 %s, got %d %s", CodeStoreUnreadable, rr.Code, rr.Body.String())
+	}
+}
+
+// Every reader of the binding table fails closed on a binding it cannot decode: its name is never
+// read as free to claim (BindIfFree, BoundUsernames), nor its subject as bound to nothing.
+func TestAnUndecodableBindingIsNeverReadAsFree(t *testing.T) {
+	s, _ := idCases[0].server(t)
+	corrupt(t, s, bucketBindings, "sub-2")
+	if _, err := s.store.Bindings(); err == nil {
+		t.Error("Bindings skipped it")
+	}
+	if _, err := s.store.BoundUsernames(); err == nil {
+		t.Error("BoundUsernames skipped it, so its name reads as unclaimed")
+	}
+	err := s.store.BindIfFree(Binding{SubjectID: "sub-3", Username: "carol", UID: 300003, UIDKind: uidKindAccount})
+	if err == nil || errors.As(err, new(ErrUsernameBound)) {
+		t.Errorf("BindIfFree: %v; the name sub-2 holds is unknown, so no name is free", err)
+	}
+	if _, bound, _ := s.store.GetBinding("sub-3"); bound {
+		t.Error("BindIfFree wrote the binding anyway")
 	}
 }
 

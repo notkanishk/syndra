@@ -289,9 +289,11 @@ type subject struct {
 	Standing *standing      `json:"standing"`
 }
 
-// noConflicts is /subjects' conflicts here, always none: this app hands no id out twice
-// (newID) and nothing renames an account behind the add-on, so a binding always names its
-// account. An app that can do either reports each binding that names nothing (AUTHORING,
+// noConflicts is /subjects' conflicts here, always none, for every reason a conflict has: a
+// binding is the account's id itself, which this app hands out once (newID), so no name or
+// number can be held by another (name_held, number_held) and no key is shared by two accounts
+// (ambiguous); and only a create binds, to the account it made, so no two subjects name one
+// account (claimed_twice). An app where any can happen reports each such binding (AUTHORING,
 // GET /subjects).
 var noConflicts = []any{}
 
@@ -469,7 +471,7 @@ func (a *Addon) decide(subj, email string, raw map[string]json.RawMessage) (outc
 			if other.username == name {
 				out.Effect, out.Detail = "blocked", "The name this subject would get is taken."
 				out.Consequence = "An operator adopts " + name + " or renames it."
-				out.Conflict = map[string]any{"username": name, "account_id": other.id, "adoptable": true,
+				out.Conflict = map[string]any{"reason": "name_held", "username": name, "account_id": other.id, "adoptable": true,
 					"detail": out.Detail, "next": out.Consequence}
 				return out, nil, nil
 			}

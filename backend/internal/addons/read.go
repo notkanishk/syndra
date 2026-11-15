@@ -70,12 +70,16 @@ type SubjectOutcome struct {
 	Conflict *BindingConflict `json:"conflict,omitempty"`
 }
 
-// BindingConflict is a binding that names no account because another account
-// holds its name or number (common/binding_conflict.json). Username and
-// AccountID are the HOLDER's, never the subject's account.
+// BindingConflict is a binding that names no account because the account it
+// would name is not the subject's alone to have (common/binding_conflict.json).
+// Username and AccountID are the HOLDER's, never the subject's account; an
+// ambiguous key has Holders instead, none of them named.
 type BindingConflict struct {
-	Username  string `json:"username"`
-	AccountID string `json:"account_id"`
+	// Reason is name_held, number_held, ambiguous or claimed_twice.
+	Reason    string           `json:"reason"`
+	Username  string           `json:"username"`
+	AccountID string           `json:"account_id"`
+	Holders   []ConflictHolder `json:"holders,omitempty"`
 	// Adoptable says account.adopt would bind the holder to this subject as
 	// things stand. A conflict that is not adoptable must not be offered as a
 	// one-click resolution.
@@ -86,6 +90,13 @@ type BindingConflict struct {
 	// an operator does next. Shown as written.
 	Detail string `json:"detail,omitempty"`
 	Next   string `json:"next,omitempty"`
+}
+
+// ConflictHolder is one account an ambiguous key names
+// (common/binding_conflict.json#/$defs/Holder).
+type ConflictHolder struct {
+	Username  string `json:"username"`
+	AccountID string `json:"account_id"`
 }
 
 // SubjectConflict is one entry of /subjects' conflicts: a subject whose

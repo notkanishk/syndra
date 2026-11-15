@@ -16,8 +16,15 @@ keep: it is unique within one read and survives a rename, but it is not an
 identity across reads, since an app can hand a deleted account's id to a new
 one (SCIM, RFC 7643 §3.1: `subject` plays `externalId`).
 
+- Every conflict carries a required `reason`: `name_held`, `number_held`,
+  `ambiguous` (two or more accounts on the key; `holders` lists them, and
+  no single `username`/`account_id` is given) or `claimed_twice` (two
+  bindings name one account; neither gets the row). Every binding is
+  attributed, a conflict, or gone: never left in neither for another cause.
+- `/subjects` declares 500 (`STORE_UNREADABLE`) in `openapi.yaml`.
 - Schema files: `common/binding_conflict.json` (new; the conflict's one
-  shape, with `detail` and `next` required), `subjects.json` (`subject`,
+  shape, with `reason`, `detail` and `next` required, and the holder or
+  `holders` by `reason` through `if`/`then`/`else`), `subjects.json` (`subject`,
   `conflicts`, `$defs/Conflict`), `apply_response.json` and `error.json`
   (`conflict` refers to the common shape; `apply_response.json#/$defs/BindingConflict`
   is gone), `common/field.json` (`AccountId`'s description).

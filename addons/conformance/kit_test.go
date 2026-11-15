@@ -101,8 +101,11 @@ func serveRewritingHeaders(t *testing.T, secret string, hook func(r *http.Reques
 }
 
 func config(url string, mutate bool) Config {
-	return Config{URL: url, Target: "reference", Secret: []byte(testSecret), Mutate: mutate, Subject: "conformance-self-test",
-		ElevatedKey: testElevatedKey}
+	cfg := Config{URL: url, Target: "reference", Secret: []byte(testSecret), Mutate: mutate, Subject: "conformance-self-test"}
+	if mutate {
+		cfg.ElevatedKey = testElevatedKey
+	}
+	return cfg
 }
 
 // testElevatedKey is the reference's account.purge credential: any value, which it never keeps.
@@ -155,8 +158,8 @@ func lifecycleOf(t *testing.T, url string) string {
 // leftFirst is a run that ended before identity.not-reused, or ran without the elevated key.
 const leftFirst = `one disabled account "conformance-self-test" (account_id 1001) on target "reference"; removal disables, never deletes`
 
-const leftOne = `one disabled account "conformance-self-test" (account_id 1002) on target "reference"; removal disables, never deletes; ` +
-	`account_id 1001, the kit's first, was purged to check identity.not-reused`
+const leftOne = `one disabled account "conformance-self-test" (account_id 1002) on target "reference"; the end of the run disabled it and did not delete it; ` +
+	`the kit's first account, account_id 1001, was deleted with account.purge to check identity.not-reused (the operator's elevated key; the one deletion a run makes)`
 
 // The clean reference passes every core check, and skips only what this kit
 // does not check yet. A check that quietly skipped against the reference
@@ -291,15 +294,32 @@ func TestWithoutAnElevatedKeyNothingIsPurged(t *testing.T) {
 	}
 }
 
+// A delete-capable key is refused on a reads-only run, before anything is sent.
+func TestAnElevatedKeyWithoutMutateIsRefused(t *testing.T) {
+	url, seen := serve(t, testSecret, nil)
+	cfg := config(url, false)
+	cfg.ElevatedKey = testElevatedKey
+	if r, err := Run(context.Background(), cfg); err == nil || r != nil || !strings.Contains(err.Error(), "-elevated-key-file is only for -mutate") {
+		t.Errorf("Run answered %v, %v", r, err)
+	}
+	if len(seen()) != 0 {
+		t.Errorf("sent %v", seen())
+	}
+}
+
 // Reads-only, the attribution rules judge whatever the add-on lists: a subject
 // on two rows, or a conflict that is also a row's subject, fails.
 func TestAttributionIsJudgedOnAReadsOnlyRun(t *testing.T) {
 	two := `{"subject":"wwe-the-rock","username":"rock","account_id":"9","state":{},"standing":{"usable":true,"waiting_on":"none"}}`
-	for _, tc := range []struct{ id, rows, conflicts string }{
-		{"subjects.subject", two + "," + strings.Replace(two, `"9"`, `"10"`, 1), `[]`},
-		{"subjects.conflicts", two, `[{"subject":"wwe-the-rock","username":"cena","account_id":"11","adoptable":false,"detail":"Held.","next":"Release it."}]`},
+	for _, tc := range []struct{ name, id, rows, conflicts string }{
+		{"a subject on two rows", "subjects.subject", two + "," + strings.Replace(two, `"9"`, `"10"`, 1), `[]`},
+		{"a conflict that is also a row's subject", "subjects.conflicts", two,
+			`[{"subject":"wwe-the-rock","reason":"name_held","username":"cena","account_id":"11","adoptable":false,"detail":"Held.","next":"Release it."}]`},
+		// An ambiguous key has no one holder: naming one is the guess the reason exists to refuse.
+		{"an ambiguous conflict naming one holder", "subjects.conflicts", "",
+			`[{"subject":"wwe-edge","reason":"ambiguous","username":"edge","account_id":"12","adoptable":false,"detail":"Two hold it.","next":"Rename one."}]`},
 	} {
-		t.Run(tc.id, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			url, _ := serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
 				if r.URL.Path != "/subjects" {
 					return reply

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -209,12 +210,18 @@ func TestSubjectsReplyLands(t *testing.T) {
 		t.Errorf("subject did not land: bound %q, self %q", a.Subject, r.Accounts[1].Subject)
 	}
 	want := SubjectConflict{Subject: "289471021834760196", BindingConflict: BindingConflict{
-		Username: "kofi_kingston", AccountID: "3012",
+		Reason: "number_held", Username: "kofi_kingston", AccountID: "3012",
 		Detail: "The account finn_balor, recorded for this person, is gone, and its number is now held by a different account, kofi_kingston.",
 		Next:   "Stop tracking this person's old account; the next change creates a new one for them. Adopt kofi_kingston instead only if it is theirs.",
 	}}
-	if len(r.Conflicts) != 1 || r.Conflicts[0] != want {
-		t.Errorf("conflicts did not land: %+v", r.Conflicts)
+	if len(r.Conflicts) != 2 || !reflect.DeepEqual(r.Conflicts[0], want) {
+		t.Fatalf("conflicts did not land: %+v", r.Conflicts)
+	}
+	// An ambiguous key lands as its holders, none of them the holder.
+	amb := r.Conflicts[1]
+	if amb.Subject != "289471021834760197" || amb.Reason != "ambiguous" || amb.Username != "" || amb.AccountID != "" ||
+		!reflect.DeepEqual(amb.Holders, []ConflictHolder{{"big_e", "3031"}, {"big_e", "3032"}}) || amb.Next == "" {
+		t.Errorf("the ambiguous conflict did not land: %+v", amb)
 	}
 
 	addonAnswering(t, "subjects_stale.json")

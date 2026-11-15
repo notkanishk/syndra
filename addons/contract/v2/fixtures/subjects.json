@@ -59,11 +59,29 @@
   "conflicts": [
     {
       "subject": "289471021834760196",
+      "reason": "number_held",
       "username": "kofi_kingston",
       "account_id": "3012",
       "adoptable": false,
       "detail": "The account finn_balor, recorded for this person, is gone, and its number is now held by a different account, kofi_kingston.",
       "next": "Stop tracking this person's old account; the next change creates a new one for them. Adopt kofi_kingston instead only if it is theirs."
+    },
+    {
+      "subject": "289471021834760197",
+      "reason": "ambiguous",
+      "holders": [
+        {
+          "username": "big_e",
+          "account_id": "3031"
+        },
+        {
+          "username": "big_e",
+          "account_id": "3032"
+        }
+      ],
+      "adoptable": false,
+      "detail": "More than one account on TrueNAS has the name or number this person's account is recorded under.",
+      "next": "Rename or remove one of them on TrueNAS, then try again."
     }
   ]
 }

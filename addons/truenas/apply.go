@@ -194,15 +194,21 @@ const (
 	EffectApply    = "apply"
 )
 
-// BindingConflict is an unbound account already holding the derived name.
+// BindingConflict is a binding that names no account because the account it would name is not
+// this subject's alone to have (common/binding_conflict.json): another account holds the name or
+// the number, two accounts hold the key, or another subject's binding names the same account.
 //
 // Silently adopting it is the dangerous outcome: that account may belong to
 // somebody else entirely, and adopting it hands them a subject's entitlements
 // along with whatever is already in its home directory. So the operation stops
 // and an operator chooses (BindingConflict.words).
 type BindingConflict struct {
-	Username  string `json:"username"`
-	AccountID string `json:"account_id"`
+	// Reason is which of the four it is; set by worded from the flags below.
+	Reason string `json:"reason"`
+	// Username and AccountID are the holder's; Holders instead when the key is ambiguous.
+	Username  string   `json:"username,omitempty"`
+	AccountID string   `json:"account_id,omitempty"`
+	Holders   []Holder `json:"holders,omitempty"`
 	// Adoptable says the account exists, no other subject is bound to it and
 	// it is known not to be the add-on's own, which is the only case the
 	// adoption action can act on.
@@ -213,6 +219,9 @@ type BindingConflict struct {
 	// worded, where a conflict is made.
 	Detail string `json:"detail"`
 	Next   string `json:"next"`
+	// claimedTwice is another subject's binding naming the same account (attribute): not on the
+	// wire, which says it as the reason.
+	claimedTwice bool
 	// serviceAccount is the add-on's own account holding the name, which
 	// account.adopt refuses (refuseSelfAccount). Not on the wire: adoptable
 	// false already says the one thing Syndra acts on, and words says why.
@@ -240,8 +249,32 @@ func (s *server) unboundConflict(account *Subject, owner string) *BindingConflic
 	}).worded()
 }
 
-// worded sets the conflict's Detail and Next from words, once, where it is made.
+// Holder is one account an ambiguous key names (common/binding_conflict.json#/$defs/Holder).
+type Holder struct {
+	Username  string `json:"username"`
+	AccountID string `json:"account_id"`
+}
+
+// The conflict reasons (common/binding_conflict.json).
+const (
+	reasonNameHeld     = "name_held"
+	reasonNumberHeld   = "number_held"
+	reasonAmbiguous    = "ambiguous"
+	reasonClaimedTwice = "claimed_twice"
+)
+
+// worded sets the conflict's Reason, Detail and Next, once, where it is made.
 func (c *BindingConflict) worded() *BindingConflict {
+	switch {
+	case len(c.Holders) > 0:
+		c.Reason = reasonAmbiguous
+	case c.claimedTwice:
+		c.Reason = reasonClaimedTwice
+	case c.numberHeld:
+		c.Reason = reasonNumberHeld
+	default:
+		c.Reason = reasonNameHeld
+	}
 	c.Detail, c.Next = c.words()
 	return c
 }
@@ -321,6 +354,11 @@ func adoptionWords(out ApplyOutcome, planned bool) ApplyOutcome {
 // operator releases first.
 func (c BindingConflict) words() (detail, next string) {
 	switch {
+	case len(c.Holders) > 0:
+		return ambiguityWords()
+	case c.claimedTwice:
+		return fmt.Sprintf("The account %s is recorded for this person and for someone else, so Syndra changes it for neither.", c.Username),
+			"Stop tracking it for whichever of the two it does not belong to."
 	case c.serviceAccount:
 		return fmt.Sprintf("%s is the account this add-on signs in to the app with, so it is never adopted.", c.Username),
 			"Create this subject's account in the app under another name, then adopt that."

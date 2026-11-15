@@ -436,17 +436,17 @@ func (s *Store) BindIfFree(b Binding) error {
 	}
 	return s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(bucketBindings)
-		var taken error
-		_ = bucket.ForEach(func(k, v []byte) error {
-			var other Binding
-			if json.Unmarshal(v, &other) == nil && other.Username == b.Username && string(k) != b.SubjectID {
-				taken = ErrUsernameBound{Username: b.Username, Owner: string(k)}
-				return taken
+		if err := bucket.ForEach(func(k, v []byte) error {
+			other, err := decodeBinding(k, v)
+			switch {
+			case err != nil:
+				return err // which name it holds is unknown: never read as free
+			case other.Username == b.Username && string(k) != b.SubjectID:
+				return ErrUsernameBound{Username: b.Username, Owner: string(k)}
 			}
 			return nil
-		})
-		if taken != nil {
-			return taken
+		}); err != nil {
+			return err
 		}
 		return bucket.Put([]byte(b.SubjectID), encoded)
 	})
@@ -472,11 +472,10 @@ func (s *Store) GetBinding(subjectID string) (Binding, bool, error) {
 		if raw == nil {
 			return nil
 		}
-		if err := json.Unmarshal(raw, &b); err != nil {
-			return fmt.Errorf("stored binding for %s is unreadable: %w", subjectID, err)
-		}
-		found = true
-		return nil
+		var err error
+		b, err = decodeBinding([]byte(subjectID), raw)
+		found = err == nil
+		return err
 	})
 	return b, found, err
 }
@@ -489,17 +488,26 @@ type Wish struct {
 	Enabled *bool
 }
 
-// Bindings is every binding, as stored, each with its uid read from account_id when that is all it
-// kept. Which NAS account one names is the server's rule, not this list's (identity_resolve.go).
-// A binding that cannot be decoded is an error, as GetBinding answers it: left out, its subject
-// would read as bound to nothing, and /subjects would say that person's account is gone.
+// decodeBinding is the one way every reader decodes a stored binding. One that cannot be decoded
+// is an error, never a binding that is not there: skipped, its name would read as free to claim and
+// its subject as bound to nothing, and /subjects would say that person's account is gone.
+func decodeBinding(subjectID, raw []byte) (Binding, error) {
+	var b Binding
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return Binding{}, fmt.Errorf("stored binding for %s is unreadable: %w", subjectID, err)
+	}
+	return b, nil
+}
+
+// Bindings is every binding, as stored. Which NAS account one names is the server's rule, not this
+// list's (identity_resolve.go).
 func (s *Store) Bindings() ([]Binding, error) {
 	var out []Binding
 	err := s.db.View(func(tx *bolt.Tx) error {
 		return tx.Bucket(bucketBindings).ForEach(func(k, v []byte) error {
-			var b Binding
-			if err := json.Unmarshal(v, &b); err != nil {
-				return fmt.Errorf("binding %s: %w", k, err)
+			b, err := decodeBinding(k, v)
+			if err != nil {
+				return err
 			}
 			out = append(out, b)
 			return nil
@@ -515,10 +523,10 @@ func (s *Store) Bindings() ([]Binding, error) {
 func (s *Store) BoundUsernames() (map[string]string, error) {
 	out := map[string]string{}
 	err := s.db.View(func(tx *bolt.Tx) error {
-		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
-			var b Binding
-			if err := json.Unmarshal(v, &b); err != nil {
-				return nil
+		return tx.Bucket(bucketBindings).ForEach(func(k, v []byte) error {
+			b, err := decodeBinding(k, v)
+			if err != nil {
+				return err
 			}
 			out[b.Username] = b.SubjectID
 			return nil

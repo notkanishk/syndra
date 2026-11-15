@@ -827,11 +827,29 @@ mirror holds no limits: absent in `state` is "not known".
   "conflicts": [
     {
       "subject": "289471021834760196",
+      "reason": "number_held",
       "username": "kofi_kingston",
       "account_id": "3012",
       "adoptable": false,
       "detail": "The account finn_balor, recorded for this person, is gone, and its number is now held by a different account, kofi_kingston.",
       "next": "Stop tracking this person's old account; the next change creates a new one for them. Adopt kofi_kingston instead only if it is theirs."
+    },
+    {
+      "subject": "289471021834760197",
+      "reason": "ambiguous",
+      "holders": [
+        {
+          "username": "big_e",
+          "account_id": "3031"
+        },
+        {
+          "username": "big_e",
+          "account_id": "3032"
+        }
+      ],
+      "adoptable": false,
+      "detail": "More than one account on TrueNAS has the name or number this person's account is recorded under.",
+      "next": "Rename or remove one of them on TrueNAS, then try again."
     }
   ]
 }
@@ -851,18 +869,28 @@ mirror holds no limits: absent in `state` is "not known".
   binding names in this read MUST carry that subject as `subject`; an
   account no binding names MUST NOT carry one, and the add-on's own
   account never does. A subject MUST be on one row at most.
-- A binding that names no account in this read because another account
-  holds its name or its number MUST be listed in `conflicts`: the subject,
-  the holder's `username` and `account_id`, `adoptable`, `bound_to` when
-  another subject holds it, and the add-on's own `detail` and `next` for
-  an operator (`v2/schema/common/binding_conflict.json`, the same shape an
-  apply's conflict has). A subject in `conflicts` MUST be on no row: the
-  holder is never its account. So Syndra reads three states off one
-  reply: bound (a row with `subject`), conflict (in `conflicts`), and gone
-  (neither: the account was deleted in the app). A store that cannot be
-  read MUST be an error (500 `STORE_UNREADABLE`), never a reply with no
-  row bound, which says every person's account is gone. The kit checks
-  this as `subjects.subject` and `subjects.conflicts`.
+- A binding that names no account in this read for any other reason than
+  its account being gone MUST be listed in `conflicts`, with its `reason`
+  (`v2/schema/common/binding_conflict.json`, the same shape an apply's
+  conflict has): `name_held` (another account holds the name),
+  `number_held` (the recorded name is gone and a number the app can hand
+  out again is held by another name), `ambiguous` (two or more accounts
+  hold the key the binding is looked up by: list them all as `holders`,
+  never pick one), or `claimed_twice` (two bindings name one account:
+  list both, give the row to neither). Each carries the holder's
+  `username` and `account_id` (`holders` instead for `ambiguous`),
+  `adoptable`, `bound_to` when another subject holds it, and the add-on's
+  own `detail` and `next` for an operator. A subject in `conflicts` MUST
+  be on no row: the holder is never its account. So every binding is in
+  exactly one of three states, read off one reply: attributed (a row
+  with `subject`), a conflict (in `conflicts`, any reason), or gone
+  (neither: the account was deleted in the app). An add-on MUST NOT leave
+  a binding in neither for any other cause; Syndra reads "neither" as
+  deleted. A store that cannot be read MUST be an error (500
+  `STORE_UNREADABLE`), never a reply with no row bound, which says every
+  person's account is gone, and never an earlier copy labelled as though
+  the app were unreachable. The kit checks this as `subjects.subject` and
+  `subjects.conflicts` (the shape per reason included).
   `groups`, `home`, `enabled` and `smb_enabled` on a subject are the storage
   add-on's own; every value Syndra reads is in `state`.
 - `state` MUST hold the account's current value for every field of your
@@ -1016,6 +1044,7 @@ Schemas: `v2/schema/plan_request.json`, `v2/schema/plan_response.json`.
       "detail": "An account named seth_rollins already exists and is bound to another subject.",
       "consequence": "Nothing would change. If it is not theirs, release it from that subject, then adopt it here.",
       "conflict": {
+        "reason": "name_held",
         "username": "seth_rollins",
         "account_id": "3077",
         "adoptable": false,
@@ -1139,6 +1168,7 @@ the state the write left.
   "effect": "blocked",
   "consequence": "Nothing was changed. If it is not theirs, release it from that subject, then adopt it here.",
   "conflict": {
+    "reason": "name_held",
     "username": "seth_rollins",
     "account_id": "3077",
     "adoptable": false,
@@ -2452,8 +2482,19 @@ Steps, in order; each ends on a check.
    writes only to an account whose `username` begins `conformance-`
    ([The one create](#the-one-create)). Add `-mutate-settings` if you serve
    `settings` and the instance can have a setting written back. Add
-   `-json report.json` for the report. *Done when:* it exits 0 and the last
-   line (`left:`) names the one disabled account.
+   `-json report.json` for the report.
+
+   `-elevated-key-file <file>` (with `-mutate` only; the kit refuses it on
+   a reads-only run) hands the kit the `elevated_key` your `account.purge`
+   takes. With it, and `account.purge` declared available, the advisory
+   check `identity.not-reused` runs last: once the withdraw step has turned
+   the kit's own account off, the kit purges that account (only that one,
+   after a plan for its subject names it), creates it again, and warns if
+   the new account answers the old `account_id`. It is the one deletion a
+   run makes, and the last line says so. Without the key the check skips
+   and nothing is deleted; leave it out wherever the instance is shared
+   with production (a purge is a real delete). *Done when:* it exits 0 and
+   the last line (`left:`) names the one disabled account.
    (Exit 1: a MUST failed. Exit 2: the run could not start or `-mutate` was
    refused, for example because the subject exists. Exit 130: interrupted,
    after it put back what it changed.)
