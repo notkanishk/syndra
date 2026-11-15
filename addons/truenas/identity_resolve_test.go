@@ -622,6 +622,100 @@ func TestASharedUIDPutsTheSubjectOnTheNamedRowOnly(t *testing.T) {
 	}
 }
 
+// A rename between keyRows' reads is a torn read, never judged: sub-1 (bob, uid 300001) finds the
+// account as bob, then TrueNAS renames it bob_b before sub-2's reads (its name gone, the same uid)
+// find it again. Held by record key, it is one account under two names: 503 in the one sentence,
+// nothing written. Judged as two rows, sub-2 would be ambiguous and sub-1 given an account a whole
+// read calls claimed_twice.
+func TestARenameBetweenKeyReadsIsATornReadNeverJudged(t *testing.T) {
+	for _, op := range []string{"apply", "password.set"} {
+		s, m := idCases[0].server(t)
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "carol", UID: 300001, UIDKind: uidKindAccount}); err != nil {
+			t.Fatal(err)
+		}
+		renamed := false
+		m.after = map[string]func(){"user.query": func() {
+			// Once sub-1's number has been read (its last key read); sub-2's reads are next.
+			last, _ := json.Marshal(m.fakeRPC.params[len(m.fakeRPC.params)-1])
+			if !renamed && strings.Contains(string(last), `["uid","=",300001]`) {
+				renamed = true
+				m.fakeRPC.users = strings.Replace(m.fakeRPC.users, `"username":"bob"`, `"username":"bob_b"`, 1)
+			}
+		}}
+		var rr *httptest.ResponseRecorder
+		if op == "apply" {
+			// Its own fingerprint, so the helper resolves nothing before the apply does.
+			rr = postApply(t, s, strings.Replace(oneApply, `"call_id":"c1",`, `"call_id":"c1","fingerprint":"from-the-plan",`, 1))
+		} else {
+			rr = postOperation(t, s, op, `{"call_id":"p1","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
+		}
+		var body struct{ Detail string }
+		_ = json.Unmarshal(rr.Body.Bytes(), &body)
+		if rr.Code != http.StatusServiceUnavailable || body.Detail != errTornRead.Error() {
+			t.Errorf("%s: want 503 %q, got %d %s", op, errTornRead.Error(), rr.Code, rr.Body.String())
+		}
+		if len(m.updates)+len(m.creates) != 0 {
+			t.Errorf("%s: wrote %v %v on a torn read", op, m.updates, m.creates)
+		}
+	}
+}
+
+// The holders of an ambiguous key come in one order wherever they are said, whatever order TrueNAS
+// lists them in: by name, then account_id, on /subjects and on the apply's refusal alike.
+func TestAmbiguousHoldersAreInOneOrder(t *testing.T) {
+	c := idCase{binding: Binding{Username: "bob", UID: 300001, UIDKind: uidKindAccount}, nas: `[
+		{"username":"bob_b","id":12,"uid":300001,"locked":false,"smb":false,"groups":[]},
+		{"username":"bob_a","id":11,"uid":300001,"locked":false,"smb":false,"groups":[]}]`}
+	want := []Holder{{Username: "bob_a", AccountID: "300001"}, {Username: "bob_b", AccountID: "300001"}}
+	s, _ := c.server(t)
+	if _, got := getSubjects(t, s, true); len(got.Conflicts) != 1 || !slices.Equal(got.Conflicts[0].Holders, want) {
+		t.Errorf("/subjects: %+v", got.Conflicts)
+	}
+	var refused struct{ Conflict BindingConflict }
+	_ = json.Unmarshal(postApply(t, s, oneApply).Body.Bytes(), &refused)
+	if !slices.Equal(refused.Conflict.Holders, want) {
+		t.Errorf("apply: %+v", refused.Conflict.Holders)
+	}
+}
+
+// The ambiguous apply's refusal is a contract body: error.json, its conflict binding_conflict.json.
+func TestTheAmbiguousApplyRefusalSatisfiesTheSchema(t *testing.T) {
+	c := idCase{binding: Binding{Username: "bob", UID: 300001, UIDKind: uidKindAccount}, nas: `[
+		{"username":"bob_a","id":11,"uid":300001,"locked":false,"smb":false,"groups":[]},
+		{"username":"bob_b","id":12,"uid":300001,"locked":false,"smb":false,"groups":[]}]`}
+	s, _ := c.server(t)
+	rr := postApply(t, s, oneApply)
+	if rr.Code != http.StatusConflict || problemCode(t, rr) != CodeBindingConflict {
+		t.Fatalf("%d %s", rr.Code, rr.Body.String())
+	}
+	assertSchema(t, "error.json", rr.Body.Bytes(), "the ambiguous apply's 409")
+	var doc struct{ Conflict json.RawMessage }
+	_ = json.Unmarshal(rr.Body.Bytes(), &doc)
+	assertSchema(t, "common/binding_conflict.json", doc.Conflict, "its conflict")
+}
+
+// Where home folders go is the add-on's own setting: unreadable, the apply answers it as the plan
+// does, 500 STORE_UNREADABLE in the one sentence, never APPLY_FAILED with the store's own text.
+func TestAnUnreadableHomeSettingIsStoreUnreadableForPlanAndApply(t *testing.T) {
+	const existing = `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`
+	s, m := homeServer(t, existing, nil, nil)
+	corrupt(t, s, bucketSettings, settingHomeRoot)
+	rr := postApply(t, s, `{"call_id":"h1","subject":"sub-1","email":"charlotte@example.org","desired":{"home":["true"]}}`)
+	var body struct{ Code, Detail string }
+	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	if rr.Code != http.StatusInternalServerError || body.Code != CodeStoreUnreadable || body.Detail != storeUnreadableDetail {
+		t.Errorf("apply: %d %s", rr.Code, rr.Body.String())
+	}
+	rr = httptest.NewRecorder()
+	planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"charlotte@example.org","desired":{"home":["true"]}}]}`)
+	if rr.Code != http.StatusInternalServerError || problemCode(t, rr) != CodeStoreUnreadable {
+		t.Errorf("plan: %d %s", rr.Code, rr.Body.String())
+	}
+	if len(m.updates)+len(m.creates) != 0 {
+		t.Errorf("wrote %v %v", m.updates, m.creates)
+	}
+}
+
 // A release forgets the binding, and with it the attribution: the account stays, bound to nobody,
 // on the very next read (every write forgets the copy, so no earlier read's subject survives).
 func TestAReleasedAccountCarriesNoSubject(t *testing.T) {

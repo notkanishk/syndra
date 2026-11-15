@@ -490,6 +490,8 @@ func statusForLookup(err error) int {
 // renamed before anything is safe to run.
 func lookupRefusal(err error) error {
 	switch {
+	case errors.Is(err, errTornRead):
+		return errTornRead
 	case errors.Is(err, ErrNotSent):
 		// Nothing was asked, so nothing was done: kept, so the reply says so.
 		return ErrNotSent

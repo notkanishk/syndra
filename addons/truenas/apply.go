@@ -474,8 +474,12 @@ func (s *server) decodeDesired(raw map[string]json.RawMessage) (desiredState, er
 	if err != nil || !d.wantsHome {
 		return d, err
 	}
-	d.homeRoot, err = s.homeRoot()
-	return d, err
+	// Where home folders go is the add-on's own setting, in its store: a failure is the store's,
+	// answered alike by the plan and the apply (unreadable).
+	if d.homeRoot, err = s.homeRoot(); err != nil {
+		return d, unreadable(err)
+	}
+	return d, nil
 }
 
 func decodeDesiredFields(raw map[string]json.RawMessage) (desiredState, error) {
@@ -1600,6 +1604,9 @@ func acted(err error) (ApplyOutcome, int, error) {
 
 func statusFor(err error) int {
 	switch {
+	case errors.Is(err, errTornRead):
+		// TrueNAS changed mid-read (keyRows): nothing was judged or sent, and a retry reads it whole.
+		return http.StatusServiceUnavailable
 	case errors.Is(err, ErrTargetUnreachable):
 		return http.StatusServiceUnavailable
 	case errors.Is(err, ErrRateLimited):

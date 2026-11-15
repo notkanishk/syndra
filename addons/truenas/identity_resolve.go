@@ -241,7 +241,7 @@ func (s *server) resolveLive(subject string, who *caller) (r resolved, bound boo
 	if err != nil {
 		return resolved{}, true, unreadable(err)
 	}
-	rows := map[rowID]Subject{}
+	rows := map[string]Subject{} // by record key (keyRows)
 	cut, err := s.keyRows(b, rows)
 	if err != nil {
 		return resolved{}, true, err
@@ -261,10 +261,7 @@ func (s *server) resolveLive(subject string, who *caller) (r resolved, bound boo
 			judged = append(judged, other)
 		}
 	}
-	read := slices.SortedFunc(maps.Values(rows), func(x, y Subject) int { // one order, so holders read the same
-		return cmp.Or(cmp.Compare(x.UID, y.UID), strings.Compare(x.Username, y.Username), strings.Compare(string(x.ID.raw), string(y.ID.raw)))
-	})
-	r, _ = s.attributeOver(judged, read).of(subject)
+	r, _ = s.attributeOver(judged, slices.Collect(maps.Values(rows))).of(subject)
 	// A cut-short read only matters when the conclusion is that the account is not there.
 	r.Cut = cut && r.Account == nil && r.Conflict == nil
 	now := r.Binding
@@ -276,18 +273,29 @@ func (s *server) resolveLive(subject string, who *caller) (r resolved, bound boo
 	return r, true, nil
 }
 
-// rowID is one account of a read, however many keys it was found by.
-type rowID struct {
-	id string // the record key, which two accounts never share
-	rowKey
+// errTornRead is one account read twice, across keyRows' reads, under a different name or number:
+// TrueNAS changed between them. Judged from that, one account would count as two and a
+// claimed_twice could pass as ambiguous with one claimant given the account; so nothing is judged,
+// and the caller is asked to try again (503, which every write route answers: statusFor). The
+// sentence is shown as written (copy guide).
+var errTornRead = errors.New("TrueNAS changed while Syndra was reading it. Try again.")
+
+// recordID is an account's record key, which two accounts never share and a rename keeps: what
+// keyRows holds rows by, so one account read under two names is one account, seen torn.
+func recordID(a *Subject) string {
+	if id := string(a.ID.raw); id != "" {
+		return id
+	}
+	return fmt.Sprintf("uid %d name %s", a.UID, a.Username) // ponytail: a target that sends no record key
 }
 
 // keyRows reads, from the user table alone, every account on a binding's two keys: its recorded
 // name, and its number unless that is 0 (root, never looked up). That is everything boundAccount
 // can ask of the binding. Each read is filtered at the target, and the key is compared on this
 // side too, so a target that ignored the filter cannot add an account to the verdict; cut is such
-// a read coming back capped.
-func (s *server) keyRows(b Binding, into map[rowID]Subject) (cut bool, err error) {
+// a read coming back capped. Rows are held by record key: one that comes back with another name or
+// number than an earlier read gave it is errTornRead.
+func (s *server) keyRows(b Binding, into map[string]Subject) (cut bool, err error) {
 	keys := [][]any{{"username", "=", b.Username}}
 	if b.UID != 0 {
 		keys = append(keys, []any{"uid", "=", b.UID})
@@ -300,7 +308,11 @@ func (s *server) keyRows(b Binding, into map[rowID]Subject) (cut bool, err error
 		cut = cut || c
 		for _, a := range accounts {
 			if a.Username == b.Username || (b.UID != 0 && a.UID == b.UID) {
-				into[rowID{string(a.ID.raw), rowOf(&a)}] = a
+				id := recordID(&a)
+				if seen, ok := into[id]; ok && (seen.Username != a.Username || seen.UID != a.UID) {
+					return cut, errTornRead
+				}
+				into[id] = a
 			}
 		}
 	}
@@ -493,6 +505,10 @@ func holdersOf(subjects []Subject, b Binding, ix accountIndex) []Holder {
 			out = append(out, Holder{Username: subjects[i].Username, AccountID: accountID(subjects[i].UID)})
 		}
 	}
+	// One order wherever the read came from (a whole read, keyRows): by name, then account_id.
+	slices.SortFunc(out, func(x, y Holder) int {
+		return cmp.Or(strings.Compare(x.Username, y.Username), strings.Compare(x.AccountID, y.AccountID))
+	})
 	return out
 }
 

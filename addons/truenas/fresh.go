@@ -234,8 +234,8 @@ func (f *fresher) read(key string, fresh bool, live func() (any, time.Time, erro
 // about the request (an operation's 4xx: no bound account) rather than the NAS
 // failing to be read, or there is no copy to serve.
 func (f *fresher) fallback(key string, err error) (any, Observed, error) {
-	if refusal(err) || errors.Is(err, errStoreUnreadable) {
-		// The add-on's own store failed, not the NAS: the copy served as
+	if refusal(err) || errors.Is(err, errStoreUnreadable) || errors.Is(err, errTornRead) {
+		// The add-on's own store failed, or TrueNAS changed mid-read (errTornRead): the copy served as
 		// "unreachable" would say the wrong thing, so the error is the answer.
 		return nil, Observed{}, err
 	}
