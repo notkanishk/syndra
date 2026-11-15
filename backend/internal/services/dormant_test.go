@@ -27,7 +27,7 @@ func stubDormant(t *testing.T) {
 			Outcome:  addons.OutcomeSucceeded,
 			Current:  true,
 			TakenAt:  time.Now(),
-			Accounts: []addons.TargetAccount{{Username: "charlotte", AccountID: "3001"}, {Username: "seth", AccountID: "3002"}},
+			Accounts: []addons.TargetAccount{{Username: "charlotte", AccountID: "3001", Subject: "u1"}, {Username: "seth", AccountID: "3002", Subject: "u2"}},
 		}
 	}
 	dormantBindings = func(context.Context, string) ([]db.TargetBinding, error) {
@@ -139,12 +139,35 @@ func TestABindingToAnAbsentAccountIsNotDormant(t *testing.T) {
 	dormantSubjects = func(context.Context, string, bool) addons.SubjectsResult {
 		return addons.SubjectsResult{
 			Outcome: addons.OutcomeSucceeded, Current: true, TakenAt: time.Now(),
-			Accounts: []addons.TargetAccount{{Username: "charlotte", AccountID: "3001"}},
+			Accounts: []addons.TargetAccount{{Username: "charlotte", AccountID: "3001", Subject: "u1"}},
 		}
 	}
 
 	report, _ := DormantAccounts(context.Background(), "truenas")
 	if len(report.Accounts) != 0 {
 		t.Fatalf("nothing to remove is not dormant, got %+v", report.Accounts)
+	}
+}
+
+// Whose account is whose is the add-on's to say (design 7t D3). A stranger who
+// took the name Syndra's copy recorded is never offered for removal as the
+// member's, and the member's renamed account is listed under its own name.
+func TestADormantAccountIsTheOneTheAddOnAttributes(t *testing.T) {
+	stubDormant(t)
+	dormantSubjects = func(context.Context, string, bool) addons.SubjectsResult {
+		return addons.SubjectsResult{
+			Outcome: addons.OutcomeSucceeded, Current: true, TakenAt: time.Now(),
+			Accounts: []addons.TargetAccount{
+				{Username: "seth", AccountID: "3099"},                  // a stranger on the recorded name
+				{Username: "seth.r", AccountID: "3002", Subject: "u2"}, // seth's account, renamed
+			},
+		}
+	}
+	report, err := DormantAccounts(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Accounts) != 1 || report.Accounts[0].Account != "seth.r" || report.Accounts[0].SubjectID != "u2" {
+		t.Fatalf("want only seth's own account, under its name now, got %+v", report.Accounts)
 	}
 }

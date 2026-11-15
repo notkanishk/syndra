@@ -135,6 +135,11 @@ var (
 	// Who had an apply in flight while the target was read: never concluded
 	// deleted from that read (7t-3).
 	appliesInFlight = db.AppliesInFlightSince
+	// The database's clock, which started_at and completed_at are on: when a
+	// pass's read began, on it.
+	databaseNow = db.DatabaseNow
+	// How long a claimed apply's calls can run (addons.ApplyWindow).
+	applyWindow = addons.ApplyWindow
 
 	// The mutation-log anchor (2.28). Two seams rather than one, because the
 	// read and the comparison fail differently: a health read that did not
@@ -155,6 +160,8 @@ var (
 	// resolve, and a base must NOT be advanced past one.
 	saveMergeFinding  = db.RecordMergeFinding
 	clearMergeFinding = db.ClearMergeFinding
+	// Closes the binding conflicts a whole read no longer lists (7t-3).
+	clearFindingsOutside = db.ClearMergeFindingsOutside
 
 	// The resolved set itself, not only its wire map: a convergence is built
 	// from the set (EntitlementSet.Convergence), which also says whether it

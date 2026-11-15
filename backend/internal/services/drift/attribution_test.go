@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -118,6 +117,44 @@ func TestAConflictTheAddOnStopsReportingIsClosed(t *testing.T) {
 	}
 }
 
+// A conflict ends when the add-on stops listing it, whether or not the
+// subject has a binding here: on a whole read, every standing
+// binding_conflict outside this read's conflicts is closed, keeping the ones
+// it lists. Not on a truncated read, which may have cut a conflict's holder.
+func TestAWholeReadClosesTheConflictsItNoLongerLists(t *testing.T) {
+	read := currentRead()
+	read.Conflicts = []addons.SubjectConflict{heldBy("sub-1")}
+	h := &addonReconcileHarness{read: read}
+	stubAddonReconcile(t, h)
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.closedOutside) != 1 || h.closedOutside[0] != "binding_conflict:sub-1" {
+		t.Fatalf("want the conflicts outside {sub-1} closed, got %v", h.closedOutside)
+	}
+
+	truncated := currentRead()
+	truncated.Truncated = true
+	h2 := &addonReconcileHarness{read: truncated}
+	stubAddonReconcile(t, h2)
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h2.closedOutside) != 0 {
+		t.Fatalf("a truncated read closes no conflict: %v", h2.closedOutside)
+	}
+}
+
+// A reply that both attributes a row to a subject and lists it in conflict
+// contradicts itself; the conflict wins, so the subject is never planned.
+func TestAConflictWinsOverARowForTheSameSubject(t *testing.T) {
+	b := []db.TargetBinding{{SubjectID: "sub-1"}}
+	accounts := []addons.TargetAccount{{Username: "kofi_kingston", AccountID: "3001", Subject: "sub-1"}}
+	if live, stale := partitionByPresence(b, accounts, map[string]bool{"sub-1": true}, nil); len(live) != 0 || len(stale) != 0 {
+		t.Fatalf("live=%+v stale=%+v, want neither", live, stale)
+	}
+}
+
 // An apply landing between the add-on's read of the app and its read of its
 // bindings leaves the subject on no row and in no conflict for one read. With
 // an apply in flight since the read began, the pass concludes nothing about
@@ -130,7 +167,6 @@ func TestASubjectWithAnApplyInFlightIsNeverConcludedDeleted(t *testing.T) {
 	}
 	stubAddonReconcile(t, h)
 
-	before := time.Now()
 	res, err := ReconcileAddon(context.Background(), "truenas")
 	if err != nil {
 		t.Fatal(err)
@@ -139,8 +175,11 @@ func TestASubjectWithAnApplyInFlightIsNeverConcludedDeleted(t *testing.T) {
 		t.Fatalf("nothing may be concluded about a subject whose apply was in flight: stale %+v, findings %+v, queued %+v",
 			res.Stale, h.findingsWritten, h.converged)
 	}
-	if h.inFlightSince.Before(before) || h.inFlightSince.After(time.Now()) {
-		t.Fatalf("in flight is asked from when the read began, got %v", h.inFlightSince)
+	// Asked on the database's clock, which completed_at and started_at are on,
+	// and bounded by how long a claimed apply's calls can run, so a row a
+	// crashed drain left in_flight never hides a deletion for ever.
+	if !h.inFlightSince.Equal(dbClock) || h.inFlightWindow != addons.ApplyWindow() || h.inFlightWindow <= 0 {
+		t.Fatalf("in flight is asked from the database's clock with the apply window, got %v / %v", h.inFlightSince, h.inFlightWindow)
 	}
 
 	// The same subject with nothing in flight is concluded gone: the guard is
@@ -184,11 +223,16 @@ func TestAnUnreadableStoreIsARefusedReadNeverAnOutage(t *testing.T) {
 		t.Fatalf("the inventory must say the same: %+v", inv)
 	}
 
-	// Not answered at all, or answered that TrueNAS could not be reached: an
-	// outage, and no words of the add-on's to carry.
+	// Every other failure is TrueNAS not read, answered in a code or not
+	// (NO_CURRENT_READ: it could not be read and the add-on holds no copy):
+	// target_unreachable, which the pages word with the system's name and their
+	// own next step; never read_refused, whose words are about the add-on's
+	// records.
 	for _, read := range []addons.SubjectsResult{
 		{Outcome: addons.OutcomeUnreached},
 		{Outcome: addons.OutcomeUnreached, Status: 503, Code: "TARGET_UNREACHABLE", Detail: "TrueNAS did not answer."},
+		{Outcome: addons.OutcomeIndeterminate, Status: 503, Code: "NO_CURRENT_READ", Detail: "TrueNAS could not be read."},
+		{Outcome: addons.OutcomeIndeterminate, Status: 502, Code: "TARGET_UNREADABLE"},
 		{Outcome: addons.OutcomeIndeterminate, Status: 502},
 	} {
 		if reason, words := readFailure(read); reason != db.UnreconciledUnreachable || words != "" {

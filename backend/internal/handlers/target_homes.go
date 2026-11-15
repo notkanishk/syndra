@@ -68,9 +68,14 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 	_, schema := acceptedShape(r.Context(), target)
 	limit, _ := kinds.HomeLimit(schema)
 	homes := addonsReadHomes(r.Context(), target, wantsFresh(r))
-	byName := map[string]addons.HomeUsage{}
+	// Whose each home is, by the add-on's attribution (design 7t D3): never by
+	// the name Syndra's copy of the binding recorded, which a rename moves and
+	// a stranger can take.
+	bySubject := map[string]addons.HomeUsage{}
 	for _, h := range homes.Homes {
-		byName[h.Username] = h
+		if h.Subject != "" {
+			bySubject[h.Subject] = h
+		}
 	}
 
 	now := time.Now()
@@ -81,7 +86,8 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 			roleLimits(&row, set, limit)
 		}
 		row.Own = ownHomeLimit(r, b.SubjectID, target, limit.Name, now)
-		if h, ok := byName[b.Username]; ok {
+		if h, ok := bySubject[b.SubjectID]; ok {
+			row.Username = h.Username // the account's own name now
 			row.Home = h.Home
 			if homes.UsageRead {
 				used, quota := h.UsedBytes, h.QuotaBytes

@@ -3,6 +3,17 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Attribution everywhere a row is an account (slice 7t-3, 15 Nov 2026)
+
+Still major 2 before its release. `/subjects` `conflicts` is now required
+(`[]` when none, a served copy included): it is how a reply says it carries
+attribution, and Syndra concludes nothing from one without it, since every
+binding would read as deleted. `GET /homes` rows carry `subject` from the
+same attribution as `/subjects` (`profiles/storage/homes.json`), and its
+500 `STORE_UNREADABLE` is declared in `openapi.yaml`. Fixtures:
+`subjects_stale.json` and `subjects_cooldown.json` gain `conflicts: []`,
+`homes.json` a bound row's `subject`.
+
 ## The add-on says whose account is whose (slice 7t-2, 15 Nov 2026)
 
 A change to major 2 before its release, not a new major or a feature (no

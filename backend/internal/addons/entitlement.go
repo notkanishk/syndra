@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 )
 
 // The entitlement leg of the transport (design §4).
@@ -132,6 +133,14 @@ type applyWire struct {
 	Fingerprint string                     `json:"fingerprint"`
 	Observed    map[string]json.RawMessage `json:"observed"`
 	Unverified  bool                       `json:"unverified"`
+}
+
+// ApplyWindow is the longest a claimed apply's calls to its add-on can run: a
+// system-initiated row is planned again (one /plan) and then applied (one
+// /apply), each sent addonAttempts times under callTimeout. Past it, every
+// call a claimed row made has ended, landed or not.
+func ApplyWindow() time.Duration {
+	return 2 * time.Duration(addonAttempts) * callTimeout
 }
 
 // CodePlanStale is the add-on refusing because live state no longer matches the

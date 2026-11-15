@@ -326,7 +326,7 @@ func (res *DrainResult) settleFailure(id, step string, err error) {
 }
 
 // unreachedWhy is why an unreached row waits, in words true of its code and in the copy
-// guide's voice: the system by its name (system, addons.SystemName), never "the target".
+// guide's voice: the system by its name (system, addons.SystemNameOf), never "the target".
 // TARGET_CHANGED is unreached like TARGET_UNREACHABLE (addons.classifyStatus, one path); only
 // the reason differs. It lands in last_error, which the pages show.
 func unreachedWhy(system string, resp addons.ApplyResponse) string {
@@ -356,7 +356,13 @@ func refusalReason(system string, resp addons.ApplyResponse) string {
 	if words := addonWords(resp.Detail, resp.Consequence); words != "" {
 		return words
 	}
-	return fmt.Sprintf("%s gave no reason (status %d).", system, resp.Status)
+	return noReason(system)
+}
+
+// noReason is a refusal the add-on gave no words for. Never the HTTP status
+// (copy guide §8): the page that shows it adds the next step.
+func noReason(system string) string {
+	return system + " gave no reason."
 }
 
 // addonWords is an add-on's refusal as it said it: what happened, then what to
@@ -374,6 +380,20 @@ func addonWords(detail, next string) string {
 // add-on's words, and the next sweep raises it again.
 func raiseConflict(ctx context.Context, target, subject string, conflict *addons.BindingConflict) {
 	if conflict == nil {
+		return
+	}
+	// Only a subject with a binding on the target. An apply for one without is
+	// a create, and its conflict (the name it would be made under is taken) is
+	// no binding's: it is never in /subjects' conflicts, so the sweep would
+	// never close it, and `unbound` would release nothing, so it would loop.
+	// That refusal keeps its own path: the refused row and the add-on's words.
+	// The backend's mirror answers which; one it lacks the next sweep raises
+	// from /subjects.
+	if _, bound, err := getBinding(ctx, target, subject); err != nil || !bound {
+		if err != nil {
+			log.Printf("[ADDON-DRAIN] could not read %s's binding on %s; the next sweep raises its conflict: %v",
+				subject, target, err)
+		}
 		return
 	}
 	report, err := json.Marshal(addons.SubjectConflict{Subject: subject, BindingConflict: *conflict})
@@ -451,7 +471,7 @@ func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.Entitlemen
 		raiseConflict(ctx, intent.Target, intent.SubjectID, out.Conflict)
 		reason := addonWords(out.Detail, out.Consequence)
 		if reason == "" {
-			reason = systemName(ctx, intent.Target) + " gave no reason."
+			reason = noReason(systemName(ctx, intent.Target))
 		}
 		if err := markTargetRefused(ctx, intent.OutboxID, reason); err != nil {
 			res.settleFailure(intent.OutboxID, "mark failed", err)

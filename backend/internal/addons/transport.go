@@ -505,6 +505,11 @@ const (
 // differ where a person is told (handlers).
 const CodeTargetChanged = "TARGET_CHANGED"
 
+// CodeStoreUnreadable is the add-on's own local store failing to read: the
+// add-on answered, its records failed, and the target may be fine (the drift
+// sweep's read_refused).
+const CodeStoreUnreadable = "STORE_UNREADABLE"
+
 // refusalOf is a refusal's code and what it names, in one decode: the
 // problem's `code` (contract 2), else a contract-1 add-on's `error`. The
 // fallback is for classification only and only until the next major: a

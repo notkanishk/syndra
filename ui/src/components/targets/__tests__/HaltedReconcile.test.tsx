@@ -127,4 +127,16 @@ describe("a reconcile pass that halted", () => {
     expect(screen.queryByText(/once it is reachable/)).toBeNull();
     expect(screen.queryByText(/read_refused/)).toBeNull();
   });
+
+  // Without the add-on's words the reason is still said in words, never its
+  // code, with a next step true of it: a refused read is fixed, not waited out.
+  it("words a refused read with no sentence, and never as an outage", () => {
+    pass.data = { ...pass.data, reason: "read_refused", detail: undefined };
+    renderTarget();
+
+    expect(screen.getByText(/would not serve the read/)).toBeInTheDocument();
+    expect(screen.getByText(/add-on, then check again\./)).toBeInTheDocument();
+    expect(screen.queryByText(/read_refused/)).toBeNull();
+    expect(screen.queryByText(/once it is reachable/)).toBeNull();
+  });
 });

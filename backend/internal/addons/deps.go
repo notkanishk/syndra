@@ -56,4 +56,6 @@ var (
 	dbSaveTargetFieldRoles       = db.SaveTargetFieldRoles
 	dbStatsDescriptors           = db.StatsDescriptors
 	dbSaveStatsDescriptors       = db.SaveStatsDescriptors
+	// What an operator named a system (SystemNameOf).
+	dbTargetName = db.TargetName
 )

@@ -331,7 +331,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 		}},
 		{"PUT /settings/{name} reply", "setting.json", "setting.json", setting},
 		{"GET /homes", "homes.json", "profiles/storage/homes.json", HomesResponse{QuotaRead: true, Observed: Observed{TakenAt: "2026-11-10T09:30:00Z", Current: true},
-			Homes: []HomeUsage{{Username: "rey_mysterio", AccountID: "3051", Home: "/mnt/tank/homes/rey_mysterio", UsedBytes: 19756849561, QuotaBytes: 53687091200}}}},
+			Homes: []HomeUsage{{Username: "rey_mysterio", AccountID: "3051", Subject: "289471021834760193", Home: "/mnt/tank/homes/rey_mysterio", UsedBytes: 19756849561, QuotaBytes: 53687091200}}}},
 		{"POST /plan reply", "plan_response.json", "plan_response.json", PlanResponse{
 			Outcomes: []ApplyOutcome{
 				{Subject: "289471021834760193", Effect: EffectApply, Detail: "Would add fabrication.", Consequence: "In lab_makers, fabrication. Enabled, SMB on.",

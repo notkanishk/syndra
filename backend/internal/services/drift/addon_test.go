@@ -60,9 +60,16 @@ type addonReconcileHarness struct {
 	waited []time.Duration
 	// inFlight is who had an apply in flight since the read began, and
 	// inFlightSince what the pass asked it from.
-	inFlight      map[string]bool
-	inFlightSince time.Time
+	inFlight       map[string]bool
+	inFlightSince  time.Time
+	inFlightWindow time.Duration
+	// closedOutside is each whole-read close of the conflicts a read no longer
+	// lists, as "outcome:kept,subjects".
+	closedOutside []string
 }
+
+// dbClock is the database's clock in these tests, apart from this process's.
+var dbClock = time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)
 
 func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 	t.Helper()
@@ -72,11 +79,16 @@ func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 	origBases := listMergeBases
 	origMappings, origHolders, origPending := listMappings, mappingHolders, pendingApply
 	t.Cleanup(func() { listMappings, mappingHolders, pendingApply = origMappings, origHolders, origPending })
-	origInFlight := appliesInFlight
-	t.Cleanup(func() { appliesInFlight = origInFlight })
-	appliesInFlight = func(_ context.Context, _ string, since time.Time) (map[string]bool, error) {
-		h.inFlightSince = since
+	origInFlight, origNow, origOutside := appliesInFlight, databaseNow, clearFindingsOutside
+	t.Cleanup(func() { appliesInFlight, databaseNow, clearFindingsOutside = origInFlight, origNow, origOutside })
+	databaseNow = func(context.Context) (time.Time, error) { return dbClock, nil }
+	appliesInFlight = func(_ context.Context, _ string, since time.Time, window time.Duration) (map[string]bool, error) {
+		h.inFlightSince, h.inFlightWindow = since, window
 		return h.inFlight, nil
+	}
+	clearFindingsOutside = func(_ context.Context, _, outcome string, keep []string, _ string) (int64, error) {
+		h.closedOutside = append(h.closedOutside, outcome+":"+strings.Join(keep, ","))
+		return 0, nil
 	}
 	listMappings = func(context.Context, string) ([]db.RoleMapping, error) { return h.mappings, nil }
 	mappingHolders = func(_ context.Context, project, role string) ([]string, error) {

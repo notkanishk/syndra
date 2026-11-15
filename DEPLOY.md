@@ -630,6 +630,16 @@ The copy is the same fallback the workflow keeps (never `mutations.log`); a
 contract-2 add-on writes its store additively, so a rollback normally needs no
 restore from it.
 
+**The add-on and the backend go out from one commit, never the backend alone
+(add-on contract 7t-3).** A backend from 7t-3 on attributes every account by
+the `subject` the add-on puts on its `/subjects` rows and reads a binding on
+no row and in no conflict as a deleted account. An add-on from before 7t-2
+(or a contract-1 add-on after a rollback) says neither, so the backend
+refuses to conclude anything from its reply (no `conflicts`: the read is not
+usable) and every drift pass stops as a stale read until the add-on catches
+up. The workflow and the commands above ship both from one commit; a
+by-hand deploy of the backend alone is the order this guards against.
+
 If a migration must be undone, restore the matching
 `~/syndra-backups/pre-deploy-*.dump` with `pg_restore --clean` into the
 postgres container; a migration that only adds (as 000088 does) needs only the

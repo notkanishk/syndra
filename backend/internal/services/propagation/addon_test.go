@@ -43,6 +43,8 @@ type addonHarness struct {
 	// findings is the standing findings the drain raised (a blocked apply's
 	// binding conflict, 7t-3).
 	findings []db.MergeFinding
+	// bound is the backend's recorded bindings by subject.
+	bound map[string]db.TargetBinding
 }
 
 func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarness {
@@ -78,6 +80,11 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 		return nil
 	}))
 	t.Cleanup(swap(&systemName, func(context.Context, string) string { return "TrueNAS" }))
+	// Nobody has a binding unless a test says so: an apply is then a create.
+	t.Cleanup(swap(&getBinding, func(_ context.Context, target, subject string) (db.TargetBinding, bool, error) {
+		b, ok := h.bound[subject]
+		return b, ok, nil
+	}))
 	t.Cleanup(swap(&saveMergeBase, func(_ context.Context, b db.MergeBase) error {
 		h.bases = append(h.bases, b)
 		return nil

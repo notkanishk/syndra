@@ -101,47 +101,160 @@ func TestLiveABindingConflictTakesTheAccountSlotAndClosesAgreed(t *testing.T) {
 	}
 }
 
-// What the sweep asks before concluding an account deleted: applies claimed
-// and unsettled (in_flight, also where a lost answer stays), and applies
-// settled since the read began. Not one settled before it, not one only
-// queued, not another target's, not a Zitadel-shaped row.
+// What the sweep asks before concluding an account deleted, on the database's
+// clock: applies settled since the read began, and applies claimed and not
+// settled that started within the window a claimed apply's calls can run. Not
+// one settled before the read, not one only queued, not another target's, not
+// a Zitadel-shaped row, and not an in_flight row older than the window (a
+// drain that crashed mid-row): that one can no longer land, and must not hide
+// a real deletion for ever.
 func TestLiveAppliesInFlightSince(t *testing.T) {
 	ctx := liveDB(t)
 	seedAddonTarget(t, ctx)
-	since := time.Now().Add(-time.Minute)
-	seed := func(op, user, target, status string, completedAgo time.Duration) {
+	since, err := DatabaseNow(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const window = time.Minute
+	seed := func(op, user, target, status string, started, completed *time.Time) {
 		t.Helper()
 		key, err := newOutboxIdempotencyKey()
 		if err != nil {
 			t.Fatal(err)
 		}
-		var completed any
-		if completedAgo > 0 {
-			completed = time.Now().Add(-completedAgo)
-		}
 		if _, err := PG.Exec(ctx, `
 			INSERT INTO propagation_outbox
 				(op_type, user_id, project_id, role_keys, payload_json, idempotency_key,
-				 initiated_by, source, target, status, completed_at)
+				 initiated_by, source, target, status, started_at, completed_at)
 			VALUES ($1, $2, CASE WHEN $1 = 'apply' THEN NULL ELSE 'p1' END,
 			        CASE WHEN $1 = 'apply' THEN NULL ELSE ARRAY['community'] END,
-			        '{}', $3, 'tester', 'direct', $4, $5, $6)`,
-			op, user, key, target, status, completed); err != nil {
+			        '{}', $3, 'tester', 'direct', $4, $5, $6, $7)`,
+			op, user, key, target, status, started, completed); err != nil {
 			t.Fatalf("seed %s %s: %v", user, status, err)
 		}
 	}
-	seed("apply", "claimed", "truenas", "in_flight", 0)
-	seed("apply", "settled-during", "truenas", "applied", time.Second)
-	seed("apply", "settled-before", "truenas", "applied", time.Hour)
-	seed("apply", "queued", "truenas", "pending", 0)
-	seed("add", "zitadel-shaped", "zitadel", "in_flight", 0)
+	at := func(d time.Duration) *time.Time { v := since.Add(d); return &v }
+	seed("apply", "claimed", "truenas", "in_flight", at(-30*time.Second), nil)
+	seed("apply", "orphaned", "truenas", "in_flight", at(-time.Hour), nil)
+	seed("apply", "settled-during", "truenas", "applied", at(-time.Second), at(time.Second))
+	seed("apply", "settled-before", "truenas", "applied", at(-2*time.Hour), at(-time.Hour))
+	seed("apply", "queued", "truenas", "pending", nil, nil)
+	seed("add", "zitadel-shaped", "zitadel", "in_flight", at(-time.Second), nil)
 
-	got, err := AppliesInFlightSince(ctx, "truenas", since)
+	got, err := AppliesInFlightSince(ctx, "truenas", since, window)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 2 || !got["claimed"] || !got["settled-during"] {
 		t.Fatalf("want claimed and settled-during, got %v", got)
+	}
+}
+
+// A new outcome in a standing finding's slot is a new question (7t-3): a
+// deleted_upstream decided "re-provision" and then replaced by a
+// binding_conflict is undecided, detected anew, and unbound resolves it. The
+// same outcome raised again keeps its decision and its age.
+func TestLiveANewOutcomeInTheSlotDropsTheOldDecision(t *testing.T) {
+	ctx := liveDB(t)
+	seedAddonTarget(t, ctx)
+	cleanMergeFindings(t, ctx)
+
+	if err := RecordMergeFinding(ctx, MergeFinding{Target: "truenas", SubjectID: "sub-1", Outcome: "deleted_upstream"}); err != nil {
+		t.Fatal(err)
+	}
+	first := openFindings(t, ctx, "sub-1")[0]
+	if _, err := RecordMergeDecision(ctx, first.ID, "op_1", ResolutionReprovisioned, "they still need it"); err != nil {
+		t.Fatal(err)
+	}
+	// Raised again as itself: the decision and the age stand.
+	if err := RecordMergeFinding(ctx, MergeFinding{Target: "truenas", SubjectID: "sub-1", Outcome: "deleted_upstream"}); err != nil {
+		t.Fatal(err)
+	}
+	if again := openFindings(t, ctx, "sub-1")[0]; again.Decision != ResolutionReprovisioned || !again.DetectedAt.Equal(first.DetectedAt) {
+		t.Fatalf("the same question keeps its answer and its age: %+v", again)
+	}
+
+	if err := RecordMergeFinding(ctx, MergeFinding{Target: "truenas", SubjectID: "sub-1", Outcome: "binding_conflict",
+		Theirs: []byte(`{"subject":"sub-1","reason":"number_held"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	now := openFindings(t, ctx, "sub-1")
+	if len(now) != 1 || now[0].ID != first.ID || now[0].Outcome != "binding_conflict" {
+		t.Fatalf("want the one slot, now a binding_conflict: %+v", now)
+	}
+	if now[0].Decision != "" || now[0].DecidedBy != "" || now[0].DecidedAt != nil || now[0].DecisionReason != "" ||
+		!now[0].DetectedAt.After(first.DetectedAt) {
+		t.Fatalf("a new outcome is undecided and detected now: %+v", now[0])
+	}
+	if _, err := RecordMergeDecision(ctx, now[0].ID, "op_2", ResolutionUnbound, "not theirs"); err != nil {
+		t.Fatalf("unbound must be decidable on it: %v", err)
+	}
+	if _, err := ResolveMergeFinding(ctx, now[0].ID, "op_2", ResolutionUnbound); err != nil {
+		t.Fatalf("unbound must resolve it: %v", err)
+	}
+	if open := openFindings(t, ctx, "sub-1"); len(open) != 0 {
+		t.Fatalf("resolved: %+v", open)
+	}
+}
+
+// The sweep's close for conflicts the add-on stopped listing: every standing
+// binding_conflict on the target outside the kept subjects closes (agreed, or
+// what was decided, by whoever decided it); the kept ones, other outcomes and
+// other targets stand. An empty keep closes them all.
+func TestLiveClearMergeFindingsOutside(t *testing.T) {
+	ctx := liveDB(t)
+	seedAddonTarget(t, ctx)
+	cleanMergeFindings(t, ctx)
+	if _, err := PG.Exec(ctx, `INSERT INTO targets (target) VALUES ('test_7t3_other') ON CONFLICT DO NOTHING`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = PG.Exec(context.Background(), `DELETE FROM target_merge_findings WHERE target = 'test_7t3_other'`)
+		_, _ = PG.Exec(context.Background(), `DELETE FROM targets WHERE target = 'test_7t3_other'`)
+	})
+	conflict := func(target, subject string) {
+		t.Helper()
+		if err := RecordMergeFinding(ctx, MergeFinding{Target: target, SubjectID: subject, Outcome: "binding_conflict",
+			Theirs: []byte(`{"reason":"name_held"}`)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	conflict("truenas", "still")
+	conflict("truenas", "ended")
+	conflict("truenas", "decided")
+	conflict("test_7t3_other", "elsewhere")
+	if err := RecordMergeFinding(ctx, MergeFinding{Target: "truenas", SubjectID: "gone", Outcome: "deleted_upstream"}); err != nil {
+		t.Fatal(err)
+	}
+	decided := openFindings(t, ctx, "decided")[0]
+	if _, err := RecordMergeDecision(ctx, decided.ID, "op_1", ResolutionUnbound, "not theirs"); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := ClearMergeFindingsOutside(ctx, "truenas", "binding_conflict", []string{"still"}, "system:reconcile")
+	if err != nil || n != 2 {
+		t.Fatalf("want ended and decided closed, got %d (%v)", n, err)
+	}
+	for subject, open := range map[string]bool{"still": true, "ended": false, "decided": false, "gone": true} {
+		if got := len(openFindings(t, ctx, subject)) == 1; got != open {
+			t.Errorf("%s: open %t, want %t", subject, got, open)
+		}
+	}
+	var resolution, by string
+	if err := PG.QueryRow(ctx, `SELECT resolution, resolved_by FROM target_merge_findings
+		WHERE target = 'truenas' AND subject_id = 'ended'`).Scan(&resolution, &by); err != nil || resolution != ResolutionAgreed || by != "system:reconcile" {
+		t.Errorf("ended closed as %q by %q (%v), want agreed by the sweep", resolution, by, err)
+	}
+	if err := PG.QueryRow(ctx, `SELECT resolution, resolved_by FROM target_merge_findings
+		WHERE target = 'truenas' AND subject_id = 'decided'`).Scan(&resolution, &by); err != nil || resolution != ResolutionUnbound || by != "op_1" {
+		t.Errorf("decided closed as %q by %q (%v), want what op_1 decided", resolution, by, err)
+	}
+	if n, err := ClearMergeFindingsOutside(ctx, "truenas", "binding_conflict", nil, "system:reconcile"); err != nil || n != 1 {
+		t.Fatalf("an empty keep closes every one left, got %d (%v)", n, err)
+	}
+	var elsewhere int
+	if err := PG.QueryRow(ctx, `SELECT COUNT(*) FROM target_merge_findings WHERE target = 'test_7t3_other' AND resolved_at IS NULL`).Scan(&elsewhere); err != nil || elsewhere != 1 {
+		t.Errorf("another target's conflict must stand: %d (%v)", elsewhere, err)
 	}
 }
 

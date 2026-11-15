@@ -868,7 +868,14 @@ mirror holds no limits: absent in `state` is "not known".
   (`attribute` in `addons/truenas/identity_resolve.go`). An account a
   binding names in this read MUST carry that subject as `subject`; an
   account no binding names MUST NOT carry one, and the add-on's own
-  account never does. A subject MUST be on one row at most.
+  account never does. A subject MUST be on one row at most. Every other
+  read with a row per account carries the same `subject` from the same
+  attribution (`GET /homes`); Syndra matches a row to a person by it and
+  never by `username` or `account_id`.
+- `conflicts` MUST be present on every reply, `[]` when there is none, a
+  served copy included: it is how a reply says it carries attribution.
+  Syndra does not conclude anything from a reply without it, since every
+  binding would read as gone.
 - A binding that names no account in this read for any other reason than
   its account being gone MUST be listed in `conflicts`, with its `reason`
   (`v2/schema/common/binding_conflict.json`, the same shape an apply's
@@ -2325,7 +2332,10 @@ from a five-minute cache as `stale.reason: cached`, and 503
 `REACH_NEVER_READ` before its first read. `/homes` answers every home folder
 and its use against its limit, Syndra's "how much now"; `quota_read: false`
 says the limits could not be read while the folders were, a partial read and
-not a stale one.
+not a stale one. Each home carries `subject` exactly as `/subjects` would
+for that account (the same attribution over the same read; absent when no
+binding names it), and bindings that cannot be read are 500
+`STORE_UNREADABLE`, as on `/subjects`.
 
 ## 11. Worked example: the reference add-on
 

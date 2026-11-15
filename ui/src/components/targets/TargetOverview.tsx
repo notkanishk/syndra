@@ -43,7 +43,7 @@ import { TargetName } from "@/components/targets/TargetName";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
-import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
+import { formatBytes, formatClock, formatShortDate, personLine, versionLabel, whyNotChecked } from "@/lib/format";
 import { stamped, useCountdown, useRetryOnce } from "@/lib/queries/fresh";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
@@ -586,10 +586,14 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
               The check stopped before it concluded anything. {result.detail}
             </span>
           ) : result.halted ? (
+            // The reason in words (whyNotChecked), never its code, and a next
+            // step true of it: a refused read is fixed, not waited out.
             <span className="text-warn-text">
-              The check stopped before it concluded anything
-              {result.reason ? `: ${result.reason}` : ""}. Nothing was learned about {name}; try
-              again once it is reachable.
+              The check stopped before it concluded anything.{" "}
+              {result.reason ? `${whyNotChecked(result.reason)} ` : ""}
+              {result.reason === "read_refused"
+                ? `Check ${name}'s add-on, then check again.`
+                : `Nothing was learned about ${name}; try again once it is reachable.`}
             </span>
           ) : (
             reconcileLine(result.bound, result.queued, result.stale?.length ?? 0, name)
@@ -625,11 +629,11 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
         </CardRow>
       )}
 
-      {result && !result.current && !result.detail && !waiting && !skipped && (
+      {result && !result.current && !result.halted && !waiting && !skipped && (
         // A pass that concluded nothing must not read as a clean one.
         <CardRow>
           <span className="text-[13.5px] text-warn-text">
-            Nothing was concluded: {result.reason || `${name} could not be read`}.
+            Nothing was concluded: {result.reason ? whyNotChecked(result.reason) : `${name} could not be read.`}
           </span>
         </CardRow>
       )}

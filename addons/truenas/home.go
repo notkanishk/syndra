@@ -274,8 +274,12 @@ func homePlacesIn(read shareRead) (paths []string, labels map[string]string) {
 // HomeUsage is one account's home folder: where it is, what is saved in it, and
 // the limit TrueNAS holds for it. QuotaBytes 0 is no limit set.
 type HomeUsage struct {
-	Username   string `json:"username"`
-	AccountID  string `json:"account_id"`
+	Username  string `json:"username"`
+	AccountID string `json:"account_id"`
+	// Subject is the subject this account is bound to, by the attribution
+	// /subjects gives (attribute): Syndra matches a home to a person by it,
+	// never by name. Absent when no binding names the account.
+	Subject    string `json:"subject,omitempty"`
 	Home       string `json:"home"`
 	UsedBytes  int64  `json:"used_bytes"`
 	QuotaBytes int64  `json:"quota_bytes,omitempty"`
@@ -305,6 +309,12 @@ func (s *server) handleHomes(w http.ResponseWriter, r *http.Request, _ []byte) {
 	if writeCooldown(w, err) {
 		return
 	}
+	if errors.Is(err, errStoreUnreadable) {
+		// The bindings each home is attributed by: the add-on's records, not
+		// the NAS, failed.
+		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, subjectsStoreUnreadable, nil)
+		return
+	}
 	if err != nil {
 		writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's accounts or shares could not be read.", nil)
 		return
@@ -325,13 +335,18 @@ func (s *server) readHomes() (HomesResponse, error) {
 	if err != nil {
 		return HomesResponse{}, err
 	}
+	// Whose each home is: the one attribution /subjects serves, over this read.
+	at, err := s.attribute(snap.Subjects)
+	if err != nil {
+		return HomesResponse{}, unreadable(err)
+	}
 	out := HomesResponse{Homes: []HomeUsage{}, QuotaRead: true}
 	quotas := map[string]map[int64]PlaceUsage{}
 	for _, sub := range snap.Subjects {
 		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
 			continue
 		}
-		h := HomeUsage{Username: sub.Username, AccountID: accountID(sub.UID), Home: sub.Home}
+		h := HomeUsage{Username: sub.Username, AccountID: accountID(sub.UID), Subject: at.subjectOf[rowOf(&sub)], Home: sub.Home}
 		// The limit is a user quota on the dataset holding the home's parent,
 		// the same one convergeQuota sets.
 		dataset := datasetOf(path.Dir(sub.Home))

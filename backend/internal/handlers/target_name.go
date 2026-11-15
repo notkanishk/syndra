@@ -19,24 +19,10 @@ import (
 // names. systemName is the one place the name is decided, and every roster
 // (GET /targets, GET /me/targets, a person's systems) carries what it says.
 
-// systemName is the operator's name for a target, else its accepted
-// manifest's product (saved at acceptance, so it holds while the add-on is
-// down), else its id title-cased (the same rule the UI's targetLabel draws a
-// row with before any roster has loaded); from says which. The rule is
-// addons.SystemName; this reads its two values.
+// systemName is addons.SystemNameOf (the operator's name, else the accepted
+// product, else the id) over this package's seams for the two reads.
 func systemName(ctx context.Context, target string) (name, from string) {
-	stored, err := dbTargetName(ctx, target)
-	if err != nil {
-		// Non-fatal: a page that cannot read the name still has a true one.
-		log.Printf("[TARGETS] could not read %s's name: %v (non-fatal)", target, err)
-	}
-	product := ""
-	if stored == "" {
-		if shape, err := addonsAcceptedShape(ctx, target); err == nil {
-			product = shape.Product
-		}
-	}
-	return addons.SystemName(stored, product, target)
+	return addons.SystemNameFrom(ctx, target, dbTargetName, addonsAcceptedShape)
 }
 
 type targetNameRequest struct {

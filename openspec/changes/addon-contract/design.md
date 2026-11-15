@@ -1371,7 +1371,8 @@ that row. Since 7t-3 it is also a standing finding (below); rendering it is 7t-4
 **The backend's half (7t-3).** The backend never works out attribution itself. A `/subjects` row is
 a recorded binding's account exactly when the row's `subject` is that binding's subject; nothing is
 matched by `account_id` or name (`unmanaged`: the rows with no `subject`; `statesBySubject`: the
-state compared; `partitionByPresence`; the inventory's standing). `target_account_bindings` stays the
+state compared; `partitionByPresence`; the inventory's standing; the dormant list; and `/homes`,
+whose rows carry `subject` from the same `attribute()`). `target_account_bindings` stays the
 backend's mirror for the outbox, Home and the UI, written from apply results and adoptions, and is
 never consulted to attribute a row. Per recorded binding the sweep reads one of three states off one
 reply: **bound** (live, classified and planned as before), **conflict** (in `conflicts`), or
@@ -1388,27 +1389,35 @@ reply: **bound** (live, classified and planned as before), **conflict** (in `con
   **Raised too** by the drain (pending owner Q6): a rejected apply, or a system row's re-plan that
   blocks, carrying `conflict` records the same finding through the same rule (`raiseConflict`:
   `merge.Conflicted`), so it shows under Waiting on you at once; the sweep then refreshes that row.
-  **Closed** `agreed` by the sweep's account-slot clear (`persistFindings`) the first pass the add-on
-  attributes the subject's own row again; if the conflict ends with the account gone, the same slot
-  becomes `deleted_upstream`. **Resolved** only by `unbound` (stop tracking: `account.release`, the
+  Only for a subject with a binding on the target (the backend's mirror): a create blocked because its
+  name is taken is no binding's conflict, never in `/subjects`, and keeps its refused row and words.
+  **Closed** `agreed` (or as decided) on every whole read for each subject the add-on no longer lists
+  (`db.ClearMergeFindingsOutside`, before the stale loop), and by the account-slot clear
+  (`persistFindings`) when the subject's own row is back; if the conflict ends with the account gone,
+  the slot becomes a new `deleted_upstream`. A new outcome in a slot drops any decision about the old
+  one (`RecordMergeFinding`). **Resolved** only by `unbound` (stop tracking: `account.release`, the
   add-on's own next step; pending owner Q5); `reprovisioned`, `keep_ours` and `take_theirs` are
   refused (`resolutionFits`). Adopting the holder stays in its one place, Not created by Syndra.
 - **An apply in flight.** The add-on reads the app before its bindings, so an apply landing between
   the two leaves its subject on no row and in no conflict for one read. The sweep asks which subjects
-  had an apply in flight since the read began (`db.AppliesInFlightSince`: `in_flight`, which is also
-  where a lost answer stays, or settled after the read began) and concludes nothing about them that
-  pass: never `deleted_upstream`.
+  had an apply in flight since the read began (`db.AppliesInFlightSince`: settled after the read
+  began, or `in_flight` and started within `addons.ApplyWindow()` of it, so a row a crashed drain
+  left never hides a deletion; the read's start is the database's clock) and concludes nothing about
+  them that pass: never `deleted_upstream`.
 - **The drain keeps the add-on's words.** `applyWire` decodes `consequence` and `conflict`. A refused
   row's `last_error` is the add-on's `detail` and then its `consequence` (the next step), as written,
   for the pending page to show after "{system} refused it:". The requeue reasons name the system by
-  its name (`addons.SystemName`, the one rule the pages use): "{system} could not be reached",
+  its name (`addons.SystemNameOf`, the one path the pages use): "{system} could not be reached",
   "{system} changed while Syndra was reading it", "{system} is not taking changes right now".
-- **A refused read is not an outage.** A `/subjects` the add-on answered with its own code (500
-  `STORE_UNREADABLE`: its records failed while TrueNAS may be fine; a rejected key) is `read_refused`
-  on the target's record and on the sweep's and the inventory's result, which carry the add-on's
-  sentence and next step as `detail` (`readFailure`); only an unanswered read, or one answered with an
-  unreached code (`TARGET_UNREACHABLE`, `TARGET_CHANGED`, 429), is `target_unreachable`. The System
-  page's Check now line shows that sentence instead of "try again once it is reachable".
+- **A refused read is not an outage.** A `/subjects` answered 500 `STORE_UNREADABLE` (the add-on's
+  records failed while TrueNAS may be fine) is `read_refused` on the target's record and on the
+  sweep's and the inventory's result, which carry the add-on's sentence and next step as `detail`
+  (`readFailure`); every other failure (`NO_CURRENT_READ`, `TARGET_UNREADABLE`, no answer) is
+  `target_unreachable`. The System page's Check now line shows that sentence, or the reason in words
+  with a next step true of it, never the reason's code.
+- **Deploy order.** `conflicts` is required on `/subjects`; a reply without it (an add-on before
+  7t-2, or contract 1) is not usable, so a backend deployed ahead of its add-on stops drift as a stale
+  read rather than reading every binding as deleted. Both ship from one commit.
 
 ### 9.5 Identity
 

@@ -227,8 +227,12 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	//
 	// readBegan is taken before the first read, so it is never later than the
 	// read concluded from: what was in flight since then (appliesInFlight)
-	// covers every apply that could have landed mid-read.
-	readBegan := time.Now()
+	// covers every apply that could have landed mid-read. On the database's
+	// clock, which the outbox's started_at and completed_at are written on.
+	readBegan, err := databaseNow(ctx)
+	if err != nil {
+		return res, err
+	}
 	read := addonSubjects(ctx, target, true)
 	if retry, cooled := read.CooledDown(); cooled && patient && waitOut(ctx, sweepWait(target, retry)) {
 		read = addonSubjects(ctx, target, true)
@@ -269,7 +273,7 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	// Asked after the read, of everything since it began: an apply that landed
 	// between the add-on's read of the app and its read of its bindings leaves
 	// its subject on no row and in no conflict, and is not a deleted account.
-	inFlight, err := appliesInFlight(ctx, target, readBegan)
+	inFlight, err := appliesInFlight(ctx, target, readBegan, applyWindow())
 	if err != nil {
 		return res, fmt.Errorf("read applies in flight on %s: %w", target, err)
 	}
@@ -286,7 +290,7 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	// offered a re-create. Every one the add-on reports, recorded here or not:
 	// which subject a binding is for is the add-on's to say.
 	unrecorded := 0
-	conflicted, findings := raiseConflicts(ctx, target, read.Conflicts, &unrecorded)
+	conflicted, findings := raiseConflicts(ctx, target, read.Conflicts, !read.Truncated, &unrecorded)
 
 	// A binding whose account is not on the target is not a convergence, it is
 	// a finding.
@@ -395,14 +399,14 @@ func halt(ctx context.Context, res AddonReconcileResult, reason, detail string) 
 // readFailure is why a read that did not succeed concluded nothing, with the
 // add-on's own sentence when it refused it.
 //
-// An add-on that answered in its own code refused the read: STORE_UNREADABLE
-// is its records failing while the target may be fine, and a rejected key is
-// the same kind of thing. That is read_refused, something to fix rather than
-// wait out, and its sentence carries the next step. One that did not answer,
-// or answered that it could not reach the target (an unreached outcome,
-// addons.classifyStatus), is target_unreachable.
+// STORE_UNREADABLE is the add-on's own records failing while the target may
+// be fine: read_refused, something to fix rather than wait out, and the
+// add-on's sentence carries the next step (check its storage). Every other
+// failure, answered or not (NO_CURRENT_READ, TARGET_UNREADABLE, a timeout),
+// is the target not read: target_unreachable, which the pages word with the
+// system's name and their own next step.
 func readFailure(read addons.SubjectsResult) (reason, detail string) {
-	if read.Code != "" && read.Outcome != addons.OutcomeUnreached {
+	if read.Code == addons.CodeStoreUnreadable {
 		return db.UnreconciledReadRefused, read.Detail
 	}
 	return db.UnreconciledUnreachable, ""
@@ -413,14 +417,26 @@ func readFailure(read addons.SubjectsResult) (reason, detail string) {
 // add-on's report (reason, holder, detail, next) as theirs, and returns the
 // subjects it names: they are neither planned nor concluded absent this pass.
 //
-// Closed by the next pass that sees the subject's own row (persistFindings
-// clears the account slot), refreshed while it stands (one row per subject,
-// RecordMergeFinding), and replaced in the same slot by deleted_upstream if
-// the conflict ends with the account gone.
+// Refreshed while it stands (one row per subject, RecordMergeFinding). On a
+// whole read, every standing binding_conflict whose subject this read does
+// not list is closed (`agreed`, or what was decided): the add-on stopped
+// reporting it, whether or not the subject has a binding recorded here.
+// Before the stale loop, so a conflict that ended with the account gone is
+// closed and then raised again as a new deleted_upstream.
 func raiseConflicts(ctx context.Context, target string, conflicts []addons.SubjectConflict,
-	unrecorded *int) (map[string]bool, []merge.SubjectFinding) {
+	whole bool, unrecorded *int) (map[string]bool, []merge.SubjectFinding) {
 	conflicted := make(map[string]bool, len(conflicts))
 	findings := make([]merge.SubjectFinding, 0, len(conflicts))
+	if whole {
+		keep := make([]string, 0, len(conflicts))
+		for _, c := range conflicts {
+			keep = append(keep, c.Subject)
+		}
+		if _, err := clearFindingsOutside(ctx, target, string(merge.BindingConflict), keep, reconcileActor); err != nil {
+			log.Printf("[ADDON-RECONCILE] %s: could not close the conflicts it no longer reports: %v", target, err)
+			*unrecorded++
+		}
+	}
 	for _, c := range conflicts {
 		conflicted[c.Subject] = true
 		report, err := json.Marshal(c)
@@ -773,10 +789,14 @@ func partitionByPresence(bindings []db.TargetBinding, accounts []addons.TargetAc
 	}
 	for _, b := range bindings {
 		switch {
+		case conflicted[b.SubjectID]:
+			// A finding of its own, first: a reply that both attributed a row
+			// to the subject and listed it in conflict contradicts itself
+			// (the contract forbids it), and the conflict is the safe reading.
 		case bound[b.SubjectID]:
 			live = append(live, b)
-		case conflicted[b.SubjectID], inFlight[b.SubjectID]:
-			// Neither live nor stale: a finding of its own, or unknown this read.
+		case inFlight[b.SubjectID]:
+			// Unknown this read.
 		default:
 			stale = append(stale, StaleBinding{SubjectID: b.SubjectID, Username: b.Username, AccountID: b.AccountID})
 		}

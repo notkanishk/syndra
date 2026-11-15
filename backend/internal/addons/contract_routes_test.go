@@ -267,11 +267,17 @@ func TestAnAbsentReplyFieldMakesTheReadUnusable(t *testing.T) {
 			t.Errorf("a current plan with no readable taken_at was issued: %+v", r)
 		}
 	}
-	for _, key := range []string{"current", "truncated"} {
+	// conflicts too (7t-3): a reply without it is from an add-on that says no
+	// attribution, and every binding would read as deleted.
+	for _, key := range []string{"current", "truncated", "conflicts"} {
 		addonServing(t, edit("subjects.json", drop(key)))
 		if r := Subjects(context.Background(), "truenas", false); r.Usable() {
 			t.Errorf("subjects without %s is usable: %+v", key, r)
 		}
+	}
+	addonServing(t, edit("subjects.json", func(d map[string]any) { d["conflicts"] = []any{} }))
+	if r := Subjects(context.Background(), "truenas", false); !r.Usable() {
+		t.Errorf("subjects with no conflict, said, is usable: %+v", r)
 	}
 	addonServing(t, edit("subjects.json", func(d map[string]any) {
 		delete(d["subjects"].([]any)[0].(map[string]any)["standing"].(map[string]any), "usable")
@@ -426,7 +432,7 @@ func TestSettingsAndHomesRepliesLand(t *testing.T) {
 	if got.method != http.MethodGet || got.path != "/homes" || !h.Read || !h.UsageRead || len(h.Homes) != 1 {
 		t.Fatalf("homes: sent %s %s, %+v", got.method, got.path, h)
 	}
-	if u := h.Homes[0]; u.Username != "rey_mysterio" || u.AccountID != "3051" || u.Home == "" || u.UsedBytes != 19756849561 || u.QuotaBytes != 53687091200 {
+	if u := h.Homes[0]; u.Username != "rey_mysterio" || u.AccountID != "3051" || u.Subject != "289471021834760193" || u.Home == "" || u.UsedBytes != 19756849561 || u.QuotaBytes != 53687091200 {
 		t.Errorf("a home did not land: %+v", u)
 	}
 }

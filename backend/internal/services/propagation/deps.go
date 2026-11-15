@@ -259,19 +259,14 @@ var (
 	// standing finding the drift sweep raises from /subjects (7t-3), so the
 	// operator sees it now rather than at the next sweep.
 	saveMergeFinding = db.RecordMergeFinding
+	// Whether the subject has a binding on the target, which decides whether a
+	// conflict is a binding's (a finding) or a create's (the row alone).
+	getBinding = db.GetTargetBinding
 
-	// What the system is called, for the sentences the drain writes on a row
-	// (addons.SystemName's rule over the operator's name and the accepted
-	// product). Read failures fall to the next value, never to "the target".
+	// What the system is called, for the sentences the drain writes on a row:
+	// addons.SystemNameOf, the one path the pages use too.
 	systemName = func(ctx context.Context, target string) string {
-		operator, _ := db.TargetName(ctx, target)
-		product := ""
-		if operator == "" {
-			if shape, err := addons.AcceptedShape(ctx, target); err == nil {
-				product = shape.Product
-			}
-		}
-		name, _ := addons.SystemName(operator, product, target)
+		name, _ := addons.SystemNameOf(ctx, target)
 		return name
 	}
 

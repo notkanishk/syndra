@@ -464,12 +464,14 @@ func (r SubjectsResult) Usable() bool {
 // does not say it is current is not, and one that does not say it is complete
 // is truncated, so neither can be concluded from.
 type subjectsWire struct {
-	Subjects  []TargetAccount   `json:"subjects"`
-	Current   *bool             `json:"current"`
-	TakenAt   *string           `json:"taken_at"`
-	Truncated *bool             `json:"truncated"`
-	Stale     *Stale            `json:"stale"`
-	Conflicts []SubjectConflict `json:"conflicts"`
+	Subjects  []TargetAccount `json:"subjects"`
+	Current   *bool           `json:"current"`
+	TakenAt   *string         `json:"taken_at"`
+	Truncated *bool           `json:"truncated"`
+	Stale     *Stale          `json:"stale"`
+	// Conflicts is a pointer for the same reason: required since 7t-2, so a
+	// reply without it is from an add-on that says no attribution at all.
+	Conflicts *[]SubjectConflict `json:"conflicts"`
 }
 
 // Subjects reads every account the target holds.
@@ -504,13 +506,26 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 		out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode subjects: %w", target, err)
 		return out
 	}
-	out.Accounts, out.Stale, out.Conflicts = decoded.Subjects, decoded.Stale, decoded.Conflicts
+	out.Accounts, out.Stale = decoded.Subjects, decoded.Stale
 	out.Current = decoded.Current != nil && *decoded.Current
 	out.Truncated = decoded.Truncated == nil || *decoded.Truncated
 	if err := staleInvariant(resp.Body); err != nil {
 		// Two answers about one read: served, labelled, never concluded from.
 		log.Printf("[ADDON] %s/subjects: %v; the read is not usable", target, err)
 		out.Current, out.Truncated = false, true
+	}
+	if decoded.Conflicts == nil {
+		// An add-on from before attribution (contract before 7t-2, or a
+		// rollback to contract 1): no row carries `subject`, so every binding
+		// would read as on no row and in no conflict, which Syndra concludes
+		// is a deleted account. Served, labelled, never concluded from, the
+		// same as any reply that breaks the contract's invariants. This is
+		// also what makes the add-on's deploy before this backend a matter of
+		// order, not of safety.
+		log.Printf("[ADDON] %s/subjects carries no conflicts, so no attribution; the read is not usable", target)
+		out.Current, out.Truncated = false, true
+	} else {
+		out.Conflicts = *decoded.Conflicts
 	}
 	// Every subject is an account, so every one carries standing.usable; one
 	// that does not makes the read one nothing may be concluded from.
@@ -949,8 +964,11 @@ func settingsCall(ctx context.Context, target, method, path string, body []byte)
 
 // HomeUsage is one account's home folder on a target, as the target read it.
 type HomeUsage struct {
-	Username   string `json:"username"`
-	AccountID  string `json:"account_id"`
+	Username  string `json:"username"`
+	AccountID string `json:"account_id"`
+	// Subject is whose home it is, by the add-on's attribution (as on
+	// /subjects): what a home is matched to a person by, never the name.
+	Subject    string `json:"subject,omitempty"`
 	Home       string `json:"home"`
 	UsedBytes  int64  `json:"used_bytes"`
 	QuotaBytes int64  `json:"quota_bytes,omitempty"`
