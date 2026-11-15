@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, request } from "@/lib/api-client";
 import type { EntitlementField } from "@/lib/fields";
@@ -421,14 +421,37 @@ export interface GoverningPolicy {
   holders: number;
 }
 
+/** The one read of a target's standing findings: its key and its fetch, for every reader. */
+const mergeFindingsQuery = (target: string | undefined) => ({
+  queryKey: ["targets", target, "merge-findings"],
+  queryFn: async () =>
+    (await request<{ findings: MergeFinding[] }>(`/targets/${target}/merge-findings`)).findings ?? [],
+  enabled: Boolean(target),
+});
+
 export function useMergeFindings(target: string | undefined) {
-  return useQuery({
-    queryKey: ["targets", target, "merge-findings"],
-    queryFn: async () =>
-      (await request<{ findings: MergeFinding[] }>(`/targets/${target}/merge-findings`)).findings ?? [],
-    enabled: Boolean(target),
-  });
+  return useQuery(mergeFindingsQuery(target));
 }
+
+/**
+ * Whose binding conflict still stands, on each of the given systems: one findings read per system,
+ * however many rows ask (7t-6). A page that lists stopped changes asks it once, for the systems of
+ * its `binding_conflict` rows, so a row is sent to Waiting on you only while something there waits.
+ */
+export function useStandingBindingConflicts(targets: string[]) {
+  const distinct = [...new Set(targets.filter(Boolean))].sort();
+  const reads = useQueries({ queries: distinct.map((target) => mergeFindingsQuery(target)) });
+  const at = (target: string | undefined) => reads[distinct.indexOf(target ?? "")];
+  return {
+    /** The system's findings are still being read: no next step is shown yet, so none is swapped. */
+    loading: (target: string | undefined) => Boolean(at(target)?.isLoading),
+    /** A `binding_conflict` finding stands for this person on this system. */
+    stands: (target: string | undefined, subject: string) =>
+      Boolean(at(target)?.data?.some((f) => f.outcome === "binding_conflict" && f.subject_id === subject)),
+  };
+}
+
+export type StandingBindingConflicts = ReturnType<typeof useStandingBindingConflicts>;
 
 /**
  * A change a connected system never answered (A-09 §3–4): it may or may not

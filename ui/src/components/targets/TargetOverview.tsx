@@ -256,7 +256,7 @@ export function TargetOverview({ target }: { target: string }) {
           id="waiting"
           title="Waiting on you"
           count={waitingKnown ? waiting : null}
-          lede={`Things Syndra found and will not settle by itself: an account that differs from what Syndra expects, a change log on ${name} that was altered, two records disagreeing about whose account it is, or a change ${name} never answered. Each needs a decision from you.`}
+          lede={`Things Syndra found and will not settle by itself: an account that differs from what Syndra expects, a change log on ${name} that was altered, or a change ${name} never answered. Each needs a decision from you.`}
         >
           {/* First, because a person may be waiting on one. A loading or failed
               read shows no rows and no count (A-09 §4 States). */}

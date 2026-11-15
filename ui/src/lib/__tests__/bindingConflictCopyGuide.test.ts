@@ -12,7 +12,7 @@ import {
   stopTrackingConsequence,
 } from "@/components/targets/bindingConflict";
 import { inventoryNotRead, whyNotChecked } from "@/lib/format";
-import { BINDING_CONFLICT, DECIDE_IT, PLAN_STALE, TARGET_REFUSED, decideAt, decideStep, refusalCause, stoppedLine } from "@/lib/wait-reason";
+import { BINDING_CONFLICT, DECIDE_IT, LOOKING_UP_NEXT, PLAN_STALE, TARGET_REFUSED, decideAt, decideStep, planStaleStep, refusalCause, stoppedLine } from "@/lib/wait-reason";
 
 /**
  * The copy guide's section 16 rows for the binding conflict (addon-contract 7t-4)
@@ -35,6 +35,9 @@ describe("the binding conflict's copy guide rows", () => {
       stopTrackingConsequence(S),
       decideStep(S),
       DECIDE_IT,
+      LOOKING_UP_NEXT,
+      planStaleStep(S, true),
+      planStaleStep(S, false),
       stoppedLine(S, { ...row, last_error: "out of retries after 5 attempts: x" }).replace("5 tries", "{n} tries"),
       stoppedLine(S, { ...row, wait_reason: TARGET_REFUSED, last_error: "{its words}." }).replace("{its words}.", "{its words}"),
       stoppedLine(S, { ...row, wait_reason: TARGET_REFUSED }),
@@ -58,7 +61,7 @@ describe("the binding conflict's copy guide rows", () => {
     expect(section).toContain("{system} did not answer when Syndra last tried.");
   });
 
-  it("words a binding conflict's row as the refusal it is, and sends it to Waiting on you by its wait reason alone", () => {
+  it("words a binding conflict's row as the refusal it is, and sends it to Waiting on you while the conflict stands", () => {
     // 7t-6: the row is the add-on's refusal or block on the person's binding conflict; its words are the
     // add-on's, after "{system} refused it:", exactly as a target_refused row's.
     for (const system of ["TrueNAS", "Makerspace NAS"]) {
@@ -66,9 +69,13 @@ describe("the binding conflict's copy guide rows", () => {
         stoppedLine(system, { attempts: 0, wait_reason: TARGET_REFUSED, last_error: "It is held." }),
       );
     }
-    expect(decideAt({ wait_reason: BINDING_CONFLICT, target: "truenas" })).toBe("/system/targets/truenas#waiting");
-    expect(decideAt({ wait_reason: TARGET_REFUSED, target: "truenas" })).toBeNull();
-    expect(decideAt({ wait_reason: PLAN_STALE, target: "truenas" })).toBeNull();
+    // Sent to Waiting on you only while the person's binding_conflict still stands on that system.
+    const standing = (target: string | undefined, subject: string) => target === "truenas" && subject === "u1";
+    expect(decideAt({ wait_reason: BINDING_CONFLICT, target: "truenas", user_id: "u1" }, standing)).toBe("/system/targets/truenas#waiting");
+    expect(decideAt({ wait_reason: BINDING_CONFLICT, target: "truenas", user_id: "u2" }, standing)).toBeNull();
+    expect(decideAt({ wait_reason: BINDING_CONFLICT, target: "unifi", user_id: "u1" }, standing)).toBeNull();
+    expect(decideAt({ wait_reason: TARGET_REFUSED, target: "truenas", user_id: "u1" }, standing)).toBeNull();
+    expect(decideAt({ wait_reason: PLAN_STALE, target: "truenas", user_id: "u1" }, standing)).toBeNull();
     // The backend's own sentence for the retired applied-but-unattributed row is gone everywhere.
     const backend = readFileSync(resolve(__dirname, "../../../../backend/internal/services/propagation/addon.go"), "utf8");
     expect(backend).not.toContain("Two of Syndra's records disagree");
@@ -77,9 +84,16 @@ describe("the binding conflict's copy guide rows", () => {
 
   it("says a stale plan in plain words, the stored sentence as the backend stores it", () => {
     const backend = readFileSync(resolve(__dirname, "../../../../backend/internal/services/propagation/addon.go"), "utf8");
-    const stored = "Their account changed after this change was approved, so it was not sent. Make the change again to send it.";
-    expect(backend).toContain(`planStaleReason = "${stored}"`);
-    expect(section).toContain(stored);
+    // Both stored sentences, as the Go source joins them, and in the guide.
+    for (const next of [
+      "Syndra sends it again on its own after its next check, or asks you under Waiting on you if the change there touched the same thing.",
+      "Syndra's next check puts it back in Pending changes, or asks you under Waiting on you if the change there touched the same thing.",
+    ]) {
+      expect(backend).toContain(`"Their account changed after this change was approved, so it was not sent. " +\n\t\t"${next}"`);
+      expect(section).toContain(`Their account changed after this change was approved, so it was not sent. ${next}`);
+    }
+    expect(backend).not.toContain("Make the change again");
+    const stored = "Their account changed after this change was approved, so it was not sent.";
     expect(backend).not.toContain('"PLAN_STALE: ');
     expect(stoppedLine("TrueNAS", { attempts: 0, wait_reason: PLAN_STALE, last_error: stored })).not.toContain("PLAN_STALE");
   });
@@ -87,14 +101,20 @@ describe("the binding conflict's copy guide rows", () => {
   it("quotes the sentences the pages and the card say that are not built from a helper", () => {
     const read = (path: string) => readFileSync(resolve(__dirname, path), "utf8");
     const findings = read("../../components/targets/MergeFindings.tsx");
-    const pending = read("../../app/governance/pending/page.tsx");
     for (const [source, text] of [
       [findings, "Finish: stop tracking it"],
-      [pending, "Give it again from their page."],
     ] as const) {
       expect(source, `the page no longer says ${text}`).toContain(text);
       expect(section, `design.md §16 does not carry ${text}`).toContain(text.replace("${system}", "{system}"));
     }
+  });
+
+  it("quotes Waiting on you's lede, which no longer names the retired disagreement", () => {
+    const overview = readFileSync(resolve(__dirname, "../../components/targets/TargetOverview.tsx"), "utf8");
+    const lede = "Things Syndra found and will not settle by itself: an account that differs from what Syndra expects, a change log on ${name} that was altered, or a change ${name} never answered. Each needs a decision from you.";
+    expect(overview).toContain(lede);
+    expect(section).toContain(lede.replaceAll("${name}", "{system}"));
+    expect(overview).not.toContain("two records disagreeing");
   });
 
   it("never echoes a reason's code", () => {

@@ -514,11 +514,11 @@ func TestAStalePlanIsWithheldAndSaysSo(t *testing.T) {
 	if len(h.stale) != 1 || len(h.refused) != 0 {
 		t.Errorf("the refusal must be settled as stale: stale %v refused %v", h.stale, h.refused)
 	}
-	if reason := h.failed["o1"]; !strings.Contains(reason, "Make the change again") {
-		// Every other refusal means "fix it and retry". This one means "make
-		// the change again", and an operator reading the queue has only this
-		// sentence and its wait reason to tell them apart.
-		t.Errorf("the refusal must name the operator's next action: %q", reason)
+	if reason := h.failed["o1"]; !strings.Contains(reason, "Pending changes") {
+		// Every other refusal means "fix it and retry". This one comes back by
+		// itself at the next check, and an operator reading the queue has only
+		// this sentence and its wait reason to tell them apart.
+		t.Errorf("the refusal must say what happens next: %q", reason)
 	}
 }
 
@@ -767,29 +767,37 @@ func TestATargetsRefusalIsMarkedAsOne(t *testing.T) {
 
 // A stale plan is not a refusal a retry would repeat: the subject moved since
 // the approval. Settled as plan_stale, which holds nobody's next withdrawal,
-// with a plain sentence that names no code and no system and ends in the next
-// step (copy guide §16).
+// with a plain sentence that names no code and no system and ends in what
+// happens next, which differs: the sweep's next pass queues the change again,
+// and a withdrawal then sends on its own while anything else waits in Pending
+// changes (copy guide §16).
 func TestAStalePlanIsSettledAsStaleInPlainWords(t *testing.T) {
-	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeRejected, Status: 409, Code: addons.CodePlanStale,
-		Detail: "PLAN_STALE: fingerprint mismatch"}
-	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
-		t.Fatal(err)
-	}
-	if len(h.refused) != 0 || len(h.conflicted) != 0 || len(h.stale) != 1 || h.stale[0] != "o1" {
-		t.Fatalf("want o1 settled as plan_stale only: stale %v refused %v conflicted %v", h.stale, h.refused, h.conflicted)
-	}
-	got := h.failed["o1"]
-	if got != planStaleReason {
-		t.Fatalf("want the plain sentence, got %q", got)
-	}
-	for _, raw := range []string{"PLAN_STALE", "plan", "subject", "target", "TrueNAS", "fingerprint"} {
-		if strings.Contains(got, raw) {
-			t.Errorf("the sentence must not carry %q: %q", raw, got)
+	for _, c := range []struct {
+		withdraws bool
+		want      string
+	}{{true, planStaleWithdrawal}, {false, planStaleChange}} {
+		h := stubAddonDrain(t, addonRow("o1"))
+		h.intent.WithdrawsOnly = c.withdraws
+		h.resp = addons.ApplyResponse{Outcome: addons.OutcomeRejected, Status: 409, Code: addons.CodePlanStale,
+			Detail: "PLAN_STALE: fingerprint mismatch"}
+		if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+			t.Fatal(err)
+		}
+		if len(h.refused) != 0 || len(h.conflicted) != 0 || len(h.stale) != 1 || h.stale[0] != "o1" {
+			t.Fatalf("want o1 settled as plan_stale only: stale %v refused %v conflicted %v", h.stale, h.refused, h.conflicted)
+		}
+		got := h.failed["o1"]
+		if got != c.want {
+			t.Fatalf("withdraws %t: want %q, got %q", c.withdraws, c.want, got)
+		}
+		for _, raw := range []string{"PLAN_STALE", "plan", "subject", "target", "TrueNAS", "fingerprint", "Make the change again"} {
+			if strings.Contains(got, raw) {
+				t.Errorf("the sentence must not carry %q: %q", raw, got)
+			}
 		}
 	}
-	if !strings.HasSuffix(got, "Make the change again to send it.") {
-		t.Errorf("it ends in the next step: %q", got)
+	if !strings.Contains(planStaleWithdrawal, "on its own") || strings.Contains(planStaleChange, "on its own") {
+		t.Error("only a withdrawal is sent again on its own; anything else waits in Pending changes")
 	}
 }
 

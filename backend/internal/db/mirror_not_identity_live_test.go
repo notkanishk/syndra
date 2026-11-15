@@ -299,6 +299,86 @@ func TestLiveMigration98DownResolvesDuplicatesAndUpDropsTheIndexes(t *testing.T)
 
 func ptrInt(n int64) *int64 { return &n }
 
+// rollbackSQL is the SQL scripts/rollback-mirror-indexes.sh runs: its heredoc.
+func rollbackSQL(t *testing.T) string {
+	t.Helper()
+	raw, err := os.ReadFile("../../../scripts/rollback-mirror-indexes.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(raw)
+	const open = "RESTORE <<'SQL' || true\n"
+	start := strings.Index(script, open)
+	end := strings.Index(script, "\nSQL\n")
+	if start < 0 || end < start {
+		t.Fatal("the rollback script's SQL heredoc has moved; re-read this guard")
+	}
+	return script[start+len(open) : end+1]
+}
+
+// Guard: the rollback script runs 000098's down migration and nothing else,
+// so the operator's step and the migration are one statement of the rule.
+func TestTheRollbackScriptIsMigration98Down(t *testing.T) {
+	_, down := readMigrationPair(t, "000098_mirror_is_not_an_identity")
+	if got := rollbackSQL(t); got != down {
+		t.Fatal("scripts/rollback-mirror-indexes.sh must embed 000098's down migration byte for byte")
+	}
+}
+
+// The rollback script's SQL against the real engine, at 98, over duplicates:
+// it restores the indexes, keeps the newest row on each key and audits each
+// clear; run again it changes nothing. The 98 shape is put back after.
+func TestLiveTheRollbackScriptIsIdempotentAndAudited(t *testing.T) {
+	ctx := liveDB(t)
+	atLeast(t, ctx, 98)
+	seedAddonTarget(t, ctx)
+	cleanStaleAudit(t)
+	t.Cleanup(func() {
+		for _, index := range []string{"idx_target_account_bindings_username", "idx_target_account_bindings_uid", "idx_target_account_bindings_account_id"} {
+			_, _ = PG.Exec(context.Background(), `DROP INDEX IF EXISTS `+index)
+		}
+	})
+	for _, s := range []struct{ subject, username, id, age string }{
+		{"old", "rey_mysterio", "4001", "3 hours"}, {"new", "rey_mysterio", "4002", "1 hour"},
+		{"id-old", "big_e", "5001", "3 hours"}, {"id-new", "xavier_woods", "5001", "1 hour"},
+	} {
+		if _, err := PG.Exec(ctx, `INSERT INTO target_account_bindings
+			(target, subject_id, username, account_id, account_uid, bound_by, bound_at, last_seen_at)
+			VALUES ('truenas', $1, $2, $3::text, $3::text::bigint, 'seed', NOW() - $4::interval, NOW() - $4::interval)`,
+			s.subject, s.username, s.id, s.age); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run := func() {
+		t.Helper()
+		tx, err := PG.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		if _, err := tx.Exec(ctx, rollbackSQL(t)); err != nil {
+			t.Fatalf("the rollback script's SQL: %v", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run()
+	if got := mirrored(t, ctx); len(got) != 2 || got["new"] == "" || got["id-new"] == "" {
+		t.Fatalf("the newest row on each key is kept: %v", got)
+	}
+	if n := len(staleAudits(t, ctx)); n != 2 {
+		t.Fatalf("each cleared row is audited once, got %d", n)
+	}
+	if got := uniqueIndexes(t, ctx); len(got) != 3 {
+		t.Fatalf("the three unique indexes are back: %v", got)
+	}
+	run()
+	if n := len(staleAudits(t, ctx)); n != 2 || len(mirrored(t, ctx)) != 2 {
+		t.Fatalf("a second run clears and audits nothing: %d audits, %v", n, mirrored(t, ctx))
+	}
+}
+
 // Guard: 000099 widens the wait_reason check with plan_stale, keeping every
 // value 000097 allowed, and its down clears those rows' reason (what they had
 // before) before restoring exactly the 000097 check.
@@ -339,7 +419,7 @@ func TestLiveMigration99RunsDownAndUp(t *testing.T) {
 		RETURNING id::text`, key).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	const sentence = "Their account changed after this change was approved, so it was not sent. Make the change again to send it."
+	const sentence = "Their account changed after this change was approved, so it was not sent. Syndra's next check puts it back in Pending changes, or asks you under Waiting on you if the change there touched the same thing."
 	if err := MarkPropagationPlanStale(ctx, id, sentence); err != nil {
 		t.Fatal(err)
 	}

@@ -25,6 +25,7 @@ func bindingLive(t *testing.T) context.Context {
 			`DELETE FROM addon_operations WHERE target = $1`,
 			`DELETE FROM target_account_bindings WHERE target = $1`,
 			`DELETE FROM audit_logs WHERE action LIKE 'addon.' || $1 || '.%'`,
+			`DELETE FROM audit_logs WHERE action = 'binding.' || $1 || '.stale_cleared'`,
 		} {
 			if _, err := PG.Exec(ctx, q, bindTarget); err != nil {
 				t.Fatal(err)
@@ -100,6 +101,49 @@ func releaseOf(subject string) func(context.Context) error {
 			return err
 		}
 		return ForgetTargetBinding(ctx, bindTarget, subject)
+	}
+}
+
+// 7t-6: a late settle of an adoption whose account the add-on has since given
+// to somebody else. Their copy, written after the call, is the newer answer:
+// half is not run, so it is neither cleared as stale nor joined by a second
+// subject on that account; the row still settles as happened. Their copy from
+// BEFORE the call is the stale one, and half clears it.
+func TestLiveALateAdoptionSettleNeverClearsANewerHolder(t *testing.T) {
+	ctx := bindingLive(t)
+	call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
+	if err := adoptionOf("u-bayley", "charlotte", "200001")(ctx); err != nil {
+		t.Fatal(err)
+	}
+	runs := 0
+	half := func(ctx context.Context) error { runs++; return adoptionOf("u-becky", "charlotte", "200001")(ctx) }
+	if _, err := ResolveBindingCall(ctx, bindTarget, call, "200001", AddonUnresolvedGrace, half); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := resolution(t, ctx, call); res != AddonResolutionHappened || runs != 0 {
+		t.Fatalf("want happened without the half, got %q after %d runs", res, runs)
+	}
+	if b, found := boundRow(t, ctx, "u-bayley"); !found || b.AccountID == nil || *b.AccountID != "200001" {
+		t.Fatalf("the newer holder's copy must stand: %+v %t", b, found)
+	}
+	if _, found := boundRow(t, ctx, "u-becky"); found {
+		t.Fatal("the late settle must not record a second subject on that account")
+	}
+
+	// The same, with the other copy older than the call: it is the stale one.
+	call = lostCall(t, ctx, "account.adopt", "u-lita", "lita")
+	if err := adoptionOf("u-trish", "lita", "200002")(ctx); err != nil {
+		t.Fatal(err)
+	}
+	aged(t, ctx, "u-trish")
+	if _, err := ResolveBindingCall(ctx, bindTarget, call, "200002", AddonUnresolvedGrace, adoptionOf("u-lita", "lita", "200002")); err != nil {
+		t.Fatal(err)
+	}
+	if _, found := boundRow(t, ctx, "u-trish"); found {
+		t.Fatal("a copy older than the call is stale and is cleared")
+	}
+	if b, found := boundRow(t, ctx, "u-lita"); !found || *b.AccountID != "200002" {
+		t.Fatalf("the adoption is recorded: %+v %t", b, found)
 	}
 }
 

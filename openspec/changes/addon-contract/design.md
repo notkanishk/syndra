@@ -1400,7 +1400,16 @@ drain's `recordConflict`, `health.binding_conflicts`, `POST /targets/{target}/bi
 the system page's "Two records disagree" notice and its owner dialog, the pending page's `outbox_id`
 match). The table is kept, unread and unwritten, for one release so a rollback to the contract-1
 backend (which reads it, and is never run with migrations down, task 1.10) still finds it; it is
-dropped with `account_uid` (task 1.7b). Production runs contract 1 and has the table: any open row is
+dropped with `account_uid` (task 1.7b). A rollback depends on the indexes too, not only the table:
+the contract-1 backend's guard against two people on one account is the unique violation, and the
+forward deploy after a rollback re-runs 000088, whose unique index fails on duplicates written
+meanwhile. So a rollback to a backend before 000098 MUST first run 000098's down by hand, with
+`scripts/rollback-mirror-indexes.sh` (that SQL byte for byte, held equal by
+`TestTheRollbackScriptIsMigration98Down`; idempotent, audited; dry run by default), and again before
+any forward deploy that re-runs 000088 (DEPLOY.md, Rollback). A late settle of an adoption
+(`ResolveBindingCall`, from the add-on's `/calls` record) never clears another person's copy written
+after the call began: the add-on gave that account to them since, so half is not run; an older copy
+is the stale one and is cleared. Production runs contract 1 and has the table: any open row is
 resolved in the contract-1 UI before the cutover (NEXT.md, read-only check); one left open is not
 migrated into a finding, because the sweep raises from the add-on's own `conflicts` whatever still
 stands and closes any finding the add-on does not report.
@@ -1423,8 +1432,11 @@ stands and closes any finding the add-on does not report.
   not attribute, which 000098 ended), which holds the person's next withdrawal like a refusal
   (`runnerSends`). Any other refusal settles `target_refused`, with no words stored as none.
   `PLAN_STALE` settles `plan_stale` (000099), which holds nothing, with a plain sentence that names
-  no code and no system ("Their account changed after this change was approved, so it was not sent.
-  Make the change again to send it.", `planStaleReason`). The pages switch on the `wait_reason`,
+  no code and no system and says what happens next: the person's access still says the change, so
+  the sweep's next pass queues it again (a fast-forward) unless the target changed the same field
+  (a finding); a withdrawal it queues sends on its own, anything else waits in Pending changes
+  (`planStaleWithdrawal`, `planStaleChange`; the pages' `planStaleStep` by the row's
+  `sends_on_its_own`). The pages switch on the `wait_reason`,
   never on what `last_error` says: "{system} refused it:" then the stored words for the first two,
   "{system} refused it and gave no reason" with none, "{system} refused it: their account there
   changed after this change was approved" for the third.
@@ -1442,10 +1454,13 @@ stands and closes any finding the add-on does not report.
   never inferred from `reason`. The holder's number is Advanced's Technical detail. A resolved row leaves with the list's leaving
   motion. Pending changes and Withdrawn access say why a change stopped through one helper
   (`stoppedLine`), a refusal's stored `last_error` after "{system} refused it:" (never twice). A
-  row stopped on a binding's conflict says so by its own `wait_reason` (`decideAt`, 7t-6), so both
-  pages give it the next step "Decide it under Waiting on you", linking the system page's `#waiting`
-  region, without reading anything else; a revocation the conflict blocked carries it on Withdrawn
-  access too (`unconfirmed-revocations` sends `wait_reason`). The account list card says why a
+  row stopped on a binding's conflict says so by its own `wait_reason`, and while a `binding_conflict`
+  finding still stands for that person on that system (`decideAt`, 7t-6; the system's findings read
+  once per page, `useStandingBindingConflicts`) both pages give it the next step "Decide it under
+  Waiting on you", linking the system page's `#waiting` region; once it is decided or closed the row
+  has its ordinary next step, and while the findings are read the seat says "Looking up what to do
+  next." A revocation the conflict blocked carries it on Withdrawn access too
+  (`unconfirmed-revocations` sends `wait_reason`). The account list card says why a
   stopped pass was not read: a halted pass answers 503 with the inventory as its body, which the
   reader takes as data (`readInventory`: a 503 whose body says `halted: true`, which `ApiError.body`
   keeps; any other 503, a null body or any other failure still throws), and the card shows
@@ -1460,11 +1475,17 @@ is free text with no account key, matched against the mirror's names. 7t-6 looke
 mirror: the collector has no `/subjects` read, and adding one would either spend the fresh-read
 cooldown every hour (the sweep's and "Read again"'s) or answer from the add-on's kept copy, which can
 be older than the mirror, so a subject bound since would read as unbound and its points be dropped for
-good. What made a mirror name wrong is gone instead: a reused number (or a name where no id says otherwise) moves to its new holder on
-the add-on's next answer (`RecordTargetBinding`'s clear; `TestLiveAReusedNumberNamesItsNewHolder`).
-What is left is an out-of-band rename between applies: the old name still matches (which hides more,
-never less) and the new one is missed unless the directory's own names carry it, until the next apply
-records it.
+good. A reused number moves to its new holder on the add-on's next answer (`RecordTargetBinding`'s
+clear; `TestLiveAReusedNumberNamesItsNewHolder`), so a record naming it names the holder now. A name
+is not fixed that way, and is not claimed to be: an account renamed on the target keeps its old name
+in the mirror until its person's next apply (the clear keeps a same-name row on another id). If a
+new account now carries that old name, a record naming it names both people. That fails closed:
+`named_subjects` is what a member's own view must not show to anyone else (`namesOther`), so listing
+both leaves the record out of every member's view, each of theirs included, and counts it as left out;
+an admin sees it as stored (`TestANameTwoRecordsCarryNamesBoth`,
+`TestARecordNamingTwoPeopleIsLeftOutForEveryMember`). Crediting neither would empty the list and show
+the record to every member. The renamed account's new name is missed meanwhile unless the directory's
+own names carry it.
 
 ### 9.5 Identity
 

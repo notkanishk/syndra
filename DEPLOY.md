@@ -708,12 +708,35 @@ that is AHEAD of it when that schema is clean (`[STARTUP] the database is at
 migration N and this backend knows M at most`), because every migration since
 has been additive. A backend built **before** that commit refuses such a
 database, so the **first rollback across 000088 to a pre-088 backend** needs
-one manual step first, on the production host, before the dispatch:
+manual steps first, on the production host, before the dispatch.
+
+**First, the binding mirror's unique indexes (MUST, any rollback to a backend
+before 000098).** 000098 dropped the unique indexes on
+`target_account_bindings` name, uid and account id; the older backend's only
+guard against recording two people on one account is the violation they raise,
+and the next forward deploy re-runs 000088, whose unique index then fails on
+any duplicate written meanwhile (a dirty migration, the backend down). Put them
+back with the script, which runs 000098's down SQL byte for byte (duplicates
+resolved by keeping the newest row, each clear audited, indexes created
+`IF NOT EXISTS`; a second run changes nothing). Copy it out of the checkout
+first, because the rollback checks out a commit without it:
+
+```bash
+cd /opt/syndra
+sudo install -m 755 scripts/rollback-mirror-indexes.sh /usr/local/bin/
+rollback-mirror-indexes.sh            # dry run: duplicates per key, present indexes, a rehearsal rolled back
+rollback-mirror-indexes.sh --apply
+```
+
+Run it **again before any forward deploy** that re-runs 000088 (it is the same
+dedupe; with the indexes in place during the rollback it finds nothing).
+
+Then reset the migration version:
 
 ```bash
 cd /opt/syndra
 docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
-  "UPDATE schema_migrations SET version = 87, dirty = false WHERE version = 88 AND dirty = false;"' </dev/null
+  "UPDATE schema_migrations SET version = 87, dirty = false WHERE version >= 88 AND dirty = false;"' </dev/null
 ```
 
 Then, still on the production host and as root, push a fresh copy of that
@@ -730,7 +753,9 @@ stand-in Zitadel's world file). Only then dispatch the rollback above.
 
 000088 only adds columns (`account_id` on both binding tables, `targets.field_roles`)
 and an index, which the older backend ignores; they stay, and the backfill at
-the next forward start fills what it wrote meanwhile. Rolling forward again
+the next forward start fills what it wrote meanwhile. 000098 is the one that
+removes something the older backend relies on, which is why the script above
+comes first. Rolling forward again
 re-runs 000088, which is written to be re-runnable (`IF NOT EXISTS`).
 Any other migration boundary: revert the migration deliberately first.
 

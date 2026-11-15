@@ -28,7 +28,8 @@ import { formatShortDate, humanizeKey } from "@/lib/format";
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { sortByName } from "@/lib/sort";
-import { DECIDE_IT, decideAt, stoppedLine } from "@/lib/wait-reason";
+import { BINDING_CONFLICT, DECIDE_IT, LOOKING_UP_NEXT, decideAt, lookingUp, stoppedLine } from "@/lib/wait-reason";
+import { useStandingBindingConflicts, type StandingBindingConflicts } from "@/lib/queries/useTargets";
 
 /**
  * Review › Unfinished revocations (9.9, 9.10).
@@ -112,6 +113,10 @@ export function WithdrawnAccess() {
   const nameOf = useSystemNames();
 
   const rows = useMemo(() => query.data?.revocations ?? [], [query.data]);
+  // One findings read per system for the whole list, never one per row (7t-6).
+  const conflicts = useStandingBindingConflicts(
+    rows.filter((row) => row.spent && row.wait_reason === BINDING_CONFLICT).map((row) => row.target),
+  );
   const clearedByMe = useQueueCleared(rows, !query.isLoading && !query.error, true).cleared?.mine != null;
   const [search, setSearch] = useState("");
   const [where, setWhere] = useState("");
@@ -236,6 +241,7 @@ export function WithdrawnAccess() {
                   key={key}
                   {...SECTIONS[key]}
                   rows={leaving.rows.filter((row) => row.spent === (key === "spent"))}
+                  conflicts={conflicts}
                   count={(key === "spent" ? spent : queued).length}
                   leave={leaving.props}
                   view={view}
@@ -294,6 +300,7 @@ function RevocationSection({
   empty,
   resolved,
   rows,
+  conflicts,
   count,
   leave,
   view,
@@ -302,6 +309,7 @@ function RevocationSection({
   sort,
   onSort,
 }: {
+  conflicts: StandingBindingConflicts;
   id: string;
   label: string;
   tone: "danger" | "neutral";
@@ -382,7 +390,7 @@ function RevocationSection({
                     return (
                       <LeavingRow key={row.id} {...leave(row.id)}>
                         {run && <RunLabel {...run} />}
-                        <Row row={row} />
+                        <Row row={row} conflicts={conflicts} />
                       </LeavingRow>
                     );
                   })}
@@ -404,11 +412,12 @@ function RevocationSection({
   );
 }
 
-function Row({ row }: { row: UnconfirmedRevocation }) {
+function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: StandingBindingConflicts }) {
   const resolver = useNameResolver();
   const first = resolver.resolveUser(row.user_id).value?.display_name?.split(" ")[0];
   const where = useSystemNames()(row.target);
-  const decide = decideAt(row);
+  const looking = lookingUp(row, conflicts.loading);
+  const decide = decideAt(row, conflicts.stands);
   return (
     <div className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px]">
       <WhoSeat id={row.user_id} />
@@ -451,8 +460,10 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
           // Zitadel, it is raised in Drift by the next check and revoked
           // there; on a connected system, its page shows the account, unless
           // the stop is the person's binding conflict, which is decided in one
-          // place (decideAt, the row's own wait reason).
-          decide ? (
+          // place while it still stands (decideAt).
+          looking ? (
+            <span className="text-right text-[13px] text-muted">{LOOKING_UP_NEXT}</span>
+          ) : decide ? (
             <ArrowLink href={decide}>{DECIDE_IT}</ArrowLink>
           ) : row.target === "zitadel" ? (
             <ArrowLink href="/governance/drift">Revoke it from Drift</ArrowLink>

@@ -38,10 +38,19 @@ vi.mock("@/lib/queries/usePropagation", () => ({
   useDrainPropagations: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-// A stopped row says where it is decided by its own wait_reason alone (7t-6): nothing about the
-// system is read for it, so any read of one fails the test.
+// A stopped row says where it is decided by its own wait_reason and its system's standing findings,
+// read once for the whole list (useStandingBindingConflicts, 7t-6): never per row, so a per-row read
+// of findings or health fails the test.
+const conflicts = vi.hoisted(() => ({ calls: [] as string[][], loading: false, standing: [] as string[] }));
 vi.mock("@/lib/queries/useTargets", async (orig) => ({
   ...(await orig<typeof import("@/lib/queries/useTargets")>()),
+  useStandingBindingConflicts: (targets: string[]) => {
+    conflicts.calls.push(targets);
+    return {
+      loading: () => conflicts.loading,
+      stands: (target: string | undefined, subject: string) => conflicts.standing.includes(`${target}|${subject}`),
+    };
+  },
   useMergeFindings: () => {
     throw new Error("a stopped row must not read the findings");
   },
@@ -93,6 +102,9 @@ function renderPending() {
 beforeEach(() => {
   pending.data = [];
   gaveUp.data = [];
+  conflicts.calls = [];
+  conflicts.loading = false;
+  conflicts.standing = [];
   summary.reachable = true;
   bundles.data = [];
   rules.data = [];
@@ -158,33 +170,52 @@ describe("Pending changes", () => {
 
   // 7t-6: a refusal on a person's binding conflict says so by its wait_reason (binding_conflict),
   // worded as the refusal it is, and sends that row, and only that row, to Waiting on you.
-  it("sends a binding conflict's row to Waiting on you by its wait reason alone", () => {
+  it("sends a binding conflict's row to Waiting on you while the conflict stands there", () => {
     const said = "The account rey, recorded for this person, is gone, and its number is now held by a different account, kofi.";
     gaveUp.data = [
       row({ id: "t1", target: "truenas", status: "failed", wait_reason: "binding_conflict", last_error: said, cascade_id: "c1" }),
-      row({ id: "t2", user_id: "u1", target: "truenas", status: "failed", wait_reason: "target_refused", last_error: "It is held.", cascade_id: "c2" }),
+      // Decided or closed since: its conflict no longer stands, so it has the ordinary step.
+      row({ id: "t2", user_id: "u2", target: "truenas", status: "failed", wait_reason: "binding_conflict", last_error: said, cascade_id: "c2" }),
+      row({ id: "t3", target: "truenas", status: "failed", wait_reason: "target_refused", last_error: "It is held.", cascade_id: "c3" }),
     ];
+    conflicts.standing = ["truenas|u1"];
     renderPending();
-    expect(screen.getByText(`TrueNAS refused it: ${said} Syndra stopped sending it.`)).toBeInTheDocument();
-    // The same person, the same system: only the conflict's own row gets the link.
+    expect(screen.getAllByText(`TrueNAS refused it: ${said} Syndra stopped sending it.`)).toHaveLength(2);
+    // Only the row whose conflict stands gets the link; the same person's plain refusal does not.
     expect(screen.getAllByRole("link", { name: /Decide it under Waiting on you/ })).toHaveLength(1);
     expect(screen.getByRole("link", { name: /Decide it under Waiting on you/ })).toHaveAttribute("href", "/system/targets/truenas#waiting");
     expect(screen.getByText(/Waiting on you is on TrueNAS.s page\./)).toBeInTheDocument();
-    expect(screen.getAllByText(/Give it again from their page once the reason is fixed\./)).toHaveLength(1);
+    expect(screen.getAllByText(/Give it again from their page once the reason is fixed\./)).toHaveLength(2);
+    // One read for the list, of the binding conflicts' systems: never per row.
+    expect(conflicts.calls.every((targets) => targets.join() === "truenas,truenas")).toBe(true);
   });
 
-  // 7t-6: a stale plan in plain words, and its own next step: nothing to fix, give it again.
-  it("says a stale plan in plain words, with no code", () => {
+  it("says it is looking, never a step then a swap, while the system's findings are read", () => {
+    gaveUp.data = [row({ id: "t1", target: "truenas", status: "failed", wait_reason: "binding_conflict", last_error: "Held.", cascade_id: "c1" })];
+    conflicts.loading = true;
+    renderPending();
+    expect(screen.getByText(/Looking up what to do next\./)).toBeInTheDocument();
+    expect(screen.queryByText(/Give it again from their page/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Decide it under Waiting on you/ })).not.toBeInTheDocument();
+  });
+
+  // 7t-6: a stale plan in plain words, and its own next step: the next check queues it again; a
+  // withdrawal then sends on its own, anything else comes back here.
+  it("says a stale plan in plain words, with what happens next", () => {
     gaveUp.data = [
-      row({ id: "t1", target: "truenas", status: "failed", wait_reason: "plan_stale",
-        last_error: "Their account changed after this change was approved, so it was not sent. Make the change again to send it.", cascade_id: "c1" }),
+      row({ id: "t1", target: "truenas", status: "failed", wait_reason: "plan_stale", sends_on_its_own: true,
+        last_error: "Their account changed after this change was approved, so it was not sent.", cascade_id: "c1" }),
+      row({ id: "t2", user_id: "u2", target: "truenas", status: "failed", wait_reason: "plan_stale",
+        last_error: "Their account changed after this change was approved, so it was not sent.", cascade_id: "c2" }),
     ];
     renderPending();
     expect(
-      screen.getByText("TrueNAS refused it: their account there changed after this change was approved, so Syndra stopped sending it."),
-    ).toBeInTheDocument();
+      screen.getAllByText("TrueNAS refused it: their account there changed after this change was approved, so Syndra stopped sending it."),
+    ).toHaveLength(2);
     expect(screen.queryByText(/PLAN_STALE/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Give it again from their page\. Then mark it seen on Home\./)).toBeInTheDocument();
+    expect(screen.getByText(/Syndra sends it again on its own after its next check of TrueNAS/)).toBeInTheDocument();
+    expect(screen.getByText(/It comes back here after Syndra's next check of TrueNAS/)).toBeInTheDocument();
+    expect(screen.queryByText(/Give it again from their page/)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Decide it under Waiting on you/ })).not.toBeInTheDocument();
   });
 

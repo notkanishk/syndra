@@ -116,14 +116,40 @@ export function stoppedLine(
 }
 
 /**
- * Where a stopped change is decided, when it is a person's binding conflict: Waiting on you on the
- * system's page. Read off the row's own `wait_reason`, so every page that lists the row (Pending
- * changes, Withdrawn access) says it the same way and asks nothing else; null for any other stop.
+ * Where a stopped change is decided, when it is a person's binding conflict that still waits:
+ * Waiting on you on the system's page. The row's own `wait_reason` says it stopped on one, and the
+ * system's standing findings say one still waits for this person (`stands`, one read per system,
+ * useStandingBindingConflicts); once it is decided or closed the row has its ordinary next step, so
+ * the link never opens an empty region. Null for any other stop. Every page that lists the row
+ * (Pending changes, Withdrawn access) says it through this one helper.
  */
-export function decideAt(row: { wait_reason?: string; target?: string }): string | null {
-  return row.wait_reason === BINDING_CONFLICT && row.target
+export function decideAt(
+  row: { wait_reason?: string; target?: string; user_id: string },
+  stands: (target: string | undefined, subject: string) => boolean,
+): string | null {
+  return row.wait_reason === BINDING_CONFLICT && row.target && stands(row.target, row.user_id)
     ? `/system/targets/${encodeURIComponent(row.target)}#waiting`
     : null;
+}
+
+/** A binding conflict's row while its system's findings are read: its seat says so, never a step then a swap. */
+export const LOOKING_UP_NEXT = "Looking up what to do next.";
+
+/** Whether a row's next step waits on its system's findings being read. */
+export const lookingUp = (row: { wait_reason?: string; target?: string }, loading: (target: string | undefined) => boolean) =>
+  row.wait_reason === BINDING_CONFLICT && loading(row.target);
+
+/**
+ * A stale plan's next step (PLAN_STALE, db.WaitReasonPlanStale): nothing to fix or repeat. The
+ * person's access still says the change, so Syndra's next check of the system queues it again,
+ * unless the system changed the same thing, which waits under Waiting on you. Queued again, a change
+ * that sends on its own (the row's `sends_on_its_own`, db.sendsOnItsOwn: a withdrawal) goes by
+ * itself; any other comes back to Pending changes.
+ */
+export function planStaleStep(system: string, sendsOnItsOwn: boolean): string {
+  return sendsOnItsOwn
+    ? `Syndra sends it again on its own after its next check of ${system}, or asks you under Waiting on you if ${system} changed the same thing.`
+    : `It comes back here after Syndra's next check of ${system}, or under Waiting on you if ${system} changed the same thing.`;
 }
 
 /** The link to `decideAt`, and the next step beside it. */

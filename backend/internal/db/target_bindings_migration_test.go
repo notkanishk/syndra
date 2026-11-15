@@ -2,6 +2,7 @@ package db
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -39,7 +40,8 @@ func TestTheMirrorIsNotAnIdentity(t *testing.T) {
 			t.Errorf("000098 down must restore %s as UNIQUE", index)
 		}
 	}
-	if strings.Contains(strings.ToUpper(up), "CREATE UNIQUE") || strings.Contains(up, "target_binding_conflicts;") {
+	statements := regexp.MustCompile(`(?m)^--.*$`).ReplaceAllString(up, "")
+	if strings.Contains(strings.ToUpper(statements), "CREATE UNIQUE") || strings.Contains(statements, "target_binding_conflicts") {
 		t.Error("000098 up adds no unique index and leaves target_binding_conflicts for the rollback (dropped with 1.7b)")
 	}
 	// The duplicates go before the first index, newest kept, each audited.

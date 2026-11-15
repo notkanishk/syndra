@@ -7,6 +7,7 @@ Operational helpers. Most are also reachable through `make` targets — see the
 |---|---|
 | `gen-prod-env.sh` | Generates a production `.env` with fresh random secrets at mode 600 |
 | `reset-data.sh` | Clears demo rows or truncates every operator table. Dry run by default |
+| `rollback-mirror-indexes.sh` | Before a rollback to a backend older than migration 000098, and before the forward deploy after it: restores the binding mirror's unique indexes (000098's down SQL, audited, idempotent). Dry run by default; see DEPLOY.md, Rollback |
 | `smoke-test-action-v2.sh` | Signed POST to `/api/action/inject`, asserts claim injection |
 | `smoke-test-event-listener.sh` | Signed POST to `/api/webhooks/zitadel`, asserts event handling |
 | `smoke-test-lxc.sh` | Checks UI, API health, and container status on a deployed host |

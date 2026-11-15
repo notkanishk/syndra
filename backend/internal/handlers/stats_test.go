@@ -550,6 +550,34 @@ func TestAMembersOwnNameHidesNothingOfTheirs(t *testing.T) {
 	}
 }
 
+// 7t-6: a record whose name two people carry (named_subjects lists both, the
+// collector's answer to an ambiguous name) is left out of every member's own
+// view, each of theirs included, and counted; an admin sees it as stored.
+func TestARecordNamingTwoPeopleIsLeftOutForEveryMember(t *testing.T) {
+	stubStats(t, &statsStore{})
+	dbStatsDays = func(context.Context, string, string, string) ([]db.StatsValue, error) {
+		return []db.StatsValue{{Metric: "storage.sessions", Dims: map[string]string{"share": "home-alice"}, When: "2026-11-10", Value: 5, NamedSubjects: []string{"sub-a", "sub-b"}}}, nil
+	}
+	dbStatsMonths = func(context.Context, string, string, string) ([]db.StatsValue, error) { return nil, nil }
+	dbStatsGaps = func(context.Context, string, string) ([]db.StatsGapRow, error) { return nil, nil }
+	now := time.Date(2026, 11, 12, 6, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		subject string
+		member  bool
+		shown   bool
+	}{{"sub-a", true, false}, {"sub-b", true, false}, {"sub-c", true, false}, {"sub-a", false, true}} {
+		usage, err := statsUsageFor(context.Background(), "truenas", c.subject, c.member, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := json.Marshal(usage)
+		s := sessionsOf(t, usage)
+		if got := strings.Contains(string(raw), "home-alice"); got != c.shown || (s.LeftOut == 1) == c.shown {
+			t.Errorf("%s (member view %t): shown %t, left out %d; want shown %t", c.subject, c.member, got, s.LeftOut, c.shown)
+		}
+	}
+}
+
 // Through the real handlers: /me/targets is the member's view, masked;
 // /users/{id}/targets the admin's, as stored.
 func TestOnlyTheMembersOwnPageIsMasked(t *testing.T) {

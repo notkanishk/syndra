@@ -25,6 +25,16 @@
 -- the refusal above). It is kept, untouched, for one release so a rollback to
 -- the contract-1 backend (tasks 1.10: migrations are never run down there)
 -- still finds the table it reads; it is dropped with account_uid (task 1.7b).
+--
+-- A rollback depends on the INDEXES, not only on the table. The contract-1
+-- backend's conflict guard is the unique violation these indexes raise:
+-- without them it records two people on one account without a word, and the
+-- forward deploy after a rollback re-runs 000088 from version 87, whose
+-- CREATE UNIQUE INDEX (target, account_id) then fails on those duplicates.
+-- So a rollback to a backend before this migration runs this file's down
+-- first, by hand, with scripts/rollback-mirror-indexes.sh (the same SQL,
+-- idempotent and audited), and again before any forward deploy that re-runs
+-- 000088 (DEPLOY.md, Rollback).
 DROP INDEX IF EXISTS idx_target_account_bindings_username;
 DROP INDEX IF EXISTS idx_target_account_bindings_uid;
 DROP INDEX IF EXISTS idx_target_account_bindings_account_id;

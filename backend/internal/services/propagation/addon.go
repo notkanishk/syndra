@@ -253,7 +253,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		case raiseConflict(ctx, intent.Target, intent.SubjectID, resp.Conflict):
 			settle = markBindingConflict
 		}
-		if err := settle(ctx, row.ID, refusalReason(resp)); err != nil {
+		if err := settle(ctx, row.ID, refusalReason(resp, intent.WithdrawsOnly)); err != nil {
 			res.settleFailure(row.ID, "mark failed", err)
 			return false
 		}
@@ -326,13 +326,20 @@ func unreachedWhy(system string, resp addons.ApplyResponse) string {
 // after "{system} refused it:". So it is the add-on's words as written: what
 // happened (detail) and what to do next (consequence), the next step a blocked
 // apply carries (apply_response.json), never lost.
-func refusalReason(resp addons.ApplyResponse) string {
+func refusalReason(resp addons.ApplyResponse, withdraws bool) string {
 	if resp.Code == addons.CodePlanStale {
-		// The one refusal whose next step is to make the change again rather
-		// than to fix something. Plain words, no code (the row's wait_reason,
+		// The one refusal nobody has to fix or repeat: the person's desired
+		// state still says the change, so the drift sweep's next pass queues it
+		// again (a fast-forward, merge.Convergeable) unless the target changed
+		// the same field, which it raises as a finding. A withdrawal it queues
+		// sends on its own (db.sendsOnItsOwn); anything else waits in Pending
+		// changes. Plain words, no code (the row's wait_reason,
 		// db.WaitReasonPlanStale, is what a page switches on), and no system
 		// name, so a renamed system cannot make it wrong.
-		return planStaleReason
+		if withdraws {
+			return planStaleWithdrawal
+		}
+		return planStaleChange
 	}
 	if words := addonWords(resp.Detail, resp.Consequence); words != "" {
 		return words
@@ -342,8 +349,14 @@ func refusalReason(resp addons.ApplyResponse) string {
 	return ""
 }
 
-// planStaleReason is a PLAN_STALE row's last_error (copy guide §16).
-const planStaleReason = "Their account changed after this change was approved, so it was not sent. Make the change again to send it."
+// A PLAN_STALE row's last_error (copy guide §16): a withdrawal's, and any
+// other change's.
+const (
+	planStaleWithdrawal = "Their account changed after this change was approved, so it was not sent. " +
+		"Syndra sends it again on its own after its next check, or asks you under Waiting on you if the change there touched the same thing."
+	planStaleChange = "Their account changed after this change was approved, so it was not sent. " +
+		"Syndra's next check puts it back in Pending changes, or asks you under Waiting on you if the change there touched the same thing."
+)
 
 // addonWords is an add-on's refusal as it said it: what happened, then what to
 // do next, each shown as written.

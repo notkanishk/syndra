@@ -41,7 +41,20 @@ import {
   type PendingPropagationRow,
 } from "@/lib/queries/usePropagation";
 import { Relative } from "@/components/ui/Time";
-import { DECIDE_IT, PLAN_STALE, decideAt, decideStep, stoppedLine, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
+import {
+  BINDING_CONFLICT,
+  DECIDE_IT,
+  LOOKING_UP_NEXT,
+  PLAN_STALE,
+  decideAt,
+  decideStep,
+  lookingUp,
+  planStaleStep,
+  stoppedLine,
+  waitIsChosen,
+  waitReasonLine,
+} from "@/lib/wait-reason";
+import { useStandingBindingConflicts, type StandingBindingConflicts } from "@/lib/queries/useTargets";
 
 /** Q2 (A-17): an empty queue still says "Send 0 changes". The owner's answer is a change to this one function. */
 const sendLabel = (known: boolean, n: number) => (known && n > 0 ? `Send ${n} ${n === 1 ? "change" : "changes"}` : "Send changes");
@@ -312,6 +325,10 @@ export default function PendingChangesPage() {
  * the next check and revoked there. A give is given again from their page.
  */
 function StoppedSending({ rows, loading }: { rows: PendingPropagationRow[]; loading: boolean }) {
+  // One findings read per system for the whole list, never one per row (7t-6).
+  const conflicts = useStandingBindingConflicts(
+    rows.filter((row) => row.wait_reason === BINDING_CONFLICT).map((row) => row.target ?? ""),
+  );
   return (
     <Card id="stopped-sending">
       <CardHeader title="Syndra stopped sending" count={rows.length} />
@@ -324,7 +341,7 @@ function StoppedSending({ rows, loading }: { rows: PendingPropagationRow[]; load
           guidance="Every change Syndra stopped sending has been marked seen, or there were none this week."
         />
       ) : (
-        rows.map((row) => <StoppedRow key={row.id} row={row} />)
+        rows.map((row) => <StoppedRow key={row.id} row={row} conflicts={conflicts} />)
       )}
     </Card>
   );
@@ -337,14 +354,15 @@ function StoppedSending({ rows, loading }: { rows: PendingPropagationRow[]; load
  * account conflict has one place it is decided, Waiting on you on the system's
  * page, so that is its next step and its link.
  */
-function StoppedRow({ row }: { row: PendingPropagationRow }) {
+function StoppedRow({ row, conflicts }: { row: PendingPropagationRow; conflicts: StandingBindingConflicts }) {
   const nameOf = useSystemNames();
   const system = nameOf(row.target ?? "zitadel");
   const revocation = row.op_type === "revoke";
   const zitadel = (row.target ?? "zitadel") === "zitadel";
   // A person's binding conflict says so by the row's own wait reason (db.WaitReasonBindingConflict),
-  // so the row needs nothing else read to say where it is decided.
-  const decideHere = decideAt(row);
+  // and is decided under Waiting on you only while it still stands there.
+  const looking = lookingUp(row, conflicts.loading);
+  const decideHere = decideAt(row, conflicts.stands);
   return (
             <CardRow>
               <span className="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
@@ -370,20 +388,22 @@ function StoppedRow({ row }: { row: PendingPropagationRow }) {
                   </span>
                 </span>
                 <span className="text-[12.5px] text-faint">
-                  {decideHere
+                  {looking
+                    ? LOOKING_UP_NEXT
+                    : decideHere
                     ? decideStep(system)
                     : revocation && zitadel
                     ? `They may still hold it in ${system}. It shows in Drift after Syndra's next check; revoke it there.`
                     : revocation
                       ? `They may still hold it in ${system}. Check their account on ${system}'s page.`
                       : row.wait_reason === PLAN_STALE
-                        ? "Give it again from their page."
+                        ? planStaleStep(system, Boolean(row.sends_on_its_own))
                         : "Give it again from their page once the reason is fixed."}{" "}
                   Then mark it seen on Home.
                 </span>
               </span>
               <span className="tablet:w-[140px] tablet:shrink-0 tablet:text-right">
-                {decideHere ? (
+                {looking ? null : decideHere ? (
                   <ArrowLink href={decideHere}>{DECIDE_IT}</ArrowLink>
                 ) : revocation && zitadel ? (
                   <ArrowLink href="/governance/drift">Drift</ArrowLink>
