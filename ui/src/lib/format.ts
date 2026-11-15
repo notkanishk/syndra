@@ -303,11 +303,16 @@ export function personLine(user: { title?: string | null; team?: string | null }
  * of the entry is that the operator's next move differs by reason: there is
  * nothing to reach for, or there is something to fix.
  *
- * An unrecognised value falls through unchanged rather than being swallowed. A
- * reason nobody has worded yet is still more use than no reason at all, and it
- * shows up here rather than disappearing quietly.
+ * An unrecognised value is said in a general sentence, never as its code: the
+ * code is the machine's word and reached a page unchanged once already.
  */
-export function whyNotChecked(reason: string): string {
+export function whyNotChecked(reason: string, system?: string): string {
+  const said = reasonWords(reason);
+  // "It" is the system; where the sentence stands alone, with no system before it, the name replaces it.
+  return system ? said.replace(/^It /, `${system} `).replace(/^Its /, `${system}'s `) : said;
+}
+
+function reasonWords(reason: string): string {
   switch (reason) {
     case "target_unreachable":
       return "It did not answer when Syndra last tried.";
@@ -322,8 +327,20 @@ export function whyNotChecked(reason: string): string {
     case "addon_outdated":
       return "Its add-on is older than this Syndra, so Syndra stopped checking it. Update the add-on from the same release as Syndra.";
     default:
-      return reason;
+      // Never the code: a reason nobody has worded yet is still said in words.
+      return "It could not be checked, and Syndra has no words for why.";
   }
+}
+
+/**
+ * The account list when the pass stopped before it concluded anything: the
+ * add-on's own sentence and next step when it gave them (`detail`), else the
+ * reason in words, naming the system, and the one step true of every reason.
+ * The empty list such a pass returns is never shown as "nothing outside Syndra".
+ */
+export function inventoryNotRead(system: string, detail: string | undefined, reason: string | undefined): string {
+  const why = detail?.trim() || `${reason ? whyNotChecked(reason, system) : `${system} could not be read.`} Read again once that is fixed.`;
+  return `The account list could not be read. ${why}`;
 }
 
 /**

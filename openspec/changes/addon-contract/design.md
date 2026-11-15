@@ -1306,124 +1306,123 @@ whether a member's usage grew. `storage.sessions` from the audit log is the
 second TrueNAS metric and reports a `gap` for every share auditing does not
 cover (`uncovered` today, as a gap reason).
 
-### 9.4b Which account a binding names (the TrueNAS add-on, slices 7r, 7t-1 and 7t-2; the backend, 7t-3)
+### 9.4b One account identity (the TrueNAS add-on, slices 7r, 7t-1, 7t-2; the backend, 7t-3; the UI, 7t-4)
 
-A binding records the account's uid and what that uid is (`uid_kind`). `"account"` says it is a real
-NAS uid: written by create, both adoptions and `boundAccount`'s rewrite. Absent is a contract-1
-binding, whose uid may be the NAS record key. `boundAccount` says which account it names, and since
-7t-1 it is the rule of **every add-on caller**, through one module (`addons/truenas/identity_resolve.go`):
-`resolveLive` against the target now, from the user table alone since naming an account needs only
-its uid and name (apply's `locate`, which then names the account's groups to converge them, the account operations set-password, rotate
-and purge, `storage.status`, `activity.get`, and adoption's repeat check) and `resolveIn` over one read
-(the plan, and the wishes behind the standing, the statistics and `accountBound`). `recordID` is gone.
-Since 7t-2 the add-on also says the attribution on the wire. `attribute` runs `resolveIn` over every
-binding once, and `/subjects` carries each row's `subject` (the account a binding names) and
-`conflicts[]` (a binding that names no account, with a required `reason`: `name_held`,
-`number_held`, `ambiguous` with every holder listed, or `claimed_twice` when two bindings name one
-account and neither gets it; with the holder and the add-on's `detail` and `next`:
-`common/binding_conflict.json`, the apply's conflict shape). Every binding is in exactly one of three
-states on one reply: attributed, a conflict, or gone (neither), and nothing else is left in neither.
-The verdict is one judgement, `attributeOver`, of a binding with every other binding over the same
-read. `/subjects` and the plan run it over a whole read. `resolveLive`, and so the apply and every
-operation, runs it over the accounts on the keys of the subject's binding and of every binding that
-could name the same account. So a `claimed_twice` account is refused to both claimants everywhere,
-never changed for whichever one asked. `account_id`
-stays the uid and is a key within one read, not an identity across reads (AUTHORING ch. 2; SCIM
-RFC 7643 §3.1, with `subject` as `externalId`). Since 7t-3 the backend attributes by `subject`
-alone (below, "The backend's half"). Below, "never written", "never attributed" and "names no
-account" are about the add-on:
+Decision record: `docs/adr/007-account-id-is-a-key-within-a-read.md`. The rule in one sentence: **the
+add-on's binding table is the only link from a person to an account, the add-on says it on the wire,
+and Syndra never works it out again.**
+
+**The module.** `addons/truenas/identity_resolve.go` owns which account a binding names, for every
+add-on caller, with `boundAccount` its only rule. `resolveLive(subject, who)` asks the target now
+(the user table alone: naming an account needs its uid and name); `resolveIn(binding, ix)` asks one
+read (the plan, the wishes, statistics, `accountBound`); `attribute` runs `resolveIn` over every
+binding once, with `attributeOver` the one judgement of a binding against every other binding on the
+same read. Callers: apply's `locate`, `setPassword`, `rotatePassword`, `purgeAccount`,
+`storageStatus`, `smbActivity`, adoption's repeat check, `planOne`. `recordID` is deleted. Invariant:
+no write is ever sent to an account `resolveLive` did not return. A refusal is one mapping
+(`operatedAccount`): 422 no binding or account gone, 409 on a conflict (the conflict's `detail` and
+`next`) or two accounts on one key, 500 `STORE_UNREADABLE`, 502 an absence read from a cut-short list.
+
+**The rule.**
 
 - The name is the anchor. A name that finds an account with the recorded uid names it; a name held by
   a different uid is a conflict (the original was deleted and the name reused). An unmarked binding
-  the name finds is rewritten once with the real uid and the marker, by `resolveLive` for an apply or
-  a write operation (logged `store.bind` under that call); a read operation (`storage.status`,
-  `activity.get`) resolves the same way and writes nothing, since it runs outside the subject lock
-  and the lifecycle gate.
+  the name finds is rewritten once with the real uid and the marker (`uid_kind: "account"`), by
+  `resolveLive` for an apply or a write (logged `store.bind`); a read operation writes nothing.
 - A number is followed to a new name only **inside the range this add-on hands out**
-  (`TRUENAS_ID_FLOOR`..`CEILING`), where numbers are never handed out twice (`ClaimID`'s high-water
-  mark): a rename is followed. A number outside it (an adopted hand-made account, uid from 3000)
-  can come back after a delete, the hazard `identity.go` records (three new accounts got departed
-  members' home folders), so it is never believed alone: name gone and number held by another name is
-  a `BindingConflict` (an operator releases the binding, and adopts that account only if it is
-  theirs); the apply renames, writes and creates nothing. Name and number both gone is the deleted
-  account, re-created as before. The same holds for an **unmarked** binding outside the range (legacy
-  policy B, design 7t D6; `legacyHaltsOnHeldNumber`, pending the owner's Q2): its name gone and its
-  number held by another name halts as the same conflict and creates nothing. uid 0 is never looked
-  up (root).
-- An operation refuses rather than guesses: 422 when the subject has no binding or its account is
-  gone, 409 on a conflict (the conflict's own detail and next step, `OPERATION_FAILED`; no wire
-  change in 7t-1) and on two accounts holding one key, 500 `STORE_UNREADABLE` when the add-on's store
-  cannot be read; 502 when an absence is read from a cut-short list. An operation's conflict stays
-  `OPERATION_FAILED` after 7t-2: `BINDING_CONFLICT` carries an apply outcome (`effect: blocked`),
-  which an operation has no vocabulary for, and the same conflict is on `/subjects`. On a conflict no write is sent and
-  nothing is logged (the lookups are reads): no write ever goes to an
-  account `resolveLive` did not return. A purge's self check and `activity.get`'s audit filter use the
-  account's name now (the audit log is keyed by name), so an in-range rename finds its log.
-- A conflicted binding names no account for the statistics, the standing or `accountBound`: the holder
-  of the number is not attributed to the subject there. `account_id` is stamped on a binding only for
-  a marked uid, so a record key never reads as one; it is the uid, which outside the range TrueNAS can
-  hand to a new account (7t).
+  (`TRUENAS_ID_FLOOR`..`CEILING`, never handed out twice: `ClaimID`'s high-water mark). Outside it
+  (an adopted hand-made account) TrueNAS can reuse a freed number, the hazard `identity.go:7-12`
+  records, so a number is never believed alone: name gone and number held by another name is a
+  `BindingConflict` and nothing is renamed, written or created. Name and number both gone is the
+  deleted account, re-created. uid 0 is never looked up.
+- **Legacy policy B (design 7t D6; `legacyHaltsOnHeldNumber`; pending owner Q2).** An unmarked
+  (contract-1) binding outside the range follows the same rule: name gone, number held by another
+  name halts as a conflict instead of creating a duplicate. `false` is policy A (create). Its only
+  false positive is a record-key-era binding whose key equals a system uid, which halts once and is
+  released. The cutover pre-check (NEXT.md, a **must**, read-only, from a copy of production's
+  `state.db`) lists bindings with no `uid_kind` whose name the NAS no longer has; expected zero.
 
-The conflict reaches the operator as the apply's and the plan's `blocked` outcome and an operation's
-409 (detail and next step as the add-on words them), which the backend settles as the target refusing
-that row. Since 7t-3 it is also a standing finding (below); rendering it is 7t-4.
+**The wire (contract 2, core, not a feature; pending owner Q4).**
 
-**The backend's half (7t-3).** The backend never works out attribution itself. A `/subjects` row is
-a recorded binding's account exactly when the row's `subject` is that binding's subject; nothing is
-matched by `account_id` or name (`unmanaged`: the rows with no `subject`; `statesBySubject`: the
-state compared; `partitionByPresence`; the inventory's standing; the dormant list; and `/homes`,
-whose rows carry `subject` from the same `attribute()`). `target_account_bindings` stays the
-backend's mirror for the outbox, Home and the UI, written from apply results and adoptions, and is
-never consulted to attribute a row. Per recorded binding the sweep reads one of three states off one
-reply: **bound** (live, classified and planned as before), **conflict** (in `conflicts`), or
-**absent** (neither: `deleted_upstream`, as before, from a whole read only).
+- `/subjects`: each row carries `subject` (the subject the add-on's binding names it for; absent when
+  none does, never on `self`), and the reply carries `conflicts[]`: `{subject, username, account_id,
+  adoptable, bound_to?, holders?, detail, next}` with a required `reason` (`name_held`,
+  `number_held`, `ambiguous` with every holder, `claimed_twice` when two bindings name one account
+  and neither gets it). `username`/`account_id` are the **holder's**. One shape,
+  `common/binding_conflict.json`, shared with an apply or plan outcome's `conflict` and the
+  `BINDING_CONFLICT` problem. Every binding is in exactly one of three states on one reply:
+  attributed, a conflict, or gone (neither).
+- `/homes` rows carry `subject` from the same `attribute()`; 500 `STORE_UNREADABLE` when the
+  bindings cannot be read.
+- 503 `TARGET_CHANGED`: the add-on's reads straddled a change; nothing was sent, try again.
+- `account_id` keeps its value (the uid; pending owner Q1) and its meaning is narrowed (AUTHORING
+  ch. 2): unique within one read, survives a rename, **not an identity across reads**. SCIM RFC 7643
+  §3.1: the add-on is the service provider, `subject` plays `externalId`.
+- Deploy order: `conflicts` is required (`[]` when none). A reply without it (an add-on before 7t-2,
+  or contract 1) is `Outdated`, the one test (`SubjectsResult.Outdated`; the verdict is remembered per add-on and
+  `addons.Outdated` answers it, asked by `/homes` too). The sweep and the inventory stop as `addon_outdated` (`SubjectsResult.Halt()`), so
+  a backend ahead of its add-on says to update the add-on instead of reading every binding as
+  deleted. The add-on goes out with or before the backend, from one commit.
 
-- **The finding.** A conflict is a standing finding in `target_merge_findings` with the outcome
-  `binding_conflict` (`merge.BindingConflict`, account-level like `deleted_upstream`; migration
-  000096 widens the outcome check, reversible: its down deletes these rows), keyed
-  `(target, subject, field "")`, with the add-on's whole report as `theirs` (`reason`, holder,
-  `adoptable`, `bound_to`, `detail`, `next`) for the UI to render. **Raised** by the sweep from
-  `/subjects.conflicts` before anything is classified (`raiseConflicts`), for every subject the
-  add-on names, recorded here or not; such a subject is never planned, never queued by the unbound
-  half (`convergeUnbound` skips it) and never read as absent, so it is never offered "recreate".
-  **Raised too** by the drain (pending owner Q6): a rejected apply, or a system row's re-plan that
-  blocks, carrying `conflict` records the same finding through the same rule (`raiseConflict`:
-  `merge.Conflicted`), so it shows under Waiting on you at once; the sweep then refreshes that row.
-  Only for a subject with a binding on the target (the backend's mirror): a create blocked because its
-  name is taken is no binding's conflict, never in `/subjects`, and keeps its refused row and words.
-  **Closed** `agreed` (or as decided) on every whole read for each subject the add-on no longer lists
-  (`db.ClearMergeFindingsOutside`, before the stale loop; a subject with an apply in flight is kept,
-  since the drain may have raised its conflict after the add-on read), and by the account-slot clear
-  (`persistFindings`) when the subject's own row is back; if the conflict ends with the account gone,
-  the slot becomes a new `deleted_upstream`. A new outcome in a slot drops any decision about the old
-  one (`RecordMergeFinding`). **Resolved** only by `unbound` (stop tracking: `account.release`, the
-  add-on's own next step; pending owner Q5); `reprovisioned`, `keep_ours` and `take_theirs` are
-  refused (`resolutionFits`). Adopting the holder stays in its one place, Not created by Syndra.
-- **An apply in flight.** The add-on reads the app before its bindings, so an apply landing between
-  the two leaves its subject on no row and in no conflict for one read. The sweep asks which subjects
-  had an apply in flight since the read began (`db.AppliesInFlightSince`: settled after the read
-  began, or `in_flight` and started within `addons.ApplyWindow()` of it, so a row a crashed drain
-  left never hides a deletion; the read's start is the database's clock). A row's `started_at` is
-  stamped as its calls go out (`db.MarkPropagationSending`, at the head of `dispatchEntitlement`,
-  which every add-on drain path sends through), not only when its batch was claimed and concludes nothing about
-  them that pass: never `deleted_upstream`.
-- **The drain keeps the add-on's words.** `applyWire` decodes `consequence` and `conflict`. A refused
-  row's `last_error` is the add-on's `detail` and then its `consequence` (the next step), as written,
-  for the pending page to show after "{system} refused it:". The requeue reasons name the system by
-  its name (`addons.SystemNameOf`, the one path the pages use): "{system} could not be reached",
-  "{system} changed while Syndra was reading it", "{system} is not taking changes right now".
-- **A refused read is not an outage.** A `/subjects` answered 500 `STORE_UNREADABLE` (the add-on's
-  records failed while TrueNAS may be fine) is `read_refused` on the target's record and on the
-  sweep's and the inventory's result, which carry the add-on's sentence and next step as `detail`
-  (`readFailure`); every other failure (`NO_CURRENT_READ`, `TARGET_UNREADABLE`, no answer) is
-  `target_unreachable`. The System page's Check now line shows that sentence, or the reason in words
-  with a next step true of it, never the reason's code.
-- **Deploy order.** `conflicts` is required on `/subjects`; a reply without it (an add-on before
-  7t-2, or contract 1) is `Outdated`: the one test, made on `/subjects` and remembered per add-on
-  (`addons.Outdated`, which `/homes` asks too, reading `/subjects` once when nothing has said yet). The
-  pass and the inventory stop as `addon_outdated` (`readHalt`, the one mapping) and `/homes` answers
-  not read with that reason, so a backend deployed ahead of its add-on says to update the add-on
-  rather than reading every binding as deleted. Both ship from one commit.
+**The backend's half (7t-3).** A `/subjects` row is a recorded binding's account exactly when the
+row's `subject` is that binding's subject; nothing is matched by `account_id` or name (`unmanaged`,
+`statesBySubject`, `partitionByPresence`, the inventory's standing, the dormant list, `/homes`).
+`target_account_bindings` stays the backend's mirror for the outbox, Home and the UI and is never
+consulted to attribute a row. Per recorded binding the sweep reads one of three states: **bound**
+(classified and planned), **conflict**, or **absent** (`deleted_upstream`, from a whole read only).
+A subject with an apply in flight since the read began (`db.AppliesInFlightSince`, bounded by
+`addons.ApplyWindow()`; a row is stamped when sent, `db.MarkPropagationSending`) is concluded
+nothing about that pass.
+
+**The finding lifecycle (D5).** One standing row in `target_merge_findings`, outcome
+`binding_conflict` (`merge.BindingConflict`, account-level like `deleted_upstream`; migration
+000096), keyed `(target, subject, "")`, `theirs` the add-on's whole report.
+
+- **Raised** by the sweep from `/subjects.conflicts` before anything is classified
+  (`raiseConflicts`), so such a subject is never planned, never queued, never offered "recreate". And
+  by the drain (pending owner Q6): a rejected apply or a blocking re-plan carrying `conflict`
+  (`raiseConflict`), only for a subject with a binding on the target; a create blocked because its
+  name is taken is no binding's conflict and keeps its refused row. The row's `last_error` is, for a
+  refusal, the add-on's `detail` then `consequence`, as written, no prefix; for a change the add-on
+  applied that Syndra could not attribute (`ErrBindingConflict`, which also records the
+  `target_binding_conflicts` finding naming the row's `outbox_id`) it is Syndra's own plain sentence
+  (`bindingConflictReason`: "Two of Syndra's records disagree about whose account {name} is. Decide
+  whose it is before changing anything else for them."), which names no system, with the ids and the
+  store's error in the log only. That row settles with its own `wait_reason`, `binding_conflict`
+  (migration 000097; down maps it back to `target_refused`), which holds the person's next
+  withdrawal like a refusal (`runnerSends`). A refusal with no words stores none, under
+  `target_refused`. The pages switch on the `wait_reason`, never on what `last_error` says: "{system}
+  applied the change." then the stored sentence for the first, never "refused it"; "{system} refused
+  it and gave no reason" for the second.
+- **Closed** `agreed` on every whole read for each subject the add-on no longer lists
+  (`ClearMergeFindingsOutside`), and by the account-slot clear when the subject's own row is back; a
+  conflict that ends with the account gone becomes `deleted_upstream`. A new outcome in a slot drops
+  the old decision.
+- **Resolved** only by `unbound` (`account.release`; pending owner Q5; `resolutionFits` refuses the
+  rest). Adopting the holder stays in its one place, Not created by Syndra.
+- **Shown (7t-4).** `MergeFindings` renders the add-on's `detail` then `next` as written, the
+  holders of an `ambiguous` conflict, the other person of a `claimed_twice` one by name, and the
+  one action **Stop tracking** (the system page's own `account.release` control) through the
+  decision form, whose line says only what stopping does to the system (nothing on it is changed):
+  whether to adopt the holder, or what the next change does, is the add-on's `next`, said once and
+  never inferred from `reason`. The holder's number is Advanced's Technical detail. A resolved row leaves with the list's leaving
+  motion. Pending changes and Withdrawn access say why a change stopped through one helper
+  (`stoppedLine`), a refusal's stored `last_error` after "{system} refused it:" (never twice). A
+  bound person's conflict, from a standing finding (matched by person: no link joins an outbox row to
+  it) or from a `target_binding_conflicts` record (matched by the row's own id), has the next step
+  "Decide it under Waiting on you", linking the system page's `#waiting` region; while those are read
+  the seat says so rather than showing a step and swapping it. The account list card says why a
+  stopped pass was not read: a halted pass answers 503 with the inventory as its body, which the
+  reader takes as data (`readInventory`: a 503 whose body says `halted: true`, which `ApiError.body`
+  keeps; any other 503, a null body or any other failure still throws), and the card shows
+  its `detail`, not an empty list. Copy: `plain-language-copy/design.md` §16, `bindingConflictCopyGuide.test.ts`.
+- **A refused read is not an outage.** 500 `STORE_UNREADABLE` is `read_refused` with the add-on's
+  sentence and next step as `detail`; a refusal inside the add-on's cooldown is `read_stale` (with
+  `retry_after`); every other failure is `target_unreachable` (`SubjectsResult.Halt()` is the one
+  mapping).
+
+Name-based attribution remains in one place by design: the statistics' record text (§9.6 `peopleOn`)
+is free text with no account key. Left to slice 7t-6 with the mirror's unique indexes.
 
 ### 9.5 Identity
 

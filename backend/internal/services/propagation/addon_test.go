@@ -33,6 +33,8 @@ type addonHarness struct {
 	applied    []string
 	failed     map[string]string
 	refused    []string
+	// conflicted are the rows settled as applied-but-unattributed (db.WaitReasonBindingConflict).
+	conflicted []string
 	requeued   []string
 	released   []string
 	attempts   int
@@ -103,6 +105,11 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 	t.Cleanup(swap(&markTargetRefused, func(_ context.Context, id, msg string) error {
 		h.failed[id] = msg
 		h.refused = append(h.refused, id)
+		return nil
+	}))
+	t.Cleanup(swap(&markBindingConflict, func(_ context.Context, id, msg string) error {
+		h.failed[id] = msg
+		h.conflicted = append(h.conflicted, id)
 		return nil
 	}))
 	requeue = func(_ context.Context, id, _ string) (int, error) {
@@ -666,14 +673,23 @@ func TestARefusedBindingDoesNotSettleApplied(t *testing.T) {
 	// The mutation LANDED. Every other terminal failure on this path means it
 	// did not, so an operator who reads this as "the change did not go through"
 	// re-drives it onto the same account belonging to the same other person.
-	if !strings.Contains(reason, "was applied") {
-		t.Errorf("the reason must say the change landed: %q", reason)
+	// Its own wait_reason says the change landed and is not a refusal, so no page
+	// has to read the wording; and it holds the next withdrawal like one.
+	if len(h.conflicted) != 1 || h.conflicted[0] != "o1" || len(h.refused) != 0 {
+		t.Errorf("want o1 settled as applied-but-unattributed and not as a refusal: conflicted %v refused %v", h.conflicted, h.refused)
 	}
-	if !strings.Contains(reason, "charlotte") || !strings.Contains(reason, "another subject") {
+	if !strings.Contains(reason, "charlotte") || !strings.HasPrefix(reason, "Two of Syndra's records disagree about whose account") {
 		t.Errorf("it must name the account and what is wrong with it: %q", reason)
 	}
-	if !strings.Contains(reason, "Do not retry") {
-		t.Errorf("and that retrying is the wrong move: %q", reason)
+	// Plain words for a person: nothing internal, and it ends in a next step.
+	// Names no system either: it is worded with the system's current name where it is read.
+	for _, raw := range []string{"subject", "binding", "3001", "Do not retry", "charlotte on truenas", "TrueNAS", "truenas"} {
+		if strings.Contains(reason, raw) {
+			t.Errorf("the reason must not carry %q: %q", raw, reason)
+		}
+	}
+	if !strings.HasSuffix(reason, "Decide whose it is before changing anything else for them.") {
+		t.Errorf("and it must end in the next step: %q", reason)
 	}
 }
 

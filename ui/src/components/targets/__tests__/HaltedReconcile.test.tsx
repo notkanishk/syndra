@@ -102,7 +102,7 @@ describe("a reconcile pass that halted", () => {
     expect(
       screen.getByText(/stopped before it concluded anything/i),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/target unreachable/i).length).toBeGreaterThan(
+    expect(screen.getAllByText(/Syndra has no words for why/i).length).toBeGreaterThan(
       0,
     );
 

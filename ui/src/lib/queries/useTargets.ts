@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { request } from "@/lib/api-client";
+import { ApiError, request } from "@/lib/api-client";
 import type { EntitlementField } from "@/lib/fields";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
@@ -308,18 +308,39 @@ export interface TargetInventory {
   truncated?: boolean;
   halted?: boolean;
   reason?: string;
+  /** The add-on's own sentence for a read it refused, with its next step; shown as written. */
+  detail?: string;
   /** Why this is the add-on's copy, when it is one (feature freshness). */
   read_stale?: Stale;
 }
 
 /** "Read again" on the inventory: the same GET, asking the target itself. */
 export const useTargetInventoryAgain = (target: string | undefined) =>
-  useReadAgain<TargetInventory>(["targets", target, "inventory"], `/targets/${target}/inventory`);
+  useReadAgain<TargetInventory>(["targets", target, "inventory"], `/targets/${target}/inventory`, readInventory);
+
+/**
+ * A pass that stopped answers 503 with the inventory itself (`halted`, `reason`, `detail`), never an
+ * empty list (handlers/inventory.go). Read as data, so the card can say why. Only such a body: any
+ * other 503 (an unreachable system's envelope, a gateway's page) and every other failure, a 429's
+ * cooldown included, still throws as it did.
+ */
+async function readInventory(path: string): Promise<TargetInventory> {
+  try {
+    return await request<TargetInventory>(path);
+  } catch (e) {
+    // The handler's own reason for the 503 is `halted`: nothing else is read as an inventory.
+    const body = e instanceof ApiError && e.status === 503 ? e.body : undefined;
+    if (typeof body === "object" && body !== null && (body as { halted?: unknown }).halted === true) {
+      return body as TargetInventory;
+    }
+    throw e;
+  }
+}
 
 export function useTargetInventory(target: string | undefined) {
   return useQuery({
     queryKey: ["targets", target, "inventory"],
-    queryFn: () => request<TargetInventory>(`/targets/${target}/inventory`),
+    queryFn: () => readInventory(`/targets/${target}/inventory`),
     enabled: Boolean(target),
   });
 }
@@ -406,7 +427,7 @@ export interface MergeFinding {
   /** Empty for an account-level finding — `deleted_upstream` is about the
    * account existing, not about any value. */
   field?: string;
-  outcome: "theirs_only" | "conflict" | "deleted_upstream";
+  outcome: "theirs_only" | "conflict" | "deleted_upstream" | "binding_conflict";
   /** What the target last reported, what Syndra wants, and what the target has
    * now. All three, because "what was it before" is the question asked first. */
   base?: unknown;

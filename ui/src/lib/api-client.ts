@@ -60,12 +60,17 @@ export class ApiError extends Error {
   readonly retryAfter?: number;
   /** The request's method, so a failed write is told apart from a failed read. */
   readonly method?: string;
+  /**
+   * The body as parsed, for the rare read whose failure status carries a result and not an
+   * envelope (the inventory's 503 is the inventory, halted). Not a message: never shown.
+   */
+  readonly body?: unknown;
 
   constructor(status: number, body: ApiErrorBody | string, method?: string) {
     // A bare string is a gateway's page or an upstream's text, never the product's words: at 5xx
     // it is not shown. The envelope's `message` is the only copy that reaches the screen.
     const parsed: ApiErrorBody =
-      typeof body === "string" ? (status >= 500 ? {} : { message: body }) : body;
+      typeof body === "string" ? (status >= 500 ? {} : { message: body }) : (body ?? {}); // a JSON `null` is no envelope
     super(parsed.message ?? fallbackMessage(status));
     this.name = "ApiError";
     this.status = status;
@@ -73,6 +78,7 @@ export class ApiError extends Error {
     this.details = parsed.details;
     this.retryAfter = parsed.retry_after;
     this.method = method;
+    this.body = typeof body === "string" ? undefined : body;
   }
 }
 

@@ -28,6 +28,7 @@ import { formatShortDate, humanizeKey } from "@/lib/format";
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { sortByName } from "@/lib/sort";
+import { stoppedLine } from "@/lib/wait-reason";
 
 /**
  * Review › Unfinished revocations (9.9, 9.10).
@@ -55,6 +56,8 @@ interface UnconfirmedRevocation {
   status: string;
   attempts: number;
   last_error?: string;
+  /** Why it stopped, when the system itself refused it (db.WaitReasonTargetRefused) or Zitadel did (refused:cause). */
+  wait_reason?: string;
   created_at: string;
   target: string;
   age_seconds: number;
@@ -424,7 +427,7 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
             See it in Change history
           </ArrowLink>
         )}
-        <LastError row={row} />
+        <LastError row={row} system={where} />
       </WhatSeat>
 
       <span className="hidden w-[130px] flex-none pt-0.5 text-[14px] text-muted desktop:block">{where}</span>
@@ -468,12 +471,12 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
  * Why Syndra gave up: the reason, for a row that will not clear itself. A row still on the way
  * retries by itself, so its last error is not something anybody can act on.
  */
-function LastError({ row }: { row: UnconfirmedRevocation }) {
+function LastError({ row, system }: { row: UnconfirmedRevocation; system: string }) {
   if (!row.spent || !row.last_error) return null;
   return (
     <span className="mt-1 flex items-baseline gap-2 text-[12.5px] leading-[1.5] text-faint">
       <StatusDot tone="danger" />
-      {row.last_error}
+      {stoppedLine(system, row)}
     </span>
   );
 }

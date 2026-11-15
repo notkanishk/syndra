@@ -352,7 +352,7 @@ const runnerSends = `(` + sendsOnItsOwn + `
 			      SELECT 1 FROM propagation_outbox f
 			       WHERE f.target = p.target AND f.user_id = p.user_id
 			         AND f.op_type = 'apply' AND f.withdraws_only
-			         AND f.status = 'failed' AND f.wait_reason = '` + WaitReasonTargetRefused + `'
+			         AND f.status = 'failed' AND f.wait_reason IN ('` + WaitReasonTargetRefused + `', '` + WaitReasonBindingConflict + `')
 			         AND f.intent_seq < p.intent_seq
 			         AND NOT EXISTS (
 			             SELECT 1 FROM propagation_outbox a
@@ -826,6 +826,14 @@ func SendsOnTheirOwnTx(ctx context.Context, tx pgx.Tx, ids []string) (map[string
 		out[id] = sends
 	}
 	return out, rows.Err()
+}
+
+// MarkPropagationBindingConflict is MarkPropagationFailed for an add-on row
+// whose change landed and could not be attributed (WaitReasonBindingConflict).
+func MarkPropagationBindingConflict(ctx context.Context, id, errMsg string) error {
+	return settleOne(ctx, "mark propagation as applied but unattributed", id,
+		`UPDATE propagation_outbox SET status='failed', completed_at=NOW(), last_error=$2, wait_reason='`+WaitReasonBindingConflict+`'
+		 WHERE id=$1 AND status='in_flight'`, errMsg)
 }
 
 // MarkPropagationTargetRefused is MarkPropagationFailed for an add-on row the

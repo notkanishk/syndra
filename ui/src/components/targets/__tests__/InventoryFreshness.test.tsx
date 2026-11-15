@@ -158,3 +158,43 @@ describe("a cooldown carried in the account list's data", () => {
     expect(screen.getByText(cooldownLine("The account list", 18))).toBeInTheDocument();
   });
 });
+
+// 7t-3 left the add-on's sentence on the inventory result; a stopped pass has an empty list it
+// never measured, so the card says why instead of "Nothing outside Syndra."
+describe("an account list whose pass stopped", () => {
+  const stopped = (over: Record<string, unknown>) =>
+    (state.inventory = { data: { target: "truenas", bound: 0, unmanaged: [], current: false, halted: true, ...over } });
+
+  it("says the add-on's own sentence and next step as written, and never an empty list", () => {
+    const detail = "Syndra's records of who has which account on TrueNAS can't be read. Check the add-on's storage, then try again.";
+    stopped({ reason: "read_refused", detail });
+    renderTarget();
+    expect(screen.getByText(`The account list could not be read. ${detail}`)).toBeInTheDocument();
+    expect(screen.queryByText("Nothing outside Syndra.")).toBeNull();
+    expect(screen.queryByText("read_refused")).toBeNull();
+  });
+
+  it("words the reason and ends in a step when the add-on said nothing", () => {
+    stopped({ reason: "target_unreachable" });
+    renderTarget();
+    // The system is the one that did not answer, not the list.
+    expect(
+      screen.getByText(/^The account list could not be read\. Truenas did not answer when Syndra last tried\. Read again once that is fixed\.$/i),
+    ).toBeInTheDocument();
+  });
+
+  it("never shows a reason's code, and still says a next step", () => {
+    stopped({ reason: "some_new_reason" });
+    renderTarget();
+    expect(
+      screen.getByText(/^The account list could not be read\. Truenas could not be checked, and Syndra has no words for why\. Read again once that is fixed\.$/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/some_new_reason/)).toBeNull();
+  });
+
+  it("says nothing of a stop for a pass that concluded", () => {
+    state.inventory = copyOf({ halted: false, current: true, reason: undefined, read_stale: undefined });
+    renderTarget();
+    expect(screen.queryByText(/The account list could not be read/)).toBeNull();
+  });
+});
