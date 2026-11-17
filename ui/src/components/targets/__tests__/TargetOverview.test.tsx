@@ -6,6 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
 import { expectFullStrength } from "@/test-utils/fullStrength";
+import { makeProxyFetch } from "@/test-utils/proxyFetch";
+import { OVERVIEW_NEXT, RETENTION_TITLE } from "@/components/usage/copy";
+import { targetStats } from "@/components/usage/__tests__/fixtures";
 import type {
   AccountHome,
   TargetHealth,
@@ -1219,6 +1222,27 @@ describe("while TrueNAS isn't answering", () => {
     expect(screen.getByRole("button", { name: "Assign to a person" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Check now" })).toBeEnabled();
     expect(screen.queryByText(/waits too/)).toBeNull();
+  });
+});
+
+describe("what has been used here (A-23 R2)", () => {
+  it("keeps the retention control in Advanced only, as the region's last card", async () => {
+    const stub = makeProxyFetch();
+    stub.register("GET", "/api/proxy/targets/truenas/stats", () => ({ ...targetStats(), target: "truenas" }));
+    vi.stubGlobal("fetch", stub.fetchImpl);
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" } as TargetHealth;
+    const { unmount } = renderTarget("advanced");
+    const region = document.getElementById("stats") as HTMLElement;
+    expect(await within(region).findByText(RETENTION_TITLE)).toBeInTheDocument();
+    const cards = region.querySelectorAll(".card");
+    expect(cards[cards.length - 1]).toHaveTextContent(RETENTION_TITLE);
+    unmount();
+    renderTarget("basic");
+    const basic = document.getElementById("stats") as HTMLElement;
+    expect(await within(basic).findByText(OVERVIEW_NEXT)).toBeInTheDocument();
+    expect(within(basic).queryByText(RETENTION_TITLE)).toBeNull();
+    vi.unstubAllGlobals();
   });
 });
 

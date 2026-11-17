@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
 import { StoragePage as MySystems } from "@/components/kinds/storage/StoragePage";
 import { deviceFrom } from "@/components/kinds/storage/device";
+import { homeBytes, sessions, windows } from "@/components/usage/__tests__/fixtures";
 import type { CredentialAnswer, MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
 import type { OneShotSecret } from "@/lib/secret";
 import type { RetryState } from "@/lib/retry";
@@ -173,6 +174,38 @@ describe("usage", () => {
     expect(within(row).getByRole("meter").firstElementChild).toHaveClass("bg-warn");
     const quack = screen.getByText("quack_share").closest(".row-divider") as HTMLElement;
     expect(within(quack).queryByText(/GiB|Nothing saved/)).toBeNull();
+  });
+
+  it("draws the home folder's month under its meter, before the addresses, and the usage card leaves it out (A-23 R1)", () => {
+    state.targets = [view({ usage: { reported: true, metrics: [homeBytes({ against: "home_quota" }), sessions()], ...windows() } })];
+    renderStorage();
+    const home = screen.getByText("Your home folder").closest(".row-divider") as HTMLElement;
+    const month = home.querySelector("[data-home-month]") as HTMLElement;
+    expect(month).not.toBeNull();
+    expect(within(month).getByRole("img")).toBeInTheDocument();
+    expect(within(home).getByRole("meter").compareDocumentPosition(month) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(month.compareDocumentPosition(within(home).getByText(/Connect to Server/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Only the home place carries it.
+    expect(document.querySelectorAll("[data-home-month]")).toHaveLength(1);
+    const card = screen.getByRole("group", { name: "What I have used" });
+    expect(within(card).queryByText("Home folder used")).toBeNull();
+    expect(within(card).getByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+  });
+
+  // Wherever the card does not draw the month, the usage card beside it keeps it: said once, never
+  // twice, never nowhere (one answer, `drawsHomeMonth`).
+  it.each([
+    ["ready", {}, "card"],
+    ["the system did not say which folders are open (unread)", { storage: undefined }, "usage"],
+    ["its places could not be read", { storage: { usable: true, needs_password: false, places: [HOME, WADDLE], places_readable: false } }, "usage"],
+    ["no folder is open to you", { storage: { usable: true, needs_password: false, places: [], places_readable: true } }, "usage"],
+    ["no home place among the folders", { storage: { usable: true, needs_password: false, places: [WADDLE], places_readable: true } }, "usage"],
+  ] as const)("says the home folder's month once: %s", (_, over, where) => {
+    state.targets = [view({ usage: { reported: true, metrics: [homeBytes({ against: "home_quota" }), sessions()], ...windows() }, ...(over as Partial<MyTargetView>) })];
+    renderStorage();
+    const inCard = document.querySelectorAll("[data-home-month]").length;
+    const inUsage = screen.queryAllByRole("heading", { name: "Home folder used" }).length;
+    expect([inCard, inUsage]).toEqual(where === "card" ? [1, 0] : [0, 1]);
   });
 
   it("says no limit set rather than drawing a full bar", () => {

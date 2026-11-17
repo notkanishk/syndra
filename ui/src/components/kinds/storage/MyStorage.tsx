@@ -33,6 +33,7 @@ import {
   type StoragePlace,
 } from "@/lib/queries/useMyStorage";
 import { Meter } from "@/components/ui/Meter";
+import { HomeMonth } from "@/components/usage/UsageCard";
 import { oneShot } from "@/lib/secret";
 import dynamic from "next/dynamic";
 import { RetryStatus } from "@/components/ui/RetryStatus";
@@ -455,6 +456,7 @@ function Folders({
                 showAddresses={!!host}
                 homeKept={!!place.home && !!view.home_kept}
                 roleName={roleName}
+                month={place.home ? <HomeMonth view={view} /> : null}
               />
             ))}
           </div>
@@ -494,12 +496,15 @@ function PlaceBlock({
   showAddresses,
   homeKept,
   roleName,
+  month,
 }: {
   place: StoragePlace;
   offline: boolean;
   showAddresses: boolean;
   homeKept: boolean;
   roleName: (r: RoleSource) => string;
+  /** The home folder's month (A-23 R1): under its meter, before the addresses. */
+  month?: React.ReactNode;
 }) {
   const can = place.access === "change";
   const roles = (place.roles ?? []).map(roleName);
@@ -556,6 +561,7 @@ function PlaceBlock({
       {can && usage && quota > 0 && !offline && (
         <Meter value={usage.used_bytes} limit={quota} label={`${placeName(place)} usage`} valueText={use ?? undefined} />
       )}
+      {month}
       {showAddresses && place.smb_address && place.unc_address && (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-x-3.5 gap-y-2.5">
           <div className="flex min-w-0 flex-col gap-[5px]">

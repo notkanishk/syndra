@@ -27,6 +27,9 @@ import (
 var statsChecks = []string{"stats.descriptors", "stats.points", "stats.totals", "stats.since", "stats.idempotent",
 	"stats.gaps", "stats.unbound", "stats.buffer", "stats.page-size", "stats.no-people", "stats.no-people.ids"}
 
+// gapKinds is stats.json's gap kind enum: why a window was not observed, which Syndra reads.
+var gapKinds = []string{"began", "unread", "dropped", "unobserved"}
+
 // statsMaxPages bounds one read: a cursor that never ends is a failure, not a
 // kit that never ends.
 const statsMaxPages = 1000
@@ -414,6 +417,16 @@ func (k *kit) judgeStats(m map[string]any, r statsRead, set statsSetup) {
 			gaps.expect(end.After(start) && end.Equal(midnight(end, set.zone)), "%s: %s ends at %s, not a later midnight", name, what, str(g, "end"))
 		}
 		gaps.expect(strings.TrimSpace(str(g, "reason")) != "", "%s: %s has no reason", name, what)
+		kind := str(g, "kind")
+		gaps.expect(slices.Contains(gapKinds, kind), "%s: %s has kind %q, not one of %v", name, what, kind, gapKinds)
+		if kind == "began" {
+			// Before the add-on started counting: no point of the metric starts before it ends.
+			for _, p := range r.points {
+				at, _ := time.Parse(time.RFC3339, str(p, "start"))
+				gaps.expect(!at.Before(end), "%s: %s says began (before counting) and ends at %s, after point %s was counted",
+					name, what, str(g, "end"), str(p, "start"))
+			}
+		}
 		gdims := dimsOf(gaps, what, g)
 		for _, p := range r.points {
 			at, _ := time.Parse(time.RFC3339, str(p, "start"))

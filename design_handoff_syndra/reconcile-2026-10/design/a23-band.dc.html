@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Band of days (A-23)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div class="u-band" style="width:{{ b.W }}px" role="img" aria-label="{{ b.aria }}">
+  <sc-if value="{{ b.hasHot }}" hint-placeholder-val="{{ false }}"><div class="hot" style="left:{{ b.hotLeft }}px;width:{{ b.hotW }}px"></div></sc-if>
+  <sc-for list="{{ b.hatches }}" as="h" hint-placeholder-count="1"><div class="hatch" style="left:{{ h.left }}px;width:{{ h.w }}px"></div></sc-for>
+  <sc-if value="{{ b.hasPre }}" hint-placeholder-val="{{ false }}"><div class="pre" style="left:0;width:{{ b.baseLeft }}px"></div></sc-if>
+  <sc-if value="{{ b.hasBase }}" hint-placeholder-val="{{ true }}"><div class="base" style="left:{{ b.baseLeft }}px;width:{{ b.baseW }}px"></div></sc-if>
+  <sc-if value="{{ b.hasTick }}" hint-placeholder-val="{{ false }}"><div class="tick" style="left:{{ b.baseLeft }}px"></div></sc-if>
+  <sc-if value="{{ b.hasLimit }}" hint-placeholder-val="{{ false }}"><div class="limit" style="left:{{ b.baseLeft }}px;width:{{ b.baseW }}px"></div><span class="limit-word">{{ b.limitWord }}</span></sc-if>
+  <sc-for list="{{ b.bars }}" as="r" hint-placeholder-count="1"><div class="bar" style="left:{{ r.x }}px;width:{{ r.w }}px;height:{{ r.h }}px"></div></sc-for>
+  <sc-if value="{{ b.isLine }}" hint-placeholder-val="{{ true }}">
+  <svg width="{{ b.W }}" height="40" aria-hidden="true">
+    <polygon points="{{ b.a1 }}" fill="var(--accent-soft)" stroke="none"></polygon>
+    <polygon points="{{ b.a2 }}" fill="var(--accent-soft)" stroke="none"></polygon>
+    <polygon points="{{ b.a3 }}" fill="var(--accent-soft)" stroke="none"></polygon>
+    <polyline points="{{ b.l1 }}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+    <polyline points="{{ b.l2 }}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+    <polyline points="{{ b.l3 }}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+    <circle cx="{{ b.d1x }}" cy="{{ b.d1y }}" r="{{ b.d1r }}" fill="var(--accent)" stroke="var(--surface-1)" stroke-width="1.5"></circle>
+    <circle cx="{{ b.d2x }}" cy="{{ b.d2y }}" r="{{ b.d2r }}" fill="var(--accent)" stroke="var(--surface-1)" stroke-width="1.5"></circle>
+    <circle cx="{{ b.d3x }}" cy="{{ b.d3y }}" r="{{ b.d3r }}" fill="var(--accent)" stroke="var(--surface-1)" stroke-width="1.5"></circle>
+    <circle cx="{{ b.d4x }}" cy="{{ b.d4y }}" r="{{ b.d4r }}" fill="var(--accent)" stroke="var(--surface-1)" stroke-width="1.5"></circle>
+  </svg>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":608,"height":40}}'>
+// A helper the A-23 boards mount (as Frame.dc.html is): the band of days, drawn from what it is handed. Styles come from the board's helmet.
+class Component extends DCLogic {
+  renderVals() { return { b: this.props.b || {} }; }
+}
+</script>
+</body>
+</html>

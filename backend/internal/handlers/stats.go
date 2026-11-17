@@ -65,10 +65,15 @@ type statsMetricView struct {
 	// CountedThrough is the watermark as a day: the last final one, nil with
 	// it. A day after it may still change, and one with no point is not yet
 	// a zero.
-	CountedThrough *string         `json:"counted_through"`
-	Series         []statsSeries   `json:"series"`
-	Gaps           []statsGapView  `json:"gaps"`
-	Collected      *statsCollected `json:"collected,omitempty"`
+	CountedThrough *string `json:"counted_through"`
+	// Began is the day the add-on began counting the metric: the end of its
+	// began gap over the whole metric, kept however old (db.StatsGaps), nil
+	// when it sent none. A day before it is before the record, neither a gap
+	// nor a zero; a later outage is a gap of its own kind, never this.
+	Began     *string         `json:"began"`
+	Series    []statsSeries   `json:"series"`
+	Gaps      []statsGapView  `json:"gaps"`
+	Collected *statsCollected `json:"collected,omitempty"`
 	// LeftOut, on a member's own view, is how many of their series are left
 	// out because a dimension value names a person: said, so the rest never
 	// reads as all of their usage.
@@ -103,7 +108,10 @@ type statsGapView struct {
 	Start      string            `json:"start"`
 	End        string            `json:"end"`
 	Dimensions map[string]string `json:"dimensions,omitempty"`
-	Reason     string            `json:"reason"`
+	// Kind is the add-on's (began, unread, dropped, unobserved): what the page
+	// draws by. Reason is what it shows.
+	Kind   string `json:"kind"`
+	Reason string `json:"reason"`
 }
 
 // statsCollected is an admin's line about the last collection: when, how many
@@ -253,7 +261,13 @@ func statsUsageFor(ctx context.Context, target, subject string, memberView bool,
 			if g.Metric != m.Name || subject != "" && len(g.Dims) > 0 && !slices.ContainsFunc(view.Series, func(s statsSeries) bool { return within(g.Dims, s.Dimensions) }) {
 				continue
 			}
-			gap := statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Reason: g.Reason}
+			if g.Kind == addons.GapBegan && len(g.Dims) == 0 && (view.Began == nil || g.End > *view.Began) {
+				view.Began = &g.End
+			}
+			if g.End <= from12m { // the began gap, kept for Began alone: older than any window shown
+				continue
+			}
+			gap := statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Kind: g.Kind, Reason: g.Reason}
 			if memberView && namesOther(g.NamedSubjects, subject) {
 				gap.Reason = reasonWithheld
 			}

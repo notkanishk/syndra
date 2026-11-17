@@ -390,6 +390,7 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.StatsNoBufferGap:          "stats.buffer",
 		reference.StatsTotalMissing:         "stats.totals",
 		reference.StatsDimensionNamesPerson: "stats.no-people",
+		reference.StatsGapsAllBegan:         "stats.gaps",
 		reference.FoldsNames:                "requests.exact-names",
 		reference.OffWaitsOnOperator:        "standing.off",
 		reference.OmitsSubject:              "subjects.subject",

@@ -1,4 +1,4 @@
-import { NO_LIMIT, noMoreLines, ofLimit } from "@/components/results/copy";
+import { noMoreLines } from "@/components/results/copy";
 import { formatList } from "@/lib/format";
 import { NOTHING_TO_DO } from "@/lib/outcome";
 import type { StatsUnit } from "@/lib/queries/useStats";
@@ -15,7 +15,7 @@ import type { StatsUnit } from "@/lib/queries/useStats";
  * (a guard reads this file for the words that would).
  */
 
-export { NO_LIMIT, noMoreLines, ofLimit, NOTHING_TO_DO };
+export { noMoreLines, NOTHING_TO_DO };
 
 /** The card. */
 export const MEMBER_TITLE = "What I have used";
@@ -34,14 +34,25 @@ export const leftOut = (n: number) =>
 /** A gauge: its latest value and the day it was taken. */
 export const latestOn = (value: string, day: string) => `${value} on ${day}`;
 export const NO_RECENT_VALUE = "No value in the last 30 days";
-export const LIMIT_UNREAD = "Its limit could not be read, so there is no meter.";
+/** A level's change over the record: its latest value against its first counted day ("within rounding": the two read the same). */
+export const changeUp = (difference: string, day: string) => `Up ${difference} since ${day}`;
+export const changeDown = (difference: string, day: string) => `Down ${difference} since ${day}`;
+export const changeNone = (day: string) => `Unchanged since ${day}`;
+/** A level drawn against its limit: the word at the limit's line. */
+export const limitWord = (limit: string) => `${limit} limit`;
 
-/** Days nobody could observe, said, never drawn as zero. */
+/** Days nobody could observe, said in the card's one fold, never drawn as zero. */
+export const FOLD_HEADING = "What wasn't counted";
+/** The fold's list, for a screen reader. */
 export const GAPS_HEADING = "Couldn't count these days";
 export const gapLine = (range: string, where: string, reason: string) => `${range}${where ? `, ${where}` : ""}: ${reason}`;
 const keptFor = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
 export const keptLine = (n: number) => `Kept for only ${keptFor(n)} on this system`;
-export const GAPS_NOTE = "A day left blank was not counted. It is not a zero.";
+export const GAPS_NOTE = "A striped day was not counted. Neither it nor a day not counted yet is a zero.";
+/** In a gap line, in place of the reason when the add-on gave none (the gap is kept, as unread: a window it sent is never lost). */
+export const NO_REASON = "no reason given";
+/** The end row, when the record starts inside the window. */
+export const countingBegan = (day: string) => `Counting began ${day}`;
 
 /** States. */
 export const NOT_COUNTED = "Not counted yet";
@@ -53,6 +64,9 @@ export const UNAVAILABLE = "Syndra couldn't read these numbers just now. Reload 
 export const OVERVIEW_TITLE = "What has been used here";
 export const OVERVIEW_LEDE = "Totals for everyone who used it, over the last 30 days and the last 12 months. One person's numbers are on their page.";
 export const lastCounted = (age: string) => `Last counted ${age}`;
+/** The totals card's step and its one link to Insights, Usage (the pattern Insights' own end row uses); a kind may give its own words for the step (`kinds/limits.ts` usageStep). */
+export const OVERVIEW_NEXT = `${NOTHING_TO_DO} Who used what is in Insights.`;
+export const OVERVIEW_NEXT_LINK = "Open Usage";
 export const unbound = (n: number) =>
   `${n} ${n === 1 ? "account" : "accounts"} Syndra does not manage also used it. ${n === 1 ? "It is" : "They are"} in the totals.`;
 
@@ -83,7 +97,8 @@ export const DROPPED: Record<string, (n: number) => string> = {
   past_retention: (n) => `${n} ${n === 1 ? "value" : "values"} older than Syndra keeps`,
   series: (n) => `${n} ${n === 1 ? "value" : "values"} from more series than Syndra keeps`,
 };
-export const droppedLine = (parts: string[]) => `The last count did not keep ${formatList(parts)}.`;
+/** In the card's fold (Advanced): one line per metric with something dropped, the metric's label capped by the renderer. */
+export const droppedFor = (metric: string, parts: string[]) => `${metric}: the last count did not keep ${formatList(parts)}.`;
 
 /** Insights (operators, Advanced view). */
 export const INSIGHTS_TAB = "Usage";
@@ -124,6 +139,9 @@ export const dayGap = (day: string) => `${day}: couldn't count`;
 export const dayNoValue = (day: string) => `${day}: no new value`;
 export const dayKept = (day: string, n: number) => `${day}: kept for only ${keptFor(n)} on this system`;
 export const dayPending = (day: string) => `${day}: not counted yet`;
+export const dayBefore = (day: string) => `${day}: before counting began`;
+/** The section's readout when it has several rows: the row's name leads the day's words. */
+export const readoutNamed = (name: string, said: string) => `${name}, ${said}`;
 export const sparkLabel = (what: string, gaps: boolean) => `${what}, day by day over the last 30 days${gaps ? ". Days that could not be counted are hatched" : ""}`;
 export const INSIGHTS_LOADING = "Loading the usage";
 export const INSIGHTS_ERROR = "Couldn't read the usage.";

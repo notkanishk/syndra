@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -61,30 +61,34 @@ describe("the same value looks the same everywhere", () => {
     [50, "bg-accent", null],
     [92, "bg-warn", "nearly full"],
     [100, "bg-warn", "full"],
-  ])("%i of 100: a status read and a statistic agree on colour and word", (used, token, word) => {
+  ])("%i of 100: a status read says its colour and its word", (used, token, word) => {
     const said = () => [screen.queryByText("nearly full") !== null, screen.queryByText("full") !== null];
-    const expected = [word === "nearly full", word === "full"];
-
     render(<StatusMeters result={status(used)} name="Parts shelf" reader={MEMBER} />);
     expect(fill()).toHaveClass(token);
-    expect(said()).toEqual(expected);
+    expect(said()).toEqual([word === "nearly full", word === "full"]);
     cleanup();
+  });
 
-    const latest = { day: "2026-11-01", value: used * GIB };
-    render(<UsageCard title="t" windows={windows()} metrics={[homeBytes({ series: [{ dimensions: {}, latest, days: [] }] })]} limits={{ quota_field: 100 * GIB }} />);
-    expect(fill()).toHaveClass(token);
-    expect(said()).toEqual(expected);
+  it("a statistic draws no meter of its own (A-23 Q4): its limit's meter is the kind's card's", () => {
+    const latest = { day: "2026-11-01", value: 92 * GIB };
+    render(<UsageCard title="t" windows={windows()} metrics={[homeBytes({ series: [{ dimensions: {}, latest, days: [] }] })]} />);
+    expect(screen.queryByRole("meter")).toBeNull();
   });
 });
 
 describe("there is one meter", () => {
+  const root = resolve(__dirname, "../../..");
   it("is the only place that writes role=meter", () => {
-    const root = resolve(__dirname, "../../..");
-    const files = ["components/kinds/storage/MyStorage.tsx", "components/kinds/storage/PersonStorage.tsx", "components/results/StatusMeters.tsx", "components/usage/MetricBlock.tsx"];
+    const files = ["components/kinds/storage/MyStorage.tsx", "components/kinds/storage/PersonStorage.tsx", "components/results/StatusMeters.tsx"];
     for (const f of files) {
       const code = readFileSync(resolve(root, f), "utf8");
       expect(code, f).not.toMatch(/role="meter"/);
       expect(code, f).toMatch(/<Meter\b/);
     }
+  });
+
+  it("is never drawn by a statistics component", () => {
+    const dir = resolve(root, "components/usage");
+    for (const f of readdirSync(dir).filter((n) => /\.tsx$/.test(n))) expect(readFileSync(resolve(dir, f), "utf8"), f).not.toMatch(/<Meter\b|role="meter"/);
   });
 });

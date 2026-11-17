@@ -1,6 +1,6 @@
 import { addDays, today } from "@/components/insights/days";
 import type { MyTargetView } from "@/lib/queries/useMyStorage";
-import type { StatsMetric, TargetStats, UsageWindows } from "@/lib/queries/useStats";
+import type { StatsGap, StatsMetric, TargetStats, UsageWindows } from "@/lib/queries/useStats";
 
 /** Statistics fixtures: ring names and example.org only. Days are relative to today, in the makerspace's zone. */
 export const GIB = 1024 ** 3;
@@ -49,7 +49,7 @@ export const sessions = (over: Partial<StatsMetric> = {}): StatsMetric => ({
 });
 
 /** Three unobserved days inside the ring series' window (start 8 days ago, end 5 days ago exclusive). */
-export const GAP = { start: ago(8), end: ago(5), dimensions: { area: "ring" }, reason: "Auditing is off in this area" };
+export const GAP: StatsGap = { start: ago(8), end: ago(5), dimensions: { area: "ring" }, kind: "unobserved", reason: "Auditing is off in this area" };
 
 export const view = (usage: MyTargetView["usage"], over: Partial<MyTargetView> = {}): MyTargetView => ({
   target: "gym",

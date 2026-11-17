@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 import * as copy from "@/components/usage/copy";
 import { NameLink, nameHref } from "@/components/names/NameLink";
 import { Unresolved, UNKNOWN_ACCOUNT } from "@/components/names/Unresolved";
@@ -10,6 +12,7 @@ import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { useInsightsStats, type InsightsPerson, type InsightsSeries, type InsightsStatsMetric, type StatsUnit } from "@/lib/queries/useStats";
 import { daysBetween } from "@/components/insights/days";
+import { glideTo } from "@/lib/motion";
 import { CAP, capText, dayWords, dimensionWords, formatValue } from "@/lib/usage";
 
 /**
@@ -106,10 +109,32 @@ function People({ metric, row, what }: { metric: InsightsStatsMetric; row: Insig
   );
 }
 
+/** A system's anchor on this tab: its first section carries it, so a link from that system's totals (`insightsUsageHref`) lands there. */
+export const systemAnchor = (target: string) => `usage-${target}`;
+/** Where a system's totals link to: this tab, at that system (A-23 O2). */
+export const insightsUsageHref = (target: string) => `/insights?tab=usage#${encodeURIComponent(systemAnchor(target))}`;
+
 export function InsightsUsage() {
   const stats = useInsightsStats();
   const metrics = stats.data?.metrics ?? [];
   const groups = UNITS.map((unit) => ({ unit, metrics: metrics.filter((m) => m.unit === unit) })).filter((g) => g.metrics.length > 0);
+  // The first section of each system, in the order drawn, holds its anchor.
+  const anchored = new Set<string>();
+  const anchorFor = (target: string) => (anchored.has(target) ? undefined : (anchored.add(target), systemAnchor(target)));
+
+  // `#usage-<target>` from a system's totals: once the sections are drawn the page glides to that
+  // system's first one (as PeopleOnTarget's `?person=`). Once per visit.
+  const landed = useRef(false);
+  useEffect(() => {
+    if (landed.current || stats.isLoading || metrics.length === 0) return;
+    landed.current = true;
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (!id) return;
+    requestAnimationFrame(() => {
+      const section = document.getElementById(id);
+      if (section) void glideTo(section);
+    });
+  }, [stats.isLoading, metrics.length]);
 
   return (
     <>
@@ -136,7 +161,7 @@ export function InsightsUsage() {
           <Card key={g.unit}>
             <CardHeader title={copy.UNIT_HEADING[g.unit]} />
             {g.metrics.map((m) => (
-              <section key={`${m.target}/${m.name}`} aria-label={`${capText(m.system, CAP.label)}: ${capText(m.label, CAP.label)}`}>
+              <section key={`${m.target}/${m.name}`} id={anchorFor(m.target)} className="scroll-mt-4" aria-label={`${capText(m.system, CAP.label)}: ${capText(m.label, CAP.label)}`}>
                 <div className="row-divider px-5 pb-1 pt-3.5">
                   <h3 className="type-label text-label [overflow-wrap:anywhere]">
                     {capText(m.system, CAP.label)}: {capText(m.label, CAP.label)}

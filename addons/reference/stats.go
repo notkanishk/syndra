@@ -101,6 +101,7 @@ type gap struct {
 	Start      string            `json:"start"`
 	End        string            `json:"end"`
 	Dimensions map[string]string `json:"dimensions,omitempty"`
+	Kind       string            `json:"kind"` // the contract's gap kind; the reference never has a began window, as it reads the log back over the whole buffer
 	Reason     string            `json:"reason"`
 }
 
@@ -267,7 +268,7 @@ func (a *Addon) statsDay(d time.Time) (jobs, longest statDay) {
 	for _, p := range printers {
 		dims := map[string]string{"printer": p}
 		if p == "xl-1" && off {
-			jobs.gaps = append(jobs.gaps, gap{Start: start, End: end, Dimensions: dims, Reason: offReason})
+			jobs.gaps = append(jobs.gaps, gap{Start: start, End: end, Dimensions: dims, Kind: "unread", Reason: offReason})
 			continue
 		}
 		var total int64
@@ -455,11 +456,11 @@ func (a *Addon) statsRead(r *http.Request, _ []byte) reply {
 	if after == nil { // gaps on the first page only
 		all := []gap{}
 		if from.Before(st.heldFrom) {
-			all = append(all, gap{Start: stamp3339(from), End: stamp3339(st.heldFrom), Reason: bufferReason})
+			all = append(all, gap{Start: stamp3339(from), End: stamp3339(st.heldFrom), Kind: "dropped", Reason: bufferReason})
 		}
 		all = append(all, mergeGaps(gaps, watermark)...)
 		if lost := next(dayOf(st.takenAt)); st.failing && lost.Before(next(dayOf(a.statsNow()))) {
-			all = append(all, gap{Start: stamp3339(lost), End: stamp3339(next(dayOf(a.statsNow()))), Reason: failureReason})
+			all = append(all, gap{Start: stamp3339(lost), End: stamp3339(next(dayOf(a.statsNow()))), Kind: "unread", Reason: failureReason})
 		}
 		doc["gaps"] = all
 	}

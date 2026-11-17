@@ -33,11 +33,19 @@ export interface StatsSeries {
   latest?: StatsDay;
 }
 
+/** Why a window was not observed (stats.json): the machine's half of a gap; `reason` is the member's. */
+export type GapKind = "began" | "unread" | "dropped" | "unobserved";
+
 /** Days nobody could observe; `end` is exclusive (the first day with data again). */
 export interface StatsGap {
   start: string;
   end: string;
   dimensions?: Record<string, string>;
+  /**
+   * The add-on's kind (contract 2, stats.json): `began`, before it started counting the metric, is drawn
+   * as before the record, never hatched or listed; every other kind is hatched and listed with its reason.
+   */
+  kind: GapKind;
   reason: string;
 }
 
@@ -60,6 +68,11 @@ export interface StatsMetric {
   watermark: string | null;
   /** The last makerspace day that is final; later days with no point are not counted yet, never 0. Optional: older data has none. */
   counted_through?: string | null;
+  /**
+   * The day the add-on began counting the metric: the end of its `began` gap over the whole metric,
+   * kept however old (handlers/stats.go). Null or absent when it sent none.
+   */
+  began?: string | null;
   series: StatsSeries[];
   gaps: StatsGap[];
   collected?: StatsCollected;

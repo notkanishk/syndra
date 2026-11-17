@@ -139,6 +139,10 @@
    * then has to override. */
   --breakpoint-tablet: 45rem; /* 720px */
   --breakpoint-desktop: 67.5rem; /* 1080px */
+  /* The same tablet step for a part that answers its own width (`@container`,
+     `@tablet:`), not the window's: the usage card's row is a three-column
+     ledger from 720px of card and a stack under it (A-23 §3.2). */
+  --container-tablet: 45rem; /* 720px */
 
   /* ── Motion ──────────────────────────────────────────────────────────────
    * Tint 120, press 180, settle 260, arrive 420, flash 900, breathe 2400, and

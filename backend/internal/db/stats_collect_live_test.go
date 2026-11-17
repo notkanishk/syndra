@@ -92,7 +92,15 @@ func pt(t *testing.T, d, subject string, dims map[string]string, v float64) addo
 }
 
 func gp(t *testing.T, from, to string, dims map[string]string, reason string) addons.StatGap {
-	return addons.StatGap{Start: mid(t, from), End: mid(t, to), Dimensions: dims, Reason: reason}
+	return addons.StatGap{Start: mid(t, from), End: mid(t, to), Dimensions: dims, Kind: kindOf(reason), Reason: reason}
+}
+
+// kindOf is the kind a scripted add-on gives a reason: these tests' first-collection gaps are began.
+func kindOf(reason string) string {
+	if strings.HasPrefix(reason, "Not collected yet") {
+		return addons.GapBegan
+	}
+	return "unread"
 }
 
 var share = func(s string) map[string]string { return map[string]string{"share": s} }
@@ -320,7 +328,9 @@ func TestLiveTheWatermarkIsAMidnightThatNeverGoesBack(t *testing.T) {
 // rest is kept: a point that is not one makerspace day, no value or a
 // negative one, a subject on a metric not per person or with no binding here,
 // an undeclared dimension, and a late point past retention. A dimension naming
-// a person is not a drop (TestLiveWhatNamesAPersonIsKeptAndRecorded).
+// a person is not a drop (TestLiveWhatNamesAPersonIsKeptAndRecorded). A gap
+// with no reason is counted as a bad value and kept, as unread: a gap the
+// add-on sent is never lost.
 func TestLiveEachDropIsCountedByReason(t *testing.T) {
 	ctx := collectLive(t)
 	utcMidnight := pt(t, day(3), "", share("makers"), 1)
@@ -349,8 +359,8 @@ func TestLiveEachDropIsCountedByReason(t *testing.T) {
 	}
 	h := holding(t, ctx, sessions.Name)
 	if len(h.Points) != 3 || !has(h.Points, ` {"share": "makers"} `+day(3)+` 7`) || !has(h.Points, `sub-cena {"share": "makers"} `+day(3)+` 2`) ||
-		!has(h.Points, ` {"share": "makers"} `+day(401)+` 1`) || len(h.Gaps) != 0 {
-		t.Errorf("kept %v and gaps %v: want the makerspace day's two points and the total past a person's retention", h.Points, h.Gaps)
+		!has(h.Points, ` {"share": "makers"} `+day(401)+` 1`) || len(h.Gaps) != 1 || h.Gaps[0] != `{"share": "lab"} `+day(3)+` `+day(2)+` ` {
+		t.Errorf("kept %v and gaps %v: want the makerspace day's two points, the total past a person's retention, and the gap with no reason kept (never lost), its reason empty", h.Points, h.Gaps)
 	}
 
 	totals := &script{replies: [][]any{{page(t, day(1), []addons.StatPoint{pt(t, day(3), "sub-cena", nil, 1), pt(t, day(3), "", nil, 4)})}}}
@@ -517,6 +527,29 @@ func TestLiveACursorThatRepeatsStopsTheCollection(t *testing.T) {
 	}
 	if h := holding(t, ctx, sessions.Name); len(h.Points) != 0 || h.Watermark != nil {
 		t.Errorf("a stopped collection kept %+v", h)
+	}
+}
+
+// A gap is stored with the kind the add-on gave it, and read back with it: the
+// first collection's began window and a share's unobserved days alike.
+func TestLiveAGapKeepsItsKind(t *testing.T) {
+	ctx := collectLive(t)
+	first := clock.Day(time.Now().Add(-buffer))
+	audited := gp(t, day(3), day(2), share("scratch"), "Auditing does not record everyone on this share")
+	audited.Kind = "unobserved"
+	s := &script{replies: [][]any{{page(t, day(1), []addons.StatPoint{pt(t, day(5), "", share("makers"), 2)},
+		gp(t, first, day(9), nil, "Not collected yet: counting began on a day"), audited)}}}
+	collect(t, ctx, sessions, s)
+	gaps, err := db.StatsGaps(ctx, collectTarget, day(400))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]string{}
+	for _, g := range gaps {
+		kinds[g.Start] = g.Kind
+	}
+	if kinds[first] != "began" || kinds[day(3)] != "unobserved" {
+		t.Errorf("stored kinds %v, want began from %s and unobserved on %s", kinds, first, day(3))
 	}
 }
 

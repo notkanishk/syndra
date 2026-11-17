@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Usage card (A-23)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<x-import component-from-global-scope="Syndra.Card" role="group" aria-label="{{ u.aria }}" hint-size="100%,700px">
+  <sc-if value="{{ u.hasTitle }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.CardHeader" title="{{ u.title }}" hint-size="100%,60px"></x-import></sc-if>
+  <sc-if value="{{ u.unavailable }}" hint-placeholder-val="{{ false }}"><div class="u-sec"><span style="font-size:14px;color:var(--muted)">Syndra couldn't read these numbers just now. Reload this page to try again.</span></div></sc-if>
+  <sc-for list="{{ u.metrics }}" as="m" hint-placeholder-count="3">
+    <section class="u-sec {{ m.cls }}" aria-label="{{ m.label }}">
+      <sc-if value="{{ m.many }}" hint-placeholder-val="{{ true }}"><h3 class="type-label u-label">{{ m.label }}</h3></sc-if>
+      <div class="u-rows">
+        <sc-if value="{{ m.notCounted }}" hint-placeholder-val="{{ false }}">
+          <div class="u-row"><h3 class="u-name type-label u-label">{{ m.label }}</h3><div class="u-bandseat"><div class="u-band" aria-hidden="true"></div></div><span class="u-fig"><span class="u-figline"><span class="u-not">Not counted yet</span></span></span></div>
+        </sc-if>
+        <sc-if value="{{ m.single }}" hint-placeholder-val="{{ false }}">
+          <div class="u-row"><h3 class="u-name type-label u-label">{{ m.label }}</h3><div class="u-bandseat"><dc-import name="a23-band" b="{{ m.one.b }}" hint-size="100%,40px"></dc-import></div><span class="u-fig"><span class="u-figline"><span class="u-figtext"><span class="u-val">{{ m.one.value }}</span><span class="u-when"> {{ m.one.when }}</span></span></span><sc-if value="{{ m.one.hasSecond }}" hint-placeholder-val="{{ false }}"><span class="u-second">{{ m.one.second }}</span></sc-if></span></div>
+        </sc-if>
+        <sc-if value="{{ m.many }}" hint-placeholder-val="{{ true }}">
+          <sc-for list="{{ m.rows }}" as="r" hint-placeholder-count="3">
+            <div class="u-row" style="{{ r.style }}"><span class="u-name">{{ r.name }}</span><div class="u-bandseat"><dc-import name="a23-band" b="{{ r.b }}" hint-size="100%,40px"></dc-import></div><span class="u-fig"><span class="u-figline"><span class="u-figtext"><span class="u-val">{{ r.value }}</span><span class="u-when"> {{ r.when }}</span></span></span><sc-if value="{{ r.hasSecond }}" hint-placeholder-val="{{ false }}"><span class="u-second">{{ r.second }}</span></sc-if></span></div>
+          </sc-for>
+        </sc-if>
+        <sc-if value="{{ m.hasAxis }}" hint-placeholder-val="{{ true }}"><div class="u-axis"><span>{{ m.axisLeft }}</span><span class="read" aria-live="polite">{{ m.axisRight }}</span></div></sc-if>
+      </div>
+      <sc-if value="{{ m.hasQuiet }}" hint-placeholder-val="{{ false }}"><span class="u-quiet">{{ m.quiet }}</span></sc-if>
+    </section>
+  </sc-for>
+  <sc-if value="{{ u.hasFold }}" hint-placeholder-val="{{ false }}">
+    <div class="u-fold row-divider">
+      <button type="button" class="btn" aria-expanded="{{ u.foldOpen }}"><x-import component-from-global-scope="Syndra.FoldChevron" open="{{ u.foldOpen }}" hint-size="28px,28px"></x-import>What wasn't counted</button>
+      <x-import component-from-global-scope="Syndra.Unfold" open="{{ u.foldOpen }}" hint-size="100%,80px">
+        <ul>
+          <sc-for list="{{ u.foldLines }}" as="l" hint-placeholder-count="2"><li>{{ l }}</li></sc-for>
+          <li class="last">A day with no line was not counted. It is not a zero.</li>
+        </ul>
+      </x-import>
+    </div>
+  </sc-if>
+  <sc-if value="{{ u.hasEnd }}" hint-placeholder-val="{{ true }}">
+    <div class="u-end"><span class="u-step"><span>{{ u.step }}</span><sc-if value="{{ u.hasLink }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ArrowLink" href="#insights" hint-size="100px,20px">Open Usage</x-import></sc-if></span><sc-if value="{{ u.hasRight }}" hint-placeholder-val="{{ true }}"><span class="age">{{ u.right }}</span></sc-if></div>
+  </sc-if>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1136,"height":700}}'>
+// A helper the A-23 boards mount (as Frame.dc.html is): the usage card, drawn from what it is handed. Styles come from the board's helmet.
+// Every band import here is unguarded on purpose: a row always has its band (a guard nobody sets is a band that silently never mounts).
+class Component extends DCLogic {
+  renderVals() { return { u: this.props.u || {} }; }
+}
+</script>
+</body>
+</html>

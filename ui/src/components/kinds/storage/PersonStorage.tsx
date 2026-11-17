@@ -27,6 +27,8 @@ import { NextStep } from "@/components/ui/NextStep";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { formatClock, formatList, formatRelative, formatShortDate } from "@/lib/format";
 import { Meter } from "@/components/ui/Meter";
+import { HomeMonth } from "@/components/usage/UsageCard";
+import { drawsHome } from "@/components/kinds/storage/limits";
 import { Tinted } from "@/lib/motion";
 import type { PersonTargetView, RoleSource, StoragePlace } from "@/lib/queries/useMyStorage";
 import { sortByName } from "@/lib/sort";
@@ -336,9 +338,6 @@ function LimitLines({ view }: { view: PersonTargetView }) {
   );
 }
 
-/** The home folder's own usage is drawn only for a home that exists or is given; otherwise the limit lines stand in. */
-const drawsHome = ({ home }: PersonTargetView) => Boolean(home?.home || home?.gives_home || home?.own);
-
 function HomeUse({ view }: { view: PersonTargetView }) {
   const home = view.home;
   const label = view.name;
@@ -364,6 +363,8 @@ function HomeUse({ view }: { view: PersonTargetView }) {
       {used !== undefined && quota > 0 && (
         <Meter value={used} limit={quota} label={`${label} home folder usage`} className="my-1" />
       )}
+      {/* Its month, under its meter and before the limit lines (A-23 R1). */}
+      <HomeMonth view={view} operator />
       {kept ? (
         <Faint>No role of theirs gives a home folder any more. It stays, with their files, and only they can open it.</Faint>
       ) : (

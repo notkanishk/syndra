@@ -4,6 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonStorage } from "@/components/kinds/storage/PersonStorage";
+import { homeBytes, sessions, windows } from "@/components/usage/__tests__/fixtures";
 import type { PersonTargetView } from "@/lib/queries/useMyStorage";
 
 const state = vi.hoisted(() => ({
@@ -228,6 +229,38 @@ describe("a person's network storage (A-10 Part 1)", () => {
     show(view({ home: { ...view().home!, used_bytes: 46 * GB } }));
     expect(screen.getByText("nearly full")).toBeInTheDocument();
     expect(screen.getByRole("meter").firstElementChild).toHaveClass("bg-warn");
+  });
+
+  it("draws the home folder's month under its meter, before the limit lines (A-23 R1)", () => {
+    const usage = { reported: true as const, metrics: [homeBytes({ against: "home_quota" })], ...windows() };
+    show(view({ usage }));
+    const month = document.querySelector("[data-home-month]") as HTMLElement;
+    expect(month).not.toBeNull();
+    expect(within(month).getByRole("img")).toBeInTheDocument();
+    const meter = screen.getByRole("meter");
+    expect(meter.compareDocumentPosition(month) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(month.compareDocumentPosition(screen.getByText(/Thesis renders/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Without the statistic, nothing is drawn there.
+    document.body.innerHTML = "";
+    show(view());
+    expect(document.querySelector("[data-home-month]")).toBeNull();
+  });
+
+  // Wherever the card does not draw the month, the person's usage card keeps it: said once, never twice,
+  // never nowhere. SystemsSection draws both: the storage card, then "What {person} has used".
+  it.each([
+    ["a home drawn", {}, "card"],
+    ["no home and none given (the limit lines stand in)", { home: { subject_id: "u1", username: "roman.reigns", gives_home: false } }, "usage"],
+    ["the system did not answer", { storage: undefined, last_known: undefined }, "usage"],
+    ["a home kept after its role was removed", { home: { subject_id: "u1", username: "roman.reigns", gives_home: false, home: homePlace.path, used_bytes: 1 * GB, quota_bytes: 20 * GB } }, "card"],
+    ["no account yet", { account: undefined }, "usage"],
+  ] as const)("says the home folder's month once: %s", (_, over, where) => {
+    const usage = { reported: true as const, metrics: [homeBytes({ against: "home_quota" }), sessions()], ...windows() };
+    const v = view({ usage, ...(over as Partial<PersonTargetView>) });
+    show(v);
+    const inCard = document.querySelectorAll("[data-home-month]").length;
+    const inUsage = screen.queryAllByRole("heading", { name: "Home folder used" }).length;
+    expect([inCard, inUsage]).toEqual(where === "card" ? [1, 0] : [0, 1]);
   });
 
   it("loading shows the name and caption with no values; an error replaces the card", () => {

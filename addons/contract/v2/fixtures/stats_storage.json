@@ -49,6 +49,7 @@
       "dimensions": {
         "share": "scratch"
       },
+      "kind": "unobserved",
       "reason": "Auditing does not record everyone on this share"
     }
   ],

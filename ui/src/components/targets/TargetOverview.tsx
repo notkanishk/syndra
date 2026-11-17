@@ -320,10 +320,14 @@ export function TargetOverview({ target }: { target: string }) {
         </Region>
 
         {/* Region 4 · what has been used here. Every region keeps its seat:
-            an add-on that reports no statistics says so in place. */}
+            an add-on that reports no statistics says so in place. The retention
+            control is Advanced's (A-23 R2), the region's last card, so nothing
+            above it moves when it comes and goes. */}
         <Region id="stats" title={OVERVIEW_TITLE} lede={OVERVIEW_LEDE}>
-          <TargetStats target={target} />
-          <StatsRetention target={target} />
+          <TargetStats target={target} kind={registered?.kind} />
+          <AdvancedOnly gap={16}>
+            <StatsRetention target={target} />
+          </AdvancedOnly>
         </Region>
         </div>
         </NotOpenYet>

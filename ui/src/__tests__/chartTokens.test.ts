@@ -50,8 +50,8 @@ describe("the chart tokens, both themes", () => {
   });
 
   it("the chart reads the tokens by name, so the themes decide the colour", () => {
-    const spark = readFileSync(resolve(SRC, "components/usage/Spark.tsx"), "utf8");
-    expect(spark).toContain("var(--chart-hatch)");
-    expect(spark).toContain("var(--accent)");
+    const band = readFileSync(resolve(SRC, "components/usage/Band.tsx"), "utf8");
+    expect(band).toContain("var(--chart-hatch)");
+    expect(band).toContain("var(--accent)");
   });
 });

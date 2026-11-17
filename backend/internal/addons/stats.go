@@ -222,13 +222,22 @@ type StatPoint struct {
 	Value *float64 `json:"value"`
 }
 
-// StatGap is a window the add-on could not observe, with its reason.
+// StatGap is a window the add-on could not observe, with its kind (which
+// Syndra reads) and its reason (which it shows, never parses).
 type StatGap struct {
 	Start      time.Time         `json:"start"`
 	End        time.Time         `json:"end"`
 	Dimensions map[string]string `json:"dimensions,omitempty"`
+	Kind       string            `json:"kind"`
 	Reason     string            `json:"reason"`
 }
+
+// GapKinds is stats.json's gap kind enum (contract 2, AUTHORING "every gap
+// MUST carry a kind"). GapBegan is the window before the add-on started
+// counting the metric: before the record, never a gap the page hatches.
+var GapKinds = []string{GapBegan, "unread", "dropped", "unobserved"}
+
+const GapBegan = "began"
 
 // StatsPage is one page of a GET /stats reply.
 type StatsPage struct {

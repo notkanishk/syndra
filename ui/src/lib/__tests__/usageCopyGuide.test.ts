@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { STORAGE_USAGE_STEP } from "@/components/kinds/storage/captions";
 import * as copy from "@/components/usage/copy";
 import type { StatsUnit } from "@/lib/queries/useStats";
 
@@ -25,13 +26,11 @@ const SAID = [
   copy.NOTHING_COUNTED,
   copy.latestOn("{value}", "{day}"),
   copy.NO_RECENT_VALUE,
-  copy.ofLimit("{limit}"),
-  copy.NO_LIMIT,
-  copy.LIMIT_UNREAD,
   copy.GAPS_HEADING,
   copy.gapLine("{range}", "{where}", "{reason}"),
   copy.gapLine("{range}", "", "{reason}"),
   copy.GAPS_NOTE,
+  copy.NO_REASON,
   copy.NOT_COUNTED,
   copy.NOT_COUNTED_NEXT,
   copy.ABSENT,
@@ -69,7 +68,7 @@ const SAID = [
   copy.leftOut(1),
   sub(copy.leftOut(2), 2, N),
   sub(copy.spreadDays(777), 777, "{n}"),
-  copy.droppedLine(["{reason}"]),
+  copy.droppedFor("{metric}", ["{reason}"]),
   ...Object.values(copy.DROPPED).flatMap((say) => [sub(say(555), 555, N), sub(say(1), 1, N)]),
   copy.INSIGHTS_TAB,
   copy.INSIGHTS_LEDE,
@@ -88,6 +87,18 @@ const SAID = [
   copy.dayNoValue("{day}"),
   copy.sparkLabel("{what}", false),
   copy.sparkLabel("{what}", true),
+  // A-23 (slice 7s).
+  copy.FOLD_HEADING,
+  copy.dayBefore("{day}"),
+  copy.countingBegan("{day}"),
+  copy.changeUp("{difference}", "{day}"),
+  copy.changeDown("{difference}", "{day}"),
+  copy.changeNone("{day}"),
+  copy.limitWord("{limit}"),
+  copy.readoutNamed("{name}", copy.dayValue("{day}", "{value}")),
+  copy.OVERVIEW_NEXT,
+  copy.OVERVIEW_NEXT_LINK,
+  STORAGE_USAGE_STEP,
   ...Object.values(copy.UNIT_HEADING),
 ];
 
@@ -110,7 +121,7 @@ describe("the copy guide's section on what has been used", () => {
   });
 
   it("ends every card on a next step, in plain words (no em dash, no exclamation, no 'UTC')", () => {
-    for (const s of [copy.NOT_COUNTED_NEXT, copy.ABSENT, copy.INSIGHTS_EMPTY, copy.INSIGHTS_NEXT]) expect(s).toContain(copy.NOTHING_TO_DO);
+    for (const s of [copy.NOT_COUNTED_NEXT, copy.ABSENT, copy.INSIGHTS_EMPTY, copy.INSIGHTS_NEXT, copy.OVERVIEW_NEXT, STORAGE_USAGE_STEP]) expect(s).toContain(copy.NOTHING_TO_DO);
     expect(copy.UNAVAILABLE).toMatch(/Reload this page/);
     for (const s of SAID) {
       expect(s).not.toMatch(/[—!]/);

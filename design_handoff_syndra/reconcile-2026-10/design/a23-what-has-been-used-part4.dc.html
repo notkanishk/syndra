@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What has been used · part 4</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* Frames: a page drawn at its true width and shown at half size by zoom, so the box is exactly as tall as the page (no clipping, no empty tail). The shell's own viewport height and inner scroller are let out, so the whole page lays out. */
+.b-fr{overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas);width:720px}
+.b-fr.rec{border:2px solid var(--accent-line)}
+.b-fr>div{width:1440px;zoom:.5}
+.b-fr.col{width:704px}.b-fr.col>div{width:1136px;zoom:.62}
+.b-fr.true{width:1136px}.b-fr.true>div{width:1136px;zoom:1}
+.b-fr.phone{width:390px}.b-fr.phone>div{width:390px;zoom:1}
+.b-fr>div{container-type:inline-size;container-name:syndra-frame}
+.b-fr [data-syndra-portal]{height:auto!important}
+.b-fr #app-root{height:auto!important;min-height:0!important;overflow:visible!important}
+.b-fr #app-scroll{overflow:visible!important;min-height:0!important}
+/* The theme at the frame's root. Tailwind's aliases (--color-ink: var(--ink) and the rest) resolve once at :root, so a frame's own data-theme must re-declare them where its tokens live; otherwise only CSS that reads var(--ink) directly turns light. */
+.b-root{--color-ground:var(--ground);--color-canvas:var(--canvas);--color-surface-0:var(--surface-0);--color-surface-1:var(--surface-1);--color-surface-2:var(--surface-2);--color-rail:var(--rail);--color-line:var(--line);--color-line-strong:var(--line-strong);--color-ink:var(--ink);--color-muted:var(--muted);--color-faint:var(--faint);--color-label:var(--label);--color-tint-1:var(--tint-1);--color-tint-2:var(--tint-2);--color-tint-3:var(--tint-3);--color-divider:var(--divider);--color-accent:var(--accent);--color-accent-text:var(--accent-text);--color-accent-ink:var(--accent-ink);--color-accent-soft:var(--accent-soft);--color-accent-line:var(--accent-line);--color-accent-dense:var(--accent-dense);--color-healthy:var(--healthy);--color-warn:var(--warn);--color-warn-text:var(--warn-text);--color-warn-ink:var(--warn-ink);--color-warn-soft:var(--warn-soft);--color-warn-line:var(--warn-line);--color-danger:var(--danger);--color-danger-text:var(--danger-text);--color-danger-ink:var(--danger-ink);--color-danger-soft:var(--danger-soft);--color-danger-line:var(--danger-line);color:var(--ink);background:var(--canvas)}
+.b-fig{display:flex;flex-direction:column;gap:12px;margin:0}
+.b-fig .cap{display:flex;align-items:baseline;gap:12px}
+.b-fig .cap .n{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 8px;box-sizing:border-box;border-radius:var(--radius-pill);border:1px solid var(--line-strong);font-size:12.5px;font-weight:700}
+.b-fig .cap .n.rec{border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
+.b-fig .cap .t{font-size:16px;font-weight:600}
+.b-fig .cap .r{font-size:12.5px;font-weight:600;color:var(--accent-text)}
+.b-fig .cap .d{font-size:12.5px;font-weight:600;color:var(--accent-text)}
+.b-fig figcaption{font-size:14px;line-height:1.6;color:var(--muted);text-wrap:pretty;max-width:704px}
+/* Drawn inline until built (BRIDGE): components/usage is outside the bundle and Meter (12 Nov) postdates the canvas copy. Everything else is the real part. */
+.u-sec{display:flex;flex-direction:column;gap:12px;padding:18px 20px}
+.u-sec.titled{padding-top:6px}
+/* The section label is the design system's type-label at every width; these only place it. */
+.u-label{margin:0;line-height:1.25}
+.u-rows{display:flex;flex-direction:column}
+/* One row, one baseline: the name, the band's baseline and the figure sit on the same line (each seat is 40px, bottom-aligned); a second line hangs under the figure. */
+.u-row{display:grid;grid-template-columns:200px minmax(0,1fr) 240px;column-gap:24px;align-items:start;padding:12px 0}
+.u-row+.u-row{border-top:1px solid var(--divider)}
+.u-rows .u-row:first-child{padding-top:0}
+.u-rows .u-row:last-child,.u-rows .u-row:nth-last-child(2){padding-bottom:0}
+.u-name{min-height:40px;display:flex;align-items:flex-end;min-width:0;font-size:15.5px;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+.u-name.u-label{font-size:12.5px;font-weight:600;line-height:1.5}
+.u-bandseat{min-width:0}
+.u-fig{display:flex;flex-direction:column;align-items:flex-end;gap:3px;min-width:0;text-align:right}
+.u-figline{min-height:40px;display:flex;align-items:flex-end;justify-content:flex-end}
+/* The figure and its words are one line of text with a real space between them, so they read and copy as words whatever the styles. */
+.u-figtext{display:block;text-align:right;font-size:13px;line-height:1}
+.u-val{font-family:var(--font-display);font-size:24px;font-weight:600;line-height:1;color:var(--ink)}
+.u-when{font-size:13px;color:var(--muted);line-height:1;margin-left:3px}
+.u-second{font-size:13px;color:var(--faint);font-variant-numeric:tabular-nums;line-height:1.35}
+.u-not{font-size:14px;color:var(--muted);line-height:1.3}
+.u-band{position:relative;height:40px}
+.u-band .hatch{position:absolute;top:0;height:34px;background:repeating-linear-gradient(45deg,var(--chart-hatch) 0 1px,transparent 1px 6px)}
+.u-band .hot{position:absolute;top:0;height:34px;background:var(--tint-3);border-radius:var(--radius-inner)}
+.u-band .pre{position:absolute;top:34px;height:1px;background:var(--line)}
+.u-band .base{position:absolute;top:34px;height:1px;background:var(--line-strong)}
+.u-band .limit{position:absolute;top:6px;height:1px;background:var(--line)}
+.u-band .limit-word{position:absolute;top:8px;right:0;font-size:12.5px;color:var(--faint)}
+.u-band .bar{position:absolute;bottom:6px;border-radius:1px;background:var(--accent)}
+.u-band .tick{position:absolute;top:29px;width:1px;height:6px;background:var(--line-strong)}
+.u-band svg{position:absolute;inset:0;overflow:visible}
+/* The section's axis sits under its rows, inset to the band's column. */
+.u-axis{display:flex;justify-content:space-between;gap:12px;padding:6px 264px 0 224px;font-size:12.5px;color:var(--faint);font-variant-numeric:tabular-nums;line-height:1.3}
+.u-axis .read{margin-left:auto}
+.u-quiet{font-size:13px;color:var(--faint);max-width:80ch;text-wrap:pretty}
+.u-fold{display:flex;flex-direction:column;gap:10px;padding:14px 20px}
+.u-fold .btn{display:inline-flex;align-items:center;gap:10px;align-self:flex-start;font-size:14px;font-weight:600;color:var(--ink);background:none;border:0;padding:0;cursor:pointer}
+.u-fold ul{margin:0;padding:0 0 0 38px;list-style:none;display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);overflow-wrap:anywhere;max-width:86ch}
+.u-fold .last{color:var(--faint)}
+.u-end{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:6px 16px;padding:14px 20px;font-size:13px;color:var(--muted);border-top:1px solid var(--divider)}
+.u-step{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:0 12px}
+.u-end .age{color:var(--faint);margin-left:auto}
+.u-meter{display:flex;align-items:center;gap:10px;max-width:360px}
+.u-meter .track{flex:1;height:8px;border-radius:var(--radius-pill);background:var(--tint-3);overflow:hidden}
+.u-meter .fill{display:block;height:100%;border-radius:var(--radius-pill);background:var(--accent)}
+.u-meter .fill.warn{background:var(--warn)}
+.u-meter .word{font-size:13px;font-weight:600;color:var(--warn-text);white-space:nowrap}
+/* R1: a folder's month under its meter, at the meter's own width. */
+.u-month{display:flex;flex-direction:column;gap:4px;max-width:360px}
+.u-month .chg{font-size:13px;color:var(--faint)}
+.u-month .u-axis{padding:2px 0 0}
+@container syndra-frame (max-width: 719px){
+.u-row{grid-template-columns:minmax(0,1fr);row-gap:6px}
+.u-name{min-height:0}
+.u-fig{order:2;align-items:flex-start;text-align:left}
+.u-figline{min-height:0;justify-content:flex-start}
+.u-figtext{text-align:left}
+.u-bandseat{order:3}
+.u-axis{padding:6px 0 0}
+.p-setting .l,.k-panel .l{flex:1 1 100%}
+.p-setting .s{flex:1 1 100%;justify-content:flex-start;margin-left:0}
+.k-role .r,.k-role .st,.k-role .src{flex:1 1 100%}
+.k-head .acts{padding-bottom:0}
+}
+/* The page's other parts, where the bundle has no part for them: the region seam, a reading row, the sticky band and its pill, a setting row, a place block. */
+.p-page{display:flex;flex-direction:column;gap:16px}
+.p-regions{display:grid;gap:32px}
+.p-region{display:grid;gap:14px}
+.p-region .hd{display:grid;gap:6px}
+.p-region .hd .t{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.p-region .hd h2{margin:0}
+.p-region .hd p{margin:0;max-width:86ch;font-size:14px;line-height:1.6;color:var(--muted)}
+.p-region .bd{display:grid;gap:16px}
+.p-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start;gap:16px}
+.p-reading{display:flex;align-items:flex-start;gap:12px;padding:14px 20px}
+.p-reading+.p-reading{border-top:1px solid var(--divider)}
+.p-reading .dot{margin-top:7px}
+.p-reading .col{display:flex;flex-direction:column;gap:3px;min-width:0}
+.p-reading .lbl{font-size:14.5px;font-weight:600;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.p-reading .lbl .faint{font-size:13px;font-weight:400;color:var(--faint)}
+.p-reading .txt{font-size:13.5px;line-height:1.5;color:var(--muted);max-width:80ch;text-wrap:pretty}
+.p-setting{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:14px 20px;min-height:60px}
+.p-setting+.p-setting{border-top:1px solid var(--divider)}
+.p-setting .l{flex:0 0 170px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--label)}
+.p-setting .v{flex:1 1 200px;min-width:0;font-size:14px;display:flex;flex-direction:column;gap:3px}
+.p-setting .v .f{font-size:13px;color:var(--faint)}
+.p-setting .s{flex:0 0 200px;display:flex;justify-content:flex-end;margin-left:auto}
+.p-cols{display:flex;gap:18px;padding:11px 20px;font-size:12.5px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--label)}
+.p-prow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:12px 20px;min-height:60px;border-top:1px solid var(--divider)}
+.p-prow .who{flex:0 0 220px;display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:600}
+.p-prow .acct{flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.p-prow .since{flex:0 0 110px;text-align:right;font-size:13.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.p-prow .seat{flex:0 0 260px;display:flex;justify-content:flex-end;gap:8px}
+.p-mono{font-family:var(--font-mono);font-size:13px}
+.p-stand{font-size:12.5px;color:var(--faint)}
+.p-ops{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:12px 20px;min-height:60px}
+.p-ops+.p-ops{border-top:1px solid var(--divider)}
+.p-ops .w{flex:1 1 200px;font-size:14px}
+.p-band{position:sticky;top:0;height:64px;margin:0 -26px;padding:12px 26px 0;background:var(--canvas);border-bottom:1px solid var(--line);display:flex;justify-content:center;align-items:flex-start}
+.p-pill{display:inline-flex;gap:2px;padding:4px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);background:var(--surface-1);box-shadow:var(--shadow-dialog);white-space:nowrap}
+.p-pill a{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 14px;border-radius:var(--radius-pill);font-size:13px;font-weight:600;color:var(--muted);text-decoration:none}
+.p-pill a.here{background:var(--surface-2);color:var(--ink)}
+.p-pill a .c{font-weight:500;color:var(--faint)}
+.p-pill a .ar{font-size:12px;color:var(--faint)}
+.p-readline{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.p-chips{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px}
+.p-chip{display:inline-flex;align-items:center;gap:8px;border-radius:var(--radius-pill);background:var(--tint-2);padding:6px 14px;font-size:14px;font-weight:600}
+.p-chip .c{color:var(--faint)}.p-chip .ar{font-size:12px;color:var(--faint)}
+.s-top{display:flex;flex-direction:column;gap:8px;padding:20px 20px 0}
+.s-title{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px}
+.s-status{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.s-steps{display:flex;flex-wrap:wrap;align-items:center;gap:4px 20px;font-size:13.5px;color:var(--muted);margin:0;padding:0;list-style:none}
+.s-steps li{display:inline-flex;align-items:center;gap:8px}
+.s-head{display:flex;flex-direction:column;gap:8px;padding:18px 20px 22px}
+.s-head h2{margin:0;font-family:var(--font-display);font-size:24px;font-weight:600;line-height:1.25;letter-spacing:-.01em;text-wrap:pretty}
+.s-head p{margin:0;max-width:66ch;font-size:15px;line-height:1.55;color:var(--muted);text-wrap:pretty}
+.s-sec{display:flex;flex-direction:column;gap:8px;padding:18px 20px;border-top:1px solid var(--divider)}
+.s-sec .lr{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px}
+.s-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px}
+.s-place{display:flex;flex-direction:column;gap:10px;padding:14px 0}
+.s-place+.s-place{border-top:1px solid var(--divider)}
+.s-places .s-place:first-child{padding-top:0}.s-places .s-place:last-child{padding-bottom:0}
+.s-place .nm{font-size:15.5px;font-weight:600}
+.s-place .can{font-size:13px;color:var(--muted);white-space:nowrap;margin-left:10px}
+.s-place .where{font-size:13px;color:var(--faint)}
+.s-place .use{margin-left:auto;font-size:13.5px;color:var(--muted)}
+.s-addr{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px 14px}
+.s-addr .k{font-size:12.5px;color:var(--muted);display:block;margin-bottom:5px}
+.s-scope{max-width:62ch;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty;margin:0}
+.k-head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px 20px}
+.k-head .av{flex:none}
+.k-head .ph{min-width:0;flex:1 1 420px}
+.k-head .acts{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding-bottom:12px}
+.k-panel{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:14px 20px}
+.k-panel .l{font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--label);flex:0 0 170px}
+.k-chip{display:inline-flex;align-items:center;border-radius:var(--radius-pill);background:var(--tint-2);padding:6px 14px;font-size:14px;font-weight:600}
+.k-proj{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:14px 20px}
+.k-proj .nm{font-family:var(--font-display);font-size:19px;font-weight:600}
+.k-proj .tally{font-size:13px;color:var(--faint)}
+.k-group{padding:12px 20px 2px;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--label);border-top:1px solid var(--divider)}
+.k-role{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:12px 20px;min-height:60px}
+.k-role+.k-role{border-top:1px solid var(--divider)}
+.k-role .r{flex:0 0 230px;display:flex;flex-direction:column;gap:2px}
+.k-role .r .n{font-size:14.5px;font-weight:600}
+.k-role .r .key{font-family:var(--font-mono);font-size:12.5px;color:var(--faint)}
+.k-role .src{flex:1 1 200px;min-width:0;font-size:13.5px;color:var(--muted)}
+.k-role .st{flex:0 0 220px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}
+.k-role .st .w{display:inline-flex;align-items:center;gap:8px;font-weight:600}
+.k-role .st .f{font-size:12.5px;color:var(--faint)}
+.k-role .seat{flex:0 0 190px;display:flex;justify-content:flex-end;gap:8px;margin-left:auto}
+.k-dl{display:grid;grid-template-columns:170px 1fr;gap:4px 18px;padding:0 20px 12px 20px;font-size:12.5px;color:var(--faint)}
+.k-dl dt{font-weight:600;color:var(--label);text-transform:uppercase;letter-spacing:.1em}
+.k-dl dd{margin:0;font-family:var(--font-mono)}
+.k-ps .v .m{font-family:var(--font-mono);font-size:13.5px}
+.k-ps .v .sub{font-size:13px;color:var(--muted)}
+.k-ps .v .f{font-size:13px;color:var(--faint)}
+.k-ps .v .warn{font-size:14px;line-height:1.55;color:var(--warn-text);max-width:70ch}
+.k-fold{display:flex;flex-direction:column;gap:6px;padding:4px 0}
+.k-fold .nm{font-size:14.5px;font-weight:600}
+.k-fold .sm{font-size:13px;color:var(--muted)}
+.b-table{display:grid;gap:0;border:1px solid var(--line);border-radius:var(--radius-block);overflow:hidden}
+.b-table .r{display:grid;grid-template-columns:200px 1fr 1fr 180px;gap:18px;padding:12px 22px;border-top:1px solid var(--divider);font-size:13.5px;line-height:1.55;color:var(--muted)}
+.b-table .r.h{border-top:0;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--label)}
+.b-table .r .k{color:var(--ink);font-weight:600}
+.b-note{margin:0;font-size:14px;line-height:1.6;color:var(--muted);text-wrap:pretty;max-width:84ch}
+</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px 72px 100px;display:flex;flex-direction:column;gap:64px;background:var(--ground);min-height:100vh">
+
+  <header data-screen-label="{{ boardLabel }}" style="display:flex;flex-direction:column;gap:14px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">A-23 · What has been used · the TrueNAS page, Network storage and the person page · Settled by the owner, 17 Nov 2026 · {{ partLabel }}</span>
+    <h1 class="type-page-title" style="margin:0;font-size:44px;line-height:1.1">{{ partTitle }}</h1>
+    <p style="margin:0;font-size:17px;line-height:1.65;color:var(--muted);text-wrap:pretty">{{ partLede }}</p>
+  </header>
+
+  <sc-if value="{{ p1 }}" hint-placeholder-val="{{ true }}">
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;border-color:var(--accent-line)"><span class="type-label" style="color:var(--label)">Settled · owner, 17 Nov 2026</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The figure is the stat face, Bricolage 24 · days before the record carry the window's faint baseline, the record starts at a tick · What wasn't counted is one fold per card, closed · the meter is drawn once per page, in the storage card · the home folder's month sits under its meter there, and the usage card keeps the shares · who used a share is one link per card to Insights › Usage · the retention card is Advanced only · no window switch, no busiest day, no export.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">How the big number stays calm</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The row is still a folder row: the name left, its number right. The band sits between them, so every band on a card shares one column and the days line up down the card. The figures form one right-aligned column in the display face; name, band baseline and figure share a baseline; the second line hangs under the figure in faint. A row is one line tall, so the card is shorter than before, not taller. On a phone the row stacks: name, figure, band.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Kept, and drawn inline</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">A day not counted is never a zero; nothing ranks people with a word; every card ends on its next step; tokens only, both themes; structure keeps its seat. AppShell, PageHeader, Card, CardHeader, CardRow, EmptyState, Notice, ReadFreshness, Tabs, FoldChevron, Unfold, StatusDot, StatusSeat, CountChip, Button, ArrowLink, CopyableValue, Input, Avatar and TechnicalDetail are the real parts; the usage rows and band, Meter, the Region seam, role rows and folder rows are inline until built (A-23 §5).</p></div>
+  </section>
+  </sc-if>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+    <section data-screen-label="{{ g.title }}" style="display:flex;flex-direction:column;gap:26px">
+      <div style="display:flex;flex-direction:column;gap:6px;max-width:960px"><span class="type-label" style="color:var(--label)">{{ g.eyebrow }}</span><h2 class="type-section-title" style="margin:0">{{ g.title }}</h2><p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">{{ g.note }}</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:40px 36px;align-items:flex-start">
+        <sc-for list="{{ g.frames }}" as="f" hint-placeholder-count="2">
+          <figure class="b-fig" data-screen-label="{{ f.label }}">
+            <div class="cap"><span class="n {{ f.nClass }}">{{ f.n }}</span><span class="t">{{ f.label }}</span><sc-if value="{{ f.rec }}" hint-placeholder-val="{{ false }}"><span class="r">Recommended</span></sc-if><sc-if value="{{ f.hasDelta }}" hint-placeholder-val="{{ false }}"><span class="d">{{ f.delta }}</span></sc-if></div>
+            <div class="b-fr {{ f.cls }}"><div><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+            <figcaption>{{ f.note }}</figcaption>
+          </figure>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+
+  <sc-if value="{{ p4 }}" hint-placeholder-val="{{ false }}">
+  <section data-screen-label="Motion spec" style="display:flex;flex-direction:column;gap:18px;max-width:1500px">
+    <div style="display:flex;flex-direction:column;gap:6px;max-width:960px"><span class="type-label" style="color:var(--label)">7 · Motion, the spec</span><h2 class="type-section-title" style="margin:0">What moves, and only when it helps</h2><p class="b-note">Every movement is one of Syndra's six on the one soft curve (A-05, FINAL §4). Nothing in the band is decorated: no line draws itself, no number counts up. Motion answers an act (opening, reading a day, a later read) and shows what changed.</p></div>
+    <div class="b-table">
+      <div class="r h"><span>Moment</span><span>Movement</span><span>Token</span><span>Still form</span></div>
+      <sc-for list="{{ motion }}" as="m" hint-placeholder-count="8"><div class="r"><span class="k">{{ m.when }}</span><span>{{ m.what }}</span><span>{{ m.token }}</span><span>{{ m.still }}</span></div></sc-for>
+    </div>
+  </section>
+
+  </sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<div data-theme="{{ theme }}" class="b-root">
+
+<sc-if value="{{ shell }}" hint-placeholder-val="{{ true }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="{{ pathname }}" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" initialView="{{ view }}" hint-size="100%,100vh">
+
+<sc-if value="{{ isTargetPage }}" hint-placeholder-val="{{ true }}">
+<div class="p-page">
+  <sc-if value="{{ notScrolled }}" hint-placeholder-val="{{ true }}">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="TrueNAS" meta="TrueNAS 25.10" lede="Whether Syndra can reach TrueNAS and what it says about itself, who has an account there, and anything waiting on you. Syndra provisions an account for every person whose roles reach TrueNAS, and keeps it in step." hint-size="100%,120px"></x-import>
+  </sc-if>
+
+  <sc-if value="{{ scrolled }}" hint-placeholder-val="{{ false }}">
+    <div class="p-band" aria-hidden="true"><nav class="p-pill"><a>Waiting on you <span class="c">0</span> <span class="ar">↑</span></a><a>Accounts <span class="c">14</span> <span class="ar">↑</span></a><a>What runs here <span class="c">9</span> <span class="ar">↑</span></a><a class="here">What has been used here</a></nav></div>
+  </sc-if>
+
+  <sc-if value="{{ notScrolled }}" hint-placeholder-val="{{ true }}">
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,190px">
+    <div class="p-setting"><span class="l">Zitadel project</span><span class="v"><a href="#project" style="font-weight:600;color:var(--ink)">Makerspace storage</a></span><span class="s"></span></div>
+    <div class="p-setting"><span class="l">Role mappings</span><span class="v">6 roles to TrueNAS groups · version 4</span><span class="s"><x-import component-from-global-scope="Syndra.ArrowLink" href="#mappings" hint-size="90px,20px">Mappings</x-import></span></div>
+    <div class="p-setting"><span class="l">Home folders</span><span class="v"><span>In tank/home</span></span><span class="s"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Change folder</x-import></span></div>
+  </x-import>
+
+  <div class="p-readline">
+    <x-import component-from-global-scope="Syndra.ReadFreshness" subject="TrueNAS" state="{{ readState }}" hint-size="260px,20px"></x-import>
+    <nav class="p-chips" aria-label="Regions of this page"><span class="p-chip">Waiting on you <span class="c">0</span><span class="ar">↓</span></span><span class="p-chip">Accounts <span class="c">14</span><span class="ar">↓</span></span><span class="p-chip">What runs here <span class="c">9</span><span class="ar">↓</span></span><span class="p-chip">What has been used here <span class="ar">↓</span></span></nav>
+  </div>
+
+  <div class="p-regions">
+    <section class="p-region" id="land">
+      <div class="hd"><div class="t"><h2 class="type-section-title">Whether changes can land</h2></div></div>
+      <div class="bd">
+        <div class="p-two">
+          <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+            <x-import component-from-global-scope="Syndra.CardHeader" title="Syndra's reach" hint-size="100%,60px"></x-import>
+            <div class="p-reading"><span class="dot"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import></span><span class="col"><span class="lbl">Answering <span class="faint">Answered 40 seconds ago</span></span><span class="txt">Accepting changes. Nothing is in flight.</span></span></div>
+          </x-import>
+          <x-import component-from-global-scope="Syndra.Card" hint-size="100%,260px">
+            <x-import component-from-global-scope="Syndra.CardHeader" title="What TrueNAS reports" note="All read" hint-size="100%,60px"></x-import>
+            <div class="p-reading"><span class="dot"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import></span><span class="col"><span class="lbl">Nothing raised</span><span class="txt">No alerts, every pool healthy, and the sharing services are running.</span></span></div>
+            <div class="p-reading"><span class="dot"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import></span><span class="col"><span class="lbl">Storage pool tank</span><span class="txt">Online · 1.8 TiB of 3.6 TiB used</span></span></div>
+            <div class="p-reading"><span class="dot"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="6px,6px"></x-import></span><span class="col"><span class="lbl">truenas.example.edu</span><span class="txt">TrueNAS SCALE 25.10</span></span></div>
+          </x-import>
+        </div>
+        <sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Syndra.Card" id="maintenance" hint-size="100%,260px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Maintenance" hint-size="100%,60px"></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>Active</span><span style="font-size:14px;color:var(--muted)">TrueNAS takes reads and changes. Two states you can put it in instead:</span></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span style="width:150px;flex:none"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Start draining</x-import></span><span style="min-width:0;flex:1 1 320px;font-size:13.5px;line-height:1.55;color:var(--muted)"><span style="font-weight:600;color:var(--ink)">Lets calls already sent finish, and refuses new ones.</span> Use it before replacing TrueNAS's key or restarting it: once nothing is in flight, nothing can be cut off halfway.</span></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span style="width:150px;flex:none"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Set read-only</x-import></span><span style="min-width:0;flex:1 1 320px;font-size:13.5px;line-height:1.55;color:var(--muted)"><span style="font-weight:600;color:var(--ink)">Keeps answering reads and refuses every change.</span> This page stays current. Use it while you work on TrueNAS itself; members setting a password are told to try later.</span></x-import>
+        </x-import>
+        </sc-if>
+      </div>
+    </section>
+
+    <section class="p-region" id="name">
+      <div class="hd"><div class="t"><h2 class="type-section-title">Name</h2></div></div>
+      <div class="bd">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,120px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="What members see it called" hint-size="100%,60px"></x-import>
+          <div class="p-setting" style="padding-top:0"><span class="l">Name</span><span class="v"><span style="font-weight:600">TrueNAS</span><span class="f">On every member's Network storage page and in their rail.</span></span><span class="s"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="90px,34px">Rename</x-import></span></div>
+        </x-import>
+      </div>
+    </section>
+
+    <section class="p-region" id="waiting">
+      <div class="hd"><div class="t"><h2 class="type-section-title">Waiting on you</h2><x-import component-from-global-scope="Syndra.CountChip" n="{{ zero }}" hint-size="30px,22px"></x-import></div><p>Things Syndra found and will not settle by itself: an account that differs from what Syndra expects, a change log on TrueNAS that was altered, two records disagreeing about whose account it is, or a change TrueNAS never answered. Each needs a decision from you.</p></div>
+      <div class="bd">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,140px">
+          <x-import component-from-global-scope="Syndra.EmptyState" title="Nothing is waiting on you." guidance="A change TrueNAS never answered, an account two records disagree about, or a password that needs a new one appears here." hint-size="100%,120px"></x-import>
+        </x-import>
+      </div>
+    </section>
+
+    <section class="p-region" id="accounts">
+      <div class="hd"><div class="t"><h2 class="type-section-title">Accounts on TrueNAS</h2></div><p>Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action.</p></div>
+      <div class="bd">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,420px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Accounts Syndra manages" count="{{ fourteen }}" note="Put what a role gives them on hold, or revoke it" hint-size="100%,60px"></x-import>
+          <div class="p-cols"><span style="flex:0 0 220px">Person</span><span style="flex:1 1 200px">Account on TrueNAS</span><span style="flex:0 0 110px;text-align:right">Since</span><span style="flex:0 0 260px"></span></div>
+          <sc-for list="{{ people }}" as="p" hint-placeholder-count="5">
+            <div class="p-prow"><span class="who"><x-import component-from-global-scope="Syndra.Avatar" name="{{ p.name }}" size="row" hint-size="30px,30px"></x-import>{{ p.name }}</span><span class="acct"><span class="p-mono">{{ p.acct }}</span><span class="p-stand">{{ p.stand }}</span></span><span class="since">{{ p.since }}</span><span class="seat"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Put on hold</x-import><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="80px,34px">Revoke</x-import></span></div>
+          </sc-for>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:12px 20px;border-top:1px solid var(--divider);font-size:13px;color:var(--muted)"><span>Showing 5 of 14</span><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="110px,34px">Show 25 more</x-import><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="100px,34px">Show all 14</x-import></div>
+        </x-import>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Not created by Syndra" count="{{ two }}" note="Accounts on TrueNAS that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person." hint-size="100%,60px"></x-import>
+          <div style="padding:0 20px 10px"><x-import component-from-global-scope="Syndra.ReadFreshness" subject="The account list" state="{{ readState }}" hint-size="260px,20px"></x-import></div>
+          <div class="p-prow"><span style="flex:0 0 220px" class="p-mono">backup_runner</span><span class="p-stand" style="flex:1 1 200px">Signs in from the backup host</span><span class="seat" style="flex:0 0 200px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="140px,34px">Assign to a person</x-import></span></div>
+          <div class="p-prow"><span style="flex:0 0 220px" class="p-mono">syndra</span><span class="p-stand" style="flex:1 1 200px">Syndra's own account on TrueNAS, which cannot be assigned to anyone</span><span class="seat" style="flex:0 0 200px"></span></div>
+        </x-import>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,140px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="No longer needed" count="{{ zero }}" note="Accounts Syndra created that no active role needs any more" hint-size="100%,60px"></x-import>
+          <x-import component-from-global-scope="Syndra.EmptyState" title="Nothing to tidy." guidance="Every account Syndra created on TrueNAS is still backed by a role." hint-size="100%,100px"></x-import>
+        </x-import>
+      </div>
+    </section>
+
+    <section class="p-region" id="runs">
+      <div class="hd"><div class="t"><h2 class="type-section-title">What runs here</h2></div><p>What Syndra is able to do on TrueNAS, and the scheduled check that keeps accounts in step.</p></div>
+      <div class="bd">
+        <div class="p-two">
+          <x-import component-from-global-scope="Syndra.Card" hint-size="100%,560px">
+            <x-import component-from-global-scope="Syndra.CardHeader" title="What it can do" note="As reported by the connection to TrueNAS" hint-size="100%,60px"></x-import>
+            <sc-for list="{{ ops }}" as="o" hint-placeholder-count="9">
+              <div class="p-ops"><span class="w">{{ o.w }}</span><x-import component-from-global-scope="Syndra.StatusSeat" tone="{{ o.tone }}" word="{{ o.word }}" hint-size="130px,22px"></x-import></div>
+            </sc-for>
+            <sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:12px 20px;border-top:1px solid var(--divider)"><x-import component-from-global-scope="Syndra.TechnicalDetail" hint-size="100%,32px"><span class="p-mono">account.list · account.provision · health.get · storage.status</span></x-import></div>
+              <div style="display:grid;gap:6px;padding:12px 20px;border-top:1px solid var(--divider)"><span class="type-label" style="color:var(--label)">What the add-on also says</span><span style="font-size:13px;color:var(--faint)">Nothing beyond what Syndra uses.</span></div>
+            </sc-if>
+          </x-import>
+          <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px">
+            <x-import component-from-global-scope="Syndra.CardHeader" title="Check for differences" note="Compares TrueNAS with what Syndra expects and records any fixes as changes waiting for you to send. Nothing is applied until somebody sends them from Pending changes." hint-size="100%,80px"></x-import>
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span style="flex:1;font-size:14.5px;color:var(--muted)">Syndra checks by itself every six hours.</span><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Check now</x-import></x-import>
+          </x-import>
+        </div>
+      </div>
+    </section>
+  </div>
+  </sc-if>
+
+  <div class="p-regions">
+    <section class="p-region" id="stats">
+      <div class="hd"><div class="t"><h2 class="type-section-title">What has been used here</h2></div><p>Totals for everyone who used it, over the last 30 days and the last 12 months. One person's numbers are on their page.</p></div>
+      <div class="bd">
+        <dc-import name="a23-usage-card" u="{{ u }}" hint-size="100%,900px"></dc-import>
+        <sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,150px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="How long per-person numbers are kept" hint-size="100%,60px"></x-import>
+          <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 16px;padding:0 20px 20px"><div style="display:flex;flex-direction:column;gap:6px;width:140px"><x-import component-from-global-scope="Syndra.FieldLabel" htmlFor="days" hint-size="60px,18px">Days</x-import><x-import component-from-global-scope="Syndra.Input" id="days" value="400" readOnly="{{ true }}" hint-size="140px,40px"></x-import></div><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" disabled="{{ true }}" hint-size="70px,34px">Save</x-import><span style="flex-basis:100%;font-size:13px;color:var(--muted)">Per-person numbers are kept for 400 days. Totals are kept for 5 years.</span></div>
+        </x-import>
+        </sc-if>
+      </div>
+    </section>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isStoragePage }}" hint-placeholder-val="{{ false }}">
+<div class="p-page">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Network storage" lede="Your account on the makerspace's shared storage, and how to connect to it. Your access follows the roles you hold." hint-size="100%,110px"></x-import>
+  <div style="display:grid;gap:16px">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,900px">
+      <div class="s-top">
+        <div class="s-title"><span class="type-card-title">TrueNAS</span><span class="s-status"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>Answering and accepting sign-ins · checked 40 seconds ago</span></div>
+        <ol class="s-steps" aria-label="Your progress"><li><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>A role gives you access</li><li><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>Your account is created</li><li><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>You set a password</li></ol>
+      </div>
+      <div class="s-head"><h2>Your account is ready</h2><p>Copy an address below into your computer, then sign in with your account name and storage password.</p></div>
+      <div class="s-sec"><span class="type-label" style="color:var(--label)">Sign in as</span><div style="max-width:460px"><x-import component-from-global-scope="Syndra.CopyableValue" value="becky.lynch" label="Your account name" hint-size="100%,40px"></x-import></div></div>
+      <div class="s-sec" style="gap:14px">
+        <div class="lr"><span class="type-label" style="color:var(--label)">Your folders</span><span style="margin-left:auto"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="190px,34px">First time? How to connect</x-import></span></div>
+        <div class="s-places">
+          <div class="s-place">
+            <div class="s-line"><span><span class="nm">Your home folder</span><span class="can">Can change files</span></span><span class="use">18.4 GiB of 20.0 GiB</span></div>
+            <span class="where">In home › becky.lynch · private to you</span>
+            <span class="u-meter" role="meter" aria-label="Your home folder usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="92"><span class="track"><span class="fill warn" style="width:92%"></span></span><span class="word">nearly full</span></span>
+            <span class="u-month"><span class="chg">Up 0.3 GiB since 17 Oct</span><dc-import name="a23-band" b="{{ homeBand }}" hint-size="100%,40px"></dc-import><span class="u-axis"><span>17 Oct</span><span class="read">15 Nov</span></span></span>
+            <div class="s-addr"><div><span class="k">Mac and Linux · Connect to Server</span><x-import component-from-global-scope="Syndra.CopyableValue" value="smb://truenas.example.edu/home/becky.lynch" label="Address for Mac and Linux" hint-size="100%,40px"></x-import></div><div><span class="k">Windows · File Explorer address bar</span><x-import component-from-global-scope="Syndra.CopyableValue" value="\\truenas.example.edu\home\becky.lynch" label="Address for Windows" hint-size="100%,40px"></x-import></div></div>
+          </div>
+          <div class="s-place">
+            <div class="s-line"><span><span class="nm">makers</span><span class="can">Can change files</span></span></div>
+            <span class="where">From your Member in Studio role</span>
+            <div class="s-addr"><div><span class="k">Mac and Linux · Connect to Server</span><x-import component-from-global-scope="Syndra.CopyableValue" value="smb://truenas.example.edu/makers" label="Address for Mac and Linux" hint-size="100%,40px"></x-import></div><div><span class="k">Windows · File Explorer address bar</span><x-import component-from-global-scope="Syndra.CopyableValue" value="\\truenas.example.edu\makers" label="Address for Windows" hint-size="100%,40px"></x-import></div></div>
+          </div>
+          <div class="s-place">
+            <div class="s-line"><span><span class="nm">scans</span><span class="can">Read only</span></span></div>
+            <span class="where">From your Member in Studio role</span>
+            <div class="s-addr"><div><span class="k">Mac and Linux · Connect to Server</span><x-import component-from-global-scope="Syndra.CopyableValue" value="smb://truenas.example.edu/scans" label="Address for Mac and Linux" hint-size="100%,40px"></x-import></div><div><span class="k">Windows · File Explorer address bar</span><x-import component-from-global-scope="Syndra.CopyableValue" value="\\truenas.example.edu\scans" label="Address for Windows" hint-size="100%,40px"></x-import></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="s-sec" style="padding-bottom:22px"><span class="type-label" style="color:var(--label)">Storage password</span><div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;max-width:460px"><div style="min-width:0;flex:1 1 220px"><x-import component-from-global-scope="Syndra.Input" type="password" aria-label="New storage password" value="" hint-size="100%,40px"></x-import></div><x-import component-from-global-scope="Syndra.Button" variant="outline" disabled="{{ true }}" hint-size="150px,40px">Change password</x-import></div><p class="s-scope">Last changed 3 weeks ago. Only for TrueNAS: not your Syndra sign-in or your Google account.</p></div>
+    </x-import>
+    <dc-import name="a23-usage-card" u="{{ u }}" hint-size="100%,700px"></dc-import>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPersonPage }}" hint-placeholder-val="{{ false }}">
+<div class="p-page">
+  <div class="k-head">
+    <span class="av"><x-import component-from-global-scope="Syndra.Avatar" name="Becky Lynch" size="header" hint-size="62px,62px"></x-import></span>
+    <div class="ph"><x-import component-from-global-scope="Syndra.PageHeader" title="Becky Lynch" meta="{{ personMeta }}" lede="Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why." hint-size="100%,120px"></x-import></div>
+    <div class="acts"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="140px,40px">Manage bundles</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="110px,40px">Give a role</x-import></div>
+  </div>
+  <x-import component-from-global-scope="Syndra.Tabs" options="{{ personTabs }}" value="access" onSelect="{{ noop }}" label="Views of this person's access" hint-size="100%,44px"></x-import>
+
+  <sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,120px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="This account" hint-size="100%,60px"></x-import>
+    <div class="p-setting" style="padding-top:0"><span class="l">Kind</span><span class="v"><span style="font-weight:600">A person</span><span class="f">Signs in with a password in Zitadel.</span></span><span class="s"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="190px,34px">Mark as a service account</x-import></span></div>
+  </x-import>
+  </sc-if>
+
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,60px">
+    <div class="k-panel"><span class="l">Bundles</span><span class="k-chip">Studio member v2</span></div>
+  </x-import>
+
+  <div class="p-readline">
+    <x-import component-from-global-scope="Syndra.ReadFreshness" subject="Becky Lynch's access" state="{{ readState }}" hint-size="260px,20px"></x-import>
+    <nav class="p-chips" aria-label="Projects on this page"><span class="p-chip">Studio <span class="c">3</span><span class="ar">↓</span></span><span class="p-chip">Wood shop <span class="c">1</span><span class="ar">↓</span></span><span class="p-chip">Network storage <span class="ar">↓</span></span></nav>
+  </div>
+
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,320px">
+    <div class="k-proj"><x-import component-from-global-scope="Syndra.FoldChevron" open="{{ true }}" hint-size="28px,28px"></x-import><span class="nm">Studio</span><span class="tally">3 roles · last signed in 14 Nov</span></div>
+    <div class="k-group">Given</div>
+    <div class="k-role"><span class="r"><span class="n">Member</span><sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}"><span class="key">studio.member</span></sc-if></span><span class="src">From the Studio member v2 bundle, given by Kanishk Singh on 3 Mar</span><span class="st"><span class="w"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>In Zitadel</span><span class="f">No end date</span></span><span class="seat"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="80px,34px">Remove</x-import></span></div>
+    <div class="k-role"><span class="r"><span class="n">Laser user</span><sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}"><span class="key">studio.laser</span></sc-if></span><span class="src">Given by hand by Kanishk Singh on 2 Nov: “Passed the laser induction”</span><span class="st"><span class="w"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>In Zitadel</span><span class="f">Ends 24 Nov · 9 days</span></span><span class="seat"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="80px,34px">Extend</x-import><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="80px,34px">Revoke</x-import></span></div>
+    <div class="k-group">Automatic</div>
+    <div class="k-role"><span class="r"><span class="n">Safety refresher done</span><sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}"><span class="key">studio.safety_ok</span></sc-if></span><span class="src">From the rule Safety refresher, 12 Oct</span><span class="st"><span class="w"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>In Zitadel</span><span class="f">No end date</span></span><span class="seat"><sc-if value="{{ basic }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="110px,34px">Show the rule</x-import></sc-if></span></div>
+    <sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}"><dl class="k-dl"><dt>Grant id</dt><dd>grant_7f3a…c21</dd><dt>Rule input</dt><dd>training.safety = 2026-10-12</dd></dl></sc-if>
+  </x-import>
+
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px">
+    <div class="k-proj"><x-import component-from-global-scope="Syndra.FoldChevron" open="{{ true }}" hint-size="28px,28px"></x-import><span class="nm">Wood shop</span><span class="tally">1 role · last signed in 9 Nov</span></div>
+    <div class="k-group">Given</div>
+    <div class="k-role"><span class="r"><span class="n">Member</span><sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}"><span class="key">woodshop.member</span></sc-if></span><span class="src">Given by hand by Rhea Ripley on 21 Aug: “Bench induction done”</span><span class="st"><span class="w"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>In Zitadel</span><span class="f">No end date</span></span><span class="seat"><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="80px,34px">Revoke</x-import></span></div>
+  </x-import>
+
+  <section id="storage" style="display:grid;gap:14px">
+    <span class="type-label" style="color:var(--label)">Network storage</span>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,520px">
+      <div class="s-top" style="padding-bottom:6px"><div class="s-title"><span class="type-card-title">TrueNAS</span><span class="s-status"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>answering · read 40 seconds ago</span></div></div>
+      <div class="k-ps">
+        <div class="p-setting"><span class="l">Account</span><span class="v"><span class="m">becky.lynch</span><span class="sub">Made by Syndra on 3 Mar 2026.</span></span><span class="s"></span></div>
+        <div class="p-setting"><span class="l">Password</span><span class="v"><span>Set, last changed 24 Oct</span><span class="f">Only Becky Lynch sets it, on their Network storage page.</span></span><span class="s"></span></div>
+        <div class="p-setting"><span class="l">Home folder</span><span class="v"><span>18.4 GiB of 20.0 GiB</span><span class="u-meter" role="meter" aria-label="Becky Lynch's home folder usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="92"><span class="track"><span class="fill warn" style="width:92%"></span></span><span class="word">nearly full</span></span><span class="u-month"><span class="chg">Up 0.3 GiB since 17 Oct</span><dc-import name="a23-band" b="{{ homeBand }}" hint-size="100%,40px"></dc-import><span class="u-axis"><span>17 Oct</span><span class="read">15 Nov</span></span></span><span class="sub">Up to 20.0 GiB, from their Member in Studio role.</span></span><span class="s"><x-import component-from-global-scope="Syndra.ArrowLink" href="#truenas" hint-size="180px,20px">Set on TrueNAS's page</x-import></span></div>
+        <div class="p-setting"><span class="l">Folders</span><span class="v"><span class="k-fold"><span><span class="nm">makers</span> <span class="sm">Can change files · from Member in Studio</span></span><sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}"><span class="m" style="font-size:12.5px;color:var(--faint)">tank/makers</span></sc-if></span><span class="k-fold"><span><span class="nm">scans</span> <span class="sm">Read only · from Member in Studio</span></span><sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}"><span class="m" style="font-size:12.5px;color:var(--faint)">tank/scans</span></sc-if></span></span><span class="s"><x-import component-from-global-scope="Syndra.ArrowLink" href="#mappings" hint-size="200px,20px">Set in TrueNAS's mappings</x-import></span></div>
+        <div class="p-setting"><span class="l">Hold</span><span class="v"><span>None</span><span class="f">The last one ended on 2 Sep.</span></span><span class="s"><x-import component-from-global-scope="Syndra.ArrowLink" href="#truenas" hint-size="180px,20px">Set on TrueNAS's page</x-import></span></div>
+      </div>
+    </x-import>
+    <dc-import name="a23-usage-card" u="{{ u }}" hint-size="100%,700px"></dc-import>
+  </section>
+
+</div>
+</sc-if>
+
+<sc-if value="{{ isPhoneTarget }}" hint-placeholder-val="{{ false }}">
+<div class="p-page">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="TrueNAS" lede="Whether Syndra can reach TrueNAS and what it says about itself, who has an account there, and anything waiting on you." hint-size="100%,120px"></x-import>
+  <div class="p-regions">
+    <section class="p-region" id="stats">
+      <div class="hd"><div class="t"><h2 class="type-section-title">What has been used here</h2></div><p>Totals for everyone who used it, over the last 30 days and the last 12 months. One person's numbers are on their page.</p></div>
+      <div class="bd"><dc-import name="a23-usage-card" u="{{ u }}" hint-size="100%,900px"></dc-import></div>
+    </section>
+  </div>
+</div>
+</sc-if>
+
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ region }}" hint-placeholder-val="{{ false }}">
+<div style="padding:26px;display:grid;gap:16px">
+  <sc-if value="{{ hasNotice }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Notice" tone="warn" title="{{ noticeTitle }}" live="{{ noticeLive }}" next="{{ noticeNext }}" hint-size="100%,110px">{{ noticeBody }}</x-import>
+  </sc-if>
+  <sc-if value="{{ hasReach }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,140px">
+      <x-import component-from-global-scope="Syndra.CardHeader" title="Syndra's reach" hint-size="100%,60px"></x-import>
+      <div class="p-reading"><span class="dot"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import></span><span class="col"><span class="lbl">Answering <span class="faint">Answered 40 seconds ago</span></span><span class="txt">Syndra can reach TrueNAS, but it is read-only. Kanishk Singh set it, 2 hours ago: “Replacing the pool's cache disk.” Every change is refused at once. Reads keep working. <span style="display:inline-block;margin-left:6px"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="150px,34px">Open Maintenance</x-import></span></span></span></div>
+    </x-import>
+  </sc-if>
+  <sc-if value="{{ hasPersonStorage }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+      <x-import component-from-global-scope="Syndra.CardHeader" title="TrueNAS" note="Read just now" hint-size="100%,60px"></x-import>
+      <div class="p-setting" style="padding-top:0"><span class="l">Account</span><span class="v"><span class="p-mono">becky.lynch</span><span class="f">Created 3 Mar 2026 · password set</span></span><span class="s"></span></div>
+      <div class="p-setting"><span class="l">Home folder</span><span class="v"><span>18.4 GiB of 20.0 GiB</span><span class="u-meter" role="meter" aria-label="Her home folder usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="92"><span class="track"><span class="fill warn" style="width:92%"></span></span><span class="word">nearly full</span></span><span class="u-month"><span class="chg">Up 0.3 GiB since 17 Oct</span><dc-import name="a23-band" b="{{ homeBand }}" hint-size="100%,40px"></dc-import><span class="u-axis"><span>17 Oct</span><span class="read">15 Nov</span></span></span></span><span class="s"><x-import component-from-global-scope="Syndra.ArrowLink" href="#truenas" hint-size="180px,20px">Set on TrueNAS's page</x-import></span></div>
+      <div class="p-setting"><span class="l">Folders</span><span class="v"><span>makers · can change files</span><span>scans · read only</span><span class="f">From her Member in Studio role</span></span><span class="s"></span></div>
+    </x-import>
+  </sc-if>
+  <sc-if value="{{ regionHead }}" hint-placeholder-val="{{ true }}">
+  <section class="p-region" id="stats">
+    <div class="hd"><div class="t"><h2 class="type-section-title">What has been used here</h2></div><p>Totals for everyone who used it, over the last 30 days and the last 12 months. One person's numbers are on their page.</p></div>
+    <div class="bd"><dc-import name="a23-usage-card" u="{{ u }}" hint-size="100%,900px"></dc-import></div>
+  </section>
+  </sc-if>
+  <sc-if value="{{ cardOnly }}" hint-placeholder-val="{{ false }}">
+    <dc-import name="a23-usage-card" u="{{ u }}" hint-size="100%,900px"></dc-import>
+  </sc-if>
+</div>
+</sc-if>
+
+</div>
+</sc-if>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1640,"height":4200}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.part = 4;
+    this.self = "a23-what-has-been-used-part" + this.part + ".dc.html?frame=";
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame") || "";
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.member = { id: "u7", name: "Becky Lynch", email: "becky.lynch@example.edu", title: "Member", team: "", status: "active", avatar: "BL", role: "user", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 0 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas", name: "TrueNAS" }] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u7", display_name: "Becky Lynch" }], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+
+  // The 30 makerspace days of the window, 17 Oct to 15 Nov 2026; index 29 is today.
+  dayName(i) { return i <= 14 ? (17 + i) + " Oct" : (i - 14) + " Nov"; }
+
+  // Cells: none (before the record), gap (inside it, couldn't count), val, pending (not counted yet).
+  cells(startIdx, values, gaps, o) {
+    o = o || {};
+    const out = [];
+    const pendingFrom = o.pendingFrom === undefined ? 29 : o.pendingFrom;
+    for (let i = 0; i < 30; i++) {
+      if (i >= pendingFrom) { out.push({ k: "pending" }); continue; }
+      if (i < startIdx) { out.push({ k: o.hatchBefore ? "gap" : "none" }); continue; }
+      if (gaps && gaps.some(g => i >= g[0] && i <= g[1])) { out.push({ k: "gap" }); continue; }
+      const v = values[i - startIdx];
+      if (v === undefined || v === null) out.push({ k: "pending" }); else out.push({ k: "val", v });
+    }
+    return out;
+  }
+
+  // The band's geometry for a width. A counter is columns (a count per day); a level is a line with a soft area under it, against its limit where one was read.
+  // A day before the record has the window's faint baseline and nothing else; the record's baseline is strong from its tick.
+  band(cells, W, aria, o) {
+    o = o || {};
+    const n = cells.length, H = 40, PY = 6;
+    // A column's half-width is the band's own inset, so the first and last columns end at the same inset as a line's dots.
+    const PX = o.bars ? Math.max(3, (0.45 * (W - 6) / (n - 1)) / 2) : 3, step = (W - 2 * PX) / (n - 1);
+    const x = i => PX + i * step;
+    const top = o.limit || Math.max(1, ...cells.map(c => c.v || 0));
+    const y = v => H - PY - (v / top) * (H - 2 * PY);
+    const first = cells.findIndex(c => c.k !== "none");
+    const runs = [[]];
+    cells.forEach((c, i) => { if (c.k !== "val") { if (runs[runs.length - 1].length) runs.push([]); } else runs[runs.length - 1].push([x(i), y(c.v), i]); });
+    const pt = p => p[0].toFixed(1) + "," + p[1].toFixed(1);
+    const lines = runs.filter(r => r.length > 1).map(r => r.map(pt).join(" "));
+    const areas = runs.filter(r => r.length > 1).map(r => r.map(pt).join(" ") + " " + r[r.length - 1][0].toFixed(1) + "," + (H - PY) + " " + r[0][0].toFixed(1) + "," + (H - PY));
+    const dots = runs.filter(r => r.length === 1).map(r => ({ x: r[0][0], y: r[0][1] }));
+    let last = -1; for (let i = n - 1; i >= 0; i--) if (cells[i].k === "val") { last = i; break; }
+    if (last >= 0 && !dots.some(d => Math.abs(d.x - x(last)) < 0.5)) dots.push({ x: x(last), y: y(cells[last].v) });
+    const hatches = [];
+    cells.forEach((c, i) => { if (c.k !== "gap") return; const l = Math.max(0, x(i) - step / 2), r = Math.min(W, x(i) + step / 2); const h = hatches[hatches.length - 1]; if (h && Math.abs(h.left + h.w - l) < 0.5) h.w = r - h.left; else hatches.push({ left: l, w: r - l }); });
+    const bw = step * 0.45;
+    const bars = o.bars ? cells.map((c, i) => c.k === "val" ? { x: (x(i) - bw / 2).toFixed(1), w: bw.toFixed(1), h: Math.max(1.5, (H - PY) - y(c.v)).toFixed(1) } : null).filter(Boolean) : [];
+    const baseLeft = first < 0 ? W : (first === 0 ? 0 : Math.max(0, x(first) - step / 2));
+    const d = k => dots[k] ? { x: dots[k].x.toFixed(1), y: dots[k].y.toFixed(1), r: 2.5 } : { x: 0, y: 0, r: 0 };
+    const hot = o.hot === undefined ? -1 : o.hot;
+    return {
+      W, isLine: !o.bars, bars,
+      l1: lines[0] || "", l2: lines[1] || "", l3: lines[2] || "", a1: areas[0] || "", a2: areas[1] || "", a3: areas[2] || "",
+      d1x: d(0).x, d1y: d(0).y, d1r: d(0).r, d2x: d(1).x, d2y: d(1).y, d2r: d(1).r, d3x: d(2).x, d3y: d(2).y, d3r: d(2).r, d4x: d(3).x, d4y: d(3).y, d4r: d(3).r,
+      hatches: hatches.map(h => ({ left: h.left.toFixed(1), w: h.w.toFixed(1) })),
+      hasBase: first >= 0, hasPre: first > 0, baseLeft: baseLeft.toFixed(1), baseW: (W - baseLeft).toFixed(1), hasTick: first > 0,
+      hasLimit: !!o.limit, limitWord: o.limitWord || "",
+      hasHot: hot >= 0, hotLeft: hot >= 0 ? Math.max(0, x(hot) - step / 2).toFixed(1) : 0, hotW: step.toFixed(1),
+      aria, alpha: 1,
+    };
+  }
+
+  // What a day says in the readout seat.
+  dayWords(cells, i, unit, name) {
+    const c = cells[i];
+    const v = c.k === "val" ? (unit === "GiB" ? c.v.toFixed(1) + " GiB" : c.v.toLocaleString("en-GB")) : c.k === "gap" ? "couldn't count" : c.k === "pending" ? "not counted yet" : "before counting began";
+    return (name ? name + ", " : "") + this.dayName(i) + ": " + v;
+  }
+
+  // A level's change over the record: its latest value against its first counted day.
+  change(cells, unit) {
+    let a = -1, b = -1;
+    for (let i = 0; i < cells.length; i++) if (cells[i].k === "val") { if (a < 0) a = i; b = i; }
+    if (a < 0 || a === b) return "";
+    const dv = cells[b].v - cells[a].v;
+    const abs = unit === "GiB" ? Math.abs(dv).toFixed(1) + " GiB" : Math.abs(Math.round(dv)).toLocaleString("en-GB");
+    return (Math.abs(dv) < 0.05 ? "Unchanged" : (dv > 0 ? "Up " : "Down ") + abs) + " since " + this.dayName(a);
+  }
+
+  // The usage card's data for one state. `W` is the band's width: the card's inner width less the name and figure columns.
+  usage(kind, state, W, o) {
+    o = o || {};
+    const series = (base, drift) => Array.from({ length: 30 }, (_, i) => +(base + drift * i + Math.sin(i / 2.7) * 0.35).toFixed(2));
+    const sessions = (seed) => Array.from({ length: 30 }, (_, i) => { const d = (i + seed) % 7; return d >= 5 ? 0 : Math.round(18 + 14 * Math.abs(Math.sin(i * 1.3 + seed))); });
+    const start = state === "day1" ? 28 : state === "ten" ? 20 : 0;
+    const pendingFrom = state === "offline" ? 27 : 29;
+    const gapDay = state === "gap" ? [[23, 23]] : [];
+    const cellsFor = (vals, gaps) => this.cells(start, vals.slice(start), (gaps || []).concat(gapDay), { pendingFrom });
+    const gib = v => v.toFixed(1) + " GiB";
+    const hot = o.hot === undefined ? -1 : o.hot;
+    let read = null;
+    const rowG = (what, name, vals, gaps, i) => {
+      const c = cellsFor(vals, gaps);
+      let li = 28; for (let k = 28; k >= 0; k--) if (c[k].k === "val") { li = k; break; }
+      const v = c[li] && c[li].k === "val" ? c[li].v : vals[28];
+      if (i === 0 && hot >= 0 && !read) read = this.dayWords(c, hot, "GiB", name);
+      const ch = this.change(c, "GiB");
+      return { name: name || "", value: gib(v), when: "on " + this.dayName(li), hasSecond: !!ch, second: ch, style: o.rowStyle ? o.rowStyle[i] || "" : "", b: this.band(c, W, what + (name ? ", " + name : "") + ", day by day over the last 30 days", { hot: i === 0 ? hot : -1 }) };
+    };
+    const rowC = (what, name, vals, gaps, i) => {
+      const c = cellsFor(vals, gaps);
+      const sum = c.reduce((a, x) => a + (x.k === "val" ? x.v : 0), 0);
+      const s12 = start ? sum : sum * 11 + 613;
+      const n = 30 - start;
+      if (i === 0 && hot >= 0 && !read) read = this.dayWords(c, hot, "", name);
+      return { name, value: sum.toLocaleString("en-GB"), when: start ? "in the last " + (n === 1 ? "day" : n + " days") : "in the last 30 days", hasSecond: !start, second: s12.toLocaleString("en-GB") + " in the last 12 months", style: o.rowStyle ? o.rowStyle[i] || "" : "", b: this.band(c, W, what + ", " + name + ", day by day over the last 30 days", { bars: true, hot: i === 0 ? hot : -1 }) };
+    };
+    // Every metric carries every flag the template reads, on every path.
+    const metric = (label, cls, extra) => Object.assign({ label, cls, many: false, single: false, notCounted: false, rows: [], hasAxis: true, axisLeft: "17 Oct", axisRight: "15 Nov", hasQuiet: false, quiet: "" }, extra);
+    const gap = state === "gap";
+    const adv = !!o.advanced;
+
+    if (kind === "person") {
+      const own = o.who === "member";
+      const sess = [rowC("Storage sessions", "makers", sessions(3), [], 0), rowC("Storage sessions", "scans", sessions(5).map(v => Math.round(v / 3)), [], 1)];
+      const used = [rowG("Storage used", "makers", series(9.4, 0.03), [], 0)];
+      return {
+        aria: own ? "What I have used" : "What Becky Lynch has used", hasTitle: true, title: own ? "What I have used" : "What Becky Lynch has used", unavailable: false,
+        metrics: [
+          metric("Storage sessions", "titled", { many: true, rows: sess, hasQuiet: own, quiet: "1 more line is not shown here, as the add-on named a person in it." }),
+          metric("Storage used", "row-divider", { many: true, rows: used }),
+        ],
+        hasFold: gap, foldOpen: !!o.foldOpen, foldLines: ["9 Nov: “The NAS was off”"],
+        hasEnd: true, step: "Nothing for you to do.", hasLink: false, hasRight: false, right: "",
+      };
+    }
+
+    if (state === "error") return { aria: "What has been used here", hasTitle: false, unavailable: true, metrics: [], hasFold: false, hasEnd: false, hasLink: false, hasRight: false };
+
+    let metrics;
+    if (state === "day0") {
+      metrics = [metric("Storage sessions", "", { notCounted: true, hasAxis: false }), metric("Home folder used", "row-divider", { notCounted: true, hasAxis: false }), metric("Storage used", "row-divider", { notCounted: true, hasAxis: false })];
+    } else {
+      const gapsGit = gap ? [[17, 19]] : [];
+      const sess = [rowC("Storage sessions", "makers", sessions(1), [], 0), rowC("Storage sessions", "gitlab_data", sessions(4), gapsGit, 1), rowC("Storage sessions", "scans", sessions(2), [], 2)];
+      const used = [rowG("Storage used", "makers", series(88.1, 0.17), [], 0), rowG("Storage used", "gitlab_data", series(412.6, 0.9), gapsGit, 1), rowG("Storage used", "scans", series(37.2, -0.05), [], 2)];
+      const home = rowG("Home folder used", "", series(611.4, 0.6), [], 0);
+      const unbound = "2 accounts Syndra does not manage also used it. They are in the totals.";
+      metrics = [
+        metric("Storage sessions", "", { many: true, rows: sess, hasQuiet: gap, quiet: unbound }),
+        metric("Home folder used", "row-divider", { single: true, one: home }),
+        metric("Storage used", "row-divider", { many: true, rows: used, hasQuiet: gap, quiet: unbound }),
+      ];
+      if (read) metrics[0].axisRight = read;
+    }
+    const foldLines = ["3–5 Nov, Share: “gitlab_data”: “Auditing does not record everyone on this share”", "9 Nov: “The NAS was off”"];
+    if (gap && adv) foldLines.push("Storage sessions: the last count did not keep 2 values that were not for a whole day.");
+    const began = start === 28 ? "Counting began 14 Nov" : start === 20 ? "Counting began 6 Nov" : "";
+    const age = state === "day0" ? "" : state === "offline" ? "Last counted 3 days ago" : state === "stale" ? "Last counted 2 hours ago" : o.justNow ? "Last counted just now" : "Last counted 2 minutes ago";
+    const right = [began, age].filter(Boolean).join(" · ");
+    return {
+      aria: "What has been used here", hasTitle: false, unavailable: false, metrics,
+      hasFold: gap, foldOpen: !!o.foldOpen, foldLines,
+      hasEnd: true, hasLink: state !== "day0",
+      step: state === "day0" ? "Nothing for you to do. The numbers appear here once Syndra has counted." : "Nothing for you to do. Who used each share is in Insights.",
+      hasRight: !!right, right,
+    };
+  }
+
+  // R1: the home folder's month under its meter in the storage cards, at the meter's width, against its limit.
+  homeBand(W, gap) {
+    const series = Array.from({ length: 30 }, (_, i) => +(17.9 + 0.02 * i + Math.sin(i / 2.7) * 0.35).toFixed(2));
+    return this.band(this.cells(0, series, gap ? [[23, 23]] : [], {}), W, "Home folder used, day by day over the last 30 days, against its limit of 20.0 GiB", { limit: 20, limitWord: "20.0 GiB limit" });
+  }
+
+  renderVals() {
+    const f = this.frame;
+    const light = /-light$/.test(f);
+    const name = f.replace(/-light$/, "");
+    const parts = name.split("-");
+    const kind = parts[0], state = parts.slice(1).join("-");
+    const phone = kind === "phone";
+
+    // Which frame draws what.
+    const shell = kind === "page" || kind === "scrolled" || kind === "storage" || kind === "persona" || phone;
+    const region = !shell;
+    const isTargetPage = kind === "page" || kind === "scrolled";
+    const isStoragePage = kind === "storage" || (phone && state === "storage");
+    const isPhoneTarget = phone && state === "target";
+    const isPersonPage = kind === "persona" || (phone && state === "person");
+    const advanced = /advanced/.test(name) || ["scrolled", "motion", "true", "state", "person"].includes(kind) || isPhoneTarget || (phone && state === "person");
+    const session = isStoragePage ? this.member : this.operator;
+    // The band's column: the card's inner width less the name (200), the figure (240) and two 24px gaps; the card's width on a phone.
+    const W = phone ? 318 : (shell ? 1096 : 1044) - 488;
+
+    let u;
+    if (isStoragePage || kind === "member") u = this.usage("person", "full", W, { who: "member" });
+    else if (isPersonPage || kind === "person") u = this.usage("person", "gap", W, { who: "operator", advanced });
+    else if (kind === "motion") {
+      if (state === "arrive") u = this.usage("target", "full", W, { advanced: true, rowStyle: ["", "opacity:.55;transform:translateY(4px)", "opacity:.2;transform:translateY(7px)"] });
+      else if (state === "fold-closed") u = this.usage("target", "gap", W, { advanced: true, foldOpen: false });
+      else if (state === "fold-open") u = this.usage("target", "gap", W, { advanced: true, foldOpen: true });
+      else if (state === "readout-rest") u = this.usage("target", "gap", W, { advanced: true });
+      else if (state === "readout-hover") u = this.usage("target", "gap", W, { advanced: true, hot: 23 });
+      else if (state === "refresh-before") u = this.usage("target", "full", W, { advanced: true });
+      else u = this.usage("target", "full", W, { advanced: true, justNow: true });
+    }
+    else if (kind === "state") u = this.usage("target", state, W, { advanced: true });
+    else u = this.usage("target", "gap", W, { advanced });
+
+    // Stills that show only the card, or the card under the page's own Notice.
+    const motionCard = kind === "motion" && state !== "arrive";
+    const cardOnly = kind === "true" || motionCard || kind === "person" || kind === "member";
+    const hasNotice = kind === "state" && (state === "offline" || state === "stale");
+    const notices = {
+      offline: { title: "TrueNAS isn't answering.", live: true, next: "Check that TrueNAS is running and reachable.", body: "Since 12 Nov, 21:40: 3 checks in a row went unanswered. Changes for TrueNAS wait until it answers. Look at TrueNAS." },
+      stale: { title: "Syndra is waiting to retry TrueNAS.", live: false, next: "Syndra tries again on its own when the wait is over. If it keeps happening, ask whoever runs the Syndra server to look at it.", body: "5 calls in a row failed, so it stopped calling and tries again by itself every 30 seconds. The cards on this page show the last read, 2 hours ago." },
+    };
+    const notice = notices[state] || notices.offline;
+
+    const readState = { readAt: new Date(Date.now() - 40000).toISOString(), current: true };
+    const people = [
+      ["Becky Lynch", "becky.lynch", "Member in Studio", "3 Mar"], ["Bianca Belair", "bianca.belair", "Member in Studio", "12 Jan"], ["Cody Rhodes", "cody.rhodes", "Lab tech in Studio", "8 Sep"], ["Rhea Ripley", "rhea.ripley", "Member in Wood shop", "21 Aug"], ["Roman Reigns", "roman.reigns", "Supervisor in Studio", "2 Feb 2025"],
+    ].map(([n, a, st, d]) => ({ name: n, acct: a, stand: st, since: d }));
+    const ops = [
+      ["Assigns an existing account to a person", "warn", "Stops and asks"], ["Brings an account in line", "neutral", "Runs by itself"], ["Creates an account", "neutral", "Runs by itself"], ["Deletes an account", "warn", "Stops and asks"], ["Lets a member set their own storage password, never logged", "neutral", "Runs by itself"], ["Lets go of an account, keeping it", "neutral", "Runs by itself"], ["Reads space used and quota", "neutral", "Runs by itself"], ["Reads the list of accounts", "neutral", "Runs by itself"], ["Reads the system's own health report", "neutral", "Runs by itself"],
+    ].map(([w, tone, word]) => ({ w, tone, word }));
+
+    return {
+      isBoard: !f, isFrame: !!f,
+      theme: light ? "light" : "dark",
+      shell, region, isTargetPage, isStoragePage, isPhoneTarget, isPersonPage, notPhone: !phone,
+      scrolled: kind === "scrolled", notScrolled: kind !== "scrolled",
+      advanced, basic: !advanced, view: advanced ? "advanced" : "basic", noop: () => {},
+      pathname: isStoragePage ? "/storage" : isPersonPage ? "/users/u7" : "/system/targets/truenas",
+      personMeta: "becky.lynch@example.edu · Member · Studio",
+      personTabs: [{ value: "access", label: "Access" }, { value: "requests", label: "Requests" }, { value: "activity", label: "Activity" }],
+      session, rootData: this.rootData, readState,
+      zero: 0, two: 2, fourteen: 14, people, ops,
+      u, homeBand: this.homeBand(phone ? 318 : 360, isPersonPage || kind === "person"),
+      hasNotice, noticeTitle: notice.title, noticeLive: notice.live, noticeNext: notice.next, noticeBody: notice.body,
+      hasReach: kind === "state" && state === "paused",
+      hasPersonStorage: kind === "person",
+      regionHead: !cardOnly, cardOnly,
+      partLabel: "part " + this.part + " of 6", partTitle: this.partTitle(), partLede: this.partLede(),
+      boardLabel: "What has been used · part " + this.part,
+      p1: this.part === 1, p4: this.part === 4,
+      groups: this.groups(), motion: this.motion(),
+    };
+  }
+
+  partTitle() { return ["The whole page, with the statistics in their place", "The statistics, state by state", "Network storage, phones and true size", "Motion, as stills and as a table", "Her page, whole: Basic and Advanced", "Her page in daylight, and on a phone"][this.part - 1]; }
+  partLede() {
+    return [
+      "Final, as the owner settled it on 17 Nov 2026. The TrueNAS page from its header to its last card, in Basic and in Advanced, dark and light. What has been used here is the fourth region: a labelled section per metric, a row per share with its name left, its days in the middle and its figure in the stat face at the right, one axis per section, one fold and one end row per card.",
+      "The same region from the first count to a month in, with a gap, with the add-on paused, offline, waiting to retry, and when Syndra cannot read its own numbers. Three metric sections, the same row and the same end row keep their seats in every state; each ends on its next step or on Nothing for you to do.",
+      "The member's Network storage page, whole: the storage card with the home folder's month under its meter, and What I have used under it holding the shares. Then the two phones, where the row stacks (name, figure, band), and the TrueNAS card at true size, dark and light.",
+      "The stills of everything that moves: first paint, the fold, reading a day, a later read. Then the spec: each moment, its movement, its token and its still form. Motion answers an act and shows what changed; nothing in the band is decorated.",
+      "The page staff open for one member, top to bottom: her header and tabs, her bundles, her projects and roles, then Network storage: the storage card with her home folder's month under its meter, and What Becky Lynch has used under it, the same part as on her own page and on TrueNAS. Basic on the left, Advanced on the right.",
+      "The same page in daylight, and the whole of it on a phone, in the app's own phone shell.",
+    ][this.part - 1];
+  }
+
+  groups() {
+    const P = this.self;
+    const fr = (n, frame, label, note, cls, rec, delta) => ({ n, nClass: rec ? "rec" : "", rec: false, src: P + frame, label, note, cls: (cls || "") + (rec ? " rec" : ""), hasDelta: !!delta, delta: delta || "" });
+    if (this.part === 1) return [
+      { eyebrow: "1 · The whole page", title: "TrueNAS, top to bottom", note: "A system a month into counting, with two gaps: auditing was off on gitlab_data for three days and the NAS was off for one. Basic on the left, Advanced on the right. Advanced adds Maintenance under Whether changes can land, the technical fold and what the add-on also says under What it can do, the retention card after the statistics, and inside What wasn't counted the line about values the count did not keep. Nothing above an Advanced part moves when it opens.", frames: [
+        fr(1, "page-basic", "Basic · dark", "The four regions and their chips; What has been used here last. Seven figures in one right-aligned column; every band in one column, so 9 Nov is one hatched stripe down the card.", "", true),
+        fr(2, "page-advanced", "Advanced · dark", "The same page with Maintenance, the technical fold, the add-on's own words and How long per-person numbers are kept. The statistics card is the same card.", "", true),
+        fr(3, "page-basic-light", "Basic · light", "Daylight. The hatch, the columns, the line and its area, the surface ring on each dot are tokens. Nothing is a hex.", ""),
+        fr(4, "page-advanced-light", "Advanced · light", "Daylight, Advanced.", ""),
+      ] },
+      { eyebrow: "2 · Under the band", title: "Scrolled to the fourth stop", note: "Once the read line has scrolled away the same four stops float as the pill at the top centre, on the 64px band; the one you are in is filled. The section glides there (520ms) and its heading flashes once. Drawn as a still: the band and pill are the page's own SectionPill, which needs a scroll to appear.", frames: [
+        fr(5, "scrolled", "Advanced · dark · scrolled", "The sticky band over the statistics, the retention card under them.", "", true),
+      ] },
+    ];
+    if (this.part === 2) return [
+      { eyebrow: "3 · The region, state by state", title: "From nothing counted to a month in", note: "Each frame is the region as it sits on the page in part 1, at the content column's width (Advanced).", frames: [
+        fr(6, "state-day0", "Nothing counted yet", "Before the first count. Each metric is one row: its label in the name seat, an empty band seat, Not counted yet in the figure's seat. No axis and no age, because there was no count. The end row carries the step.", "col"),
+        fr(7, "state-day1", "Day one", "Counting began yesterday. The window's faint baseline runs from 17 Oct; the record's strong baseline starts at a tick on 14 Nov with its one value (a column for a count, a dot for a level); today is blank. Nothing is hatched. The end row says when counting began.", "col"),
+        fr(8, "state-ten", "Ten days in", "The record starts on 6 Nov. Counters say in the last 10 days; a level says its change since 6 Nov. The end-row note stays until the start leaves the window.", "col"),
+        fr(9, "state-full", "A full window", "Thirty days, every one counted. No tick, no fold, no note: only Last counted. Silence for normal (G17).", "col"),
+        fr(10, "state-gap", "A gap: auditing off, the NAS off", "Two gaps hatched in every band they touch; the columns stop and the line breaks. Because the bands share a column, 9 Nov is one stripe down the card. The unmanaged-accounts line stays under each metric it qualifies. One What wasn't counted, closed, above the end row.", "col", true),
+        fr(11, "state-paused", "The add-on paused", "An operator set TrueNAS read-only. Reads keep working, so the count keeps running and the card is unchanged; Syndra's reach says what is paused and why.", "col"),
+        fr(12, "state-offline", "Offline: three days unanswered", "The page's one Notice says it. The last three days are blank, not counted yet, never a zero; Last counted 3 days ago. UNVERIFIED whether the add-on fills them in or reports a gap when it returns.", "col"),
+        fr(13, "state-stale", "Waiting to retry", "The page's other cards recede to the last read. This card does not: the count is Syndra's own record. Last counted 2 hours ago.", "col"),
+        fr(14, "state-error", "Syndra could not read its own numbers", "One sentence with its step in it. No seats are drawn, because nothing was read.", "col"),
+      ] },
+    ];
+    if (this.part === 3) return [
+      { eyebrow: "4 · The member's page", title: "Network storage, with What I have used", note: "The folder row carries its meter and, under it at the meter's width, its month against the 20.0 GiB limit with its change line (R1). What I have used holds the shares: two figures in the right column, away from the storage card's headline. A member's card says once when a line is left out because the add-on named a person in it.", frames: [
+        fr(15, "storage-member", "Member · dark", "Becky's page. The usage card is the storage card's sibling: the same section label, the name where a folder's name sits, the figure where its number sits.", "", true),
+        fr(16, "storage-member-light", "Member · light", "Daylight.", ""),
+      ] },
+      { eyebrow: "5 · Phone · 390", title: "The row stacks: name, figure, band", note: "The app's own phone shell. The figure keeps the stat face and takes its own line under the name; the band runs the card's width (318); the section's axis under it.", frames: [
+        fr(17, "phone-storage", "Network storage", "The member's whole page on a phone: the storage card with the home folder's month under its meter at the card's width, then What I have used with the shares, each row stacked.", "phone", true),
+        fr(18, "phone-target", "What has been used here", "The operator's region on a phone (Advanced), the page's header above it; the rest of the page is as built.", "phone"),
+      ] },
+      { eyebrow: "6 · True size", title: "The card at 1136, as it is read", note: "Advanced, with the gap. Dark, then light.", frames: [
+        fr(19, "true-gap", "Dark", "Name 15.5 semibold · band 40 · figure Bricolage 24 with its words in 13 muted, all on one baseline; the second line in 13 faint under the figure; 12px above and below each hairline; 18px section padding.", "true", true),
+        fr(20, "true-gap-light", "Light", "The same in daylight.", "true"),
+      ] },
+    ];
+    if (this.part === 4) return [
+      { eyebrow: "7 · Motion, as stills", title: "Before and after", note: "Each pair is one movement. The line under each title says what changed.", frames: [
+        fr("M1", "motion-arrive", "First paint, 180ms in", "The region's heading has tinted in; the card arrives as one row of the page (8px, 420ms). Inside it nothing arrives on its own: the rows are drawn here at the stagger they would have if the card were a list, to show what is never done. Every band appears complete; no column grows, no line draws itself.", "col", false, "A still of the arrive: rows 2 and 3 of the first section are mid-rise, to show the stagger the card never has"),
+        fr("M2", "motion-fold-closed", "The fold, closed · before", "At rest, above the end row.", "col", false, "Before: chevron pointing right, the lines not drawn"),
+        fr("M2", "motion-fold-open", "The fold, open · after", "Unfold: the region opens to its height on settle (260ms); the lines tint in behind it; the chevron turns 90° on the same curve. Closing fades the lines first (120ms), then the height settles.", "col", false, "After: the chevron turned, three lines open, the end row pushed down"),
+        fr("M3", "motion-readout-rest", "Reading a day · before", "The section's right axis label says today.", "col", false, "Before: the readout seat says 15 Nov"),
+        fr("M3", "motion-readout-hover", "Reading a day · after: 9 Nov under the pointer", "The day's column takes tint-3 in the hovered band and the section's readout seat crossfades to that day's words (120ms). Nothing travels, nothing pops up. ← and → move the read day; the seat is aria-live.", "col", false, "After: the 9 Nov column tinted in the first band; the seat reads makers, 9 Nov: couldn't count"),
+        fr("M4", "motion-refresh-before", "A later read · before", "Last counted 2 minutes ago; today blank.", "col", false, "Before: Last counted 2 minutes ago"),
+        fr("M4", "motion-refresh-after", "A later read · after", "Rows keyed by series hold still; the age crossfades to just now. A day that gained a value would have its column, or its dot and segment, tint in. Nothing arrives, nothing blooms: a background count is not something you did.", "col", false, "After: the end row reads Last counted just now; every row where it was"),
+      ] },
+    ];
+    if (this.part === 5) return [
+      { eyebrow: "8 · Her page", title: "Becky Lynch, top to bottom", note: "A member with two projects (Studio, with a Laser user role ending in 9 days, and Wood shop), one bundle, a home folder nearly full, two shares, one gap day (the NAS was off on 9 Nov). Advanced adds This account, the role keys, the grant lineage and the folder paths. The storage card's Home folder row carries the meter and its month; the usage card is the same part as everywhere: her name in its title, the shares, one fold, Nothing for you to do.", frames: [
+        fr(21, "persona-basic", "Basic · dark", "Access tab. Bundles, the read line with a chip per project and one for Network storage, the two project cards, then the storage card and her numbers.", "", true),
+        fr(22, "persona-advanced", "Advanced · dark", "This account, keys in mono, the grant lineage under a rule-given role, paths under the folders. The usage card gains nothing but a dropped-values line inside its fold, when there is one.", "", true),
+      ] },
+      { eyebrow: "9 · Who sees her numbers", title: "The admin's reading and her own", note: "An operator is the admin role (router.go:509-517); there is no non-admin operator, so there is no third reading. The admin sees every line as stored. The member sees her own record on Network storage, with a line that named someone else left out and said so (stats.go:180).", frames: [
+        fr(23, "person-full", "The admin, on her page", "What Becky Lynch has used, every line, under the storage card (abbreviated here).", "col", true),
+        fr(24, "member-full", "Becky, on her own page", "What I have used: the same part; one line left out, said once under the metric it belongs to.", "col", true),
+      ] },
+    ];
+    return [
+      { eyebrow: "10 · Her page, daylight", title: "Basic and Advanced, light", note: "Every token through the theme; nothing is a hex.", frames: [
+        fr(25, "persona-basic-light", "Basic · light", "", "", true),
+        fr(26, "persona-advanced-light", "Advanced · light", "", "", true),
+      ] },
+      { eyebrow: "11 · Her page on a phone", title: "The whole of it at 390", note: "The app's own phone shell: the header stacks under her avatar, the tabs stay pills, a role's seat wraps under its words, the storage card's labels go full width with the meter and its month under them, the usage rows stack.", frames: [
+        fr(27, "phone-person", "Advanced · dark · phone", "", "phone", true),
+      ] },
+    ];
+  }
+
+  motion() {
+    return [
+      { when: "First paint, navigated to", what: "S11: the header tints in, then the page's cards arrive, 8px up, staggered 40ms and capped at five. The usage card is one arriving card; its rows, bands and figures are drawn complete inside it. Never on back, reload or the view switch.", token: "tint 120 · arrive 420 --ease-arrive · --arrive-step 40, cap 5", still: "Everything at once, in place." },
+      { when: "A later read (refresh, the window rolling a day)", what: "Rows keyed by series hold still. A day that gained a value: its dot and the segment to it tint in. Last counted crossfades. Nothing arrives and nothing blooms.", token: "tint 120 --ease-tint (Crossfade)", still: "The words swap at once." },
+      { when: "The viewport changes", what: "The band re-measures (ResizeObserver) and redraws at the new width at once. No transition: a transition during a drag fights it.", token: "none", still: "Same." },
+      { when: "The fold opens", what: "Unfold: the region opens to its height on settle; its lines tint in 120ms behind; the chevron turns 90° on settle. The page below moves down with it.", token: "settle 260 --ease-settle · tint 120 · motion-turn", still: "Opens at once; the chevron turns at once." },
+      { when: "The fold closes", what: "Closing fades first and is quicker: the lines tint out, then the gap settles shut.", token: "tint 120, then settle 260", still: "Leaves at once." },
+      { when: "Reading a day (hover, focus, ← →)", what: "The day's column takes tint-3 in the band under the pointer; the section's readout seat crossfades to the day's words, with the row's name first where the section has several rows. Colour only: no dot grows, nothing travels, no popover.", token: "tint 120 (Crossfade; aria-live polite)", still: "The column and words change at once." },
+      { when: "Basic to Advanced", what: "Inside the fold the dropped-values line opens by Unfold and closes fade first (A-08 §3). The rest of the card does not move.", token: "settle 260 · tint 120", still: "Appears and leaves at once." },
+      { when: "Press on the fold's control", what: "The chevron's seat presses 3%, as every control.", token: "press 180 --ease-press", still: "Press survives reduced motion." },
+      { when: "The link to Insights, on hover", what: "A-08 2a: the link keeps its colour and its underline tints in. Colour only.", token: "tint 120", still: "Same." },
+      { when: "Never", what: "A column that grows, a line that draws itself, a number that counts up, a bloom for a count Syndra ran, arrive replaying on refresh.", token: "", still: "" },
+    ];
+  }
+}
+</script>
+</body>
+</html>

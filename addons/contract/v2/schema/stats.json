@@ -92,6 +92,15 @@
               "type": "string"
             }
           },
+          "kind": {
+            "enum": [
+              "began",
+              "unread",
+              "dropped",
+              "unobserved"
+            ],
+            "description": "Why the window was not observed, for the machine (reason is for the member). began: before the add-on started counting this metric, days it never held; every began gap ends at or before the metric's first counted day. unread: the app could not be read for the window (off, unreachable, or too much activity to read). dropped: the window was read or readable once and is gone: purged by the app, or older than the add-on still holds. unobserved: the app was read and does not record this window (auditing off, a series the app cannot see)."
+          },
           "reason": {
             "type": "string",
             "description": "In the member's words."
@@ -100,6 +109,7 @@
         "required": [
           "start",
           "end",
+          "kind",
           "reason"
         ]
       }

@@ -1,19 +1,21 @@
 "use client";
 
 import * as copy from "@/components/usage/copy";
-import { MetricBlock } from "@/components/usage/MetricBlock";
+import { UsageCard } from "@/components/usage/UsageCard";
+import { usageStep } from "@/components/kinds/limits";
 import { RowSkeleton } from "@/components/states";
 import { Card, CardRow } from "@/components/ui/Card";
 import { useTargetStats } from "@/lib/queries/useStats";
 
 /**
  * The target overview's statistics (operators): every metric the add-on
- * reports, as totals for everyone who used it, one row per breakdown, gaps
- * hatched, then the unbound-accounts and collection lines. Drawn from the
- * descriptors; "this add-on does not report statistics" when the feature is
- * absent, which is not the same sentence as "no data".
+ * reports, as totals for everyone who used it, one row per breakdown, in the
+ * usage card (A-23), with the one link to Insights, Usage and how old the
+ * count is. Drawn from the descriptors; "this add-on does not report
+ * statistics" when the feature is absent, which is not the same sentence as
+ * "no data".
  */
-export function TargetStats({ target }: { target: string }) {
+export function TargetStats({ target, kind }: { target: string; kind?: string }) {
   const stats = useTargetStats(target);
 
   if (stats.isLoading) {
@@ -42,14 +44,5 @@ export function TargetStats({ target }: { target: string }) {
       </Card>
     );
   }
-  return (
-    <Card>
-      {usage.metrics.map((m) => (
-        <MetricBlock key={m.name} metric={m} windows={usage} />
-      ))}
-      <CardRow first={usage.metrics.length === 0}>
-        <span className="text-[13px] text-muted">{copy.NOTHING_TO_DO}</span>
-      </CardRow>
-    </Card>
-  );
+  return <UsageCard label={copy.OVERVIEW_TITLE} metrics={usage.metrics} windows={usage} target={target} step={usageStep(kind)} />;
 }

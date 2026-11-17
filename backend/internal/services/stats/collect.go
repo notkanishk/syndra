@@ -45,7 +45,7 @@ type Read func(ctx context.Context, metric string, since time.Time, cursor strin
 // what is dropped is counted on the metric's row (addon_metrics.dropped).
 const (
 	DropNotADay             = "not_a_day"            // not one makerspace day, midnight to midnight
-	DropBadValue            = "bad_value"            // no value, a negative one, or a gap with no reason
+	DropBadValue            = "bad_value"            // no value, a negative one, or a gap with no reason or no kind the contract knows (such a gap is kept, as unread)
 	DropNotPerSubject       = "not_per_subject"      // a subject on a metric not reported per person
 	DropUnboundSubject      = "unbound_subject"      // a subject with no binding on this target
 	DropUndeclaredDimension = "undeclared_dimension" // a dimension the metric does not declare
@@ -405,6 +405,11 @@ func checkPoint(p addons.StatPoint, m addons.Metric, who people) (string, string
 // keepGaps is the gaps of a page worth storing: whole makerspace days, only
 // declared dimensions, a reason capped at 200 characters, with whoever a
 // dimension value or the reason names (named_subjects).
+//
+// A gap the add-on sent is never lost: dropped, its days would read as counted
+// zeros. One with no reason, or with no kind the contract knows, is kept as
+// unread (the kind that claims least, as migration 000101's backfill) with the
+// reason it had, and still counted as a bad value.
 func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[string]int) []db.StatsGap {
 	var out []db.StatsGap
 	for _, g := range gaps {
@@ -414,13 +419,18 @@ func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[st
 		switch {
 		case !ok1 || !ok2 || end <= start:
 			dropped[DropNotADay]++
-		case g.Reason == "":
-			dropped[DropBadValue]++
 		case why != "":
 			dropped[why]++
 		default:
-			reason := []rune(g.Reason)
-			out = append(out, db.StatsGap{Dims: g.Dimensions, Start: start, End: end, Reason: string(reason[:min(len(reason), 200)]),
+			kind := g.Kind
+			if strings.TrimSpace(g.Reason) == "" || !slices.Contains(addons.GapKinds, g.Kind) {
+				dropped[DropBadValue]++
+				if !slices.Contains(addons.GapKinds, kind) {
+					kind = "unread"
+				}
+			}
+			reason := []rune(strings.TrimSpace(g.Reason))
+			out = append(out, db.StatsGap{Dims: g.Dimensions, Start: start, End: end, Kind: kind, Reason: string(reason[:min(len(reason), 200)]),
 				NamedSubjects: union(who.namesIn(g.Dimensions), who.names(g.Reason))})
 		}
 	}

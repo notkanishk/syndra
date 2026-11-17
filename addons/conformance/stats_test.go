@@ -219,7 +219,7 @@ func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
 		k.m = &manifest{statsZone: "America/Santiago"}
 		r := statsRead{first: map[string]any{"unbound": map[string]any{"accounts": json.Number("0")}, "watermark": "2026-09-06T01:00:00-03:00",
 			"taken_at": "2026-09-06T15:00:00Z", "gaps": []any{map[string]any{"start": "2026-09-06T01:00:00-03:00", "end": "2026-09-07T00:00:00-03:00",
-				"dimensions": map[string]any{"printer": "xl-1"}, "reason": "The xl-1 printer's job log could not be read"}}}}
+				"dimensions": map[string]any{"printer": "xl-1"}, "kind": "unread", "reason": "The xl-1 printer's job log could not be read"}}}}
 		r.watermark, _ = time.Parse(time.RFC3339, "2026-09-06T01:00:00-03:00")
 		r.takeAt, _ = time.Parse(time.RFC3339, "2026-09-06T15:00:00Z")
 		r.points = []map[string]any{tc.point}
