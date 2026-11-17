@@ -37,7 +37,7 @@ function Fold({ metrics, windows }: { metrics: StatsMetric[]; windows: UsageWind
     // A counter's 12-month total is drawn, so every gap inside it is explained; a level shows 30 days.
     const from = metric.instrument === "counter" && windows.window_12m_from < windows.window_30d_from ? windows.window_12m_from : windows.window_30d_from;
     for (const g of gapLines(metric.gaps.filter((x) => x.kind !== "began"), from, end)) {
-      const said = copy.gapLine(gapRange(g), gapWhere(metric, g), quoted(g.reason, CAP.reason));
+      const said = copy.gapLine(gapRange(g), gapWhere(metric, g), g.reason.trim() ? quoted(g.reason, CAP.reason) : copy.NO_REASON);
       if (seen.has(said)) continue;
       seen.add(said);
       lines.push({ start: g.start, said });
@@ -213,7 +213,7 @@ export function HomeMonth({ view, operator = false }: { view: MyTargetView; oper
   const [read, setRead] = useState<number | null>(null);
   const metric = meteredMetric(view, operator);
   const usage = view.usage;
-  if (!metric || !usage?.reported || metric.watermark === null || metric.series.length !== 1) return null;
+  if (!metric || !usage?.reported) return null;
   const days = windowDays(usage.today);
   const p = plot(metric.series[0], metric.gaps, metric.instrument, days, { from: usage.kept_from, began: metric.began, countedThrough: metric.counted_through });
   const limit = observedLimits(view)[metric.against ?? ""];

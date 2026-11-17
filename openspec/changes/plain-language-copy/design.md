@@ -832,7 +832,8 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | Gaps: one line, with its breakdown | {range}, {where}: {reason} |
 | Gaps: one line, for the whole metric | {range}: {reason} |
 | The end row of a person's card, when a window starts at what retention keeps | Kept for only {n} days on this system |
-| Gaps: under the lines (the hatch is the mark, on columns and lines alike) | A striped day was not counted. It is not a zero. |
+| Gaps: under the lines (the hatch is the mark, on columns and lines alike; a day after the last one counted is blank) | A striped day was not counted. Neither it nor a day not counted yet is a zero. |
+| Gaps: in place of the reason, when the add-on gave none (unquoted; the gap is kept as unread) | no reason given |
 | The end row, when the record starts inside the window | Counting began {day} |
 | A metric not collected yet | Not counted yet |
 | A card with such a metric: its step | Nothing for you to do. The numbers appear here once Syndra has counted. |

@@ -25,13 +25,16 @@ const KIND_METERED: Record<string, (view: MyTargetView, operator: boolean) => st
 
 /**
  * The metric a kind's card draws under its own meter (A-23 R1), when it draws it: the level whose
- * `against` is that meter's field. The one answer both sides ask, so the month is drawn in the kind's
- * card exactly when the usage card leaves it out: never twice, never nowhere.
+ * `against` is that meter's field, counted, with the one series a person's month draws. The one answer
+ * both sides ask, so the month is drawn in the kind's card exactly when the usage card leaves it out:
+ * never twice, never nowhere (not counted yet, or no value or several series, it stays in the usage
+ * card, which says so).
  */
 export function meteredMetric(view: MyTargetView, operator: boolean): StatsMetric | undefined {
   const field = KIND_METERED[view.kind ?? ""]?.(view, operator);
   if (field === undefined || !view.usage?.reported) return undefined;
-  return view.usage.metrics.find((m) => m.instrument === "gauge" && m.against === field);
+  const metric = view.usage.metrics.find((m) => m.instrument === "gauge" && m.against === field);
+  return metric && metric.watermark !== null && metric.series.length === 1 ? metric : undefined;
 }
 
 /**

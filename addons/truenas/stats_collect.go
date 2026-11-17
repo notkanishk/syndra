@@ -165,7 +165,7 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	// (it purges its log past its own retention, so the day of the oldest
 	// row it keeps may be part-purged), or one with more rows than a run may
 	// read.
-	count, gone := from, map[string]string{}
+	count, gone := from, map[string]gapReason{}
 	var audits []shareAudit
 	var rows []auditRow
 	var capped bool

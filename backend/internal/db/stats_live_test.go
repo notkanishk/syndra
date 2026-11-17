@@ -514,19 +514,30 @@ func TestMigration94IsExpandOnly(t *testing.T) {
 // each stored reason was written for, and its down drops exactly the column.
 func TestMigration101IsExpandOnly(t *testing.T) {
 	up, down := readMigrationPair(t, "000101_stats_gap_kind")
-	if u := strings.ToUpper(stripSQLComments(up)); strings.Contains(u, "DROP ") || strings.Contains(u, " TYPE ") || strings.Contains(u, "DELETE") {
+	// The one drop is the reason's check, put back looser (a gap with no reason is kept): every write a
+	// 000100 backend makes still satisfies it.
+	loosen := "ALTER TABLE addon_metric_gaps DROP CONSTRAINT IF EXISTS addon_metric_gaps_reason_check;"
+	if u := strings.ToUpper(strings.Replace(stripSQLComments(up), loosen, "", 1)); strings.Contains(u, "DROP ") || strings.Contains(u, " TYPE ") || strings.Contains(u, "DELETE") {
 		t.Error("000101 up must be additive")
 	}
 	for _, want := range []string{
 		"ALTER TABLE addon_metric_gaps ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'unread'",
 		"CHECK (kind IN ('began', 'unread', 'dropped', 'unobserved'))",
+		loosen,
+		"ADD CONSTRAINT addon_metric_gaps_reason_check CHECK (char_length(reason) <= 200)",
 	} {
 		if !strings.Contains(up, want) {
 			t.Errorf("000101 up must contain %q", want)
 		}
 	}
-	if strings.TrimSpace(stripSQLComments(down)) != "ALTER TABLE addon_metric_gaps DROP COLUMN IF EXISTS kind;" {
-		t.Errorf("000101 down must drop exactly the kind column: %q", down)
+	for _, want := range []string{
+		"UPDATE addon_metric_gaps SET reason = 'No reason given' WHERE reason = ''",
+		"ADD CONSTRAINT addon_metric_gaps_reason_check CHECK (char_length(reason) BETWEEN 1 AND 200)",
+		"ALTER TABLE addon_metric_gaps DROP COLUMN IF EXISTS kind;",
+	} {
+		if !strings.Contains(down, want) {
+			t.Errorf("000101 down must contain %q", want)
+		}
 	}
 }
 
@@ -599,6 +610,22 @@ func TestLiveMigration101KindsEveryStoredGap(t *testing.T) {
 	}
 	if _, err := PG.Exec(ctx, `UPDATE addon_metric_gaps SET kind = 'outage' WHERE target_id = $1`, statsTarget); err == nil {
 		t.Error("the column took a kind the contract does not know")
+	}
+
+	// A gap with no reason is held (never lost), and down gives it words a 000100 backend can hold.
+	noReason := StatsGap{Dims: map[string]string{"share": "quiet"}, Start: ago(3), End: ago(2), Kind: "unread", Reason: ""}
+	if err := CollectStats(ctx, statsTarget, "storage.sessions", func(c *StatsTx) error { _, err := c.UpsertGaps(ctx, today, []StatsGap{noReason}); return err }); err != nil {
+		t.Fatalf("a gap with no reason was refused: %v", err)
+	}
+	if err := m.Migrate(100); err != nil {
+		t.Fatalf("000101 down with a reason-less gap: %v", err)
+	}
+	var said string
+	if err := PG.QueryRow(ctx, `SELECT reason FROM addon_metric_gaps WHERE target_id = $1 AND gap_start = $2::date`, statsTarget, ago(3)).Scan(&said); err != nil || said != "No reason given" {
+		t.Errorf("after down the reason-less gap says %q (%v)", said, err)
+	}
+	if err := m.Migrate(101); err != nil {
+		t.Fatalf("000101 up again: %v", err)
 	}
 }
 

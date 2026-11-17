@@ -30,6 +30,7 @@ const SAID = [
   copy.gapLine("{range}", "{where}", "{reason}"),
   copy.gapLine("{range}", "", "{reason}"),
   copy.GAPS_NOTE,
+  copy.NO_REASON,
   copy.NOT_COUNTED,
   copy.NOT_COUNTED_NEXT,
   copy.ABSENT,

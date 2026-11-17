@@ -23,3 +23,11 @@ UPDATE addon_metric_gaps SET kind = CASE
     WHEN reason = 'Auditing does not record everyone on this share' THEN 'unobserved'
     ELSE 'unread'
   END;
+
+-- A gap the add-on sent is never lost (7s review): one with no reason is kept,
+-- as unread, its reason empty (the page says "no reason given"), so its days
+-- are never read as counted zeros. The reason's check loosens to allow it; a
+-- 000100 backend's writes still satisfy it. 000093 named the check
+-- addon_metric_gaps_reason_check (an inline CHECK on reason).
+ALTER TABLE addon_metric_gaps DROP CONSTRAINT IF EXISTS addon_metric_gaps_reason_check;
+ALTER TABLE addon_metric_gaps ADD CONSTRAINT addon_metric_gaps_reason_check CHECK (char_length(reason) <= 200);

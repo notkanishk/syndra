@@ -382,6 +382,24 @@ describe("a person's view of a system", () => {
       expect(render(<HomeMonth view={view({ reported: true, metrics: [homeBytes()], ...windows() })} />).container).toBeEmptyDOMElement();
       expect(render(<HomeMonth view={storage({ reported: true, metrics: [homeBytes({ watermark: null, series: [] })], ...windows() })} />).container).toBeEmptyDOMElement();
     });
+
+    // Wherever the month cannot draw (not counted yet, no value, several series), the usage card keeps
+    // the metric and says so: one answer, `meteredMetric`, so it is never shown nowhere.
+    it.each([
+      ["not counted yet", { watermark: null, series: [] }],
+      ["no value", { series: [] }],
+      ["several series", { series: [homeBytes().series[0], { ...homeBytes().series[0], dimensions: { pool: "b" } }] }],
+    ] as Array<[string, Partial<StatsMetric>]>)("leaves the home folder in the usage card when the month cannot draw: %s", (_, over) => {
+      const v = storage({ reported: true, metrics: [homeBytes(over), sessions()], ...windows() });
+      const { container } = render(
+        <>
+          <HomeMonth view={v} />
+          <ViewUsage view={v} />
+        </>,
+      );
+      expect(container.querySelector("[data-home-month]")).toBeNull();
+      expect(screen.getAllByRole("region", { name: "Home folder used" })).toHaveLength(1);
+    });
   });
 });
 
@@ -551,15 +569,21 @@ describe("the band's fidelity", () => {
   it("draws the read day behind the band on the inner radius, not as a pill", () => {
     render(<UsageCard title="t" windows={windows()} metrics={[sessions()]} />);
     fireEvent.pointerEnter(bands()[0].querySelectorAll("rect:not([data-column])")[28]);
-    const read = bands()[0].parentElement!.querySelector("[data-read]")!;
+    const svg = bands()[0];
+    const read = svg.parentElement!.querySelector("[data-read]")!;
     expect(read.tagName).toBe("DIV");
     expect(read).toHaveClass("rounded-inner");
+    // Behind the marks: the tint comes first and the band is positioned after it, so the band paints over it.
+    expect(read.compareDocumentPosition(svg) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(svg).toHaveClass("relative");
+    // And it never takes the pointer, which would end the read it shows (the readout looping).
+    expect(read).toHaveClass("pointer-events-none");
   });
 
   it("keeps the limit's word off the line on a folder 95% full, and moves it left of a point over the limit", () => {
     const storage = (used: number) =>
       ({
-        ...view({ reported: true, metrics: [homeBytes({ series: [{ dimensions: {}, latest: { day: ago(1), value: used }, days: Array.from({ length: 29 }, (_, i) => ({ day: ago(29 - i), value: used })) }] })], ...windows() }, { kind: "storage", entitlement_schema: [{ name: "quota_field", role: "limit", unit: "bytes", label: "Limit" }] as never }),
+        ...view({ reported: true, metrics: [homeBytes({ series: [{ dimensions: {}, latest: { day: ago(1), value: used }, days: Array.from({ length: 29 }, (_, i) => ({ day: ago(29 - i), value: i >= 25 ? used : Math.min(used, 19 * GIB) })) }] })], ...windows() }, { kind: "storage", entitlement_schema: [{ name: "quota_field", role: "limit", unit: "bytes", label: "Limit" }] as never }),
         storage: { usable: true, needs_password: false, places_readable: true, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: used, quota_bytes: 20 * GIB } }] },
       });
     const { unmount } = render(<HomeMonth view={storage(19 * GIB)} />);
@@ -575,6 +599,29 @@ describe("the band's fidelity", () => {
     render(<HomeMonth view={storage(22 * GIB)} />);
     svg = bands()[0];
     expect(svg.querySelector("[data-limit-word]")!.getAttribute("text-anchor")).toBe("start");
+  });
+
+  it("draws no limit word where a point over the limit would lie under it at both ends", () => {
+    const over = 22 * GIB;
+    const v = {
+      ...view({ reported: true, metrics: [homeBytes({ series: [{ dimensions: {}, latest: { day: ago(0), value: over }, days: Array.from({ length: 30 }, (_, i) => ({ day: ago(29 - i), value: over })) }] })], ...windows() }, { kind: "storage", entitlement_schema: [{ name: "quota_field", role: "limit", unit: "bytes", label: "Limit" }] as never }),
+      storage: { usable: true, needs_password: false, places_readable: true, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: over, quota_bytes: 20 * GIB } }] },
+    };
+    render(<HomeMonth view={v} />);
+    expect(bands()[0].querySelector("[data-limit]")).not.toBeNull();
+    expect(bands()[0].querySelector("[data-limit-word]")).toBeNull();
+  });
+});
+
+describe("a gap the add-on sent is never lost", () => {
+  it("one with no reason is hatched like any other, never a zero, and the fold says no reason was given", () => {
+    const silent: StatsGap = { start: ago(8), end: ago(6), dimensions: { area: "ring" }, kind: "unread", reason: "" };
+    const { container } = render(<UsageCard title="t" windows={windows()} metrics={[sessions({ gaps: [silent] })]} />);
+    const ring = bands()[0];
+    expect(ring.querySelectorAll("[data-gap]")).toHaveLength(1);
+    expect(titles(ring)).not.toContain(copy.dayValue(dayWords(ago(7)), "0"));
+    openFold();
+    expect(container.textContent).toContain(copy.gapLine(`${dayWords(ago(8)).split(" ")[0]}–${dayWords(ago(7))}`, "Area: “ring”", copy.NO_REASON).split(", ")[1]);
   });
 });
 

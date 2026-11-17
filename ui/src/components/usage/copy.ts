@@ -48,7 +48,9 @@ export const GAPS_HEADING = "Couldn't count these days";
 export const gapLine = (range: string, where: string, reason: string) => `${range}${where ? `, ${where}` : ""}: ${reason}`;
 const keptFor = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
 export const keptLine = (n: number) => `Kept for only ${keptFor(n)} on this system`;
-export const GAPS_NOTE = "A striped day was not counted. It is not a zero.";
+export const GAPS_NOTE = "A striped day was not counted. Neither it nor a day not counted yet is a zero.";
+/** In a gap line, in place of the reason when the add-on gave none (the gap is kept, as unread: a window it sent is never lost). */
+export const NO_REASON = "no reason given";
 /** The end row, when the record starts inside the window. */
 export const countingBegan = (day: string) => `Counting began ${day}`;
 

@@ -63,16 +63,6 @@ const (
 	// Syndra reads (TestStatsPagesFitTheContractsCeiling holds the two equal).
 	statsMaxReplyBytes = 1 << 20
 
-	// reasonBuffer is for days the buffer dropped to stay within its size or its P90D; days before
-	// the first collection were never held, and say so (reasonBegan).
-	reasonBuffer   = "The add-on no longer holds these days"
-	reasonNAS      = "The NAS could not be read"
-	reasonDark     = "The NAS could not be read that day"
-	reasonBehind   = "Too much activity to count yet"
-	reasonAudited  = "Auditing does not record everyone on this share"
-	reasonPurged   = "The NAS no longer keeps its log of these days"
-	reasonOverfull = "Too much activity to count"
-
 	// A gap's kind (contract: stats.json, AUTHORING "every gap MUST carry a kind"), which Syndra
 	// reads; the reason is the member's.
 	kindBegan      = "began"
@@ -81,10 +71,27 @@ const (
 	kindUnobserved = "unobserved"
 )
 
-// gapKinds is each fixed reason's kind, one row per reason, so no reason goes out without one.
-// reasonBegan, which carries its day, is kindBegan where it is made. Behind and overfull are
-// unread: the log was there and could not be read whole, in time or at all.
-var gapKinds = map[string]string{
+// gapReason is one of the add-on's fixed sentences for a window not observed. A gap is made only by
+// gapOf, from a gapReason, or by beganGap, so its kind cannot be left out; TestEveryGapReasonHasAKind
+// reads this package for every constant of the type, and for any other StatGap literal, so a new
+// reason without a row in gapKinds fails its tests.
+type gapReason string
+
+const (
+	// reasonBuffer is for days the buffer dropped to stay within its size or its P90D; days before
+	// the first collection were never held, and say so (beganGap).
+	reasonBuffer   gapReason = "The add-on no longer holds these days"
+	reasonNAS      gapReason = "The NAS could not be read"
+	reasonDark     gapReason = "The NAS could not be read that day"
+	reasonBehind   gapReason = "Too much activity to count yet"
+	reasonAudited  gapReason = "Auditing does not record everyone on this share"
+	reasonPurged   gapReason = "The NAS no longer keeps its log of these days"
+	reasonOverfull gapReason = "Too much activity to count"
+)
+
+// gapKinds is each fixed reason's kind. Behind and overfull are unread: the log was there and could
+// not be read whole, in time or at all.
+var gapKinds = map[gapReason]string{
 	reasonBuffer:   kindDropped,
 	reasonNAS:      kindUnread,
 	reasonDark:     kindUnread,
@@ -95,8 +102,14 @@ var gapKinds = map[string]string{
 }
 
 // gapOf is a window not observed for one of the fixed reasons, with that reason's kind.
-func gapOf(start, end string, dims map[string]string, reason string) StatGap {
-	return StatGap{Start: start, End: end, Dimensions: dims, Kind: gapKinds[reason], Reason: reason}
+func gapOf(start, end string, dims map[string]string, reason gapReason) StatGap {
+	return StatGap{Start: start, End: end, Dimensions: dims, Kind: gapKinds[reason], Reason: string(reason)}
+}
+
+// beganGap is the window before the first collection, over the whole metric: days the add-on never
+// held, so began, said with the day counting began.
+func (c statsClock) beganGap(start, end, began string) StatGap {
+	return StatGap{Start: start, End: end, Kind: kindBegan, Reason: c.reasonBegan(began)}
 }
 
 func declaredMetric(name string) (Metric, bool) {
@@ -387,17 +400,21 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request, _ []byte) {
 	}
 	if after == nil { // gaps on the first page only
 		if from < meta.HeldFrom {
-			// Before the first collection (Began, set once, 7r): never held, so began; after the
-			// buffer trimmed past it: dropped.
-			g := gapOf(c.stamp(from), c.stamp(meta.HeldFrom), nil, reasonBuffer)
-			if meta.Began != "" && meta.Began == meta.HeldFrom {
-				g.Kind, g.Reason = kindBegan, c.reasonBegan(meta.Began)
+			// Split at Began (the first collection, set once, 7r): before it, never held, began;
+			// from it to what the buffer still holds, held once and trimmed since, dropped. A Began
+			// not known (state from before it existed and trimmed since) claims no began window.
+			cut := from
+			if meta.Began != "" && meta.Began > from {
+				cut = min(meta.Began, meta.HeldFrom)
+				out.Gaps = append(out.Gaps, c.beganGap(c.stamp(from), c.stamp(cut), meta.Began))
 			}
-			out.Gaps = append(out.Gaps, g)
+			if cut < meta.HeldFrom {
+				out.Gaps = append(out.Gaps, gapOf(c.stamp(cut), c.stamp(meta.HeldFrom), nil, reasonBuffer))
+			}
 		}
 		for i, g := range dayGaps {
 			if g.Kind == "" { // stored before kinds existed: every stored reason is a fixed one
-				dayGaps[i].Kind = gapKinds[g.Reason]
+				dayGaps[i].Kind = gapKinds[gapReason(g.Reason)]
 			}
 		}
 		out.Gaps = append(out.Gaps, mergeGaps(dayGaps, c.stamp(meta.Watermark))...)

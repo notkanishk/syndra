@@ -1265,6 +1265,9 @@ Rules, MUST on the add-on:
   metric however old, so a later outage is never read as the record's start
   (the stats view's `began`). Kit: `stats.gaps`; reference defect
   `stats-gaps-all-began`.
+  A gap Syndra is sent is never lost: one with no kind, an unknown kind or no
+  reason is kept as `unread` (the kind that claims least) and counted as a
+  `bad_value`.
 - Paged with a **keyset** cursor (`next_cursor` encodes the last
   `(start, subject, dimensions)` sent; no snapshot needed, because
   ingestion is upsert-by-key and the watermark is written last); a cursor

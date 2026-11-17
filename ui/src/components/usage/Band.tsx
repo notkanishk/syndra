@@ -110,10 +110,12 @@ export function Band({
   if (last >= 0) dots.add(last);
   const bw = step * COLUMN;
   // The limit's word sits above its line, at the right; where a value over the limit (a folder past full)
-  // would rise into it there, at the line's left instead. ~7px a character at 12.5px.
+  // would rise into it there, at the line's left; where it would at both ends, it is not drawn (the meter
+  // above says "full" in words). ~7px a character at 12.5px.
   const word = limit !== undefined ? limitWord(formatValue(limit, unit)) : "";
+  const span = word.length * 7 + 4;
   const over = (from: number, to: number) => cells.some((c, i) => c.value !== undefined && c.value > (limit ?? Infinity) && x(i) >= from && x(i) <= to);
-  const wordLeft = over(W - word.length * 7 - 4, W);
+  const wordAt: "end" | "start" | null = !over(W - span, W) ? "end" : !over(baseLeft, baseLeft + span) ? "start" : null;
 
   const keys = (e: KeyboardEvent) => {
     const by = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
@@ -124,8 +126,10 @@ export function Band({
 
   return (
     <div ref={seat} className="relative h-10 min-w-0">
-      {/* The day being read, behind the band: the board's inner radius (--radius-inner), colour only. */}
-      {readIndex !== null && <div data-read aria-hidden className="absolute rounded-inner bg-tint-3" style={{ insetBlockStart: 0, left: left(readIndex), width: right(readIndex) - left(readIndex), height: BASE }} />}
+      {/* The day being read, behind the band: the board's inner radius (--radius-inner), colour only. It
+          comes first and the band is positioned after it, so the band paints over it; it never takes the
+          pointer, which stays the band's (a tint that took it would end the read it shows). */}
+      {readIndex !== null && <div data-read aria-hidden className="pointer-events-none absolute rounded-inner bg-tint-3" style={{ insetBlockStart: 0, left: left(readIndex), width: right(readIndex) - left(readIndex), height: BASE }} />}
       <svg
         role="img"
         aria-label={sparkLabel(what, plot.gapRuns.length > 0)}
@@ -133,7 +137,7 @@ export function Band({
         width={W}
         height={H}
         viewBox={`0 0 ${W} ${H}`}
-        className="block overflow-visible rounded-inner focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="relative block overflow-visible rounded-inner focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         onFocus={() => onRead(readIndex ?? n - 1)}
         onBlur={() => onRead(null)}
         onKeyDown={keys}
@@ -153,9 +157,11 @@ export function Band({
         {limit !== undefined && first >= 0 && (
           <>
             <line data-limit x1={baseLeft} x2={W} y1={y(limit) + 0.5} y2={y(limit) + 0.5} stroke="var(--line)" strokeWidth="1" />
-            <text data-limit-word x={wordLeft ? baseLeft : W} y={y(limit) - 4} textAnchor={wordLeft ? "start" : "end"} fontSize="12.5" fill="var(--faint)">
-              {word}
-            </text>
+            {wordAt && (
+              <text data-limit-word x={wordAt === "start" ? baseLeft : W} y={y(limit) - 4} textAnchor={wordAt} fontSize="12.5" fill="var(--faint)">
+                {word}
+              </text>
+            )}
           </>
         )}
         {bars

@@ -195,10 +195,11 @@ func TestADisplayNameIsCheckedLikeAnyOtherName(t *testing.T) {
 	}
 }
 
-// A gap is kept with the add-on's kind, which the page draws by; one with no
-// kind, or a kind the contract does not know, is not a gap Syndra can draw
-// and is dropped as a bad value (counted, never guessed).
-func TestAGapIsKeptWithItsKindAndOnlyWithOne(t *testing.T) {
+// A gap is kept with the add-on's kind, which the page draws by. A gap the
+// add-on sent is never lost: one with no kind, a kind the contract does not
+// know, or no reason is kept as unread (dropped, its days would read as
+// counted zeros), and still counted as a bad value.
+func TestAGapIsKeptWithItsKindAndNeverLost(t *testing.T) {
 	m := addons.Metric{Name: "storage.sessions", Instrument: "counter", Unit: "count", Label: "Sessions", Dimensions: []addons.Dimension{{Name: "share", Label: "Share"}}}
 	start := time.Date(2026, 11, 9, 0, 0, 0, 0, clock.Loc)
 	end := start.AddDate(0, 0, 1)
@@ -207,12 +208,14 @@ func TestAGapIsKeptWithItsKindAndOnlyWithOne(t *testing.T) {
 	for _, k := range []string{"began", "unread", "dropped", "unobserved", "", "outage"} {
 		in = append(in, addons.StatGap{Start: start, End: end, Dimensions: map[string]string{"share": k + "x"}, Kind: k, Reason: "a reason"})
 	}
-	var kinds []string
+	in = append(in, addons.StatGap{Start: start, End: end, Dimensions: map[string]string{"share": "silent"}, Kind: "dropped", Reason: "  "})
+	var kept []string
 	for _, g := range keepGaps(in, m, peopleOn(nil, nil), dropped) {
-		kinds = append(kinds, g.Kind)
+		kept = append(kept, g.Kind+":"+g.Reason)
 	}
-	if !slices.Equal(kinds, []string{"began", "unread", "dropped", "unobserved"}) || dropped[DropBadValue] != 2 {
-		t.Errorf("kept kinds %v, dropped %v: want the four contract kinds kept and the two others dropped as bad values", kinds, dropped)
+	want := []string{"began:a reason", "unread:a reason", "dropped:a reason", "unobserved:a reason", "unread:a reason", "unread:a reason", "dropped:"}
+	if !slices.Equal(kept, want) || dropped[DropBadValue] != 3 {
+		t.Errorf("kept %v, dropped %v: want every gap kept (an unknown kind as unread, no reason as empty) and three bad values", kept, dropped)
 	}
 }
 

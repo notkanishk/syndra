@@ -4,10 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -226,7 +231,7 @@ func TestAShareNotAuditedForEveryoneIsAGapNotAZero(t *testing.T) {
 	first, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
 	gapped := map[string]StatGap{}
 	for _, g := range first.Gaps {
-		if g.Reason == reasonAudited && g.Start == "2026-11-09T00:00:00+05:30" {
+		if g.Reason == string(reasonAudited) && g.Start == "2026-11-09T00:00:00+05:30" {
 			gapped[g.Dimensions["share"]] = g
 		}
 	}
@@ -268,7 +273,7 @@ func TestTheWatermarkIsHeldWhileTheNASIsDown(t *testing.T) {
 		if dark.Watermark != "2026-11-09T00:00:00+05:30" {
 			t.Errorf("%s: with the NAS down the watermark moved to %s", m, dark.Watermark)
 		}
-		want := StatGap{Start: "2026-11-10T00:00:00+05:30", End: "2026-11-12T00:00:00+05:30", Reason: reasonNAS}
+		want := StatGap{Start: "2026-11-10T00:00:00+05:30", End: "2026-11-12T00:00:00+05:30", Reason: string(reasonNAS)}
 		if !slices.ContainsFunc(dark.Gaps, func(g StatGap) bool { return sameGap(g, want) }) {
 			t.Errorf("%s: gaps %+v, want the unread days as %+v", m, dark.Gaps, want)
 		}
@@ -282,7 +287,7 @@ func TestTheWatermarkIsHeldWhileTheNASIsDown(t *testing.T) {
 	s.nas.mu.Unlock()
 	s.collectStatsOnce()
 	back, points, _ := allStats(t, s, metricSessions, since)
-	if back.Watermark != "2026-11-11T00:00:00+05:30" || slices.ContainsFunc(back.Gaps, func(g StatGap) bool { return g.Reason == reasonNAS }) {
+	if back.Watermark != "2026-11-11T00:00:00+05:30" || slices.ContainsFunc(back.Gaps, func(g StatGap) bool { return g.Reason == string(reasonNAS) }) {
 		t.Errorf("back up: watermark %s, gaps %+v; want the start of today and the failure gap withdrawn", back.Watermark, back.Gaps)
 	}
 	if v, _ := onDay(points, "2026-11-10", "sub-rey", "main"); v != 1 {
@@ -290,7 +295,7 @@ func TestTheWatermarkIsHeldWhileTheNASIsDown(t *testing.T) {
 	}
 	used, _, _ := allStats(t, s, metricUsedBytes, since)
 	if !slices.ContainsFunc(used.Gaps, func(g StatGap) bool {
-		return g.Reason == reasonDark && g.Start == "2026-11-10T00:00:00+05:30" && g.End == "2026-11-11T00:00:00+05:30"
+		return g.Reason == string(reasonDark) && g.Start == "2026-11-10T00:00:00+05:30" && g.End == "2026-11-11T00:00:00+05:30"
 	}) {
 		t.Errorf("used_bytes on the dark day: gaps %+v, want a final gap: a level cannot be read after the fact", used.Gaps)
 	}
@@ -337,11 +342,11 @@ func TestAFinalDayNeverChangesAndSinceIsHonoured(t *testing.T) {
 func TestGapsJoinNeverAcrossTheWatermarkOrAShare(t *testing.T) {
 	c := statsClock{zone: kolkata}
 	g := func(day, share string) StatGap {
-		return StatGap{Start: c.stamp(day), End: c.stamp(nextDayKey(day)), Dimensions: map[string]string{"share": share}, Reason: reasonAudited}
+		return StatGap{Start: c.stamp(day), End: c.stamp(nextDayKey(day)), Dimensions: map[string]string{"share": share}, Reason: string(reasonAudited)}
 	}
 	got := mergeGaps([]StatGap{g("2026-11-08", "open"), g("2026-11-11", "scratch"), g("2026-11-09", "open"), g("2026-11-10", "open")}, c.stamp("2026-11-10"))
 	want := []StatGap{
-		{Start: c.stamp("2026-11-08"), End: c.stamp("2026-11-10"), Dimensions: map[string]string{"share": "open"}, Reason: reasonAudited},
+		{Start: c.stamp("2026-11-08"), End: c.stamp("2026-11-10"), Dimensions: map[string]string{"share": "open"}, Reason: string(reasonAudited)},
 		g("2026-11-10", "open"), g("2026-11-11", "scratch")}
 	if !slices.EqualFunc(got, want, sameGap) {
 		t.Errorf("merged %+v\nwant   %+v", got, want)
@@ -427,7 +432,7 @@ func TestTheBufferDropsTheOldestAndSaysSo(t *testing.T) {
 	s.collectStatsOnce()
 	first, points, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
 	held := s.stats.oldest(*at)
-	if len(first.Gaps) == 0 || !sameGap(first.Gaps[0], StatGap{Start: "2026-11-09T00:00:00+05:30", End: s.stats.stamp(held), Reason: reasonBuffer}) {
+	if len(first.Gaps) == 0 || !sameGap(first.Gaps[0], StatGap{Start: "2026-11-09T00:00:00+05:30", End: s.stats.stamp(held), Reason: string(reasonBuffer)}) {
 		t.Errorf("first gap %+v, want 9 Nov up to %s with the buffer's reason", first.Gaps, held)
 	}
 	for _, p := range points {
@@ -462,7 +467,9 @@ func TestTheAuditReadIsBoundedAndCatchesUp(t *testing.T) {
 		t.Errorf("one run asked the audit log %d times, want at most 1+%d", nas.reads, statsAuditPages)
 	}
 	if first.Watermark != "2026-11-10T00:00:00+05:30" ||
-		!slices.ContainsFunc(first.Gaps, func(g StatGap) bool { return g.Reason == reasonBehind && g.Start == "2026-11-10T00:00:00+05:30" }) {
+		!slices.ContainsFunc(first.Gaps, func(g StatGap) bool {
+			return g.Reason == string(reasonBehind) && g.Start == "2026-11-10T00:00:00+05:30"
+		}) {
 		t.Errorf("capped run: watermark %s, gaps %+v; want 10 Nov and a gap from it", first.Watermark, first.Gaps)
 	}
 	s.collectStatsOnce()
@@ -683,7 +690,7 @@ func TestAnOutageLongerThanTheLogIsKeptIsAGapNotZeros(t *testing.T) {
 	s.collectStatsOnce()
 
 	first, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
-	want := StatGap{Start: "2026-11-09T00:00:00+05:30", End: "2026-11-16T00:00:00+05:30", Reason: reasonPurged}
+	want := StatGap{Start: "2026-11-09T00:00:00+05:30", End: "2026-11-16T00:00:00+05:30", Reason: string(reasonPurged)}
 	if !slices.ContainsFunc(first.Gaps, func(g StatGap) bool { return sameGap(g, want) }) {
 		t.Errorf("gaps %+v, want the purged days as %+v", first.Gaps, want)
 	}
@@ -719,7 +726,7 @@ func TestADayTooBusyToCountIsAGapAndTheWatermarkMoves(t *testing.T) {
 		s.collectStatsOnce()
 	}
 	first, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
-	want := StatGap{Start: "2026-11-10T00:00:00+05:30", End: "2026-11-11T00:00:00+05:30", Reason: reasonOverfull}
+	want := StatGap{Start: "2026-11-10T00:00:00+05:30", End: "2026-11-11T00:00:00+05:30", Reason: string(reasonOverfull)}
 	if first.Watermark != "2026-11-11T00:00:00+05:30" || !slices.ContainsFunc(first.Gaps, func(g StatGap) bool { return sameGap(g, want) }) {
 		t.Errorf("watermark %s, gaps %+v; want 11 Nov and %+v", first.Watermark, first.Gaps, want)
 	}
@@ -783,28 +790,76 @@ func TestADayBeforeCountingBeganIsNotCollectedYet(t *testing.T) {
 			if len(first.Gaps) == 0 || first.Gaps[0].Reason != want || first.Gaps[0].Kind != kindBegan {
 				t.Errorf("gaps %+v, want the first to say %q", first.Gaps, want)
 			}
+			// An add-on older than its buffer: the window splits at Began. Before it, never held,
+			// still began (the record's start is not lost); from it to what is held, dropped.
 			*at = day0.AddDate(0, 0, 95)
 			s.collectStatsOnce()
 			later, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -3))
-			if len(later.Gaps) == 0 || later.Gaps[0].Reason != reasonBuffer || later.Gaps[0].Kind != kindDropped {
-				t.Errorf("after the buffer trimmed past it, gaps %+v, want %q", later.Gaps, reasonBuffer)
+			held := metaOf(t, s, metric).HeldFrom
+			if len(later.Gaps) < 2 ||
+				later.Gaps[0].Kind != kindBegan || !strings.HasPrefix(later.Gaps[0].Reason, want) || later.Gaps[0].End != s.stats.stamp(s.stats.day(day0)) ||
+				later.Gaps[1].Kind != kindDropped || later.Gaps[1].Reason != string(reasonBuffer) || later.Gaps[1].Start != s.stats.stamp(s.stats.day(day0)) || later.Gaps[1].End != s.stats.stamp(held) {
+				t.Errorf("after the buffer trimmed past Began, gaps %+v: want began up to %s, then dropped to %s", later.Gaps, s.stats.day(day0), held)
+			}
+			// Asked from after Began, there is no began window, only what was dropped.
+			after, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, 2))
+			if len(after.Gaps) == 0 || after.Gaps[0].Kind != kindDropped {
+				t.Errorf("asked from after Began, gaps %+v: want the dropped window alone", after.Gaps)
 			}
 		})
 	}
 }
 
-// Every fixed reason has exactly one kind the contract knows, and every gap a reply carries,
-// one stored before kinds existed included, validates against stats.json (kind required).
-func TestEveryGapGoesOutWithItsKind(t *testing.T) {
-	for _, reason := range []string{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonPurged, reasonOverfull} {
-		if k := gapKinds[reason]; !slices.Contains([]string{kindUnread, kindDropped, kindUnobserved}, k) {
-			t.Errorf("reason %q has kind %q", reason, k)
+// A gap's kind cannot be left out: the package is read for every constant of type gapReason (not a
+// hand list), and each has one kind the contract knows; and no StatGap is written as a literal
+// outside its two makers (gapOf, beganGap), where a kind could be forgotten.
+func TestEveryGapReasonHasAKind(t *testing.T) {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reasons := 0
+	for _, pkg := range pkgs {
+		for name, file := range pkg.Files {
+			ast.Inspect(file, func(n ast.Node) bool {
+				switch n := n.(type) {
+				case *ast.ValueSpec:
+					if id, ok := n.Type.(*ast.Ident); ok && id.Name == "gapReason" {
+						for _, v := range n.Values {
+							lit := v.(*ast.BasicLit)
+							reason, _ := strconv.Unquote(lit.Value)
+							reasons++
+							if k := gapKinds[gapReason(reason)]; !slices.Contains([]string{kindUnread, kindDropped, kindUnobserved}, k) {
+								t.Errorf("%s: reason %q has kind %q", name, reason, k)
+							}
+						}
+					}
+				case *ast.FuncDecl:
+					if n.Name.Name == "gapOf" || n.Name.Name == "beganGap" {
+						return false
+					}
+				case *ast.CompositeLit:
+					if id, ok := n.Type.(*ast.Ident); ok && id.Name == "StatGap" {
+						t.Errorf("%s: a StatGap literal at %s, outside gapOf and beganGap", name, fset.Position(n.Pos()))
+					}
+				}
+				return true
+			})
 		}
 	}
+	if reasons < 7 {
+		t.Fatalf("found %d gap reasons; the reader is not seeing the constants", reasons)
+	}
+}
+
+// Every gap a reply carries, one stored before kinds existed included, validates against stats.json
+// (kind required).
+func TestEveryGapGoesOutWithItsKind(t *testing.T) {
 	s, _, _ := statsServer(t)
 	s.collectStatsOnce()
 	// A day stored by an older binary: its gap has no kind.
-	legacy := statDay{Gaps: []StatGap{{Start: s.stats.stamp(s.stats.day(day0)), End: s.stats.stamp(nextDayKey(s.stats.day(day0))), Dimensions: map[string]string{"share": "scratch"}, Reason: reasonAudited}}}
+	legacy := statDay{Gaps: []StatGap{{Start: s.stats.stamp(s.stats.day(day0)), End: s.stats.stamp(nextDayKey(s.stats.day(day0))), Dimensions: map[string]string{"share": "scratch"}, Reason: string(reasonAudited)}}}
 	if err := s.store.PutStats(metricSessions, metaOf(t, s, metricSessions), map[string]statDay{s.stats.day(day0): legacy}, s.stats.oldest(day0)); err != nil {
 		t.Fatal(err)
 	}
@@ -820,7 +875,7 @@ func TestEveryGapGoesOutWithItsKind(t *testing.T) {
 	for _, g := range page.Gaps {
 		kinds[g.Reason] = g.Kind
 	}
-	if kinds[reasonAudited] != kindUnobserved || kinds[s.stats.reasonBegan(s.stats.day(day0))] != kindBegan {
+	if kinds[string(reasonAudited)] != kindUnobserved || kinds[s.stats.reasonBegan(s.stats.day(day0))] != kindBegan {
 		t.Errorf("gaps by reason %v: want the legacy one unobserved and the first collection's began", kinds)
 	}
 }
@@ -895,7 +950,7 @@ func TestStateWithoutBeganIsMigratedOnce(t *testing.T) {
 				got, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -200))
 				want := s.stats.reasonBegan(s.stats.day(day0))
 				if trimmed {
-					want = reasonBuffer
+					want = string(reasonBuffer)
 				}
 				if len(got.Gaps) == 0 || got.Gaps[0].Reason != want {
 					t.Errorf("gaps %+v, want the first to say %q", got.Gaps, want)
