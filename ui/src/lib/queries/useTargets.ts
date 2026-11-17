@@ -355,10 +355,13 @@ export function useReconcileTarget(target: string) {
 export function useReleaseBinding(target: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (subjectId: string) =>
+    // `version` is the binding as the page read it (an If-Match): the backend refuses when
+    // Syndra's record of that person changed since, so a page left open cannot drop an account
+    // the person was given in the meantime.
+    mutationFn: ({ subjectId, version }: { subjectId: string; version?: string }) =>
       request<ReleaseResult>(
         `/targets/${target}/bindings/${encodeURIComponent(subjectId)}/release`,
-        { method: "POST", body: { confirmed: true } },
+        { method: "POST", body: { confirmed: true, version } },
       ),
     onSuccess: () => invalidateAfter(client, "target", { target }),
   });
@@ -538,6 +541,8 @@ export interface StaleBinding {
   subject_id: string;
   username: string;
   account_id?: string;
+  /** Syndra's record of the binding as this read saw it; sent back with a release. */
+  version?: string;
 }
 
 export interface TargetReconcileResult {

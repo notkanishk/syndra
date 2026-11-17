@@ -668,7 +668,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
                     size="sm"
                     isPending={release.isPending}
                     onClick={() =>
-                      release.mutate(b.subject_id, {
+                      release.mutate({ subjectId: b.subject_id, version: b.version }, {
                         onSuccess: (res) => {
                           // Released, and nothing left over. Anything else keeps
                           // the row and its control, and says what the backend

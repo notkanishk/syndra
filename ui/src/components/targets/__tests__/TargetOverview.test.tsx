@@ -40,7 +40,7 @@ const state = {
   inventory: {} as TargetInventory,
   resolved: [] as Array<{ head: string; note: string }>,
   reconcile: undefined as undefined | Record<string, unknown>,
-  released: [] as string[],
+  released: [] as { subjectId: string; version?: string }[],
   releaseResult: { status: "released" } as Record<string, unknown>,
   adopted: [] as Array<{ username: string; subjectId: string }>,
   adoptResult: { status: "adopted", detail: "The account is now bound to that person." } as unknown,
@@ -109,8 +109,8 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
     }),
     useReleaseBinding: () => ({
-      mutate: (subjectId: string, opts?: { onSuccess?: (r: unknown) => void }) => {
-        state.released.push(subjectId);
+      mutate: (input: { subjectId: string; version?: string }, opts?: { onSuccess?: (r: unknown) => void }) => {
+        state.released.push(input);
         opts?.onSuccess?.(state.releaseResult);
       },
       isPending: false,
@@ -283,7 +283,7 @@ describe("one target's page", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
       target: "truenas", bound: 4, queued: 1, current: true,
-      stale: [{ subject_id: "s1", username: "becky", account_id: "3999" }],
+      stale: [{ subject_id: "s1", username: "becky", account_id: "3999", version: "v-read" }],
     };
     renderTarget();
 
@@ -292,7 +292,8 @@ describe("one target's page", () => {
     expect(screen.getByText(/Nothing is deleted/i)).toBeTruthy();
 
     fireEvent.click(screen.getByText("Stop tracking becky"));
-    expect(state.released).toEqual(["s1"]);
+    // The version the page read goes with the press: a stale page is refused by the backend.
+    expect(state.released).toEqual([{ subjectId: "s1", version: "v-read" }]);
     // The row it acted on must stop saying it is unresolved. The reconcile
     // result is a mutation's answer, so nothing refetches it.
     expect(screen.getByText(/Stopped tracking it\. Nothing on TrueNAS was changed/i)).toBeTruthy();

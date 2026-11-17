@@ -239,10 +239,15 @@ func writeOperationError(w http.ResponseWriter, err error, code, confirmation st
 	}
 }
 
+const releaseConfirmation = "Syndra will stop managing that account. Nothing on the target changes and the account keeps working. Confirm to continue."
+
 type releaseRequest struct {
 	// Confirmed is the operator saying it out loud, and the backend refuses
 	// without it for the same reason every other confirmed operation does.
 	Confirmed bool `json:"confirmed"`
+	// Version is the binding version the page read (an If-Match, RFC 9110 §13.1.1): when Syndra's
+	// record of this person's binding has changed since, nothing is released. Empty: no check.
+	Version string `json:"version,omitempty"`
 }
 
 // handleReleaseBinding stops Syndra managing an account, and touches the
@@ -271,19 +276,38 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A page left open can list a person who has been given an account since (an adoption under
+	// another name): releasing then would drop the new binding and strand its account. Judged
+	// against Syndra's own record, no read of the target. A person with no record is already
+	// released, and the same press repairs a split.
+	if req.Version != "" {
+		if b, bound, err := dbGetTargetBinding(r.Context(), target, subject); err != nil {
+			writeOperationError(w, err, "RELEASE_FAILED", releaseConfirmation)
+			return
+		} else if bound && b.Version() != req.Version {
+			jsonErrorResponse(w, http.StatusConflict, "RELEASE_REFUSED",
+				"This person's account changed since this page was read. Check again.")
+			return
+		}
+	}
+
 	res, err := svcDispatchOperation(r.Context(), addonop.Request{
 		Target:    target,
 		Operation: "account.release",
 		ActorID:   resolveActor(r, ""),
 		SubjectID: subject,
 		Confirmed: req.Confirmed,
-		// The account this row shows, as the precondition: never a newer one bound since.
-		Params: releaseParams(boundAccountID(r.Context(), target, subject)),
+		// No account_id precondition. This page lists a person the add-on's own /subjects read
+		// attributes no account to; the only id Syndra holds for them is its mirror's, which only
+		// an apply or adopt refreshes, so sending it could refuse the same release every time while
+		// "Check again" changed nothing. The add-on releases what it binds (account.release's
+		// account_id is optional); the findings' Stop tracking, whose id comes from the add-on's
+		// own report, still sends one.
+		Params: releaseParams(""),
 		About:  boundUsername(r.Context(), target, subject),
 	})
 	if err != nil {
-		writeOperationError(w, err, "RELEASE_FAILED",
-			"Syndra will stop managing that account. Nothing on the target changes and the account keeps working. Confirm to continue.")
+		writeOperationError(w, err, "RELEASE_FAILED", releaseConfirmation)
 		return
 	}
 

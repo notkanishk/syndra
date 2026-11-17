@@ -1939,8 +1939,10 @@ feature and serve both:
   the add-on MUST refuse with 409 and release nothing when the subject's
   binding no longer names that account (the person was released and bound
   again since), and a subject with no binding is still answered as done.
-  Judging it from the binding's own recorded id needs no read of the app
-  (`bindingNames` in `addons/truenas/operations.go`).
+  Judging it is from the binding's own recorded id and MUST need no read of
+  the app: a binding that does not carry a real account id (a contract-1 one)
+  is released without the check and the answer says so
+  (`releaseAccount` in `addons/truenas/operations.go`).
 - A **move**: `account.adopt` for a subject that already has a binding MUST
   be refused unless that binding is in a `name_held` or `number_held`
   conflict whose holder is the account named and is `adoptable`, and MUST

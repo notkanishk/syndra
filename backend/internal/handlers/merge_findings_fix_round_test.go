@@ -135,15 +135,61 @@ func TestAStaleKeepIsRefusedAndGivesBothReservationsBack(t *testing.T) {
 	}
 }
 
-// The system page's Stop tracking names the account its row shows.
-func TestTheSystemPagesReleaseNamesTheAccountItShows(t *testing.T) {
+// The system page lists people /subjects attributes no account to, so it names none: Syndra's mirror
+// id can be stale and only an apply refreshes it, which made the same refusal repeat.
+func TestTheSystemPagesReleaseSendsNoAccountFromTheMirror(t *testing.T) {
 	h := &releaseHarness{}
 	stubRelease(t, h)
 	dbGetTargetBinding = func(context.Context, string, string) (db.TargetBinding, bool, error) {
 		return db.TargetBinding{Username: "roman.reigns", AccountID: strp("3999")}, true, nil
 	}
-	if rr := release(t, `{"confirmed":true}`); rr.Code != http.StatusOK || h.dispatched[0].Params["account_id"] != "3999" {
-		t.Fatalf("want the release to name 3999, got %d %+v", rr.Code, h.dispatched)
+	if rr := release(t, `{"confirmed":true}`); rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d %+v", rr.Code, h.dispatched)
+	}
+	if _, named := h.dispatched[0].Params["account_id"]; named {
+		t.Fatalf("a stale mirror id must not be sent: %+v", h.dispatched[0].Params)
+	}
+}
+
+// A page left open lists a person who was given an account since (adopted under another name: the
+// row is updated in place, bound_at kept). Its release carries the version it read; the changed
+// record refuses with nothing released, and a page that read the current record releases.
+func TestAReleaseFromAStalePageIsRefusedAndAFreshOneReleases(t *testing.T) {
+	read := db.TargetBinding{Username: "roman.reigns", BoundAt: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)}
+	seen := read.Version()
+	for _, tc := range []struct {
+		name    string
+		now     db.TargetBinding
+		bound   bool
+		version string
+		want    int
+	}{
+		{"fresh page", read, true, seen, http.StatusOK},
+		{"adopted under another name since", db.TargetBinding{Username: "roman", BoundAt: read.BoundAt, AccountID: strp("4001")}, true, seen, http.StatusConflict},
+		{"moved to another name only", db.TargetBinding{Username: "roman", BoundAt: read.BoundAt}, true, seen, http.StatusConflict},
+		{"moved to another account id only", db.TargetBinding{Username: "roman.reigns", BoundAt: read.BoundAt, AccountID: strp("4001")}, true, seen, http.StatusConflict},
+		{"released and bound again since", db.TargetBinding{Username: "roman.reigns", BoundAt: read.BoundAt.Add(time.Hour)}, true, seen, http.StatusConflict},
+		{"sweep only touched last_seen_at", db.TargetBinding{Username: "roman.reigns", BoundAt: read.BoundAt, LastSeenAt: time.Now()}, true, seen, http.StatusOK},
+		{"already released", db.TargetBinding{}, false, seen, http.StatusOK},
+		{"no version sent", db.TargetBinding{Username: "roman"}, true, "", http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &releaseHarness{}
+			stubRelease(t, h)
+			get := dbGetTargetBinding
+			t.Cleanup(func() { dbGetTargetBinding = get })
+			dbGetTargetBinding = func(context.Context, string, string) (db.TargetBinding, bool, error) { return tc.now, tc.bound, nil }
+			rr := release(t, `{"confirmed":true,"version":"`+tc.version+`"}`)
+			if rr.Code != tc.want {
+				t.Fatalf("want %d, got %d %s", tc.want, rr.Code, rr.Body.String())
+			}
+			if tc.want == http.StatusConflict {
+				if len(h.dispatched) != 0 || len(h.forgotten) != 0 || !strings.Contains(rr.Body.String(), "RELEASE_REFUSED") ||
+					!strings.Contains(rr.Body.String(), "This person's account changed since this page was read. Check again.") {
+					t.Fatalf("refused in words, nothing released: %s %v %v", rr.Body.String(), h.dispatched, h.forgotten)
+				}
+			}
+		})
 	}
 }
 
@@ -158,6 +204,41 @@ func releasedReservations(t *testing.T) *[]string {
 		return nil
 	}
 	return &out
+}
+
+// Keeping it for a person who is no longer tracked (untracked elsewhere since) would leave the
+// account bound to nobody: refused in words with a next step, nothing released, both reservations
+// given back. The same on a Finish, which runs the same call again.
+func TestKeepingItForSomeoneNoLongerTrackedIsRefused(t *testing.T) {
+	for _, decided := range []string{"", "kept"} {
+		t.Run("decided="+decided, func(t *testing.T) {
+			f := bindingConflict("f1", "sub-1", claimedTwice)
+			f.Decision = decided
+			h := stubConflictActions(t, f)
+			h.tracked = false
+			h.others = []db.MergeFinding{bindingConflict("f2", "sub-2", `{"subject":"sub-2","reason":"claimed_twice","bound_to":"sub-1"}`)}
+			cleared := releasedReservations(t)
+			rr := resolveFinding(t, `{"resolution":"kept","reason":"bob is sub-1's"}`)
+			// A first press can choose again after Checking; a Finish cannot (a decided row refuses
+			// any other choice), so its next step is to wait for the sweep.
+			next := "Check again"
+			if decided != "" {
+				next = "Syndra closes this when it next checks"
+			}
+			if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "no longer tracked") || !strings.Contains(rr.Body.String(), next) {
+				t.Fatalf("want 409 in words with the next step %q, got %d %s", next, rr.Code, rr.Body.String())
+			}
+			if decided != "" && strings.Contains(rr.Body.String(), "choose from") {
+				t.Fatalf("a Finish must not tell the operator to choose again: %s", rr.Body.String())
+			}
+			if len(h.dispatched) != 0 || len(h.forgotten) != 0 {
+				t.Fatalf("nothing released or forgotten: %v %v", h.dispatched, h.forgotten)
+			}
+			if decided == "" && strings.Join(*cleared, ",") != "f1:kept,f2:unbound" {
+				t.Fatalf("both reservations given back: %v", *cleared)
+			}
+		})
+	}
 }
 
 type errString string
