@@ -62,54 +62,54 @@ const (
 	// statsMaxReplyBytes is constants.max_reply_bytes, the largest reply
 	// Syndra reads (TestStatsPagesFitTheContractsCeiling holds the two equal).
 	statsMaxReplyBytes = 1 << 20
-
-	// A gap's kind (contract: stats.json, AUTHORING "every gap MUST carry a kind"), which Syndra
-	// reads; the reason is the member's.
-	kindBegan      = "began"
-	kindUnread     = "unread"
-	kindDropped    = "dropped"
-	kindUnobserved = "unobserved"
 )
 
-// gapReason is one of the add-on's fixed sentences for a window not observed. A gap is made only by
-// gapOf, from a gapReason, or by beganGap, so its kind cannot be left out; TestEveryGapReasonHasAKind
-// reads this package for every constant of the type, and for any other StatGap literal, so a new
-// reason without a row in gapKinds fails its tests.
-type gapReason string
+// gapKind is the contract's gap kind (stats.json, AUTHORING "every gap MUST carry a kind"), which
+// Syndra reads; the reason is the member's.
+type gapKind string
 
 const (
-	// reasonBuffer is for days the buffer dropped to stay within its size or its P90D; days before
-	// the first collection were never held, and say so (beganGap).
-	reasonBuffer   gapReason = "The add-on no longer holds these days"
-	reasonNAS      gapReason = "The NAS could not be read"
-	reasonDark     gapReason = "The NAS could not be read that day"
-	reasonBehind   gapReason = "Too much activity to count yet"
-	reasonAudited  gapReason = "Auditing does not record everyone on this share"
-	reasonPurged   gapReason = "The NAS no longer keeps its log of these days"
-	reasonOverfull gapReason = "Too much activity to count"
+	kindBegan      gapKind = "began"
+	kindUnread     gapKind = "unread"
+	kindDropped    gapKind = "dropped"
+	kindUnobserved gapKind = "unobserved"
 )
 
-// gapKinds is each fixed reason's kind. Behind and overfull are unread: the log was there and could
-// not be read whole, in time or at all.
-var gapKinds = map[gapReason]string{
-	reasonBuffer:   kindDropped,
-	reasonNAS:      kindUnread,
-	reasonDark:     kindUnread,
-	reasonBehind:   kindUnread,
-	reasonAudited:  kindUnobserved,
-	reasonPurged:   kindDropped,
-	reasonOverfull: kindUnread,
+// gapReason is why a window was not observed: the member's sentence and the kind Syndra reads, one
+// value, so neither goes out without the other. Each is written positionally, gapReason{text, kind},
+// so one without its kind does not compile; a StatGap is made only from one (gapOf), and its reason
+// and kind are unexported, so nothing sets one without the other.
+type gapReason struct {
+	text string
+	kind gapKind
 }
 
-// gapOf is a window not observed for one of the fixed reasons, with that reason's kind.
-func gapOf(start, end string, dims map[string]string, reason gapReason) StatGap {
-	return StatGap{Start: start, End: end, Dimensions: dims, Kind: gapKinds[reason], Reason: string(reason)}
+// The fixed reasons. Behind and overfull are unread: the log was there and could not be read whole,
+// in time or at all. The window before the first collection carries its day (beganGap).
+var (
+	// reasonBuffer is for days the buffer dropped to stay within its size or its P90D; days before
+	// the first collection were never held, and say so (beganGap).
+	reasonBuffer   = gapReason{"The add-on no longer holds these days", kindDropped}
+	reasonNAS      = gapReason{"The NAS could not be read", kindUnread}
+	reasonDark     = gapReason{"The NAS could not be read that day", kindUnread}
+	reasonBehind   = gapReason{"Too much activity to count yet", kindUnread}
+	reasonAudited  = gapReason{"Auditing does not record everyone on this share", kindUnobserved}
+	reasonPurged   = gapReason{"The NAS no longer keeps its log of these days", kindDropped}
+	reasonOverfull = gapReason{"Too much activity to count", kindUnread}
+)
+
+// gapReasons is every fixed reason: a gap stored before kinds existed takes its sentence's kind.
+var gapReasons = []gapReason{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonPurged, reasonOverfull}
+
+// gapOf is the one way a window not observed is made: from its reason, which carries its kind.
+func gapOf(start, end string, dims map[string]string, why gapReason) StatGap {
+	return StatGap{Start: start, End: end, Dimensions: dims, why: why}
 }
 
 // beganGap is the window before the first collection, over the whole metric: days the add-on never
 // held, so began, said with the day counting began.
 func (c statsClock) beganGap(start, end, began string) StatGap {
-	return StatGap{Start: start, End: end, Kind: kindBegan, Reason: c.reasonBegan(began)}
+	return gapOf(start, end, nil, gapReason{c.reasonBegan(began), kindBegan})
 }
 
 func declaredMetric(name string) (Metric, bool) {
@@ -140,14 +140,53 @@ type StatPoint struct {
 	Value      int64             `json:"value"`
 }
 
+// StatGap is one window not observed. Its reason and kind are one unexported value (gapReason), set
+// by gapOf alone; the wire form (statGapWire) carries both.
 type StatGap struct {
+	Start      string
+	End        string
+	Dimensions map[string]string
+	why        gapReason
+}
+
+// Kind is the contract's kind of the gap; Reason, the member's sentence.
+func (g StatGap) Kind() gapKind  { return g.why.kind }
+func (g StatGap) Reason() string { return g.why.text }
+
+type statGapWire struct {
 	Start      string            `json:"start"`
 	End        string            `json:"end"`
 	Dimensions map[string]string `json:"dimensions,omitempty"`
-	// Kind is the contract's gap kind. A gap stored before kinds existed has none and takes its
-	// reason's when it is served (gapKinds); every stored reason is a fixed one.
-	Kind   string `json:"kind"`
-	Reason string `json:"reason"`
+	Kind       gapKind           `json:"kind"`
+	Reason     string            `json:"reason"`
+}
+
+// MarshalJSON refuses a gap with no kind: one written as a bare StatGap literal, not by gapOf, is a
+// bug, and it fails here, in every test that serves it, rather than reaching Syndra without a kind.
+func (g StatGap) MarshalJSON() ([]byte, error) {
+	if g.why.kind == "" {
+		return nil, errors.New("stats: the gap " + g.Start + " to " + g.End + " has no kind (made without gapOf)")
+	}
+	return json.Marshal(statGapWire{Start: g.Start, End: g.End, Dimensions: g.Dimensions, Kind: g.why.kind, Reason: g.why.text})
+}
+
+// UnmarshalJSON reads a gap as served or as stored. One stored before kinds existed has none and takes
+// its sentence's, every stored reason being a fixed one (gapReasons); a sentence not among them is
+// unread, the kind that claims least.
+func (g *StatGap) UnmarshalJSON(b []byte) error {
+	var w statGapWire
+	if err := json.Unmarshal(b, &w); err != nil {
+		return err
+	}
+	why := gapReason{w.Reason, w.Kind}
+	if why.kind == "" {
+		why.kind = kindUnread
+		if i := slices.IndexFunc(gapReasons, func(r gapReason) bool { return r.text == w.Reason }); i >= 0 {
+			why = gapReasons[i]
+		}
+	}
+	*g = StatGap{Start: w.Start, End: w.End, Dimensions: w.Dimensions, why: why}
+	return nil
 }
 
 // statsClock is the zone days are counted in and the clock, both seams.
@@ -277,7 +316,7 @@ func fill(encoded [][]byte, room int) int {
 // Gaps are keyed by (dimensions, start), so two shares' gaps on one day stay
 // two gaps.
 func mergeGaps(gaps []StatGap, watermark string) []StatGap {
-	series := func(g StatGap) string { d, _ := json.Marshal(g.Dimensions); return string(d) + g.Reason }
+	series := func(g StatGap) string { d, _ := json.Marshal(g.Dimensions); return string(d) + g.why.text }
 	gaps = slices.Clone(gaps)
 	slices.SortStableFunc(gaps, func(a, b StatGap) int {
 		if c := strings.Compare(series(a), series(b)); c != 0 {
@@ -288,7 +327,7 @@ func mergeGaps(gaps []StatGap, watermark string) []StatGap {
 	var out []StatGap
 	for _, g := range gaps {
 		if n := len(out); n > 0 && out[n-1].End == g.Start && g.Start != watermark &&
-			out[n-1].Reason == g.Reason && sameDims(out[n-1].Dimensions, g.Dimensions) {
+			out[n-1].why == g.why && sameDims(out[n-1].Dimensions, g.Dimensions) {
 			out[n-1].End = g.End
 			continue
 		}
@@ -410,11 +449,6 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request, _ []byte) {
 			}
 			if cut < meta.HeldFrom {
 				out.Gaps = append(out.Gaps, gapOf(c.stamp(cut), c.stamp(meta.HeldFrom), nil, reasonBuffer))
-			}
-		}
-		for i, g := range dayGaps {
-			if g.Kind == "" { // stored before kinds existed: every stored reason is a fixed one
-				dayGaps[i].Kind = gapKinds[gapReason(g.Reason)]
 			}
 		}
 		out.Gaps = append(out.Gaps, mergeGaps(dayGaps, c.stamp(meta.Watermark))...)
