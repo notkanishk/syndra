@@ -3,6 +3,18 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Adopting the holder of a binding's conflict (slice 7t-7, 17 Nov 2026)
+
+Still major 2 before its release. A binding's own `name_held` or
+`number_held` conflict MAY now be `adoptable: true` (the holder bound to
+nobody and not the add-on's own; `common/binding_conflict.json`), and
+`account.adopt` for that subject with the holder's `username` moves the
+binding to it, judged again when it runs. `account.adopt` gains an optional
+`account_id` parameter (`registry/operations.json`): the account the
+operator was shown, refused with 409 when the account named is no longer
+it (an `If-Match`-style precondition, RFC 9110 §13.1.1). No fixture
+changed.
+
 ## Attribution everywhere a row is an account (slice 7t-3, 15 Nov 2026)
 
 Still major 2 before its release. `/subjects` `conflicts` is now required

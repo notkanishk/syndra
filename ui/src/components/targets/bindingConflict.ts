@@ -62,5 +62,74 @@ export const stopTrackingConsequence = (system: string) =>
 // What to do next, adopt the holder or not, is the add-on's `next`: this line adds only what stopping
 // does to the system, so nothing is said twice and adoptability is never guessed from `reason`.
 
-/** The one action's label: the system page's own control for `account.release` says it the same way. */
+/** The default action's label: the system page's own control for `account.release` says it the same way. */
 export const STOP_TRACKING = "Stop tracking";
+
+/**
+ * The other answers (addon-contract 7t-7, owner ruling 17 Nov 2026). Each label is the
+ * confirm button's, and each `says` is the sentence beside it: what happens on the system
+ * and in Syndra, true of what the backend does.
+ */
+export const ADOPT_IT = "It's theirs: adopt it";
+export const adoptConsequence = (system: string, holder: string) =>
+  `Syndra makes ${holder} this person's account on ${system} and manages it from now on. Nothing on ${holder} is changed. If it has changed on ${system} since it was checked, nothing is adopted.`;
+
+/** Claimed twice: the account stays one person's, and Syndra stops tracking it for the other. */
+export const keepFor = (person: string) => `Keep it for ${person}`;
+export const keepConsequence = (system: string, holder: string, keeper: string, released: string) =>
+  `${holder} stays ${keeper}'s account on ${system}, and Syndra stops tracking it for ${released}. Nothing on ${system} is changed. ${start(released)}'s next change creates a new account for them.`;
+
+/** A fresh read of the system: the same pass as Check now. An action, never a decision. */
+export const CHECK_AGAIN = "Check again";
+export const checkAgainConsequence = (system: string) =>
+  `Syndra reads ${system} again now, the same check as Check now. Nothing on ${system} is changed, and any fix it finds waits in Pending changes. Once the accounts are fixed on ${system}, this closes by itself.`;
+// Inside the add-on's cooldown it says what every cooldown says (cooldownLine, components/results/copy.ts).
+export const stillReported = (system: string) =>
+  `Checked just now: ${system} still reports this. Fix it on ${system}, then check again, or decide it another way.`;
+export const checkStopped = (said: string) =>
+  `The check stopped before it concluded anything. ${said} Check again once that is fixed.`;
+
+/** What a decided conflict is waiting for, in place of "waiting for {system} to match". */
+export const closesAtNextCheck = (system: string) => `closes when Syndra next checks ${system}`;
+
+const start = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+export type ConflictAnswer = "unbound" | "adopted" | "kept" | "check";
+export interface ConflictChoice {
+  answer: ConflictAnswer;
+  label: string;
+  says: string;
+}
+
+/**
+ * The answers a conflict takes, safest first: the first is preselected. Stop tracking is the
+ * default; Check again comes first only for `ambiguous`, whose fix is on the system itself, and is
+ * offered on every conflict. Adoption only where the add-on marked the holder adoptable (the backend
+ * refuses it anywhere else); keeping it for one of two people only for `claimed_twice` with the
+ * other person named, where keeping it for the other one is this person's Stop tracking.
+ * `person` and `other` are names as shown, never ids.
+ */
+export function conflictChoices(c: BindingConflictReport, system: string, person: string, other: string): ConflictChoice[] {
+  const stop: ConflictChoice = { answer: "unbound", label: STOP_TRACKING, says: stopTrackingConsequence(system) };
+  const check: ConflictChoice = { answer: "check", label: CHECK_AGAIN, says: checkAgainConsequence(system) };
+  const holder = c.username ?? "The account";
+  switch (c.reason) {
+    case "ambiguous":
+      return [check, stop];
+    case "claimed_twice":
+      return c.bound_to
+        ? [
+            { answer: "unbound", label: keepFor(other), says: keepConsequence(system, holder, other, person) },
+            { answer: "kept", label: keepFor(person), says: keepConsequence(system, holder, person, other) },
+            check,
+          ]
+        : [stop, check];
+    case "name_held":
+    case "number_held":
+      return c.adoptable && c.username
+        ? [stop, { answer: "adopted", label: ADOPT_IT, says: adoptConsequence(system, c.username) }, check]
+        : [stop, check];
+    default:
+      return [stop, check];
+  }
+}

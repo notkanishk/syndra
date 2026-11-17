@@ -147,7 +147,7 @@ func boundAccount(binding Binding, floor, ceiling int64,
 			// A name some other account now holds (the original was deleted
 			// and the name reused). Converging it would hand this subject's
 			// entitlements to a stranger, so it halts like any foreign name.
-			return nil, binding, (&BindingConflict{Username: found.Username, AccountID: accountID(found.UID)}).worded(), nil
+			return nil, binding, (&BindingConflict{Username: found.Username, AccountID: accountID(found.UID), recorded: true}).worded(), nil
 		}
 		if !owned {
 			// A legacy binding holding a record key (or a real uid it never said was one): the name
@@ -176,7 +176,7 @@ func boundAccount(binding Binding, floor, ceiling int64,
 			// deleted: not a rename, whatever else is true, marked or not (policy B). An operator
 			// decides; nothing is written to the account that holds the number and nothing is created.
 			return nil, binding, (&BindingConflict{Username: renamed.Username, AccountID: accountID(renamed.UID),
-				numberHeld: true, was: binding.Username}).worded(), nil
+				numberHeld: true, was: binding.Username, recorded: true}).worded(), nil
 		}
 		binding.Username = renamed.Username
 		binding.UIDKind = uidKindAccount
@@ -493,6 +493,18 @@ func (s *server) attributeOver(bindings []Binding, subjects []Subject) attributi
 			r := at.bySubject[subject]
 			r.Account, r.Conflict = nil, c.worded()
 			at.bySubject[subject] = r
+		}
+	}
+	// A recorded binding whose name or number another account took can be moved to that account,
+	// when it is the person's (adoptAccount; owner ruling 17 Nov 2026), by account.adopt's own rule
+	// judged over this same read: the holder bound to nobody, the add-on's own account known and
+	// not it. A system account is never in a read (withoutSystemAccounts).
+	_, _, known := s.nas.Self()
+	for _, r := range at.bySubject {
+		if c := r.Conflict; c != nil && c.recorded {
+			holder, _ := ix.name(c.Username)
+			c.Adoptable = holder != nil && known && !at.bound(holder.UID) && s.refuseSelfAccount(c.Username) == nil
+			c.worded()
 		}
 	}
 	for _, b := range bindings { // store order, which is by subject

@@ -43,7 +43,8 @@ func TestAnOutOfRangeNumberHeldByAnotherNameIsAConflictNeverARename(t *testing.T
 			}
 			out := decodeOutcome(t, postApply(t, s, oneApply))
 			if out.Effect != EffectBlocked || out.Conflict == nil || out.Detail != "The account bob, recorded for this person, is gone, and its number is now held by a different account, "+tc.holder+"." ||
-				!strings.Contains(out.Consequence, "Stop tracking this person's old account; the next change creates a new one for them. Adopt "+tc.holder+" instead only if it is theirs.") {
+				!out.Conflict.Adoptable ||
+				!strings.Contains(out.Consequence, "Adopt "+tc.holder+" if it is theirs. If it is not, stop tracking this person's old account; the next change creates a new one for them.") {
 				t.Fatalf("want a conflict an operator decides, got %+v", out)
 			}
 			if len(m.updates) != 0 || len(m.creates) != 0 {

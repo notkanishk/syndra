@@ -111,6 +111,10 @@ var operationPolicy = map[string]OperationPolicy{
 			// subject is not a parameter: it is the request's subject, checked
 			// by the same binding rule every operation goes through.
 			{Name: "username", Type: "string", Required: true},
+			// The account the operator was shown, a precondition (RFC 9110
+			// §13.1.1, If-Match): a name can be handed to a new account, and
+			// the add-on refuses when the one named is no longer it.
+			{Name: "account_id", Type: "string"},
 		},
 		Effect: EffectAccount,
 	},

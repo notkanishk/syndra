@@ -665,23 +665,37 @@ func TestAReusedUsernameIsNotThisSubjectsAccount(t *testing.T) {
 		t.Fatalf("want 409, got %d (%s)", rr.Code, rr.Body.String())
 	}
 	out := decodeOutcome(t, rr)
-	if out.Effect != EffectBlocked || out.Conflict == nil || out.Conflict.AccountID != "300777" || out.Conflict.Adoptable {
-		t.Fatalf("want a non-adoptable conflict naming the stranger's uid: %+v", out)
+	// Bound to nobody, so adoptable: account.adopt would move this person's binding to it.
+	if out.Effect != EffectBlocked || out.Conflict == nil || out.Conflict.AccountID != "300777" || !out.Conflict.Adoptable {
+		t.Fatalf("want an adoptable conflict naming the stranger's uid: %+v", out)
 	}
 	if len(m.creates) != 0 || len(m.updates) != 0 {
 		t.Fatal("nothing may be written to someone else's account")
 	}
-	// Not adoptable because this subject has a binding: account.adopt refuses
-	// it, so the next step the outcome names is a release first.
+	// The account after it may be a stranger's (the name was reused), so the
+	// step never reads as "adopt it": only if it is theirs.
+	if !strings.Contains(out.Consequence, "Adopt charlotte if it is theirs. If it is not, stop tracking this person's old account, or rename charlotte on TrueNAS.") {
+		t.Errorf("the next step is an adoption only of their own account, else a release, got %q", out.Consequence)
+	}
+
+	// Held by another person's binding: not adoptable, the words are a release
+	// first, and account.adopt refuses to move this person to it.
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "charlotte", UID: 300777, UIDKind: uidKindAccount}); err != nil {
+		t.Fatal(err)
+	}
+	out = decodeOutcome(t, postApply(t, s, `{"call_id":"c2","subject":"sub-1","email":"charlotte@example.edu",
+		"desired":{"group":["lab_makers"],"enabled":true}}`))
+	if out.Conflict == nil || out.Conflict.Adoptable ||
+		!strings.Contains(out.Consequence, "Stop tracking this person's old account first") ||
+		!strings.Contains(out.Consequence, "adopt that account only if it is theirs") {
+		t.Fatalf("held by another person: want a non-adoptable conflict, release first, got %+v", out)
+	}
 	if _, status, _ := s.adoptAccount(OperationRequest{Operation: "account.adopt", Subject: "sub-1", Actor: "op1", CallID: "a1",
 		Params: map[string]any{"username": "charlotte"}}); status != http.StatusConflict {
-		t.Fatalf("account.adopt must refuse a bound subject, got %d", status)
+		t.Fatalf("account.adopt must refuse to move a person to someone else's account, got %d", status)
 	}
-	// And the account after it may be a stranger's (the name was reused), so
-	// the step never reads as "adopt it": only if it is theirs.
-	if !strings.Contains(out.Consequence, "Stop tracking this person's old account first") ||
-		!strings.Contains(out.Consequence, "adopt that account only if it is theirs") {
-		t.Errorf("the next step is a release, then an adoption only of their own account, got %q", out.Consequence)
+	if b, _, _ := s.store.GetBinding("sub-1"); b.UID != 300001 {
+		t.Fatalf("the refused move left the binding as it was, got %+v", b)
 	}
 }
 

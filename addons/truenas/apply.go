@@ -230,6 +230,10 @@ type BindingConflict struct {
 	// handed out again) now held by another name, which was: not on the wire.
 	numberHeld bool
 	was        string
+	// recorded is a recorded binding's conflict (boundAccount: its name or its number is held),
+	// never a create's. Only then can adoption move the binding to the holder (attributeOver sets
+	// Adoptable, adoptAccount moves it). Not on the wire: reason and adoptable already say it.
+	recorded bool
 	// selfUnknown is the add-on not yet knowing its own account (auth.me),
 	// while account.adopt refuses everything; not on the wire either.
 	selfUnknown bool
@@ -359,6 +363,14 @@ func (c BindingConflict) words() (detail, next string) {
 	case c.claimedTwice:
 		return fmt.Sprintf("The account %s is recorded for this person and for someone else, so Syndra changes it for neither.", c.Username),
 			"Stop tracking it for whichever of the two it does not belong to."
+	case c.recorded && c.Adoptable && c.numberHeld:
+		// The holder is bound to nobody (attributeOver), so adopting it moves this person's
+		// binding to it in one step.
+		return fmt.Sprintf("The account %s, recorded for this person, is gone, and its number is now held by a different account, %s.", c.was, c.Username),
+			fmt.Sprintf("Adopt %s if it is theirs. If it is not, stop tracking this person's old account; the next change creates a new one for them.", c.Username)
+	case c.recorded && c.Adoptable:
+		return fmt.Sprintf("The name %s this person's account is recorded under is now held by a different account.", c.Username),
+			fmt.Sprintf("Adopt %s if it is theirs. If it is not, stop tracking this person's old account, or rename %s on TrueNAS.", c.Username, c.Username)
 	case c.serviceAccount:
 		return fmt.Sprintf("%s is the account this add-on signs in to the app with, so it is never adopted.", c.Username),
 			"Create this subject's account in the app under another name, then adopt that."

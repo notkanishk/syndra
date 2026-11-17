@@ -1291,7 +1291,8 @@ whole burden.
   holds it, and `adoptable`, `true` exactly when `account.adopt` for this
   subject would succeed: no other subject holds the account, the add-on
   knows its own service account and this is not it, and this subject has no
-  binding, and `detail` and `next`, the add-on's words for an operator:
+  binding (or the conflict is its binding's own, below), and `detail` and
+  `next`, the add-on's words for an operator:
   `v2/schema/common/binding_conflict.json`), and an
   operator decides through the confirmed
   `account.adopt` operation, which every add-on that creates accounts
@@ -1327,11 +1328,19 @@ whole burden.
   shows it to an operator, who re-provisions it (that apply) or lets it go
   (`account.release`).
 - **A bound name another account now holds** (the original deleted, the
-  name reused) is a `BINDING_CONFLICT` with `adoptable: false`, never this
-  subject's account: converging it hands the subject's access to a
-  stranger. `account.adopt` refuses a subject that has a binding, so the
-  operator releases first (`account.release`), then adopts that account
-  only if it is theirs, or renames it in the app.
+  name reused; or a reused number, `number_held`) is a `BINDING_CONFLICT`,
+  never this subject's account: converging it hands the subject's access
+  to a stranger. When no other subject holds that account and it is not the
+  add-on's own, the conflict is `adoptable: true`, and an operator who knows
+  it is the person's says so with `account.adopt` for this subject and the
+  holder's `username`: the add-on MUST move the binding to it, touching
+  nothing on the account, and MUST judge that again over the one read it
+  writes from (this binding's conflict, with this holder, still adoptable),
+  refusing it with 409 otherwise. Any other account, or a holder another
+  subject holds, is `adoptable: false`: the operator releases first
+  (`account.release`), or renames it in the app. (`attributeOver` in
+  `addons/truenas/identity_resolve.go` sets `adoptable`; `adoptAccount`
+  moves it.)
 
 #### The reply
 
@@ -1904,7 +1913,14 @@ feature and serve both:
 
 - `account.adopt` binds the account named in `params.username` to the
   subject, after reading it, and answers its `account_id`
-  (`handleAdoptAccount` in `backend/internal/handlers/inventory.go`). While
+  (`handleAdoptAccount` in `backend/internal/handlers/inventory.go`; from a
+  binding conflict, `adoptOnTarget` in
+  `backend/internal/handlers/merge_findings.go`, which moves the binding:
+  [A bound name another account now holds](#the-one-create)). When
+  `params.account_id` is sent it is the account the operator was shown, a
+  precondition in the sense of `If-Match` (RFC 9110 §13.1.1): the add-on
+  MUST refuse with 409 when the account named is no longer that one, since
+  a name can be handed to a new account. While
   the add-on cannot yet tell which account is its own service account, it
   MUST refuse with 422 `OPERATION_FAILED` (nothing was done, and the
   sentence reaches the operator, who tries again) rather than risk binding

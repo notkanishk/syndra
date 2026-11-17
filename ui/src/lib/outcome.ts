@@ -432,6 +432,8 @@ export const MAY_HAVE_GONE_THROUGH: Record<string, string> = {
   RECONCILE_FAILED: "the system's page under System",
   LIFECYCLE_NOT_SET: "the system's page under System",
   RELEASE_NOT_CONFIRMED: "the system's page under System",
+  // An adoption from a binding conflict the add-on did not confirm (handlers/merge_findings.go adoptOnTarget): it may be bound.
+  ADOPTION_NOT_CONFIRMED: "the system's page under System",
   TARGET_UNCONFIRMED: "the system's page under System",
   TARGET_ANSWER_UNREADABLE: "the system's page under System",
   SWEEP_ERROR: "Audit",

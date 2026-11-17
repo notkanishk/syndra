@@ -497,7 +497,8 @@ export function useAnswerUnconfirmed(target: string) {
 
 export interface ResolveFindingInput {
   id: string;
-  resolution: "keep_ours" | "take_theirs" | "reprovisioned" | "unbound";
+  /** `adopted` and `kept` answer a binding conflict only (addon-contract 7t-7). */
+  resolution: "keep_ours" | "take_theirs" | "reprovisioned" | "unbound" | "adopted" | "kept";
   reason: string;
   expires_at?: string;
   review_date?: string;

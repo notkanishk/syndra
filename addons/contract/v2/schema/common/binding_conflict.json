@@ -33,7 +33,7 @@
     },
     "adoptable": {
       "type": "boolean",
-      "description": "account.adopt would bind the holder to this subject as things stand: no other subject holds it, it is not the add-on's own, and this subject has no binding. Never true for ambiguous or claimed_twice."
+      "description": "account.adopt would bind the holder to this subject as things stand: no other subject holds it and it is not the add-on's own; and either this subject has no binding, or this is its binding's own name_held or number_held conflict, which account.adopt answers by moving the binding to the holder. Never true for ambiguous or claimed_twice."
     },
     "bound_to": {
       "type": "string",

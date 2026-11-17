@@ -1444,12 +1444,38 @@ stands and closes any finding the add-on does not report.
   (`ClearMergeFindingsOutside`), and by the account-slot clear when the subject's own row is back; a
   conflict that ends with the account gone becomes `deleted_upstream`. A new outcome in a slot drops
   the old decision.
-- **Resolved** only by `unbound` (`account.release`; confirmed by the owner 17 Nov 2026; `resolutionFits` refuses the
-  rest). Adopting the holder stays in its one place, Not created by Syndra.
+- **Resolved** (owner's Q5 ruling, 17 Nov 2026): Stop tracking by default, plus adopt when adoptable,
+  keep-for-one on `claimed_twice`, and Check again. `resolutionFits` takes each only where the stored
+  report says it can work, and refuses the rest (slice 7t-7, migration 000100):
+  - `unbound` (Stop tracking, `account.release` of this person), always.
+  - `adopted` ("It's theirs: adopt it") only when the add-on marked the holder `adoptable` and the
+    reason is `name_held` or `number_held`: the one `account.adopt` (`adoptOnTarget`, the same
+    policy, confirmation, record and audit as the inventory's), naming the holder and, as an
+    `If-Match`-style precondition (RFC 9110 §13.1.1), the `account_id` the operator was shown. The
+    add-on sets `adoptable` on a recorded binding's own conflict by `account.adopt`'s rule (the
+    holder bound to nobody, not its own account; `attributeOver`) and moves the binding to the
+    holder, judged again over the one read it writes from (`adoptAccount`); a stale one is a 409 in
+    its words, and nothing is written. This side's half is `recordAdoptedBinding`, with the old
+    account's observation forgotten.
+  - `kept` ("Keep it for {person}") only for `claimed_twice` with `bound_to` naming the other
+    person: `account.release` of the OTHER person (never this one) through `releaseOnTarget`; their
+    copy is forgotten and their standing finding settled `unbound`. Keeping it for the other person
+    is this person's `unbound`. Either way the other row is reserved with the same answer from its
+    side (`reservePair`) before the add-on is called, so the two people's rows can never release
+    both. Both rows close when the add-on reports one binding.
+  - Check again is not a resolution: the same pass as Check now (`POST /targets/{t}/reconcile`),
+    audited `target.checked` with who asked; the conflict closes itself when the add-on stops
+    reporting it, and inside the add-on's cooldown the page says when it can read again.
+  `adopted` and `kept` are decisions: reserved before the call, repeatable as a repair, and closed by
+  the sweep carrying the decision. Every resolution is audited `merge_finding.decided` with who and why.
+  No plan-gate surface: `account.adopt` and `account.release` are confirmed one-shot operations, as
+  from the inventory.
 - **Shown (7t-4).** `MergeFindings` renders the add-on's `detail` then `next` as written, the
   holders of an `ambiguous` conflict, the other person of a `claimed_twice` one by name, and the
-  one action **Stop tracking** (the system page's own `account.release` control) through the
-  decision form, whose line says only what stopping does to the system (nothing on it is changed):
+  default action **Stop tracking** (the system page's own `account.release` control) through the
+  decision form (7t-7: with the answers above as one choice at a time, safest first and
+  preselected, Check again first for `ambiguous`, each with its own sentence beside the button and
+  both people named, `conflictChoices`), whose line says only what stopping does to the system (nothing on it is changed):
   whether to adopt the holder, or what the next change does, is the add-on's `next`, said once and
   never inferred from `reason`. The holder's number is Advanced's Technical detail. A resolved row leaves with the list's leaving
   motion. Pending changes and Withdrawn access say why a change stopped through one helper

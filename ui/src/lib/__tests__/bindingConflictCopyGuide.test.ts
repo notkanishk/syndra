@@ -4,11 +4,20 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  ADOPT_IT,
+  CHECK_AGAIN,
   CONFLICT_NEXT_FALLBACK,
   OTHER_PERSON,
   STOP_TRACKING,
+  adoptConsequence,
+  checkAgainConsequence,
+  checkStopped,
+  closesAtNextCheck,
   conflictDetailFallback,
   holdersLine,
+  keepConsequence,
+  keepFor,
+  stillReported,
   stopTrackingConsequence,
 } from "@/components/targets/bindingConflict";
 import { inventoryNotRead, whyNotChecked } from "@/lib/format";
@@ -33,6 +42,16 @@ describe("the binding conflict's copy guide rows", () => {
       holdersLine(S, ["{a}", "{b}"]),
       STOP_TRACKING,
       stopTrackingConsequence(S),
+      // 7t-7: the other answers, and Check again.
+      ADOPT_IT,
+      adoptConsequence(S, "{holder}"),
+      keepFor("{name}"),
+      keepConsequence(S, "{holder}", "{keeper}", "{other}"),
+      CHECK_AGAIN,
+      checkAgainConsequence(S),
+      stillReported(S),
+      checkStopped("{why}"),
+      closesAtNextCheck(S),
       decideStep(S),
       DECIDE_IT,
       LOOKING_UP_NEXT,
@@ -106,6 +125,21 @@ describe("the binding conflict's copy guide rows", () => {
     ] as const) {
       expect(source, `the page no longer says ${text}`).toContain(text);
       expect(section, `design.md §16 does not carry ${text}`).toContain(text.replace("${system}", "{system}"));
+    }
+  });
+
+  it("quotes the add-on's adoptable next steps and its stale refusals as the Go source says them", () => {
+    const read = (path: string) => readFileSync(resolve(__dirname, path), "utf8");
+    const apply = read("../../../../addons/truenas/apply.go");
+    const operations = read("../../../../addons/truenas/operations.go");
+    for (const [source, go] of [
+      [apply, "Adopt %s if it is theirs. If it is not, stop tracking this person's old account; the next change creates a new one for them."],
+      [apply, "Adopt %s if it is theirs. If it is not, stop tracking this person's old account, or rename %s on TrueNAS."],
+      [operations, "%s on TrueNAS is no longer the account you were shown. Check again to see it as it is now."],
+      [operations, "%s can no longer be adopted for this person: TrueNAS changed since it was checked. Check again to see it as it is now."],
+    ] as const) {
+      expect(source, `the add-on no longer says ${go}`).toContain(go);
+      expect(section, `design.md §16 does not carry ${go}`).toContain(go.replaceAll("%s", "{name}"));
     }
   });
 

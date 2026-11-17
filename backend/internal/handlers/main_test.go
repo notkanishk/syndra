@@ -47,6 +47,8 @@ func TestMain(m *testing.M) {
 	dbBundleIncludesAnything = func(context.Context, string) (bool, error) { return false, nil }
 	dbRetireBlockers = func(context.Context, string) ([]string, error) { return nil, nil }
 	dbInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
+	// Nothing is audited unless a test says so (it writes Postgres).
+	dbInsertAuditLogDetails = func(context.Context, string, string, string, string, any) error { return nil }
 	// The welcome switch is off unless a test says so (it reads Postgres).
 	svcWelcomeClaims = func(context.Context) (claimserve.Welcome, error) { return claimserve.Welcome{}, nil }
 	// A Change is delivered as its plan said, with nothing sent anywhere: a
