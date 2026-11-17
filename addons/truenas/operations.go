@@ -442,6 +442,7 @@ func (s *server) refuseSelfAccount(username string) error {
 // for whoever is using it, and appears in the unmanaged inventory on the next
 // read — which is exactly what it now is.
 func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, error) {
+	unchecked := false
 	binding, found, err := s.store.GetBinding(req.Subject)
 	if err != nil {
 		return OperationResult{}, http.StatusInternalServerError, err
@@ -460,13 +461,12 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 	if want, typed := req.Params["account_id"].(string); req.Params["account_id"] != nil && !typed {
 		return OperationResult{}, http.StatusBadRequest, fmt.Errorf("account_id must be a string")
 	} else if want != "" {
-		names, status, err := s.bindingNames(req, binding)
-		if err != nil {
-			return OperationResult{}, status, err
-		}
-		// A binding that names no account now (a contract-1 one whose account is gone) has nothing
-		// a release could wrongly drop.
-		if names != "" && names != want {
+		// Only a binding whose own uid is a real account id answers it. A contract-1 binding's uid
+		// may be a record key, and matching it to an account takes a NAS read: a release never
+		// needs the NAS, so that one is released unchecked and the reply says so.
+		if floor, ceiling := s.idRange(); !binding.ownsUID(floor, ceiling) {
+			unchecked = true
+		} else if accountID(binding.UID) != want {
 			return OperationResult{}, http.StatusConflict, errors.New("This person's record on TrueNAS now names a different account " +
 				"from the one Syndra meant, so nothing was released. Check again to see it as it is now.")
 		}
@@ -487,33 +487,15 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 	if floor, ceiling := s.idRange(); binding.ownsUID(floor, ceiling) {
 		released = accountID(binding.UID)
 	}
+	detail := "Syndra no longer manages " + binding.Username +
+		". Nothing on the target was changed — the account still exists and still works."
+	if unchecked {
+		detail += " This record predates account ids, so it was released without checking which account it named."
+	}
 	return OperationResult{
 		Operation: "account.release", Subject: req.Subject, Outcome: "succeeded",
-		AccountID: released,
-		Detail: "Syndra no longer manages " + binding.Username +
-			". Nothing on the target was changed — the account still exists and still works.",
+		AccountID: released, Detail: detail,
 	}, http.StatusOK, nil
-}
-
-// bindingNames is the account_id a binding names, for release's precondition: its own uid when
-// that is a real one (the release then needs no NAS, as it must not); for a contract-1 binding,
-// whose uid may be a record key, the account the module finds for it now (resolveLive, a read),
-// or the account two bindings claim. "" when it names none.
-func (s *server) bindingNames(req OperationRequest, b Binding) (string, int, error) {
-	if floor, ceiling := s.idRange(); b.ownsUID(floor, ceiling) {
-		return accountID(b.UID), 0, nil
-	}
-	r, _, err := s.resolveLive(req.Subject, nil)
-	switch {
-	case err != nil:
-		status, refusal := liveRefusal(err)
-		return "", status, refusal
-	case r.Account != nil:
-		return accountID(r.Account.UID), 0, nil
-	case r.Conflict != nil && r.Conflict.claimedTwice:
-		return r.Conflict.AccountID, 0, nil
-	}
-	return "", 0, nil
 }
 
 // rotatePassword mints a new credential, applies it, and returns nothing.

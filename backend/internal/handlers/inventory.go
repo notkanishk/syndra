@@ -277,8 +277,13 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		ActorID:   resolveActor(r, ""),
 		SubjectID: subject,
 		Confirmed: req.Confirmed,
-		// The account this row shows, as the precondition: never a newer one bound since.
-		Params: releaseParams(boundAccountID(r.Context(), target, subject)),
+		// No account_id precondition. This page lists a person the add-on's own /subjects read
+		// attributes no account to; the only id Syndra holds for them is its mirror's, which only
+		// an apply or adopt refreshes, so sending it could refuse the same release every time while
+		// "Check again" changed nothing. The add-on releases what it binds (account.release's
+		// account_id is optional); the findings' Stop tracking, whose id comes from the add-on's
+		// own report, still sends one.
+		Params: releaseParams(""),
 		About:  boundUsername(r.Context(), target, subject),
 	})
 	if err != nil {

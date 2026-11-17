@@ -709,7 +709,18 @@ func callTarget(ctx context.Context, f db.MergeFinding, resolution, actor string
 		return targetDone{}, releaseOnTarget(ctx, f.Target, f.SubjectID, actor, releasedAccount(ctx, f))
 	case db.ResolutionKept:
 		// The account both claimed: if the other person was released and bound again
-		// since, their new account is not this one, and the add-on refuses.
+		// since, their new account is not this one, and the add-on refuses. And the person it is
+		// kept FOR must still be tracked: untracked elsewhere in between, releasing the other
+		// would leave the account bound to nobody. Whether they are bound is what Syndra's own
+		// row says (an id on it can lag, so only its presence is judged: a refusal "Check again"
+		// could not clear would be the same wedge). Same on a Finish: it runs this again.
+		if _, bound, err := dbGetTargetBinding(ctx, f.Target, f.SubjectID); err != nil {
+			return targetDone{}, fmt.Errorf("read this person's record on %s: %w", f.Target, err)
+		} else if !bound {
+			return targetDone{}, fmt.Errorf("%w: This person is no longer tracked for that account, so letting go of the other "+
+				"person's claim would leave it with nobody. Nothing was changed. Check again to see who holds it now, "+
+				"then choose from what it shows.", errReleaseRefused)
+		}
 		return targetDone{}, releaseOnTarget(ctx, f.Target, conflictOf(f).BoundTo, actor, conflictOf(f).AccountID)
 	case db.ResolutionAdopted:
 		id, err := adoptOnTarget(ctx, f, actor)

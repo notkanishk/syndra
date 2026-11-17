@@ -36,7 +36,7 @@ func bindingConflict(id, subject, theirs string) db.MergeFinding {
 
 func stubConflictActions(t *testing.T, f db.MergeFinding) *conflictActions {
 	t.Helper()
-	h := &conflictActions{findingHarness: &findingHarness{finding: f}}
+	h := &conflictActions{findingHarness: &findingHarness{finding: f, tracked: true}}
 	stubFindings(t, h.findingHarness)
 	list, record, decide, resolve, audit, dispatch := dbStandingMergeFindings, dbRecordTargetBinding,
 		dbRecordMergeDecision, dbResolveMergeFinding, dbInsertAuditLogDetails, svcDispatchOperation

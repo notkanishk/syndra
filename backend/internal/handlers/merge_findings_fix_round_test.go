@@ -135,15 +135,19 @@ func TestAStaleKeepIsRefusedAndGivesBothReservationsBack(t *testing.T) {
 	}
 }
 
-// The system page's Stop tracking names the account its row shows.
-func TestTheSystemPagesReleaseNamesTheAccountItShows(t *testing.T) {
+// The system page lists people /subjects attributes no account to, so it names none: Syndra's mirror
+// id can be stale and only an apply refreshes it, which made the same refusal repeat.
+func TestTheSystemPagesReleaseSendsNoAccountFromTheMirror(t *testing.T) {
 	h := &releaseHarness{}
 	stubRelease(t, h)
 	dbGetTargetBinding = func(context.Context, string, string) (db.TargetBinding, bool, error) {
 		return db.TargetBinding{Username: "roman.reigns", AccountID: strp("3999")}, true, nil
 	}
-	if rr := release(t, `{"confirmed":true}`); rr.Code != http.StatusOK || h.dispatched[0].Params["account_id"] != "3999" {
-		t.Fatalf("want the release to name 3999, got %d %+v", rr.Code, h.dispatched)
+	if rr := release(t, `{"confirmed":true}`); rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d %+v", rr.Code, h.dispatched)
+	}
+	if _, named := h.dispatched[0].Params["account_id"]; named {
+		t.Fatalf("a stale mirror id must not be sent: %+v", h.dispatched[0].Params)
 	}
 }
 
@@ -158,6 +162,32 @@ func releasedReservations(t *testing.T) *[]string {
 		return nil
 	}
 	return &out
+}
+
+// Keeping it for a person who is no longer tracked (untracked elsewhere since) would leave the
+// account bound to nobody: refused in words with a next step, nothing released, both reservations
+// given back. The same on a Finish, which runs the same call again.
+func TestKeepingItForSomeoneNoLongerTrackedIsRefused(t *testing.T) {
+	for _, decided := range []string{"", "kept"} {
+		t.Run("decided="+decided, func(t *testing.T) {
+			f := bindingConflict("f1", "sub-1", claimedTwice)
+			f.Decision = decided
+			h := stubConflictActions(t, f)
+			h.tracked = false
+			h.others = []db.MergeFinding{bindingConflict("f2", "sub-2", `{"subject":"sub-2","reason":"claimed_twice","bound_to":"sub-1"}`)}
+			cleared := releasedReservations(t)
+			rr := resolveFinding(t, `{"resolution":"kept","reason":"bob is sub-1's"}`)
+			if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "no longer tracked") || !strings.Contains(rr.Body.String(), "Check again") {
+				t.Fatalf("want 409 in words with a next step, got %d %s", rr.Code, rr.Body.String())
+			}
+			if len(h.dispatched) != 0 || len(h.forgotten) != 0 {
+				t.Fatalf("nothing released or forgotten: %v %v", h.dispatched, h.forgotten)
+			}
+			if decided == "" && strings.Join(*cleared, ",") != "f1:kept,f2:unbound" {
+				t.Fatalf("both reservations given back: %v", *cleared)
+			}
+		})
+	}
 }
 
 type errString string
