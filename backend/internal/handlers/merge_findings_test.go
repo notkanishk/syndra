@@ -27,6 +27,8 @@ import (
 // operator believes they have decided.
 
 type findingHarness struct {
+	// tracked: Syndra has its own row for the finding's person (the person a keep is kept for).
+	tracked    bool
 	finding    db.MergeFinding
 	getErr     error
 	converged  []db.SystemConvergence
@@ -123,8 +125,9 @@ func stubFindings(t *testing.T, h *findingHarness) {
 	}
 	getBinding := dbGetTargetBinding
 	t.Cleanup(func() { dbGetTargetBinding = getBinding })
-	dbGetTargetBinding = func(context.Context, string, string) (db.TargetBinding, bool, error) {
-		return db.TargetBinding{}, false, nil
+	dbGetTargetBinding = func(_ context.Context, _, subject string) (db.TargetBinding, bool, error) {
+		// A kept finding's person is tracked unless a test says otherwise; every other caller sees none.
+		return db.TargetBinding{}, subject == h.finding.SubjectID && h.tracked, nil
 	}
 	dbForgetTargetBinding = func(_ context.Context, _, subject string) error {
 		if h.forgetErr != nil {

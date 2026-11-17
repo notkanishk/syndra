@@ -481,6 +481,10 @@ func TestPresenceIsBySubjectNeverByNameOrNumber(t *testing.T) {
 	if live, stale := partitionByPresence(b, reused, nil, nil); len(live) != 0 || len(stale) != 1 {
 		t.Error("an account the add-on attributes to nobody is not the member's, whatever name and number it holds")
 	}
+	// The stale row carries the version of the record it was read from, for the page's release.
+	if _, stale := partitionByPresence(b, reused, nil, nil); stale[0].Version != b[0].Version() || stale[0].Version == "" {
+		t.Errorf("a stale binding names its record's version: %+v", stale)
+	}
 }
 
 // A conflicted subject and one with an apply in flight are neither live nor

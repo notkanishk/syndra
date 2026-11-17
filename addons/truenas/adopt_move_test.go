@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -211,17 +212,29 @@ func TestAReleaseForAnAccountTheBindingNoLongerNamesIsRefused(t *testing.T) {
 	}
 }
 
-// A contract-1 binding (no marker, uid maybe a record key) is matched by the account the module finds.
-func TestAReleasePreconditionOnALegacyBindingAsksTheModule(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"bob","id":11,"uid":3051,"locked":false,"smb":false,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "bob", UID: 11}); err != nil {
-		t.Fatal(err)
-	}
-	if _, status, err := s.releaseAccount(OperationRequest{Subject: "sub-1", Params: map[string]any{"account_id": "11"}}); status != http.StatusConflict || err == nil {
-		t.Fatalf("the record key is not the account: want 409, got %d %v", status, err)
-	}
-	if _, status, err := s.releaseAccount(OperationRequest{Subject: "sub-1", Params: map[string]any{"account_id": "3051"}}); err != nil || status != http.StatusOK {
-		t.Fatalf("the account its name finds: want 200, got %d %v", status, err)
+// A contract-1 binding (no marker, uid maybe a record key) is released without the check, and the
+// NAS is never read: unreachable, or the name recreated with a new uid, it still releases, in words.
+func TestAReleaseOfALegacyBindingNeverNeedsTheNAS(t *testing.T) {
+	for name, nas := range map[string]string{
+		"unreachable": "",
+		"recreated":   `[{"username":"bob","id":99,"uid":4242,"locked":false,"smb":false,"groups":[]}]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, _ := applyServer(t, nas)
+			if nas == "" {
+				s.nas = newNAS(func() (rpc, error) { return nil, errors.New("unreachable") }, []string{"25.04"})
+			}
+			if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "bob", UID: 11}); err != nil {
+				t.Fatal(err)
+			}
+			res, status, err := s.releaseAccount(OperationRequest{Subject: "sub-1", Params: map[string]any{"account_id": "3051"}})
+			if err != nil || status != http.StatusOK || !strings.Contains(res.Detail, "released without checking") {
+				t.Fatalf("want 200 in words, got %d %v %+v", status, err, res)
+			}
+			if _, bound, _ := s.store.GetBinding("sub-1"); bound {
+				t.Fatal("released")
+			}
+		})
 	}
 }
 
