@@ -50,7 +50,7 @@ var idCases = []idCase{
 		`[{"username":"bob_renamed","id":11,"uid":300001,"locked":false,"smb":false,"groups":[]}]`, "bob_renamed", false},
 	{"legacy record key, found by name", Binding{Username: "bob", UID: 11},
 		`[{"username":"bob","id":11,"uid":3051,"locked":false,"smb":false,"groups":[]}]`, "bob", false},
-	// Legacy policy B (design 7t D6, pending owner Q2): halts, creates nothing. Policy A
+	// Legacy policy B (design 7t D6, confirmed by the owner 17 Nov 2026): halts, creates nothing. Policy A
 	// (legacyHaltsOnHeldNumber false) reads it as gone: re-created beside the holder, who is
 	// still never its account. Either answer is asserted by flipping the one constant.
 	{"legacy out of range, number held by another name", Binding{Username: "bob", UID: 3051},

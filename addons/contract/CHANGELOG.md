@@ -17,12 +17,12 @@ same attribution as `/subjects` (`profiles/storage/homes.json`), and its
 ## The add-on says whose account is whose (slice 7t-2, 15 Nov 2026)
 
 A change to major 2 before its release, not a new major or a feature (no
-contract-2 add-on has shipped; pending owner Q4). Each `/subjects` row
+contract-2 add-on has shipped; confirmed by the owner 17 Nov 2026). Each `/subjects` row
 carries `subject`, the subject the add-on's binding names that account for,
 absent when none does; the reply carries `conflicts`, every binding that
 names no account because another account holds its name or number, with the
 holder and the add-on's own `detail` and `next`. `account_id` keeps its
-value (the uid on TrueNAS; pending owner Q1) and loses a claim it could not
+value (the uid on TrueNAS; confirmed by the owner 17 Nov 2026) and loses a claim it could not
 keep: it is unique within one read and survives a rename, but it is not an
 identity across reads, since an app can hand a deleted account's id to a new
 one (SCIM, RFC 7643 §3.1: `subject` plays `externalId`).

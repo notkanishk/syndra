@@ -480,7 +480,7 @@ func writeResolutionError(w http.ResponseWriter, err error) {
 // both from any caller.
 //
 // A `binding_conflict` takes `unbound` alone (stop tracking: account.release,
-// the add-on's own next step; design 7t §3, pending owner Q5). Re-provisioning
+// the add-on's own next step; design 7t §3, confirmed by the owner 17 Nov 2026). Re-provisioning
 // is the create the add-on refuses, there is no account of the subject's to
 // keep or take a value on, and adopting the holder has its one place, Not
 // created by Syndra, once the binding is released.
