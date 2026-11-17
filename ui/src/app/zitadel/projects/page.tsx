@@ -198,7 +198,7 @@ function RoleRow({
 
   return (
     <>
-      <div className={`row-divider flex flex-col items-start gap-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-(--row-gap)`}>
+      <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center`}>
         <span className="min-w-[200px] flex-1 text-[14.5px] [overflow-wrap:anywhere]">
           {role.displayName || role.key} <Mono className="text-faint">{role.key}</Mono>
         </span>

@@ -629,7 +629,7 @@ function PersonRow({
   // anything about them needs doing — plus the sentence explaining why they
   // are in the list. Team and bundles fold away: both are one tap deeper, on
   // the person's own page, and neither is what this screen is scanned for.
-  const shared = `row-divider flex flex-col items-start gap-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center tablet:gap-(--row-gap)`;
+  const shared = `row-divider flex flex-col items-start gap-y-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center`;
 
   if (!bulkMode) {
     return (

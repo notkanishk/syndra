@@ -348,7 +348,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
           {visible.map((entry) => (
             <LeavingRow key={entry.id} {...leaving.props(entry.id)}>
             <div
-              className={`row-divider flex flex-col items-start gap-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-(--row-gap) desktop:flex-nowrap ${
+              className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center desktop:flex-nowrap ${
                 selection.isSelected(entry.id) ? "bg-accent-soft" : ""
               }`}
               {...selection.rowProps(entry.id)}
@@ -650,7 +650,7 @@ function YourRequests({
         {mine.map((entry) => (
           <div
             key={entry.id}
-            className={`row-divider flex flex-col items-start gap-2 ${ROW} tablet:flex-row tablet:items-center tablet:gap-(--row-gap)`}
+            className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:items-center`}
           >
             <div className="w-full min-w-0 tablet:flex-1">
               {/* The role, not only the place: two asks on one project were

@@ -203,7 +203,7 @@ export default function ProjectDetailPage({
             return (
               <div
                 key={role.role_key}
-                className="row-divider flex flex-wrap items-start gap-[18px] px-5 py-3.5"
+                className="row-divider row-cols flex flex-wrap items-start gap-y-[18px] px-5 py-3.5"
               >
                 <div className="min-w-[min(220px,100%)] flex-1">
                   <div className="text-[15px] font-semibold">

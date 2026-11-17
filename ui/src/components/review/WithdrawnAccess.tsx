@@ -419,7 +419,7 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
   const looking = lookingUp(row, conflicts.loading);
   const decide = decideAt(row, conflicts.stands);
   return (
-    <div className={`row-divider flex flex-col items-start gap-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-(--row-gap)`}>
+    <div className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-start`}>
       <WhoSeat id={row.user_id} />
 
       <WhatSeat

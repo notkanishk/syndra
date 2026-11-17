@@ -161,7 +161,7 @@ function PersonRow({
 
   return (
     <>
-      <CardRow id={`person-${account.subject_id}`} data-account={account.subject_id} className="scroll-mt-4 flex-wrap gap-y-1.5">
+      <CardRow id={`person-${account.subject_id}`} data-account={account.subject_id} className="scroll-mt-4">
         <span className="flex w-[220px] flex-none items-center gap-2.5">
           <UserAvatar id={account.subject_id} size="row" />
           <span className="min-w-0">

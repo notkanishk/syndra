@@ -895,7 +895,7 @@ function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) 
       : "Syndra gave this and Zitadel does not have it, so the change never went through.";
   return (
     <div data-compared-row className="border-l-[3px] border-transparent">
-      <div className="row-divider flex flex-wrap items-start gap-x-[18px] gap-y-3 px-5 py-4">
+      <div className="row-divider row-cols flex flex-wrap items-start gap-y-3 px-5 py-4">
         <WhoSeat id={row.userId} />
         <WhatSeat projectId={row.projectId} roleKeys={[row.role]} />
         <div className="order-last flex w-full min-w-0 flex-col items-start gap-1 desktop:order-none desktop:w-auto desktop:flex-1">
@@ -955,7 +955,7 @@ function TriageRow({
       className={isSafety(item) ? "border-l-[3px] border-danger" : "border-l-[3px] border-transparent"}
     >
       <div
-        className={`row-divider flex flex-wrap items-start gap-x-[18px] gap-y-3 px-5 py-4 ${
+        className={`row-divider row-cols flex flex-wrap items-start gap-y-3 px-5 py-4 ${
           selection.isSelected(item.id) ? "bg-accent-soft" : ""
         }`}
         {...selection.rowProps(item.id)}

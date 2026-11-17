@@ -115,12 +115,12 @@ export default function AutomaticRulesPage() {
             <div
               key={rule.id}
               // ROW's box split in two: the row's padding is on the button inside, so its tint is the row's height.
-              className="row-divider flex w-full min-h-[60px] items-center gap-3 px-(--card-x) tablet:min-h-0 tablet:gap-(--row-gap)"
+              className="row-divider row-cols flex w-full min-h-[60px] items-center px-(--card-x) tablet:min-h-0"
             >
               <button
                 type="button"
                 onClick={() => setEditing(rule)}
-                className="flex min-w-0 flex-1 flex-col items-start gap-1.5 py-(--row-y) text-left hover-tint tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px]"
+                className="row-cols flex min-w-0 flex-1 flex-col items-start gap-y-1.5 py-(--row-y) text-left hover-tint tablet:flex-row tablet:flex-wrap tablet:items-center"
               >
                 <span className="w-full text-[14.5px] tablet:min-w-[320px] tablet:flex-1">
                   <span className="text-muted">

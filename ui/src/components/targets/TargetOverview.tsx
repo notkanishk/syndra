@@ -15,7 +15,7 @@ import { MergeFindings } from "@/components/targets/MergeFindings";
 import { OVERVIEW_LEDE, OVERVIEW_TITLE } from "@/components/usage/copy";
 import { StatsRetention } from "@/components/targets/StatsRetention";
 import { TargetStats } from "@/components/usage/TargetStats";
-import { Region, REGION_GAP } from "@/components/targets/Region";
+import { Region } from "@/components/targets/Region";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -160,7 +160,7 @@ export function TargetOverview({ target }: { target: string }) {
       )}
 
       <div className="grid gap-(--region-gap)">
-        <SectionPill sections={sections} label="Regions of this page" gap={REGION_GAP} />
+        <SectionPill sections={sections} label="Regions of this page" gap="var(--region-gap)" />
         {/* Region 0 · whether changes can land.
 
             Health and maintenance are one question, and they used to sit six

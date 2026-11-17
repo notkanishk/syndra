@@ -493,7 +493,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                 sections={sections}
                 label="Projects on this page"
                 onOpen={openProject}
-                gap={16}
+                gap="16px"
               />
             </>
           )}

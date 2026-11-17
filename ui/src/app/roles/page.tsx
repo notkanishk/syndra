@@ -211,7 +211,7 @@ export default function RolesPage() {
           all.length > 0 ? (
             <div className="flex flex-col gap-1">
               <ReadFreshness state={readState} subject="What Zitadel confirmed" />
-              <p className="max-w-[92ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+              <p data-prose className="max-w-[92ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
                 Roles made straight in Zitadel, on a project Syndra cannot read, are not listed.{" "}
                 <ArrowLink href="/zitadel/projects" className="whitespace-nowrap">
                   Check a project&rsquo;s roles in Zitadel
@@ -284,7 +284,7 @@ export default function RolesPage() {
             <Link
               data-row
               href={`/projects/${role.project_id}/roles/${encodeURIComponent(role.role_key)}`}
-              className={`row-divider flex flex-col items-start gap-1 ${ROW} hover-tint tablet:flex-row tablet:items-center tablet:gap-(--row-gap)`}
+              className={`row-divider flex flex-col items-start gap-y-1 ${ROW} hover-tint tablet:flex-row tablet:items-center`}
             >
               {/* Under the project's own label the name is not said again, unless Syndra could not
                   name it: then the id beside "Unknown project" is all there is to tell two apart. */}

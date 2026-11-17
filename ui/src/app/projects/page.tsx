@@ -159,7 +159,7 @@ export default function ProjectsPage() {
             <Link
               data-row
               href={`/projects/${entry.project.id}`}
-              className={`row-divider flex flex-col items-start gap-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center tablet:gap-(--row-gap)`}
+              className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center`}
             >
               {/* The project's name, and — when there are no roles — the fact
                   that nothing in it can be granted. The sentence lives HERE and

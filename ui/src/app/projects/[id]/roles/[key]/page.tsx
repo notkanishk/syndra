@@ -206,7 +206,7 @@ export default function RoleMembersPage({
               data-row
               key={person.id}
               href={`/users/${person.id}`}
-              className={`row-divider flex items-center gap-3 ${ROW} hover-tint`}
+              className={`row-divider flex items-center ${ROW} hover-tint`}
             >
               <Avatar name={person.name} />
               <span className="min-w-0 flex-1">
@@ -267,7 +267,7 @@ function MemberRow({
     });
 
   return (
-    <div className={`row-divider flex flex-col items-start gap-1.5 ${ROW} tablet:flex-row tablet:items-center tablet:gap-(--row-gap)`}>
+    <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:items-center`}>
       <Avatar name={member.user.name} />
       <Link
         href={`/users/${member.user.id}`}

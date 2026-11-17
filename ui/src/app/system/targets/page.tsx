@@ -221,9 +221,9 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           time it began faint under it. */}
       <span className="flex flex-col gap-[3px] text-[13.5px] tablet:w-[180px] tablet:shrink-0">
         <ReadingWord reading={reading} recent={row.health?.recent ?? []} />
-        {reading.line && <span className="pl-4 text-[12.5px] text-faint">{reading.line}</span>}
+        {reading.line && <span className="pl-(--dot-indent) text-[12.5px] text-faint">{reading.line}</span>}
         {row.health?.last_answered_at ? (
-          <span className="pl-4 text-[12.5px] text-faint">
+          <span className="pl-(--dot-indent) text-[12.5px] text-faint">
             Last answered <Relative iso={row.health.last_answered_at} />
           </span>
         ) : (
@@ -231,7 +231,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           !reading.line &&
           answering &&
           row.health?.checked_at && (
-            <span className="pl-4 text-[12.5px] text-faint">
+            <span className="pl-(--dot-indent) text-[12.5px] text-faint">
               Answered <Relative iso={row.health.checked_at} />
             </span>
           )

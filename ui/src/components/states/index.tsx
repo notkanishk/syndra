@@ -116,7 +116,7 @@ export function EmptyState({
   lift?: boolean;
 }) {
   return (
-    <div role="status" className={`${lift ? "lift-in" : "tint-in"} flex flex-col justify-center gap-2.5 px-(--card-x) py-(--empty-y)`}>
+    <div role="status" className={`${lift ? "lift-in" : "tint-in"} flex flex-col justify-center gap-2.5 px-6 py-(--empty-y) tablet:px-(--card-x)`}>
       <div className="flex items-center gap-2.5">
         {resolved && (
           <StatusDot tone="healthy" bloom={bloom} />

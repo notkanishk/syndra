@@ -193,7 +193,7 @@ export default function AuditPage() {
           {drawn.map((entry) => (
             <LeavingRow key={entry.id} {...leaving.props(entry.id)}>
             <div
-              className={`row-divider flex flex-col items-start gap-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-baseline tablet:gap-(--row-gap)`}
+              className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-baseline`}
             >
               <Mono className="text-faint tablet:w-[124px] tablet:shrink-0">
                 {formatWhen(entry.created_at)}

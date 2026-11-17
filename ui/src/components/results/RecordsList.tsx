@@ -61,7 +61,7 @@ export function RecordsList({ result, name, reader }: { result: RecordsResult; n
           </CardColumns>
           <ul className={`m-0 flex list-none flex-col p-0 ${view.className}`}>
             {rows.map((r) => (
-              <li key={r.id} className="row-divider flex flex-wrap items-start gap-x-4 gap-y-2 py-3 first:border-t-0 first:pt-0 tablet:flex-nowrap tablet:gap-x-[18px]">
+              <li key={r.id} className="row-divider row-cols flex flex-wrap items-start gap-y-2 py-3 first:border-t-0 first:pt-0 tablet:flex-nowrap">
                 <span className="flex min-w-[200px] flex-1 flex-col gap-0.5">
                   <span className="text-[14.5px] font-semibold [overflow-wrap:anywhere]">{r.label}</span>
                   {r.category && <span className="text-[13px] text-faint">{r.category}</span>}

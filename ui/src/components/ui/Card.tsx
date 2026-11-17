@@ -69,7 +69,7 @@ export function CardHeader({
         : "bg-accent-dense text-accent-ink";
 
   return (
-    <div className={`flex flex-wrap items-center gap-x-[11px] gap-y-2 px-(--card-x) py-(--card-head-y) ${className}`}>
+    <div className={`flex flex-wrap items-center gap-[11px] px-(--card-x) py-(--card-head-y) tablet:gap-y-2 ${className}`}>
       <span className="type-card-title">{title}</span>
       {/* Hollow at zero, filled otherwise — the same thing `CountChip` says on
           a region heading. A solid badge is an alarm, and a solid `0` beside
@@ -89,7 +89,11 @@ export function CardHeader({
       <span className="flex-1" />
       {note && <span className="text-[13.5px] text-faint">{note}</span>}
       {action}
-      {caption && <p className="measure basis-full text-small text-muted">{caption}</p>}
+      {caption && (
+        <p data-prose className="measure basis-full text-small text-muted">
+          {caption}
+        </p>
+      )}
     </div>
   );
 }
@@ -115,9 +119,35 @@ export function CardHeader({
  *
  * The row's anatomy (D-1 §4): `children` are its parts, `action` sits in the
  * seat at the right of its first line, `detail` is the sentence under it. A
- * row whose `onToggle` makes it a button holds no `action`: a button cannot
- * hold a button.
+ * row whose `onToggle` makes it a button takes neither, and the types say so:
+ * a button cannot hold a button, and a `<p>` is not phrasing content.
  */
+type RowProps = React.HTMLAttributes<HTMLDivElement> & {
+  first?: boolean;
+  disclosure?: React.ReactNode;
+  expanded?: boolean;
+  /**
+   * The seat's width, which is the table's: the most verbs any of its rows can
+   * show. Pass it on every row of the table, with or without an `action`, and
+   * an empty seat keeps its place.
+   */
+  seat?: Seat;
+  /** More than one line: top-aligned from tablet, each part's first line on the seat's. */
+  top?: boolean;
+};
+
+export type CardRowProps = RowProps &
+  (
+    | {
+        onToggle?: undefined;
+        /** A button or an ArrowLink, in the action seat: never inside a sentence. */
+        action?: React.ReactNode;
+        /** The sentence that explains the row, under its first line, at the measure. */
+        detail?: React.ReactNode;
+      }
+    | { onToggle: () => void; action?: never; detail?: never }
+  );
+
 export function CardRow({
   className = "",
   first = false,
@@ -130,29 +160,14 @@ export function CardRow({
   top = false,
   children,
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & {
-  first?: boolean;
-  disclosure?: React.ReactNode;
-  expanded?: boolean;
-  onToggle?: () => void;
-  /** A button or an ArrowLink, in the action seat: never inside a sentence. */
-  action?: React.ReactNode;
-  /**
-   * The seat's width, which is the table's: the most verbs any of its rows can
-   * show. Pass it on every row of the table, with or without an `action`, and
-   * an empty seat keeps its place.
-   */
-  seat?: Seat;
-  /** The sentence that explains the row, under its first line, at the measure. */
-  detail?: React.ReactNode;
-  /** More than one line: top-aligned, each part's first line on the seat's. */
-  top?: boolean;
-}) {
+}: CardRowProps) {
   // One definition of the line, used by all three shapes. It used to be typed
   // twice, and the copies had already drifted: only one of them lifted its
-  // 60px floor above the tablet breakpoint. `row-top` and `items-center` are
-  // never both present: two alignments on one element is a coin toss.
-  const line = `flex flex-wrap gap-x-(--row-gap) gap-y-1 ${ROW} ${top ? "row-top" : "items-center"} ${className}`;
+  // 60px floor above the tablet breakpoint. A wrapped part sits a gap under the
+  // line on a phone (its 44px control would otherwise touch the text above it)
+  // and 4px under it from tablet. A `top` row is centred on a phone, where its
+  // seat wraps, and top-aligned from tablet: one alignment per breakpoint.
+  const line = `flex flex-wrap gap-y-(--row-gap) tablet:gap-y-1 ${ROW} items-center ${top ? "row-top tablet:items-start" : ""} ${className}`;
   const parts = (
     <>
       {children}
@@ -245,7 +260,7 @@ export function CardColumns({
 }: React.HTMLAttributes<HTMLDivElement> & { seat?: Seat }) {
   return (
     <div
-      className={`hidden gap-(--row-gap) px-(--card-x) py-2 text-[12.5px] font-semibold uppercase tracking-[0.09em] text-label tablet:flex ${className}`}
+      className={`row-cols hidden px-(--card-x) py-2 text-[12.5px] font-semibold uppercase tracking-[0.09em] text-label tablet:flex ${className}`}
       {...props}
     >
       {children}
@@ -264,8 +279,12 @@ function seatWidth(seat: Seat | undefined): "narrow" | "wide" | undefined {
   return seat === "default" ? undefined : seat;
 }
 
-/** The action seat: the row's last part, right-aligned, on its first line. */
-function ActionSeat({ seat, children }: { seat?: Seat; children: React.ReactNode }) {
+/**
+ * The action seat: the row's last part, right-aligned, on its first line.
+ * CardRow draws it; a list row built on `ROW` (a link, a row that stacks on a
+ * phone) puts its action in one, so no page types `row-seat` itself.
+ */
+export function ActionSeat({ seat, children }: { seat?: Seat; children?: React.ReactNode }) {
   return (
     <div data-action-seat className="row-seat" data-seat={seatWidth(seat)}>
       {children}
@@ -275,12 +294,14 @@ function ActionSeat({ seat, children }: { seat?: Seat; children: React.ReactNode
 
 /**
  * A list row's box: the touch floor on a phone (lifted from tablet up), the
- * card's inset and the row's padding (D-1 §3). CardRow is built on it; a list
- * page whose row is its own element (a link, a row that stacks on a phone)
- * takes it too, so no row keeps a 60px floor where a pointer is, and none
+ * card's inset and the row's padding (D-1 §3), and the table's column gap
+ * (`row-cols`, the one CardColumns reads, so a heading sits over its cell).
+ * CardRow is built on it; a list page whose row is its own element (a link, a
+ * row that stacks on a phone) takes it too, and states only its vertical gap
+ * (`gap-y-*`), so no row keeps a 60px floor where a pointer is, and none
  * carries its own idea of the numbers.
  */
-export const ROW = "min-h-[60px] px-(--card-x) py-(--row-y) tablet:min-h-0";
+export const ROW = "row-cols min-h-[60px] px-(--card-x) py-(--row-y) tablet:min-h-0";
 
 /**
  * The label/value pair a disclosed row is built from.

@@ -365,7 +365,7 @@ function AppRow({ app }: { app: ClaimApp }) {
   const served = SERVED.reduce((n, o) => n + (app.outcomes[o] ?? 0), 0);
   const others = Object.entries(app.outcomes).filter(([o, n]) => n > 0 && !SERVED.includes(o));
   return (
-    <div className="row-divider flex flex-col gap-1.5 px-5 py-3 text-[14px] tablet:flex-row tablet:items-baseline tablet:gap-[18px]">
+    <div className="row-divider row-cols flex flex-col gap-y-1.5 px-5 py-3 text-[14px] tablet:flex-row tablet:items-baseline">
       <span className="flex min-w-0 flex-col gap-0.5 tablet:w-[220px] tablet:shrink-0">
         {app.name && app.app_id ? (
           <Link href={`/applications/${app.app_id}`} className="font-semibold text-ink link-hover">
@@ -472,7 +472,7 @@ function ConfigLine({ row, names }: { row: ConfigRow; names: Names }) {
   const problem = PROBLEM.has(row.state);
   const fix = problem || row.state === "info" ? fixFor(row, names) : null;
   return (
-    <li className="row-divider flex flex-col gap-1 px-5 py-3 tablet:flex-row tablet:items-baseline tablet:gap-[18px]">
+    <li className="row-divider row-cols flex flex-col gap-y-1 px-5 py-3 tablet:flex-row tablet:items-baseline">
       <span className="flex min-w-0 flex-1 items-baseline gap-2.5">
         <StatusDot tone={STATE_TONE[row.state]} />
         <span className="flex min-w-0 flex-col gap-0.5">

@@ -1026,9 +1026,96 @@ describe("density and alignment (D-1)", () => {
     expect(clamped, "a clamp saturates at 1080 and gives every desktop the largest size").toEqual([]);
   });
 
-  it("gives SectionPill the regions' own gap", async () => {
-    const { REGION_GAP } = await import("@/components/targets/Region");
-    expect(`--region-gap: ${REGION_GAP}px;`).toBe(/--region-gap: \d+px;/.exec(theme)?.[0]);
+  it("gives SectionPill the regions' own gap, as the token, so the two agree at every width", () => {
+    const overview = readFileSync(resolve(SRC_ROOT, "components/targets/TargetOverview.tsx"), "utf8");
+    expect(overview).toContain('<div className="grid gap-(--region-gap)">');
+    expect(overview).toMatch(/<SectionPill[^>]*gap="var\(--region-gap\)"/);
+  });
+
+  // §8: "every phone layout is kept". The density is a window's; a phone reads
+  // the same tokens at the values it had before D-1, and the parts scope what
+  // the tokens cannot say (an inset, a wrapped gap) to tablet and up.
+  it("keeps every phone layout: the phone holds each density token at its old value", () => {
+    for (const token of [
+      "--text-title: 19px", // card and empty titles, a Notice's
+      "--region-gap: 32px",
+      "--region-head-gap: 14px",
+      "--card-head-y: 16px", // CardHeader's py-4
+      "--row-y: 14px", // a row's py-3.5
+      "--row-gap: 18px", // a row's gap-[18px], both ways
+      "--empty-y: 32px", // EmptyState's py-8
+    ]) {
+      expect(phone, `the phone block must hold ${token}`).toContain(`${token};`);
+    }
+    const read = (path: string) => readFileSync(resolve(SRC_ROOT, path), "utf8");
+    const parts: Array<[string, RegExp, string]> = [
+      ["components/states/index.tsx", /px-6 py-\(--empty-y\) tablet:px-\(--card-x\)/, "EmptyState's 24px inset on a phone"],
+      ["components/ui/Notice.tsx", /px-5 py-4 tablet:py-3\.5/, "a Notice's 16px on a phone"],
+      ["components/ui/Card.tsx", /gap-\[11px\] px-\(--card-x\) py-\(--card-head-y\) tablet:gap-y-2/, "CardHeader's 11px wrap on a phone"],
+      ["components/ui/Card.tsx", /gap-y-\(--row-gap\) tablet:gap-y-1/, "a wrapped part 18px under its row on a phone"],
+      ["components/targets/Region.tsx", /grid gap-1\.5 tablet:gap-1/, "a region's 6px heading-to-lede on a phone"],
+    ];
+    for (const [path, shape, what] of parts) expect(read(path), what).toMatch(shape);
+    // The row-top offset applies only where the seat shares the line.
+    const rowTop = css.slice(css.indexOf(":where(.row-top)") - 200, css.lastIndexOf(":where(.row-top)") + 200);
+    expect(rowTop).toContain("@media (width >= theme(--breakpoint-tablet))");
+    expect(css).not.toMatch(/@utility row-top/);
+  });
+
+  // The headings sat 2px off their cells in about ten tables: CardColumns took
+  // the token and the hand-built rows kept 18px. One grid, `row-cols`.
+  it("gives every table row and its headings one column grid, and no column gap of their own", () => {
+    const COLUMN_GAP = /(?:^|\s)(?:[a-z]+:)?gap-(?!y-)[^\s"'`]+/;
+    // Bands and panels in a table's card that are not its rows: no columns to line up.
+    const notRows: Array<[string, string]> = [
+      ["app/changes/roles-that-wait/page.tsx", "gap-3 px-5 py-3.5"], // the waiting-changes footer
+      ["components/system/ClaimsDelivery.tsx", "gap-x-3 gap-y-1.5 px-5 py-3.5"], // a part's head
+      ["components/apps/DebugMode.tsx", "gap-x-3 gap-y-1 px-5 py-2.5"], // the log's head
+    ];
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      if (!file.endsWith(".tsx")) continue;
+      const rel = file.replace(`${SRC_ROOT}/`, "");
+      const source = readFileSync(file, "utf8");
+      // A CardRow's className never states a gap: the row has its grid.
+      for (const tag of openingTags(source, "CardRow")) {
+        const cls = /className=(?:"([^"]*)"|\{`([^`]*)`\})/.exec(tag.text);
+        if (cls && /(?:^|\s)(?:[a-z]+:)?gap-/.test(cls[1] ?? cls[2])) found.push(`${rel}: <CardRow className> states a gap`);
+      }
+      if (!source.includes("<CardColumns")) continue;
+      for (const m of Array.from(source.matchAll(/(?:"|`)([^"`]*(?:row-divider|\$\{ROW\})[^"`]*)(?:"|`)/g))) {
+        const cls = m[1];
+        if (/bg-surface-0|(?:^|\s)grid(?:\s|$)/.test(cls)) continue; // a band or a grid panel
+        if (notRows.some(([path, fragment]) => rel === path && cls.includes(fragment))) continue;
+        const gap = COLUMN_GAP.exec(cls);
+        if (gap) found.push(`${rel}:${source.slice(0, m.index).split("\n").length} ${gap[0].trim()}`);
+      }
+    }
+    expect(found, `A table row takes row-cols (or ROW) and states only gap-y-*:\n  ${found.join("\n  ")}`).toEqual([]);
+    expect(theme).toContain("--row-gap: 16px;");
+    expect(namedAtRuleBody(css, "@utility", "row-cols")).toContain("column-gap: var(--row-gap);");
+  });
+
+  // §4: an action is never inside a sentence. The suite-wide DOM guard
+  // (test-utils/layout.ts) reads what is rendered; this reads what is written,
+  // so an untested screen is held too. A lede, a caption or a meta line may
+  // carry a link (they are prose); the rest wait on pass 2's seats.
+  it("never writes an action after a sentence's space", () => {
+    const allowed: Record<string, { count: number; why: string }> = {
+      "app/roles/page.tsx": { count: 1, why: "the page's caption: a link in a caption is prose" },
+      "components/apps/AppTokenScreen.tsx": { count: 2, why: "the header's meta line: a link in a meta line is prose" },
+      "components/targets/TargetOverview.tsx": { count: 1, why: "pass 2, §5 #1" },
+      "components/kinds/storage/HomeMapping.tsx": { count: 1, why: "pass 2, the home row (found 18 Nov)" },
+      "app/zitadel/users/page.tsx": { count: 1, why: "pass 2, the intro row (found 18 Nov)" },
+    };
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      if (!file.endsWith(".tsx")) continue;
+      const rel = file.replace(`${SRC_ROOT}/`, "");
+      const hits = Array.from(readFileSync(file, "utf8").matchAll(/\{" "\}\s*(?:\{[^<{}]*&&\s*)?<(?:Button|ButtonLink|ArrowLink)\b/g));
+      if (hits.length > (allowed[rel]?.count ?? 0)) found.push(`${rel}: ${hits.length}`);
+    }
+    expect(found, `An action belongs in its row's seat, not after a sentence:\n  ${found.join("\n  ")}`).toEqual([]);
   });
 
   it("lays the page frame once: main, the top bar's row and the section band read --page-x", () => {
@@ -1056,7 +1143,10 @@ describe("density and alignment (D-1)", () => {
     expect(found, `Take ROW from components/ui/Card:\n  ${found.join("\n  ")}`).toEqual([]);
   });
 
-  // §5 #30: the line under a status dot started at 14, 15 or 16px.
+  // §5 #30: the line under a status dot started at 14, 15, 16 or 18px. The
+  // suite-wide DOM guard (test-utils/layout.ts) catches any `pl-*` on a line
+  // under a rendered dot; this catches the two numbers the token replaced in
+  // source no test renders.
   it("starts a line under a status dot at --dot-indent", () => {
     const found = patternOffenders(/\bpl-\[1[45]px\]/, "pl-[14px] or pl-[15px]: use pl-(--dot-indent)");
     expect(found, describeOffenders(found)).toEqual([]);

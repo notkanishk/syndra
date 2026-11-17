@@ -91,7 +91,7 @@ export function Notice({
   const box = (
     <div
       role={blocking ? "alert" : "status"}
-      className={`flex items-start gap-3.5 rounded-panel border px-5 py-3.5 ${t.box} ${className}`}
+      className={`flex items-start gap-3.5 rounded-panel border px-5 py-4 tablet:py-3.5 ${t.box} ${className}`}
     >
       <span
         aria-hidden

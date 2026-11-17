@@ -477,7 +477,7 @@ function PendingGroups({
             <Unfold open={open}>
               {group.rows.map((row) => (
                 <LeavingRow key={row.id} {...leave(row.id)}>
-                  <div className={`row-divider flex flex-col items-start gap-1.5 ${ROW} tablet:flex-row tablet:items-center tablet:gap-(--row-gap)`}>
+                  <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:items-center`}>
                     <span className="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
                       <UserName id={row.user_id} />
                     </span>

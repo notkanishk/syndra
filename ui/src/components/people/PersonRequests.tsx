@@ -125,7 +125,7 @@ function RequestRow({
   const terms = useTerms();
 
   return (
-    <div className={`row-divider flex flex-col items-start gap-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-(--row-gap)`}>
+    <div className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center`}>
       <span className="w-full text-[14.5px] tablet:w-[250px] tablet:shrink-0">
         <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
         <span className="block text-[12.5px] text-faint">

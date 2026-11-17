@@ -173,7 +173,7 @@
      row of text 41. With a smaller title a region's boundary is carried by
      space, so that one gap grows. Kept: 28 under a page header, 16 between
      cards, every radius. */
-  --region-gap: 40px; /* region to region; REGION_GAP mirrors it for SectionPill */
+  --region-gap: 40px; /* region to region; SectionPill gives back var(--region-gap) */
   --region-head-gap: 12px; /* a region's heading to its first card */
   --card-x: 20px; /* the one inset of a card: header, rows, columns, caption, empty state */
   --card-head-y: 12px;
@@ -511,10 +511,21 @@
          taller of the two so the one number clears both. */
       --touch-nav-height: calc(69px + env(safe-area-inset-bottom));
 
-      /* The display steps' one step down (D-1 §3). A phone already had 26 for a
-         page; the heading (22) and title (17) hold at every width. */
+      /* A phone keeps the layout it had (D-1 §8): the density is for a window,
+         and a phone was already sized for a thumb. The display steps take their
+         one step down (a phone already had 26 for a page, 22 for a heading),
+         and every density token a phone reads holds the value it had before
+         D-1, so the shared parts read one token at every width and a phone
+         never sees the desktop's numbers. `design-system.test.ts` holds these. */
       --text-display: 28px;
       --text-page: 26px;
+      --text-title: 19px;
+      --region-gap: 32px;
+      --region-head-gap: 14px;
+      --card-head-y: 16px;
+      --row-y: 14px;
+      --row-gap: 18px;
+      --empty-y: 32px;
     }
   }
 
@@ -1557,16 +1568,29 @@ html.theme-fading *::after {
 /* A row of more than one line: top-aligned, with each part's first line
    centred on the seat's control, so a one-line row and a three-line row put
    their buttons at the same height. The control is --tap tall until desktop. */
-@utility row-top {
-  --row-control: var(--tap);
-  align-items: flex-start;
-
-  & > :not([data-action-seat], [data-row-detail]) {
-    padding-block: calc((var(--row-control) - 1lh) / 2);
+/* Only from tablet, where the seat shares the first line: on a phone it wraps
+   under the row, so there is no control to centre on and the padding would only
+   make the row taller (CardRow aligns a `top` row with `tablet:items-start`).
+   The control is --tap tall until desktop. In the components layer and at zero
+   specificity (`:where`), so a part that states its own padding keeps it. */
+@layer components {
+  @media (width >= theme(--breakpoint-tablet)) {
+    :where(.row-top) > :where(:not([data-action-seat], [data-row-detail])) {
+      padding-block: calc((var(--tap) - 1lh) / 2);
+    }
   }
   @media (width >= theme(--breakpoint-desktop)) {
-    --row-control: var(--control-sm);
+    :where(.row-top) > :where(:not([data-action-seat], [data-row-detail])) {
+      padding-block: calc((var(--control-sm) - 1lh) / 2);
+    }
   }
+}
+
+/* A table's column grid: the gap between a row's seats and between its column
+   headings, one token, so the headings sit over their cells. CardColumns and
+   ROW carry it; a table row states only its vertical gap (`gap-y-*`). */
+@utility row-cols {
+  column-gap: var(--row-gap);
 }
 
 @utility warn-note {

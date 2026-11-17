@@ -87,9 +87,15 @@ export function PageHeader({
       <div className="min-w-0 flex-auto">
         {eyebrow && <div className="mb-1 text-[13.5px] text-faint">{eyebrow}</div>}
         <h1 className="type-page-title">{title}</h1>
-        {meta && <div className="mt-1.5 text-body text-muted">{meta}</div>}
+        {meta && (
+          <div data-prose className="mt-1.5 text-body text-muted">
+            {meta}
+          </div>
+        )}
         {lede && (
-          <p className="measure mt-2 text-body text-muted">{lede}</p>
+          <p data-prose className="measure mt-2 text-body text-muted">
+            {lede}
+          </p>
         )}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}

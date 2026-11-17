@@ -1,33 +1,28 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { EmptyState } from "@/components/states";
 import { SettingRow } from "@/components/targets/SettingRow";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, CardRow, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, CardRow, ROW } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { StandingLine } from "@/components/ui/StandingLine";
+import { ACTIONS, actionsInProse, dotLinesOffIndent } from "@/test-utils/layout";
 
 /**
  * D-1 §4: every action sits in its row's right seat on the first line, never in
  * a sentence and never on a row of its own; the seat's width is the table's.
  * jsdom has no layout, so these hold the structure the layout is drawn from.
+ * The two layout guards also run after every test in the suite (test-setup.ts);
+ * here they are held to what they must catch and what they must let pass.
  */
 
-/** A control a reader presses: a button, or a link drawn as a pill or an ArrowLink. */
-const CONTROLS = "button, a.rounded-pill, a[data-arrow-link]";
-
-/** Every control inside a `<p>`: a button in a sentence moves with its words. */
-function controlsInProse(root: Element): Element[] {
-  return Array.from(root.querySelectorAll(CONTROLS)).filter((control) => control.closest("p"));
-}
-
-/** Every control in a row that is not in the row's seat (a form or a dialog is its own row). */
-function controlsOutsideSeat(row: Element): Element[] {
-  return Array.from(row.querySelectorAll(CONTROLS)).filter(
-    (control) => !control.closest('[data-action-seat], form, [role="dialog"]'),
+/** Every action in a row that is not in the row's seat (a form or a dialog is its own row). */
+function actionsOutsideSeat(row: Element): Element[] {
+  return Array.from(row.querySelectorAll(ACTIONS)).filter(
+    (action) => !action.closest('[data-action-seat], form, [role="dialog"]'),
   );
 }
 
@@ -49,8 +44,8 @@ describe("CardRow's action seat", () => {
     expect(detail).toHaveAttribute("data-row-detail");
     expect(detail).toHaveClass("row-detail");
     expect(detail).toHaveTextContent("Last checked a minute ago.");
-    expect(controlsOutsideSeat(row)).toEqual([]);
-    expect(controlsInProse(row)).toEqual([]);
+    expect(actionsOutsideSeat(row)).toEqual([]);
+    expect(actionsInProse(row)).toEqual([]);
   });
 
   it("takes the table's width, and keeps an empty seat in its place", () => {
@@ -85,15 +80,15 @@ describe("CardRow's action seat", () => {
     expect(container.querySelector("[data-row-detail]")).toBeNull();
   });
 
-  it("top-aligns a row of more than one line, and never holds two alignments", () => {
+  it("top-aligns a row of more than one line from tablet, and centres it on a phone", () => {
     const { container, rerender } = render(
       <CardRow first top action={<Button size="sm">Decide</Button>}>
         <span>A long finding</span>
       </CardRow>,
     );
     const row = () => container.firstElementChild!;
-    expect(row()).toHaveClass("row-top");
-    expect(row()).not.toHaveClass("items-center");
+    // One alignment per breakpoint: centred on a phone, where the seat wraps under the row.
+    expect(row()).toHaveClass("row-top", "items-center", "tablet:items-start");
     rerender(
       <CardRow first action={<Button size="sm">Decide</Button>}>
         <span>A short finding</span>
@@ -101,6 +96,7 @@ describe("CardRow's action seat", () => {
     );
     expect(row()).toHaveClass("items-center");
     expect(row()).not.toHaveClass("row-top");
+    expect(row()).not.toHaveClass("tablet:items-start");
   });
 
   it("keeps the seat in a row that discloses the rest of itself", () => {
@@ -112,14 +108,41 @@ describe("CardRow's action seat", () => {
     expect(screen.getByRole("link", { name: /Decide on Drift/ }).closest("[data-action-seat]")).not.toBeNull();
   });
 
-  it("is built on ROW, the box every list row takes", () => {
-    const { container } = render(
-      <CardRow first>
-        <span>Becky Lynch</span>
-      </CardRow>,
+  it("refuses an action or a detail line on a row that is itself a button", () => {
+    // Never rendered: tsc is the check (`bun run typecheck`, and `next build`).
+    const nested = () => (
+      // @ts-expect-error a button row cannot hold a button
+      <CardRow onToggle={() => {}} action={<Button size="sm">Decide</Button>}>
+        <span>Laser cutter</span>
+      </CardRow>
     );
-    for (const c of ROW.split(" ")) expect(container.firstElementChild).toHaveClass(c);
+    const paragraph = () => (
+      // @ts-expect-error a <p> is not phrasing content, so not inside a button
+      <CardRow onToggle={() => {}} detail="Why">
+        <span>Laser cutter</span>
+      </CardRow>
+    );
+    expect([nested, paragraph]).toHaveLength(2);
+  });
+
+  it("is built on ROW, the box and column grid every list row takes, and the headings read the same grid", () => {
+    const { container } = render(
+      <Card>
+        <CardColumns>
+          <span>Name</span>
+        </CardColumns>
+        <CardRow first>
+          <span>Becky Lynch</span>
+        </CardRow>
+      </Card>,
+    );
+    const [columns, row] = Array.from(container.firstElementChild!.children);
+    for (const c of ROW.split(" ")) expect(row).toHaveClass(c);
     expect(ROW).toContain("tablet:min-h-0");
+    expect(ROW).toContain("row-cols");
+    expect(columns).toHaveClass("row-cols");
+    // Neither states a column gap of its own beside the grid's.
+    for (const el of [columns, row]) expect(el.className).not.toMatch(/(?:^|\s)(?:[a-z]+:)?gap-(?!y-)/);
   });
 });
 
@@ -141,24 +164,28 @@ describe("a card's explanation", () => {
 });
 
 describe("a setting row", () => {
-  it("puts its way on in the action seat, and its label in the label seat", () => {
+  it("is a CardRow: its way on in the action seat, its label in the label seat", () => {
     const { container } = render(
       <SettingRow label="Home folders" action={<Button size="sm">Choose folder</Button>}>
         /mnt/tank/home
       </SettingRow>,
     );
     const row = container.firstElementChild!;
+    for (const c of ROW.split(" ")) expect(row).toHaveClass(c);
     expect(screen.getByText("Home folders")).toHaveClass("w-(--seat-label)");
     expect(row.lastElementChild).toHaveAttribute("data-action-seat");
     expect(row.lastElementChild).toHaveClass("row-seat");
-    expect(controlsOutsideSeat(row)).toEqual([]);
+    expect(actionsOutsideSeat(row)).toEqual([]);
+  });
+
+  it("keeps its seat when it has no way on", () => {
+    const { container } = render(<SettingRow label="Name">TrueNAS</SettingRow>);
+    expect(container.querySelector("[data-action-seat]")).toBeEmptyDOMElement();
   });
 });
 
-describe("no control in a sentence", () => {
-  // A Notice and an EmptyState end on their action: a message is read top to
-  // bottom and ends on its step. That step is still never inside a sentence.
-  it("holds for the shared parts that carry a step", () => {
+describe("the prose guard", () => {
+  it("passes the shared parts that carry a step: a message ends on its action, never inside a sentence", () => {
     const { container } = render(
       <>
         <Notice tone="warn" title="TrueNAS is not answering" next="Check the NAS." action={{ label: "Read again", onClick: () => {} }}>
@@ -166,15 +193,66 @@ describe("no control in a sentence", () => {
         </Notice>
         <EmptyState title="Nothing waiting on you" guidance="Syndra checks again on its own." action={{ label: "Check now", onClick: () => {} }} />
         <Card>
-          <CardHeader title="Accounts" caption="Every account Syndra made on this system." />
+          <CardHeader title="Accounts" caption={<>Every account Syndra made. <ArrowLink href="/drift">Drift</ArrowLink></>} />
           <CardRow first action={<Button size="sm">Show</Button>} detail="Made by Syndra.">
             <span>roman</span>
           </CardRow>
         </Card>
       </>,
     );
-    expect(screen.getAllByRole("button")).toHaveLength(3);
-    expect(controlsInProse(container)).toEqual([]);
+    expect(container.querySelectorAll("button.rounded-pill")).toHaveLength(3);
+    expect(actionsInProse(container)).toEqual([]);
+  });
+
+  it("catches an action in a sentence, in a paragraph or in an inline run of text", () => {
+    const { container } = render(
+      <div>
+        <p>
+          Syndra checks on its own. <Button size="sm">Check now</Button>
+        </p>
+        <p>
+          <span>Two ways there:</span>
+          <ArrowLink href="/governance/pending">Pending changes</ArrowLink>
+        </p>
+        <span>
+          In Laser Lab. <ArrowLink href="/apps/1">Open it</ArrowLink>
+        </span>
+        <div>
+          No mapping can give one yet.{" "}
+          <span>
+            <ArrowLink href="/system">Choose where</ArrowLink>
+          </span>
+        </div>
+      </div>,
+    );
+    expect(actionsInProse(container)).toEqual([
+      'button "Check now" in "Syndra checks on its own. Check now"',
+      'a "Pending changes→" in "Two ways there:Pending changes→"',
+      'a "Open it→" in "In Laser Lab. Open it→"',
+      'a "Choose where→" in "Choose where→"',
+    ]);
+    cleanup(); // the offenders were drawn on purpose; the suite-wide guard reads only what a test leaves
+  });
+
+  it("lets a link sit in a lede or caption, never a button", () => {
+    const { container } = render(
+      <p data-prose>
+        Read live. <ArrowLink href="/users">See Syndra&rsquo;s view</ArrowLink> <Button size="sm">Read again</Button>
+      </p>,
+    );
+    expect(actionsInProse(container)).toEqual(['button "Read again" in "Read live. See Syndra’s view→ Read again"']);
+    cleanup();
+  });
+
+  it("lets a row's parts sit side by side", () => {
+    const { container } = render(
+      <div>
+        <span>Roman Reigns</span>
+        <span>Ready to use</span>
+        <Button size="sm">Extend</Button>
+      </div>,
+    );
+    expect(actionsInProse(container)).toEqual([]);
   });
 });
 
@@ -187,5 +265,35 @@ describe("a line under a status dot", () => {
     const grid = container.querySelector("[data-standing] > .grid")!;
     expect(grid.className).toContain("grid-cols-[var(--dot-indent)_1fr]");
     expect(step.closest(".col-start-2")?.parentElement).toBe(grid);
+  });
+
+  it("is caught at any number of its own, and passes at the token", () => {
+    const line = (pad: string) => (
+      <span>
+        <span className="inline-flex items-center gap-2">
+          <span data-dot />
+          Answering
+        </span>
+        <span className={pad}>Last answered a minute ago</span>
+      </span>
+    );
+    const { container, rerender } = render(line("pl-[18px] text-faint"));
+    expect(dotLinesOffIndent(container)).toEqual(['"Last answered a minute ago" under a status dot at pl-[18px]']);
+    rerender(line("pl-4 text-faint"));
+    expect(dotLinesOffIndent(container)).toEqual(['"Last answered a minute ago" under a status dot at pl-4']);
+    rerender(line("pl-(--dot-indent) text-faint"));
+    expect(dotLinesOffIndent(container)).toEqual([]);
+  });
+});
+
+describe("ActionSeat", () => {
+  it("is the one seat a list row built on ROW takes", () => {
+    const { container } = render(
+      <ActionSeat seat="narrow">
+        <Button size="sm">Withdraw</Button>
+      </ActionSeat>,
+    );
+    expect(container.firstElementChild).toHaveAttribute("data-action-seat");
+    expect(container.firstElementChild).toHaveAttribute("data-seat", "narrow");
   });
 });

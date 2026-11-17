@@ -72,14 +72,14 @@ export function VersionBand({ target, history }: { target: string; history?: Map
     <Card>
       <div className="flex flex-wrap items-start gap-4 px-5 py-4">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <span className="flex items-center gap-2.5">
+          <span className="flex items-center gap-2">
             <StatusDot tone={reading.tone} />
             <span className={`text-[15.5px] font-semibold ${STATUS_TONE[reading.tone].label}`}>
               {reading.title}
             </span>
           </span>
 
-          <p className="pl-[18px] text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
+          <p className="pl-(--dot-indent) text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
             {pending ? (
               <>
                 The rows below are live.{" "}

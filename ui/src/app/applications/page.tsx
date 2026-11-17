@@ -115,7 +115,7 @@ export default function AppsPage() {
               data-row
               key={entry.application.id}
               href={`/applications/${entry.application.id}`}
-              className={`row-divider flex flex-col items-start gap-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center tablet:gap-(--row-gap)`}
+              className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center`}
             >
               <span className="w-full min-w-0 tablet:w-[300px] tablet:min-w-[170px] tablet:shrink-0">
                 <span className="block text-[15.5px] font-semibold [text-wrap:pretty]">

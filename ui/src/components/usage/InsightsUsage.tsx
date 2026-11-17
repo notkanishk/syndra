@@ -37,7 +37,7 @@ function Spread({ metric, row }: { metric: InsightsStatsMetric; row: InsightsSer
   const p90 = formatValue(row.p90, metric.unit);
   const share = row.p90 > 0 ? Math.min(100, (row.p50 / row.p90) * 100) : 0;
   return (
-    <CardRow className="flex-wrap items-center gap-x-6 gap-y-2">
+    <CardRow>
       <span className="flex min-w-0 flex-1 basis-[260px] flex-col gap-0.5">
         {where && <span className="text-[14.5px] font-semibold [overflow-wrap:anywhere]">{where}</span>}
         <span className="text-[13px] tabular-nums text-muted">
@@ -86,7 +86,7 @@ function People({ metric, row, what }: { metric: InsightsStatsMetric; row: Insig
       </CardColumns>
       <div role="rowgroup" className={view.className}>
         {rows.map((p) => (
-          <div key={p.user_id} role="row" className="row-divider flex flex-wrap items-baseline gap-x-[18px] gap-y-1 px-5 py-2 text-[14px] tablet:flex-nowrap">
+          <div key={p.user_id} role="row" className="row-divider row-cols flex flex-wrap items-baseline gap-y-1 px-5 py-2 text-[14px] tablet:flex-nowrap">
             <span role="cell" className="w-full min-w-0 [overflow-wrap:anywhere] tablet:w-auto tablet:flex-1">
               {p.name ? (
                 <NameLink href={nameHref.user(p.user_id)} className="font-semibold">{p.name}</NameLink>

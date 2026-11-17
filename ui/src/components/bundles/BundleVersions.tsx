@@ -257,7 +257,7 @@ function Holders({
                 )}
               </div>
               {people.map((holder) => (
-                <div key={holder.user_id} className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-1 px-5 py-3">
+                <div key={holder.user_id} className="row-divider row-cols flex flex-wrap items-center gap-y-1 px-5 py-3">
                   <span className="flex min-w-[min(220px,100%)] flex-1 items-center gap-3">
                     <UserAvatar id={holder.user_id} size="row" />
                     <UserName id={holder.user_id} className="text-[14.5px] font-semibold text-ink" />

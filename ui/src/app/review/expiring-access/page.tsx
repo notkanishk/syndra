@@ -589,7 +589,7 @@ function ExpiringRow({
   return (
     <div
       data-soonest={soonest || undefined}
-      className={`row-divider flex flex-col items-start gap-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-(--row-gap) ${
+      className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center ${
         soonest
           ? "border-l-[3px] border-warn"
           : selecting && ack

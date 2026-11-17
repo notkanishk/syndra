@@ -101,18 +101,20 @@ export function ReadLine<T extends NavSection>({
  * scrolled away. The one you are in is filled; the others point up or down to
  * where they are. Put it at the top of the sections' own container, which is
  * what it sticks within; `gap` is that container's row gap, which the pill
- * gives back so it takes no room of its own.
+ * gives back so it takes no room of its own. A CSS length, so a container whose
+ * gap is a token passes the token (`var(--region-gap)`) and the two can never
+ * disagree, at any width.
  */
 export function SectionPill<T extends NavSection>({
   sections,
   onOpen,
   label,
-  gap = 16,
+  gap = "16px",
 }: {
   sections: T[];
   onOpen?: (section: T) => void;
   label: string;
-  gap?: number;
+  gap?: string;
 }) {
   const [spy, setSpy] = useState<{ active: string; away: boolean }>({ active: "", away: false });
   const ids = sections.map((section) => section.id).join(" ");
@@ -138,7 +140,7 @@ export function SectionPill<T extends NavSection>({
   if (sections.length < 2) return null;
   const at = Math.max(0, sections.findIndex((section) => section.id === spy.active));
   return (
-    <div className="sticky top-0 z-(--layer-bar) h-0" style={{ marginBottom: -gap }}>
+    <div className="sticky top-0 z-(--layer-bar) h-0" style={{ marginBottom: `calc(-1 * ${gap})` }}>
       {/* The band behind the pill: the page's own ground, full width of the column, so text that
           scrolls up never shows through beside the pill. --section-band is the room a page with this band keeps
           above what a jump lands on (the scroller's scroll-padding-top in globals.css, which glideTo reads
