@@ -315,10 +315,11 @@ export function useTargetInventory(target: string | undefined) {
 export function useAdoptAccount(target: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { username: string; subjectId: string }) =>
+    mutationFn: (input: { username: string; subjectId: string; accountId?: string }) =>
       request<AdoptionResult>(
         `/targets/${target}/inventory/${encodeURIComponent(input.username)}/adopt`,
-        { method: "POST", body: { subject_id: input.subjectId, confirmed: true } },
+        // The account the row showed, so a name handed to another account since is never adopted (7t-7).
+        { method: "POST", body: { subject_id: input.subjectId, confirmed: true, ...(input.accountId ? { account_id: input.accountId } : {}) } },
       ),
     onSuccess: () => invalidateAfter(client, "target", { target }),
   });
@@ -497,7 +498,8 @@ export function useAnswerUnconfirmed(target: string) {
 
 export interface ResolveFindingInput {
   id: string;
-  resolution: "keep_ours" | "take_theirs" | "reprovisioned" | "unbound";
+  /** `adopted` and `kept` answer a binding conflict only (addon-contract 7t-7). */
+  resolution: "keep_ours" | "take_theirs" | "reprovisioned" | "unbound" | "adopted" | "kept";
   reason: string;
   expires_at?: string;
   review_date?: string;

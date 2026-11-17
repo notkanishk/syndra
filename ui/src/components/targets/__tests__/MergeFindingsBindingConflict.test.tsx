@@ -8,7 +8,7 @@ import { MergeFindings } from "@/components/targets/MergeFindings";
 import type { MergeFinding, ResolveFindingInput } from "@/lib/queries/useTargets";
 
 // 7t-4: a binding_conflict finding. The add-on says what happened and what to do
-// (shown as written); the only action is the system page's own "Stop tracking".
+// (shown as written); the default action is the system page's own "Stop tracking" (7t-7 adds the others).
 
 const state = { findings: [] as MergeFinding[], resolved: [] as ResolveFindingInput[] };
 
@@ -78,7 +78,7 @@ describe("a binding conflict", () => {
     expect(screen.getByText(`${DETAIL} ${NEXT}`)).toBeTruthy();
   });
 
-  it("offers only Stop tracking, never the keep or take buttons that answer 422", () => {
+  it("offers Stop tracking, never the keep or take buttons that answer 422", () => {
     state.findings = [conflict(numberHeld)];
     renderFindings();
     fireEvent.click(screen.getByText("Decide"));

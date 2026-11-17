@@ -1454,7 +1454,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
                 setResult(null);
                 adopt.reset();
                 adopt.mutate(
-                  { username: adopting, subjectId },
+                  { username: adopting, subjectId, accountId: unmanaged.find((a) => a.username === adopting)?.account_id },
                   { onSuccess: (res) => setResult({ username: adopting, person, result: res }) },
                 );
               }}

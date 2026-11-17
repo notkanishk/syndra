@@ -455,6 +455,22 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 			Detail: "No account was bound to this subject.",
 		}, http.StatusOK, nil
 	}
+	// The account Syndra means, when it says (an If-Match precondition, RFC 9110 §13.1.1): a
+	// person released and bound again since names a new account, which this release must not drop.
+	if want, typed := req.Params["account_id"].(string); req.Params["account_id"] != nil && !typed {
+		return OperationResult{}, http.StatusBadRequest, fmt.Errorf("account_id must be a string")
+	} else if want != "" {
+		names, status, err := s.bindingNames(req, binding)
+		if err != nil {
+			return OperationResult{}, status, err
+		}
+		// A binding that names no account now (a contract-1 one whose account is gone) has nothing
+		// a release could wrongly drop.
+		if names != "" && names != want {
+			return OperationResult{}, http.StatusConflict, errors.New("This person's record on TrueNAS now names a different account " +
+				"from the one Syndra meant, so nothing was released. Check again to see it as it is now.")
+		}
+	}
 	if err := s.mutate(opCaller("account.release", req).on(binding.UID), "store.unbind", func() error {
 		return s.store.DeleteBinding(req.Subject)
 	}); errors.Is(err, errNotLogged) {
@@ -477,6 +493,27 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 		Detail: "Syndra no longer manages " + binding.Username +
 			". Nothing on the target was changed — the account still exists and still works.",
 	}, http.StatusOK, nil
+}
+
+// bindingNames is the account_id a binding names, for release's precondition: its own uid when
+// that is a real one (the release then needs no NAS, as it must not); for a contract-1 binding,
+// whose uid may be a record key, the account the module finds for it now (resolveLive, a read),
+// or the account two bindings claim. "" when it names none.
+func (s *server) bindingNames(req OperationRequest, b Binding) (string, int, error) {
+	if floor, ceiling := s.idRange(); b.ownsUID(floor, ceiling) {
+		return accountID(b.UID), 0, nil
+	}
+	r, _, err := s.resolveLive(req.Subject, nil)
+	switch {
+	case err != nil:
+		status, refusal := liveRefusal(err)
+		return "", status, refusal
+	case r.Account != nil:
+		return accountID(r.Account.UID), 0, nil
+	case r.Conflict != nil && r.Conflict.claimedTwice:
+		return r.Conflict.AccountID, 0, nil
+	}
+	return "", 0, nil
 }
 
 // rotatePassword mints a new credential, applies it, and returns nothing.
@@ -1203,6 +1240,13 @@ func noAdoptableAccount(username string) error {
 // requires them to leave identical state, and the way to guarantee that is for
 // there to be one action rather than two that agree today.
 //
+// A subject already bound is refused, with one exception: a binding that names
+// no account because the account being adopted took its name or number (a
+// recorded name_held or number_held conflict the add-on reports as adoptable)
+// moves to that account, judged again over one read before it is written. That
+// is "It's theirs: adopt it" on the binding conflict (owner ruling 17 Nov 2026).
+// params.account_id, when sent, must still be the account's: the one shown.
+//
 // It writes a binding and touches the account itself in no way at all. Whatever
 // groups, lock state and SMB flag it already has stay exactly as they are until
 // the next convergence, which is the operator's next decision and not this one's
@@ -1224,27 +1268,52 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 	if err := s.refuseSelfAccount(username); err != nil {
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
+	// The account the operator was shown, when the caller names it (an If-Match precondition,
+	// RFC 9110 §13.1.1): a name can be handed to a new account, so the name alone does not say
+	// the account is still the one that was looked at.
+	want, typed := req.Params["account_id"].(string)
+	if req.Params["account_id"] != nil && !typed {
+		return OperationResult{}, http.StatusBadRequest, fmt.Errorf("account_id must be a string")
+	}
+	shown := func(a *Subject) error {
+		if want == "" || accountID(a.UID) == want {
+			return nil
+		}
+		return fmt.Errorf("%s on TrueNAS is no longer the account you were shown. Check again to see it as it is now.", username)
+	}
 
 	// Already bound to this subject: reported as done rather than refused. The
 	// dedup store makes a replay return the original answer, and this covers the
 	// other repeat — an operator adopting the same account twice from two
 	// screens — without a second mutation.
+	moving := false
 	if existing, bound, err := s.store.GetBinding(req.Subject); err != nil {
 		// The module's mapping, as every operation answers an unreadable binding.
 		status, refusal := liveRefusal(unreadable(err))
 		return OperationResult{}, status, refusal
 	} else if bound {
-		if existing.Username == username {
+		who := opCaller("account.adopt", req)
+		r, _, err := s.resolveLive(req.Subject, &who)
+		if err != nil {
+			status, refusal := liveRefusal(err)
+			return OperationResult{}, status, refusal
+		}
+		switch {
+		case r.Conflict != nil && r.Conflict.recorded && r.Conflict.Username == username:
+			// The account now holding this person's recorded name or number, named as theirs:
+			// the binding moves to it (owner ruling 17 Nov 2026). Judged again below, over one
+			// read with every other binding, before anything is written. Only with the account the
+			// operator was shown: the name alone may have gone to another account since.
+			if want == "" {
+				return OperationResult{}, http.StatusConflict, fmt.Errorf("Moving this person to %s needs the account you were shown, "+
+					"so that a name given to another account since is never adopted. Adopt it from the conflict under Waiting on you.", username)
+			}
+			moving = true
+		case existing.Username == username:
 			// A repeat only while the binding still names an account
 			// (resolveLive). When another account now holds its name or number
 			// (a conflict), "already bound" would answer done and leave the
 			// apply blocked for ever: refused, and the operator releases first.
-			who := opCaller("account.adopt", req)
-			r, _, err := s.resolveLive(req.Subject, &who)
-			if err != nil {
-				status, refusal := liveRefusal(err)
-				return OperationResult{}, status, refusal
-			}
 			if r.Conflict != nil {
 				return OperationResult{}, http.StatusConflict, conflictRefusal(r.Conflict)
 			}
@@ -1253,6 +1322,9 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 				// Bound, and the account is gone: not "already bound", which
 				// would answer done for nothing, but the miss any adopt is.
 				return OperationResult{}, http.StatusNotFound, noAdoptableAccount(username)
+			}
+			if err := shown(found); err != nil {
+				return OperationResult{}, http.StatusConflict, err
 			}
 			return OperationResult{
 				Operation: "account.adopt", Subject: req.Subject, Outcome: "succeeded",
@@ -1266,13 +1338,15 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 				AccountID: accountID(found.UID),
 				Detail:    fmt.Sprintf("%s was already bound to this subject.", username),
 			}, http.StatusOK, nil
+		default:
+			// Rebinding is not adoption. The subject already has an account here,
+			// and moving them to another one abandons the first — its home
+			// directory, its ACL entries, its shares — with nothing recording that
+			// it was ever theirs. (A binding that names no account because this
+			// very account took its name or number is the one move, above.)
+			return OperationResult{}, http.StatusConflict,
+				fmt.Errorf("this subject is already bound to %s", existing.Username)
 		}
-		// Rebinding is not adoption. The subject already has an account here,
-		// and moving them to another one abandons the first — its home
-		// directory, its ACL entries, its shares — with nothing recording that
-		// it was ever theirs.
-		return OperationResult{}, http.StatusConflict,
-			fmt.Errorf("this subject is already bound to %s", existing.Username)
 	}
 
 	// Read from the target rather than trusted from the request. The inventory
@@ -1297,6 +1371,9 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		// owed the reason rather than a puzzle.
 		return OperationResult{}, http.StatusNotFound, noAdoptableAccount(username)
 	}
+	if err := shown(account); err != nil {
+		return OperationResult{}, http.StatusConflict, err
+	}
 	// Somebody else's, by the one rule over this same read (attribution.bound, accountBound's):
 	// a binding that names the account by its name or by its number after a rename, or two that
 	// do. Refused rather than moved: this is the mistake the whole "adoption is an operator
@@ -1312,6 +1389,15 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 				fmt.Errorf("%s is already bound to another subject (%s)", username, owner.SubjectID)
 		}
 		return OperationResult{}, http.StatusConflict, fmt.Errorf("%s is already bound to two other subjects", username)
+	}
+	if moving {
+		// A move stands only while this same read still says it: the person's binding names no
+		// account because this one holds its name or number, and it is adoptable (attributeOver).
+		// Anything else changed since the operator looked, and is refused as stale, never moved.
+		if c := at.bySubject[req.Subject].Conflict; c == nil || !c.recorded || c.Username != username || !c.Adoptable {
+			return OperationResult{}, http.StatusConflict,
+				fmt.Errorf("%s can no longer be adopted for this person: TrueNAS changed since it was checked. Check again to see it as it is now.", username)
+		}
 	}
 
 	if err := s.mutate(opCaller("account.adopt", req).on(account.UID), "store.bind", func() error {

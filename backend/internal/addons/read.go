@@ -97,6 +97,13 @@ type BindingConflict struct {
 // recorded under"); every other reason is a recorded binding's.
 const ConflictNameHeld = "name_held"
 
+// Two of the other reasons (common/binding_conflict.json), each a recorded
+// binding's, which a finding's resolution reads (resolutionFits).
+const (
+	ConflictNumberHeld   = "number_held"
+	ConflictClaimedTwice = "claimed_twice"
+)
+
 // ConflictHolder is one account an ambiguous key names
 // (common/binding_conflict.json#/$defs/Holder).
 type ConflictHolder struct {

@@ -1291,7 +1291,8 @@ whole burden.
   holds it, and `adoptable`, `true` exactly when `account.adopt` for this
   subject would succeed: no other subject holds the account, the add-on
   knows its own service account and this is not it, and this subject has no
-  binding, and `detail` and `next`, the add-on's words for an operator:
+  binding (or the conflict is its binding's own, below), and `detail` and
+  `next`, the add-on's words for an operator:
   `v2/schema/common/binding_conflict.json`), and an
   operator decides through the confirmed
   `account.adopt` operation, which every add-on that creates accounts
@@ -1327,11 +1328,19 @@ whole burden.
   shows it to an operator, who re-provisions it (that apply) or lets it go
   (`account.release`).
 - **A bound name another account now holds** (the original deleted, the
-  name reused) is a `BINDING_CONFLICT` with `adoptable: false`, never this
-  subject's account: converging it hands the subject's access to a
-  stranger. `account.adopt` refuses a subject that has a binding, so the
-  operator releases first (`account.release`), then adopts that account
-  only if it is theirs, or renames it in the app.
+  name reused; or a reused number, `number_held`) is a `BINDING_CONFLICT`,
+  never this subject's account: converging it hands the subject's access
+  to a stranger. When no other subject holds that account and it is not the
+  add-on's own, the conflict is `adoptable: true`, and an operator who knows
+  it is the person's says so with `account.adopt` for this subject and the
+  holder's `username`: the add-on MUST move the binding to it, touching
+  nothing on the account, and MUST judge that again over the one read it
+  writes from (this binding's conflict, with this holder, still adoptable),
+  refusing it with 409 otherwise. Any other account, or a holder another
+  subject holds, is `adoptable: false`: the operator releases first
+  (`account.release`), or renames it in the app. (`attributeOver` in
+  `addons/truenas/identity_resolve.go` sets `adoptable`; `adoptAccount`
+  moves it.)
 
 #### The reply
 
@@ -1904,7 +1913,14 @@ feature and serve both:
 
 - `account.adopt` binds the account named in `params.username` to the
   subject, after reading it, and answers its `account_id`
-  (`handleAdoptAccount` in `backend/internal/handlers/inventory.go`). While
+  (`handleAdoptAccount` in `backend/internal/handlers/inventory.go`; from a
+  binding conflict, `adoptOnTarget` in
+  `backend/internal/handlers/merge_findings.go`, which moves the binding:
+  [A bound name another account now holds](#the-one-create)). When
+  `params.account_id` is sent it is the account the operator was shown, a
+  precondition in the sense of `If-Match` (RFC 9110 §13.1.1): the add-on
+  MUST refuse with 409 when the account named is no longer that one, since
+  a name can be handed to a new account. While
   the add-on cannot yet tell which account is its own service account, it
   MUST refuse with 422 `OPERATION_FAILED` (nothing was done, and the
   sentence reaches the operator, who tries again) rather than risk binding
@@ -1918,7 +1934,19 @@ feature and serve both:
   the `account_id` it let go of when one was bound, so a release Syndra
   settles from its record (`GET /calls`) forgets Syndra's copy only while
   that copy names the same account (`ResolveBindingCall` in
-  `backend/internal/db/addon_operations.go`).
+  `backend/internal/db/addon_operations.go`). When `params.account_id` is
+  sent it is the account Syndra means, a precondition like `account.adopt`'s:
+  the add-on MUST refuse with 409 and release nothing when the subject's
+  binding no longer names that account (the person was released and bound
+  again since), and a subject with no binding is still answered as done.
+  Judging it from the binding's own recorded id needs no read of the app
+  (`bindingNames` in `addons/truenas/operations.go`).
+- A **move**: `account.adopt` for a subject that already has a binding MUST
+  be refused unless that binding is in a `name_held` or `number_held`
+  conflict whose holder is the account named and is `adoptable`, and MUST
+  then be refused with 409 when `params.account_id` is absent: a move is
+  made only to the account the operator was shown. A holder two subjects'
+  conflicts name is `adoptable` for neither.
 
 `account.adopt` and `account.release` are the only way inside Syndra to
 resolve a conflict (renaming the account in the app is the other); without
@@ -2399,9 +2427,11 @@ What the reference simplifies, and a real add-on MUST do in full:
   and `TARGET_UNREACHABLE`.
 - `Retry-After` is a constant 30; a real add-on sends what its app's state
   says.
-- It declares neither `account.adopt` nor `account.release`, though it can
-  answer `BINDING_CONFLICT`; a real add-on MUST
-  ([The account operations](#the-account-operations)).
+- It serves `account.adopt` and `account.release` with their `account_id`
+  preconditions ([The account operations](#the-account-operations)). Its
+  bindings never conflict (`noConflicts`), so it never moves one: a bound
+  subject's adoption is done when it names that subject's own account and
+  refused otherwise.
 - It declares `freshness` and `calls` only when asked
   (`Config.Features`, `-features freshness,calls`; `serves`), so the kit's
   checks for each are watched both ways. With `freshness`, `/subjects` is
@@ -2507,6 +2537,14 @@ Steps, in order; each ends on a check.
    ([The one create](#the-one-create)). Add `-mutate-settings` if you serve
    `settings` and the instance can have a setting written back. Add
    `-json report.json` for the report.
+
+   With `account.adopt` and `account.release` declared available, the
+   checks `adopt.shown`, `adopt.not-shown` and `release.not-shown` send
+   each with an `account_id` precondition for the kit's own subject only
+   (after a plan names its account): adopting its own account with its own
+   id is done, with another id 409, and a release with an id the binding
+   does not name 409, the binding staying. A release that ignores its
+   precondition is bound back to the kit's account at once.
 
    `-elevated-key-file <file>` (with `-mutate` only; the kit refuses it on
    a reads-only run) hands the kit the `elevated_key` your `account.purge`

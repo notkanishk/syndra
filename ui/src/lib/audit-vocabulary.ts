@@ -94,6 +94,10 @@ export const AUDIT_ACTIONS: Record<
   "target.named": { verb: "Changed what a connected system is called" },
   // Its old and new days are in the row's details (addon-contract 6.7, O4): how long people's own usage is kept.
   "target.stats_retention_set": { verb: "Changed how long a connected system's usage per person is kept" },
+  // A binding conflict or any other finding answered under Waiting on you (addon-contract 7t-7); the answer and reason are in the details.
+  "merge_finding.decided": { verb: "Decided what to do about an account on a connected system" },
+  // Check now, or Check again on a binding conflict: a fresh read of a connected system (7t-7).
+  "target.checked": { verb: "Checked a connected system again" },
   // Welcome roles at a first sign-in (owner, 3 Nov): Makerspace settings' switch.
   "welcome_claims.turned_on": { verb: "Turned on welcome roles at a first sign-in" },
   "welcome_claims.turned_off": { verb: "Turned off welcome roles at a first sign-in" },
