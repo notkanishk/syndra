@@ -92,7 +92,15 @@ func pt(t *testing.T, d, subject string, dims map[string]string, v float64) addo
 }
 
 func gp(t *testing.T, from, to string, dims map[string]string, reason string) addons.StatGap {
-	return addons.StatGap{Start: mid(t, from), End: mid(t, to), Dimensions: dims, Reason: reason}
+	return addons.StatGap{Start: mid(t, from), End: mid(t, to), Dimensions: dims, Kind: kindOf(reason), Reason: reason}
+}
+
+// kindOf is the kind a scripted add-on gives a reason: these tests' first-collection gaps are began.
+func kindOf(reason string) string {
+	if strings.HasPrefix(reason, "Not collected yet") {
+		return addons.GapBegan
+	}
+	return "unread"
 }
 
 var share = func(s string) map[string]string { return map[string]string{"share": s} }
@@ -517,6 +525,29 @@ func TestLiveACursorThatRepeatsStopsTheCollection(t *testing.T) {
 	}
 	if h := holding(t, ctx, sessions.Name); len(h.Points) != 0 || h.Watermark != nil {
 		t.Errorf("a stopped collection kept %+v", h)
+	}
+}
+
+// A gap is stored with the kind the add-on gave it, and read back with it: the
+// first collection's began window and a share's unobserved days alike.
+func TestLiveAGapKeepsItsKind(t *testing.T) {
+	ctx := collectLive(t)
+	first := clock.Day(time.Now().Add(-buffer))
+	audited := gp(t, day(3), day(2), share("scratch"), "Auditing does not record everyone on this share")
+	audited.Kind = "unobserved"
+	s := &script{replies: [][]any{{page(t, day(1), []addons.StatPoint{pt(t, day(5), "", share("makers"), 2)},
+		gp(t, first, day(9), nil, "Not collected yet: counting began on a day"), audited)}}}
+	collect(t, ctx, sessions, s)
+	gaps, err := db.StatsGaps(ctx, collectTarget, day(400))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]string{}
+	for _, g := range gaps {
+		kinds[g.Start] = g.Kind
+	}
+	if kinds[first] != "began" || kinds[day(3)] != "unobserved" {
+		t.Errorf("stored kinds %v, want began from %s and unobserved on %s", kinds, first, day(3))
 	}
 }
 

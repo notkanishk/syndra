@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/clock"
@@ -30,7 +31,7 @@ func TestWhatNamesAPersonIsKeptWithWhomItNames(t *testing.T) {
 		return addons.StatPoint{Start: start, End: end, Dimensions: map[string]string{"share": share}, Value: &v}
 	}
 	gap := func(share, reason string) addons.StatGap {
-		return addons.StatGap{Start: start, End: end, Dimensions: map[string]string{"share": share}, Reason: reason}
+		return addons.StatGap{Start: start, End: end, Dimensions: map[string]string{"share": share}, Kind: "unread", Reason: reason}
 	}
 
 	dropped := map[string]int{}
@@ -187,10 +188,31 @@ func TestADisplayNameIsCheckedLikeAnyOtherName(t *testing.T) {
 		t.Errorf("kept %+v, dropped %v: want both kept, the display name's naming cena", kept, dropped)
 	}
 	gaps := keepGaps([]addons.StatGap{
-		{Start: start, End: end, Dimensions: map[string]string{"share": "makers"}, Reason: "John Cena's home is offline"},
+		{Start: start, End: end, Dimensions: map[string]string{"share": "makers"}, Kind: "unread", Reason: "John Cena's home is offline"},
 	}, m, who, dropped)
 	if len(gaps) != 1 || gaps[0].Reason != "John Cena's home is offline" || !slices.Equal(gaps[0].NamedSubjects, []string{"sub-cena"}) || len(dropped) != 0 {
 		t.Errorf("gaps %+v, dropped %v: want the gap kept as sent, naming cena", gaps, dropped)
+	}
+}
+
+// A gap is kept with the add-on's kind, which the page draws by; one with no
+// kind, or a kind the contract does not know, is not a gap Syndra can draw
+// and is dropped as a bad value (counted, never guessed).
+func TestAGapIsKeptWithItsKindAndOnlyWithOne(t *testing.T) {
+	m := addons.Metric{Name: "storage.sessions", Instrument: "counter", Unit: "count", Label: "Sessions", Dimensions: []addons.Dimension{{Name: "share", Label: "Share"}}}
+	start := time.Date(2026, 11, 9, 0, 0, 0, 0, clock.Loc)
+	end := start.AddDate(0, 0, 1)
+	dropped := map[string]int{}
+	var in []addons.StatGap
+	for _, k := range []string{"began", "unread", "dropped", "unobserved", "", "outage"} {
+		in = append(in, addons.StatGap{Start: start, End: end, Dimensions: map[string]string{"share": k + "x"}, Kind: k, Reason: "a reason"})
+	}
+	var kinds []string
+	for _, g := range keepGaps(in, m, peopleOn(nil, nil), dropped) {
+		kinds = append(kinds, g.Kind)
+	}
+	if !slices.Equal(kinds, []string{"began", "unread", "dropped", "unobserved"}) || dropped[DropBadValue] != 2 {
+		t.Errorf("kept kinds %v, dropped %v: want the four contract kinds kept and the two others dropped as bad values", kinds, dropped)
 	}
 }
 

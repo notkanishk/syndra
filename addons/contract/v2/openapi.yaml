@@ -410,7 +410,9 @@ paths:
       operationId: getStats
       summary: Bucketed points for one metric
       description: >-
-        One metric per call, since that metric's watermark. Not subject to fresh.
+        One metric per call, since that metric's watermark. Not subject to fresh. Every gap carries
+        its kind (began, unread, dropped, unobserved; schema/stats.json), which Syndra reads, beside
+        the reason, which it shows.
       x-feature: stats
       security:
         - addonSignature: []

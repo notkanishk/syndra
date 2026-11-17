@@ -83,8 +83,10 @@ type StatsPoint struct {
 // StatsGap is one unobserved window [Start, End) of a metric's series.
 // NamedSubjects: who a dimension value or the reason names.
 type StatsGap struct {
-	Dims          map[string]string
-	Start, End    string
+	Dims       map[string]string
+	Start, End string
+	// Kind is the contract's gap kind (began, unread, dropped, unobserved; 000100).
+	Kind          string
 	Reason        string
 	NamedSubjects []string
 }
@@ -184,12 +186,12 @@ func (c *StatsTx) UpsertGaps(ctx context.Context, today string, gaps []StatsGap)
 			return 0, err
 		}
 		tag, err := c.tx.Exec(ctx, `
-			INSERT INTO addon_metric_gaps (target_id, metric, dims, gap_start, gap_end, reason, named_subjects)
-			SELECT $2, $3, $4::jsonb, $5::date, $6::date, $7, $8
+			INSERT INTO addon_metric_gaps (target_id, metric, dims, gap_start, gap_end, reason, named_subjects, kind)
+			SELECT $2, $3, $4::jsonb, $5::date, $6::date, $7, $8, $9
 			 WHERE $6::date > `+statsTotalKeptFrom+`
 			ON CONFLICT (target_id, metric, dims, gap_start)
-			DO UPDATE SET gap_end = EXCLUDED.gap_end, reason = EXCLUDED.reason, named_subjects = EXCLUDED.named_subjects`,
-			today, c.target, c.metric, string(raw), g.Start, g.End, g.Reason, nonNil(g.NamedSubjects))
+			DO UPDATE SET gap_end = EXCLUDED.gap_end, reason = EXCLUDED.reason, named_subjects = EXCLUDED.named_subjects, kind = EXCLUDED.kind`,
+			today, c.target, c.metric, string(raw), g.Start, g.End, g.Reason, nonNil(g.NamedSubjects), g.Kind)
 		if err != nil {
 			return 0, fmt.Errorf("store gap: %w", err)
 		}
@@ -401,12 +403,15 @@ type StatsGapRow struct {
 	StatsGap
 }
 
-// StatsGaps is every gap on a target that ends after a day.
+// StatsGaps is every gap on a target that ends after a day, and, however old,
+// each metric's began gap over the whole metric: the one fact that tells the
+// days before the record from a later outage, which a system a year old must
+// not lose when its first collection's gap falls out of the window read.
 func StatsGaps(ctx context.Context, target, after string) ([]StatsGapRow, error) {
 	rows, err := querier(ctx).Query(ctx, `
-		SELECT metric, dims, to_char(gap_start, 'YYYY-MM-DD'), to_char(gap_end, 'YYYY-MM-DD'), reason, named_subjects
+		SELECT metric, dims, to_char(gap_start, 'YYYY-MM-DD'), to_char(gap_end, 'YYYY-MM-DD'), kind, reason, named_subjects
 		  FROM addon_metric_gaps
-		 WHERE gap_end > $1::date AND target_id = $2
+		 WHERE target_id = $2 AND (gap_end > $1::date OR (kind = 'began' AND dims = '{}'::jsonb))
 		 ORDER BY metric, gap_start`, after, target)
 	if err != nil {
 		return nil, fmt.Errorf("read gaps of %s: %w", target, err)
@@ -415,7 +420,7 @@ func StatsGaps(ctx context.Context, target, after string) ([]StatsGapRow, error)
 	var out []StatsGapRow
 	for rows.Next() {
 		var g StatsGapRow
-		if err := rows.Scan(&g.Metric, &g.Dims, &g.Start, &g.End, &g.Reason, &g.NamedSubjects); err != nil {
+		if err := rows.Scan(&g.Metric, &g.Dims, &g.Start, &g.End, &g.Kind, &g.Reason, &g.NamedSubjects); err != nil {
 			return nil, err
 		}
 		out = append(out, g)

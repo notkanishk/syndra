@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -96,8 +97,8 @@ func TestLiveRetentionKeepsTotalsLongerThanPeople(t *testing.T) {
 		StatsPoint{Day: day(401), Value: 2}, StatsPoint{Day: year5, Value: 2}, StatsPoint{Day: clock.AddDate(year5, 0, 0, -1), Value: 2})
 	err := CollectStats(ctx, statsTarget, "storage.sessions", func(c *StatsTx) error {
 		_, err := c.UpsertGaps(ctx, then, []StatsGap{
-			{Start: clock.AddDate(year5, 0, 0, -2), End: year5, Reason: "The NAS was off"},
-			{Start: clock.AddDate(year5, 0, 0, -1), End: clock.AddDate(year5, 0, 0, 1), Reason: "The NAS was off"},
+			{Start: clock.AddDate(year5, 0, 0, -2), End: year5, Kind: "unread", Reason: "The NAS was off"},
+			{Start: clock.AddDate(year5, 0, 0, -1), End: clock.AddDate(year5, 0, 0, 1), Kind: "unread", Reason: "The NAS was off"},
 		})
 		return err
 	})
@@ -428,14 +429,14 @@ func TestLiveMigration94RunsUpDownUp(t *testing.T) {
 		StatsPoint{Subject: "sub-cena", Dims: map[string]string{"share": "makers"}, Day: d, Value: 3})
 	if err := CollectStats(ctx, statsTarget, "storage.sessions", func(c *StatsTx) error {
 		_, err := c.UpsertGaps(ctx, today, []StatsGap{
-			{Dims: map[string]string{}, Start: d, End: today, Reason: "john_cena's share is offline", NamedSubjects: []string{"sub-cena"}},
-			{Dims: map[string]string{"share": "makers"}, Start: d, End: today, Reason: "Auditing is off"},
+			{Dims: map[string]string{}, Start: d, End: today, Kind: "unread", Reason: "john_cena's share is offline", NamedSubjects: []string{"sub-cena"}},
+			{Dims: map[string]string{"share": "makers"}, Start: d, End: today, Kind: "unread", Reason: "Auditing is off"},
 			// Naming him by its dimension, on the series the down deletes: no
 			// surviving point holds it, and its window still stays (a deleted
 			// gap would read as counted), its reason withheld.
-			{Dims: map[string]string{"share": "home-john_cena"}, Start: d, End: today, Reason: "Auditing is off", NamedSubjects: []string{"sub-cena"}},
+			{Dims: map[string]string{"share": "home-john_cena"}, Start: d, End: today, Kind: "unread", Reason: "Auditing is off", NamedSubjects: []string{"sub-cena"}},
 			// Naming him by its reason, on a series that stays: kept, its reason withheld.
-			{Dims: map[string]string{"share": "makers"}, Start: clock.AddDate(d, 0, 0, -1), End: d, Reason: "account of john_cena is locked", NamedSubjects: []string{"sub-cena"}},
+			{Dims: map[string]string{"share": "makers"}, Start: clock.AddDate(d, 0, 0, -1), End: d, Kind: "unread", Reason: "account of john_cena is locked", NamedSubjects: []string{"sub-cena"}},
 		})
 		return err
 	}); err != nil {
@@ -443,7 +444,7 @@ func TestLiveMigration94RunsUpDownUp(t *testing.T) {
 	}
 	// A whole-metric gap on a metric with no points at all: on no series, and kept.
 	if err := CollectStats(ctx, statsTarget, "storage.home_bytes", func(c *StatsTx) error {
-		_, err := c.UpsertGaps(ctx, today, []StatsGap{{Dims: map[string]string{}, Start: d, End: today, Reason: "rey_mysterio's pool is offline", NamedSubjects: []string{"sub-rey"}}})
+		_, err := c.UpsertGaps(ctx, today, []StatsGap{{Dims: map[string]string{}, Start: d, End: today, Kind: "unread", Reason: "rey_mysterio's pool is offline", NamedSubjects: []string{"sub-rey"}}})
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -506,5 +507,128 @@ func TestMigration94IsExpandOnly(t *testing.T) {
 		if !strings.Contains(down, want) {
 			t.Errorf("000094 down must contain %q", want)
 		}
+	}
+}
+
+// 000100 adds a gap's kind with a default and its check, fills it from what
+// each stored reason was written for, and its down drops exactly the column.
+func TestMigration100IsExpandOnly(t *testing.T) {
+	up, down := readMigrationPair(t, "000100_stats_gap_kind")
+	if u := strings.ToUpper(stripSQLComments(up)); strings.Contains(u, "DROP ") || strings.Contains(u, " TYPE ") || strings.Contains(u, "DELETE") {
+		t.Error("000100 up must be additive")
+	}
+	for _, want := range []string{
+		"ALTER TABLE addon_metric_gaps ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'unread'",
+		"CHECK (kind IN ('began', 'unread', 'dropped', 'unobserved'))",
+	} {
+		if !strings.Contains(up, want) {
+			t.Errorf("000100 up must contain %q", want)
+		}
+	}
+	if strings.TrimSpace(stripSQLComments(down)) != "ALTER TABLE addon_metric_gaps DROP COLUMN IF EXISTS kind;" {
+		t.Errorf("000100 down must drop exactly the kind column: %q", down)
+	}
+}
+
+// 000100 runs down and up on the real engine and gives every stored gap the
+// kind its reason was written for (began, dropped, unobserved, else unread),
+// and the column refuses a kind the contract does not know. Left where it began.
+func TestLiveMigration100KindsEveryStoredGap(t *testing.T) {
+	ctx := statsLive(t)
+	var version int64
+	var dirty bool
+	if err := PG.QueryRow(ctx, `SELECT version, dirty FROM schema_migrations`).Scan(&version, &dirty); err != nil {
+		t.Fatal(err)
+	}
+	if version < 100 || dirty {
+		t.Skipf("the test database is at %d (dirty %t), before this branch's 100", version, dirty)
+	}
+	config, err := pgxpool.ParseConfig(os.Getenv("SYNDRA_TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	driver, err := pgx5.WithInstance(stdlib.OpenDB(*config.ConnConfig), &pgx5.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := migrate.NewWithDatabaseInstance("file://../../db/migrations", "postgres", driver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if v, _, _ := m.Version(); v != uint(version) {
+			_ = m.Migrate(uint(version))
+		}
+	})
+	today := clock.Day(clock.Now())
+	ago := func(n int) string { return clock.AddDate(today, 0, 0, -n) }
+	reasons := map[string]string{
+		"Not collected yet: counting began on 9 Nov":      "began",
+		"The add-on no longer holds these days":           "dropped",
+		"The NAS no longer keeps its log of these days":   "dropped",
+		"Auditing does not record everyone on this share": "unobserved",
+		"The NAS could not be read that day":              "unread",
+		"The print queue could not be read":               "unread",
+	}
+	var gaps []StatsGap
+	n := 0
+	for reason := range reasons {
+		n++
+		gaps = append(gaps, StatsGap{Dims: map[string]string{}, Start: ago(20 * n), End: ago(20*n - 1), Kind: "unread", Reason: reason})
+	}
+	if err := CollectStats(ctx, statsTarget, "storage.sessions", func(c *StatsTx) error { _, err := c.UpsertGaps(ctx, today, gaps); return err }); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Migrate(99); err != nil {
+		t.Fatalf("000100 down: %v", err)
+	}
+	if err := m.Migrate(100); err != nil {
+		t.Fatalf("000100 up: %v", err)
+	}
+	stored, err := StatsGaps(ctx, statsTarget, ago(400))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != len(reasons) {
+		t.Fatalf("%d gaps after up, want %d", len(stored), len(reasons))
+	}
+	for _, g := range stored {
+		if g.Kind != reasons[g.Reason] {
+			t.Errorf("%q: kind %q, want %q", g.Reason, g.Kind, reasons[g.Reason])
+		}
+	}
+	if _, err := PG.Exec(ctx, `UPDATE addon_metric_gaps SET kind = 'outage' WHERE target_id = $1`, statsTarget); err == nil {
+		t.Error("the column took a kind the contract does not know")
+	}
+}
+
+// A metric's began gap over the whole metric is read however old, beside the
+// gaps that end in the window asked: the day counting began outlives the
+// window. An old gap of any other kind, or a began gap on one series, is not.
+func TestLiveTheBeganGapIsReadHoweverOld(t *testing.T) {
+	ctx := statsLive(t)
+	today := clock.Day(clock.Now())
+	ago := func(n int) string { return clock.AddDate(today, 0, 0, -n) }
+	if err := CollectStats(ctx, statsTarget, "storage.sessions", func(c *StatsTx) error {
+		_, err := c.UpsertGaps(ctx, today, []StatsGap{
+			{Dims: map[string]string{}, Start: ago(500), End: ago(410), Kind: "began", Reason: "Not collected yet"},
+			{Dims: map[string]string{"share": "late"}, Start: ago(450), End: ago(405), Kind: "began", Reason: "Not collected yet"},
+			{Dims: map[string]string{}, Start: ago(409), End: ago(408), Kind: "unread", Reason: "The NAS could not be read"},
+			{Dims: map[string]string{}, Start: ago(9), End: ago(8), Kind: "unread", Reason: "The NAS could not be read"},
+		})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := StatsGaps(ctx, statsTarget, ago(340))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var said []string
+	for _, g := range got {
+		said = append(said, g.Kind+" "+g.Start)
+	}
+	if want := []string{"began " + ago(500), "unread " + ago(9)}; !slices.Equal(said, want) {
+		t.Errorf("read %v, want %v", said, want)
 	}
 }

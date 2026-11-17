@@ -3,6 +3,21 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Every statistics gap says its kind (slice 7s, 18 Nov 2026)
+
+Still major 2 before its release (owner, 18 Nov 2026: "label each gap"). A
+`/stats` gap carries a required `kind`, the machine's half of what its
+`reason` tells the member: `began` (before the add-on started counting the
+metric; it ends at or before the first counted day), `unread` (the app could
+not be read), `dropped` (purged, or older than the buffer holds) or
+`unobserved` (the app does not record the window). Syndra never parses a
+reason; it reads the kind, and draws a `began` window as before the record
+rather than as a gap. Schema: `stats.json` (gap `kind`, required).
+Fixtures: `stats.json` (`unread`), `stats_storage.json` (`unobserved`).
+The kit checks every gap's kind against the schema and that no point of the
+metric starts before a `began` gap's end (`stats.gaps`); the reference's
+`stats-gaps-all-began` defect fails it.
+
 ## Attribution everywhere a row is an account (slice 7t-3, 15 Nov 2026)
 
 Still major 2 before its release. `/subjects` `conflicts` is now required

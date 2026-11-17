@@ -417,6 +417,8 @@ func TestV2SchemasRefuseWhatTheyShould(t *testing.T) {
 		{"stats with a watermark that is not RFC 3339", "stats.json", "stats.json", v2Edit("watermark", "2026-11-08")},
 		{"stats point without an end", "stats.json", "stats.json", v2Edit("end", nil, "points", 0)},
 		{"stats gap without a reason", "stats.json", "stats.json", v2Edit("reason", nil, "gaps", 0)},
+		{"stats gap without a kind", "stats.json", "stats.json", v2Edit("kind", nil, "gaps", 0)},
+		{"stats gap of an unknown kind", "stats.json", "stats.json", v2Edit("kind", "outage", "gaps", 0)},
 		{"stats without gaps (absence is not a value)", "stats.json", "stats.json", v2Edit("gaps", nil)},
 		{"stats without unbound", "stats.json", "stats.json", v2Edit("unbound", nil)},
 		{"stats on contract 1", "stats.json", "stats.json", v2Edit("contract_version", 1)},

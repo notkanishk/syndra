@@ -780,16 +780,48 @@ func TestADayBeforeCountingBeganIsNotCollectedYet(t *testing.T) {
 			if !strings.HasPrefix(want, "Not collected yet: counting began on ") {
 				t.Fatalf("reason %q", want)
 			}
-			if len(first.Gaps) == 0 || first.Gaps[0].Reason != want {
+			if len(first.Gaps) == 0 || first.Gaps[0].Reason != want || first.Gaps[0].Kind != kindBegan {
 				t.Errorf("gaps %+v, want the first to say %q", first.Gaps, want)
 			}
 			*at = day0.AddDate(0, 0, 95)
 			s.collectStatsOnce()
 			later, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -3))
-			if len(later.Gaps) == 0 || later.Gaps[0].Reason != reasonBuffer {
+			if len(later.Gaps) == 0 || later.Gaps[0].Reason != reasonBuffer || later.Gaps[0].Kind != kindDropped {
 				t.Errorf("after the buffer trimmed past it, gaps %+v, want %q", later.Gaps, reasonBuffer)
 			}
 		})
+	}
+}
+
+// Every fixed reason has exactly one kind the contract knows, and every gap a reply carries,
+// one stored before kinds existed included, validates against stats.json (kind required).
+func TestEveryGapGoesOutWithItsKind(t *testing.T) {
+	for _, reason := range []string{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonPurged, reasonOverfull} {
+		if k := gapKinds[reason]; !slices.Contains([]string{kindUnread, kindDropped, kindUnobserved}, k) {
+			t.Errorf("reason %q has kind %q", reason, k)
+		}
+	}
+	s, _, _ := statsServer(t)
+	s.collectStatsOnce()
+	// A day stored by an older binary: its gap has no kind.
+	legacy := statDay{Gaps: []StatGap{{Start: s.stats.stamp(s.stats.day(day0)), End: s.stats.stamp(nextDayKey(s.stats.day(day0))), Dimensions: map[string]string{"share": "scratch"}, Reason: reasonAudited}}}
+	if err := s.store.PutStats(metricSessions, metaOf(t, s, metricSessions), map[string]statDay{s.stats.day(day0): legacy}, s.stats.oldest(day0)); err != nil {
+		t.Fatal(err)
+	}
+	rr, page := getStats(t, s, metricSessions, day0.AddDate(0, 0, -3), "")
+	var doc any
+	if err := json.Unmarshal(rr.Body.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if err := v2Validate(t, "stats.json", doc); err != nil {
+		t.Fatalf("the reply is not stats.json: %v", err)
+	}
+	kinds := map[string]string{}
+	for _, g := range page.Gaps {
+		kinds[g.Reason] = g.Kind
+	}
+	if kinds[reasonAudited] != kindUnobserved || kinds[s.stats.reasonBegan(s.stats.day(day0))] != kindBegan {
+		t.Errorf("gaps by reason %v: want the legacy one unobserved and the first collection's began", kinds)
 	}
 }
 

@@ -45,7 +45,7 @@ type Read func(ctx context.Context, metric string, since time.Time, cursor strin
 // what is dropped is counted on the metric's row (addon_metrics.dropped).
 const (
 	DropNotADay             = "not_a_day"            // not one makerspace day, midnight to midnight
-	DropBadValue            = "bad_value"            // no value, a negative one, or a gap with no reason
+	DropBadValue            = "bad_value"            // no value, a negative one, or a gap with no reason or no kind the contract knows
 	DropNotPerSubject       = "not_per_subject"      // a subject on a metric not reported per person
 	DropUnboundSubject      = "unbound_subject"      // a subject with no binding on this target
 	DropUndeclaredDimension = "undeclared_dimension" // a dimension the metric does not declare
@@ -414,13 +414,13 @@ func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[st
 		switch {
 		case !ok1 || !ok2 || end <= start:
 			dropped[DropNotADay]++
-		case g.Reason == "":
+		case g.Reason == "" || !slices.Contains(addons.GapKinds, g.Kind):
 			dropped[DropBadValue]++
 		case why != "":
 			dropped[why]++
 		default:
 			reason := []rune(g.Reason)
-			out = append(out, db.StatsGap{Dims: g.Dimensions, Start: start, End: end, Reason: string(reason[:min(len(reason), 200)]),
+			out = append(out, db.StatsGap{Dims: g.Dimensions, Start: start, End: end, Kind: g.Kind, Reason: string(reason[:min(len(reason), 200)]),
 				NamedSubjects: union(who.namesIn(g.Dimensions), who.names(g.Reason))})
 		}
 	}

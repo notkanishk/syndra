@@ -1494,10 +1494,11 @@ has collected it, under a size ceiling of your choosing that drops the
 oldest days first. Syndra's first collection of a metric asks from now
 minus `stats_buffer`. When Syndra asks from further back than you still
 hold, the add-on MUST answer a gap from the day `since` falls in to the
-first day it holds, with a reason (the TrueNAS add-on says "The add-on no
-longer holds these days" for days it dropped, and "Not collected yet: counting
-began on 9 Nov" for days before its first collection, which it never held),
-and go on from what it has.
+first day it holds, with a reason and its kind: `began` for days before it
+started counting the metric, which it never held, and `dropped` for days it
+held and has since dropped (the TrueNAS add-on says "Not collected yet:
+counting began on 9 Nov" and "The add-on no longer holds these days"), and
+go on from what it has.
 
 **A point is the whole day.** A point's `start` MUST be a midnight in
 `stats_zone` and its `end` the next one, both RFC 3339 with the zone's
@@ -1535,6 +1536,19 @@ metric is final, absence included.
   windows, but never across the watermark, so a final gap keeps its end.
   When the app comes back, read its log for the missed window and fill it;
   the watermark had not passed it, so Syndra collects it.
+- Every gap MUST carry a `kind`, which Syndra reads (the `reason` is the
+  member's, and Syndra never parses it). Exactly one fits each gap:
+  - `began`: before you started counting this metric, days you never held.
+    A `began` gap MUST end at or before the metric's first counted day: no
+    point of the metric starts before its `end`. Syndra draws these days as
+    before the record, not as a gap.
+  - `unread`: the app could not be read for the window: it was off or
+    unreachable, or held more than a run may read ("The laser PC was off").
+  - `dropped`: the window was gone when you came to it: the app purged it,
+    or it is older than the buffer still holds.
+  - `unobserved`: the app was read and does not record the window
+    (auditing off on a share, a series it cannot see).
+  Syndra hatches every kind but `began` and lists it with its reason.
 
 <!-- fixture: v2/fixtures/stats.json -->
 ```json
@@ -1572,6 +1586,7 @@ metric is final, absence included.
       "dimensions": {
         "machine": "speedy-400"
       },
+      "kind": "unread",
       "reason": "The laser PC was off"
     }
   ],
@@ -1667,6 +1682,7 @@ record everyone a gap rather than a zero:
       "dimensions": {
         "share": "scratch"
       },
+      "kind": "unobserved",
       "reason": "Auditing does not record everyone on this share"
     }
   ],

@@ -208,12 +208,11 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	for d := from; d <= today; d = nextDayKey(d) {
 		rec := statDay{}
 		if why, ok := gone[d]; ok {
-			rec.Gaps = []StatGap{{Start: c.stamp(d), End: c.stamp(nextDayKey(d)), Reason: why}}
+			rec.Gaps = []StatGap{gapOf(c.stamp(d), c.stamp(nextDayKey(d)), nil, why)}
 		}
 		for _, sh := range shares {
 			if _, ok := gone[d]; !ok && !counted[sh.Name] && d < until {
-				rec.Gaps = append(rec.Gaps, StatGap{Start: c.stamp(d), End: c.stamp(nextDayKey(d)),
-					Dimensions: map[string]string{"share": sh.Name}, Reason: reasonAudited})
+				rec.Gaps = append(rec.Gaps, gapOf(c.stamp(d), c.stamp(nextDayKey(d)), map[string]string{"share": sh.Name}, reasonAudited))
 			}
 		}
 		days[d] = rec
@@ -428,7 +427,7 @@ func (s *server) putLevels(metric string, meta statsMeta, now time.Time, dims []
 				sampled = sampled || p.Subject == "" && sameDims(p.Dimensions, want)
 			}
 			if !sampled {
-				rec.Gaps = append(rec.Gaps, StatGap{Start: c.stamp(d), End: c.stamp(nextDayKey(d)), Dimensions: want, Reason: reasonDark})
+				rec.Gaps = append(rec.Gaps, gapOf(c.stamp(d), c.stamp(nextDayKey(d)), want, reasonDark))
 			}
 		}
 		days[d] = rec

@@ -72,7 +72,32 @@ const (
 	reasonAudited  = "Auditing does not record everyone on this share"
 	reasonPurged   = "The NAS no longer keeps its log of these days"
 	reasonOverfull = "Too much activity to count"
+
+	// A gap's kind (contract: stats.json, AUTHORING "every gap MUST carry a kind"), which Syndra
+	// reads; the reason is the member's.
+	kindBegan      = "began"
+	kindUnread     = "unread"
+	kindDropped    = "dropped"
+	kindUnobserved = "unobserved"
 )
+
+// gapKinds is each fixed reason's kind, one row per reason, so no reason goes out without one.
+// reasonBegan, which carries its day, is kindBegan where it is made. Behind and overfull are
+// unread: the log was there and could not be read whole, in time or at all.
+var gapKinds = map[string]string{
+	reasonBuffer:   kindDropped,
+	reasonNAS:      kindUnread,
+	reasonDark:     kindUnread,
+	reasonBehind:   kindUnread,
+	reasonAudited:  kindUnobserved,
+	reasonPurged:   kindDropped,
+	reasonOverfull: kindUnread,
+}
+
+// gapOf is a window not observed for one of the fixed reasons, with that reason's kind.
+func gapOf(start, end string, dims map[string]string, reason string) StatGap {
+	return StatGap{Start: start, End: end, Dimensions: dims, Kind: gapKinds[reason], Reason: reason}
+}
 
 func declaredMetric(name string) (Metric, bool) {
 	i := slices.IndexFunc(statsMetrics, func(m Metric) bool { return m.Name == name })
@@ -106,7 +131,10 @@ type StatGap struct {
 	Start      string            `json:"start"`
 	End        string            `json:"end"`
 	Dimensions map[string]string `json:"dimensions,omitempty"`
-	Reason     string            `json:"reason"`
+	// Kind is the contract's gap kind. A gap stored before kinds existed has none and takes its
+	// reason's when it is served (gapKinds); every stored reason is a fixed one.
+	Kind   string `json:"kind"`
+	Reason string `json:"reason"`
 }
 
 // statsClock is the zone days are counted in and the clock, both seams.
@@ -359,18 +387,25 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request, _ []byte) {
 	}
 	if after == nil { // gaps on the first page only
 		if from < meta.HeldFrom {
-			reason := reasonBuffer
+			// Before the first collection (Began, set once, 7r): never held, so began; after the
+			// buffer trimmed past it: dropped.
+			g := gapOf(c.stamp(from), c.stamp(meta.HeldFrom), nil, reasonBuffer)
 			if meta.Began != "" && meta.Began == meta.HeldFrom {
-				reason = c.reasonBegan(meta.Began)
+				g.Kind, g.Reason = kindBegan, c.reasonBegan(meta.Began)
 			}
-			out.Gaps = append(out.Gaps, StatGap{Start: c.stamp(from), End: c.stamp(meta.HeldFrom), Reason: reason})
+			out.Gaps = append(out.Gaps, g)
+		}
+		for i, g := range dayGaps {
+			if g.Kind == "" { // stored before kinds existed: every stored reason is a fixed one
+				dayGaps[i].Kind = gapKinds[g.Reason]
+			}
 		}
 		out.Gaps = append(out.Gaps, mergeGaps(dayGaps, c.stamp(meta.Watermark))...)
 		if meta.Behind != "" {
-			out.Gaps = append(out.Gaps, StatGap{Start: c.stamp(meta.Behind), End: c.stamp(nextDayKey(today)), Reason: reasonBehind})
+			out.Gaps = append(out.Gaps, gapOf(c.stamp(meta.Behind), c.stamp(nextDayKey(today)), nil, reasonBehind))
 		}
 		if lost := nextDayKey(c.day(meta.TakenAt)); meta.Failing && lost <= today {
-			out.Gaps = append(out.Gaps, StatGap{Start: c.stamp(lost), End: c.stamp(nextDayKey(today)), Reason: reasonNAS})
+			out.Gaps = append(out.Gaps, gapOf(c.stamp(lost), c.stamp(nextDayKey(today)), nil, reasonNAS))
 		}
 		out.Gaps = slices.DeleteFunc(out.Gaps, func(g StatGap) bool {
 			end, _ := time.Parse(time.RFC3339, g.End)

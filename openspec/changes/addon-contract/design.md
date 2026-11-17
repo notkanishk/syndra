@@ -1255,6 +1255,16 @@ Rules, MUST on the add-on:
   member's words, never a zero. "The PC was off" and "nobody used it" are
   different sentences (the README's honest-degradation rule, applied to
   numbers).
+- Every gap carries a required `kind` (slice 7s; the owner's ruling of 18 Nov
+  2026, "label each gap"): `began` (before the add-on started counting the
+  metric; it ends at or before the first counted day), `unread` (the app
+  could not be read), `dropped` (purged, or older than the buffer holds) or
+  `unobserved` (the app does not record the window). Syndra reads the kind
+  and never parses the reason; it draws a `began` window as before the
+  record, not as a gap, and keeps each metric's `began` gap over the whole
+  metric however old, so a later outage is never read as the record's start
+  (the stats view's `began`). Kit: `stats.gaps`; reference defect
+  `stats-gaps-all-began`.
 - Paged with a **keyset** cursor (`next_cursor` encodes the last
   `(start, subject, dimensions)` sent; no snapshot needed, because
   ingestion is upsert-by-key and the watermark is written last); a cursor
@@ -1509,7 +1519,7 @@ in the totals". No local name crosses the wire for an unbound account.
   bucket_start DATE, value NUMERIC, observed_at)` with the plain primary key
   `(target_id, metric, subject, dims, bucket_start)` (a PRIMARY KEY cannot
   contain `COALESCE`; `bucket_end` is derived, `start + 1 day`);
-  `addon_metric_gaps(target_id, metric, dims JSONB NOT NULL DEFAULT '{}' sorted, gap_start, gap_end, reason)`
+  `addon_metric_gaps(target_id, metric, dims JSONB NOT NULL DEFAULT '{}' sorted, gap_start, gap_end, kind, reason)` (`kind` since 000100)
   with the primary key `(target_id, metric, dims, gap_start)` (a PK column
   cannot be NULL, so a gap without dimensions is `{}`);
   `addon_metrics(target_id, metric, descriptor JSONB, watermark,

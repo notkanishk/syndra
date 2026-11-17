@@ -81,7 +81,7 @@ func TestTheWatermarkIsHeldWhileTheAppIsDown(t *testing.T) {
 	if dark.Watermark != first.Watermark {
 		t.Errorf("with the app down the watermark moved to %s", dark.Watermark)
 	}
-	want := gap{Start: nov(10), End: nov(12), Reason: failureReason}
+	want := gap{Start: nov(10), End: nov(12), Kind: "unread", Reason: failureReason}
 	if n := len(dark.Gaps); n == 0 || !equal(dark.Gaps[n-1], want) {
 		t.Errorf("gaps %+v, want the days since the last read as one gap %+v", dark.Gaps, want)
 	}
@@ -115,9 +115,9 @@ func TestTheWatermarkIsHeldWhileTheAppIsDown(t *testing.T) {
 func TestGapsJoinButNeverAcrossTheWatermark(t *testing.T) {
 	dims := map[string]string{"printer": "xl-1"}
 	day := func(d int) string { return stamp3339(time.Date(2026, 11, d, 0, 0, 0, 0, statsZone)) }
-	in := []gap{{day(1), day(2), dims, offReason}, {day(2), day(3), dims, offReason}, {day(3), day(4), dims, offReason}, {day(4), day(5), nil, offReason}}
+	in := []gap{{day(1), day(2), dims, "unread", offReason}, {day(2), day(3), dims, "unread", offReason}, {day(3), day(4), dims, "unread", offReason}, {day(4), day(5), nil, "unread", offReason}}
 	got := mergeGaps(in, day(3))
-	want := []gap{{day(1), day(3), dims, offReason}, {day(3), day(4), dims, offReason}, {day(4), day(5), nil, offReason}}
+	want := []gap{{day(1), day(3), dims, "unread", offReason}, {day(3), day(4), dims, "unread", offReason}, {day(4), day(5), nil, "unread", offReason}}
 	if !equal(got, want) {
 		t.Errorf("merged %+v, want %+v", got, want)
 	}
@@ -167,7 +167,7 @@ func TestTheBufferDropsTheOldestAndSaysSo(t *testing.T) {
 
 	since := at.AddDate(0, 0, -statsBufferDays)
 	first, all := readAll(t, a, "machine.jobs", since)
-	if len(first.Gaps) == 0 || !equal(first.Gaps[0], gap{Start: stamp3339(dayOf(since)), End: stamp3339(held), Reason: bufferReason}) {
+	if len(first.Gaps) == 0 || !equal(first.Gaps[0], gap{Start: stamp3339(dayOf(since)), End: stamp3339(held), Kind: "dropped", Reason: bufferReason}) {
 		t.Errorf("first gap %+v, want the dropped days [%s, %s) with the buffer's reason", first.Gaps, stamp3339(dayOf(since)), stamp3339(held))
 	}
 	want := 0

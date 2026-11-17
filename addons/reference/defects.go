@@ -80,6 +80,7 @@ const (
 	StatsNoBufferGap          Defect = "stats-no-buffer-gap"          // the window the buffer no longer holds has no gap (with stats)
 	StatsTotalMissing         Defect = "stats-total-missing"          // a day with per-person points has no total (with stats)
 	StatsDimensionNamesPerson Defect = "stats-dimension-names-person" // the mk4-a printer is named for the first account's username (with stats)
+	StatsGapsAllBegan         Defect = "stats-gaps-all-began"         // every gap says began, the outages after counting included (with stats)
 	OffWaitsOnOperator        Defect = "off-waits-on-operator"        // an account that is off answers standing waiting_on: operator
 	FoldsNames                Defect = "folds-names"                  // decodes a request with encoding/json alone: names case-folded, the last of two kept
 	OmitsSubject              Defect = "omits-subject"                // /subjects names no row's subject, bound or not
@@ -97,7 +98,7 @@ var Defects = []Defect{IgnoresFingerprint, CreatesOnWithdraw, EchoesSecret, Repl
 	CachedAsCurrent, ReadsPerRequest, CooldownIgnored, PreviewRecorded, ReexecutesInDoubt, CheckoutUnserialised,
 	NoChangeAsSucceeded, CallsEchoParams, StatsUndeclaredDimension, StatsLocalNameSubject, StatsZeroForGap,
 	StatsWatermarkAhead, StatsSubjectsAboveTotal, StatsSinceIgnored, StatsFinalMoves, StatsUnknownMetricOK,
-	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing, StatsDimensionNamesPerson, FoldsNames, OffWaitsOnOperator,
+	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing, StatsDimensionNamesPerson, StatsGapsAllBegan, FoldsNames, OffWaitsOnOperator,
 	OmitsSubject, ConflictAlsoAttributed, ReusedID}
 
 // ParseDefects turns names into a set, refusing any name it does not know.
@@ -597,6 +598,9 @@ func (a *Addon) statsDeviate(metric string, doc map[string]any) {
 	for _, g := range gaps {
 		if d[StatsNoBufferGap] && g["reason"] == bufferReason {
 			continue
+		}
+		if d[StatsGapsAllBegan] {
+			g["kind"] = "began"
 		}
 		if dims := g["dimensions"]; d[StatsZeroForGap] && dims != nil {
 			start, _ := time.Parse(time.RFC3339, g["start"].(string))

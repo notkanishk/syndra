@@ -272,6 +272,41 @@ func TestUsageSaysWhatRetentionKeptAndWhatIsFinal(t *testing.T) {
 	}
 }
 
+// A year-old system: its first collection's began gap ended long before the
+// 12 months read, and a later outage is in them. The view names the day
+// counting began however old (began), never lists the old gap, and keeps the
+// outage a gap of its own kind, so the page never mistakes it for the record's
+// start; on the totals and on a person's view alike.
+func TestTheDayCountingBeganOutlivesTheWindow(t *testing.T) {
+	inIST(t)
+	now := time.Date(2026, 11, 12, 20, 0, 0, 0, time.UTC)
+	for _, subject := range []string{"", "u1"} {
+		stubStats(t, &statsStore{})
+		dbStatsGaps = func(context.Context, string, string) ([]db.StatsGapRow, error) {
+			return []db.StatsGapRow{
+				{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{}, Start: "2025-07-01", End: "2025-09-29", Kind: "began", Reason: "Not collected yet: counting began on 29 Sep 2025"}},
+				{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{}, Start: "2026-10-20", End: "2026-10-22", Kind: "unread", Reason: "The NAS could not be read"}},
+			}, nil
+		}
+		usage, err := statsUsageFor(context.Background(), "truenas", subject, false, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := sessionsOf(t, usage)
+		if m.Began == nil || *m.Began != "2025-09-29" {
+			t.Errorf("%q: began %v, want 2025-09-29", subject, m.Began)
+		}
+		if len(m.Gaps) != 1 || m.Gaps[0].Kind != "unread" || m.Gaps[0].Start != "2026-10-20" {
+			t.Errorf("%q: gaps %+v, want the outage alone, unread", subject, m.Gaps)
+		}
+		for _, other := range usage.Metrics {
+			if other.Name != "storage.sessions" && other.Began != nil {
+				t.Errorf("%q: %s says counting began %s; it sent no began gap", subject, other.Name, *other.Began)
+			}
+		}
+	}
+}
+
 // A person's page carries a gap over the whole metric or over one of their own
 // series, never one on a share only somebody else used: edge never sees the
 // kiln, which only lita used; lita and the totals see every gap.
