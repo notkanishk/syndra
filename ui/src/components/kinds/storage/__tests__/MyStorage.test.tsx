@@ -192,6 +192,22 @@ describe("usage", () => {
     expect(within(card).getByRole("heading", { name: "Sessions" })).toBeInTheDocument();
   });
 
+  // Wherever the card does not draw the month, the usage card beside it keeps it: said once, never
+  // twice, never nowhere (one answer, `drawsHomeMonth`).
+  it.each([
+    ["ready", {}, "card"],
+    ["the system did not say which folders are open (unread)", { storage: undefined }, "usage"],
+    ["its places could not be read", { storage: { usable: true, needs_password: false, places: [HOME, WADDLE], places_readable: false } }, "usage"],
+    ["no folder is open to you", { storage: { usable: true, needs_password: false, places: [], places_readable: true } }, "usage"],
+    ["no home place among the folders", { storage: { usable: true, needs_password: false, places: [WADDLE], places_readable: true } }, "usage"],
+  ] as const)("says the home folder's month once: %s", (_, over, where) => {
+    state.targets = [view({ usage: { reported: true, metrics: [homeBytes({ against: "home_quota" }), sessions()], ...windows() }, ...(over as Partial<MyTargetView>) })];
+    renderStorage();
+    const inCard = document.querySelectorAll("[data-home-month]").length;
+    const inUsage = screen.queryAllByRole("heading", { name: "Home folder used" }).length;
+    expect([inCard, inUsage]).toEqual(where === "card" ? [1, 0] : [0, 1]);
+  });
+
   it("says no limit set rather than drawing a full bar", () => {
     state.targets = [
       view({ storage: { ...view().storage!, places: [place({ path: "main/waddle_share", usage: { used_bytes: 2 ** 30 } })] } }),

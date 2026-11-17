@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { ago, GAP, GIB } from "@/components/usage/__tests__/fixtures";
-import { beforeRecord, capText, change, daysSince, dimensionWords, formatValue, gapIsOn, gapLines, gapRange, gapWhere, plot, quoted, seriesName, windowDays, WINDOW_DAYS } from "@/lib/usage";
+import type { StatsGap } from "@/lib/queries/useStats";
+import { capText, change, daysSince, dimensionWords, formatValue, gapIsOn, gapLines, gapRange, gapWhere, plot, quoted, seriesName, windowDays, WINDOW_DAYS } from "@/lib/usage";
 
 describe("a value in its unit", () => {
   it("says each registry unit in its own words", () => {
@@ -192,35 +193,12 @@ describe("gaps said as lines", () => {
   });
 });
 
-describe("the record's start (A-23 Q1)", () => {
-  const today = ago(0);
-  // The first collection asks for the add-on's whole buffer, and the add-on says the days before its first count are a gap.
-  const buffer = { start: ago(99), end: ago(9), reason: "Not collected yet: counting began on a day" };
-  const series = (days: Array<[number, number]>, months: Array<{ month: string; value: number }> = []) => ({ dimensions: {}, days: days.map(([d, value]) => ({ day: ago(d), value })), months });
-  const monthBefore = new Date(Date.UTC(Number(ago(9).slice(0, 4)), Number(ago(9).slice(5, 7)) - 2, 1)).toISOString().slice(0, 7);
+describe("the record's start is the add-on's (A-23 Q1, a gap's kind)", () => {
+  const series = (days: Array<[number, number]>) => ({ dimensions: {}, days: days.map(([d, value]) => ({ day: ago(d), value })) });
+  const gap = (from: number, to: number, kind: StatsGap["kind"]): StatsGap => ({ start: ago(from), end: ago(to), kind, reason: "a reason" });
 
-  it("is the metric's earliest whole-metric gap, when nothing Syndra holds is older", () => {
-    expect(beforeRecord({ gaps: [{ start: ago(5), end: ago(4), reason: "The NAS could not be read" }, buffer], series: [series([[3, 1]])] }, today)).toBe(buffer);
-  });
-
-  it("is never an outage that starts inside the window, however quiet the days before it (a counter's are sparse)", () => {
-    const off = { start: ago(8), end: ago(7), reason: "The NAS was off" };
-    expect(beforeRecord({ gaps: [off], series: [series([[3, 1]])] }, today)).toBeUndefined();
-    expect(beforeRecord({ gaps: [{ ...buffer, start: ago(29) }], series: [] }, today)).toBeUndefined();
-    expect(beforeRecord({ gaps: [{ ...buffer, start: ago(30) }], series: [] }, today)).toEqual({ ...buffer, start: ago(30) });
-  });
-
-  it("is not a gap that names a series, one that ends after today, or one with a point or a counted month before it", () => {
-    expect(beforeRecord({ gaps: [{ ...buffer, dimensions: { share: "makers" } }], series: [] }, today)).toBeUndefined();
-    expect(beforeRecord({ gaps: [{ ...buffer, end: ago(-1) }], series: [] }, today)).toBeUndefined();
-    expect(beforeRecord({ gaps: [buffer], series: [series([[20, 4]])] }, today)).toBeUndefined();
-    expect(beforeRecord({ gaps: [buffer], series: [series([], [{ month: monthBefore, value: 3 }])] }, today)).toBeUndefined();
-    // A month before with nothing in it is not something held.
-    expect(beforeRecord({ gaps: [buffer], series: [series([], [{ month: monthBefore, value: 0 }])] }, today)).toBe(buffer);
-  });
-
-  it("draws the days before it as before the record: not hatched, not a zero, and the record starts on its end", () => {
-    const p = plot(series([[3, 2]]), [buffer], "counter", undefined, { began: buffer.end });
+  it("draws the days before the began day as before the record: not hatched, not a zero", () => {
+    const p = plot(series([[3, 2]]), [], "counter", undefined, { began: ago(9) });
     const early = p.cells.filter((c) => c.day < ago(9));
     expect(early).toHaveLength(WINDOW_DAYS - 10);
     expect(early.every((c) => c.before === "began" && !c.gap && c.value === undefined)).toBe(true);
@@ -228,6 +206,32 @@ describe("the record's start (A-23 Q1)", () => {
     expect(p.recordFrom).toBe(ago(9));
     // Inside the record a counter's quiet final day is still a real zero.
     expect(p.cells.find((c) => c.day === ago(8))?.value).toBe(0);
+  });
+
+  it("reads a began gap on the series the same way, and hatches every other kind, an outage at the window's start included", () => {
+    for (const kind of ["unread", "dropped", "unobserved"] as const) {
+      const p = plot(series([]), [gap(40, 20, kind)], "gauge");
+      expect(p.gapRuns, kind).toEqual([[0, 8]]);
+      expect(p.cells.slice(0, 9).every((c) => c.gap && !c.before), kind).toBe(true);
+    }
+    const began = plot(series([]), [gap(40, 20, "began")], "counter");
+    expect(began.gapRuns).toEqual([]);
+    expect(began.cells.slice(0, 9).every((c) => c.before === "began" && c.value === undefined)).toBe(true);
+    expect(began.recordFrom).toBe(ago(20));
+  });
+
+  it("a year on, the began day still holds and a later whole-metric outage stays an unread gap: the tick does not move", () => {
+    // The began gap ended a year ago (kept by the backend as `began`); an outage crossed the window's first day on a quiet counter.
+    const p = plot(series([[3, 2]]), [gap(35, 20, "unread")], "counter", undefined, { began: ago(365) });
+    expect(p.recordFrom).toBe(ago(29));
+    expect(p.cells.some((c) => c.before)).toBe(false);
+    expect(p.gapRuns).toEqual([[0, 8]]);
+  });
+
+  it("a short buffer: days before the began day are never a counter's zero", () => {
+    const p = plot(series([]), [gap(36, 7, "began")], "counter", undefined, { began: ago(7) });
+    expect(p.cells.filter((c) => c.value === 0).every((c) => c.day >= ago(7))).toBe(true);
+    expect(p.cells.filter((c) => c.day < ago(7)).every((c) => c.before === "began")).toBe(true);
   });
 });
 

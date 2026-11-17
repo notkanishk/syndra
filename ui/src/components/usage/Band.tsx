@@ -30,6 +30,8 @@ import { dayWords, formatValue, type Cell, type Plot } from "@/lib/usage";
  */
 const H = 40;
 const PAD_Y = 6;
+/** With a limit, its line sits this far down, its word above it, so the word never lies on the line's points. */
+const LIMIT_Y = 16;
 const BASE = H - PAD_Y;
 /** The width before the seat is measured (and where it cannot be). */
 const FALLBACK_W = 320;
@@ -88,7 +90,8 @@ export function Band({
   const step = (W - 2 * padX) / (n - 1);
   const x = (i: number) => padX + i * step;
   const ceiling = Math.max(limit ?? 0, 1, ...cells.map((c) => c.value ?? 0));
-  const y = (v: number) => BASE - (v / ceiling) * (H - 2 * PAD_Y);
+  const roof = limit !== undefined ? LIMIT_Y : PAD_Y;
+  const y = (v: number) => BASE - (v / ceiling) * (BASE - roof);
   const left = (i: number) => Math.max(0, x(i) - step / 2);
   const right = (i: number) => Math.min(W, x(i) + step / 2);
   const first = cells.findIndex((c) => !c.before);
@@ -106,6 +109,11 @@ export function Band({
   const dots = new Set(runs.filter((run) => run.length === 1).map((run) => run[0][2]));
   if (last >= 0) dots.add(last);
   const bw = step * COLUMN;
+  // The limit's word sits above its line, at the right; where a value over the limit (a folder past full)
+  // would rise into it there, at the line's left instead. ~7px a character at 12.5px.
+  const word = limit !== undefined ? limitWord(formatValue(limit, unit)) : "";
+  const over = (from: number, to: number) => cells.some((c, i) => c.value !== undefined && c.value > (limit ?? Infinity) && x(i) >= from && x(i) <= to);
+  const wordLeft = over(W - word.length * 7 - 4, W);
 
   const keys = (e: KeyboardEvent) => {
     const by = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
@@ -115,7 +123,9 @@ export function Band({
   };
 
   return (
-    <div ref={seat} className="h-10 min-w-0">
+    <div ref={seat} className="relative h-10 min-w-0">
+      {/* The day being read, behind the band: the board's inner radius (--radius-inner), colour only. */}
+      {readIndex !== null && <div data-read aria-hidden className="absolute rounded-inner bg-tint-3" style={{ insetBlockStart: 0, left: left(readIndex), width: right(readIndex) - left(readIndex), height: BASE }} />}
       <svg
         role="img"
         aria-label={sparkLabel(what, plot.gapRuns.length > 0)}
@@ -134,7 +144,6 @@ export function Band({
             <line x1="0" y1="0" x2="0" y2="6" stroke="var(--chart-hatch)" strokeWidth="1" />
           </pattern>
         </defs>
-        {readIndex !== null && <rect data-read x={left(readIndex)} width={right(readIndex) - left(readIndex)} y="0" height={BASE} rx={step / 2} fill="var(--tint-3)" />}
         {plot.gapRuns.map(([a, b]) => (
           <rect key={a} data-gap x={left(a)} width={right(b) - left(a)} y="0" height={BASE} fill={`url(#${id}-gap)`} />
         ))}
@@ -144,8 +153,8 @@ export function Band({
         {limit !== undefined && first >= 0 && (
           <>
             <line data-limit x1={baseLeft} x2={W} y1={y(limit) + 0.5} y2={y(limit) + 0.5} stroke="var(--line)" strokeWidth="1" />
-            <text x={W} y={y(limit) + 3} textAnchor="end" dominantBaseline="hanging" fontSize="12.5" fill="var(--faint)">
-              {limitWord(formatValue(limit, unit))}
+            <text data-limit-word x={wordLeft ? baseLeft : W} y={y(limit) - 4} textAnchor={wordLeft ? "start" : "end"} fontSize="12.5" fill="var(--faint)">
+              {word}
             </text>
           </>
         )}

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { STORAGE_USAGE_STEP } from "@/components/kinds/storage/captions";
 import * as copy from "@/components/usage/copy";
 import type { StatsUnit } from "@/lib/queries/useStats";
 
@@ -96,6 +97,7 @@ const SAID = [
   copy.readoutNamed("{name}", copy.dayValue("{day}", "{value}")),
   copy.OVERVIEW_NEXT,
   copy.OVERVIEW_NEXT_LINK,
+  STORAGE_USAGE_STEP,
   ...Object.values(copy.UNIT_HEADING),
 ];
 
@@ -118,7 +120,7 @@ describe("the copy guide's section on what has been used", () => {
   });
 
   it("ends every card on a next step, in plain words (no em dash, no exclamation, no 'UTC')", () => {
-    for (const s of [copy.NOT_COUNTED_NEXT, copy.ABSENT, copy.INSIGHTS_EMPTY, copy.INSIGHTS_NEXT, copy.OVERVIEW_NEXT]) expect(s).toContain(copy.NOTHING_TO_DO);
+    for (const s of [copy.NOT_COUNTED_NEXT, copy.ABSENT, copy.INSIGHTS_EMPTY, copy.INSIGHTS_NEXT, copy.OVERVIEW_NEXT, STORAGE_USAGE_STEP]) expect(s).toContain(copy.NOTHING_TO_DO);
     expect(copy.UNAVAILABLE).toMatch(/Reload this page/);
     for (const s of SAID) {
       expect(s).not.toMatch(/[—!]/);

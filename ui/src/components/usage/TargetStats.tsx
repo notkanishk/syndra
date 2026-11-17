@@ -2,6 +2,7 @@
 
 import * as copy from "@/components/usage/copy";
 import { UsageCard } from "@/components/usage/UsageCard";
+import { usageStep } from "@/components/kinds/limits";
 import { RowSkeleton } from "@/components/states";
 import { Card, CardRow } from "@/components/ui/Card";
 import { useTargetStats } from "@/lib/queries/useStats";
@@ -14,7 +15,7 @@ import { useTargetStats } from "@/lib/queries/useStats";
  * statistics" when the feature is absent, which is not the same sentence as
  * "no data".
  */
-export function TargetStats({ target }: { target: string }) {
+export function TargetStats({ target, kind }: { target: string; kind?: string }) {
   const stats = useTargetStats(target);
 
   if (stats.isLoading) {
@@ -43,5 +44,5 @@ export function TargetStats({ target }: { target: string }) {
       </Card>
     );
   }
-  return <UsageCard label={copy.OVERVIEW_TITLE} metrics={usage.metrics} windows={usage} target={target} />;
+  return <UsageCard label={copy.OVERVIEW_TITLE} metrics={usage.metrics} windows={usage} target={target} step={usageStep(kind)} />;
 }

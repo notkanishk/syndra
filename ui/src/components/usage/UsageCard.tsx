@@ -15,31 +15,28 @@ import { addDays } from "@/components/insights/days";
 import { formatRelative } from "@/lib/format";
 import { Crossfade, Unfold } from "@/lib/motion";
 import type { MyTargetView } from "@/lib/queries/useMyStorage";
-import type { StatsGap, StatsMetric, UsageWindows } from "@/lib/queries/useStats";
-import { beforeRecord, CAP, capText, dayWords, daysSince, gapLines, gapRange, gapWhere, plot, quoted, windowDays } from "@/lib/usage";
+import type { StatsMetric, UsageWindows } from "@/lib/queries/useStats";
+import { CAP, capText, dayWords, daysSince, gapLines, gapRange, gapWhere, plot, quoted, windowDays } from "@/lib/usage";
 
 /** The most lines the fold lists; the rest is said, not drawn. */
 const MAX_LINES = 12;
 
-/** Each metric with the gap before its record (`beforeRecord`): drawn as before the record, never listed. */
-const withRecords = (metrics: StatsMetric[], today: string) => metrics.map((metric) => ({ metric, before: beforeRecord(metric, today) }));
-type Recorded = ReturnType<typeof withRecords>[number];
-
 /**
  * The card's one fold (A-23 Q2, closed): every gap in the widest window a metric shows, merged across
  * the card's metrics where range, series and reason are the same, then in Advanced what the last count
- * did not keep, then that a day with no line is not a zero. Present only when there is something to say.
+ * did not keep, then that a striped day is not a zero. A `began` gap is before the record, not a gap,
+ * and is never listed. Present only when there is something to say.
  */
-function Fold({ recorded, windows }: { recorded: Recorded[]; windows: UsageWindows }) {
+function Fold({ metrics, windows }: { metrics: StatsMetric[]; windows: UsageWindows }) {
   const [open, setOpen] = useState(false);
   const end = addDays(windows.today, 1);
   const seen = new Set<string>();
   const lines: Array<{ start: string; said: string }> = [];
-  for (const { metric, before } of recorded) {
+  for (const metric of metrics) {
     if (metric.watermark === null) continue;
     // A counter's 12-month total is drawn, so every gap inside it is explained; a level shows 30 days.
     const from = metric.instrument === "counter" && windows.window_12m_from < windows.window_30d_from ? windows.window_12m_from : windows.window_30d_from;
-    for (const g of gapLines(metric.gaps.filter((x: StatsGap) => x !== before), from, end)) {
+    for (const g of gapLines(metric.gaps.filter((x) => x.kind !== "began"), from, end)) {
       const said = copy.gapLine(gapRange(g), gapWhere(metric, g), quoted(g.reason, CAP.reason));
       if (seen.has(said)) continue;
       seen.add(said);
@@ -47,7 +44,7 @@ function Fold({ recorded, windows }: { recorded: Recorded[]; windows: UsageWindo
     }
   }
   lines.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
-  const dropped = recorded.flatMap(({ metric }) => {
+  const dropped = metrics.flatMap((metric) => {
     const parts = Object.entries(metric.collected?.dropped ?? {})
       .filter(([reason, n]) => n > 0 && copy.DROPPED[reason])
       .map(([reason, n]) => copy.DROPPED[reason](n));
@@ -96,19 +93,19 @@ function Fold({ recorded, windows }: { recorded: Recorded[]; windows: UsageWindo
 }
 
 /**
- * The card's end row: its next step left (on a totals card with the one link to Insights, Usage),
- * and right, faint, when the record began inside the window and how old the count is (totals) or
- * how long a person's numbers are kept.
+ * The card's end row: its next step left (on a totals card with per-person metrics, the one link to
+ * Insights, Usage, in the words the system's kind gives, `step`), and right, faint, when the record
+ * began inside the window and how old the count is (totals) or how long a person's numbers are kept.
  */
-function End({ recorded, windows, target }: { recorded: Recorded[]; windows: UsageWindows; target?: string }) {
-  const waiting = recorded.some(({ metric }) => metric.watermark === null);
+function End({ metrics, windows, target, step: insights }: { metrics: StatsMetric[]; windows: UsageWindows; target?: string; step?: string }) {
+  const waiting = metrics.some((metric) => metric.watermark === null);
   const windowStart = windowDays(windows.today)[0];
-  const began = recorded
-    .map(({ before }) => before?.end)
-    .filter((d): d is string => d !== undefined && d > windowStart)
+  const began = metrics
+    .map((metric) => metric.began)
+    .filter((d): d is string => d != null && d > windowStart)
     .sort()[0];
-  const counted = recorded
-    .map(({ metric }) => metric.collected?.at)
+  const counted = metrics
+    .map((metric) => metric.collected?.at)
     .filter((at): at is string => Boolean(at))
     .sort()
     .pop();
@@ -122,12 +119,14 @@ function End({ recorded, windows, target }: { recorded: Recorded[]; windows: Usa
   ]
     .filter(Boolean)
     .join(" · ");
-  const step = waiting ? copy.NOT_COUNTED_NEXT : target !== undefined ? copy.OVERVIEW_NEXT : copy.NOTHING_TO_DO;
+  // Insights, Usage holds per-person metrics only: a system with none has nothing there to open.
+  const link = target !== undefined && !waiting && metrics.some((metric) => metric.per_subject) ? insightsUsageHref(target) : null;
+  const step = waiting ? copy.NOT_COUNTED_NEXT : link ? (insights ?? copy.OVERVIEW_NEXT) : copy.NOTHING_TO_DO;
   return (
     <div data-end className="row-divider flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1.5 px-5 py-3.5 text-[13px] text-muted">
       <span className="inline-flex flex-wrap items-baseline gap-x-3">
         <span>{step}</span>
-        {target !== undefined && !waiting && <ArrowLink href={insightsUsageHref(target)}>{copy.OVERVIEW_NEXT_LINK}</ArrowLink>}
+        {link && <ArrowLink href={link}>{copy.OVERVIEW_NEXT_LINK}</ArrowLink>}
       </span>
       {right && (
         <span className="ml-auto text-faint">
@@ -142,20 +141,33 @@ function End({ recorded, windows, target }: { recorded: Recorded[]; windows: Usa
 
 /**
  * The usage card (A-23 §3): "What I have used", the operator's "What {person} has used" (`title`), or
- * the target overview's totals (`target`, no title: the Region is the title). Its sections, one fold
- * and one end row. It never draws a meter: a person's limit has its meter, and its month, in the
- * kind's card (R1, Q4).
+ * the target overview's totals (`target`, no title: the Region is the title; `step`, its kind's words
+ * for the way to Insights). Its sections, one fold and one end row. It never draws a meter: a person's
+ * limit has its meter, and its month, in the kind's card (R1, Q4).
  */
-export function UsageCard({ title, label, metrics, windows, target }: { title?: string; label?: string; metrics: StatsMetric[]; windows: UsageWindows; target?: string }) {
-  const recorded = withRecords(metrics, windows.today);
+export function UsageCard({
+  title,
+  label,
+  metrics,
+  windows,
+  target,
+  step,
+}: {
+  title?: string;
+  label?: string;
+  metrics: StatsMetric[];
+  windows: UsageWindows;
+  target?: string;
+  step?: string;
+}) {
   return (
     <Card role="group" aria-label={title ?? label} className="@container">
       {title && <CardHeader title={title} />}
-      {recorded.map(({ metric, before }, i) => (
-        <MetricBlock key={metric.name} metric={metric} windows={windows} began={before?.end} first={i === 0} titled={Boolean(title)} />
+      {metrics.map((metric, i) => (
+        <MetricBlock key={metric.name} metric={metric} windows={windows} first={i === 0} titled={Boolean(title)} />
       ))}
-      <Fold recorded={recorded} windows={windows} />
-      <End recorded={recorded} windows={windows} target={target} />
+      <Fold metrics={metrics} windows={windows} />
+      <End metrics={metrics} windows={windows} target={target} step={step} />
     </Card>
   );
 }
@@ -164,9 +176,10 @@ export function UsageCard({ title, label, metrics, windows, target }: { title?: 
  * A system's usage card for one person's view, on the member's page (`person` absent) and on the
  * person page (the operator's). Where the add-on reports no statistics, or this person has no
  * per-person metric left to show, there is nothing to say and no card (the target overview says
- * "does not report" once, for the whole system). The metric the kind draws under its own meter is
- * left out: it is said there (R1). A view with a kind whose usage is absent is Syndra's own store
- * failing to answer: said, with its step, and never as "no data".
+ * "does not report" once, for the whole system). The metric the kind's card draws under its own meter
+ * is left out, and only when that card draws it (`meteredMetric`, the kind's one answer): it is said
+ * there (R1). A view with a kind whose usage is absent is Syndra's own store failing to answer: said,
+ * with its step, and never as "no data".
  */
 export function ViewUsage({ view, person }: { view: MyTargetView; person?: string }) {
   const usage = view.usage;
@@ -183,7 +196,7 @@ export function ViewUsage({ view, person }: { view: MyTargetView; person?: strin
     );
   }
   if (!usage.reported) return null;
-  const metered = meteredMetric(view);
+  const metered = meteredMetric(view, person !== undefined);
   const metrics = usage.metrics.filter((m) => m !== metered);
   if (metrics.length === 0) return null;
   return <UsageCard title={title} metrics={metrics} windows={usage} />;
@@ -193,15 +206,16 @@ export function ViewUsage({ view, person }: { view: MyTargetView; person?: strin
  * The home folder's month, under its meter in the storage cards (A-23 R1, §4): the level's change
  * over the record, its band against the limit Syndra read (none read, or 0 for "no limit": the band
  * on its own scale), and its own axis. Nothing when there is no such metric or nothing counted yet.
+ * `operator`: the person page's card, else the member's own: the same question `ViewUsage` asks, so
+ * the month is drawn here exactly when the usage card leaves it out.
  */
-export function HomeMonth({ view }: { view: MyTargetView }) {
+export function HomeMonth({ view, operator = false }: { view: MyTargetView; operator?: boolean }) {
   const [read, setRead] = useState<number | null>(null);
-  const metric = meteredMetric(view);
+  const metric = meteredMetric(view, operator);
   const usage = view.usage;
   if (!metric || !usage?.reported || metric.watermark === null || metric.series.length !== 1) return null;
   const days = windowDays(usage.today);
-  const before = beforeRecord(metric, usage.today);
-  const p = plot(metric.series[0], metric.gaps, metric.instrument, days, { from: usage.kept_from, began: before?.end, countedThrough: metric.counted_through });
+  const p = plot(metric.series[0], metric.gaps, metric.instrument, days, { from: usage.kept_from, began: metric.began, countedThrough: metric.counted_through });
   const limit = observedLimits(view)[metric.against ?? ""];
   const keptDays = usage.kept_from ? daysSince(usage.kept_from, usage.today) : undefined;
   const changed = changeWords(p, metric.unit);

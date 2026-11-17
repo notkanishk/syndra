@@ -324,7 +324,7 @@ export function TargetOverview({ target }: { target: string }) {
             control is Advanced's (A-23 R2), the region's last card, so nothing
             above it moves when it comes and goes. */}
         <Region id="stats" title={OVERVIEW_TITLE} lede={OVERVIEW_LEDE}>
-          <TargetStats target={target} />
+          <TargetStats target={target} kind={registered?.kind} />
           <AdvancedOnly gap={16}>
             <StatsRetention target={target} />
           </AdvancedOnly>

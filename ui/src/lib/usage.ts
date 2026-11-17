@@ -62,16 +62,16 @@ export interface GapLine {
  * whose ranges and reason are identical are one line ("14–15 Nov, shares a and b: …"), so a page of
  * sixty near-identical rows is five.
  */
-export function gapLines(gaps: StatsGap[], from: string, end: string): GapLine[] {
+export function gapLines(gaps: Array<Omit<StatsGap, "kind">>, from: string, end: string): GapLine[] {
   const key = (d: StatsGap["dimensions"]) => JSON.stringify(Object.entries(d ?? {}).sort(([a], [b]) => compareNames(a, b)));
-  const series = new Map<string, StatsGap[]>();
+  const series = new Map<string, Array<Omit<StatsGap, "kind">>>();
   for (const g of gaps) {
     if (g.end <= from || g.start >= end) continue;
     const clipped = { ...g, start: g.start < from ? from : g.start, end: g.end > end ? end : g.end };
     const k = `${g.reason}\u0000${key(g.dimensions)}`;
     series.set(k, [...(series.get(k) ?? []), clipped]);
   }
-  const ranges: Array<StatsGap> = [];
+  const ranges: Array<Omit<StatsGap, "kind">> = [];
   for (const list of series.values()) {
     list.sort((a, b) => byText(a.start, b.start));
     for (const g of list) {
@@ -165,27 +165,30 @@ export interface Plot {
 }
 
 /**
- * One series over the window. A day before `known.from` (the first day Syndra keeps, `kept_from`) or
- * before `known.began` (the metric's first collection, `beforeRecord`) is before the record: gone or
- * never held, neither a zero nor a gap. A day inside a gap is a gap whatever the points say. Outside
- * both, a counter's missing day is 0 only when it is final (not after `countedThrough`): the backend
- * sends a counter's days sparse, a missing final day being a real 0 (`useStats.ts`). A day not yet
- * counted has no value. That is the only place a zero is made, and a gap, a day before the record or
- * a day not yet counted never gets one.
+ * One series over the window. A day before `known.from` (the first day Syndra keeps, `kept_from`), before
+ * `known.began` (the day the add-on began counting the metric, the view's `began`), or inside a gap of
+ * kind `began` on this series is before the record: gone or never held, neither a zero nor a gap. The
+ * add-on says which window that is (the gap's kind); nothing here guesses it. A day inside a gap of any
+ * other kind is a gap whatever the points say. Outside both, a counter's missing day is 0 only when it
+ * is final (not after `countedThrough`): the backend sends a counter's days sparse, a missing final day
+ * being a real 0 (`useStats.ts`). A day not yet counted has no value. That is the only place a zero is
+ * made, and a gap, a day before the record or a day not yet counted never gets one.
  */
 export function plot(
   series: StatsSeries,
   gaps: StatsGap[],
   instrument: StatsMetric["instrument"],
   days: string[] = windowDays(),
-  known: { from?: string; began?: string; countedThrough?: string | null } = {},
+  known: { from?: string; began?: string | null; countedThrough?: string | null } = {},
 ): Plot {
   const given = new Map<string, number>(series.days.map((d: StatsDay) => [d.day, d.value]));
   const mine = gaps.filter((g) => gapIsOn(g, series));
+  const within = (kind: (k: StatsGap["kind"]) => boolean, day: string) => mine.some((g) => kind(g.kind) && day >= g.start && day < g.end);
   const cells = days.map((day): Cell => {
-    const before = known.from != null && day < known.from ? "kept" : known.began != null && day < known.began ? "began" : undefined;
+    const began = (known.began != null && day < known.began) || within((k) => k === "began", day);
+    const before = known.from != null && day < known.from ? "kept" : began ? "began" : undefined;
     if (before) return { day, gap: false, before };
-    if (mine.some((g) => day >= g.start && day < g.end)) return { day, gap: true };
+    if (within((k) => k !== "began", day)) return { day, gap: true };
     const point = given.get(day);
     const pending = point === undefined && known.countedThrough != null && day > known.countedThrough;
     return { day, gap: false, ...(pending ? { pending } : {}), value: point ?? (instrument === "counter" && !pending ? 0 : undefined) };
@@ -198,34 +201,6 @@ export function plot(
     else gapRuns.push([i, i]);
   });
   return { cells, gapRuns, recordFrom: cells.find((c) => !c.before)?.day ?? null };
-}
-
-/**
- * The gap before a metric's record, where Syndra can tell; else undefined. Its `end` is the day the
- * record began; it is drawn as before the record and never listed as a gap.
- *
- * Syndra's first collection of a metric asks for the add-on's whole buffer (`since = now −
- * stats_buffer`, `services/stats/collect.go`), and the contract has the add-on answer "a gap from
- * the day `since` falls in to the first day it holds" (AUTHORING.md, the buffer; TrueNAS says "Not
- * collected yet: counting began on …", `reasonBegan`). That gap is the first thing Syndra holds of
- * the metric. The contract gives a gap no kind (start, end, dimensions and a free-text reason), so it
- * is found by its shape, never by its words: the metric's earliest gap, over the whole metric,
- * reaching back past the window's first day (a buffer's worth before its end), ending by today, with
- * nothing Syndra holds before its end (no point in the window's days, no counted month before the
- * month it ends in). A gap that starts inside the window is an outage, hatched and listed, however
- * quiet the days before it were.
- *
- * ponytail: found by shape. Ceiling: on a level, a whole-metric outage that crosses the window's
- * first day and is the earliest gap the 12-month read returns (the record older than that read)
- * would read as before the record; a buffer shorter than the window reads as a gap, as before. A gap
- * kind in the contract makes it exact.
- */
-export function beforeRecord(metric: Pick<StatsMetric, "gaps" | "series">, today: string): StatsGap | undefined {
-  const first = metric.gaps.reduce<StatsGap | undefined>((a, g) => (!a || g.start < a.start ? g : a), undefined);
-  if (!first || Object.keys(first.dimensions ?? {}).length > 0 || first.end > today || first.start >= windowDays(today)[0]) return undefined;
-  const month = first.end.slice(0, 7);
-  const earlier = metric.series.some((s) => s.days.some((d) => d.day < first.end) || (s.months ?? []).some((m) => m.month < month && m.value > 0));
-  return earlier ? undefined : first;
 }
 
 /** A level's change over the record: its first and its latest counted day in the window, or null with fewer than two. */

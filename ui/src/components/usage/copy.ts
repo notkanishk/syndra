@@ -48,7 +48,7 @@ export const GAPS_HEADING = "Couldn't count these days";
 export const gapLine = (range: string, where: string, reason: string) => `${range}${where ? `, ${where}` : ""}: ${reason}`;
 const keptFor = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
 export const keptLine = (n: number) => `Kept for only ${keptFor(n)} on this system`;
-export const GAPS_NOTE = "A day with no line was not counted. It is not a zero.";
+export const GAPS_NOTE = "A striped day was not counted. It is not a zero.";
 /** The end row, when the record starts inside the window. */
 export const countingBegan = (day: string) => `Counting began ${day}`;
 
@@ -62,8 +62,8 @@ export const UNAVAILABLE = "Syndra couldn't read these numbers just now. Reload 
 export const OVERVIEW_TITLE = "What has been used here";
 export const OVERVIEW_LEDE = "Totals for everyone who used it, over the last 30 days and the last 12 months. One person's numbers are on their page.";
 export const lastCounted = (age: string) => `Last counted ${age}`;
-/** The totals card's step and its one link to Insights, Usage (the pattern Insights' own end row uses). */
-export const OVERVIEW_NEXT = `${NOTHING_TO_DO} Who used each one is in Insights.`;
+/** The totals card's step and its one link to Insights, Usage (the pattern Insights' own end row uses); a kind may give its own words for the step (`kinds/limits.ts` usageStep). */
+export const OVERVIEW_NEXT = `${NOTHING_TO_DO} Who used what is in Insights.`;
 export const OVERVIEW_NEXT_LINK = "Open Usage";
 export const unbound = (n: number) =>
   `${n} ${n === 1 ? "account" : "accounts"} Syndra does not manage also used it. ${n === 1 ? "It is" : "They are"} in the totals.`;

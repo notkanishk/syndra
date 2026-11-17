@@ -5,11 +5,12 @@ import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MemberTargetCard } from "@/components/kinds/MemberTargetCard";
+import { STORAGE_USAGE_STEP } from "@/components/kinds/storage/captions";
 import * as copy from "@/components/usage/copy";
 import { TargetStats } from "@/components/usage/TargetStats";
 import { HomeMonth, UsageCard, ViewUsage } from "@/components/usage/UsageCard";
 import { formatRelative } from "@/lib/format";
-import type { StatsMetric } from "@/lib/queries/useStats";
+import type { StatsGap, StatsMetric } from "@/lib/queries/useStats";
 import { UiViewProvider } from "@/lib/ui-view";
 import { dayWords, formatValue } from "@/lib/usage";
 import { motionInTests } from "@/test-utils/motion";
@@ -36,7 +37,7 @@ const bands = () => screen.queryAllByRole("img");
 /** A level with no limit of its own, so the usage card is not the kind's meter. */
 const level = (over: Partial<StatsMetric> = {}) => homeBytes({ against: undefined, ...over });
 /** The buffer gap: the add-on's days before its first collection, from Syndra's first read of its whole buffer. */
-const buffer = (began: number) => ({ start: ago(began + 90), end: ago(began), reason: "Not collected yet: counting began on a day" });
+const buffer = (began: number): StatsGap => ({ start: ago(began + 90), end: ago(began), kind: "began", reason: "Not collected yet: counting began on a day" });
 const openFold = () => fireEvent.click(screen.getByRole("button", { name: copy.FOLD_HEADING }));
 
 describe("the usage card: a row", () => {
@@ -97,7 +98,7 @@ describe("the usage card: a row", () => {
     const readout = () => container.querySelector('[aria-live="polite"]')!.textContent;
     fireEvent.pointerEnter(ring.querySelectorAll("rect:not([data-column])")[28]);
     expect(readout()).toBe(copy.readoutNamed("ring", copy.dayValue(dayWords(ago(1)), "3")));
-    expect(ring.querySelector("[data-read]")).not.toBeNull();
+    expect(ring.parentElement!.querySelector("[data-read]")).not.toBeNull();
     fireEvent.pointerLeave(ring);
     expect(readout()).toBe(dayWords(ago(0)));
     fireEvent.focus(ring);
@@ -151,7 +152,7 @@ describe("what wasn't counted: the card's one fold", () => {
   });
 
   it("is one per card, its lines merged across metrics where range and reason are the same", () => {
-    const off = { start: ago(8), end: ago(7), reason: "The NAS was off" };
+    const off = { start: ago(8), end: ago(7), kind: "unread" as const, reason: "The NAS was off" };
     const { container } = render(<UsageCard title="t" windows={windows()} metrics={[sessions({ gaps: [off] }), level({ gaps: [off] })]} />);
     expect(container.querySelectorAll("[data-fold]")).toHaveLength(1);
     openFold();
@@ -159,7 +160,7 @@ describe("what wasn't counted: the card's one fold", () => {
   });
 
   it("lists gaps within the widest window the block shows", () => {
-    const old = { start: ago(60), end: ago(58), dimensions: { area: "ring" }, reason: "Auditing is off in this area" };
+    const old = { start: ago(60), end: ago(58), dimensions: { area: "ring" }, kind: "unobserved" as const, reason: "Auditing is off in this area" };
     const { unmount } = render(<UsageCard title="t" windows={windows()} metrics={[sessions({ gaps: [old] })]} />);
     openFold();
     expect(screen.getByText(/Area: “ring”: “Auditing is off in this area”/)).toBeInTheDocument();
@@ -188,7 +189,7 @@ describe("what wasn't counted: the card's one fold", () => {
   });
 
   it("breaks a level's line at a gap, and at a day with no sample", () => {
-    const gauge = level({ gaps: [{ start: ago(8), end: ago(5), reason: "The NAS was off" }], series: [{ dimensions: {}, latest: { day: ago(1), value: 5 }, days: [{ day: ago(12), value: 4 }, { day: ago(10), value: 4 }, { day: ago(3), value: 5 }, { day: ago(1), value: 5 }] }] });
+    const gauge = level({ gaps: [{ start: ago(8), end: ago(5), kind: "unread", reason: "The NAS was off" }], series: [{ dimensions: {}, latest: { day: ago(1), value: 5 }, days: [{ day: ago(12), value: 4 }, { day: ago(10), value: 4 }, { day: ago(3), value: 5 }, { day: ago(1), value: 5 }] }] });
     render(<UsageCard title="t" windows={windows()} metrics={[gauge]} />);
     const svg = bands()[0];
     expect(svg.querySelectorAll("[data-line]")).toHaveLength(0);
@@ -215,7 +216,7 @@ describe("the states (A-23 part 2)", () => {
   });
 
   it("day one: the window's faint baseline, a tick where the record starts, one column, today blank, and when counting began", () => {
-    const m = sessions({ gaps: [buffer(1)], counted_through: ago(1), series: [{ dimensions: { area: "ring" }, sum_30d: 5, sum_12m: 5, days: [{ day: ago(1), value: 5 }], months: [] }] });
+    const m = sessions({ gaps: [buffer(1)], began: ago(1), counted_through: ago(1), series: [{ dimensions: { area: "ring" }, sum_30d: 5, sum_12m: 5, days: [{ day: ago(1), value: 5 }], months: [] }] });
     const { container } = render(<UsageCard title="t" windows={windows()} metrics={[m]} />);
     const svg = bands()[0];
     expect(svg.querySelector("[data-pre]")).not.toBeNull();
@@ -233,8 +234,8 @@ describe("the states (A-23 part 2)", () => {
   });
 
   it("ten days in: the last 10 days, and a level's change since its first counted day", () => {
-    const m = level({ gaps: [buffer(9)], series: [{ dimensions: {}, latest: { day: ago(1), value: 3 * GIB }, days: Array.from({ length: 9 }, (_, i) => ({ day: ago(9 - i), value: (2 + i / 8) * GIB })) }] });
-    const { container } = render(<UsageCard title="t" windows={windows()} metrics={[m, sessions({ gaps: [buffer(9)], series: [{ dimensions: {}, sum_30d: 4, sum_12m: 4, days: [{ day: ago(2), value: 4 }], months: [] }] })]} />);
+    const m = level({ gaps: [buffer(9)], began: ago(9), series: [{ dimensions: {}, latest: { day: ago(1), value: 3 * GIB }, days: Array.from({ length: 9 }, (_, i) => ({ day: ago(9 - i), value: (2 + i / 8) * GIB })) }] });
+    const { container } = render(<UsageCard title="t" windows={windows()} metrics={[m, sessions({ gaps: [buffer(9)], began: ago(9), series: [{ dimensions: {}, sum_30d: 4, sum_12m: 4, days: [{ day: ago(2), value: 4 }], months: [] }] })]} />);
     expect(screen.getByText(copy.changeUp("1.0 GiB", dayWords(ago(9))))).toBeInTheDocument();
     // Both windows start on the record's first day: one sum, said once.
     expect(figures(container)[1]).toBe("4 in the last 10 days");
@@ -313,7 +314,7 @@ describe("a person's view of a system", () => {
   const storage = (usage: Parameters<typeof view>[0]) =>
     ({
       ...view(usage, { kind: "storage", entitlement_schema: [{ name: "quota_field", role: "limit", unit: "bytes", label: "Limit" }] as never }),
-      storage: { usable: true, needs_password: false, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: 18.4 * GIB, quota_bytes: 20 * GIB } }] },
+      storage: { usable: true, needs_password: false, places_readable: true, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: 18.4 * GIB, quota_bytes: 20 * GIB } }] },
     });
 
   it("titles the member's card as theirs and the operator's by the person's name", () => {
@@ -325,7 +326,7 @@ describe("a person's view of a system", () => {
   });
 
   it("leaves out the home folder where the kind draws it under its meter (R1), and draws no meter", () => {
-    render(<ViewUsage view={storage({ reported: true, metrics: [homeBytes(), sessions()], ...windows() })} person="Rey Mysterio" />);
+    render(<ViewUsage view={storage({ reported: true, metrics: [homeBytes(), sessions()], ...windows() })} />);
     expect(screen.queryByText("Home folder used")).toBeNull();
     expect(screen.getByRole("heading", { name: "Sessions" })).toBeInTheDocument();
     expect(screen.queryByRole("meter")).toBeNull();
@@ -458,6 +459,122 @@ describe("the target overview", () => {
     stubStats(new Promise(() => {}));
     render(withQuery(<TargetStats target="gym" />));
     expect(screen.getByLabelText(copy.OVERVIEW_TITLE)).toHaveAttribute("aria-busy", "true");
+  });
+
+  // The owner's ruling of 18 Nov 2026: storage says "each share", and only storage does.
+  it("words the way to Insights in the system's kind: each share on storage, never share elsewhere", async () => {
+    stubStats(targetStats());
+    const { unmount, container } = render(withQuery(<TargetStats target="gym" kind="storage" />));
+    expect(await screen.findByText(STORAGE_USAGE_STEP)).toBeInTheDocument();
+    expect(container.textContent).toMatch(/each share/);
+    unmount();
+    for (const kind of ["inventory", "machine", undefined]) {
+      const { unmount: done, container: c } = render(withQuery(<TargetStats target="gym" kind={kind} />));
+      expect(await screen.findByText(copy.OVERVIEW_NEXT)).toBeInTheDocument();
+      expect(c.querySelector("[data-end]")!.textContent, String(kind)).not.toMatch(/\bshares?\b/i);
+      done();
+    }
+  });
+
+  it("offers Insights only where there is something there: a system with no per-person metric ends on Nothing for you to do", async () => {
+    const t = targetStats();
+    if (t.usage.reported) t.usage.metrics = t.usage.metrics.map((m) => ({ ...m, per_subject: false }));
+    stubStats(t);
+    const { container } = render(withQuery(<TargetStats target="gym" kind="storage" />));
+    await screen.findByText("61");
+    expect(container.querySelector("[data-end]")!.textContent).toMatch(new RegExp(`^${copy.NOTHING_TO_DO}`));
+    expect(screen.queryByRole("link", { name: new RegExp(copy.OVERVIEW_NEXT_LINK) })).toBeNull();
+    expect(screen.queryByText(STORAGE_USAGE_STEP)).toBeNull();
+  });
+});
+
+describe("each kind of gap (contract 2: the add-on labels it)", () => {
+  const g = (from: number, to: number, kind: StatsGap["kind"], reason: string): StatsGap => ({ start: ago(from), end: ago(to), kind, reason });
+
+  it.each([
+    ["unread", "The NAS could not be read"],
+    ["dropped", "The NAS no longer keeps its log of these days"],
+    ["unobserved", "Auditing does not record everyone on this share"],
+  ] as const)("%s: hatched, and listed in the fold with its reason", (kind, reason) => {
+    render(<UsageCard title="t" windows={windows()} metrics={[sessions({ gaps: [g(8, 6, kind, reason)] })]} />);
+    expect(bands()[0].querySelectorAll("[data-gap]")).toHaveLength(1);
+    openFold();
+    expect(screen.getByText(new RegExp(reason))).toBeInTheDocument();
+  });
+
+  it("began: before the record, never hatched, never listed, never a zero", () => {
+    const { container } = render(<UsageCard title="t" windows={windows()} metrics={[sessions({ began: ago(6), gaps: [g(96, 6, "began", "Not collected yet: counting began on a day")] })]} />);
+    expect(bands()[0].querySelectorAll("[data-gap]")).toHaveLength(0);
+    expect(bands()[0].querySelector("[data-tick]")).not.toBeNull();
+    expect(container.querySelector("[data-fold]")).toBeNull();
+    expect(titles(bands()[0]).filter((t) => t.endsWith("before counting began"))).toHaveLength(23);
+    expect(bands()[0].querySelectorAll("[data-column]")).toHaveLength(7);
+  });
+
+  it("a year-old system with a later outage: the outage is an unread gap, hatched and listed, and no tick moves to it", () => {
+    // The began gap ended a year ago and is not in the 12 months read; the backend still names the day.
+    const m = level({ began: ago(365), gaps: [g(40, 20, "unread", "The NAS could not be read")], series: [{ dimensions: {}, latest: { day: ago(2), value: 5 * GIB }, days: [{ day: ago(3), value: 4 * GIB }, { day: ago(2), value: 5 * GIB }] }] });
+    const { container } = render(<UsageCard title="t" windows={windows()} metrics={[m]} />);
+    const svg = bands()[0];
+    expect(svg.querySelectorAll("[data-gap]")).toHaveLength(1);
+    expect(svg.querySelector("[data-tick]")).toBeNull();
+    expect(svg.querySelector("[data-pre]")).toBeNull();
+    expect(titles(svg).filter((t) => t.endsWith("before counting began"))).toHaveLength(0);
+    expect(screen.queryByText(/Counting began/)).toBeNull();
+    expect(screen.getByText(copy.changeUp("1.0 GiB", dayWords(ago(3))))).toBeInTheDocument();
+    openFold();
+    expect(container.textContent).toMatch(/The NAS could not be read/);
+  });
+
+  it("a short buffer (a week): the days before counting began are before the record, never a counter's zero", () => {
+    const m = sessions({ began: ago(6), gaps: [g(13, 6, "began", "Not collected yet")], series: [{ dimensions: { area: "ring" }, sum_30d: 2, sum_12m: 2, days: [{ day: ago(3), value: 2 }], months: [] }] });
+    const { container } = render(<UsageCard title="t" windows={windows()} metrics={[m]} />);
+    const said = titles(bands()[0]);
+    expect(said.filter((t) => t.endsWith("before counting began"))).toHaveLength(23);
+    expect(said.filter((t) => t.endsWith(": 0"))).toHaveLength(6);
+    expect(figures(container)).toEqual(["2 in the last 7 days"]);
+  });
+
+  it("a new member's person card: no began gap of theirs, so their quiet days are real zeros and nothing reads as before counting", () => {
+    // A person's view of a system counting for a year; the member's own points begin last week.
+    const m = sessions({ began: ago(300), series: [{ dimensions: { area: "ring" }, sum_30d: 3, sum_12m: 3, days: [{ day: ago(4), value: 3 }], months: [{ month: ago(4).slice(0, 7), value: 3 }] }] });
+    const { container } = render(<UsageCard title={copy.operatorTitle("Becky Lynch")} windows={windows(400)} metrics={[m]} />);
+    const svg = bands()[0];
+    expect(svg.querySelector("[data-tick]")).toBeNull();
+    expect(titles(svg).filter((t) => t.endsWith("before counting began"))).toHaveLength(0);
+    expect(svg.querySelectorAll("[data-column]")).toHaveLength(30);
+    expect(figures(container)).toEqual(["3 in the last 30 days"]);
+  });
+});
+
+describe("the band's fidelity", () => {
+  it("draws the read day behind the band on the inner radius, not as a pill", () => {
+    render(<UsageCard title="t" windows={windows()} metrics={[sessions()]} />);
+    fireEvent.pointerEnter(bands()[0].querySelectorAll("rect:not([data-column])")[28]);
+    const read = bands()[0].parentElement!.querySelector("[data-read]")!;
+    expect(read.tagName).toBe("DIV");
+    expect(read).toHaveClass("rounded-inner");
+  });
+
+  it("keeps the limit's word off the line on a folder 95% full, and moves it left of a point over the limit", () => {
+    const storage = (used: number) =>
+      ({
+        ...view({ reported: true, metrics: [homeBytes({ series: [{ dimensions: {}, latest: { day: ago(1), value: used }, days: Array.from({ length: 29 }, (_, i) => ({ day: ago(29 - i), value: used })) }] })], ...windows() }, { kind: "storage", entitlement_schema: [{ name: "quota_field", role: "limit", unit: "bytes", label: "Limit" }] as never }),
+        storage: { usable: true, needs_password: false, places_readable: true, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: used, quota_bytes: 20 * GIB } }] },
+      });
+    const { unmount } = render(<HomeMonth view={storage(19 * GIB)} />);
+    let svg = bands()[0];
+    const word = svg.querySelector("[data-limit-word]")!;
+    const lineY = Number(svg.querySelector("[data-limit]")!.getAttribute("y1"));
+    // The word's baseline is above the limit line, and every point of the line is at or below it (SVG y grows down).
+    expect(Number(word.getAttribute("y"))).toBeLessThan(lineY - 1);
+    const ys = svg.querySelector("[data-line]")!.getAttribute("points")!.split(" ").map((p) => Number(p.split(",")[1]));
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(lineY - 1);
+    expect(word.getAttribute("text-anchor")).toBe("end");
+    unmount();
+    render(<HomeMonth view={storage(22 * GIB)} />);
+    svg = bands()[0];
+    expect(svg.querySelector("[data-limit-word]")!.getAttribute("text-anchor")).toBe("start");
   });
 });
 

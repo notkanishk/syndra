@@ -104,7 +104,7 @@ function LabelRow({ label, said }: { label: string; said: string }) {
 /** The section's axis: the window's first day, and the readout seat (today at rest, else the day being read). */
 export function Axis({ first, readout, inset = true }: { first: string; readout: string; inset?: boolean }) {
   return (
-    <div className={`flex justify-between gap-3 pt-1.5 text-[12.5px] tabular-nums leading-[1.3] text-faint ${inset ? "@tablet:pl-[224px] @tablet:pr-[264px]" : ""}`}>
+    <div data-axis className={`flex justify-between gap-3 text-[12.5px] tabular-nums leading-[1.3] text-faint ${inset ? "pt-1.5 @tablet:pl-[224px] @tablet:pr-[264px]" : "pt-0.5"}`}>
       <span>{dayWords(first)}</span>
       <span aria-live="polite" className="ml-auto text-right">
         <Crossfade id={readout} inline>
@@ -117,11 +117,12 @@ export function Axis({ first, readout, inset = true }: { first: string; readout:
 
 /**
  * `windows`: where the backend read this page's two windows from (a person's are cut short by
- * retention; a totals page's never are). `began`: the day this metric's record began, where Syndra
- * can tell (`beforeRecord`). `first`/`titled`: the section's place in its card.
+ * retention; a totals page's never are). The day the record began is the add-on's (`metric.began`,
+ * its began gap). `first`/`titled`: the section's place in its card.
  */
-export function MetricBlock({ metric, windows, began, first = false, titled = false }: { metric: StatsMetric; windows: UsageWindows; began?: string; first?: boolean; titled?: boolean }) {
+export function MetricBlock({ metric, windows, first = false, titled = false }: { metric: StatsMetric; windows: UsageWindows; first?: boolean; titled?: boolean }) {
   const [read, setRead] = useState<{ row: number; index: number } | null>(null);
+  const began = metric.began ?? undefined;
   const label = capText(metric.label, CAP.label);
   const rows = metric.watermark === null ? [] : metric.series.slice(0, MAX_ROWS);
   const days = windowDays(windows.today);
