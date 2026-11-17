@@ -1,7 +1,7 @@
 ## ADR-007: `account_id` is a key within a read, not an identity
 
 **Date:** 2026-11-15
-**Status:** Accepted for the rule and the wire (design 7t, D1-D6). Five points pend the owner: Q1 `account_id` stays the uid, Q2 legacy policy B, Q4 `subject` and `conflicts` core in contract 2, Q5 only `unbound` resolves a conflict finding, Q6 the drain raises the finding too. Change: `openspec/changes/addon-contract` (slices 7r, 7t).
+**Status:** Accepted (design 7t, D1-D6). The five owner points (Q1 `account_id` stays the uid, Q2 legacy policy B, Q4 `subject` and `conflicts` core in contract 2, Q5 only `unbound` resolves a conflict finding, Q6 the drain raises the finding too) were confirmed by the owner 17 Nov 2026. Change: `openspec/changes/addon-contract` (slices 7r, 7t).
 
 ### Context
 

@@ -117,7 +117,7 @@ func (s *server) accountWhere(field string, value any) (*Subject, bool, error) {
 // outside it can come back after a delete, so it never names an account by itself (boundAccount).
 func inIDRange(n, floor, ceiling int64) bool { return n >= floor && n <= ceiling }
 
-// legacyHaltsOnHeldNumber is legacy policy B (design 7t D6), pending the owner's answer to Q2: an
+// legacyHaltsOnHeldNumber is legacy policy B (design 7t D6), confirmed by the owner 17 Nov 2026 (B): an
 // unmarked binding (contract 1) outside the id range whose name is gone while its number is held by
 // another name halts as a conflict and creates nothing, the guard a marked binding already gets.
 // false is policy A: such a binding reads as missing and the apply re-creates it beside the holder.

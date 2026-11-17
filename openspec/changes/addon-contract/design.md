@@ -1335,14 +1335,14 @@ no write is ever sent to an account `resolveLive` did not return. A refusal is o
   records, so a number is never believed alone: name gone and number held by another name is a
   `BindingConflict` and nothing is renamed, written or created. Name and number both gone is the
   deleted account, re-created. uid 0 is never looked up.
-- **Legacy policy B (design 7t D6; `legacyHaltsOnHeldNumber`; pending owner Q2).** An unmarked
+- **Legacy policy B (design 7t D6; `legacyHaltsOnHeldNumber`; confirmed by the owner 17 Nov 2026).** An unmarked
   (contract-1) binding outside the range follows the same rule: name gone, number held by another
   name halts as a conflict instead of creating a duplicate. `false` is policy A (create). Its only
   false positive is a record-key-era binding whose key equals a system uid, which halts once and is
   released. The cutover pre-check (NEXT.md, a **must**, read-only, from a copy of production's
   `state.db`) lists bindings with no `uid_kind` whose name the NAS no longer has; expected zero.
 
-**The wire (contract 2, core, not a feature; pending owner Q4).**
+**The wire (contract 2, core, not a feature; confirmed by the owner 17 Nov 2026).**
 
 - `/subjects`: each row carries `subject` (the subject the add-on's binding names it for; absent when
   none does, never on `self`), and the reply carries `conflicts[]`: `{subject, username, account_id,
@@ -1355,7 +1355,7 @@ no write is ever sent to an account `resolveLive` did not return. A refusal is o
 - `/homes` rows carry `subject` from the same `attribute()`; 500 `STORE_UNREADABLE` when the
   bindings cannot be read.
 - 503 `TARGET_CHANGED`: the add-on's reads straddled a change; nothing was sent, try again.
-- `account_id` keeps its value (the uid; pending owner Q1) and its meaning is narrowed (AUTHORING
+- `account_id` keeps its value (the uid; confirmed by the owner 17 Nov 2026) and its meaning is narrowed (AUTHORING
   ch. 2): unique within one read, survives a rename, **not an identity across reads**. SCIM RFC 7643
   §3.1: the add-on is the service provider, `subject` plays `externalId`.
 - Deploy order: `conflicts` is required (`[]` when none). A reply without it (an add-on before 7t-2,
@@ -1420,7 +1420,7 @@ stands and closes any finding the add-on does not report.
 
 - **Raised** by the sweep from `/subjects.conflicts` before anything is classified
   (`raiseConflicts`), so such a subject is never planned, never queued, never offered "recreate". And
-  by the drain (pending owner Q6): a rejected apply or a blocking re-plan carrying `conflict`
+  by the drain (confirmed by the owner 17 Nov 2026): a rejected apply or a blocking re-plan carrying `conflict`
   (`raiseConflict`), only for a binding's conflict: a create blocked because its name is taken is no
   binding's and keeps its refused row. Which is the contract's to say (`bindingsConflict`,
   `common/binding_conflict.json`): `number_held`, `ambiguous` and `claimed_twice` are a recorded
@@ -1444,7 +1444,7 @@ stands and closes any finding the add-on does not report.
   (`ClearMergeFindingsOutside`), and by the account-slot clear when the subject's own row is back; a
   conflict that ends with the account gone becomes `deleted_upstream`. A new outcome in a slot drops
   the old decision.
-- **Resolved** only by `unbound` (`account.release`; pending owner Q5; `resolutionFits` refuses the
+- **Resolved** only by `unbound` (`account.release`; confirmed by the owner 17 Nov 2026; `resolutionFits` refuses the
   rest). Adopting the holder stays in its one place, Not created by Syndra.
 - **Shown (7t-4).** `MergeFindings` renders the add-on's `detail` then `next` as written, the
   holders of an `ambiguous` conflict, the other person of a `claimed_twice` one by name, and the
