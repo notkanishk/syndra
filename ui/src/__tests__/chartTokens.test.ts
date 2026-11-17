@@ -49,6 +49,15 @@ describe("the chart tokens, both themes", () => {
     }
   });
 
+  it("the record-start tick is --faint, stronger than the baseline it stands on, in both themes", () => {
+    const band = readFileSync(resolve(SRC, "components/usage/Band.tsx"), "utf8");
+    expect(band).toMatch(/data-tick[^\n]*stroke="var\(--faint\)"/);
+    for (const vars of Object.values(THEMES)) {
+      const on = colour(vars, "--surface-1");
+      expect(ratio(colour(vars, "--faint"), on)).toBeGreaterThan(ratio(colour(vars, "--line-strong"), on));
+    }
+  });
+
   it("no statistics component writes a colour of its own", () => {
     const dir = resolve(SRC, "components/usage");
     const found: string[] = [];

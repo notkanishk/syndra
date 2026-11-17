@@ -154,7 +154,7 @@ export function Band({
         ))}
         {baseLeft > 0 && <line data-pre x1="0" x2={baseLeft} y1={BASE + 0.5} y2={BASE + 0.5} stroke="var(--line-strong)" strokeWidth="1" />}
         {first >= 0 && <line data-base x1={baseLeft} x2={W} y1={BASE + 0.5} y2={BASE + 0.5} stroke="var(--line-strong)" strokeWidth="1" />}
-        {first > 0 && <line data-tick x1={baseLeft + 0.5} x2={baseLeft + 0.5} y1={BASE - 5} y2={BASE + 1} stroke="var(--line-strong)" strokeWidth="1" />}
+        {first > 0 && <line data-tick x1={baseLeft + 0.5} x2={baseLeft + 0.5} y1={BASE - 5} y2={BASE + 1} stroke="var(--faint)" strokeWidth="1" />}
         {limit !== undefined && first >= 0 && (
           <>
             <line data-limit x1={baseLeft} x2={W} y1={y(limit) + 0.5} y2={y(limit) + 0.5} stroke="var(--line)" strokeWidth="1" />
