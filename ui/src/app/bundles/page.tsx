@@ -116,7 +116,7 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
   const observed = bundle.observed_holder_count ?? undefined;
   const people = holdersLine(bundle.holder_count ?? 0, observed, observed);
   return (
-    <div className="row-divider flex flex-wrap items-start gap-x-[18px] gap-y-1 px-5 py-3.5">
+    <div className="row-divider row-cols flex flex-wrap items-start gap-y-1 px-5 py-3.5">
       <div className="w-[min(260px,40%)] min-w-0">
         <Link
           href={`/bundles/${encodeURIComponent(bundle.id)}`}

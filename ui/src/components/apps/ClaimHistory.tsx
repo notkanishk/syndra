@@ -109,7 +109,7 @@ export function ClaimHistory({
             <span className="w-[210px] flex-none" />
           </CardColumns>
           {list.map((v, i) => (
-            <div key={v.version} className="row-divider flex flex-wrap items-start gap-x-[18px] gap-y-1.5 px-5 py-3.5">
+            <div key={v.version} className="row-divider row-cols flex flex-wrap items-start gap-y-1.5 px-5 py-3.5">
               <span className="w-[130px] flex-none text-[15px] font-semibold">Version {v.version}</span>
               <span className="flex min-w-[220px] flex-1 flex-col gap-0.5">
                 <span className="text-[14.5px] leading-[1.5] [text-wrap:pretty]">

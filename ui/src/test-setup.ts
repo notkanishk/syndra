@@ -4,6 +4,7 @@ import { createElement, type ComponentType } from "react";
 import { afterEach, beforeEach, vi } from "vitest";
 
 import { resetDisplayLocaleForTests, setDisplayLocale } from "@/lib/locale";
+import { layoutFindings } from "@/test-utils/layout";
 import { installMatchMedia, resetMediaQueries } from "@/test-utils/media";
 
 // Every test runs on the same day: 9 Nov 2026, noon in the makerspace's zone,
@@ -123,9 +124,18 @@ beforeEach(() => {
 // @testing-library/react auto-cleans only with vitest globals:true. We import
 // explicitly, so wire cleanup() into afterEach so jsdom DOM doesn't leak
 // across tests (would otherwise produce "multiple role=dialog" errors).
+//
+// Before it does, D-1's layout guards read whatever the test rendered (an
+// action never in a sentence, a line under a status dot at the token), so
+// every page and part the suite draws is held to them. Read first, thrown
+// after the cleanup, so a finding never leaks this test's DOM into the next.
 afterEach(() => {
+  const findings = typeof document === "undefined" ? [] : layoutFindings(document.body);
   cleanup();
   if (typeof window !== "undefined") (window as { __motionInTests?: boolean }).__motionInTests = false;
+  if (findings.length > 0) {
+    throw new Error(`D-1 layout (test-utils/layout.ts):\n  ${findings.join("\n  ")}`);
+  }
 });
 
 // The tests' zone, as the backend would hand it over (test config; the product

@@ -72,7 +72,7 @@ describe("block form with a word", () => {
     const status = screen.getByRole("status");
     const word = screen.getByText("Given");
     expect(word.className).toContain("font-display");
-    expect(word.className).toContain("text-[22px]");
+    expect(word.className).toContain("text-title");
     expect(screen.getByText("Liv can use the laser cutter on his own now.")).toBeInTheDocument();
     expect(screen.getByText("He was in no other room.").className).toContain("text-faint");
     // The old pill is gone: the word is the status.

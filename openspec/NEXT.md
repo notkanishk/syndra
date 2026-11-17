@@ -15,6 +15,10 @@ Four buckets, in the order they actually unblock each other:
 
 ---
 
+## 0j. Density, alignment and motion, D-1 (18 Nov 2026)
+
+Source: `from-design/D-1-density-and-alignment.md` and boards `design/d1-density-1..4`; tracked as addon-contract **7u**. Pass 1 (tokens and shared parts) built on branch `feat/addon-contract-d1-1`. Open: passes 2 (seats), 3 (Home), 4 (three text sizes), the motion pass, and 5 (design-system resync, after the owner's OK). **Owner:** Q1–Q8 are built on the designer's defaults, each recommended, pending owner (7u lists each and where it flips).
+
 ## 0. The second pass (A-20), first wave
 
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).

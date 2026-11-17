@@ -9,10 +9,25 @@ import { Crossfade } from "@/lib/motion";
  * colour on tint, and the words crossfade in a seat as tall as the taller of
  * the two. It never blooms: a bloom is for something that went well because of
  * you, and that is `ActionOutcome`'s seat.
+ *
+ * The dot's column is `--dot-indent` wide (the dot and its gap), so the word,
+ * the note and the `next` step all start at one edge: a line under a status
+ * dot starts at the word, wherever it is drawn (D-1 §4, rule 5).
  */
-export function StatusSeat({ tone, word, note }: { tone: StatusTone; word: string; note?: string }) {
+export function StatusSeat({
+  tone,
+  word,
+  note,
+  next,
+}: {
+  tone: StatusTone;
+  word: string;
+  note?: string;
+  /** The step, under the words, in the same column. */
+  next?: React.ReactNode;
+}) {
   return (
-    <span className="grid grid-cols-[auto_1fr] items-start gap-x-2">
+    <span className="grid grid-cols-[var(--dot-indent)_1fr] items-start gap-y-1">
       <StatusDot tone={tone} className="mt-[7px]" />
       <Crossfade id={`${word}\n${note ?? ""}`}>
         <span className="flex flex-col gap-1">
@@ -22,6 +37,7 @@ export function StatusSeat({ tone, word, note }: { tone: StatusTone; word: strin
           {note && <span className="text-[12.5px] leading-[1.45] text-faint">{note}</span>}
         </span>
       </Crossfade>
+      {next && <span className="col-start-2">{next}</span>}
     </span>
   );
 }

@@ -17,7 +17,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, ROW } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { Input } from "@/components/ui/Input";
@@ -477,7 +477,7 @@ function PendingGroups({
             <Unfold open={open}>
               {group.rows.map((row) => (
                 <LeavingRow key={row.id} {...leave(row.id)}>
-                  <div className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:items-center tablet:gap-[18px]">
+                  <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:items-center`}>
                     <span className="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
                       <UserName id={row.user_id} />
                     </span>

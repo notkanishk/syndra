@@ -390,7 +390,7 @@ function EventRow({
       <div
         // Only the failed row is tinted, and only because it is the row somebody is
         // scrolling to find. A log where half the lines are coloured is a log nobody reads.
-        className={`row-divider flex flex-col items-start gap-2 px-5 py-4 tablet:flex-row tablet:gap-[18px] ${
+        className={`row-divider row-cols flex flex-col items-start gap-y-2 px-5 py-4 tablet:flex-row ${
           row.failed ? "bg-danger-soft" : ""
         }`}
       >

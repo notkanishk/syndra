@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { DRAIN_UNKNOWN_NEXT, outcomeFromError, succeeded, type ActionOutcome as Outcome, type AutoRetry } from "@/lib/outcome";
 import { RETRYING, refusedNext, retryLine, retryNextStep } from "@/lib/retry";
 import { refusalCause } from "@/lib/wait-reason";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardHeader, ROW } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
@@ -342,7 +342,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
           return (
             <div
               key={grant.id}
-              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4"
+              className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center`}
             >
               <span className="min-w-[200px] flex-1 text-[14.5px] [overflow-wrap:anywhere]">
                 <ProjectName id={grant.projectId} /> <RoleKeys keys={grant.roleKeys} />

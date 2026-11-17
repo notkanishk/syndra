@@ -209,7 +209,7 @@ function WaitingRoles({
               <div key={id}>
                 {run && <RunLabel {...run} />}
                 <div
-                  className={`row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-5 py-3.5 ${
+                  className={`row-divider row-cols flex flex-wrap items-center gap-y-2 px-5 py-3.5 ${
                     landed.has(id) ? "flash" : ""
                   }`}
                 >

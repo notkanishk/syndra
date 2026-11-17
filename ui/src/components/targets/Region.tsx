@@ -33,15 +33,19 @@ export function Region({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} aria-labelledby={`${id}-heading`} className="grid scroll-mt-4 gap-3.5">
-      <div className="grid gap-1.5">
+    <section id={id} aria-labelledby={`${id}-heading`} className="grid scroll-mt-4 gap-(--region-head-gap)">
+      <div className="grid gap-1.5 tablet:gap-1">
         <div className="flex flex-wrap items-center gap-2.5">
           <h2 id={`${id}-heading`} className="type-section-title">
             {title}
           </h2>
           {count !== undefined && <CountChip n={count} />}
         </div>
-        {lede && <p className="max-w-[86ch] text-[14px] leading-[1.6] text-muted">{lede}</p>}
+        {lede && (
+          <p data-prose className="measure text-body text-muted">
+            {lede}
+          </p>
+        )}
       </div>
       <div className="grid gap-4">{children}</div>
     </section>

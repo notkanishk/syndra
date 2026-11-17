@@ -184,13 +184,13 @@ export function ShapeChooser({
 function DotLine({ text, faint = false }: { text: string; faint?: boolean }) {
   if (faint) {
     return (
-      <span className="pl-4 text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
+      <span className="pl-(--dot-indent) text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
         <Ticks text={text} />
       </span>
     );
   }
   return (
-    <div className="flex items-start gap-2.5">
+    <div className="flex items-start gap-2">
       <span aria-hidden className="flex w-1.5 flex-none pt-2">
         <StatusDot tone="neutral" />
       </span>

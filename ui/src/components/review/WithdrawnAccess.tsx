@@ -8,7 +8,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArriveList } from "@/lib/motion";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
-import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
@@ -419,7 +419,7 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
   const looking = lookingUp(row, conflicts.loading);
   const decide = decideAt(row, conflicts.stands);
   return (
-    <div className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px]">
+    <div className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-start`}>
       <WhoSeat id={row.user_id} />
 
       <WhatSeat

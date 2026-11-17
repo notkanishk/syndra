@@ -116,14 +116,14 @@ export function EmptyState({
   lift?: boolean;
 }) {
   return (
-    <div role="status" className={`${lift ? "lift-in" : "tint-in"} flex flex-col justify-center gap-2.5 px-6 py-8`}>
+    <div role="status" className={`${lift ? "lift-in" : "tint-in"} flex flex-col justify-center gap-2.5 px-6 py-(--empty-y) tablet:px-(--card-x)`}>
       <div className="flex items-center gap-2.5">
         {resolved && (
           <StatusDot tone="healthy" bloom={bloom} />
         )}
         <div className="type-empty-title">{title}</div>
       </div>
-      {guidance && <p className="max-w-[60ch] text-[14px] text-muted">{guidance}</p>}
+      {guidance && <p className="measure text-body text-muted">{guidance}</p>}
       {action && (
         <div className="mt-1">
           {"href" in action ? (

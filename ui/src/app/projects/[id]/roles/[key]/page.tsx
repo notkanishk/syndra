@@ -18,7 +18,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { ProjectName, projectLabel } from "@/components/names";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardHeader, ROW } from "@/components/ui/Card";
 import { FilterPills } from "@/components/ui/Select";
 import { WithheldInline } from "@/components/ui/Withheld";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -206,7 +206,7 @@ export default function RoleMembersPage({
               data-row
               key={person.id}
               href={`/users/${person.id}`}
-              className="row-divider flex min-h-[60px] items-center gap-3 px-5 py-3 hover-tint"
+              className={`row-divider flex items-center ${ROW} hover-tint`}
             >
               <Avatar name={person.name} />
               <span className="min-w-0 flex-1">
@@ -267,7 +267,7 @@ function MemberRow({
     });
 
   return (
-    <div className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:items-center tablet:gap-[18px]">
+    <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:items-center`}>
       <Avatar name={member.user.name} />
       <Link
         href={`/users/${member.user.id}`}

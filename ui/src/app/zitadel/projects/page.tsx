@@ -12,7 +12,7 @@ import { Mono } from "@/components/ui/Badge";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { ApiError } from "@/lib/api-client";
 import { outcomeFromError, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -198,7 +198,7 @@ function RoleRow({
 
   return (
     <>
-      <div className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
+      <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center`}>
         <span className="min-w-[200px] flex-1 text-[14.5px] [overflow-wrap:anywhere]">
           {role.displayName || role.key} <Mono className="text-faint">{role.key}</Mono>
         </span>

@@ -91,18 +91,18 @@ export function Notice({
   const box = (
     <div
       role={blocking ? "alert" : "status"}
-      className={`flex items-start gap-3.5 rounded-panel border px-5 py-4 ${t.box} ${className}`}
+      className={`flex items-start gap-3.5 rounded-panel border px-5 py-4 tablet:py-3.5 ${t.box} ${className}`}
     >
       <span
         aria-hidden
         className={`mt-[7px] h-2 w-2 flex-none rounded-pill ${t.dot} ${live ? "breathe" : ""}`}
       />
       <div className="flex min-w-0 flex-col gap-1.5">
-        <span className={`font-display text-[19px] font-semibold leading-tight ${t.title}`}>{title}</span>
-        <div className="max-w-[72ch] text-[14.5px] leading-[1.55] text-ink [text-wrap:pretty]">
+        <span className={`font-display text-title ${t.title}`}>{title}</span>
+        <div className="measure text-body text-ink [text-wrap:pretty]">
           {children}
         </div>
-        <p data-notice-next className="max-w-[72ch] text-[14.5px] font-semibold leading-[1.55] text-ink [text-wrap:pretty]">
+        <p data-notice-next className="measure text-body font-semibold text-ink [text-wrap:pretty]">
           {nothingToDo !== undefined ? `${NOTHING_TO_DO} ${nothingToDo}` : next}
         </p>
         {(action || reference) && (

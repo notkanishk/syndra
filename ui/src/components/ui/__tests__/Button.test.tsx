@@ -2,7 +2,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { Button, ButtonLink, PILL } from "@/components/ui/Button";
 
 describe("<ButtonLink/>", () => {
   // The bug this component exists to prevent: <Link><Button/></Link> renders
@@ -46,5 +46,23 @@ describe("<Button/>", () => {
     // Hover doesn't exist on touch and doesn't survive a screenshot.
     expect(button).not.toHaveAttribute("title");
     expect(screen.getByText("Needs an endpoint that doesn't exist yet.")).toBeInTheDocument();
+  });
+
+  // D-1 §3: height came from padding plus border, so an outline button stood
+  // 2px taller than an accent one beside it. Height is set, from the token.
+  it("draws an accent and an outline button of one size at one height, from the token", () => {
+    for (const size of ["sm", "md"] as const) {
+      const { container } = render(
+        <>
+          <Button size={size} variant="accent">Save name</Button>
+          <Button size={size} variant="outline">Cancel</Button>
+        </>,
+      );
+      const [accent, outline] = Array.from(container.querySelectorAll("button"));
+      const heights = (button: Element) => button.className.split(/\s+/).filter((c) => /(?:^|:)(?:min-)?h-|(?:^|:)py-/.test(c));
+      expect(heights(accent)).toEqual(heights(outline));
+      expect(heights(accent)).toContain(`desktop:min-h-(--control-${size})`);
+      expect(PILL[size], "padding must not build the height").not.toMatch(/py-/);
+    }
   });
 });

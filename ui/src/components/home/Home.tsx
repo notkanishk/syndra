@@ -343,10 +343,10 @@ export function Home({ session }: { session: SessionUser }) {
           Unfold as everything else the switch moves. */}
       <Unfold open={!advanced} gap={24}>
         {/* Two ways there, not a sentence about them (A-20 P10): each switches the view on the way. */}
-        <p className="flex flex-wrap gap-x-6 gap-y-1">
+        <div className="flex flex-wrap gap-x-6 gap-y-1">
           <ArrowLink href="/governance/pending">Pending changes</ArrowLink>
           <ArrowLink href="/governance/drift">Drift</ArrowLink>
-        </p>
+        </div>
       </Unfold>
     </div>
   );

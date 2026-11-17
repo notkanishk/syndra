@@ -29,7 +29,7 @@ describe("every control clears the touch floor", () => {
       expect(control.className, `${name} must clear the floor`).toContain("min-h-[var(--tap)]");
       // And releases it only above the desktop breakpoint, where the product
       // is a dense rail-and-table application again.
-      expect(control.className).toContain("desktop:min-h-0");
+      expect(control.className).toMatch(/desktop:min-h-\(--control-(?:sm|md)\)/);
     }
   });
 

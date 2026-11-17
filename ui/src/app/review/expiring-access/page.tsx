@@ -12,7 +12,7 @@ import { Crossfade } from "@/lib/motion";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { BulkDialog } from "@/components/people/BulkDialog";
-import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { StatusDot } from "@/components/ui/Badge";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
@@ -589,7 +589,7 @@ function ExpiringRow({
   return (
     <div
       data-soonest={soonest || undefined}
-      className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] ${
+      className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center ${
         soonest
           ? "border-l-[3px] border-warn"
           : selecting && ack

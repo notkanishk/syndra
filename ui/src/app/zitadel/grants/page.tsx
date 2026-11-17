@@ -119,7 +119,7 @@ export default function UpstreamGrantsPage() {
           }
         >
           {visible.map((grant) => (
-            <div key={grant.id} className="row-divider flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5">
+            <div key={grant.id} className="row-divider row-cols flex flex-wrap items-center gap-y-1 px-5 py-2.5">
               <span className="w-full text-[14px] font-semibold [overflow-wrap:anywhere] tablet:w-[230px] tablet:shrink-0">
                 <UserName id={grant.userId} />
               </span>
