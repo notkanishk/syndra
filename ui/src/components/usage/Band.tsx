@@ -17,7 +17,8 @@ import { dayWords, formatValue, type Cell, type Plot } from "@/lib/usage";
  * or a point on the line. A day inside the record nobody could count is
  * hatched full height and the line BREAKS there, so a gap never reads as a
  * zero. A day after the last final one is blank, the baseline running on. A
- * day before the record has the window's faint baseline only (`--line`); the
+ * day before the record has the window's baseline only, in `--line-strong`
+ * (`--line` is 6-8% alpha and vanished on real data); the
  * record's strong baseline starts at a 6px tick. A level is never
  * interpolated: only adjacent counted days are joined, a value standing alone
  * is a dot. With a limit the scale's top is the limit, a faint line there and
@@ -151,9 +152,9 @@ export function Band({
         {plot.gapRuns.map(([a, b]) => (
           <rect key={a} data-gap x={left(a)} width={right(b) - left(a)} y="0" height={BASE} fill={`url(#${id}-gap)`} />
         ))}
-        {baseLeft > 0 && <line data-pre x1="0" x2={baseLeft} y1={BASE + 0.5} y2={BASE + 0.5} stroke="var(--line)" strokeWidth="1" />}
+        {baseLeft > 0 && <line data-pre x1="0" x2={baseLeft} y1={BASE + 0.5} y2={BASE + 0.5} stroke="var(--line-strong)" strokeWidth="1" />}
         {first >= 0 && <line data-base x1={baseLeft} x2={W} y1={BASE + 0.5} y2={BASE + 0.5} stroke="var(--line-strong)" strokeWidth="1" />}
-        {first > 0 && <line data-tick x1={baseLeft + 0.5} x2={baseLeft + 0.5} y1={BASE - 5} y2={BASE + 1} stroke="var(--line-strong)" strokeWidth="1" />}
+        {first > 0 && <line data-tick x1={baseLeft + 0.5} x2={baseLeft + 0.5} y1={BASE - 5} y2={BASE + 1} stroke="var(--faint)" strokeWidth="1" />}
         {limit !== undefined && first >= 0 && (
           <>
             <line data-limit x1={baseLeft} x2={W} y1={y(limit) + 0.5} y2={y(limit) + 0.5} stroke="var(--line)" strokeWidth="1" />

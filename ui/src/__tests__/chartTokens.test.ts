@@ -39,6 +39,25 @@ describe("the chart tokens, both themes", () => {
     }
   });
 
+  it("the pre-record baseline is --line-strong, which reads well clear of the faint --line it replaced and below the hatch", () => {
+    // 3:1 is the hatch's job (a gap must never read as a zero); the baseline is secondary by design.
+    for (const vars of Object.values(THEMES)) {
+      const on = colour(vars, "--surface-1");
+      const strong = ratio(colour(vars, "--line-strong"), on);
+      expect(strong).toBeGreaterThan(ratio(colour(vars, "--line"), on));
+      expect(strong).toBeLessThan(ratio(colour(vars, "--chart-hatch"), on));
+    }
+  });
+
+  it("the record-start tick is --faint, stronger than the baseline it stands on, in both themes", () => {
+    const band = readFileSync(resolve(SRC, "components/usage/Band.tsx"), "utf8");
+    expect(band).toMatch(/data-tick[^\n]*stroke="var\(--faint\)"/);
+    for (const vars of Object.values(THEMES)) {
+      const on = colour(vars, "--surface-1");
+      expect(ratio(colour(vars, "--faint"), on)).toBeGreaterThan(ratio(colour(vars, "--line-strong"), on));
+    }
+  });
+
   it("no statistics component writes a colour of its own", () => {
     const dir = resolve(SRC, "components/usage");
     const found: string[] = [];

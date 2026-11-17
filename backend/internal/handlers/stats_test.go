@@ -176,13 +176,13 @@ func TestUsageCarriesSumsLatestAndGaps(t *testing.T) {
 	if err != nil || !usage.Reported || len(usage.Metrics) != 2 {
 		t.Fatalf("%+v %v", usage, err)
 	}
-	if usage.Metrics[0].Label != "Home folder used" || usage.Metrics[1].Label != "Storage sessions" {
+	if usage.Metrics[0].Label != "Storage sessions" || usage.Metrics[1].Label != "Home folder used" {
 		t.Errorf("metrics in order %s, %s", usage.Metrics[0].Label, usage.Metrics[1].Label)
 	}
 	if usage.Today != "2026-11-12" {
 		t.Errorf("today is the makerspace day the response was built on: %q", usage.Today)
 	}
-	home := usage.Metrics[0]
+	home := usage.Metrics[1]
 	if len(home.Series) != 1 || home.Series[0].Latest == nil || home.Series[0].Latest.Day != "2026-11-11" || home.Series[0].Latest.Value != 6000 ||
 		home.Series[0].Sum30d != nil || home.Series[0].Months != nil || home.Against != "home_quota" {
 		t.Errorf("gauge %+v", home.Series)

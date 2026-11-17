@@ -276,7 +276,8 @@ func statsUsageFor(ctx context.Context, target, subject string, memberView bool,
 		view.LeftOut = len(left)
 		out.Metrics = append(out.Metrics, view)
 	}
-	textsort.ByName(out.Metrics, func(m statsMetricView) string { return m.Label }, func(m statsMetricView) string { return m.Name })
+	// One rule, the add-on's own: counters, then levels, each in manifest order (A-23), not alphabetical.
+	addons.SortMetrics(target, out.Metrics, func(m statsMetricView) addons.Metric { return m.Metric })
 	return out, nil
 }
 

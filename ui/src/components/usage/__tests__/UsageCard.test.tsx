@@ -220,6 +220,8 @@ describe("the states (A-23 part 2)", () => {
     const { container } = render(<UsageCard title="t" windows={windows()} metrics={[m]} />);
     const svg = bands()[0];
     expect(svg.querySelector("[data-pre]")).not.toBeNull();
+    // --line is a 6-8% tint that vanishes on real data: the days before the record read as a baseline in --line-strong.
+    expect(svg.querySelector("[data-pre]")!.getAttribute("stroke")).toBe("var(--line-strong)");
     expect(svg.querySelector("[data-tick]")).not.toBeNull();
     expect(svg.querySelectorAll("[data-column]")).toHaveLength(1);
     // Before the record is never hatched and never a zero.
