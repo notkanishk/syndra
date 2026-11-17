@@ -1,6 +1,7 @@
 package addons
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -305,4 +307,30 @@ func ReadStats(ctx context.Context, target, metric string, since time.Time, curs
 		page.NextCursor = *w.NextCursor
 	}
 	return page, nil
+}
+
+// SortMetrics puts a target's metrics in the order every card lists them (A-23):
+// counters before levels, then the order its manifest declares them, then by
+// name for any the manifest no longer lists. The store's own order is
+// alphabetical by name, which says nothing a reader can use.
+func SortMetrics[T any](target string, items []T, metric func(T) Metric) {
+	declared, _ := StatsMetrics(target)
+	at := func(m Metric) int {
+		for i, d := range declared {
+			if d.Name == m.Name {
+				return i
+			}
+		}
+		return len(declared)
+	}
+	level := func(m Metric) int {
+		if m.Instrument == InstrumentCounter {
+			return 0
+		}
+		return 1
+	}
+	slices.SortStableFunc(items, func(a, b T) int {
+		x, y := metric(a), metric(b)
+		return cmp.Or(cmp.Compare(level(x), level(y)), cmp.Compare(at(x), at(y)), strings.Compare(x.Name, y.Name))
+	})
 }
