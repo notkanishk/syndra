@@ -498,12 +498,21 @@ func (s *server) attributeOver(bindings []Binding, subjects []Subject) attributi
 	// A recorded binding whose name or number another account took can be moved to that account,
 	// when it is the person's (adoptAccount; owner ruling 17 Nov 2026), by account.adopt's own rule
 	// judged over this same read: the holder bound to nobody, the add-on's own account known and
-	// not it. A system account is never in a read (withoutSystemAccounts).
+	// not it. A system account is never in a read (withoutSystemAccounts). A holder two people's
+	// conflicts name is adoptable for neither (sharedHolder): which of them it is is the operator's
+	// to decide, and the words say so; it never goes to whichever is asked first.
 	_, _, known := s.nas.Self()
+	claims := map[string]int{} // holder name → recorded conflicts naming it
+	for _, r := range at.bySubject {
+		if c := r.Conflict; c != nil && c.recorded {
+			claims[c.Username]++
+		}
+	}
 	for _, r := range at.bySubject {
 		if c := r.Conflict; c != nil && c.recorded {
 			holder, _ := ix.name(c.Username)
-			c.Adoptable = holder != nil && known && !at.bound(holder.UID) && s.refuseSelfAccount(c.Username) == nil
+			c.sharedHolder = claims[c.Username] > 1
+			c.Adoptable = holder != nil && known && !c.sharedHolder && !at.bound(holder.UID) && s.refuseSelfAccount(c.Username) == nil
 			c.worded()
 		}
 	}

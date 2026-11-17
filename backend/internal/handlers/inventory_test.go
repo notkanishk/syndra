@@ -27,12 +27,29 @@ type adoptHarness struct {
 	uid       string
 	dispatchd []addonop.Request
 	recorded  []db.TargetBinding
+	// was is the backend's copy before the adoption (nil: none); basesForgotten is
+	// every subject whose merge base the adoption forgot.
+	was            *db.TargetBinding
+	basesForgotten []string
 }
 
 func stubAdopt(t *testing.T, h *adoptHarness) {
 	t.Helper()
 	dispatch, record := svcDispatchOperation, dbRecordTargetBinding
 	t.Cleanup(func() { svcDispatchOperation, dbRecordTargetBinding = dispatch, record })
+	get, forgetBase, forgetLanded := dbGetTargetBinding, dbForgetMergeBase, dbForgetPropagations
+	t.Cleanup(func() { dbGetTargetBinding, dbForgetMergeBase, dbForgetPropagations = get, forgetBase, forgetLanded })
+	dbForgetPropagations = func(context.Context, string, string) error { return nil }
+	dbGetTargetBinding = func(context.Context, string, string) (db.TargetBinding, bool, error) {
+		if h.was == nil {
+			return db.TargetBinding{}, false, nil
+		}
+		return *h.was, true, nil
+	}
+	dbForgetMergeBase = func(_ context.Context, _, subject string) error {
+		h.basesForgotten = append(h.basesForgotten, subject)
+		return nil
+	}
 
 	svcDispatchOperation = func(_ context.Context, req addonop.Request) (addonop.Result, error) {
 		h.dispatchd = append(h.dispatchd, req)

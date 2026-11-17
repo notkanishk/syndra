@@ -1010,7 +1010,8 @@ describe("adopting an account", () => {
     fireEvent.change(screen.getByLabelText(/Type the account name/), { target: { value: "iyo" } });
     fireEvent.click(screen.getByRole("button", { name: "Assign iyo to Iyo Sky" }));
 
-    expect(state.adopted).toEqual([{ username: "iyo", subjectId: "s-99" }]);
+    // With the account the row showed: a name handed to another account since is refused, never adopted.
+    expect(state.adopted).toEqual([{ username: "iyo", subjectId: "s-99", accountId: "3000" }]);
     // The sheet is its result (Assigned, Close); no Dismiss button anywhere.
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /dismiss this result/i })).toBeNull();

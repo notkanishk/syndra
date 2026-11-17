@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   ADOPT_IT,
+  CHECKED_UPDATING,
   CHECK_AGAIN,
+  FINISH_AGAIN_NOTE,
+  finishLabel,
   CONFLICT_NEXT_FALLBACK,
   OTHER_PERSON,
   STOP_TRACKING,
@@ -45,6 +48,11 @@ describe("the binding conflict's copy guide rows", () => {
       // 7t-7: the other answers, and Check again.
       ADOPT_IT,
       adoptConsequence(S, "{holder}"),
+      adoptConsequence(S, "{holder}", "name_held"),
+      CHECKED_UPDATING,
+      FINISH_AGAIN_NOTE,
+      finishLabel("adopted"),
+      finishLabel("kept"),
       keepFor("{name}"),
       keepConsequence(S, "{holder}", "{keeper}", "{other}"),
       CHECK_AGAIN,
@@ -137,9 +145,12 @@ describe("the binding conflict's copy guide rows", () => {
       [apply, "Adopt %s if it is theirs. If it is not, stop tracking this person's old account, or rename %s on TrueNAS."],
       [operations, "%s on TrueNAS is no longer the account you were shown. Check again to see it as it is now."],
       [operations, "%s can no longer be adopted for this person: TrueNAS changed since it was checked. Check again to see it as it is now."],
+      [apply, "Another person's record points to %s too, so it can't be adopted for either yet. Stop tracking the record of whichever of the two it is not, then adopt %s for the other."],
+      [operations, "Moving this person to %s needs the account you were shown, \"+\n\t\t\t\t\t\"so that a name given to another account since is never adopted. Adopt it from the conflict under Waiting on you."],
+      [operations, "This person's record on TrueNAS now names a different account \" +\n\t\t\t\t\"from the one Syndra meant, so nothing was released. Check again to see it as it is now."],
     ] as const) {
       expect(source, `the add-on no longer says ${go}`).toContain(go);
-      expect(section, `design.md §16 does not carry ${go}`).toContain(go.replaceAll("%s", "{name}"));
+      expect(section, `design.md §16 does not carry ${go}`).toContain(go.replaceAll("%s", "{name}").replace(/" ?\+\n\t+"/, ""));
     }
   });
 

@@ -12,8 +12,15 @@ nobody and not the add-on's own; `common/binding_conflict.json`), and
 binding to it, judged again when it runs. `account.adopt` gains an optional
 `account_id` parameter (`registry/operations.json`): the account the
 operator was shown, refused with 409 when the account named is no longer
-it (an `If-Match`-style precondition, RFC 9110 §13.1.1). No fixture
-changed.
+it (an `If-Match`-style precondition, RFC 9110 §13.1.1). A move (a subject
+already bound) MUST carry it, or is 409. A holder two subjects' conflicts
+name is `adoptable` for neither. `account.release` gains the same optional
+`account_id` (`registry/operations.json`): 409, nothing released, when the
+binding no longer names that account. `account_id` was already required on
+every conflict but `ambiguous` (`binding_conflict.json`). The reference
+add-on now serves `account.adopt` and `account.release`; kit checks
+`adopt.shown`, `adopt.not-shown` and `release.not-shown` (with `-mutate`),
+each failed by a reference defect. No fixture changed.
 
 ## Attribution everywhere a row is an account (slice 7t-3, 15 Nov 2026)
 

@@ -5,11 +5,15 @@ import { Term } from "@/components/ui/Term";
 import { useState } from "react";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import {
+  CHECKED_UPDATING,
   CONFLICT_NEXT_FALLBACK,
   OTHER_PERSON,
   checkStopped,
+  FINISH_AGAIN_NOTE,
+  FINISH_REASON,
   closesAtNextCheck,
   conflictChoices,
+  finishLabel,
   conflictDetailFallback,
   conflictReport,
   holdersLine,
@@ -200,6 +204,35 @@ export function MergeFindings({ target }: { target: string }) {
                         closesAtNextCheck(name)
                       : `waiting for ${name} to match`}
                   </span>
+                  {f.outcome === "binding_conflict" && (f.decision === "adopted" || f.decision === "kept") && (
+                    // A choice that reached the system and not Syndra's own records answers "choose
+                    // it again"; this is that press, on the same repair route, safe to repeat.
+                    <>
+                      <span className="w-full text-[13px] text-muted">{FINISH_AGAIN_NOTE}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={finishing.has(f.id)}
+                        isPending={resolve.isPending && finishing.has(f.id)}
+                        onClick={() => {
+                          setFinishing((prev) => new Set(prev).add(f.id));
+                          resolve.mutate(
+                            { id: f.id, resolution: f.decision as "adopted" | "kept", reason: FINISH_REASON },
+                            {
+                              onSettled: () =>
+                                setFinishing((prev) => {
+                                  const copy = new Set(prev);
+                                  copy.delete(f.id);
+                                  return copy;
+                                }),
+                            },
+                          );
+                        }}
+                      >
+                        {finishLabel(f.decision)}
+                      </Button>
+                    </>
+                  )}
                 </CardRow>
               ) : deciding === f.id ? (
                 <DecisionForm
@@ -605,7 +638,9 @@ function ConflictDecision({
         ? checked.stopped
         : checked && finding.last_seen_at !== checked.before
           ? stillReported(name)
-          : null;
+          : checked && !checked.retry
+            ? CHECKED_UPDATING
+            : null;
 
   return (
     <>

@@ -248,6 +248,13 @@ func TestEveryCallerResolvesOneIdentity(t *testing.T) {
 				nameHeld := c.conflict && strings.Contains(c.name, "name held")
 				switch {
 				case nameHeld:
+					// Never by the name alone: the move needs the account the operator was shown.
+					if b, _, _ := s.store.GetBinding("sub-1"); rr.Code != http.StatusConflict ||
+						!strings.Contains(rr.Body.String(), "needs the account you were shown") || b.UID != c.binding.UID {
+						t.Fatalf("adopt the holder by name alone: want 409 and nothing moved, got %d %s, %+v", rr.Code, rr.Body.String(), b)
+					}
+					rr = postOperation(t, s, "account.adopt", `{"call_id":"a2","subject":"sub-1","actor":"op_1","params":{"username":"`+
+						c.binding.Username+`","account_id":"`+itoa(c.holderUID(t))+`"}}`)
 					var res OperationResult
 					_ = json.Unmarshal(rr.Body.Bytes(), &res)
 					b, _, _ := s.store.GetBinding("sub-1")

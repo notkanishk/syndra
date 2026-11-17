@@ -44,11 +44,18 @@
       "secret_result": false
     },
     "account.release": {
-      "meaning": "Forget the binding without touching the account.",
+      "meaning": "Forget the binding without touching the account. account_id, when sent, is the account Syndra means: refused if the binding no longer names it.",
       "scope": "admin",
       "subject": true,
       "confirm": true,
-      "params": [],
+      "params": [
+        {
+          "name": "account_id",
+          "type": "string",
+          "required": false,
+          "secret": false
+        }
+      ],
       "secret_params": [],
       "effect": "account",
       "secret_result": false

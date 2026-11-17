@@ -455,6 +455,22 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 			Detail: "No account was bound to this subject.",
 		}, http.StatusOK, nil
 	}
+	// The account Syndra means, when it says (an If-Match precondition, RFC 9110 §13.1.1): a
+	// person released and bound again since names a new account, which this release must not drop.
+	if want, typed := req.Params["account_id"].(string); req.Params["account_id"] != nil && !typed {
+		return OperationResult{}, http.StatusBadRequest, fmt.Errorf("account_id must be a string")
+	} else if want != "" {
+		names, status, err := s.bindingNames(req, binding)
+		if err != nil {
+			return OperationResult{}, status, err
+		}
+		// A binding that names no account now (a contract-1 one whose account is gone) has nothing
+		// a release could wrongly drop.
+		if names != "" && names != want {
+			return OperationResult{}, http.StatusConflict, errors.New("This person's record on TrueNAS now names a different account " +
+				"from the one Syndra meant, so nothing was released. Check again to see it as it is now.")
+		}
+	}
 	if err := s.mutate(opCaller("account.release", req).on(binding.UID), "store.unbind", func() error {
 		return s.store.DeleteBinding(req.Subject)
 	}); errors.Is(err, errNotLogged) {
@@ -477,6 +493,27 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 		Detail: "Syndra no longer manages " + binding.Username +
 			". Nothing on the target was changed — the account still exists and still works.",
 	}, http.StatusOK, nil
+}
+
+// bindingNames is the account_id a binding names, for release's precondition: its own uid when
+// that is a real one (the release then needs no NAS, as it must not); for a contract-1 binding,
+// whose uid may be a record key, the account the module finds for it now (resolveLive, a read),
+// or the account two bindings claim. "" when it names none.
+func (s *server) bindingNames(req OperationRequest, b Binding) (string, int, error) {
+	if floor, ceiling := s.idRange(); b.ownsUID(floor, ceiling) {
+		return accountID(b.UID), 0, nil
+	}
+	r, _, err := s.resolveLive(req.Subject, nil)
+	switch {
+	case err != nil:
+		status, refusal := liveRefusal(err)
+		return "", status, refusal
+	case r.Account != nil:
+		return accountID(r.Account.UID), 0, nil
+	case r.Conflict != nil && r.Conflict.claimedTwice:
+		return r.Conflict.AccountID, 0, nil
+	}
+	return "", 0, nil
 }
 
 // rotatePassword mints a new credential, applies it, and returns nothing.
@@ -1265,7 +1302,12 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		case r.Conflict != nil && r.Conflict.recorded && r.Conflict.Username == username:
 			// The account now holding this person's recorded name or number, named as theirs:
 			// the binding moves to it (owner ruling 17 Nov 2026). Judged again below, over one
-			// read with every other binding, before anything is written.
+			// read with every other binding, before anything is written. Only with the account the
+			// operator was shown: the name alone may have gone to another account since.
+			if want == "" {
+				return OperationResult{}, http.StatusConflict, fmt.Errorf("Moving this person to %s needs the account you were shown, "+
+					"so that a name given to another account since is never adopted. Adopt it from the conflict under Waiting on you.", username)
+			}
 			moving = true
 		case existing.Username == username:
 			// A repeat only while the binding still names an account

@@ -62,6 +62,10 @@ type adoptRequest struct {
 	// Confirmed is the operator saying the number out loud. The backend refuses
 	// without it — a confirmation only the frontend enforces is a suggestion.
 	Confirmed bool `json:"confirmed"`
+	// AccountID is the account the inventory showed, sent to the add-on as
+	// account.adopt's precondition (RFC 9110 §13.1.1): a name handed to another
+	// account since is refused, never adopted. A move needs it (7t-7).
+	AccountID string `json:"account_id,omitempty"`
 }
 
 // handleAdoptAccount binds an account the target already holds to a subject.
@@ -88,7 +92,7 @@ func handleAdoptAccount(w http.ResponseWriter, r *http.Request) {
 		ActorID:   resolveActor(r, ""),
 		SubjectID: req.SubjectID,
 		Confirmed: req.Confirmed,
-		Params:    map[string]any{"username": username},
+		Params:    adoptParams(username, req.AccountID),
 		About:     username,
 	})
 	if err != nil {
@@ -158,7 +162,22 @@ func handleAdoptAccount(w http.ResponseWriter, r *http.Request) {
 // (handleAdoptAccount) and for the answer the add-on recorded when the live
 // one was lost (settleByCall, through db.ResolveBindingCall), so both leave
 // the same row. actor is who asked for the adoption.
+//
+// An adoption can MOVE a person (addon-contract 7t-7: the add-on moves a
+// binding to the account holding its recorded name or number), and every path
+// lands here: the binding conflict's resolution, the inventory, and a /calls
+// settle. So the one clear is here too: when the person was recorded on
+// another account, the observation of that account (the merge base) goes
+// first. Compared with the new account's values it would read as somebody
+// changing them on the target, a false finding; an adoption starts with no
+// base, as a first one does.
 func recordAdoptedBinding(ctx context.Context, target, subject, username, actor, accountID string) error {
+	was, bound, err := dbGetTargetBinding(ctx, target, subject)
+	if err != nil || (bound && !sameAccount(was, username, accountID)) {
+		// Unreadable is treated as moved: a missing base only means the next
+		// pass has no history, while a stale one makes up a difference.
+		forgetMergeBase(ctx, target, subject)
+	}
 	return dbRecordTargetBinding(ctx, db.TargetBinding{
 		Target: target, SubjectID: subject,
 		Username: username, BoundBy: actor,
@@ -172,6 +191,16 @@ func recordAdoptedBinding(ctx context.Context, target, subject, username, actor,
 		// empty id for "we were not told" would record an account nobody has.
 		AccountID: optionalID(accountID),
 	})
+}
+
+// sameAccount is whether a recorded binding names the account an adoption
+// bound: by id when both sides have one (a name is the half that changes),
+// else by name.
+func sameAccount(was db.TargetBinding, username, accountID string) bool {
+	if was.AccountID != nil && accountID != "" {
+		return *was.AccountID == accountID
+	}
+	return was.Username == username
 }
 
 // forgetReleasedBinding is the backend's half of a release the add-on
@@ -248,7 +277,9 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		ActorID:   resolveActor(r, ""),
 		SubjectID: subject,
 		Confirmed: req.Confirmed,
-		About:     boundUsername(r.Context(), target, subject),
+		// The account this row shows, as the precondition: never a newer one bound since.
+		Params: releaseParams(boundAccountID(r.Context(), target, subject)),
+		About:  boundUsername(r.Context(), target, subject),
 	})
 	if err != nil {
 		writeOperationError(w, err, "RELEASE_FAILED",
@@ -552,6 +583,15 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 func boundUsername(ctx context.Context, target, subject string) string {
 	if b, bound, err := dbGetTargetBinding(ctx, target, subject); err == nil && bound {
 		return b.Username
+	}
+	return ""
+}
+
+// boundAccountID is the account id the backend's copy records for a subject, or
+// "" when it records none: what a release means, as its precondition.
+func boundAccountID(ctx context.Context, target, subject string) string {
+	if b, bound, err := dbGetTargetBinding(ctx, target, subject); err == nil && bound && b.AccountID != nil {
+		return *b.AccountID
 	}
 	return ""
 }

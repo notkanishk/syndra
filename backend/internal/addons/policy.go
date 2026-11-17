@@ -163,7 +163,13 @@ var operationPolicy = map[string]OperationPolicy{
 	"account.release": {
 		Scope:   ScopeAdmin,
 		Confirm: true,
-		Effect:  EffectAccount,
+		Params: []ParamSpec{
+			// The account Syndra means, a precondition (RFC 9110 §13.1.1,
+			// If-Match): a person released and bound again since names a new
+			// account, and the add-on refuses rather than drop it.
+			{Name: "account_id", Type: "string"},
+		},
+		Effect: EffectAccount,
 	},
 	// A member asking about their own storage account: whether it can be used
 	// yet, and how much room is left.

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -70,7 +71,7 @@ func TestAdoptingTheHolderMovesTheBindingAndTouchesNoAccount(t *testing.T) {
 func TestAStaleAdoptableIsRefusedWhenItRuns(t *testing.T) {
 	for _, tc := range []struct {
 		name, users, username, accountID, says string
-		otherBinding                         *Binding
+		otherBinding                           *Binding
 	}{
 		// The operator was shown eve as 3050; the eve holding bob's number now is 3051 (made again
 		// since, or another account given the name). The name alone cannot tell: the shown id does.
@@ -145,6 +146,82 @@ func TestTheHolderIsNeverAdoptableWhenItIsTheAddOnsOwn(t *testing.T) {
 		if err != nil || len(at.conflicts) != 1 || at.conflicts[0].Adoptable {
 			t.Fatalf("%s: want one conflict, not adoptable: %v %+v", tc.name, err, at.conflicts)
 		}
+	}
+}
+
+// A move is never made from the name alone: without the account the operator was shown it is a 409
+// in words, and nothing moves (a name can go to another account between the look and the click).
+func TestAMoveWithoutTheShownAccountIsRefused(t *testing.T) {
+	s, m := movedServer(t, eveHoldsBobsNumber)
+	rr := postOperation(t, s, "account.adopt", adoptBody("n1", "eve", ""))
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "needs the account you were shown") {
+		t.Fatalf("want 409 in words, got %d %s", rr.Code, rr.Body.String())
+	}
+	if b, _, _ := s.store.GetBinding("sub-1"); b.Username != "bob" || b.UID != 3051 {
+		t.Fatalf("nothing moved: %+v", b)
+	}
+	if w := writesTo(m, &deleteRecorder{}); len(w) != 0 {
+		t.Fatalf("nothing is written: %v", w)
+	}
+}
+
+// Two people's records point to one holder (one by its number, one by its name): it is adoptable for
+// neither, the words say why and what to do, and a move for either is refused.
+func TestAHolderTwoConflictsNameIsAdoptableForNeither(t *testing.T) {
+	s, _ := movedServer(t, eveHoldsBobsNumber)
+	// sub-2's recorded name eve (in range, its own number gone) is held by the same account.
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "eve", UID: 300009, UIDKind: uidKindAccount}); err != nil {
+		t.Fatal(err)
+	}
+	at, err := s.attribute([]Subject{{Username: "eve", UID: 3051}})
+	if err != nil || len(at.conflicts) != 2 {
+		t.Fatalf("want two conflicts: %v %+v", err, at.conflicts)
+	}
+	for _, c := range at.conflicts {
+		if c.Adoptable || !strings.Contains(c.Next, "Another person's record points to eve too") {
+			t.Errorf("%s: adoptable for neither, and said: %+v", c.Subject, c.BindingConflict)
+		}
+	}
+	if rr := postOperation(t, s, "account.adopt", adoptBody("s2", "eve", "3051")); rr.Code != http.StatusConflict {
+		t.Fatalf("a move to a holder two people claim is refused, got %d %s", rr.Code, rr.Body.String())
+	}
+	if b, _, _ := s.store.GetBinding("sub-1"); b.Username != "bob" {
+		t.Fatalf("nothing moved: %+v", b)
+	}
+}
+
+// account.release with account_id releases only while the binding still names that account: a person
+// released and bound again since has a new account, and a stale release must not drop it.
+func TestAReleaseForAnAccountTheBindingNoLongerNamesIsRefused(t *testing.T) {
+	s, _ := movedServer(t, eveHoldsBobsNumber)
+	rel := func(callID, accountID string) *httptest.ResponseRecorder {
+		return postOperation(t, s, "account.release", `{"call_id":"`+callID+`","operation":"account.release","subject":"sub-1","actor":"op_1","params":{"account_id":"`+accountID+`"}}`)
+	}
+	if rr := rel("r1", "3077"); rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "now names a different account") {
+		t.Fatalf("stale: want 409 in words, got %d %s", rr.Code, rr.Body.String())
+	}
+	if _, bound, _ := s.store.GetBinding("sub-1"); !bound {
+		t.Fatal("a refused release left the binding")
+	}
+	if rr := rel("r2", "3051"); rr.Code != http.StatusOK {
+		t.Fatalf("the account it names: want 200, got %d %s", rr.Code, rr.Body.String())
+	}
+	if _, bound, _ := s.store.GetBinding("sub-1"); bound {
+		t.Fatal("released")
+	}
+}
+
+// A contract-1 binding (no marker, uid maybe a record key) is matched by the account the module finds.
+func TestAReleasePreconditionOnALegacyBindingAsksTheModule(t *testing.T) {
+	s, _ := applyServer(t, `[{"username":"bob","id":11,"uid":3051,"locked":false,"smb":false,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "bob", UID: 11}); err != nil {
+		t.Fatal(err)
+	}
+	if _, status, err := s.releaseAccount(OperationRequest{Subject: "sub-1", Params: map[string]any{"account_id": "11"}}); status != http.StatusConflict || err == nil {
+		t.Fatalf("the record key is not the account: want 409, got %d %v", status, err)
+	}
+	if _, status, err := s.releaseAccount(OperationRequest{Subject: "sub-1", Params: map[string]any{"account_id": "3051"}}); err != nil || status != http.StatusOK {
+		t.Fatalf("the account its name finds: want 200, got %d %v", status, err)
 	}
 }
 

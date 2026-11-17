@@ -119,7 +119,7 @@ describe("a binding conflict's answers", () => {
     pick("It's theirs: adopt it");
     expect(
       screen.getByText(
-        "Syndra makes rey this person's account on TrueNAS and manages it from now on. Nothing on rey is changed. If it has changed on TrueNAS since it was checked, nothing is adopted.",
+        "Syndra makes rey this person's account on TrueNAS. They get it as it is now: everything already on it, and its password. From now on Syndra manages it, and Syndra's next change for them sets its groups and sharing. Their old account, if it is still on TrueNAS under another name, stays there, and Syndra no longer manages it. If rey has changed on TrueNAS since it was checked, nothing is adopted.",
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/3051/)).toBeNull();
@@ -142,7 +142,7 @@ describe("a binding conflict's answers", () => {
     pick("Keep it for Rey Mysterio");
     expect(
       screen.getByText(
-        "rey stays Rey Mysterio's account on TrueNAS, and Syndra stops tracking it for Edge. Nothing on TrueNAS is changed. Edge's next change creates a new account for them.",
+        "rey stays Rey Mysterio's account on TrueNAS, and Syndra stops tracking it for Edge. Nothing on TrueNAS is changed. Edge's next change sets up an account for them on TrueNAS, or, if their name there is taken, stops and asks you in Pending changes.",
       ),
     ).toBeTruthy();
     why("it is Rey's");
@@ -156,7 +156,7 @@ describe("a binding conflict's answers", () => {
     fireEvent.click(screen.getByText("Decide"));
     expect(
       screen.getByText(
-        "rey stays Edge's account on TrueNAS, and Syndra stops tracking it for Rey Mysterio. Nothing on TrueNAS is changed. Rey Mysterio's next change creates a new account for them.",
+        "rey stays Edge's account on TrueNAS, and Syndra stops tracking it for Rey Mysterio. Nothing on TrueNAS is changed. Rey Mysterio's next change sets up an account for them on TrueNAS, or, if their name there is taken, stops and asks you in Pending changes.",
       ),
     ).toBeTruthy();
     why("it is Edge's");
@@ -214,6 +214,7 @@ describe("Check again", () => {
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     const still = "Checked just now: TrueNAS still reports this. Fix it on TrueNAS, then check again, or decide it another way.";
     expect(screen.queryByText(still)).toBeNull();
+    expect(screen.getByText("Checked. Updating\u2026")).toBeTruthy();
     state.findings = [conflict({ reason: "ambiguous" }, { last_seen_at: "2026-11-17T10:05:00Z" })];
     v.again();
     expect(screen.getByText(still)).toBeTruthy();
@@ -229,7 +230,42 @@ describe("Check again", () => {
   });
 });
 
+describe("what adopting says it hands over", () => {
+  it("says the old account stays only where the name was taken, never for a held number", () => {
+    for (const [reason, says] of [["name_held", true], ["number_held", false]] as const) {
+      state.findings = [conflict({ ...nameHeld, reason })];
+      const v = view();
+      fireEvent.click(screen.getByText("Decide"));
+      pick("It's theirs: adopt it");
+      expect(screen.getByText(/everything already on it, and its password/)).toBeTruthy();
+      expect(screen.queryByText(/Their old account, if it is still on TrueNAS/) !== null, reason).toBe(says);
+      v.unmount();
+    }
+  });
+});
+
 describe("a decided conflict", () => {
+  it("offers Finish for an adoption or keep, sending the same choice again on the repair route", () => {
+    for (const [decision, label] of [
+      ["adopted", "Finish: adopt it"],
+      ["kept", "Finish: keep it for them"],
+    ] as const) {
+      state.findings = [conflict(nameHeld, { decision, decided_by: "op-1" })];
+      state.resolved = [];
+      const v = view();
+      expect(screen.getByText("If Syndra said this didn't finish, finish it here. Nothing already done is done twice.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      expect(state.resolved).toEqual([{ id: "f1", resolution: decision, reason: "Finishing a choice that did not complete" }]);
+      v.unmount();
+    }
+  });
+
+  it("offers no such Finish on a value finding decided the same way", () => {
+    state.findings = [{ ...conflict(nameHeld, { decision: "keep_ours", decided_by: "op-1" }), outcome: "theirs_only", field: "enabled" }];
+    view();
+    expect(screen.queryByRole("button", { name: /^Finish/ })).toBeNull();
+  });
+
   it("says who adopted or kept it and that the next check closes it", () => {
     for (const [decision, label] of [
       ["adopted", "Adopted the account for them"],

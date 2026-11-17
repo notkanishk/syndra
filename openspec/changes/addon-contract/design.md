@@ -1455,10 +1455,16 @@ stands and closes any finding the add-on does not report.
     add-on sets `adoptable` on a recorded binding's own conflict by `account.adopt`'s rule (the
     holder bound to nobody, not its own account; `attributeOver`) and moves the binding to the
     holder, judged again over the one read it writes from (`adoptAccount`); a stale one is a 409 in
-    its words, and nothing is written. This side's half is `recordAdoptedBinding`, with the old
-    account's observation forgotten.
+    its words, and nothing is written. A move MUST carry the shown `account_id` (409 without it), and
+    a holder two people's conflicts name is adoptable for neither. This side's half is
+    `recordAdoptedBinding`, which every adoption path shares (this resolution, the inventory, a
+    `/calls` settle) and which forgets the old account's observation whenever the person's recorded
+    account changes.
   - `kept` ("Keep it for {person}") only for `claimed_twice` with `bound_to` naming the other
-    person: `account.release` of the OTHER person (never this one) through `releaseOnTarget`; their
+    person: `account.release` of the OTHER person (never this one) through `releaseOnTarget`, naming
+    the account both claimed as `account.release`'s own `account_id` precondition (a person released
+    and bound again since is refused, 409 `RELEASE_REFUSED`, never dropped; every release Syndra sends
+    names the account it means when it knows one); their
     copy is forgotten and their standing finding settled `unbound`. Keeping it for the other person
     is this person's `unbound`. Either way the other row is reserved with the same answer from its
     side (`reservePair`) before the add-on is called, so the two people's rows can never release
@@ -1466,8 +1472,8 @@ stands and closes any finding the add-on does not report.
   - Check again is not a resolution: the same pass as Check now (`POST /targets/{t}/reconcile`),
     audited `target.checked` with who asked; the conflict closes itself when the add-on stops
     reporting it, and inside the add-on's cooldown the page says when it can read again.
-  `adopted` and `kept` are decisions: reserved before the call, repeatable as a repair, and closed by
-  the sweep carrying the decision. Every resolution is audited `merge_finding.decided` with who and why.
+  `adopted` and `kept` are decisions: reserved before the call, repeatable as a repair (the decided
+  row's Finish control sends the same choice again), and closed by the sweep carrying the decision. Every resolution is audited `merge_finding.decided` with who and why.
   No plan-gate surface: `account.adopt` and `account.release` are confirmed one-shot operations, as
   from the inventory.
 - **Shown (7t-4).** `MergeFindings` renders the add-on's `detail` then `next` as written, the

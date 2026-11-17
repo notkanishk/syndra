@@ -501,6 +501,9 @@ func writeResolutionError(w http.ResponseWriter, err error) {
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"resolution": "unbounded"})
 	case errors.Is(err, errReleaseNotConfirmed):
 		writeUpstream(w, err, "RELEASE_NOT_CONFIRMED")
+	case errors.Is(err, errReleaseRefused):
+		// The add-on's words: what it found, and Check again. Nothing was released.
+		jsonErrorResponse(w, http.StatusConflict, "RELEASE_REFUSED", strings.TrimPrefix(err.Error(), errReleaseRefused.Error()+": "))
 	case errors.Is(err, errAdoptionRefused):
 		// The add-on judged it again and said no (a stale adoptable): its own
 		// sentence, which says what changed and to check again. Nothing changed.
@@ -551,7 +554,7 @@ func resolutionFits(f db.MergeFinding, resolution string) error {
 		case resolution == db.ResolutionUnbound:
 			return nil
 		case resolution == db.ResolutionAdopted:
-			if c.Adoptable && c.Username != "" && (c.Reason == addons.ConflictNameHeld || c.Reason == addons.ConflictNumberHeld) {
+			if c.Adoptable && c.Username != "" && c.AccountID != "" && (c.Reason == addons.ConflictNameHeld || c.Reason == addons.ConflictNumberHeld) {
 				return nil
 			}
 			return fmt.Errorf("%w: the account holding this person's name or number is not one the system can give them",
@@ -587,6 +590,11 @@ func resolutionFits(f db.MergeFinding, resolution string) error {
 // errReleaseNotConfirmed is the add-on not confirming that it let go.
 var errReleaseNotConfirmed = errors.New("the target did not confirm the release")
 
+// errReleaseRefused is the add-on refusing the release: its binding names another
+// account than the one Syndra meant (the precondition), or another refusal in
+// its words. Nothing was released.
+var errReleaseRefused = errors.New("the system refused the release")
+
 // releaseOnTarget makes the ADD-ON stop managing the account, before this side
 // forgets its own record of it.
 //
@@ -596,14 +604,21 @@ var errReleaseNotConfirmed = errors.New("the target did not confirm the release"
 // by an add-on that still binds it, while every surface here calls it unmanaged.
 // That is the exact split `account.release` was added to close, and resolving a
 // finding was quietly recreating it.
-func releaseOnTarget(ctx context.Context, target, subject, actor string) error {
+//
+// accountID is the account Syndra means, sent as the precondition (RFC 9110
+// §13.1.1) when it is known: a person released and bound again since names a
+// new account, which the add-on then refuses to drop (409, errReleaseRefused).
+func releaseOnTarget(ctx context.Context, target, subject, actor, accountID string) error {
 	res, err := svcDispatchOperation(ctx, addonop.Request{
 		Target: target, Operation: "account.release",
-		ActorID: actor, SubjectID: subject, Confirmed: true,
+		ActorID: actor, SubjectID: subject, Confirmed: true, Params: releaseParams(accountID),
 		About: boundUsername(ctx, target, subject),
 	})
 	if err != nil {
 		return fmt.Errorf("release %s on %s: %w", subject, target, err)
+	}
+	if res.Outcome == addons.OutcomeRejected {
+		return fmt.Errorf("%w: %s", errReleaseRefused, releaseRefusal(res.Err))
 	}
 	if res.Outcome != addons.OutcomeSucceeded {
 		// Nothing forgotten here. The add-on's store is the authority on whether
@@ -630,14 +645,10 @@ var (
 // another account. It answers the account_id the add-on bound.
 func adoptOnTarget(ctx context.Context, f db.MergeFinding, actor string) (string, error) {
 	holder := conflictOf(f)
-	params := map[string]any{"username": holder.Username}
-	if holder.AccountID != "" {
-		params["account_id"] = holder.AccountID
-	}
 	res, err := svcDispatchOperation(ctx, addonop.Request{
 		Target: f.Target, Operation: "account.adopt",
 		ActorID: actor, SubjectID: f.SubjectID, Confirmed: true,
-		Params: params, About: holder.Username,
+		Params: adoptParams(holder.Username, holder.AccountID), About: holder.Username,
 	})
 	if err != nil {
 		return "", fmt.Errorf("adopt %s for %s on %s: %w", holder.Username, f.SubjectID, f.Target, err)
@@ -651,6 +662,24 @@ func adoptOnTarget(ctx context.Context, f db.MergeFinding, actor string) (string
 	default:
 		return "", fmt.Errorf("%w: %s answered %s", errAdoptionNotConfirmed, f.Target, res.Outcome)
 	}
+}
+
+// releaseParams is account.release's params: the account_id meant, when known.
+func releaseParams(accountID string) map[string]any {
+	if accountID == "" {
+		return map[string]any{}
+	}
+	return map[string]any{"account_id": accountID}
+}
+
+// adoptParams is account.adopt's params, for every caller: the name, and the
+// account_id shown when there is one (the precondition).
+func adoptParams(username, accountID string) map[string]any {
+	params := map[string]any{"username": username}
+	if accountID != "" {
+		params["account_id"] = accountID
+	}
+	return params
 }
 
 // targetDone is what a resolution's call to the target left for this side's
@@ -677,14 +706,26 @@ func callsTarget(resolution string) bool {
 func callTarget(ctx context.Context, f db.MergeFinding, resolution, actor string) (targetDone, error) {
 	switch resolution {
 	case db.ResolutionUnbound:
-		return targetDone{}, releaseOnTarget(ctx, f.Target, f.SubjectID, actor)
+		return targetDone{}, releaseOnTarget(ctx, f.Target, f.SubjectID, actor, releasedAccount(ctx, f))
 	case db.ResolutionKept:
-		return targetDone{}, releaseOnTarget(ctx, f.Target, conflictOf(f).BoundTo, actor)
+		// The account both claimed: if the other person was released and bound again
+		// since, their new account is not this one, and the add-on refuses.
+		return targetDone{}, releaseOnTarget(ctx, f.Target, conflictOf(f).BoundTo, actor, conflictOf(f).AccountID)
 	case db.ResolutionAdopted:
 		id, err := adoptOnTarget(ctx, f, actor)
 		return targetDone{accountID: id}, err
 	}
 	return targetDone{}, fmt.Errorf("%q does not call the target", resolution)
+}
+
+// releasedAccount is the account a Stop tracking means, sent as the release's
+// precondition: the account two people claim, or the one this person's record
+// names (the mirror), "" when Syndra does not know one.
+func releasedAccount(ctx context.Context, f db.MergeFinding) string {
+	if c := conflictOf(f); c.Reason == addons.ConflictClaimedTwice {
+		return c.AccountID
+	}
+	return boundAccountID(ctx, f.Target, f.SubjectID)
 }
 
 // opposite is what an answer on one claimant's finding means on the other's,
@@ -797,11 +838,8 @@ func performResolution(ctx context.Context, f db.MergeFinding, req resolveMergeF
 
 	case db.ResolutionAdopted:
 		// The backend's half of the one adoption (recordAdoptedBinding, as
-		// handleAdoptAccount writes it). The observation of the old account goes
-		// first: compared with the holder's values it would read as somebody
-		// changing them, and an adopted account starts as an inventory adoption
-		// does, with no base.
-		forgetMergeBase(ctx, f.Target, f.SubjectID)
+		// handleAdoptAccount and a /calls settle write it), which also forgets
+		// the old account's observation when the person moves.
 		return recordAdoptedBinding(ctx, f.Target, f.SubjectID, conflictOf(f).Username, actor, done.accountID)
 
 	default:

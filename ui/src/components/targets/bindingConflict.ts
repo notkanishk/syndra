@@ -71,13 +71,16 @@ export const STOP_TRACKING = "Stop tracking";
  * and in Syndra, true of what the backend does.
  */
 export const ADOPT_IT = "It's theirs: adopt it";
-export const adoptConsequence = (system: string, holder: string) =>
-  `Syndra makes ${holder} this person's account on ${system} and manages it from now on. Nothing on ${holder} is changed. If it has changed on ${system} since it was checked, nothing is adopted.`;
+// Adoptable means bound to nobody and not the add-on's own, never untouched: so it says what they get.
+export const adoptConsequence = (system: string, holder: string, reason?: string) =>
+  `Syndra makes ${holder} this person's account on ${system}. They get it as it is now: everything already on it, and its password. From now on Syndra manages it, and Syndra's next change for them sets its groups and sharing. ${
+    reason === "name_held" ? `Their old account, if it is still on ${system} under another name, stays there, and Syndra no longer manages it. ` : ""
+  }If ${holder} has changed on ${system} since it was checked, nothing is adopted.`;
 
 /** Claimed twice: the account stays one person's, and Syndra stops tracking it for the other. */
 export const keepFor = (person: string) => `Keep it for ${person}`;
 export const keepConsequence = (system: string, holder: string, keeper: string, released: string) =>
-  `${holder} stays ${keeper}'s account on ${system}, and Syndra stops tracking it for ${released}. Nothing on ${system} is changed. ${start(released)}'s next change creates a new account for them.`;
+  `${holder} stays ${keeper}'s account on ${system}, and Syndra stops tracking it for ${released}. Nothing on ${system} is changed. ${start(released)}'s next change sets up an account for them on ${system}, or, if their name there is taken, stops and asks you in Pending changes.`;
 
 /** A fresh read of the system: the same pass as Check now. An action, never a decision. */
 export const CHECK_AGAIN = "Check again";
@@ -88,6 +91,18 @@ export const stillReported = (system: string) =>
   `Checked just now: ${system} still reports this. Fix it on ${system}, then check again, or decide it another way.`;
 export const checkStopped = (said: string) =>
   `The check stopped before it concluded anything. ${said} Check again once that is fixed.`;
+
+/** A check that answered, before the list has been read again. */
+export const CHECKED_UPDATING = "Checked. Updating\u2026";
+
+/**
+ * A decided adoption or keep: the add-on acted when it was chosen, and the row closes at the next
+ * check. If the answer said it didn't finish (Syndra's own records), this finishes it, on the same
+ * route, safe to repeat.
+ */
+export const FINISH_AGAIN_NOTE = "If Syndra said this didn't finish, finish it here. Nothing already done is done twice.";
+export const FINISH_REASON = "Finishing a choice that did not complete";
+export const finishLabel = (decision: string) => (decision === "adopted" ? "Finish: adopt it" : "Finish: keep it for them");
 
 /** What a decided conflict is waiting for, in place of "waiting for {system} to match". */
 export const closesAtNextCheck = (system: string) => `closes when Syndra next checks ${system}`;
@@ -127,7 +142,7 @@ export function conflictChoices(c: BindingConflictReport, system: string, person
     case "name_held":
     case "number_held":
       return c.adoptable && c.username
-        ? [stop, { answer: "adopted", label: ADOPT_IT, says: adoptConsequence(system, c.username) }, check]
+        ? [stop, { answer: "adopted", label: ADOPT_IT, says: adoptConsequence(system, c.username, c.reason) }, check]
         : [stop, check];
     default:
       return [stop, check];

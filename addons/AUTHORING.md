@@ -1934,7 +1934,19 @@ feature and serve both:
   the `account_id` it let go of when one was bound, so a release Syndra
   settles from its record (`GET /calls`) forgets Syndra's copy only while
   that copy names the same account (`ResolveBindingCall` in
-  `backend/internal/db/addon_operations.go`).
+  `backend/internal/db/addon_operations.go`). When `params.account_id` is
+  sent it is the account Syndra means, a precondition like `account.adopt`'s:
+  the add-on MUST refuse with 409 and release nothing when the subject's
+  binding no longer names that account (the person was released and bound
+  again since), and a subject with no binding is still answered as done.
+  Judging it from the binding's own recorded id needs no read of the app
+  (`bindingNames` in `addons/truenas/operations.go`).
+- A **move**: `account.adopt` for a subject that already has a binding MUST
+  be refused unless that binding is in a `name_held` or `number_held`
+  conflict whose holder is the account named and is `adoptable`, and MUST
+  then be refused with 409 when `params.account_id` is absent: a move is
+  made only to the account the operator was shown. A holder two subjects'
+  conflicts name is `adoptable` for neither.
 
 `account.adopt` and `account.release` are the only way inside Syndra to
 resolve a conflict (renaming the account in the app is the other); without
@@ -2415,9 +2427,11 @@ What the reference simplifies, and a real add-on MUST do in full:
   and `TARGET_UNREACHABLE`.
 - `Retry-After` is a constant 30; a real add-on sends what its app's state
   says.
-- It declares neither `account.adopt` nor `account.release`, though it can
-  answer `BINDING_CONFLICT`; a real add-on MUST
-  ([The account operations](#the-account-operations)).
+- It serves `account.adopt` and `account.release` with their `account_id`
+  preconditions ([The account operations](#the-account-operations)). Its
+  bindings never conflict (`noConflicts`), so it never moves one: a bound
+  subject's adoption is done when it names that subject's own account and
+  refused otherwise.
 - It declares `freshness` and `calls` only when asked
   (`Config.Features`, `-features freshness,calls`; `serves`), so the kit's
   checks for each are watched both ways. With `freshness`, `/subjects` is
@@ -2523,6 +2537,14 @@ Steps, in order; each ends on a check.
    ([The one create](#the-one-create)). Add `-mutate-settings` if you serve
    `settings` and the instance can have a setting written back. Add
    `-json report.json` for the report.
+
+   With `account.adopt` and `account.release` declared available, the
+   checks `adopt.shown`, `adopt.not-shown` and `release.not-shown` send
+   each with an `account_id` precondition for the kit's own subject only
+   (after a plan names its account): adopting its own account with its own
+   id is done, with another id 409, and a release with an id the binding
+   does not name 409, the binding staying. A release that ignores its
+   precondition is bound back to the kit's account at once.
 
    `-elevated-key-file <file>` (with `-mutate` only; the kit refuses it on
    a reads-only run) hands the kit the `elevated_key` your `account.purge`
