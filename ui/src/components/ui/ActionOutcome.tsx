@@ -120,11 +120,11 @@ export function ActionOutcome({
         </span>
         {/* Queued: why it waits, then the step left — the word above already
             wears the amber dot, so the link doesn't repeat it (route-requests). */}
-        {said && <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">{said}</span>}
-        {next && <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">{next}</span>}
-        {waitsForSend(outcome) && <NextStep dot={false} person={person} className="pl-[14px]" />}
+        {said && <span className="pl-(--dot-indent) text-[12.5px] leading-[1.45] text-faint">{said}</span>}
+        {next && <span className="pl-(--dot-indent) text-[12.5px] leading-[1.45] text-faint">{next}</span>}
+        {waitsForSend(outcome) && <NextStep dot={false} person={person} className="pl-(--dot-indent)" />}
         {outcome.kind === "failed" && outcome.requestId && (
-          <CopyableValue value={outcome.requestId} label="Reference" className="pl-[14px]" />
+          <CopyableValue value={outcome.requestId} label="Reference" className="pl-(--dot-indent)" />
         )}
       </span>
     );
@@ -170,7 +170,7 @@ export function ActionOutcome({
     >
       <div className="flex items-center gap-2.5">
         <StatusDot tone={dotTone(outcome)} bloom={celebrates} />
-        <span className="font-display text-[22px] font-semibold leading-[1.2] text-ink">
+        <span className="font-display text-title text-ink">
           {word}
         </span>
       </div>

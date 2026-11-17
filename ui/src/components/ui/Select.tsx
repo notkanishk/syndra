@@ -169,7 +169,7 @@ export function FilterPills<T extends string>({
             title={option.title}
             onClick={() => onChange(option.value)}
             // The same box as `Button` size="md" minus its border: 44px floor
-            // through the tablet range, then px-4 / 13.5px / py-[7px]. The
+            // through the tablet range, then px-4, text-small, --control-md tall. The
             // three pill controls — an action, a filter and a tab — were
             // 13.5px, 13px and 14.5px, and the drift queue stacks all three
             // within 120px of each other, where three sizes read as three

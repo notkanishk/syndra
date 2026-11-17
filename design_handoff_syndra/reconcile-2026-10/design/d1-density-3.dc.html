@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D-1 · Density, alignment and motion · part 3</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+
+/* ── The board's own chrome ─────────────────────────────────────────────── */
+.d1b-fig{display:flex;flex-direction:column;gap:12px;margin:0}
+.d1b-cap{display:flex;align-items:baseline;gap:12px}
+.d1b-n{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 8px;box-sizing:border-box;border-radius:var(--radius-pill);border:1px solid var(--line-strong);font-size:12.5px;font-weight:700}
+.d1b-n.rec{border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
+.d1b-t{font-size:16px;font-weight:600}
+.d1b-r{font-size:12.5px;font-weight:600;color:var(--accent-text)}
+.d1b-fig figcaption{font-size:14px;line-height:1.6;color:var(--muted);text-wrap:pretty;max-width:900px}
+.d1b-note{margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty}
+.d1b-note strong{color:var(--ink)}
+.d1b-tok{display:grid;grid-template-columns:230px 150px 230px minmax(0,1fr);gap:0 20px;font-size:13.5px;line-height:1.5}
+.d1b-tok > span{padding:7px 0;border-top:1px solid var(--divider)}
+.d1b-tok .h{border-top:0;font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--label)}
+.d1b-tok .k{font-family:var(--font-mono);font-size:12.5px;color:var(--ink)}
+.d1b-tok .v{font-weight:600;color:var(--ink)}
+.d1b-tok .w{color:var(--faint)}
+.d1b-tok .u{color:var(--muted)}
+
+/* ── A frame. `.before` is the code as it is on 18 Nov; `.after` is the proposal. ── */
+.d1{height:var(--d1-h);color:var(--ink)}
+.d1 #app-root{height:var(--d1-h)}
+
+/* The proposal, as it would read in globals.css (D-1 §3). Everything below that
+   says `.d1.after` is these numbers reaching a real part. */
+.d1.after{
+  --text-display:34px;--text-page:28px;--text-heading:22px;--text-title:17px;
+  --text-body:14px;--text-small:13px;--text-fine:12.5px;
+  --control-sm:30px;--control-md:36px;
+  --page-max:1280px;--page-top:24px;--bar:56px;--measure:60ch;--field-max:400px;
+  --region-gap:40px;--region-head-gap:12px;--card-x:20px;--card-head-y:12px;
+  --row-y:10px;--row-gap:16px;--empty-y:20px;--dot-indent:14px;
+  --seat-label:170px;--seat-number:110px;--seat-action:200px;--seat-action-narrow:140px;--seat-action-wide:300px;
+}
+/* Q1, the other two steps. */
+.d1.after.opt-a{--text-display:38px;--text-page:32px;--text-heading:24px;--text-title:18px;--control-sm:32px;--row-y:12px;--card-head-y:14px;--empty-y:24px}
+.d1.after.opt-c{--text-display:30px;--text-page:24px;--text-heading:20px;--text-title:16px;--control-sm:28px;--row-y:8px;--card-head-y:10px;--region-gap:32px;--empty-y:16px}
+
+/* The real parts, under the proposed numbers. */
+.d1.after .type-greeting{font-size:var(--text-display);line-height:1.1}
+.d1.after .type-page-title{font-size:var(--text-page);line-height:1.15}
+.d1.after .type-section-title{font-size:var(--text-heading);line-height:1.2}
+.d1.after .type-card-title,.d1.after .type-empty-title{font-size:var(--text-title);line-height:1.3}
+.d1.after #main{padding-top:var(--page-top)}
+.d1.after header[class~="h-[66px]"]{height:var(--bar);padding-inline:max(26px,calc((100% - var(--page-max)) / 2))}
+.d1.after [class~="max-w-[72ch]"]{max-width:var(--measure);font-size:var(--text-body);line-height:1.5}
+.d1.after .card > [class~="py-4"]{padding-block:var(--card-head-y)}
+.d1.after .card [class~="py-3.5"]{padding-block:var(--row-y)}
+.d1.after .card [class~="gap-[18px]"]{gap:4px var(--row-gap)}
+.d1.after .card [class~="py-[11px]"]{padding-block:8px}
+.d1.after [class~="py-8"]{padding:var(--empty-y) var(--card-x)}
+.d1.after [class~="py-8"] p{max-width:var(--measure);font-size:var(--text-body)}
+.d1.after [class~="rounded-panel"][class~="py-4"]{padding-block:14px}
+.d1.after [class~="rounded-panel"] [class~="text-[19px]"]{font-size:var(--text-title)}
+.d1.after [class~="rounded-panel"] [class~="text-[14.5px]"]{max-width:var(--measure);font-size:var(--text-body);line-height:1.5}
+.d1.after :is(button,a)[class~="rounded-pill"][class~="px-3.5"]{height:var(--control-sm);padding-block:0;box-sizing:border-box}
+.d1.after :is(button,a)[class~="rounded-pill"][class~="px-4"]{height:var(--control-md);padding-block:0;box-sizing:border-box}
+.d1.after span[class~="bg-tint-2"][class~="py-1.5"]{height:var(--control-sm);padding-block:0;box-sizing:border-box;font-size:var(--text-small)}
+.d1.after input[class~="rounded-inner"]{height:var(--control-sm);padding-block:0;box-sizing:border-box;font-size:var(--text-body)}
+
+/* The page. */
+.d1-page{display:flex;flex-direction:column;gap:16px}
+.d1.after .d1-page{max-width:var(--page-max);margin-inline:auto}
+.d1-cut{margin:0;font-size:13px;color:var(--faint)}
+.d1-regions{display:grid;gap:32px}
+.d1.after .d1-regions{gap:var(--region-gap)}
+.d1-region{display:grid;gap:14px}
+.d1.after .d1-region{gap:var(--region-head-gap)}
+.d1-rh{display:grid;gap:6px}
+.d1.after .d1-rh{gap:4px}
+.d1-rh .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.d1-rh h2{margin:0}
+.d1-rh p{margin:0;max-width:86ch;font-size:14px;line-height:1.6;color:var(--muted)}
+.d1.after .d1-rh p{max-width:var(--measure);font-size:var(--text-body);line-height:1.5}
+.d1-stack{display:grid;gap:16px}
+.d1-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start;gap:16px}
+.d1-flex{flex:1}
+.d1-ink{color:var(--ink)}
+.d1-fresh{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+.d1-fresh.pad{padding:0 20px 8px}
+
+/* The row's action seat and its detail line (D-1 §4). Before, the seat is only a flex box. */
+.d1-seat{display:flex;flex:none;align-items:center;gap:8px}
+.d1.after .d1-seat{margin-left:auto;justify-content:flex-end;min-width:var(--seat-action)}
+.d1.after .d1-seat.narrow{min-width:var(--seat-action-narrow)}
+.d1-detail{flex-basis:100%;max-width:var(--measure);font-size:var(--text-small);line-height:1.45;color:var(--muted);text-wrap:pretty}
+.d1-detail.in{padding-left:var(--dot-indent)}
+.d1.after .d1-top{align-items:flex-start}
+.d1.after .d1-top > :not(.d1-seat){padding-block:calc((var(--control-sm) - 1lh) / 2)}
+.d1.after .d1-top > .d1-acc-person{padding-block:0}
+.d1-caption{margin:-4px 0 0;padding:0 20px 12px;max-width:calc(var(--measure) + 40px);box-sizing:border-box;font-size:var(--text-small);line-height:1.45;color:var(--muted)}
+
+/* A setting row (SettingRow.tsx:14-18). */
+.d1-set{display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px;padding:12px 20px}
+.d1-set:first-child{border-top:0}
+.d1-set .lab{width:170px;flex:none}
+.d1-set .val{display:flex;min-width:0;flex:1 1 240px;flex-direction:column;gap:2px;font-size:15px}
+.d1-set .val small{font-size:13px;color:var(--faint)}
+.d1-set .seat{display:flex;width:200px;flex:none;justify-content:flex-end;margin-left:auto}
+.d1.after .d1-set{gap:4px var(--row-gap);padding:var(--row-y) var(--card-x)}
+.d1.after .d1-set .lab{width:var(--seat-label)}
+.d1.after .d1-set .val{font-size:var(--text-body)}
+.d1.after .d1-set .val small{font-size:var(--text-small)}
+.d1.after .d1-set .seat{width:var(--seat-action)}
+
+/* A reading (TargetOverview.tsx:1301-1315). */
+.d1-read{display:flex;min-width:0;flex:1;gap:12px}
+.d1-read .dot{display:flex;height:6px;margin-top:7px}
+.d1-read .col{display:flex;min-width:0;flex-direction:column;gap:3px}
+.d1-read .lab{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:14.5px;font-weight:600}
+.d1-read .lab small{font-size:12.5px;font-weight:400;color:var(--faint)}
+.d1-read .body{font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty}
+.d1.after .d1-read{gap:8px;align-items:center}
+.d1.after .d1-read.multi{align-items:flex-start}
+.d1.after .d1-read .dot{margin-top:0}
+.d1.after .d1-read.multi .dot{margin-top:7.5px}
+.d1.after .d1-read .lab{font-size:var(--text-body)}
+.d1.after .d1-read .body{font-size:var(--text-small);line-height:1.45}
+
+/* Maintenance (TargetOverview.tsx:1750-1787). */
+.d1-mt-status{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:600}
+.d1-mt-why{font-size:14px;color:var(--muted)}
+.d1-mt-btn{width:150px;flex:none}
+.d1-mt-text{min-width:0;flex:1 1 320px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty}
+.d1-mt-text strong{font-weight:600;color:var(--ink)}
+.d1.after .d1-mt-status{font-size:var(--text-body)}
+.d1.after .d1-mt-why{font-size:var(--text-body)}
+.d1.after .d1-mt-text{flex:0 1 var(--measure);font-size:var(--text-small);line-height:1.45}
+
+/* The name form (TargetName.tsx:67-98). */
+.d1-form{display:flex;flex-direction:column;gap:12px;padding:4px 20px 20px}
+.d1-form .f{display:flex;flex-direction:column}
+.d1-form .b{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.d1-formrow{display:grid;grid-template-columns:minmax(0,var(--field-max)) auto;justify-content:start;column-gap:12px;padding:0 20px 14px}
+.d1-formrow > label{grid-column:1}
+.d1-formrow > input{grid-column:1;grid-row:2}
+.d1-formrow > p{grid-column:1;grid-row:3}
+.d1-formrow > .b{grid-column:2;grid-row:2 / span 2;align-self:start}
+
+/* A finding (MergeFindings.tsx:131-141, 255-261). */
+.d1-name{font-size:14.5px;font-weight:600}
+.d1-field{font-size:13.5px;color:var(--muted)}
+.d1-seen{font-size:13px;color:var(--faint)}
+.d1-find-text{padding:0 20px 12px;font-size:13.5px;color:var(--muted)}
+.d1.after .d1-name{font-size:var(--text-body)}
+.d1.after .d1-field{font-size:var(--text-small)}
+.d1.after .d1-seen{font-size:var(--text-fine)}
+
+/* The accounts table (PeopleOnTarget.tsx:106-202, StandingLine.tsx:13-16). */
+.d1-acc-person{display:flex;width:220px;flex:none;align-items:center;gap:10px;font-size:14.5px;font-weight:600}
+.d1-acc-user{min-width:0;flex:1 1 200px;font-family:var(--font-mono);font-size:13.5px;overflow-wrap:anywhere}
+.d1-acc-standing{display:flex;flex-direction:column;gap:4px;margin-top:4px;font-family:var(--font-sans)}
+.d1-acc-standing .next{padding-left:16px;font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty}
+.d1-acc-status{display:flex;min-width:0;flex:1.3 1 240px;flex-direction:column;gap:2px}
+.d1-acc-status .next{padding-left:var(--dot-indent);font-size:var(--text-small);line-height:1.45;color:var(--muted);text-wrap:pretty}
+.d1-acc-since{width:110px;flex:none;text-align:right;font-size:13.5px;color:var(--muted)}
+.d1-acc-actions{display:flex;width:260px;flex:none;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}
+.d1-col-person{width:220px;flex:none}
+.d1-col-user{min-width:0;flex:1 1 200px}
+.d1-col-status{min-width:0;flex:1.3 1 240px}
+.d1-col-num{width:110px;flex:none;text-align:right}
+.d1-col-seat{width:260px;flex:none}
+.d1.after .d1-acc-person{font-size:var(--text-body)}
+.d1.after .d1-acc-user,.d1.after .d1-col-user{flex:1 1 180px}
+.d1.after .d1-acc-user{font-size:var(--text-small)}
+.d1.after .d1-acc-since{width:var(--seat-number);font-size:var(--text-small)}
+.d1.after .d1-col-num{width:var(--seat-number)}
+.d1.after .d1-col-seat{width:var(--seat-action)}
+
+/* Home (Home.tsx:262-340, 466-488, 782-864, 1212-1225). */
+.d1-home-head{display:flex;flex-direction:column;margin-bottom:12px}
+.d1-home-head h1{margin:0;max-width:34ch;text-wrap:balance}
+.d1-home-head .when{margin-top:8px;font-size:14.5px;color:var(--faint)}
+.d1-home-head .line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding-top:4px;font-size:13.5px;color:var(--muted)}
+.d1-home-head .line a{color:var(--ink);font-weight:500}
+.d1-home-head .line i{font-style:normal;color:var(--faint)}
+.d1.after .d1-home-head .when{font-size:var(--text-body)}
+.d1.after .d1-home-head .line{font-size:var(--text-small)}
+.d1-home-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start;gap:24px}
+.d1-home-col{display:flex;min-width:0;flex-direction:column}
+.d1-home-col .h{display:flex;flex-direction:column;gap:4px}
+.d1-home-col .h h2{margin:0}
+.d1-home-col .h span{font-size:13.5px;color:var(--muted)}
+.d1-home-col .blocks{display:flex;flex-direction:column}
+.d1-home-col .blocks > *{margin-top:14px}
+.d1.after .d1-home-grid{grid-template-columns:minmax(0,1fr);gap:var(--region-gap)}
+.d1.after .d1-home-col .h span{font-size:var(--text-small)}
+.d1.after .d1-home-col .blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,600px),1fr));align-items:start;gap:16px;margin-top:var(--region-head-gap)}
+.d1.after .d1-home-col .blocks > *{margin-top:0}
+.d1-h-text{flex:1;font-size:14.5px}
+.d1-h-name{width:170px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:600}
+.d1-h-what{min-width:0;flex:1;font-size:14px;color:var(--muted)}
+.d1-h-when{width:66px;flex:none;font-size:13px;color:var(--faint)}
+.d1-h-sa{min-width:0;flex:1;font-size:15px;font-weight:600}
+.d1-h-owner{width:170px;flex:none;font-size:14px}
+.d1.after .d1-h-text,.d1.after .d1-h-name,.d1.after .d1-h-sa,.d1.after .d1-h-what,.d1.after .d1-h-owner{font-size:var(--text-body)}
+.d1.after .d1-h-when{font-size:var(--text-fine)}
+
+/* Motion stills (part 4): a strip of moments, each at 100%. */
+.d1-strip{display:flex;align-items:flex-start;gap:24px;height:100%;padding:20px 24px;box-sizing:border-box;background:var(--canvas)}
+.d1-still{display:flex;flex:none;flex-direction:column;gap:12px}
+.d1-still .cap{display:flex;flex-direction:column;gap:2px;min-height:60px}
+.d1-still .cap .t{font-family:var(--font-mono);font-size:12.5px;font-weight:600;color:var(--accent-text)}
+.d1-still .cap .w{font-size:13px;line-height:1.45;color:var(--muted);text-wrap:pretty}
+.d1-seatbox{display:inline-flex}
+.d1-mini{display:flex;flex-direction:column;gap:16px}
+.d1-mini h1{margin:0}
+.d1-pill{position:relative;isolation:isolate;display:inline-flex;gap:2px;padding:4px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);background:var(--surface-1);box-shadow:var(--shadow-dialog);white-space:nowrap}
+.d1-pill .seg{position:relative;display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 14px;border-radius:var(--radius-pill);font-size:13px;font-weight:600;color:var(--muted)}
+.d1-pill .seg.here{background:var(--surface-2);color:var(--ink)}
+.d1-pill .seg.mid{color:var(--ink)}
+.d1-pill .seg.mid::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:var(--radius-pill);background:var(--surface-2);transform:translateX(-55%)}
+.d1-pill .seg .n{font-weight:500;color:var(--faint)}
+.d1-pill .seg .a{font-size:12px;color:var(--faint)}
+.d1-swap{display:grid;min-width:0;flex:1;font-size:var(--text-body);color:var(--muted)}
+.d1-swap > span{grid-area:1 / 1}
+</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:80px 72px 120px;display:flex;flex-direction:column;gap:72px;background:var(--ground);min-height:100vh">
+
+  <header data-screen-label="{{ boardLabel }}" style="display:flex;flex-direction:column;gap:16px;max-width:1100px">
+    <span class="type-label" style="color:var(--label)">{{ boardEyebrow }}</span>
+    <h1 class="type-page-title" style="margin:0;font-size:44px;line-height:1.1">{{ boardTitle }}</h1>
+    <p style="margin:0;font-size:17px;line-height:1.65;color:var(--muted);text-wrap:pretty">{{ boardLede }}</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:2000px">
+    <sc-for list="{{ cards }}" as="c" hint-placeholder-count="3">
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;border-color:{{ c.edge }}"><span class="type-label" style="color:var(--label)">{{ c.label }}</span><p class="d1b-note">{{ c.text }}</p></div>
+    </sc-for>
+  </section>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+    <section data-screen-label="{{ g.title }}" style="display:flex;flex-direction:column;gap:28px">
+      <div style="display:flex;flex-direction:column;gap:6px;max-width:1100px"><span class="type-label" style="color:var(--label)">{{ g.eyebrow }}</span><h2 class="type-section-title" style="margin:0">{{ g.title }}</h2><p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">{{ g.note }}</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:44px 36px;align-items:flex-start">
+        <sc-for list="{{ g.frames }}" as="f" hint-placeholder-count="2">
+          <figure class="d1b-fig" data-screen-label="{{ f.label }}">
+            <div class="d1b-cap"><span class="d1b-n {{ f.nClass }}">{{ f.n }}</span><span class="d1b-t">{{ f.label }}</span><sc-if value="{{ f.rec }}" hint-placeholder-val="{{ false }}"><span class="d1b-r">Recommended</span></sc-if></div>
+            <div style="width:{{ f.w }}px;height:{{ f.h }}px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+            <figcaption style="max-width:{{ f.capW }}px">{{ f.note }}</figcaption>
+          </figure>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+
+  <sc-if value="{{ showTokens }}" hint-placeholder-val="{{ false }}">
+  <section data-screen-label="The tokens" style="display:flex;flex-direction:column;gap:20px;max-width:1500px">
+    <div style="display:flex;flex-direction:column;gap:6px;max-width:1100px"><span class="type-label" style="color:var(--label)">{{ tokensEyebrow }}</span><h2 class="type-section-title" style="margin:0">{{ tokensTitle }}</h2><p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">{{ tokensNote }}</p></div>
+    <div class="card" style="padding:14px 24px 18px">
+      <div class="d1b-tok">
+        <span class="h">Token</span><span class="h">Value</span><span class="h">Today</span><span class="h">What reads it</span>
+        <sc-for list="{{ tokens }}" as="t" hint-placeholder-count="12">
+          <span class="k">{{ t.k }}</span><span class="v">{{ t.v }}</span><span class="w">{{ t.w }}</span><span class="u">{{ t.u }}</span>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+  </sc-if>
+
+  <section style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;max-width:2000px">
+    <div class="card" style="padding:22px 24px;display:flex;flex-direction:column;gap:10px">
+      <span class="type-label" style="color:var(--label)">{{ footLeftLabel }}</span>
+      <p class="d1b-note" style="font-size:14px">{{ footLeft }}</p>
+    </div>
+    <div class="card" style="padding:22px 24px;display:flex;flex-direction:column;gap:10px;border-color:var(--accent-line)">
+      <span class="type-label" style="color:var(--label)">{{ footRightLabel }}</span>
+      <p class="d1b-note" style="font-size:14px">{{ footRight }}</p>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<div class="d1 {{ mode }}" style="--d1-h:{{ frameH }}px">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="{{ pathname }}" data="{{ rootData }}" hint-size="100%,100vh">
+<sc-if value="{{ isShell }}" hint-placeholder-val="{{ true }}">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+
+<sc-if value="{{ isTarget }}" hint-placeholder-val="{{ true }}">
+<div class="d1-page">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="TrueNAS" meta="TrueNAS 25.10.7" lede="{{ lede }}" hint-size="100%,150px"></x-import>
+
+  <sc-if value="{{ cut }}" hint-placeholder-val="{{ false }}"><p class="d1-cut">{{ cutNote }}</p></sc-if>
+
+  <sc-if value="{{ showSetup }}" hint-placeholder-val="{{ true }}">
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,170px">
+    <sc-if value="{{ nameRow }}" hint-placeholder-val="{{ false }}">
+      <div class="row-divider d1-set"><span class="type-label lab">Name</span><span class="val"><span>TrueNAS</span><small>Members see it as TrueNAS, the product's own name.</small></span><span class="seat"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="120px,30px">Change name</x-import></span></div>
+    </sc-if>
+    <div class="row-divider d1-set"><span class="type-label lab">Zitadel project</span><span class="val"><strong style="font-weight:600">TrueNAS</strong></span><span class="seat"></span></div>
+    <div class="row-divider d1-set"><span class="type-label lab">Role mappings</span><span class="val"><span>2 roles to TrueNAS groups</span></span><span class="seat"><x-import component-from-global-scope="Syndra.ArrowLink" href="#page" hint-size="90px,20px">Mappings</x-import></span></div>
+    <div class="row-divider d1-set"><span class="type-label lab">Home folders</span><span class="val"><span>Not chosen yet</span><small>Mappings work without it; none can give a home folder until it is chosen.</small></span><span class="seat"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="120px,30px">Choose folder</x-import></span></div>
+  </x-import>
+  <x-import component-from-global-scope="Syndra.ReadLine" sections="{{ sections }}" label="Regions of this page" hint-size="100%,34px"><span class="d1-fresh"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>TrueNAS was read just now</span></x-import>
+  </sc-if>
+
+  <div class="d1-regions">
+
+  <sc-if value="{{ showLand }}" hint-placeholder-val="{{ true }}">
+  <section class="d1-region">
+    <div class="d1-rh"><div class="row"><h2 class="type-section-title">Whether changes can land</h2></div></div>
+    <div class="d1-stack">
+      <sc-if value="{{ showLandTop }}" hint-placeholder-val="{{ true }}">
+      <x-import component-from-global-scope="Syndra.Notice" tone="danger" title="One item under Waiting on you needs a decision." next="Decide it under Waiting on you." hint-size="100%,96px">Until this is settled, what TrueNAS reports cannot be trusted.</x-import>
+      <div class="d1-two">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,150px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Syndra's reach" hint-size="100%,56px"></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,90px">
+            <sc-if value="{{ isBefore }}" hint-placeholder-val="{{ true }}">
+              <div class="d1-read"><span class="dot"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import></span><span class="col"><span class="lab">Answering <small>Answered just now</small></span><span class="body">Syndra can reach TrueNAS, but it is read-only. It was started this way by its configuration. Every change is refused at once. Reads keep working. <x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="140px,34px">Open Maintenance</x-import></span></span></div>
+            </sc-if>
+            <sc-if value="{{ isAfter }}" hint-placeholder-val="{{ false }}">
+              <div class="d1-read"><span class="dot"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import></span><span class="col"><span class="lab">Answering <small>Answered just now</small></span></span></div>
+              <span class="d1-seat narrow"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="140px,30px">Open Maintenance</x-import></span>
+              <span class="d1-detail in">Syndra can reach TrueNAS, but it is read-only. It was started this way by its configuration. Every change is refused at once. Reads keep working.</span>
+            </sc-if>
+          </x-import>
+        </x-import>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="What TrueNAS reports" note="All read" hint-size="100%,56px"></x-import>
+          <sc-for list="{{ reports }}" as="r" hint-placeholder-count="2">
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,80px">
+              <div class="d1-read multi"><span class="dot"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ r.tone }}" hint-size="6px,6px"></x-import></span><span class="col"><span class="lab">{{ r.label }}</span><span class="body">{{ r.body }} <span class="d1-ink">Look at TrueNAS.</span></span></span></div>
+            </x-import>
+          </sc-for>
+        </x-import>
+      </div>
+      </sc-if>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,190px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Maintenance" hint-size="100%,56px"></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,50px">
+          <span class="d1-mt-status"><x-import component-from-global-scope="Syndra.StatusDot" tone="accent" hint-size="6px,6px"></x-import>Read-only</span>
+          <span class="d1-mt-why">Refusing every change. Reads keep working. It was started this way by its configuration.</span>
+        </x-import>
+        <sc-for list="{{ maint }}" as="m" hint-placeholder-count="2">
+          <sc-if value="{{ isBefore }}" hint-placeholder-val="{{ true }}">
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px">
+              <span class="d1-mt-btn"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="120px,34px">{{ m.verb }}</x-import></span>
+              <span class="d1-mt-text"><strong>{{ m.head }}</strong> {{ m.more }}</span>
+            </x-import>
+          </sc-if>
+          <sc-if value="{{ isAfter }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="Syndra.CardRow" class-name="d1-top" hint-size="100%,50px">
+              <span class="d1-mt-text"><strong>{{ m.head }}</strong> {{ m.more }}</span>
+              <span class="d1-seat"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="120px,30px">{{ m.verb }}</x-import></span>
+            </x-import>
+          </sc-if>
+        </sc-for>
+      </x-import>
+    </div>
+  </section>
+  </sc-if>
+
+  <sc-if value="{{ showName }}" hint-placeholder-val="{{ true }}">
+  <section class="d1-region">
+    <div class="d1-rh"><div class="row"><h2 class="type-section-title">Name</h2></div></div>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,260px">
+      <x-import component-from-global-scope="Syndra.CardHeader" title="What members see it called" hint-size="100%,56px"></x-import>
+      <sc-if value="{{ isBefore }}" hint-placeholder-val="{{ true }}">
+        <div class="d1-form">
+          <div class="f">
+            <x-import component-from-global-scope="Syndra.FieldLabel" hint-size="60px,20px">Name</x-import>
+            <x-import component-from-global-scope="Syndra.Input" placeholder="TrueNAS" aria-label="Name" hint-size="100%,49px"></x-import>
+            <x-import component-from-global-scope="Syndra.FieldHint" hint-size="100%,20px">Members see it as TrueNAS, the product's own name. Name it here to tell two of the same make apart.</x-import>
+          </div>
+          <div class="b"><x-import component-from-global-scope="Syndra.Button" variant="accent" disabled="{{ true }}" reason="Type a new name first." hint-size="110px,60px">Save name</x-import></div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isAfter }}" hint-placeholder-val="{{ false }}">
+        <div class="d1-formrow">
+          <x-import component-from-global-scope="Syndra.FieldLabel" hint-size="60px,20px">Name</x-import>
+          <x-import component-from-global-scope="Syndra.Input" dense="{{ true }}" placeholder="TrueNAS" aria-label="Name" hint-size="100%,30px"></x-import>
+          <x-import component-from-global-scope="Syndra.FieldHint" hint-size="100%,38px">Members see it as TrueNAS, the product's own name. Name it here to tell two of the same make apart.</x-import>
+          <div class="b"><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" disabled="{{ true }}" reason="Type a new name first." hint-size="110px,56px">Save name</x-import></div>
+        </div>
+      </sc-if>
+    </x-import>
+  </section>
+  </sc-if>
+
+  <sc-if value="{{ showWaiting }}" hint-placeholder-val="{{ true }}">
+  <section class="d1-region">
+    <div class="d1-rh"><div class="row"><h2 class="type-section-title">Waiting on you</h2><x-import component-from-global-scope="Syndra.CountChip" n="{{ 3 }}" hint-size="28px,22px"></x-import></div><p>Things Syndra found and will not settle by itself: an account that differs from what Syndra expects, a change log on TrueNAS that was altered, or a change TrueNAS never answered. Each needs a decision from you.</p></div>
+    <div class="d1-stack">
+      <x-import component-from-global-scope="Syndra.Notice" tone="danger" title="The change log on TrueNAS has been altered" next="Find out why the log changed. Resolve this finding only once you know." action="{{ resolveAction }}" hint-size="100%,190px">
+        <p style="margin:0">Entries that existed are gone. Syndra last saw 55 entries 26 min ago; TrueNAS reported 23 just now.</p>
+        <p style="margin:4px 0 0;font-weight:600;color:var(--danger-text)">If you do not know why the log changed, do not resolve this. Ask the person who runs the Syndra server.</p>
+      </x-import>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
+        <sc-if value="{{ isBefore }}" hint-placeholder-val="{{ true }}">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Waiting on a decision" count="{{ 2 }}" note="Merge findings: differences between Syndra and TrueNAS that Syndra will not settle on its own." hint-size="100%,56px"></x-import>
+          <sc-for list="{{ findings }}" as="f" hint-placeholder-count="2">
+            <x-import component-from-global-scope="Syndra.CardRow" first="{{ f.first }}" hint-size="100%,50px">
+              <span class="d1-name">{{ f.who }}</span><span class="d1-field">{{ f.field }}</span><span class="d1-flex"></span><span class="d1-seen">{{ f.seen }}</span>
+            </x-import>
+            <div class="d1-find-text">{{ f.text }}</div>
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,62px">
+              <span class="d1-flex"></span><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="80px,34px">Decide</x-import>
+            </x-import>
+          </sc-for>
+        </sc-if>
+        <sc-if value="{{ isAfter }}" hint-placeholder-val="{{ false }}">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Waiting on a decision" count="{{ 2 }}" hint-size="100%,46px"></x-import>
+          <p class="d1-caption">Merge findings: differences between Syndra and TrueNAS that Syndra will not settle on its own.</p>
+          <sc-for list="{{ findings }}" as="f" hint-placeholder-count="2">
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,76px">
+              <span class="d1-name">{{ f.who }}</span><span class="d1-field">{{ f.field }}</span><span class="d1-seen">{{ f.seen }}</span>
+              <span class="d1-seat narrow"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="80px,30px">Decide</x-import></span>
+              <span class="d1-detail">{{ f.text }}</span>
+            </x-import>
+          </sc-for>
+        </sc-if>
+      </x-import>
+    </div>
+  </section>
+  </sc-if>
+
+  <sc-if value="{{ showAccounts }}" hint-placeholder-val="{{ true }}">
+  <section class="d1-region">
+    <div class="d1-rh"><div class="row"><h2 class="type-section-title">Accounts on TrueNAS</h2></div><p>Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action.</p></div>
+    <div class="d1-stack">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,420px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Accounts Syndra manages" count="{{ 4 }}" note="Put what a role gives them on hold, or revoke it" hint-size="100%,56px"></x-import>
+        <sc-if value="{{ isBefore }}" hint-placeholder-val="{{ true }}">
+          <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span class="d1-col-person">Person</span><span class="d1-col-user">Account on TrueNAS</span><span class="d1-col-num">Since</span><span class="d1-col-seat"></span></x-import>
+          <sc-for list="{{ accounts }}" as="a" hint-placeholder-count="4">
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,98px">
+              <span class="d1-acc-person"><x-import component-from-global-scope="Syndra.Avatar" name="{{ a.name }}" size="row" hint-size="30px,30px"></x-import>{{ a.name }}</span>
+              <span class="d1-acc-user">{{ a.user }}<span class="d1-acc-standing"><x-import component-from-global-scope="Syndra.StatusSeat" tone="{{ a.tone }}" word="{{ a.word }}" note="{{ a.note }}" hint-size="200px,24px"></x-import><span class="next">{{ a.next }}</span></span></span>
+              <span class="d1-acc-since">{{ a.since }}</span>
+              <span class="d1-acc-actions"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="100px,34px">Put on hold</x-import><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="74px,34px">Revoke</x-import></span>
+            </x-import>
+          </sc-for>
+        </sc-if>
+        <sc-if value="{{ isAfter }}" hint-placeholder-val="{{ false }}">
+          <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,34px"><span class="d1-col-person">Person</span><span class="d1-col-user">Account on TrueNAS</span><span class="d1-col-status">Status</span><span class="d1-col-num">Since</span><span class="d1-col-seat"></span></x-import>
+          <sc-for list="{{ accounts }}" as="a" hint-placeholder-count="4">
+            <x-import component-from-global-scope="Syndra.CardRow" class-name="d1-top" hint-size="100%,62px">
+              <span class="d1-acc-person"><x-import component-from-global-scope="Syndra.Avatar" name="{{ a.name }}" size="row" hint-size="30px,30px"></x-import>{{ a.name }}</span>
+              <span class="d1-acc-user">{{ a.user }}</span>
+              <span class="d1-acc-status"><x-import component-from-global-scope="Syndra.StatusSeat" tone="{{ a.tone }}" word="{{ a.word }}" note="{{ a.note }}" hint-size="200px,24px"></x-import><sc-if value="{{ a.sayNext }}" hint-placeholder-val="{{ true }}"><span class="next">{{ a.next }}</span></sc-if></span>
+              <span class="d1-acc-since">{{ a.since }}</span>
+              <span class="d1-seat"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="100px,30px">Put on hold</x-import><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="74px,30px">Revoke</x-import></span>
+            </x-import>
+          </sc-for>
+        </sc-if>
+      </x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <sc-if value="{{ isBefore }}" hint-placeholder-val="{{ true }}">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Not created by Syndra" count="{{ 0 }}" note="Accounts on TrueNAS that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person." hint-size="100%,80px"></x-import>
+        </sc-if>
+        <sc-if value="{{ isAfter }}" hint-placeholder-val="{{ false }}">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Not created by Syndra" count="{{ 0 }}" hint-size="100%,46px"></x-import>
+          <p class="d1-caption">Accounts on TrueNAS that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.</p>
+        </sc-if>
+        <div class="d1-fresh pad"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>The account list was read just now</div>
+        <x-import component-from-global-scope="Syndra.EmptyState" title="Nothing outside Syndra." guidance="Every account on TrueNAS was created by Syndra." hint-size="100%,130px"></x-import>
+      </x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,190px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="No longer needed" count="{{ 0 }}" note="Accounts Syndra created that no active role needs any more" hint-size="100%,56px"></x-import>
+        <x-import component-from-global-scope="Syndra.EmptyState" title="Nothing to tidy." guidance="Every account Syndra created on TrueNAS is still backed by a role." hint-size="100%,130px"></x-import>
+      </x-import>
+    </div>
+  </section>
+  </sc-if>
+
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ false }}">
+<div class="d1-page">
+  <div class="d1-home-head">
+    <h1 class="type-greeting">Evening, Kanishk. <span style="color:var(--faint)">Three things need you.</span></h1>
+    <div class="when">Wednesday 18 Nov · last checked 02:19</div>
+    <div class="line"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import><span>Claims: no sign-ins to check since 01:52</span></div>
+    <div class="line"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import><span>Checked, nothing waiting:</span><a href="#page">Requests</a><i>·</i><a href="#page">Expiring access</a><i>·</i><a href="#page">Pending changes</a><i>·</i><a href="#page">Unfinished revocations</a><i>·</i><a href="#page">Holds due</a></div>
+  </div>
+  <div class="d1-home-grid">
+    <section class="d1-home-col">
+      <div class="h"><h2 class="{{ homeH2 }}">Time-sensitive</h2><span>Access ends, stays wrong, or goes unseen if you wait.</span></div>
+      <div class="blocks">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,110px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Drift" count="{{ 47 }}" tone="danger" hint-size="100%,56px"></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,50px">
+            <div class="d1-h-text">47 grants Syndra can't explain</div>
+            <span class="d1-seat narrow"><x-import component-from-global-scope="Syndra.ArrowLink" href="#page" hint-size="120px,20px">Review on Drift</x-import></span>
+          </x-import>
+        </x-import>
+      </div>
+    </section>
+    <section class="d1-home-col">
+      <div class="h"><h2 class="{{ homeH2 }}">When you're ready</h2><span>Nothing changes until you act.</span></div>
+      <div class="blocks">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,380px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="New people without a bundle" count="{{ 27 }}" hint-size="100%,56px"></x-import>
+          <sc-for list="{{ newPeople }}" as="p" hint-placeholder-count="5">
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px">
+              <x-import component-from-global-scope="Syndra.Avatar" name="{{ p.name }}" hint-size="34px,34px"></x-import>
+              <span class="d1-h-name">{{ p.name }}</span>
+              <div class="d1-h-what">Holds no bundle</div>
+              <div class="d1-h-when">{{ p.joined }}</div>
+              <span class="d1-seat narrow"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="120px,30px">Give a bundle</x-import></span>
+            </x-import>
+          </sc-for>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,50px"><x-import component-from-global-scope="Syndra.ArrowLink" href="#page" hint-size="110px,20px">and 22 more</x-import></x-import>
+        </x-import>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Service accounts to look at" count="{{ 3 }}" tone="warn" hint-size="100%,56px"></x-import>
+          <sc-for list="{{ serviceAccounts }}" as="s" hint-placeholder-count="3">
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,50px">
+              <span class="d1-h-sa">{{ s }}</span>
+              <div class="d1-h-owner"><x-import component-from-global-scope="Syndra.StatusSeat" tone="warn" word="No owner" hint-size="100px,22px"></x-import></div>
+            </x-import>
+          </sc-for>
+        </x-import>
+      </div>
+    </section>
+  </div>
+</div>
+</sc-if>
+
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isStrip }}" hint-placeholder-val="{{ false }}">
+<div class="d1-strip">
+  <sc-for list="{{ stills }}" as="s" hint-placeholder-count="4">
+    <div class="d1-still" style="width:{{ stillW }}px">
+      <div class="cap"><span class="t">{{ s.t }}</span><span class="w">{{ s.cap }}</span></div>
+
+      <sc-if value="{{ kResolve }}" hint-placeholder-val="{{ false }}">
+      <div class="d1-region">
+        <div class="d1-rh"><div class="row"><h2 class="type-section-title">Waiting on you</h2><span class="d1-seatbox" style="{{ s.chip }}"><x-import component-from-global-scope="Syndra.CountChip" n="{{ s.count }}" hint-size="28px,22px"></x-import></span></div></div>
+        <div class="d1-stack">
+          <sc-if value="{{ s.hasNotice }}" hint-placeholder-val="{{ true }}">
+            <div style="{{ s.notice }}"><x-import component-from-global-scope="Syndra.Notice" tone="danger" title="The change log on TrueNAS has been altered" next="Find out why the log changed. Resolve this finding only once you know." action="{{ resolveAction }}" hint-size="100%,190px">Entries that existed are gone. Syndra last saw 55 entries 26 min ago; TrueNAS reported 23 just now.</x-import></div>
+          </sc-if>
+          <sc-if value="{{ s.hasEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ s.empty }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,90px"><x-import component-from-global-scope="Syndra.EmptyState" resolved="{{ s.resolved }}" title="Nothing is waiting on you." guidance="A change TrueNAS never answered, an account two records disagree about, or a password that needs a new one appears here." hint-size="100%,90px"></x-import></x-import></div>
+          </sc-if>
+          <x-import component-from-global-scope="Syndra.Card" hint-size="100%,130px">
+            <x-import component-from-global-scope="Syndra.CardHeader" title="Waiting on a decision" count="{{ 0 }}" hint-size="100%,46px"></x-import>
+            <x-import component-from-global-scope="Syndra.EmptyState" title="Nothing disputed." guidance="Every account Syndra manages on TrueNAS matches what Syndra expects, or differs in a way Syndra could explain." hint-size="100%,90px"></x-import>
+          </x-import>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ kArrive }}" hint-placeholder-val="{{ false }}">
+      <div class="d1-mini">
+        <h1 class="type-page-title" style="{{ s.h1 }}">TrueNAS</h1>
+        <div style="{{ s.b0 }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,44px"><div class="d1-set"><span class="type-label lab">Zitadel project</span><span class="val"><strong style="font-weight:600">TrueNAS</strong></span><span class="seat"></span></div></x-import></div>
+        <div class="d1-regions" style="{{ s.slab }}">
+          <sc-for list="{{ s.regions }}" as="r" hint-placeholder-count="3">
+            <section class="d1-region" style="{{ r.style }}">
+              <div class="d1-rh"><div class="row"><h2 class="type-section-title">{{ r.title }}</h2></div></div>
+              <x-import component-from-global-scope="Syndra.Card" hint-size="100%,46px"><x-import component-from-global-scope="Syndra.CardHeader" title="{{ r.card }}" hint-size="100%,46px"></x-import></x-import>
+            </section>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ kPill }}" hint-placeholder-val="{{ false }}">
+      <div><div class="d1-pill">
+        <sc-for list="{{ s.segs }}" as="g" hint-placeholder-count="4">
+          <span class="seg {{ g.cls }}"><sc-if value="{{ g.dot }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import></sc-if><span>{{ g.label }}</span><sc-if value="{{ g.hasCount }}" hint-placeholder-val="{{ true }}"><span class="n">{{ g.count }}</span></sc-if><sc-if value="{{ g.hasArrow }}" hint-placeholder-val="{{ true }}"><span class="a" style="{{ g.arrowStyle }}">{{ g.arrow }}</span></sc-if></span>
+        </sc-for>
+      </div></div>
+      </sc-if>
+
+      <sc-if value="{{ kCheck }}" hint-placeholder-val="{{ false }}">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Check for differences" hint-size="100%,46px"></x-import>
+        <p class="d1-caption">Compares TrueNAS with what Syndra expects and records any fixes as changes waiting for you to send. Nothing is applied until somebody sends them from Pending changes.</p>
+        <div class="row-divider" style="{{ s.row }}">
+          <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,50px">
+            <div class="d1-swap"><span style="{{ s.oldStyle }}">Syndra checks by itself every six hours.</span><span style="{{ s.newStyle }}">4 people with a managed account · 1 fix waiting for you to send · 0 people with an account missing from TrueNAS</span></div>
+            <span class="d1-seat narrow"><x-import component-from-global-scope="Syndra.Button" size="sm" is-pending="{{ s.pending }}" hint-size="100px,30px">Check now</x-import></span>
+          </x-import>
+        </div>
+      </x-import>
+      </sc-if>
+
+    </div>
+  </sc-for>
+</div>
+</sc-if>
+
+</x-import>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":3060,"height":6800}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    // One source for the D-1 boards; the parts differ in this constant (as A-23's do).
+    this.part = 3;
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame") || "";
+    this.frameH = Number(q.get("h")) || 900;
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 47, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 0 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+
+  renderVals() {
+    const f = this.frame;
+    const [surface, variant] = f.replace(/-light$/, "").split("-");
+    const isStrip = /^m[1-4]$/.test(surface || "");
+    // The motion stills are all drawn at the proposed density, so only the motion differs.
+    const before = variant === "before" && !isStrip;
+    const opt = variant === "a" || variant === "c" ? " opt-" + variant : "";
+    const isHome = surface === "home" || surface === "homewide";
+    const isTarget = !!f && !isHome && !isStrip;
+    // Which parts of the TrueNAS page a frame draws.
+    const top = surface === "top" || surface === "wide";
+    const nameRow = variant === "name";
+    const once = variant === "once";
+    const NOTHING = "Nothing for you to do.";
+    const accounts = [
+      { name: "Becky Lynch", user: "becky.lynch_ug2023", tone: "healthy", word: "Ready to use", note: "", next: NOTHING, since: "15 Oct" },
+      { name: "Bianca Belair", user: "bianca.belair_ug2024", tone: "healthy", word: "Ready to use", note: "", next: NOTHING, since: "22 Oct" },
+      { name: "Kanishk Singh", user: "kanishk.singh", tone: "neutral", word: "Switched off", note: "Switched off on TrueNAS.", next: "If no one in Syndra asked for this, use Check for differences on the system's Mappings page.", since: "15 Oct" },
+      { name: "Rhea Ripley", user: "rhea.ripley_ug2023", tone: "healthy", word: "Ready to use", note: "", next: NOTHING, since: "3 Nov" },
+    ].map(a => ({ ...a, sayNext: !(once && a.next === NOTHING) }));
+    const strip = isStrip ? this.stills(surface, variant === "before") : { stills: [], stillW: 0 };
+    return {
+      isBoard: !f, isFrame: !!f, isShell: !!f && !isStrip, isStrip, isTarget, isHome,
+      mode: (before ? "before" : "after") + opt,
+      isBefore: before, isAfter: !before,
+      frameH: this.frameH,
+      pathname: isHome ? "/" : "/system/targets/truenas",
+      session: this.operator,
+      rootData: this.rootData,
+      lede: top ? "Whether Syndra can reach TrueNAS and what it says about itself, who has an account there, and anything waiting on you. Syndra provisions an account for every person whose roles reach TrueNAS, and keeps it in step." : "",
+      showSetup: top,
+      showLand: top || surface === "mn",
+      showLandTop: top,
+      showName: (top || surface === "mn") && !nameRow,
+      showWaiting: top || surface === "wait",
+      showAccounts: surface === "wait" || surface === "acc",
+      nameRow,
+      cut: isTarget && !top,
+      cutNote: surface === "mn" ? "The page's top and the two cards above Maintenance are unchanged and left out of this frame." : "The regions above this one are left out of this frame.",
+      sections: [
+        { id: "waiting", label: "Waiting on you", count: 3, tone: "warn" },
+        { id: "accounts", label: "Accounts", count: 4 },
+        { id: "runs", label: "What runs here", count: 8 },
+        { id: "stats", label: "What has been used here" },
+      ],
+      reports: [
+        { tone: "warn", label: "A disk reports errors it could not correct", body: "TrueNAS raised this on 6 Jul and has not cleared it. These are its words, not Syndra's: “1 uncorrectable errors reported for sdb (EXAMPLE01).”" },
+        { tone: "accent", label: "An update is available", body: "TrueNAS raised this on 12 Nov and has not cleared it. These are its words, not Syndra's: “A system update is available. Go to System → Update to download and apply the update.”" },
+      ],
+      maint: [
+        { verb: "Make active", head: "Takes reads and changes again.", more: "Use it once the work on the key or on TrueNAS itself is done." },
+        { verb: "Start draining", head: "Lets calls already sent finish, and refuses new ones.", more: "Use it before replacing TrueNAS's key or restarting it: once nothing is in flight, nothing can be cut off halfway." },
+      ],
+      resolveAction: { label: "Resolve this finding", onClick: () => {} },
+      findings: [
+        { first: true, who: "Bianca Belair", field: "home folder limit", seen: "first seen 3 days ago", text: "Its home folder limit was 20 GB when Syndra last saw it, and is 50 GB now. Syndra did not change it, so somebody changed it on TrueNAS." },
+        { first: false, who: "Rhea Ripley", field: "", seen: "first seen 2 hours ago", text: "This account is no longer on TrueNAS. Somebody deleted it there. Creating it again brings back what they deleted; stopping management leaves TrueNAS alone and Syndra forgets the account." },
+      ],
+      accounts,
+      homeH2: before ? "type-card-title" : "type-section-title",
+      newPeople: [
+        { name: "Asuka", joined: "10 Sept" },
+        { name: "Bayley", joined: "19 Aug" },
+        { name: "Charlotte Flair", joined: "18 Aug" },
+        { name: "Iyo Sky", joined: "6 Aug" },
+        { name: "Liv Morgan", joined: "5 Aug" },
+      ],
+      serviceAccounts: ["door-controller", "laser-kiosk", "print-queue"],
+      kResolve: surface === "m1", kArrive: surface === "m2", kPill: surface === "m3", kCheck: surface === "m4",
+      stills: strip.stills, stillW: strip.stillW,
+      ...this.board(),
+    };
+  }
+
+  // The stills of one motion: `today` is the code on 18 Nov, read from the source; otherwise the proposal.
+  stills(kind, today) {
+    const hidden = "opacity:0;transform:translateY(8px)";
+    const at = (o, y) => "opacity:" + o + ";transform:translateY(" + y + "px)";
+    if (kind === "m1") {
+      const s = (t, cap, o) => ({ t, cap, count: 1, chip: "", hasNotice: true, notice: "", hasEmpty: false, empty: "", resolved: false, ...o });
+      return { stillW: 548, stills: today ? [
+        s("0 ms", "Close is pressed. The Notice is gone, the count already says 0, and everything under it has jumped up 200px in one frame.", { count: 0, hasNotice: false, hasEmpty: true, empty: "opacity:.4" }),
+        s("120 ms", "The empty line has tinted in. Nothing showed the eye what left, or that it was you who cleared it.", { count: 0, hasNotice: false, hasEmpty: true }),
+      ] : [
+        s("0 ms", "Close is pressed. The Notice starts to fade on tint. Nothing has moved.", { notice: "opacity:.45" }),
+        s("120 ms", "Faded, its space still held: closing fades first. The count begins to crossfade in its seat.", { notice: "opacity:0", chip: "opacity:.5" }),
+        s("220 ms", "The space folds on the fold step (200ms); what is under it rises with it, at most its own height.", { count: 0, notice: "opacity:0;height:96px;overflow:hidden" }),
+        s("320 ms", "Folded. The count reads 0, hollow. It never ticked.", { count: 0, hasNotice: false }),
+        s("580 ms", "Nothing is waiting on you. opens and rises 6px, and its dot blooms once, because you emptied the list on this screen.", { count: 0, hasNotice: false, hasEmpty: true, resolved: true }),
+      ] };
+    }
+    if (kind === "m2") {
+      const regions = (a, b, c) => [
+        { title: "Whether changes can land", card: "Syndra's reach", style: a },
+        { title: "Waiting on you", card: "Waiting on a decision", style: b },
+        { title: "Accounts on TrueNAS", card: "Accounts Syndra manages", style: c },
+      ];
+      const s = (t, cap, b0, slab, r) => ({ t, cap, h1: "", b0, slab, regions: r });
+      return { stillW: 696, stills: today ? [
+        s("120 ms", "The title has tinted in. Everything else waits.", hidden, hidden, regions("", "", "")),
+        s("240 ms", "The settings card is arriving. Every region under it starts together, as one slab.", at(.75, 2), at(.3, 6), regions("", "", "")),
+        s("620 ms", "Settled. Three regions came as one thing, so the page read as one block and then as many.", "", "", regions("", "", "")),
+      ] : [
+        s("120 ms", "The title has tinted in. Everything else waits.", hidden, "", regions(hidden, hidden, hidden)),
+        s("240 ms", "The settings card is arriving. The first region has started; the second starts now.", at(.75, 2), "", regions(at(.3, 6), hidden, hidden)),
+        s("320 ms", "Each region is 40ms behind the one above it: the page is read top to bottom as it lands.", at(.95, 0), "", regions(at(.75, 2), at(.5, 4), at(.3, 6))),
+        s("700 ms", "Settled, 80ms later than today. The stagger stops at five, as everywhere.", "", "", regions("", "", "")),
+      ] };
+    }
+    if (kind === "m3") {
+      const names = [["Waiting on you", 1, true], ["Accounts", 4, false], ["What runs here", 8, false], ["What has been used here", null, false]];
+      const segs = (here, mid, seats) => names.map((n, i) => ({
+        label: n[0], count: n[1], hasCount: n[1] !== null, dot: n[2],
+        cls: i === mid ? "mid" : i === here ? "here" : "",
+        hasArrow: seats || (i !== here && i !== mid),
+        arrow: i < (mid >= 0 ? mid : here) ? "↑" : "↓",
+        arrowStyle: seats && (i === here || i === mid) ? "opacity:0" : "",
+      }));
+      const s = (t, cap, here, mid, seats) => ({ t, cap, segs: segs(here, mid, seats) });
+      return { stillW: 720, stills: today ? [
+        s("In Waiting on you", "The section you are in is filled and has no arrow.", 0, -1, false),
+        s("Scrolled into Accounts", "The fill swaps on tint. Waiting on you gains an arrow and Accounts loses one, so every label after the first moves sideways while you scroll.", 1, -1, false),
+      ] : [
+        s("In Waiting on you", "Every section keeps an arrow seat; the one you are in leaves it empty. The pill is one width for good.", 0, -1, true),
+        s("Crossing into Accounts · 130 ms", "The fill glides on settle, as Segmented and Tabs do. The arrows tint. No label moves.", -1, 1, true),
+        s("In Accounts · 260 ms", "Settled. With reduced motion the fill jumps and the arrows change at once.", 1, -1, true),
+      ] };
+    }
+    const s = (t, cap, pending, oldStyle, newStyle, row) => ({ t, cap, pending, oldStyle, newStyle, row: row || "" });
+    return { stillW: 696, stills: today ? [
+      s("Pressed", "Check now breathes while the check runs. The sentence still says what it said.", true, "", "visibility:hidden"),
+      s("The result lands", "The sentence is replaced between two frames. A check takes seconds; if you looked away, nothing says it changed.", false, "visibility:hidden", ""),
+    ] : [
+      s("Pressed", "The same. The old sentence stays until the new one is read (S17).", true, "", "visibility:hidden"),
+      s("Lands · 60 ms", "The words crossfade on tint in one seat, sized to the taller.", false, "opacity:.5", "opacity:.5"),
+      s("Lands · 120 ms", "The new sentence. The row flashes once, colour only, for 900ms: the mark for a value that arrived while you may have been elsewhere.", false, "visibility:hidden", "", "background:var(--accent-soft)"),
+      s("Rest", "The flash has gone. If the check found accounts to list, only those new rows arrive.", false, "visibility:hidden", ""),
+    ] };
+  }
+
+  board() {
+    const PART = this.part;
+    const P = "d1-density-" + PART + ".dc.html?frame=";
+    const fr = (n, frame, label, note, h, rec, w) => ({ n, nClass: rec ? "rec" : "", rec: !!rec, src: P + frame + "&h=" + h, label, note, w: w || 1440, h, capW: Math.min(w || 1440, 900), edge: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)" });
+    const eyebrow = "D-1 · Density, alignment and motion · part " + PART + " of 4 · Proposed, 18 Nov 2026 · recommended, pending owner";
+    const edge = "var(--accent-line)", plain = "var(--line)";
+    const none = { showTokens: false, tokensEyebrow: "", tokensTitle: "", tokensNote: "", tokens: [] };
+
+    if (PART === 1) return {
+      boardLabel: "D-1 board, part 1", boardEyebrow: eyebrow,
+      boardTitle: "The same window, holding more",
+      boardLede: "Every frame on these boards is drawn at 100%, in a 1440 or 1800 window, because that is where the product is used; the earlier boards were shown at half size, which is why a 40px title looked right. On the left of each pair is the code as it stands on 18 Nov, mounted from the real parts. On the right are the same parts under one set of numbers: a type scale that stops growing at the desktop, a page that stops stretching, rows whose actions sit in a seat. Scroll inside any frame.",
+      cards: [
+        { edge: plain, label: "What makes it feel zoomed in", text: "Three display sizes saturate at 1080px: page 40, region 32, card 22, over a 14.5px body and 13px buttons (globals.css:754-773). The page has no maximum width, so at 1800 a row's name and its button are 1,300px apart (AppShell.tsx:97). Rows carry a 60px floor or 14px of padding each side around a 34px button; an empty state spends 32px above and below one sentence. And the lede's 72ch is about 93 characters, not 72: ch is the width of a zero." },
+        { edge, label: "The proposal, in one breath", text: "Page 28, region 22, card 17, body 14, small 13, fine 12.5: the steps Apple's text styles, Material 3 and Carbon's productive set all land on. The page frame is 1280 wide and centred; a sentence is 60ch, about 78 characters. A row is 10px above and below, with 30px controls; a card header 12. Every action sits in a right-hand seat on the row's first line, never in a sentence and never on a row of its own, unless the row is a form. Structure, words, colours and the phone are unchanged." },
+        { edge: plain, label: "How the frames are made", text: "PageHeader, AppShell, Card, CardHeader, CardRow, CardColumns, Notice, EmptyState, Button, StatusSeat, Avatar, ReadLine and Input are the real parts. The page's own compositions (the setting rows, a reading, a finding, the accounts row) live in components/targets, outside the bundle, so they are drawn here with the classes the code uses. An after-frame is the same DOM with the proposed tokens applied: the block marked “the proposal” in this board's stylesheet is the diff." },
+      ],
+      groups: [
+        { eyebrow: "1 · One window, 1440 by 900", title: "The TrueNAS page, as it opens", note: "Same page, same data, same viewport. Before, the window ends inside the first two cards. After, it reaches the Name card, and Waiting on you is one short scroll away. Nothing was removed and no word changed; one button moved out of a sentence.", frames: [
+          fr("1", "top-before", "Today", "Title 40, region 32, card titles 22. Open Maintenance flows at the end of a sentence, so it sits wherever the sentence ends, and it is a different width in Basic. The lede runs to about 93 characters a line.", 900),
+          fr("2", "top-after", "Proposed", "Title 28, region 22, card titles 17. Open Maintenance has the row's seat, on the line that says Answering; the sentence sits under it at 60ch. Setting rows are 10px above and below. The top bar is 56 (was 66).", 900, true),
+          fr("3", "top-after-light", "Proposed, daylight", "The same frame in the light theme. Density is spacing and size only: no colour token changes.", 900),
+        ] },
+        { eyebrow: "2 · Your call: how much tighter (Q1)", title: "Three steps, side by side", note: "The same page top at three settings of the same tokens. B is the recommendation and what every other after-frame uses.", frames: [
+          fr("A", "top-a", "A step down · 32 / 24 / 18", "Rows 12px, controls 32. Calmer than today, and still the loudest thing on the page is its headings. Carbon's heading-05 and heading-04.", 500),
+          fr("B", "top-b", "The middle · 28 / 22 / 17", "Rows 10px, controls 30. The page title is twice the body, the region title is a clear step under it, and a card title is a bold line rather than a headline. A row with a button is 50px: Carbon's default table row is 48.", 500, true),
+          fr("C", "top-c", "Compact · 24 / 20 / 16", "Rows 8px, controls 28. The most on screen, and close to an admin console: the display face loses the room it needs to read as Syndra's.", 500),
+        ] },
+      ],
+      showTokens: true,
+      tokensEyebrow: "3 · The numbers",
+      tokensTitle: "One density system, as tokens",
+      tokensNote: "All in globals.css. Each is read by the shared part named on its row, so a screen never sets its own. Values not listed (the 28 under a page header, 16 between cards, every radius and colour) stay as they are.",
+      tokens: this.tokens(),
+      footLeftLabel: "Kept, as decided",
+      footLeft: "The 28px under a page header (owner, 5 Nov) · 16 between cards · the stat figure at display 24 (owner, 17 Nov: “I like big number”) · the 12.5px floor (A-09) · the 44px touch floor below desktop and every phone layout · the rail at 252 · every word on screen but one new column heading (Status) · both themes, tokens only · structure never moves with data · Basic and Advanced keep their seats.",
+      footRightLabel: "Your call · D-1 §9",
+      footRight: "Q1 how much tighter: A, B or C above. I recommend B. Q3 the body sizes: fold today's six sizes (15, 14.5, 14, 13.5, 13, 12.5) into three (14, 13, 12.5) in a second, mechanical pass. I recommend yes. Parts 2 to 4 carry Q2 and Q4 to Q8. You are away, so the build spec is complete on the recommendations; each is marked recommended, pending owner.",
+    };
+
+    if (PART === 2) return {
+      boardLabel: "D-1 board, part 2", boardEyebrow: eyebrow,
+      boardTitle: "Every action in its seat",
+      boardLede: "The surfaces where a button's place depends on how long a sentence is, or where a button has a row to itself. Each pair is the same data at 1440. The rule drawn here: a row's first line is its seats (who, what, status, a number, the action); a sentence that explains the row sits under that line at reading width; the action seat is the row's last, right-aligned, with a width that belongs to the table and not to the row.",
+      cards: [
+        { edge: plain, label: "Found in the code", text: "A button inside a sentence (TargetOverview.tsx:849). A whole row for one button (MergeFindings.tsx:255-261). Buttons leading a row in a 150px seat, left-aligned, two widths (TargetOverview.tsx:1772). A field the full width of its card with its button a row below (TargetName.tsx:77-90). An action seat whose width changes with the data, 260 or 380 (PeopleOnTarget.tsx:55). Four different indents for the line under a status dot: 14, 15, 16 and 18px. An empty state inset 24 inside a card inset 20." },
+        { edge, label: "The seat, as a part", text: "CardRow takes the action as a prop and draws the seat: right-aligned, min-width from a token (140, 200 or 300), on the first line. A top-aligned row centres its first line of text on the control, so a two-line row and a one-line row put their buttons at the same height. A card's explanation is a caption under its title at 60ch; the right-hand note is for a short fact (All read, a time). A field on a page is the dense field A-16 already made, at most 400px wide, with its button on its line." },
+        { edge: plain, label: "Not moved, on purpose", text: "A Notice and an empty state keep their action at the end of the message: a message is read top to bottom and ends on its step. A link inside a lede or a caption is prose and stays in the sentence. The Read again pill belongs to the sentence it refreshes. Dialogs are untouched: A-22 settled them." },
+      ],
+      groups: [
+        { eyebrow: "4 · Maintenance and Name", title: "Two cards that were mostly air", note: "Advanced's Maintenance card and the Name region. Before, about 620px for a status, two choices and one short field. After, about 330.", frames: [
+          fr("4", "mn-before", "Today", "Make active and Start draining lead their rows, left-aligned in a 150px seat, so the sentences start at one x and the buttons end at two. The name field is 1,096px wide for a name of a few words and is 49px tall beside a 34px button; Save name and its reason each take a row.", 820),
+          fr("5", "mn-after", "Proposed", "Each choice reads as a sentence with its verb in the seat. The field is the dense field at 400px; Save name is on its line, with why it is off under itself (G31). Region title 22, card title 17.", 820, true),
+          fr("6", "top-name", "Further, if you want it (Q4)", "Name as one more row of the settings card the page already opens with: label, value, Change name, the same shape as Home folders and Choose folder. The Name region goes, and renaming, done once in a system's life, is one deliberate step away. This changes structure, so it is a question, not part of the density pass.", 560),
+        ] },
+        { eyebrow: "5 · Waiting on you", title: "Decide, on the finding's own line", note: "Before, each finding is three blocks: who, a sentence, and a row holding only Decide under a divider. After, one row: who and when, Decide in the seat, the sentence under it.", frames: [
+          fr("7", "wait-before", "Today", "Two findings take about 420px. The card's explanation sits to the right of its title and drops under it, left-aligned, when it does not fit. The region title is 32 over a 22 card title over 13.5 text.", 900),
+          fr("8", "wait-after", "Proposed", "Two findings take about 200px. The explanation is a caption under the title. The Notice keeps its button at the end of the message.", 900, true),
+        ] },
+        { eyebrow: "6 · Accounts on TrueNAS", title: "A status column, and quiet empty cards", note: "Before, a healthy account is 98px tall: its status and its next step are stacked under the username, 2px out of line with each other. After, status has its own column and the row is 62. The empty cards lose 60px each.", frames: [
+          fr("9", "acc-before", "Today", "Ready to use starts 14px in from the username; Nothing for you to do. starts 16px in. The action seat is 260 here and 380 when any row has a third verb, so the Since column moves with the data. Nothing outside Syndra. is inset 24 under a title inset 20.", 860),
+          fr("10", "acc-after", "Proposed", "Person, account, status, since, actions. The step sits under the status word at the one dot indent (14). The seat is the table's own, 200. One new word on screen: the Status heading.", 860, true),
+          fr("11", "acc-once", "Further, if you want it (Q5)", "The same table with silence for normal (G17): a row that is Ready to use says only that, and only a row with a step writes one. Every healthy row is one line, 50px. This is a wording rule, so it is yours.", 520),
+        ] },
+      ],
+      ...none,
+      footLeftLabel: "Also found, same fix (D-1 §5 lists each)",
+      footLeft: "Fourteen list pages keep the 60px row floor at every width (People, Projects, Roles, Apps, Requests, Automatic rules, Audit, Pending changes, Expiring access, Unfinished revocations and four detail lists): they take CardRow's padding and lose the floor above tablet. Eleven rows end in a button with no seat (a person's roles, a role's people, a bundle's roles, Holds due, Drift, Expiring access). Seven fixed seats exist at seven widths (140, 150, 196, 200, 240, 260, 380): they become three. Holds due writes the row's name into its button (“Lift the hold on …”), so every button is a different width: the button says the verb, the row says the name.",
+      footRightLabel: "Your call · D-1 §9",
+      footRight: "Q4 Name as a row of the settings card (frame 6), or its own region, tightened (frame 5). I recommend the row. Q5 in a table, say “Nothing for you to do.” on every healthy row (frame 10) or stay silent for normal (frame 11). I recommend silent. The build spec uses frame 5 and frame 10 until you answer: they change no structure and no words.",
+    };
+
+    if (PART === 3) return {
+      boardLabel: "D-1 board, part 3", boardEyebrow: eyebrow,
+      boardTitle: "A wide window, used",
+      boardLede: "The owner's window is 1800 wide. Today the page fills it edge to edge: 1,496px of content, so a row's label and its button are a screen apart, and Home's two pinned columns leave whichever is shorter empty. The proposal is one frame, 1280 wide, centred between the rail and the window's edge, and blocks that sit side by side only when each has room for its rows.",
+      cards: [
+        { edge: plain, label: "The rule", text: "Sentences: 60ch (about 78 characters; Bringhurst's range is 45 to 75, WCAG 1.4.8 asks for 80 at most). The page frame: 1280, centred; the top bar's row takes the same frame so the breadcrumb stays over the title. A field on a page: 400. At 1440 the page is 1136 wide and none of this is felt." },
+        { edge, label: "Home", text: "Groups stack in the order they matter: Time-sensitive, then When you're ready. Inside a group, blocks sit two across when each can be 600px wide, which is what a Home row needs (avatar, name, what, when, its button); otherwise one. A block alone takes the row. The five-row cap, the order and every word stay (A-07)." },
+        { edge: plain, label: "Why not fill the width", text: "A wider table does not show more: the columns are fixed seats and one flexible one, and the extra goes into that one column as empty space between a name and its action. Material 3 gives the same advice for windows past 1200: add a pane or cap the content, do not stretch it." },
+      ],
+      groups: [
+        { eyebrow: "7 · The TrueNAS page at 1800", title: "A page that stops stretching", note: "Above 1332px of room the page keeps its 1280 frame. Compare the distance from Home folders to Choose folder, and how the two cards under the Notice split.", frames: [
+          fr("12", "wide-before", "Today, at 1800", "The content is 1,496px wide. A setting's label and its button are a screen apart; two cards split 740 each.", 900, false, 1800),
+          fr("13", "wide-after", "Proposed, at 1800 (Q2)", "The same page in a 1280 frame, centred. The eye crosses 1,240px at most to reach a row's action; the breadcrumb and the account control line up with the page's edges.", 900, true, 1800),
+        ] },
+        { eyebrow: "8 · Home", title: "Urgency stacks; blocks sit side by side", note: "Before, the two groups are two pinned columns (Home.tsx:264-317), so a short group leaves its whole column empty, and at 1440 each column is 556px, too narrow for its own rows. After, the groups stack and each lays out its blocks.", frames: [
+          fr("14", "homewide-before", "Today, at 1800", "Time-sensitive holds one row and 500px of nothing. The group headings and the card titles are the same size (22). The greeting is 42.", 900, false, 1800),
+          fr("15", "homewide-after", "Proposed, at 1800 (Q6)", "Time-sensitive is a band across the top; When you're ready sits under it, two blocks across. Group headings 22, card titles 17, greeting 34.", 900, true, 1800),
+          fr("16", "home-after", "Proposed, at 1440", "At 1136px of content a block cannot be 600 wide twice, so the blocks stack and every row has room. Today the same window gives each column 556.", 900),
+        ] },
+      ],
+      ...none,
+      footLeftLabel: "Considered and set aside",
+      footLeft: "Left-aligned instead of centred: simpler, and the title stays where the eye already is, but at 1800 it leaves one 268px band of nothing on the right, which is the lopsidedness the owner is describing. A narrower rail: it would give 60px back and cost the nav its labels at a glance. A third column on Home at wide widths: three 400px blocks cannot hold a Home row. Filling the width with a second pane (a person's page beside the list): a real improvement for People, and a different project.",
+      footRightLabel: "Your call · D-1 §9",
+      footRight: "Q2 the wide window: a 1280 frame, centred (frame 13), or left against the rail. I recommend centred. Q6 Home's groups stacked, blocks side by side where they fit (frames 15 and 16), or the two pinned columns kept. I recommend stacked. The build spec uses both recommendations.",
+    };
+
+    return {
+      boardLabel: "D-1 board, part 4", boardEyebrow: eyebrow,
+      boardTitle: "Motion that says what changed",
+      boardLede: "Syndra already has one motion system (FINAL §4, A-05): six movements on one soft curve, a 10px travel cap, a still form for each. Read against the code on 18 Nov, almost all of it is built and consistent; the audit of 24 Oct is closed but for the sign-in door. What is left are the newer surfaces, where a state changes between two frames with nothing to say what happened. Each strip below is one of them, drawn as stills at 100%: today above, proposed below. Nothing new is invented: every step is tint, settle, lift, flash or bloom, in the order the system already asks for.",
+      cards: [
+        { edge: plain, label: "Sound, and left alone", text: "Tint 120, press 180, settle 260, arrive 420 over 8px, flash 900, breathe 2400, glide 520; closing fades first and is quicker; light leads shape by 40ms. Dialogs, sheets, folds, rows leaving, Segmented and Tabs, the role picker, Copied, Read again and the theme all follow it. Every distance in the keyframes matches the spec. No route transition, no shake, no count that ticks." },
+        { edge, label: "Proposed", text: "Five tokens name numbers that are literals today (the 40ms light lead, the 200ms fold, the three distances). Six fixes, each in a shared part: a page's regions arrive one after another; a count crossfades in its seat; a Notice leaves fade first, then folds; an emptied queue rises and blooms for the reader who emptied it; a check's sentence crossfades and its row flashes once; the section pill holds its width and its fill glides. One still form each." },
+        { edge: plain, label: "Standards", text: "Material 3 puts simple changes at 100 to 200ms, a panel at 250 to 300 and a full arrival at 400 to 450, exits shorter than entrances, on a decelerating curve: Syndra's tint, settle and arrive, and its settle curve. Apple's guidance is that motion should explain a change and never be the point. WCAG 2.3.3 asks that motion from interaction can be turned off: every movement here has a still form, through stillMotion() in JS and one block in CSS." },
+      ],
+      groups: [
+        { eyebrow: "9 · The last item under Waiting on you is resolved", title: "Fade, fold, count, then the all-clear", note: "The operator resolves the log finding in its dialog and presses Close. Today the Notice unmounts at once (TargetOverview.tsx:284), the count is the new number before anything has left, and the empty line tints in with no dot. Proposed: the order the system already asks of a Notice leaving (A-08 §5) and of a queue you emptied (S13).", frames: [
+          fr("17", "m1-before", "Today", "Two frames. The page jumps by the height of the Notice.", 460, false, 1168),
+          fr("18", "m1-after", "Proposed", "Five moments, 580ms end to end, no step slower than 260. With reduced motion: the Notice goes, the count changes and the line is there, at once.", 540, true, 2916),
+        ] },
+        { eyebrow: "10 · A page with regions, arriving", title: "Top to bottom, 40ms apart", note: "S11 says the header tints in and then the cards arrive in a stagger. On the TrueNAS page every region sits in one wrapper, so the stagger stops there and three regions arrive as one slab (PageHeader's page-head reaches only its own siblings). Proposed: the wrapper passes the stagger on to its regions.", frames: [
+          fr("19", "m2-before", "Today", "One slab, 200ms after the title.", 580, false, 2196),
+          fr("20", "m2-after", "Proposed", "Regions at 200, 240 and 280ms; the cap of five holds. Only on a first paint you navigated to; never on Back, refresh or the view switch.", 580, true, 2916),
+        ] },
+        { eyebrow: "11 · The section pill, while scrolling", title: "One width, and a fill that glides", note: "The pill draws an arrow on every section but the one you are in (SectionNav.tsx:181-185), so its labels shift each time you cross a section. Its fill swaps on tint where Segmented, Tabs and FilterPills glide (S10).", frames: [
+          fr("21", "m3-before", "Today", "Compare where What runs here sits in the two stills.", 150, false, 1512),
+          fr("22", "m3-after", "Proposed", "The arrow seat is always there; the fill is the same GlideIndicator the other pills use.", 150, true, 2256),
+        ] },
+        { eyebrow: "12 · Check now, when the result lands", title: "Crossfade, and one flash", note: "The button already breathes while the check runs. When the result lands the sentence is swapped by a ternary (TargetOverview.tsx:563-590). Proposed: S17's rule, the old words stay until the new are read, then crossfade; and the row flashes once, as the rail's rows do when a count changes.", frames: [
+          fr("23", "m4-before", "Today", "Two frames.", 250, false, 1472),
+          fr("24", "m4-after", "Proposed", "No progress bar and no new words: a check has no steps Syndra could honestly count.", 250, true, 2916),
+        ] },
+      ],
+      showTokens: true,
+      tokensEyebrow: "13 · The numbers",
+      tokensTitle: "The motion tokens: seven kept, five named",
+      tokensNote: "In globals.css, beside the ones that exist. The five new ones change no timing: each replaces a literal that is already this value. The JS mirrors live in lib/motion/still.ts and are held to the CSS by design-system.test.ts.",
+      tokens: this.motionTokens(),
+      footLeftLabel: "Also to fix (D-1 §7 lists each, with file and line)",
+      footLeft: "A sheet's settle-back uses tint's curve for a transform (Modal.tsx:513, 517; settle's at :449). A jump lands its one flash on the whole region, where 8d says the heading (SectionNav.tsx:43-45 hands glideTo the section). Rows in No longer needed and Not created by Syndra appear and vanish bare, beside two tables that fade and fold (DormantAccounts.tsx:176-190). Decide, its form and Decided swap with no Unfold (MergeFindings.tsx:150-250). An outcome appearing under a form pushes the page by its own height (ActionOutcome has no Unfold; Notice has). Unfold decides stillness by its own check, not stillMotion(). Two utilities are unused: motion-press and motion-settle.",
+      footRightLabel: "Your call · D-1 §9",
+      footRight: "Q7 page change: stay with S11 (the shell is still, the header tints, the blocks arrive) and no route transition. I recommend staying; a crossfade of the main column is worth one look after the Next 16 upgrade. Q8 the sign-in door keeps its own two loops and timings as a written exemption (the doorway is not the product). I recommend the exemption, with its literals named as --door- tokens.",
+    };
+  }
+
+  tokens() {
+    const t = (k, v, w, u) => ({ k, v, w, u });
+    return [
+      t("--text-display", "34px (28 on a phone)", "42", "Home's greeting, and nothing else"),
+      t("--text-page", "28px (26 on a phone)", "40", "PageHeader's title: type-page-title"),
+      t("--text-heading", "22px", "32; a dialog 26", "A region's title, Home's group headings, a dialog's title"),
+      t("--text-title", "17px, 600", "22; a Notice 19", "CardHeader, Notice, EmptyState and ActionOutcome titles"),
+      t("--text-figure", "24px, 600", "24", "A stat figure. Unchanged (owner, 17 Nov)"),
+      t("--text-body", "14px / 1.5", "15, 14.5, 14", "Sentences and a row's first line"),
+      t("--text-small", "13px / 1.45", "13.5, 13", "Second lines, notes, every control's label"),
+      t("--text-fine", "12.5px / 1.4", "12.5, 12", "Labels, captions, times. The floor (A-09)"),
+      t("--control-sm", "30px", "34 outline, 32 accent", "A row's button, a dense field, a chip. Height, not padding, so accent and outline match"),
+      t("--control-md", "36px", "37 outline, 35 accent", "A page header's and a dialog footer's button"),
+      t("--page-max", "1280px", "none", "The page frame: main, the top bar's row and the section band, centred (through --page-x)"),
+      t("--page-top", "24px", "30", "AppShell's main"),
+      t("--bar", "56px", "66", "TopBar, from tablet up"),
+      t("--measure", "60ch", "46 to 92ch, 840px", "Every sentence: lede, caption, Notice, guidance, a row's detail line. About 78 characters"),
+      t("--field-max", "400px", "the card's width", "A text field on a page"),
+      t("--region-gap", "40px", "32", "Region to region"),
+      t("--region-head-gap", "12px", "14", "A region's heading to its first card"),
+      t("--card-x", "20px", "20; EmptyState 24", "The one inset of a card: header, rows, columns, empty state, caption"),
+      t("--card-head-y", "12px", "16", "CardHeader"),
+      t("--row-y", "10px", "14; a setting row 12", "CardRow, SettingRow and the list pages' rows; no 60px floor above tablet"),
+      t("--row-gap", "16px", "18; a setting row 20", "Between a row's seats, and its column headings"),
+      t("--empty-y", "20px", "32", "EmptyState"),
+      t("--dot-indent", "14px", "14, 15, 16, 18", "A line under a status dot: the dot (6) and its gap (8)"),
+      t("--seat-label", "170px", "170", "A setting's label"),
+      t("--seat-number", "110px", "110; a date 66", "A number or a date, right-aligned (G16)"),
+      t("--seat-action-narrow", "140px", "140, 150", "One short verb or one link"),
+      t("--seat-action", "200px", "196, 200, 240, 260", "One or two verbs. The default"),
+      t("--seat-action-wide", "300px", "380", "Three verbs"),
+    ];
+  }
+
+  motionTokens() {
+    const t = (k, v, w, u) => ({ k, v, w, u });
+    return [
+      t("--duration-tint", "120ms", "120 · kept", "Colour, opacity, words crossfading, a count changing"),
+      t("--duration-press", "180ms", "180 · kept", "The 3% press on a control"),
+      t("--duration-settle", "260ms", "260 · kept", "Height opening, an indicator gliding, a sheet rising, a lift"),
+      t("--duration-arrive", "420ms", "420 · kept", "A first paint's blocks and rows; --arrive-step 40ms, --arrive-cap 5"),
+      t("--duration-flash", "900ms", "900 · kept", "The bloom, and the wash on a row whose value changed"),
+      t("--duration-breathe", "2400ms", "2400 · kept", "The one loop: still happening"),
+      t("--duration-glide", "520ms", "520 · kept", "Scrolling to a section"),
+      t("--duration-fold", "200ms", "a calc at globals.css:1153", "A height closing: quicker than it opened"),
+      t("--light-lead", "40ms", "four literals, and --arrive-step borrowed at leave-scrim", "Light leads shape: a scrim before its sheet, a tick after its seat"),
+      t("--travel-arrive", "8px", "literal in two keyframes", "arrive, settle-in"),
+      t("--travel-lift", "6px", "literal in lift", "A result or an all-clear rising into place"),
+      t("--travel-nudge", "4px", "literal in three keyframes", "A popover, a chip, a panel sinking as it leaves"),
+      t("--travel-cap", "10px", "10 · kept", "Nothing in the page travels further; the pill's drop uses it"),
+    ];
+  }
+}
+</script>
+</body>
+</html>

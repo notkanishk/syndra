@@ -15,7 +15,7 @@ import { MergeFindings } from "@/components/targets/MergeFindings";
 import { OVERVIEW_LEDE, OVERVIEW_TITLE } from "@/components/usage/copy";
 import { StatsRetention } from "@/components/targets/StatsRetention";
 import { TargetStats } from "@/components/usage/TargetStats";
-import { Region } from "@/components/targets/Region";
+import { Region, REGION_GAP } from "@/components/targets/Region";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -159,8 +159,8 @@ export function TargetOverview({ target }: { target: string }) {
         </ReadLine>
       )}
 
-      <div className="grid gap-8">
-        <SectionPill sections={sections} label="Regions of this page" gap={32} />
+      <div className="grid gap-(--region-gap)">
+        <SectionPill sections={sections} label="Regions of this page" gap={REGION_GAP} />
         {/* Region 0 · whether changes can land.
 
             Health and maintenance are one question, and they used to sit six
@@ -245,7 +245,7 @@ export function TargetOverview({ target }: { target: string }) {
           why="Waiting on you, accounts and reconciliation open once it is set."
           step={{ label: "Choose it above ↑", href: "#project" }}
         >
-        <div className="grid gap-8">
+        <div className="grid gap-(--region-gap)">
         {/* Region 1 · second on the page, and not first.
 
             Three findings on a target that has not answered for forty minutes

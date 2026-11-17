@@ -29,7 +29,7 @@ export function RetryStatus({
           {own ? memberRetryLine(retry) : retryLine(retry, system)}
         </span>
       </span>
-      <span className="pl-[14px] text-faint">{retryNextStep(retry, { own })}</span>
+      <span className="pl-(--dot-indent) text-faint">{retryNextStep(retry, { own })}</span>
     </span>
   );
 }

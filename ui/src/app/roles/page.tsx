@@ -11,7 +11,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Badge, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { Card, CardColumns, ROW } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -284,7 +284,7 @@ export default function RolesPage() {
             <Link
               data-row
               href={`/projects/${role.project_id}/roles/${encodeURIComponent(role.role_key)}`}
-              className="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
+              className={`row-divider flex flex-col items-start gap-1 ${ROW} hover-tint tablet:flex-row tablet:items-center tablet:gap-(--row-gap)`}
             >
               {/* Under the project's own label the name is not said again, unless Syndra could not
                   name it: then the id beside "Unknown project" is all there is to tell two apart. */}

@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/Badge";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { Card, CardColumns, ROW } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { Input } from "@/components/ui/Input";
@@ -159,7 +159,7 @@ export default function ProjectsPage() {
             <Link
               data-row
               href={`/projects/${entry.project.id}`}
-              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
+              className={`row-divider flex flex-col items-start gap-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center tablet:gap-(--row-gap)`}
             >
               {/* The project's name, and — when there are no roles — the fact
                   that nothing in it can be granted. The sentence lives HERE and

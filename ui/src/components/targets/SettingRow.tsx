@@ -11,11 +11,13 @@ export function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="row-divider flex flex-wrap items-center gap-x-5 gap-y-1.5 px-5 py-3 first:border-t-0">
-      <span className="type-label w-[170px] flex-none text-label">{label}</span>
+    <div className="row-divider flex flex-wrap items-center gap-x-(--row-gap) gap-y-1 px-(--card-x) py-(--row-y) first:border-t-0">
+      <span className="type-label w-(--seat-label) flex-none text-label">{label}</span>
       <span className="min-w-0 flex-[1_1_240px]">{children}</span>
-      {/* Wraps right-aligned when the row is narrow, never under the label. */}
-      <span className="ml-auto flex w-[200px] flex-none justify-end">{action}</span>
+      {/* The action seat (D-1 §4), the table's width: wraps right-aligned when the row is narrow, never under the label. */}
+      <span data-action-seat className="row-seat">
+        {action}
+      </span>
     </div>
   );
 }

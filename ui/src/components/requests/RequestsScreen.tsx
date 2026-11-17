@@ -12,7 +12,7 @@ import { Crossfade } from "@/lib/motion";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import {
@@ -348,7 +348,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
           {visible.map((entry) => (
             <LeavingRow key={entry.id} {...leaving.props(entry.id)}>
             <div
-              className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] desktop:flex-nowrap ${
+              className={`row-divider flex flex-col items-start gap-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-(--row-gap) desktop:flex-nowrap ${
                 selection.isSelected(entry.id) ? "bg-accent-soft" : ""
               }`}
               {...selection.rowProps(entry.id)}
@@ -650,7 +650,7 @@ function YourRequests({
         {mine.map((entry) => (
           <div
             key={entry.id}
-            className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]"
+            className={`row-divider flex flex-col items-start gap-2 ${ROW} tablet:flex-row tablet:items-center tablet:gap-(--row-gap)`}
           >
             <div className="w-full min-w-0 tablet:flex-1">
               {/* The role, not only the place: two asks on one project were

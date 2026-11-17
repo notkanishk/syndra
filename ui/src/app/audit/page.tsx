@@ -9,7 +9,7 @@ import { FilterBar } from "@/components/ui/FilterBar";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Button } from "@/components/ui/Button";
 import { FilterChip } from "@/components/ui/FilterChip";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { Card, CardColumns, ROW } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -193,7 +193,7 @@ export default function AuditPage() {
           {drawn.map((entry) => (
             <LeavingRow key={entry.id} {...leaving.props(entry.id)}>
             <div
-              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-baseline tablet:gap-[18px]"
+              className={`row-divider flex flex-col items-start gap-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-baseline tablet:gap-(--row-gap)`}
             >
               <Mono className="text-faint tablet:w-[124px] tablet:shrink-0">
                 {formatWhen(entry.created_at)}

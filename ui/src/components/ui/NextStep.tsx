@@ -48,7 +48,7 @@ export function NextStep({
           Waiting for you to send <span aria-hidden>→</span>
         </AdvancedLink>
       </span>
-      {why && <span className="pl-[15px] text-[12.5px] text-faint">{why}</span>}
+      {why && <span className="pl-(--dot-indent) text-[12.5px] text-faint">{why}</span>}
     </span>
   );
 }

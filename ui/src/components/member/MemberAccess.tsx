@@ -505,7 +505,7 @@ function OnItsWay({ at, sent }: { at?: string; sent?: boolean }) {
         <StatusDot tone="neutral" />
         On its way
       </span>
-      <span className="pl-[15px] text-[12.5px] text-faint">
+      <span className="pl-(--dot-indent) text-[12.5px] text-faint">
         {at ? `Given ${givenWhen(at)}. ` : ""}
         {sent ? "Syndra has sent it. It should show up soon." : "It starts working once makerspace staff send it."}
       </span>

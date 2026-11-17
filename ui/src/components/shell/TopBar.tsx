@@ -36,7 +36,7 @@ export function TopBar({ session }: { session: SessionUser }) {
   const trail = crumb ? [...crumbs, { label: crumb }] : crumbs;
 
   return (
-    <header className="flex h-[66px] flex-none items-center gap-2.5 border-b border-line px-4 tablet:gap-4 tablet:px-[26px]">
+    <header className="flex h-[66px] flex-none items-center gap-2.5 border-b border-line px-4 tablet:h-(--bar) tablet:gap-4 tablet:px-(--page-x)">
       {/* The mark has a seat on a phone (A-20 P6): the rail that holds it is
           hidden there, and the one-shot bloom lights whichever is on screen. */}
       <span className="flex-none tablet:hidden">

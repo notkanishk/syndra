@@ -13,7 +13,7 @@ import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { Card, CardColumns, ROW } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
@@ -629,7 +629,7 @@ function PersonRow({
   // anything about them needs doing — plus the sentence explaining why they
   // are in the list. Team and bundles fold away: both are one tap deeper, on
   // the person's own page, and neither is what this screen is scanned for.
-  const shared = `row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]`;
+  const shared = `row-divider flex flex-col items-start gap-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center tablet:gap-(--row-gap)`;
 
   if (!bulkMode) {
     return (

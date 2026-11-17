@@ -46,10 +46,15 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
  * The 44px floor holds through the tablet range on purpose — 720–1080 is a
  * tablet, which is still a thumb — and lifts above the desktop breakpoint,
  * where the control returns to its dense size.
+ *
+ * That size is a token (D-1 §3: --control-sm 30, --control-md 36), never
+ * padding plus border, so an outline and an accent button of one size are one
+ * height. A floor rather than a fixed height, so a label that has to wrap
+ * grows its pill instead of spilling out of it.
  */
 export const PILL: Record<Size, string> = {
-  sm: "min-h-[var(--tap)] px-3.5 text-[13px] desktop:min-h-0 desktop:py-1.5",
-  md: "min-h-[var(--tap)] px-4 text-[13.5px] desktop:min-h-0 desktop:py-[7px]",
+  sm: "min-h-[var(--tap)] px-3.5 text-small desktop:min-h-(--control-sm)",
+  md: "min-h-[var(--tap)] px-4 text-small desktop:min-h-(--control-md)",
 };
 
 /** Every label on this control is 13–13.5px, which is small text by WCAG at

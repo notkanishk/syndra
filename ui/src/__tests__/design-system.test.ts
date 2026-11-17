@@ -672,11 +672,20 @@ describe("design system", () => {
     // Array.from rather than iterating the matcher: this file is type-checked
     // by a target that predates iterating an iterator directly, the same
     // reason the helpers above spell out their Sets and Maps.
+    // A role states px or reads a `--text-*` step (D-1); a step is checked at
+    // every value it is declared with, the phone block's included.
+    const steps = new Map<string, number[]>();
+    for (const [, name, size] of Array.from(css.matchAll(/(--text-[a-z]+):\s*([\d.]+)px;/g))) {
+      steps.set(name, [...(steps.get(name) ?? []), Number(size)]);
+    }
     const roles = Array.from(
-      css.matchAll(/@utility\s+(type-[\w-]+)\s*\{[^}]*?font-size:\s*([\d.]+)px/g),
+      css.matchAll(/@utility\s+(type-[\w-]+)\s*\{[^}]*?font-size:\s*(?:([\d.]+)px|var\((--text-[a-z]+)\))/g),
     );
-    for (const [, name, size] of roles) {
-      if (Number(size) < 12.5) under.push(`${name} at ${size}px`);
+    expect(roles.length, "the type roles must still be readable here").toBeGreaterThanOrEqual(8);
+    for (const [, name, px, step] of roles) {
+      const sizes = px ? [Number(px)] : (steps.get(step) ?? []);
+      expect(sizes.length, `${name} reads ${step}, which globals.css does not declare in px`).toBeGreaterThan(0);
+      for (const size of sizes) if (size < 12.5) under.push(`${name} at ${size}px`);
     }
     expect(under, `Type roles below the 12.5px floor: ${under.join(", ")}`).toEqual([]);
   });
@@ -813,8 +822,8 @@ describe("design system", () => {
     );
 
     // Its parent column is a flex item too, with the same default and the same
-    // consequence.
-    expect(shell).toMatch(/<div className="flex min-h-0 min-w-0 flex-1 flex-col">/);
+    // consequence. It is also the size container the page frame's `cqw` reads.
+    expect(shell).toMatch(/<div className="@container flex min-h-0 min-w-0 flex-1 flex-col">/);
   });
 
   // Every dysfunction is a Notice in the content column (6a), never a band
@@ -943,5 +952,113 @@ describe("one breakpoint, one tap floor (A-20 P14)", () => {
       for (const hit of source.matchAll(/\b(?:w-11|min-h-\[(?:44|48|52)px\])(?![\w-])/g)) found.push(`${file}: ${hit[0]}`);
     }
     expect(found).toEqual([]);
+  });
+});
+
+// D-1: the page read zoomed in at 100%. One density, set in @theme, read by the
+// shared parts; these hold the numbers and the seams that carry them.
+describe("density and alignment (D-1)", () => {
+  const css = readFileSync(GLOBALS_CSS, "utf8");
+  const theme = atRuleBody(css, "@theme {");
+  const phone = atRuleBody(css.slice(css.indexOf("@layer base {")), "@media (max-width: 44.99rem) {");
+
+  it("declares every density token at the value D-1 set, in @theme", () => {
+    for (const token of [
+      "--text-display: 34px",
+      "--text-display--line-height: 1.1",
+      "--text-page: 28px",
+      "--text-page--line-height: 1.15",
+      "--text-heading: 22px",
+      "--text-heading--line-height: 1.2",
+      "--text-title: 17px",
+      "--text-title--line-height: 1.3",
+      "--text-title--font-weight: 600",
+      "--text-figure: 24px",
+      "--text-body: 14px",
+      "--text-body--line-height: 1.5",
+      "--text-small: 13px",
+      "--text-small--line-height: 1.45",
+      "--text-fine: 12.5px",
+      "--control-sm: 30px",
+      "--control-md: 36px",
+      "--page-max: 1280px",
+      "--page-x: max(26px, calc((100cqw - var(--page-max)) / 2))",
+      "--page-top: 24px",
+      "--bar: 56px",
+      "--measure: 60ch",
+      "--field-max: 400px",
+      "--region-gap: 40px",
+      "--region-head-gap: 12px",
+      "--card-x: 20px",
+      "--card-head-y: 12px",
+      "--row-y: 10px",
+      "--row-gap: 16px",
+      "--empty-y: 20px",
+      "--dot-indent: 14px",
+      "--seat-label: 170px",
+      "--seat-number: 110px",
+      "--seat-action-narrow: 140px",
+      "--seat-action: 200px",
+      "--seat-action-wide: 300px",
+    ]) {
+      expect(theme, `@theme must declare ${token}`).toContain(`${token};`);
+    }
+    // The display steps' one step down, on a phone; nothing else moves there.
+    expect(phone).toContain("--text-display: 28px;");
+    expect(phone).toContain("--text-page: 26px;");
+  });
+
+  it("has each display role read its step, and none clamp with the window", () => {
+    const reads: Record<string, string> = {
+      "type-greeting": "--text-display",
+      "type-page-title": "--text-page",
+      "type-section-title": "--text-heading",
+      "type-dialog-title": "--text-heading",
+      "type-card-title": "--text-title",
+      "type-empty-title": "--text-title",
+    };
+    for (const [role, step] of Object.entries(reads)) {
+      const body = namedAtRuleBody(css, "@utility", role);
+      expect(body, `${role} must read ${step}`).toContain(`font-size: var(${step});`);
+      expect(body, `${role} must take ${step}'s line-height`).toContain(`line-height: var(${step}--line-height);`);
+    }
+    const clamped = Array.from(css.matchAll(/@utility\s+(type-[\w-]+)\s*\{[^}]*clamp\(/g), (m) => m[1]);
+    expect(clamped, "a clamp saturates at 1080 and gives every desktop the largest size").toEqual([]);
+  });
+
+  it("gives SectionPill the regions' own gap", async () => {
+    const { REGION_GAP } = await import("@/components/targets/Region");
+    expect(`--region-gap: ${REGION_GAP}px;`).toBe(/--region-gap: \d+px;/.exec(theme)?.[0]);
+  });
+
+  it("lays the page frame once: main, the top bar's row and the section band read --page-x", () => {
+    const read = (path: string) => readFileSync(resolve(SRC_ROOT, path), "utf8");
+    expect(read("components/shell/AppShell.tsx")).toMatch(/<main[^>]*tablet:px-\(--page-x\) tablet:pt-\(--page-top\)/);
+    expect(read("components/shell/TopBar.tsx")).toMatch(/<header[^>]*tablet:h-\(--bar\)[^>]*tablet:px-\(--page-x\)/);
+    expect(read("components/ui/SectionNav.tsx")).toContain("tablet:-inset-x-(--page-x)");
+    for (const path of ["components/shell/AppShell.tsx", "components/shell/TopBar.tsx", "components/ui/SectionNav.tsx"]) {
+      expect(read(path), `${path} types the old inset`).not.toMatch(/(?:px|inset-x)-\[26px\]/);
+    }
+  });
+
+  // §5 #37: sixteen list rows kept their 60px touch floor at every width.
+  it("lifts every row's 60px floor where there is a pointer", () => {
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      readFileSync(file, "utf8")
+        .split("\n")
+        .forEach((line, index) => {
+          if (line.includes("min-h-[60px]") && !line.includes("tablet:min-h-0")) {
+            found.push(`${file.replace(SRC_ROOT, "src")}:${index + 1}`);
+          }
+        });
+    }
+    expect(found, `Take ROW from components/ui/Card:\n  ${found.join("\n  ")}`).toEqual([]);
+  });
+
+  // §5 #30: the line under a status dot started at 14, 15 or 16px.
+  it("starts a line under a status dot at --dot-indent", () => {
+    const found = patternOffenders(/\bpl-\[1[45]px\]/, "pl-[14px] or pl-[15px]: use pl-(--dot-indent)");
+    expect(found, describeOffenders(found)).toEqual([]);
   });
 });

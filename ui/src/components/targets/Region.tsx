@@ -17,6 +17,13 @@ import { CountChip } from "@/components/ui/Badge";
  * somebody's access happened to be disputed, which is the one difference this
  * page has to make legible without moving anything.
  */
+/**
+ * Region to region, in px: `--region-gap` in globals.css, which the regions'
+ * own grid reads. SectionPill needs the number to give the gap back, and
+ * `design-system.test.ts` holds the two equal.
+ */
+export const REGION_GAP = 40;
+
 export function Region({
   title,
   count,
@@ -33,15 +40,15 @@ export function Region({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} aria-labelledby={`${id}-heading`} className="grid scroll-mt-4 gap-3.5">
-      <div className="grid gap-1.5">
+    <section id={id} aria-labelledby={`${id}-heading`} className="grid scroll-mt-4 gap-(--region-head-gap)">
+      <div className="grid gap-1">
         <div className="flex flex-wrap items-center gap-2.5">
           <h2 id={`${id}-heading`} className="type-section-title">
             {title}
           </h2>
           {count !== undefined && <CountChip n={count} />}
         </div>
-        {lede && <p className="max-w-[86ch] text-[14px] leading-[1.6] text-muted">{lede}</p>}
+        {lede && <p className="measure text-body text-muted">{lede}</p>}
       </div>
       <div className="grid gap-4">{children}</div>
     </section>

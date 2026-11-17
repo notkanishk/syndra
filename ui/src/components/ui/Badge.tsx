@@ -56,7 +56,7 @@ export function Chip({
 }: React.HTMLAttributes<HTMLSpanElement>) {
   return (
     <span
-      className={`inline-flex items-center rounded-pill bg-tint-2 px-3.5 py-1.5 text-[14px] font-semibold ${className}`}
+      className={`inline-flex items-center rounded-pill bg-tint-2 px-3.5 py-1.5 text-small font-semibold desktop:min-h-(--control-sm) desktop:py-0 ${className}`}
       {...props}
     >
       {children}

@@ -146,7 +146,7 @@ export function SectionPill<T extends NavSection>({
       <div
         aria-hidden
         data-section-band
-        className={`absolute -inset-x-4 top-0 h-(--section-band) border-b border-line bg-canvas motion-tint tablet:-inset-x-[26px] ${
+        className={`absolute -inset-x-4 top-0 h-(--section-band) border-b border-line bg-canvas motion-tint tablet:-inset-x-(--page-x) ${
           spy.away ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       />

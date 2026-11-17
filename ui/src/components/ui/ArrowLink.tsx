@@ -25,7 +25,8 @@ export function ArrowLink({
   className?: string;
 }) {
   return (
-    <AdvancedLink href={href} className={`${ARROW_LINK} ${className}`}>
+    // `data-arrow-link`: the row guards find a way on by it, so it can be held to its row's seat (D-1 §4).
+    <AdvancedLink href={href} data-arrow-link className={`${ARROW_LINK} ${className}`}>
       {children}
       <span aria-hidden>→</span>
     </AdvancedLink>

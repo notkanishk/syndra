@@ -17,10 +17,10 @@ import { UiViewProvider } from "@/lib/ui-view";
  * The operator shell.
  *
  *   ┌─ 252px rail ─┬───────────── content ─────────────┐
- *   │ own bg       │ top bar 66px, border-bottom       │
+ *   │ own bg       │ top bar --bar, border-bottom      │
  *   │ border-right │  breadcrumb …  [switch] [account] │
  *   │              ├───────────────────────────────────┤
- *   │              │ padding 30px 26px 36px            │
+ *   │              │ --page-top, --page-x, 36px        │
  *   └──────────────┴───────────────────────────────────┘
  *
  * The scroll container carries an id because a scoped jump from Basic into
@@ -79,7 +79,9 @@ export function AppShell({
               the fold: on /roles it was at y=4037 of an 844px screen. Every
               sweep before this one measured horizontal overflow, which is
               zero, and never asked whether the page could scroll. */}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* `@container`: the page frame's side inset (`--page-x`, D-1 §3) is read in `cqw` of this
+              column, by main, the top bar's row and the section band alike, so all three share one frame. */}
+          <div className="@container flex min-h-0 min-w-0 flex-1 flex-col">
             <TopBar session={session} />
             {/* `relative`: the scroller is the containing block of everything absolutely positioned inside it
                 (the `sr-only` live regions, popovers), so none of it sits outside the scroller where
@@ -94,7 +96,7 @@ export function AppShell({
                   rather than covering it. They sit under the page's own
                   header (A-20 P3, G7), in the seat `ShellNotices` holds. */}
               {/* tabIndex -1 so the skip link's jump moves focus here, not only the scroll. */}
-              <main id="main" tabIndex={-1} className="px-4 pb-9 pt-5 tablet:px-[26px] tablet:pt-[30px]">
+              <main id="main" tabIndex={-1} className="px-4 pb-9 pt-5 tablet:px-(--page-x) tablet:pt-(--page-top)">
                 <ShellNoticesProvider>{children}</ShellNoticesProvider>
               </main>
             </div>
