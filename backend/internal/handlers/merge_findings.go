@@ -717,6 +717,12 @@ func callTarget(ctx context.Context, f db.MergeFinding, resolution, actor string
 		if _, bound, err := dbGetTargetBinding(ctx, f.Target, f.SubjectID); err != nil {
 			return targetDone{}, fmt.Errorf("read this person's record on %s: %w", f.Target, err)
 		} else if !bound {
+			if f.Decision == db.ResolutionKept {
+				// A Finish: the other person's claim was already let go of, and a decided row
+				// refuses any other choice, so the only true next step is to wait for the sweep.
+				return targetDone{}, fmt.Errorf("%w: This person is no longer tracked for that account, so Syndra's own record of "+
+					"the other person's claim was not tidied. Nothing more to do here: Syndra closes this when it next checks.", errReleaseRefused)
+			}
 			return targetDone{}, fmt.Errorf("%w: This person is no longer tracked for that account, so letting go of the other "+
 				"person's claim would leave it with nobody. Nothing was changed. Check again to see who holds it now, "+
 				"then choose from what it shows.", errReleaseRefused)

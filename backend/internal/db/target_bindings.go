@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +37,19 @@ type TargetBinding struct {
 	BoundBy    string    `json:"bound_by"`
 	BoundAt    time.Time `json:"bound_at"`
 	LastSeenAt time.Time `json:"last_seen_at"`
+}
+
+// Version is the binding's strong validator (RFC 9110 §8.8.3, an ETag): it changes when the
+// row is replaced (bound_at) or moved to another account in place (an adoption keeps bound_at but
+// changes the name or id), and not on a sweep's last_seen_at. A page that read the row sends it
+// back as If-Match would be sent, and a release refuses when it no longer matches.
+func (b TargetBinding) Version() string {
+	id := ""
+	if b.AccountID != nil {
+		id = *b.AccountID
+	}
+	sum := sha256.Sum256([]byte(b.BoundAt.UTC().Format(time.RFC3339Nano) + "\x00" + b.Username + "\x00" + id))
+	return hex.EncodeToString(sum[:8])
 }
 
 // RecordTargetBinding writes what the target reported for a subject.

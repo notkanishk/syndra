@@ -239,10 +239,15 @@ func writeOperationError(w http.ResponseWriter, err error, code, confirmation st
 	}
 }
 
+const releaseConfirmation = "Syndra will stop managing that account. Nothing on the target changes and the account keeps working. Confirm to continue."
+
 type releaseRequest struct {
 	// Confirmed is the operator saying it out loud, and the backend refuses
 	// without it for the same reason every other confirmed operation does.
 	Confirmed bool `json:"confirmed"`
+	// Version is the binding version the page read (an If-Match, RFC 9110 §13.1.1): when Syndra's
+	// record of this person's binding has changed since, nothing is released. Empty: no check.
+	Version string `json:"version,omitempty"`
 }
 
 // handleReleaseBinding stops Syndra managing an account, and touches the
@@ -271,6 +276,21 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A page left open can list a person who has been given an account since (an adoption under
+	// another name): releasing then would drop the new binding and strand its account. Judged
+	// against Syndra's own record, no read of the target. A person with no record is already
+	// released, and the same press repairs a split.
+	if req.Version != "" {
+		if b, bound, err := dbGetTargetBinding(r.Context(), target, subject); err != nil {
+			writeOperationError(w, err, "RELEASE_FAILED", releaseConfirmation)
+			return
+		} else if bound && b.Version() != req.Version {
+			jsonErrorResponse(w, http.StatusConflict, "RELEASE_REFUSED",
+				"This person's account changed since this page was read. Check again.")
+			return
+		}
+	}
+
 	res, err := svcDispatchOperation(r.Context(), addonop.Request{
 		Target:    target,
 		Operation: "account.release",
@@ -287,8 +307,7 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		About:  boundUsername(r.Context(), target, subject),
 	})
 	if err != nil {
-		writeOperationError(w, err, "RELEASE_FAILED",
-			"Syndra will stop managing that account. Nothing on the target changes and the account keeps working. Confirm to continue.")
+		writeOperationError(w, err, "RELEASE_FAILED", releaseConfirmation)
 		return
 	}
 

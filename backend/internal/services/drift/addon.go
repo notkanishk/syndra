@@ -796,7 +796,7 @@ func partitionByPresence(bindings []db.TargetBinding, accounts []addons.TargetAc
 		case inFlight[b.SubjectID]:
 			// Unknown this read.
 		default:
-			stale = append(stale, StaleBinding{SubjectID: b.SubjectID, Username: b.Username, AccountID: b.AccountID})
+			stale = append(stale, StaleBinding{SubjectID: b.SubjectID, Username: b.Username, AccountID: b.AccountID, Version: b.Version()})
 		}
 	}
 	return live, stale
@@ -809,6 +809,9 @@ type StaleBinding struct {
 	// AccountID is the account the binding recorded, absent for a binding made
 	// before ids were kept.
 	AccountID *string `json:"account_id,omitempty"`
+	// Version is Syndra's record of the binding as this read saw it (db.TargetBinding.Version),
+	// sent back with a release so a page left open cannot drop a binding made since.
+	Version string `json:"version,omitempty"`
 }
 
 // reconcileActor is who a reconciliation-sourced convergence is attributed to.
