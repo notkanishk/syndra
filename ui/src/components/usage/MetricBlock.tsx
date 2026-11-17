@@ -1,160 +1,188 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 
 import * as copy from "@/components/usage/copy";
-import { Spark } from "@/components/usage/Spark";
-import { CardRow } from "@/components/ui/Card";
-import { Meter } from "@/components/ui/Meter";
-import { formatRelative } from "@/lib/format";
+import { Band, cellWords } from "@/components/usage/Band";
+import { Crossfade } from "@/lib/motion";
 import type { StatsMetric, StatsSeries, UsageWindows } from "@/lib/queries/useStats";
-import { addDays } from "@/components/insights/days";
-import { CAP, capText, dayWords, daysSince, dimensionWords, formatValue, gapLines, gapRange, gapWhere, plot, quoted, type Plot } from "@/lib/usage";
+import { CAP, capText, change, dayWords, daysSince, formatValue, plot, seriesName, windowDays, type Plot } from "@/lib/usage";
 
 /**
- * One metric, drawn from its descriptor and nothing else: a counter is its sum
- * over the window with a sparkline, a gauge its latest value with its day (a
- * meter when `against` names a limit that was read), a gap a footnote and a
- * hatched band. Nothing here knows what the add-on measures.
+ * One metric, drawn from its descriptor and nothing else (A-23 §3): a section
+ * of folder rows, each a name, its band and its figure on one baseline, the
+ * figures one right-aligned column in the stat face. A counter's figure is its
+ * sum over the window, a level's its latest value with its day and, under it,
+ * its change over the record. Nothing here knows what the add-on measures.
  *
  * A metric's series are never added together: each is its own row. The most a
- * card shows is `MAX_ROWS` rows and lines; the rest is said, not drawn.
+ * section shows is `MAX_ROWS` rows; the rest is said, not drawn. Each section
+ * has one axis and one readout seat, fed by its bands.
  */
 const MAX_ROWS = 12;
 
-/** A person's observed limit per limit-field name, in the field's unit; absent is "not read", 0 is "no limit". */
-export type Limits = Record<string, number | undefined>;
-
-/** A gauge over the limit Syndra read: the one shared meter, or the sentence that there is none to draw. */
-function Limit({ value, limit, metric }: { value: number; limit: number | undefined; metric: StatsMetric }) {
-  if (limit === undefined) return <span className="text-[13px] text-faint">{copy.LIMIT_UNREAD}</span>;
-  if (limit === 0) return <span className="text-[13px] text-muted">{copy.NO_LIMIT}</span>;
-  const said = `${formatValue(value, metric.unit)} ${copy.ofLimit(formatValue(limit, metric.unit))}`;
+/**
+ * One row (§3.2): from the card's tablet step, the 200 · band · 240 ledger, each seat 40px and
+ * bottom-aligned so the name, the band's baseline and the figure share one line; under it one column,
+ * name, figure, band, the figure left-aligned.
+ */
+function Row({ name, band, figure, className = "" }: { name: ReactNode; band?: ReactNode; figure: ReactNode; className?: string }) {
   return (
-    <span className="flex w-full max-w-[360px] flex-col gap-1.5">
-      <Meter value={value} limit={limit} label={capText(metric.label, CAP.label)} valueText={said} />
-      <span className="text-[13px] text-muted">{said}</span>
-    </span>
+    <div data-row className={`grid grid-cols-1 items-start gap-y-1.5 py-3 @tablet:grid-cols-[200px_minmax(0,1fr)_240px] @tablet:gap-x-6 @tablet:gap-y-0 ${className}`}>
+      <span className="flex min-w-0 items-end @tablet:min-h-10">{name}</span>
+      <span className="order-3 min-w-0 @tablet:order-none">{band}</span>
+      <span className="order-2 flex min-w-0 flex-col items-start gap-[3px] @tablet:order-none @tablet:items-end @tablet:text-right">{figure}</span>
+    </div>
   );
 }
 
 /**
- * A window's sum in words, named from the day the backend read it from: a
- * start retention set (`kept_from`) is "the last n days", n counted from it to
- * today; otherwise the window's own name.
+ * A window's start for this metric: the window's own first day, or later where the record or
+ * retention starts later. Named from it: the window's own words, or "the last n days" counted to
+ * the backend's today.
  */
-function inWindow(value: string, start: string, windows: UsageWindows, own: (value: string) => string): string {
-  return start === windows.kept_from ? copy.inLastDays(value, daysSince(start, windows.today)) : own(value);
+function inWindow(value: string, own: string, began: string | undefined, windows: UsageWindows, words: (value: string) => string) {
+  const start = began !== undefined && began > own ? began : own;
+  return { start, said: start === windows.kept_from || start === began ? copy.inLastDays(value, daysSince(start, windows.today)) : words(value) };
 }
 
-function SeriesRow({ metric, series, cells, limits, windows }: { metric: StatsMetric; series: StatsSeries; cells: Plot; limits?: Limits; windows: UsageWindows }) {
-  const where = dimensionWords(metric, series.dimensions);
-  const counter = metric.instrument === "counter";
-  const metered = limits !== undefined && !counter && metric.against !== undefined && series.latest !== undefined;
-
-  let headline: ReactNode;
-  let detail: ReactNode = null;
-  if (counter) {
-    // Kept for fewer days than a window: the sum is of the days kept, and says so.
-    // Both windows starting on one day are one sum, said once.
-    const { window_30d_from: w30, window_12m_from: w12 } = windows;
-    headline = inWindow(formatValue(series.sum_30d ?? 0, metric.unit), w30, windows, copy.inDays);
-    detail = w12 === w30 ? null : inWindow(formatValue(series.sum_12m ?? 0, metric.unit), w12, windows, copy.inMonths);
-  } else if (series.latest) {
-    headline = copy.latestOn(formatValue(series.latest.value, metric.unit), dayWords(series.latest.day));
-  } else {
-    headline = <span className="font-normal text-muted">{copy.NO_RECENT_VALUE}</span>;
-  }
-
+/**
+ * The figure's first line: the value in the stat face (StatCard's figure) and the rest of its
+ * sentence in muted, one line of text with a real space, so it reads and copies as words. With no
+ * value, the sentence alone.
+ */
+function Figure({ value, said, second }: { value?: string; said: string; second?: string | null }) {
+  const rest = value && said.startsWith(`${value} `) ? said.slice(value.length + 1) : null;
   return (
-    <CardRow className="flex-wrap items-center gap-x-6 gap-y-2">
-      <span className="flex min-w-0 flex-1 basis-[220px] flex-col gap-0.5">
-        {where && <span className="text-[13.5px] font-semibold text-muted [overflow-wrap:anywhere]">{where}</span>}
-        <span className="text-[15px] font-semibold tabular-nums">{headline}</span>
-        {detail && <span className="text-[13px] tabular-nums text-faint">{detail}</span>}
-        {metered && <Limit value={series.latest!.value} limit={limits![metric.against!]} metric={metric} />}
+    <>
+      <span className="flex @tablet:min-h-10 items-end @tablet:justify-end">
+        {rest === null ? (
+          <span data-figure className="text-[14px] leading-[1.3] text-muted">
+            {said}
+          </span>
+        ) : (
+          <span data-figure className="block text-[13px] leading-none @tablet:text-right">
+            <span className="font-display text-[24px] font-semibold leading-none text-ink">{value}</span>{" "}
+            <span className="ml-[3px] text-muted">{rest}</span>
+          </span>
+        )}
       </span>
-      <Spark plot={cells} unit={metric.unit} keptDays={daysSince(windows.window_30d_from, windows.today)} what={where ? `${capText(metric.label, CAP.label)}, ${where}` : capText(metric.label, CAP.label)} />
-    </CardRow>
+      {second && <span className="text-[13px] tabular-nums text-faint">{second}</span>}
+    </>
   );
 }
 
-/** `kept`: how many days Syndra keeps, said only when a drawn row's window starts at what retention keeps. */
-function Gaps({ metric, kept, windows }: { metric: StatsMetric; kept?: number; windows: UsageWindows }) {
-  // The widest window the block shows: a counter's 12-month total is drawn, so every gap inside it
-  // is explained; a level shows 30 days only.
-  const from = metric.instrument === "counter" && windows.window_12m_from < windows.window_30d_from ? windows.window_12m_from : windows.window_30d_from;
-  const lines = gapLines(metric.gaps, from, addDays(windows.today, 1));
-  if (lines.length === 0 && kept === undefined) return null;
-  const shown = lines.slice(0, MAX_ROWS);
-  return (
-    <div className="row-divider flex flex-col gap-1 px-5 py-3 text-[13px] text-muted">
-      <span className="font-semibold">{copy.GAPS_HEADING}</span>
-      <ul className="flex flex-col gap-0.5">
-        {kept !== undefined && <li>{copy.keptLine(kept)}</li>}
-        {shown.map((g) => (
-          <li key={`${g.start}-${g.end}-${g.reason}`} className="[overflow-wrap:anywhere]">
-            {copy.gapLine(gapRange(g), gapWhere(metric, g), quoted(g.reason, CAP.reason))}
-          </li>
-        ))}
-        {lines.length > shown.length && <li className="text-faint">{copy.noMoreLines(lines.length - shown.length)}</li>}
-      </ul>
-      <span className="text-faint">{copy.GAPS_NOTE}</span>
-    </div>
-  );
-}
-
-/** The operator's collection lines on a totals page: how old the count is, what was left out, who is not a person Syndra manages. */
-function Collected({ metric }: { metric: StatsMetric }) {
-  const c = metric.collected;
+/** A level's change over the record, in words; within rounding (the two read the same) it is unchanged. */
+export function changeWords(cells: Plot, unit: StatsMetric["unit"]): string | null {
+  const c = change(cells);
   if (!c) return null;
-  const dropped = Object.entries(c.dropped ?? {})
-    .filter(([reason, n]) => n > 0 && copy.DROPPED[reason])
-    .map(([reason, n]) => copy.DROPPED[reason](n));
+  const [from, to] = [formatValue(c.first, unit), formatValue(c.last, unit)];
+  const day = dayWords(c.from);
+  if (from === to) return copy.changeNone(day);
+  const difference = formatValue(Math.abs(c.last - c.first), unit);
+  return c.last > c.first ? copy.changeUp(difference, day) : copy.changeDown(difference, day);
+}
+
+function figureFor(metric: StatsMetric, series: StatsSeries, cells: Plot, windows: UsageWindows, began: string | undefined): ReactNode {
+  if (metric.instrument === "counter") {
+    // Cut short by retention or by the record, a sum is of the days it covers and says so; both
+    // windows starting on one day are one sum, said once.
+    const a = inWindow(formatValue(series.sum_30d ?? 0, metric.unit), windows.window_30d_from, began, windows, copy.inDays);
+    const b = inWindow(formatValue(series.sum_12m ?? 0, metric.unit), windows.window_12m_from, began, windows, copy.inMonths);
+    return <Figure value={formatValue(series.sum_30d ?? 0, metric.unit)} said={a.said} second={b.start === a.start ? null : b.said} />;
+  }
+  if (!series.latest) return <Figure said={copy.NO_RECENT_VALUE} />;
+  const value = formatValue(series.latest.value, metric.unit);
+  return <Figure value={value} said={copy.latestOn(value, dayWords(series.latest.day))} second={changeWords(cells, metric.unit)} />;
+}
+
+/** A row with no band: the metric's label in the name seat, an empty band seat, a sentence in the figure seat. */
+function LabelRow({ label, said }: { label: string; said: string }) {
+  return <Row className="pt-0 pb-0" name={<h3 className="type-label text-label [overflow-wrap:anywhere]">{label}</h3>} figure={<Figure said={said} />} />;
+}
+
+/** The section's axis: the window's first day, and the readout seat (today at rest, else the day being read). */
+export function Axis({ first, readout, inset = true }: { first: string; readout: string; inset?: boolean }) {
   return (
-    <div className="row-divider flex flex-col gap-0.5 px-5 py-3 text-[13px] text-faint">
-      <span>{c.at ? copy.lastCounted(formatRelative(c.at)) : copy.NOT_COUNTED}</span>
-      {c.unbound_accounts ? <span>{copy.unbound(c.unbound_accounts)}</span> : null}
-      {dropped.length > 0 && <span>{copy.droppedLine(dropped)}</span>}
+    <div className={`flex justify-between gap-3 pt-1.5 text-[12.5px] tabular-nums leading-[1.3] text-faint ${inset ? "@tablet:pl-[224px] @tablet:pr-[264px]" : ""}`}>
+      <span>{dayWords(first)}</span>
+      <span aria-live="polite" className="ml-auto text-right">
+        <Crossfade id={readout} inline>
+          {readout}
+        </Crossfade>
+      </span>
     </div>
   );
 }
 
-/** `limits` absent draws no meter (a totals page is no one person's); present and empty draws the meter that says its limit was not read. */
-/** `windows`: where the backend read this page's two windows from (a person's are cut short by retention; a totals page's never are). */
-export function MetricBlock({ metric, limits, windows }: { metric: StatsMetric; limits?: Limits; windows: UsageWindows }) {
-  const rows = metric.series.slice(0, MAX_ROWS);
-  const plots = (metric.watermark === null ? [] : rows).map((s) => plot(s, metric.gaps, metric.instrument, undefined, { from: windows.window_30d_from, countedThrough: metric.counted_through }));
-  // Syndra's own reason (what retention keeps) is said whenever a drawn row's window starts at `kept_from`, hatched day or not.
-  const { kept_from, window_30d_from: w30, window_12m_from: w12 } = windows;
-  const keptShort = plots.length > 0 && kept_from !== undefined && (w30 === kept_from || w12 === kept_from);
+/**
+ * `windows`: where the backend read this page's two windows from (a person's are cut short by
+ * retention; a totals page's never are). `began`: the day this metric's record began, where Syndra
+ * can tell (`beforeRecord`). `first`/`titled`: the section's place in its card.
+ */
+export function MetricBlock({ metric, windows, began, first = false, titled = false }: { metric: StatsMetric; windows: UsageWindows; began?: string; first?: boolean; titled?: boolean }) {
+  const [read, setRead] = useState<{ row: number; index: number } | null>(null);
+  const label = capText(metric.label, CAP.label);
+  const rows = metric.watermark === null ? [] : metric.series.slice(0, MAX_ROWS);
+  const days = windowDays(windows.today);
+  const plots = rows.map((s) => plot(s, metric.gaps, metric.instrument, days, { from: windows.kept_from, began, countedThrough: metric.counted_through }));
+  const names = rows.map((s) => seriesName(metric, s.dimensions));
+  // The label goes on its own line when there are several rows, or a row has a name of its own; else it is the row's name.
+  const many = rows.length > 1 || names.some(Boolean);
+  const keptDays = windows.kept_from ? daysSince(windows.kept_from, windows.today) : undefined;
+  const at = read && plots[read.row]?.cells[read.index];
+  const readout = at ? (many ? copy.readoutNamed(names[read.row] || label, cellWords(at, metric.unit, keptDays)) : cellWords(at, metric.unit, keptDays)) : dayWords(windows.today);
+  const quiet = [
+    metric.collected?.unbound_accounts ? copy.unbound(metric.collected.unbound_accounts) : null,
+    // A member's own card: what the backend left out because it names a person, said so the rest never reads as all of it.
+    metric.watermark !== null && metric.left_out ? copy.leftOut(metric.left_out) : null,
+  ].filter((s): s is string => s !== null);
+
+  let body: ReactNode;
+  if (metric.watermark === null) body = <LabelRow label={label} said={copy.NOT_COUNTED} />;
+  else if (rows.length === 0) body = metric.left_out ? null : <LabelRow label={label} said={metric.instrument === "counter" ? copy.NOTHING_COUNTED : copy.NO_RECENT_VALUE} />;
+  else
+    body = (
+      <>
+        {rows.map((s, i) => (
+          <Row
+            key={JSON.stringify(s.dimensions)}
+            className={`${i > 0 ? "row-divider" : "pt-0"} ${i === rows.length - 1 ? "pb-0" : ""}`}
+            name={
+              many ? (
+                <span className="text-[15.5px] font-semibold leading-[1.25] [overflow-wrap:anywhere]">{names[i]}</span>
+              ) : (
+                <h3 className="type-label text-label [overflow-wrap:anywhere]">{label}</h3>
+              )
+            }
+            band={
+              <Band
+                plot={plots[i]}
+                instrument={metric.instrument}
+                unit={metric.unit}
+                keptDays={keptDays}
+                what={names[i] ? `${label}, ${names[i]}` : label}
+                readIndex={read?.row === i ? read.index : null}
+                onRead={(index) => setRead(index === null ? null : { row: i, index })}
+              />
+            }
+            figure={figureFor(metric, s, plots[i], windows, began)}
+          />
+        ))}
+        <Axis first={days[0]} readout={readout} />
+      </>
+    );
+
   return (
-    <section aria-label={capText(metric.label, CAP.label)}>
-      <div className="row-divider px-5 pb-1 pt-3.5">
-        <h3 className="type-label text-label [overflow-wrap:anywhere]">{capText(metric.label, CAP.label)}</h3>
-      </div>
-      {metric.watermark === null ? (
-        <CardRow>
-          <span className="text-[14px] text-muted">{copy.NOT_COUNTED}</span>
-        </CardRow>
-      ) : rows.length === 0 && !metric.left_out ? (
-        <CardRow>
-          <span className="text-[14px] text-muted">{metric.instrument === "counter" ? copy.NOTHING_COUNTED : copy.NO_RECENT_VALUE}</span>
-        </CardRow>
-      ) : (
-        rows.map((s, i) => <SeriesRow key={JSON.stringify(s.dimensions)} metric={metric} series={s} cells={plots[i]} limits={limits} windows={windows} />)
-      )}
-      {metric.series.length > rows.length && (
-        <CardRow>
-          <span className="text-[13px] text-faint">{copy.noMoreLines(metric.series.length - rows.length)}</span>
-        </CardRow>
-      )}
-      {/* A member's own card: what the backend left out because it names a person, said so the rest never reads as all of it. */}
-      {metric.watermark !== null && metric.left_out ? (
-        <CardRow>
-          <span className="text-[13px] text-faint">{copy.leftOut(metric.left_out)}</span>
-        </CardRow>
-      ) : null}
-      <Gaps metric={metric} windows={windows} kept={keptShort ? daysSince(kept_from, windows.today) : undefined} />
-      <Collected metric={metric} />
+    <section aria-label={label} className={`flex flex-col gap-3 px-5 py-[18px] ${first ? (titled ? "pt-1.5" : "") : "row-divider"}`}>
+      {many && <h3 className="type-label text-label [overflow-wrap:anywhere]">{label}</h3>}
+      {body && <div className="flex flex-col">{body}</div>}
+      {metric.series.length > rows.length && rows.length > 0 && <span className="text-[13px] text-faint">{copy.noMoreLines(metric.series.length - rows.length)}</span>}
+      {quiet.map((s) => (
+        <span key={s} className="max-w-[80ch] text-[13px] text-faint [text-wrap:pretty]">
+          {s}
+        </span>
+      ))}
     </section>
   );
 }

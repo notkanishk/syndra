@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
 import { StoragePage as MySystems } from "@/components/kinds/storage/StoragePage";
 import { deviceFrom } from "@/components/kinds/storage/device";
+import { homeBytes, sessions, windows } from "@/components/usage/__tests__/fixtures";
 import type { CredentialAnswer, MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
 import type { OneShotSecret } from "@/lib/secret";
 import type { RetryState } from "@/lib/retry";
@@ -173,6 +174,22 @@ describe("usage", () => {
     expect(within(row).getByRole("meter").firstElementChild).toHaveClass("bg-warn");
     const quack = screen.getByText("quack_share").closest(".row-divider") as HTMLElement;
     expect(within(quack).queryByText(/GiB|Nothing saved/)).toBeNull();
+  });
+
+  it("draws the home folder's month under its meter, before the addresses, and the usage card leaves it out (A-23 R1)", () => {
+    state.targets = [view({ usage: { reported: true, metrics: [homeBytes({ against: "home_quota" }), sessions()], ...windows() } })];
+    renderStorage();
+    const home = screen.getByText("Your home folder").closest(".row-divider") as HTMLElement;
+    const month = home.querySelector("[data-home-month]") as HTMLElement;
+    expect(month).not.toBeNull();
+    expect(within(month).getByRole("img")).toBeInTheDocument();
+    expect(within(home).getByRole("meter").compareDocumentPosition(month) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(month.compareDocumentPosition(within(home).getByText(/Connect to Server/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Only the home place carries it.
+    expect(document.querySelectorAll("[data-home-month]")).toHaveLength(1);
+    const card = screen.getByRole("group", { name: "What I have used" });
+    expect(within(card).queryByText("Home folder used")).toBeNull();
+    expect(within(card).getByRole("heading", { name: "Sessions" })).toBeInTheDocument();
   });
 
   it("says no limit set rather than drawing a full bar", () => {

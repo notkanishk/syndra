@@ -809,7 +809,7 @@ The dialog is one dialog: the form, the preview, the camera and the result are i
 
 An add-on that reports statistics (feature `stats`) gets the same four surfaces with no code of its own: the member's card **What I have used**, the same card on a person's page, the target overview's totals, and Insights, Usage. `components/usage/copy.ts` holds every sentence; `usageCopyGuide.test.ts` fails when this table and that file disagree, and the lint guard refuses an inline sentence in `components/usage/*.tsx` (as in sections 12 and 14). Syndra's own sentences only: what the add-on wrote (a metric's label, a breakdown's name and value, a gap's reason) is escaped, capped (label 60, value 40, reason 120 characters) and, inside a sentence, put in quotes; this table never holds it. `{value}` is a number in its unit's words ("18.4 GiB", "3 items"), `{day}` a makerspace day ("9 Nov", with the year when it is not this year's; never "UTC"), `{range}` days ("8–9 Nov"), `{where}` a breakdown (`Area: “ring”`). Every card ends on a next step or "Nothing for you to do."
 
-**A day nobody could count is not a zero.** It is hatched in the chart, the line breaks there, its hover says "couldn't count", and the card footnotes it with the add-on's reason. A counter's day with nothing in an observed window is a real 0 and is drawn as one; a day after the last one counted (`counted_through`) is not yet counted and is left blank, never 0. Each window is named from the day the backend read it from (`window_30d_from`, `window_12m_from`): the window's own first day, or the first day Syndra keeps for a person (`kept_from`, the operator's retention of N days counting today, so today − (N − 1)) when that is later. A window retention starts later is "in the last {n} days", n counted from its start to today, today included; a 12-month window it does not cut is "in the last 12 months"; when both start on one day the year line is not said twice. Only the drawn days before the 30-day start are hatched, with Syndra's own reason, and "Kept for only {n} days" is said only when such a day is drawn. A line joins only adjacent days that have a value: a gauge is never interpolated, and a value standing alone is a dot. **Ordered, never ranked** (the owner's ruling of 14 Nov 2026, superseding "Insights shows how many people and a spread, never who"). For operators, Insights shows each breakdown's spread and then **who**: every person with a value in the last 12 months, by the directory's name (never the id), linking to their page, in a table ordered by the last 30 days, largest first, whose headings re-sort (Person, Last 30 days, Last 12 months; a number's first press is largest first, as Operations' time is newest first). The spread has no floor: one person is still a spread. No sentence here, and no word in the renderers, says top, most, worst, best, highest, lowest, leader or rank, of people or of systems: the table is ordered, never labelled by place (`usageCopyGuide.test.ts` reads the files for those words). A member never sees another person's name, and their own hides nothing of theirs: on their own card a line whose breakdown the add-on wrote with someone else's name in it is left out and counted, and a gap that names someone else reads "The add-on's reason named a person." (the backend's sentence, quoted like any reason), on its own line. A series is never added to another.
+**A day nobody could count is not a zero.** It is hatched in the chart, the line breaks there, its hover says "couldn't count", and the card footnotes it with the add-on's reason. A counter's day with nothing in an observed window is a real 0 and is drawn as one; a day after the last one counted (`counted_through`) is not yet counted and is left blank, never 0. Each window is named from the day the backend read it from (`window_30d_from`, `window_12m_from`): the window's own first day, or the first day Syndra keeps for a person (`kept_from`, the operator's retention of N days counting today, so today − (N − 1)) when that is later. A window retention starts later is "in the last {n} days", n counted from its start to today, today included; a 12-month window it does not cut is "in the last 12 months"; when both start on one day the year line is not said twice. **A day before the record is not a gap either** (A-23 Q1, slice 7s): a day before the first collection, or before what retention keeps, has the window's faint baseline only, never a hatch and never a zero; the record's strong baseline starts at a small tick, its hover says "before counting began" (or "kept for only {n} days"), and the card's end row says "Counting began {day}" or "Kept for only {n} days on this system". A window the record starts later is "in the last {n} days", as a retention start is. The gaps are said once per card, in one fold that starts closed ("What wasn't counted"), merged across the card's metrics where range, breakdown and reason are the same. A line joins only adjacent days that have a value: a gauge is never interpolated, and a value standing alone is a dot. **Ordered, never ranked** (the owner's ruling of 14 Nov 2026, superseding "Insights shows how many people and a spread, never who"). For operators, Insights shows each breakdown's spread and then **who**: every person with a value in the last 12 months, by the directory's name (never the id), linking to their page, in a table ordered by the last 30 days, largest first, whose headings re-sort (Person, Last 30 days, Last 12 months; a number's first press is largest first, as Operations' time is newest first). The spread has no floor: one person is still a spread. No sentence here, and no word in the renderers, says top, most, worst, best, highest, lowest, leader or rank, of people or of systems: the table is ordered, never labelled by place (`usageCopyGuide.test.ts` reads the files for those words). A member never sees another person's name, and their own hides nothing of theirs: on their own card a line whose breakdown the add-on wrote with someone else's name in it is left out and counted, and a gap that names someone else reads "The add-on's reason named a person." (the backend's sentence, quoted like any reason), on its own line. A series is never added to another.
 
 | When | Says |
 |---|---|
@@ -823,21 +823,26 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | The same, several | {n} more lines are not shown here, as the add-on named a person in them. |
 | A gauge's latest value | {value} on {day} |
 | A gauge with no value in the window | No value in the last 30 days |
-| A meter's ceiling (the limit Syndra observed) | of {limit} |
-| A meter over a limit of 0 | no limit |
-| A meter whose limit was not read | Its limit could not be read, so there is no meter. |
-| Gaps: heading | Couldn't count these days |
+| A level's change over the record, up (its latest value against its first counted day) | Up {difference} since {day} |
+| The same, down | Down {difference} since {day} |
+| The same, within rounding (the two read the same) | Unchanged since {day} |
+| A level drawn against its limit (the home folder's month, under its meter): the line's word | {limit} limit |
+| The card's one fold: its heading | What wasn't counted |
+| The fold's list, its name for a screen reader | Couldn't count these days |
 | Gaps: one line, with its breakdown | {range}, {where}: {reason} |
 | Gaps: one line, for the whole metric | {range}: {reason} |
-| Gaps: a system that keeps per-person numbers for fewer days than the window | Kept for only {n} days on this system |
-| Gaps: under the lines | A day left blank was not counted. It is not a zero. |
+| The end row of a person's card, when a window starts at what retention keeps | Kept for only {n} days on this system |
+| Gaps: under the lines | A day with no line was not counted. It is not a zero. |
+| The end row, when the record starts inside the window | Counting began {day} |
 | A metric not collected yet | Not counted yet |
 | A card with such a metric: its step | Nothing for you to do. The numbers appear here once Syndra has counted. |
 | The add-on reports no statistics (target overview; a member or person page shows nothing) | This add-on does not report statistics. Nothing for you to do. |
 | Syndra could not read its own numbers | Syndra couldn't read these numbers just now. Reload this page to try again. |
 | Target overview: region title | What has been used here |
 | Target overview: lede | Totals for everyone who used it, over the last 30 days and the last 12 months. One person's numbers are on their page. |
-| When the last count ran | Last counted {age} |
+| When the last count ran (the totals card's end row) | Last counted {age} |
+| The totals card's step (kind-agnostic: the board's "each share" is the storage kind's word, which section 15 never says) | Nothing for you to do. Who used each one is in Insights. |
+| Its link, to Insights, Usage at this system | Open Usage |
 | Accounts Syndra does not manage, one | {n} account Syndra does not manage also used it. It is in the totals. |
 | Accounts Syndra does not manage, several | {n} accounts Syndra does not manage also used it. They are in the totals. |
 | The retention control: title (the target overview, under the totals; the one place it is set) | How long per-person numbers are kept |
@@ -853,7 +858,7 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | Shortening: the button that does not | Keep them |
 | The retention control: the word on the result | Saved |
 | The retention control: the result | Per-person numbers older than {n} days are deleted within a day. Totals stay for 5 years. |
-| What the last count did not keep | The last count did not keep {reason}. |
+| What the last count did not keep: one line per metric, in the card's fold, Advanced only | {metric}: the last count did not keep {reason}. |
 | a value for a day that is not a whole day, one | {n} value that was not for a whole day |
 | a value for a day that is not a whole day, several | {n} values that were not for a whole day |
 | a value or gap that is empty or below zero, one | {n} value or gap that was empty or below zero |
@@ -894,6 +899,8 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | A chart's hover, a gauge's day with no new sample | {day}: no new value |
 | A chart's hover, a day Syndra no longer keeps | {day}: kept for only {n} days on this system |
 | A chart's hover, a day after the last one counted | {day}: not counted yet |
+| A chart's hover, a day before counting began | {day}: before counting began |
+| The section's readout, when the section has several rows (the row's name, then the day's words) | {name}, {day}: {value} |
 | A chart's description for a screen reader | {what}, day by day over the last 30 days |
 | The same, with gaps | {what}, day by day over the last 30 days. Days that could not be counted are hatched |
 | A unit's group heading, count | Counts |
@@ -902,7 +909,7 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | A unit's group heading, seconds | Durations |
 | A unit's group heading, grams | Weights |
 
-One meter draws every "used of limit" in the product (`components/ui/Meter.tsx`): 90% and over turns it warn and writes "nearly full" beside the bar, the limit itself writes "full", and the word is never left to the colour. Units are the registry's (`registry/units.json`): count plain, items "3 items", bytes in binary steps with one decimal ("18.4 GiB", as the storage card says it), seconds as minutes or hours, grams as g or kg. A meter is drawn over the limit Syndra **read** (the storage card's number), and when none was read it says so instead of guessing. Rows are in the order the backend sends them (alphabetical by label, then by breakdown).
+One meter draws every "used of limit" in the product (`components/ui/Meter.tsx`): 90% and over turns it warn and writes "nearly full" beside the bar, the limit itself writes "full", and the word is never left to the colour. A statistic never draws a meter of its own (A-23 Q4): the home folder's month sits under the storage card's meter, its band scaled to the limit that meter is over ("{limit} limit"), and the usage card on those pages leaves that metric out, so it is said once. Units are the registry's (`registry/units.json`): count plain, items "3 items", bytes in binary steps with one decimal ("18.4 GiB", as the storage card says it), seconds as minutes or hours, grams as g or kg. A band is scaled to the limit Syndra **read** (the storage card's number); with none read, or a limit of 0 ("no limit"), it is on its own scale with no limit line, never a guessed one. Rows are in the order the backend sends them (alphabetical by label, then by breakdown).
 
 ## 16. The system page, after the visual check (addon-contract slice 7r)
 

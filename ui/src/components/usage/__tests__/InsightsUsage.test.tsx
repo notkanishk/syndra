@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { InsightsUsage } from "@/components/usage/InsightsUsage";
+import { InsightsUsage, insightsUsageHref } from "@/components/usage/InsightsUsage";
 import * as copy from "@/components/usage/copy";
 import { UNKNOWN_ACCOUNT } from "@/components/names/Unresolved";
 import { ADVANCED_NAV, BASIC_NAV, type NavEntry } from "@/lib/nav";
@@ -171,6 +171,18 @@ describe("Insights, Usage", () => {
     mount(s);
     const row = await screen.findByText(/^S+…: L+…$/);
     expect(row.textContent!.length).toBeLessThan(130);
+  });
+});
+
+describe("a system's totals link here, at that system (A-23 O2)", () => {
+  it("names each system's first section, once, and the link from its totals is that anchor on the Usage tab", async () => {
+    mount(stats());
+    await screen.findByText(copy.UNIT_HEADING.count);
+    expect(document.querySelectorAll("#usage-gym")).toHaveLength(1);
+    expect(document.querySelectorAll("#usage-lab")).toHaveLength(1);
+    // The gym's first section in the order drawn (Counts first), not its later one under Sizes.
+    expect(document.getElementById("usage-gym")).toHaveAccessibleName("Training hall: Sessions");
+    expect(insightsUsageHref("gym")).toBe("/insights?tab=usage#usage-gym");
   });
 });
 
