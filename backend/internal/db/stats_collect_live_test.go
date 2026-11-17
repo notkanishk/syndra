@@ -328,7 +328,9 @@ func TestLiveTheWatermarkIsAMidnightThatNeverGoesBack(t *testing.T) {
 // rest is kept: a point that is not one makerspace day, no value or a
 // negative one, a subject on a metric not per person or with no binding here,
 // an undeclared dimension, and a late point past retention. A dimension naming
-// a person is not a drop (TestLiveWhatNamesAPersonIsKeptAndRecorded).
+// a person is not a drop (TestLiveWhatNamesAPersonIsKeptAndRecorded). A gap
+// with no reason is counted as a bad value and kept, as unread: a gap the
+// add-on sent is never lost.
 func TestLiveEachDropIsCountedByReason(t *testing.T) {
 	ctx := collectLive(t)
 	utcMidnight := pt(t, day(3), "", share("makers"), 1)
@@ -357,8 +359,8 @@ func TestLiveEachDropIsCountedByReason(t *testing.T) {
 	}
 	h := holding(t, ctx, sessions.Name)
 	if len(h.Points) != 3 || !has(h.Points, ` {"share": "makers"} `+day(3)+` 7`) || !has(h.Points, `sub-cena {"share": "makers"} `+day(3)+` 2`) ||
-		!has(h.Points, ` {"share": "makers"} `+day(401)+` 1`) || len(h.Gaps) != 0 {
-		t.Errorf("kept %v and gaps %v: want the makerspace day's two points and the total past a person's retention", h.Points, h.Gaps)
+		!has(h.Points, ` {"share": "makers"} `+day(401)+` 1`) || len(h.Gaps) != 1 || h.Gaps[0] != `{"share": "lab"} `+day(3)+` `+day(2)+` ` {
+		t.Errorf("kept %v and gaps %v: want the makerspace day's two points, the total past a person's retention, and the gap with no reason kept (never lost), its reason empty", h.Points, h.Gaps)
 	}
 
 	totals := &script{replies: [][]any{{page(t, day(1), []addons.StatPoint{pt(t, day(3), "sub-cena", nil, 1), pt(t, day(3), "", nil, 4)})}}}
