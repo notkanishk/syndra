@@ -85,7 +85,7 @@ type StatsPoint struct {
 type StatsGap struct {
 	Dims       map[string]string
 	Start, End string
-	// Kind is the contract's gap kind (began, unread, dropped, unobserved; 000100).
+	// Kind is the contract's gap kind (began, unread, dropped, unobserved; 000101).
 	Kind          string
 	Reason        string
 	NamedSubjects []string

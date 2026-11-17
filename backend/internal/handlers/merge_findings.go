@@ -292,8 +292,8 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 	// does not bind as done rather than refused, and forgetting a row that is
 	// already gone is a no-op. A DIFFERENT decision is still refused, because
 	// the two answers are opposites.
-	repair := finding.Decision != "" && finding.Decision == req.Resolution &&
-		req.Resolution == db.ResolutionUnbound
+	calls := callsTarget(req.Resolution)
+	repair := finding.Decision != "" && finding.Decision == req.Resolution && calls
 	if finding.Decision != "" && !repair {
 		// Answered already. Refused here for the reading, and refused again
 		// atomically below — this check is the message, not the guarantee.
@@ -302,10 +302,11 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// `unbound` is the one resolution that calls the target, and the only one
-	// whose work cannot be undone by a later decision. So the decision is
-	// RESERVED first — one conditional write, under the same uniqueness the
-	// standing row already has — and only then is the add-on told to let go.
+	// `unbound`, `kept` and `adopted` are the resolutions that call the target
+	// (callsTarget), and the ones whose work cannot be undone by a later
+	// decision. So the decision is RESERVED first — one conditional write, under
+	// the same uniqueness the standing row already has — and only then is the
+	// add-on told to let go, or to bind.
 	//
 	// The order is the whole fix. Releasing first and deciding afterwards let a
 	// second request choose the opposite while the first was mid-flight: the
@@ -317,7 +318,8 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 	// seconds to answer would otherwise hold the access lock for thirty seconds,
 	// and a lock held across a call to a machine that may be down is an outage
 	// on this side of the wire.
-	if req.Resolution == db.ResolutionUnbound {
+	var done targetDone
+	if calls {
 		if !repair {
 			// The standing row rides back with the refusal, so the surface can
 			// show the second operator what was chosen and why.
@@ -326,23 +328,38 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if err := releaseOnTarget(r.Context(), finding, actor); err != nil {
-			// The reservation goes with the work that did not happen. Left
-			// standing, one unreachable add-on would wedge the finding as
-			// decided-but-never-done with no way back through this surface.
-			//
-			// Not on a repair: that reservation is somebody's earlier answer,
-			// and this attempt failing does not un-answer it — nor should it
-			// drop the only record that the add-on may already have let go.
+		// The reservation goes with the work that did not happen. Left
+		// standing, one unreachable add-on would wedge the finding as
+		// decided-but-never-done with no way back through this surface.
+		//
+		// Not on a repair: that reservation is somebody's earlier answer, and
+		// this attempt failing does not un-answer it — nor should it drop the
+		// only record that the add-on may already have acted.
+		undo := func() {
 			if !repair {
 				if rerr := dbReleaseMergeDecision(r.Context(), id, actor, req.Resolution); rerr != nil {
-					log.Printf("[FINDINGS] %s: the release failed and its reservation could not be cleared: %v",
-						id, rerr)
+					log.Printf("[FINDINGS] %s: the call failed and its reservation could not be cleared: %v", id, rerr)
+				}
+			}
+		}
+		pair, reservedPair, err := reservePair(r.Context(), finding, req, actor)
+		if err != nil {
+			undo()
+			writeResolutionError(w, err)
+			return
+		}
+		done, err = callTarget(r.Context(), finding, req.Resolution, actor)
+		if err != nil {
+			undo()
+			if reservedPair {
+				if rerr := dbReleaseMergeDecision(r.Context(), pair.ID, actor, opposite(req.Resolution)); rerr != nil {
+					log.Printf("[FINDINGS] %s: the other person's reservation could not be cleared: %v", pair.ID, rerr)
 				}
 			}
 			writeResolutionError(w, err)
 			return
 		}
+		done.pair = pair
 	}
 
 	var resolved db.MergeFinding
@@ -361,11 +378,11 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 			return fmt.Errorf("%w: %s already decided as %s by %s",
 				db.ErrMergeFindingDecided, id, current.Decision, current.DecidedBy)
 		}
-		if current.Decision != "" && req.Resolution != db.ResolutionUnbound {
+		if current.Decision != "" && !calls {
 			return fmt.Errorf("%w: %s already decided as %s by %s",
 				db.ErrMergeFindingDecided, id, current.Decision, current.DecidedBy)
 		}
-		if err := performResolution(ctx, current, req, actor); err != nil {
+		if err := performResolution(ctx, current, req, actor, done); err != nil {
 			return err
 		}
 		// A decision is not a settlement, except for the one that leaves nothing
@@ -382,9 +399,18 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 		// `unbound` is the exception: the binding is gone, so no pass will ever
 		// classify that subject again, and a row waiting for an observation that
 		// cannot happen would stand forever.
+		//
+		// `kept` and `adopted` are decisions like the others: the person's
+		// binding now names the account (or the other person's is gone), and
+		// the sweep closes the row, carrying this decision, once the add-on
+		// stops reporting the conflict. Reserved already, so nothing more to write.
 		if req.Resolution == db.ResolutionUnbound {
 			resolved, err = dbResolveMergeFinding(ctx, id, actor, req.Resolution)
 			return err
+		}
+		if calls {
+			resolved = current
+			return nil
 		}
 		var standing db.MergeFinding
 		standing, err = dbRecordMergeDecision(ctx, id, actor, req.Resolution, req.Reason)
@@ -402,12 +428,25 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 		// finishes it. Silence here is what turned a recoverable half-write into
 		// a wedge — the operator saw an error, the controls disappeared, and
 		// every retry came back 409.
-		if req.Resolution == db.ResolutionUnbound && !errors.Is(err, db.ErrMergeFindingDecided) {
+		if calls && !errors.Is(err, db.ErrMergeFindingDecided) {
 			// The cause is for the log; the body is the envelope plus the repair state.
 			ref := supportReference()
 			log.Printf("[HTTP] repair needed ref=%s finding=%s: %v", ref, id, err)
-			const detail = "The target released the account and Syndra's own records were not updated. " +
+			detail := "The target released the account and Syndra's own records were not updated. " +
 				"Nothing on the target changed. Press unbind again to finish it, every step is safe to repeat."
+			switch req.Resolution {
+			case db.ResolutionAdopted:
+				detail = "The system bound the account to this person and Syndra's own records were not updated. " +
+					"Nothing on the account changed. Choose it again to finish it, every step is safe to repeat."
+			case db.ResolutionKept:
+				detail = "The system let go of the other person's claim and Syndra's own records were not updated. " +
+					"Nothing on the account changed. Choose it again to finish it, every step is safe to repeat."
+			}
+			// The target half happened, so it is audited like a finished one.
+			_ = dbInsertAuditLogDetails(r.Context(), actor, finding.SubjectID, "merge_finding.decided", id, map[string]any{
+				"target": finding.Target, "outcome": finding.Outcome, "resolution": req.Resolution, "reason": req.Reason,
+				"repair_needed": true,
+			})
 			jsonResponse(w, http.StatusAccepted, struct {
 				ErrorResponse
 				Resolved     bool   `json:"resolved"`
@@ -430,9 +469,19 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 	// itself, and it would read to an operator as the surface being broken.
 	settled := req.Resolution == db.ResolutionUnbound
 	detail := "Decided. The finding stays open until a reconciliation sees the target agree."
-	if settled {
+	switch req.Resolution {
+	case db.ResolutionUnbound:
 		detail = "Syndra no longer manages that account. Nothing on the target was changed."
+	case db.ResolutionAdopted:
+		detail = "The account is now this person's. Nothing on it was changed. The finding closes at the next check."
+	case db.ResolutionKept:
+		detail = "The account stays this person's, and the other person's claim on it is released: their next change creates a new account for them. Both findings close at the next check."
 	}
+	// Who decided what, and why, in the audit log beside the row's own record
+	// (decided_by, resolved_by): every resolution, whichever it is.
+	_ = dbInsertAuditLogDetails(r.Context(), actor, finding.SubjectID, "merge_finding.decided", id, map[string]any{
+		"target": finding.Target, "outcome": finding.Outcome, "resolution": req.Resolution, "reason": req.Reason,
+	})
 	jsonResponse(w, http.StatusOK, map[string]any{
 		"resolved": settled, "decided": true,
 		"finding": resolved, "resolution": req.Resolution, "detail": detail,
@@ -452,6 +501,15 @@ func writeResolutionError(w http.ResponseWriter, err error) {
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"resolution": "unbounded"})
 	case errors.Is(err, errReleaseNotConfirmed):
 		writeUpstream(w, err, "RELEASE_NOT_CONFIRMED")
+	case errors.Is(err, errReleaseRefused):
+		// The add-on's words: what it found, and Check again. Nothing was released.
+		jsonErrorResponse(w, http.StatusConflict, "RELEASE_REFUSED", strings.TrimPrefix(err.Error(), errReleaseRefused.Error()+": "))
+	case errors.Is(err, errAdoptionRefused):
+		// The add-on judged it again and said no (a stale adoptable): its own
+		// sentence, which says what changed and to check again. Nothing changed.
+		jsonErrorResponse(w, http.StatusConflict, "ADOPTION_REFUSED", strings.TrimPrefix(err.Error(), errAdoptionRefused.Error()+": "))
+	case errors.Is(err, errAdoptionNotConfirmed):
+		writeUpstream(w, err, "ADOPTION_NOT_CONFIRMED")
 	case errors.Is(err, db.ErrMergeFindingDecided):
 		// 409, and it names who, what and WHY. The two answers here are
 		// opposites, so a second operator has to know that somebody chose — and
@@ -479,18 +537,37 @@ func writeResolutionError(w http.ResponseWriter, err error) {
 // there, or queue a create for one that already exists, and the API accepted
 // both from any caller.
 //
-// A `binding_conflict` takes `unbound` alone (stop tracking: account.release,
-// the add-on's own next step; design 7t §3, confirmed by the owner 17 Nov 2026). Re-provisioning
-// is the create the add-on refuses, there is no account of the subject's to
-// keep or take a value on, and adopting the holder has its one place, Not
-// created by Syndra, once the binding is released.
+// A `binding_conflict` takes `unbound` always (stop tracking: account.release,
+// the default; design 7t §3), and, by the owner's ruling of 17 Nov 2026, two
+// more where the stored report says they can work: `adopted` (account.adopt
+// moves the binding to the holder) only when the add-on marked the holder
+// adoptable and the conflict is the binding's name or number being held; and
+// `kept` (account.release of the OTHER person) only when the account is
+// claimed twice and the other person is named. The add-on judges each again
+// when it runs: this gate is what the stored report allows, never a promise.
+// Re-provisioning is the create the add-on refuses, and there is no account of
+// the subject's to keep or take a value on.
 func resolutionFits(f db.MergeFinding, resolution string) error {
 	if f.Outcome == string(merge.BindingConflict) {
-		if resolution != db.ResolutionUnbound {
-			return fmt.Errorf("%w: %q does not answer a binding whose name or number another account holds; stopping tracking it does",
-				ErrResolutionNotExpressible, resolution)
+		c := conflictOf(f)
+		switch {
+		case resolution == db.ResolutionUnbound:
+			return nil
+		case resolution == db.ResolutionAdopted:
+			if c.Adoptable && c.Username != "" && c.AccountID != "" && (c.Reason == addons.ConflictNameHeld || c.Reason == addons.ConflictNumberHeld) {
+				return nil
+			}
+			return fmt.Errorf("%w: the account holding this person's name or number is not one the system can give them",
+				ErrResolutionNotExpressible)
+		case resolution == db.ResolutionKept:
+			if c.Reason == addons.ConflictClaimedTwice && c.BoundTo != "" && c.BoundTo != f.SubjectID {
+				return nil
+			}
+			return fmt.Errorf("%w: keeping it for this person answers an account recorded for two people, and this one is not",
+				ErrResolutionNotExpressible)
 		}
-		return nil
+		return fmt.Errorf("%w: %q does not answer a binding whose name or number another account holds; stopping tracking it does",
+			ErrResolutionNotExpressible, resolution)
 	}
 	gone := f.Outcome == string(merge.DeletedUpstream)
 	switch resolution {
@@ -513,6 +590,11 @@ func resolutionFits(f db.MergeFinding, resolution string) error {
 // errReleaseNotConfirmed is the add-on not confirming that it let go.
 var errReleaseNotConfirmed = errors.New("the target did not confirm the release")
 
+// errReleaseRefused is the add-on refusing the release: its binding names another
+// account than the one Syndra meant (the precondition), or another refusal in
+// its words. Nothing was released.
+var errReleaseRefused = errors.New("the system refused the release")
+
 // releaseOnTarget makes the ADD-ON stop managing the account, before this side
 // forgets its own record of it.
 //
@@ -522,27 +604,191 @@ var errReleaseNotConfirmed = errors.New("the target did not confirm the release"
 // by an add-on that still binds it, while every surface here calls it unmanaged.
 // That is the exact split `account.release` was added to close, and resolving a
 // finding was quietly recreating it.
-func releaseOnTarget(ctx context.Context, f db.MergeFinding, actor string) error {
+//
+// accountID is the account Syndra means, sent as the precondition (RFC 9110
+// §13.1.1) when it is known: a person released and bound again since names a
+// new account, which the add-on then refuses to drop (409, errReleaseRefused).
+func releaseOnTarget(ctx context.Context, target, subject, actor, accountID string) error {
 	res, err := svcDispatchOperation(ctx, addonop.Request{
-		Target: f.Target, Operation: "account.release",
-		ActorID: actor, SubjectID: f.SubjectID, Confirmed: true,
-		About: boundUsername(ctx, f.Target, f.SubjectID),
+		Target: target, Operation: "account.release",
+		ActorID: actor, SubjectID: subject, Confirmed: true, Params: releaseParams(accountID),
+		About: boundUsername(ctx, target, subject),
 	})
 	if err != nil {
-		return fmt.Errorf("release %s on %s: %w", f.SubjectID, f.Target, err)
+		return fmt.Errorf("release %s on %s: %w", subject, target, err)
+	}
+	if res.Outcome == addons.OutcomeRejected {
+		return fmt.Errorf("%w: %s", errReleaseRefused, releaseRefusal(res.Err))
 	}
 	if res.Outcome != addons.OutcomeSucceeded {
 		// Nothing forgotten here. The add-on's store is the authority on whether
 		// it still binds the subject, and dropping this side's copy against an
 		// answer nobody received manufactures the split in the direction that
 		// hurts.
-		return fmt.Errorf("%w: %s answered %s", errReleaseNotConfirmed, f.Target, res.Outcome)
+		return fmt.Errorf("%w: %s answered %s", errReleaseNotConfirmed, target, res.Outcome)
 	}
 	return nil
 }
 
+// errAdoptionRefused is the add-on refusing the adoption (a stale adoptable,
+// judged again when it ran); errAdoptionNotConfirmed is no answer either way.
+var (
+	errAdoptionRefused      = errors.New("the system refused the adoption")
+	errAdoptionNotConfirmed = errors.New("the system did not confirm the adoption")
+)
+
+// adoptOnTarget is "It's theirs: adopt it" on a binding conflict: the one
+// account.adopt (handleAdoptAccount's operation, the same policy, confirmation,
+// record and audit through svcDispatchOperation), naming the holder by its
+// name and, as a precondition, by the account_id the operator was shown
+// (RFC 9110 §13.1.1, If-Match): the add-on refuses if that name now belongs to
+// another account. It answers the account_id the add-on bound.
+func adoptOnTarget(ctx context.Context, f db.MergeFinding, actor string) (string, error) {
+	holder := conflictOf(f)
+	res, err := svcDispatchOperation(ctx, addonop.Request{
+		Target: f.Target, Operation: "account.adopt",
+		ActorID: actor, SubjectID: f.SubjectID, Confirmed: true,
+		Params: adoptParams(holder.Username, holder.AccountID), About: holder.Username,
+	})
+	if err != nil {
+		return "", fmt.Errorf("adopt %s for %s on %s: %w", holder.Username, f.SubjectID, f.Target, err)
+	}
+	switch res.Outcome {
+	case addons.OutcomeSucceeded:
+		return res.AccountID, nil
+	case addons.OutcomeRejected:
+		// The add-on's own sentence: what changed, and Check again.
+		return "", fmt.Errorf("%w: %s", errAdoptionRefused, adoptionRefusal(res.Err))
+	default:
+		return "", fmt.Errorf("%w: %s answered %s", errAdoptionNotConfirmed, f.Target, res.Outcome)
+	}
+}
+
+// releaseParams is account.release's params: the account_id meant, when known.
+func releaseParams(accountID string) map[string]any {
+	if accountID == "" {
+		return map[string]any{}
+	}
+	return map[string]any{"account_id": accountID}
+}
+
+// adoptParams is account.adopt's params, for every caller: the name, and the
+// account_id shown when there is one (the precondition).
+func adoptParams(username, accountID string) map[string]any {
+	params := map[string]any{"username": username}
+	if accountID != "" {
+		params["account_id"] = accountID
+	}
+	return params
+}
+
+// targetDone is what a resolution's call to the target left for this side's
+// half: the account an adoption bound, and the other claimant's standing
+// finding a claimed-twice answer also settles.
+type targetDone struct {
+	accountID string
+	pair      *db.MergeFinding
+}
+
+// callsTarget is whether a resolution calls the add-on before this side
+// writes: those are reserved first and repeatable as a repair.
+func callsTarget(resolution string) bool {
+	switch resolution {
+	case db.ResolutionUnbound, db.ResolutionAdopted, db.ResolutionKept:
+		return true
+	}
+	return false
+}
+
+// callTarget makes the one call a resolution needs: a release of this person
+// (stop tracking), a release of the OTHER person (kept: never this one), or
+// the adoption.
+func callTarget(ctx context.Context, f db.MergeFinding, resolution, actor string) (targetDone, error) {
+	switch resolution {
+	case db.ResolutionUnbound:
+		return targetDone{}, releaseOnTarget(ctx, f.Target, f.SubjectID, actor, releasedAccount(ctx, f))
+	case db.ResolutionKept:
+		// The account both claimed: if the other person was released and bound again
+		// since, their new account is not this one, and the add-on refuses.
+		return targetDone{}, releaseOnTarget(ctx, f.Target, conflictOf(f).BoundTo, actor, conflictOf(f).AccountID)
+	case db.ResolutionAdopted:
+		id, err := adoptOnTarget(ctx, f, actor)
+		return targetDone{accountID: id}, err
+	}
+	return targetDone{}, fmt.Errorf("%q does not call the target", resolution)
+}
+
+// releasedAccount is the account a Stop tracking means, sent as the release's
+// precondition: the account two people claim, or the one this person's record
+// names (the mirror), "" when Syndra does not know one.
+func releasedAccount(ctx context.Context, f db.MergeFinding) string {
+	if c := conflictOf(f); c.Reason == addons.ConflictClaimedTwice {
+		return c.AccountID
+	}
+	return boundAccountID(ctx, f.Target, f.SubjectID)
+}
+
+// opposite is what an answer on one claimant's finding means on the other's,
+// when one account is claimed twice: keeping it for one is stopping tracking
+// it for the other, either way round.
+func opposite(resolution string) string {
+	if resolution == db.ResolutionKept {
+		return db.ResolutionUnbound
+	}
+	return db.ResolutionKept
+}
+
+// reservePair reserves the other claimant's standing finding with the same
+// answer seen from their side, before the target is called, so "Keep it for
+// A" and "Keep it for B" (on either person's row) can never both run: the two
+// releases would leave the account to neither. Only for claimed_twice, and
+// only when the other person's finding stands; reserved reports whether this
+// call took the reservation (to give back if the call fails). A finding
+// already answered that way is the same decision and is not reserved again.
+func reservePair(ctx context.Context, f db.MergeFinding, req resolveMergeFindingRequest, actor string) (*db.MergeFinding, bool, error) {
+	c := conflictOf(f)
+	if f.Outcome != string(merge.BindingConflict) || c.Reason != addons.ConflictClaimedTwice || c.BoundTo == "" ||
+		(req.Resolution != db.ResolutionUnbound && req.Resolution != db.ResolutionKept) {
+		return nil, false, nil
+	}
+	standing, err := dbStandingMergeFindings(ctx, f.Target)
+	if err != nil {
+		return nil, false, fmt.Errorf("read the other person's finding on %s: %w", f.Target, err)
+	}
+	want := opposite(req.Resolution)
+	for i := range standing {
+		g := standing[i]
+		if g.SubjectID != c.BoundTo || g.Outcome != string(merge.BindingConflict) || g.Field != "" {
+			continue
+		}
+		switch g.Decision {
+		case want:
+			return &g, false, nil
+		case "":
+			if held, err := dbRecordMergeDecision(ctx, g.ID, actor, want, req.Reason); err != nil {
+				return nil, false, mergeDecidedBy{error: err, standing: held}
+			}
+			return &g, true, nil
+		default:
+			return nil, false, mergeDecidedBy{error: fmt.Errorf("%w: %s already decided as %s by %s",
+				db.ErrMergeFindingDecided, g.ID, g.Decision, g.DecidedBy), standing: g}
+		}
+	}
+	return nil, false, nil
+}
+
+// conflictOf is the add-on's report a binding_conflict finding stores as
+// theirs (common/binding_conflict.json); zero when it is not one.
+func conflictOf(f db.MergeFinding) addons.SubjectConflict {
+	var c addons.SubjectConflict
+	if f.Outcome == string(merge.BindingConflict) {
+		_ = json.Unmarshal(f.Theirs, &c)
+	}
+	return c
+}
+
 // performResolution carries out the decision. It writes; it does not close.
-func performResolution(ctx context.Context, f db.MergeFinding, req resolveMergeFindingRequest, actor string) error {
+func performResolution(ctx context.Context, f db.MergeFinding, req resolveMergeFindingRequest, actor string, done targetDone) error {
 	switch req.Resolution {
 	case db.ResolutionKeepOurs, db.ResolutionReprovisioned:
 		// Syndra's state, applied over the target's. Queued like every other
@@ -573,6 +819,28 @@ func performResolution(ctx context.Context, f db.MergeFinding, req resolveMergeF
 			return fmt.Errorf("forget the binding for %s: %w", f.SubjectID, err)
 		}
 		return nil
+
+	case db.ResolutionKept:
+		// The other person's binding is what the add-on let go of: this side
+		// forgets theirs (never this person's), and their finding, the same
+		// answer from their side, is settled with it.
+		other := conflictOf(f).BoundTo
+		if err := forgetReleasedBinding(ctx, f.Target, other); err != nil {
+			return fmt.Errorf("forget the binding for %s: %w", other, err)
+		}
+		if done.pair != nil {
+			if _, err := dbResolveMergeFinding(ctx, done.pair.ID, actor, db.ResolutionUnbound); err != nil &&
+				!errors.Is(err, db.ErrNoSuchMergeFinding) {
+				return err
+			}
+		}
+		return nil
+
+	case db.ResolutionAdopted:
+		// The backend's half of the one adoption (recordAdoptedBinding, as
+		// handleAdoptAccount and a /calls settle write it), which also forgets
+		// the old account's observation when the person moves.
+		return recordAdoptedBinding(ctx, f.Target, f.SubjectID, conflictOf(f).Username, actor, done.accountID)
 
 	default:
 		return fmt.Errorf("%q is not a resolution this surface offers", req.Resolution)

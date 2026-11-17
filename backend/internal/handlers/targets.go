@@ -421,6 +421,11 @@ func handleReconcileTarget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := svcReconcileAddon(r.Context(), target)
+	// Who asked for a check, and what it came to: Check now, and Check again on
+	// a binding conflict, which is this same pass (addon-contract 7t-7).
+	_ = dbInsertAuditLogDetails(r.Context(), resolveActor(r, ""), "", "target.checked", target, map[string]any{
+		"failed": err != nil, "halted": res.Halted, "reason": res.Reason, "retry_after": res.RetryAfter,
+	})
 	if err != nil {
 		writeUpstream(w, err, "RECONCILE_FAILED")
 		return

@@ -1,4 +1,4 @@
--- 000100_stats_gap_kind (addon-contract 7s; the owner's ruling of 18 Nov 2026,
+-- 000101_stats_gap_kind (addon-contract 7s; the owner's ruling of 18 Nov 2026,
 -- "label each gap")
 --
 -- Every statistics gap carries the add-on's kind (contract 2, stats.json):
@@ -12,7 +12,7 @@
 -- sentence was written for (addons/truenas/stats.go gapKinds and reasonBegan;
 -- addons/reference/stats.go). Any other sentence is unread, the kind that
 -- claims least: a window not observed, hatched and listed. The default is the
--- same kind, so a 000099 backend still running beside it stores a gap rather
+-- same kind, so a 000100 backend still running beside it stores a gap rather
 -- than failing its collection.
 ALTER TABLE addon_metric_gaps ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'unread'
     CONSTRAINT addon_metric_gaps_kind_check CHECK (kind IN ('began', 'unread', 'dropped', 'unobserved'));

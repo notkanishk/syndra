@@ -86,6 +86,9 @@ const (
 	OmitsSubject              Defect = "omits-subject"                // /subjects names no row's subject, bound or not
 	ConflictAlsoAttributed    Defect = "conflict-also-attributed"     // /subjects lists every bound subject as a conflict too, its own account the holder
 	ReusedID                  Defect = "reused-id"                    // the create after a purge hands out the purged account's id again
+	AdoptIgnoresAccountID     Defect = "adopt-ignores-account-id"     // account.adopt binds whatever the name finds, never checking account_id
+	AdoptRefusesRepeat        Defect = "adopt-refuses-repeat"         // adopting the account a subject is already bound to is a 409, not done
+	ReleaseIgnoresAccountID   Defect = "release-ignores-account-id"   // account.release lets go whatever account_id says
 )
 
 // Defects lists every defect, for the kit's self-tests and the binary's help.
@@ -99,7 +102,7 @@ var Defects = []Defect{IgnoresFingerprint, CreatesOnWithdraw, EchoesSecret, Repl
 	NoChangeAsSucceeded, CallsEchoParams, StatsUndeclaredDimension, StatsLocalNameSubject, StatsZeroForGap,
 	StatsWatermarkAhead, StatsSubjectsAboveTotal, StatsSinceIgnored, StatsFinalMoves, StatsUnknownMetricOK,
 	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing, StatsDimensionNamesPerson, StatsGapsAllBegan, FoldsNames, OffWaitsOnOperator,
-	OmitsSubject, ConflictAlsoAttributed, ReusedID}
+	OmitsSubject, ConflictAlsoAttributed, ReusedID, AdoptIgnoresAccountID, AdoptRefusesRepeat, ReleaseIgnoresAccountID}
 
 // ParseDefects turns names into a set, refusing any name it does not know.
 func ParseDefects(names []string) (map[Defect]bool, error) {
@@ -232,6 +235,24 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 		// call_id was used before for anything else.
 		identity := map[string]any{"name": "health.get", "subject": req.Subject, "params": map[string]any{}}
 		return a.once(req.CallID, "operation", identity, func() reply { return h(r, body) })
+	}
+
+	opName := ""
+	if route == "POST /operations/{name}" {
+		opName = r.PathValue("name")
+	}
+	if (opName == "account.adopt" && d[AdoptIgnoresAccountID]) || (opName == "account.release" && d[ReleaseIgnoresAccountID]) {
+		// The precondition dropped before the handler sees it.
+		delete(req.Params, "account_id")
+		body = withField(body, "params", req.Params)
+	}
+	if opName == "account.adopt" && d[AdoptRefusesRepeat] {
+		a.mu.Lock()
+		mine := a.accounts[a.bindings[req.Subject]]
+		a.mu.Unlock()
+		if mine != nil && mine.username == req.Params["username"] {
+			return problem(409, "OPERATION_FAILED", "This subject is already bound.", nil)
+		}
 	}
 
 	a.mu.Lock()
@@ -428,7 +449,7 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 				if m := s.(map[string]any); m["subject"] != nil {
 					conflicts = append(conflicts, map[string]any{"subject": m["subject"], "reason": "name_held", "username": m["username"],
 						"account_id": m["account_id"], "adoptable": false,
-						"detail": "Another account holds this name.", "next": "Release the binding, then adopt it if it is theirs."})
+						"detail": "Another account holds this name.", "next": "Stop tracking this person's old account, then adopt that account only if it is theirs."})
 				}
 			}
 			doc["conflicts"] = conflicts

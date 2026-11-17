@@ -5,14 +5,26 @@ import { Term } from "@/components/ui/Term";
 import { useState } from "react";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import {
+  CHECKED_UPDATING,
   CONFLICT_NEXT_FALLBACK,
   OTHER_PERSON,
-  STOP_TRACKING,
+  checkStopped,
+  FINISH_AGAIN_NOTE,
+  FINISH_REASON,
+  closesAtNextCheck,
+  conflictChoices,
+  finishLabel,
   conflictDetailFallback,
   conflictReport,
   holdersLine,
-  stopTrackingConsequence,
+  stillReported,
+  type ConflictAnswer,
 } from "@/components/targets/bindingConflict";
+import { useShownNames } from "@/components/names/shownNames";
+import { useCountdown } from "@/lib/queries/fresh";
+import { cooldownLine } from "@/components/results/copy";
+import { Radio } from "@/components/ui/Choice";
+import { whyNotChecked } from "@/lib/format";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { ApiError } from "@/lib/api-client";
@@ -36,6 +48,7 @@ import { useAccountHref } from "@/components/system/ServiceAccountTag";
 import { Relative } from "@/components/ui/Time";
 import {
   useMergeFindings,
+  useReconcileTarget,
   useResolveMergeFinding,
   type MergeFinding,
   type ResolveFindingInput,
@@ -185,9 +198,41 @@ export function MergeFindings({ target }: { target: string }) {
                     </div>
                   )}
                   <span className="text-[13px] text-faint">
-                    {decisionLabel(f.decision, name)} by <Person id={f.decided_by ?? ""} /> ·
-                    waiting for {name} to match
+                    {decisionLabel(f.decision, name)} by <Person id={f.decided_by ?? ""} /> ·{" "}
+                    {f.outcome === "binding_conflict"
+                      ? // Adopted or kept: the add-on has acted, and the next read closes it.
+                        closesAtNextCheck(name)
+                      : `waiting for ${name} to match`}
                   </span>
+                  {f.outcome === "binding_conflict" && (f.decision === "adopted" || f.decision === "kept") && (
+                    // A choice that reached the system and not Syndra's own records answers "choose
+                    // it again"; this is that press, on the same repair route, safe to repeat.
+                    <>
+                      <span className="w-full text-[13px] text-muted">{FINISH_AGAIN_NOTE}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={finishing.has(f.id)}
+                        isPending={resolve.isPending && finishing.has(f.id)}
+                        onClick={() => {
+                          setFinishing((prev) => new Set(prev).add(f.id));
+                          resolve.mutate(
+                            { id: f.id, resolution: f.decision as "adopted" | "kept", reason: FINISH_REASON },
+                            {
+                              onSettled: () =>
+                                setFinishing((prev) => {
+                                  const copy = new Set(prev);
+                                  copy.delete(f.id);
+                                  return copy;
+                                }),
+                            },
+                          );
+                        }}
+                      >
+                        {finishLabel(f.decision)}
+                      </Button>
+                    </>
+                  )}
                 </CardRow>
               ) : deciding === f.id ? (
                 <DecisionForm
@@ -277,6 +322,10 @@ function decisionLabel(decision: string, name: string): string {
       return "Creating it again";
     case "unbound":
       return "No longer managing it";
+    case "adopted":
+      return "Adopted the account for them";
+    case "kept":
+      return "Kept it for them";
     case "agreed":
       return "The two sides agree now";
     default:
@@ -348,7 +397,7 @@ function DecisionForm({
   const [reason, setReason] = useState("");
   const [resolution, setResolution] = useState<string | null>(null);
   const gone = finding.outcome === "deleted_upstream";
-  // A conflict over which account a person's record names has one action: stop tracking it.
+  // A conflict over which account a person's record names has its own answers (ConflictDecision).
   const conflict = finding.outcome === "binding_conflict";
   // A limit the target changed: taking its value saves it as this person's own
   // limit, which needs an end or a review date, chosen here (design §3, 3.8).
@@ -369,28 +418,20 @@ function DecisionForm({
         value={reason}
         onChange={(e) => setReason(e.target.value)}
       />
-      {conflict && (
-        // What pressing does, beside the button that does it: the system is left as it is,
-        // and the next change makes the new account.
-        <p className="text-[13px] text-muted">{stopTrackingConsequence(name)}</p>
-      )}
+      {conflict ? (
+        <ConflictDecision
+          finding={finding}
+          name={name}
+          reason={reason}
+          pending={pending}
+          onCancel={onCancel}
+          onResolve={(answer) => {
+            setResolution(answer);
+            onResolve({ id: finding.id, resolution: answer, reason });
+          }}
+        />
+      ) : (
       <div className="flex flex-wrap gap-2">
-        {conflict ? (
-          <Button
-            size="sm"
-            variant="outline"
-            isPending={pending}
-            disabled={!reason.trim()}
-            reason={!reason.trim() ? "Say why. This becomes the record of the decision." : undefined}
-            onClick={() => {
-              setResolution("unbound");
-              onResolve({ id: finding.id, resolution: "unbound", reason });
-            }}
-          >
-            {STOP_TRACKING}
-          </Button>
-        ) : (
-        <>
         <Button
           size="sm"
           variant="outline"
@@ -432,14 +473,13 @@ function DecisionForm({
             {gone ? "Stop managing it" : `Use ${name}'s value`}
           </Button>
         )}
-        </>
-        )}
         <span className="flex-1" />
         {/* Beside outline acts, Cancel is outline too: ghost only defers to a primary (G1). */}
         <Button size="sm" onClick={onCancel}>
           Cancel
         </Button>
       </div>
+      )}
       {limit && adopting && (
         <div className="grid gap-2.5 rounded-inner bg-tint-1 px-4 py-3.5" data-adopt-limit>
           <p className="text-[13.5px] leading-[1.55] text-ink [text-wrap:pretty]">
@@ -529,6 +569,104 @@ function DecisionForm({
         )
       )}
     </div>
+  );
+}
+
+/**
+ * A binding conflict's answers in the decision form (addon-contract 7t-7): one at a time, safest
+ * first and preselected (conflictChoices), the sentence beside it saying what happens on the
+ * system and in Syndra, and one button that does it. Check again is a read, not a decision: it
+ * needs no reason, and the add-on's cooldown (Retry-After) is waited out with the time said.
+ */
+function ConflictDecision({
+  finding,
+  name,
+  reason,
+  pending,
+  onResolve,
+  onCancel,
+}: {
+  finding: MergeFinding;
+  name: string;
+  reason: string;
+  pending: boolean;
+  onResolve: (answer: Exclude<ConflictAnswer, "check">) => void;
+  onCancel: () => void;
+}) {
+  const names = useShownNames();
+  const report = conflictReport(finding.theirs);
+  // Names as shown, never ids: the two people a twice-claimed account is recorded for.
+  const choices = conflictChoices(
+    report,
+    name,
+    names.user(finding.subject_id, personOr(null)),
+    report.bound_to ? names.user(report.bound_to, "the other person") : "the other person",
+  );
+  const [answer, setAnswer] = useState<ConflictAnswer>(choices[0].answer);
+  const chosen = choices.find((c) => c.answer === answer) ?? choices[0];
+  const run = useReconcileTarget(finding.target);
+  // A check's answer: the row's last sighting when it was pressed (the sweep refreshes it while
+  // the add-on still reports the conflict, and closes the row when it stops), a cooldown, or a stop.
+  const [checked, setChecked] = useState<{ before: string; at: number; retry?: number; stopped?: string } | null>(null);
+  const left = useCountdown(checked?.retry, checked?.at);
+  const checking = chosen.answer === "check";
+  const needsWhy = !checking && !reason.trim();
+  const cooling = checking && left > 0;
+
+  function check() {
+    const before = finding.last_seen_at;
+    run.mutate(undefined, {
+      onSuccess: (pass) =>
+        setChecked({
+          before,
+          at: Date.now(),
+          retry: pass.halted && pass.retry_after ? pass.retry_after : undefined,
+          stopped:
+            pass.halted && !pass.retry_after
+              ? checkStopped(pass.detail ?? (pass.reason ? whyNotChecked(pass.reason, name) : `${name} could not be read.`))
+              : undefined,
+        }),
+    });
+  }
+
+  const confirm = () => (chosen.answer === "check" ? check() : onResolve(chosen.answer));
+  const said = run.error
+    ? sentence(describeFailure(run.error))
+    : cooling
+      ? sentence(cooldownLine(name, left))
+      : checked?.stopped
+        ? checked.stopped
+        : checked && finding.last_seen_at !== checked.before
+          ? stillReported(name)
+          : checked && !checked.retry
+            ? CHECKED_UPDATING
+            : null;
+
+  return (
+    <>
+      <fieldset className="grid gap-1.5">
+        <legend className="sr-only">What to do</legend>
+        {choices.map((c) => (
+          <label key={c.answer} className="flex items-center gap-2 text-[13.5px] text-ink">
+            <Radio name={`answer-${finding.id}`} checked={c.answer === chosen.answer} onChange={() => setAnswer(c.answer)} />
+            {c.label}
+          </label>
+        ))}
+      </fieldset>
+      {/* What pressing does, beside the button that does it. */}
+      <p className="text-[13px] text-muted">{chosen.says}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="accent" isPending={checking ? run.isPending : pending} disabled={needsWhy || cooling}
+          reason={needsWhy ? "Say why. This becomes the record of the decision." : undefined} onClick={confirm}>
+          {chosen.label}
+        </Button>
+        <span className="flex-1" />
+        <Button size="sm" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      {said && <p className="text-[13px] text-warn-text">{said}</p>}
+    </>
   );
 }
 

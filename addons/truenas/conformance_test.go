@@ -68,6 +68,7 @@ func kitAddOn(t *testing.T, homeRoot string) string {
 	s := testServer(t, &m.fakeRPC)
 	s.nas = newNAS(func() (rpc, error) { return m, nil }, []string{"25.04"})
 	s.nas.version, s.nas.probed = "25.04.2", true
+	s.nas.selfName, s.nas.selfUID = "syndra", 3001 // auth.me has named the add-on's own account, as after its first probe
 	key, err := deriveHMACKey([]byte(kitSecret), kitTarget)
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +161,8 @@ func TestTheConformanceKitPassesThisAddOn(t *testing.T) {
 		"withdraw-only.existing", "lifecycle", "operations", "plan-equals-apply", "create-is-new", "bound-to-created", "operations.result",
 		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "calls.unknown", "calls.recorded",
 		"stats.descriptors", "stats.points", "stats.totals", "stats.since", "stats.idempotent", "stats.gaps",
-		"stats.unbound", "stats.buffer", "stats.page-size", "stats.no-people", "stats.no-people.ids"} {
+		"stats.unbound", "stats.buffer", "stats.page-size", "stats.no-people", "stats.no-people.ids",
+		"adopt.shown", "adopt.not-shown", "release.not-shown"} {
 		ran := false
 		for _, res := range mutate.Results {
 			if res.ID == id {

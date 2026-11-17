@@ -230,7 +230,9 @@ func (a *Addon) capabilities(*http.Request, []byte) reply {
 		{"id": "health.get", "scope": "admin", "confirm": false, "available": true},
 		{"id": "password.set", "scope": "member", "confirm": false, "secret_params": []string{"password"}, "available": true},
 		{"id": "holdings.list", "scope": "member", "confirm": false, "available": true},
-		{"id": "account.purge", "scope": "admin", "confirm": true, "secret_params": []string{"elevated_key"}, "available": true}}
+		{"id": "account.purge", "scope": "admin", "confirm": true, "secret_params": []string{"elevated_key"}, "available": true},
+		{"id": "account.adopt", "scope": "admin", "confirm": true, "available": true},
+		{"id": "account.release", "scope": "admin", "confirm": true, "available": true}}
 	if a.serves("calls") {
 		// A physical operation needs calls (its preview and its settling)
 		// and answers its record under result.
@@ -666,7 +668,7 @@ type operationRequest struct {
 func (a *Addon) operation(r *http.Request, body []byte) reply {
 	name := r.PathValue("name")
 	checkout := name == "item.checkout" && a.serves("calls")
-	if name != "password.set" && name != "health.get" && name != "holdings.list" && name != "account.purge" && !checkout {
+	if !slices.Contains([]string{"password.set", "health.get", "holdings.list", "account.purge", "account.adopt", "account.release"}, name) && !checkout {
 		return problem(404, "OPERATION_FAILED", "This add-on has no such operation.", nil)
 	}
 	var req operationRequest
@@ -695,6 +697,8 @@ func (a *Addon) operation(r *http.Request, body []byte) reply {
 		return a.holdingsList(req)
 	case "account.purge":
 		return a.purge(req)
+	case "account.adopt", "account.release":
+		return a.binding(req)
 	}
 	switch password, _ := req.Params["password"].(string); {
 	case blank(req.CallID) || blank(req.Subject):
@@ -760,6 +764,82 @@ func (a *Addon) purge(req operationRequest) reply {
 		delete(a.bindings, req.Subject)
 		a.record("account.purge " + acct.id)
 		return ok(map[string]any{"operation": req.Operation, "subject": req.Subject, "outcome": "succeeded", "detail": "Removed " + acct.username + "."})
+	})
+}
+
+// binding serves account.adopt and account.release (AUTHORING, the account operations), each with
+// its account_id precondition: the account the operator was shown (adopt) or Syndra means
+// (release), refused with 409 when the account named is no longer it. A binding here is the
+// account's own id, never handed out twice, so it never conflicts and an adoption never moves one:
+// a bound subject's adoption is done when it names that subject's account, refused otherwise.
+func (a *Addon) binding(req operationRequest) reply {
+	want, typed := req.Params["account_id"].(string)
+	username, _ := req.Params["username"].(string)
+	adopt := req.Operation == "account.adopt"
+	allowed := map[string]bool{"account_id": true, "username": adopt}
+	switch {
+	case blank(req.CallID) || blank(req.Subject):
+		return problem(400, "BAD_REQUEST", "call_id and subject are required.", nil)
+	case req.Params["account_id"] != nil && !typed:
+		return problem(400, "OPERATION_FAILED", "account_id is a string.", nil)
+	case adopt && blank(username):
+		return problem(400, "OPERATION_FAILED", "account.adopt names the account: username.", nil)
+	}
+	for p := range req.Params {
+		if !allowed[p] {
+			return problem(400, "OPERATION_FAILED", req.Operation+" has no parameter "+p+".", nil)
+		}
+	}
+	identity := map[string]any{"name": req.Operation, "subject": req.Subject, "params": req.Params}
+	return a.once(req.CallID, "operation", identity, func() reply {
+		if refused := a.refuseUnlessActive(); refused != nil {
+			return *refused
+		}
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		done := func(id, detail string) reply {
+			out := map[string]any{"operation": req.Operation, "subject": req.Subject, "outcome": "succeeded", "detail": detail}
+			if id != "" {
+				out["account_id"] = id
+			}
+			return ok(out)
+		}
+		bound := a.bindings[req.Subject]
+		if !adopt {
+			switch {
+			case bound == "":
+				return done("", "No account was bound to this subject.")
+			case want != "" && want != bound:
+				return problem(409, "OPERATION_FAILED", "This subject's binding names another account now, so nothing was released.", nil)
+			}
+			delete(a.bindings, req.Subject)
+			a.record("account.release " + bound)
+			return done(bound, "Syndra no longer manages it. Nothing on the account changed.")
+		}
+		var acct *account
+		for _, x := range a.accounts {
+			if x.username == username {
+				acct = x
+			}
+		}
+		switch {
+		case acct == nil:
+			return problem(404, "OPERATION_FAILED", "No account here is named "+username+".", nil)
+		case want != "" && want != acct.id:
+			return problem(409, "OPERATION_FAILED", username+" is no longer the account you were shown.", nil)
+		case bound == acct.id:
+			return done(acct.id, username+" was already bound to this subject.")
+		case bound != "":
+			return problem(409, "OPERATION_FAILED", "This subject is already bound to another account.", nil)
+		}
+		for subj, id := range a.bindings {
+			if id == acct.id && subj != req.Subject {
+				return problem(409, "OPERATION_FAILED", username+" is already bound to another subject.", nil)
+			}
+		}
+		a.bindings[req.Subject] = acct.id
+		a.record("account.adopt " + acct.id)
+		return done(acct.id, username+" is now bound to this subject. Nothing on it was changed.")
 	})
 }
 

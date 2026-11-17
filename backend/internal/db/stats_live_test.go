@@ -510,38 +510,38 @@ func TestMigration94IsExpandOnly(t *testing.T) {
 	}
 }
 
-// 000100 adds a gap's kind with a default and its check, fills it from what
+// 000101 adds a gap's kind with a default and its check, fills it from what
 // each stored reason was written for, and its down drops exactly the column.
-func TestMigration100IsExpandOnly(t *testing.T) {
-	up, down := readMigrationPair(t, "000100_stats_gap_kind")
+func TestMigration101IsExpandOnly(t *testing.T) {
+	up, down := readMigrationPair(t, "000101_stats_gap_kind")
 	if u := strings.ToUpper(stripSQLComments(up)); strings.Contains(u, "DROP ") || strings.Contains(u, " TYPE ") || strings.Contains(u, "DELETE") {
-		t.Error("000100 up must be additive")
+		t.Error("000101 up must be additive")
 	}
 	for _, want := range []string{
 		"ALTER TABLE addon_metric_gaps ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'unread'",
 		"CHECK (kind IN ('began', 'unread', 'dropped', 'unobserved'))",
 	} {
 		if !strings.Contains(up, want) {
-			t.Errorf("000100 up must contain %q", want)
+			t.Errorf("000101 up must contain %q", want)
 		}
 	}
 	if strings.TrimSpace(stripSQLComments(down)) != "ALTER TABLE addon_metric_gaps DROP COLUMN IF EXISTS kind;" {
-		t.Errorf("000100 down must drop exactly the kind column: %q", down)
+		t.Errorf("000101 down must drop exactly the kind column: %q", down)
 	}
 }
 
-// 000100 runs down and up on the real engine and gives every stored gap the
+// 000101 runs down and up on the real engine and gives every stored gap the
 // kind its reason was written for (began, dropped, unobserved, else unread),
 // and the column refuses a kind the contract does not know. Left where it began.
-func TestLiveMigration100KindsEveryStoredGap(t *testing.T) {
+func TestLiveMigration101KindsEveryStoredGap(t *testing.T) {
 	ctx := statsLive(t)
 	var version int64
 	var dirty bool
 	if err := PG.QueryRow(ctx, `SELECT version, dirty FROM schema_migrations`).Scan(&version, &dirty); err != nil {
 		t.Fatal(err)
 	}
-	if version < 100 || dirty {
-		t.Skipf("the test database is at %d (dirty %t), before this branch's 100", version, dirty)
+	if version < 101 || dirty {
+		t.Skipf("the test database is at %d (dirty %t), before this branch's 101", version, dirty)
 	}
 	config, err := pgxpool.ParseConfig(os.Getenv("SYNDRA_TEST_DATABASE_URL"))
 	if err != nil {
@@ -579,11 +579,11 @@ func TestLiveMigration100KindsEveryStoredGap(t *testing.T) {
 	if err := CollectStats(ctx, statsTarget, "storage.sessions", func(c *StatsTx) error { _, err := c.UpsertGaps(ctx, today, gaps); return err }); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Migrate(99); err != nil {
-		t.Fatalf("000100 down: %v", err)
-	}
 	if err := m.Migrate(100); err != nil {
-		t.Fatalf("000100 up: %v", err)
+		t.Fatalf("000101 down: %v", err)
+	}
+	if err := m.Migrate(101); err != nil {
+		t.Fatalf("000101 up: %v", err)
 	}
 	stored, err := StatsGaps(ctx, statsTarget, ago(400))
 	if err != nil {

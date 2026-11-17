@@ -99,6 +99,9 @@ func (k *kit) mutate() error {
 		{"absent", []string{"absent-unmanaged", "plan-equals-apply"}, func() { k.absent(k.at("absent-unmanaged")) }},
 		{"limit-empty", []string{"limit-empty", "plan-equals-apply"}, func() { k.limitEmpty(k.at("limit-empty")) }},
 		{"operations", []string{"operations", "operations.secret", "strict-requests", "health"}, func() { k.operations(k.at("operations")) }},
+		{"preconditions", []string{"adopt.shown", "adopt.not-shown", "release.not-shown"}, func() {
+			k.preconditions(k.at("adopt.shown"), k.at("adopt.not-shown"), k.at("release.not-shown"))
+		}},
 		{"calls", []string{"calls.recorded", "operations.physical", "health"}, func() { k.callsWrite() }},
 		{"reads", []string{"operations.reads", "operations.result"}, func() {
 			k.readOperations(k.at("operations.reads"), callID)
@@ -322,6 +325,80 @@ func (k *kit) attributed(subj, conf *check) {
 		conf.expect(cf["subject"] != k.cfg.Subject, "the kit's subject is listed as a conflict while bound to account_id %s", k.created.id)
 	}
 	conf.mark() // the kit's own subject was looked for, conflicts or none
+}
+
+// preconditions sends account.adopt and account.release for the kit's own subject with the
+// account_id precondition (AUTHORING, the account operations; RFC 9110 §13.1.1): adopting the
+// kit's own account, already bound to it, with its own id is done (adopt.shown); with an id that is
+// not that account's it is 409 and nothing changes (adopt.not-shown); a release with an id the
+// binding does not name is 409 and the binding stays (release.not-shown). Each goes out only after
+// a plan names the kit's account (viaOwned). A release wrongly let through is put back with the
+// kit's own adoption at once; if that fails too, the kit stops writing to its subject.
+func (k *kit) preconditions(shown, notShown, release *check) {
+	const wrong = "conformance-not-the-account"
+	if !k.m.has("operations") {
+		for _, c := range []*check{shown, notShown, release} {
+			c.skip("feature operations not declared")
+		}
+		return
+	}
+	adopt := func(c *check, id string) *exchange {
+		return k.viaOwned(c)(request{method: http.MethodPost, target: "/operations/account.adopt", schema: "operation_request.json",
+			body: k.operationBody("account.adopt", k.callID(), map[string]any{"username": k.created.username, "account_id": id})})
+	}
+	stillBound := func(c *check, after string) {
+		doc := k.ok(c, k.send(request{method: http.MethodGet, target: "/subjects"}), "subjects.json")
+		for _, s := range objects(doc["subjects"]) {
+			if k.owner(s, false) == ours {
+				c.expect(s["subject"] == k.cfg.Subject, "after %s the kit's account %s no longer carries its subject", after, k.created.id)
+				return
+			}
+		}
+		c.fail("after %s /subjects does not list the kit's account %s", after, k.created.id)
+	}
+	if !k.m.ops["account.adopt"] || k.created.username == "" {
+		shown.skip("account.adopt is not declared available, or the kit's account has no username")
+		notShown.skip("account.adopt is not declared available, or the kit's account has no username")
+	} else {
+		ex := adopt(shown, k.created.id)
+		if ex.status == http.StatusUnprocessableEntity {
+			// AUTHORING: 422 while the add-on cannot yet tell its own service account. Nothing
+			// to judge until it can.
+			for _, c := range []*check{shown, notShown} {
+				c.skip("account.adopt answered 422: the add-on cannot adopt yet (it does not yet know its own account)")
+			}
+		} else {
+			if doc := k.ok(shown, ex, "operation_response.json"); doc != nil {
+				shown.expect(str(doc, "outcome") == "succeeded" && str(doc, "account_id") == k.created.id,
+					"adopting the kit's own account, already bound to it, with its own account_id answered outcome %q account_id %q, want succeeded %s",
+					str(doc, "outcome"), str(doc, "account_id"), k.created.id)
+			}
+			k.refused(notShown, adopt(notShown, wrong), 409, "OPERATION_FAILED", "account.adopt of the kit's own account with an account_id that is not its own")
+			stillBound(notShown, "an adoption with the wrong account_id")
+		}
+	}
+	if !k.m.ops["account.release"] {
+		release.skip("account.release is not declared available")
+		return
+	}
+	ex := k.viaOwned(release)(request{method: http.MethodPost, target: "/operations/account.release", schema: "operation_request.json",
+		body: k.operationBody("account.release", k.callID(), map[string]any{"account_id": wrong})})
+	if k.refused(release, ex, 409, "OPERATION_FAILED", "account.release with an account_id the binding does not name") != nil {
+		stillBound(release, "a release with the wrong account_id")
+		return
+	}
+	if ex.status/100 == 2 && k.m.ops["account.adopt"] {
+		// Let go against its precondition: bound back to the kit's own account, now. Sent without a
+		// plan first (a plan names no account any more): its own account, by its own name and id.
+		back := k.send(request{method: http.MethodPost, target: "/operations/account.adopt", schema: "operation_request.json",
+			body: k.operationBody("account.adopt", k.callID(), map[string]any{"username": k.created.username, "account_id": k.created.id})})
+		if back.status/100 == 2 {
+			return
+		}
+	}
+	if ex.status/100 == 2 {
+		k.stopReason = "account.release ignored its account_id and let go of the kit's account, and the kit could not bind it back"
+	}
 }
 
 // notReused purges the kit's own account, which the withdraw step turned off, and creates it

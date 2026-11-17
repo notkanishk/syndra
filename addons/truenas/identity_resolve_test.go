@@ -185,7 +185,7 @@ func TestEveryCallerResolvesOneIdentity(t *testing.T) {
 				switch {
 				case c.conflict:
 					if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "now held by a different account") ||
-						!strings.Contains(rr.Body.String(), "Stop tracking this person") {
+						!strings.Contains(strings.ToLower(rr.Body.String()), "stop tracking this person") {
 						t.Fatalf("%s: want 409 in the add-on's words, got %d %s", op.name, rr.Code, rr.Body.String())
 					}
 					if strings.Contains(rr.Body.String(), itoa(c.holderUID(t))) {
@@ -238,12 +238,30 @@ func TestEveryCallerResolvesOneIdentity(t *testing.T) {
 				}
 			}
 
-			// Adoption's repeat check: the same account again is done, by the module.
+			// Adoption's repeat check: the same account again is done, by the module. When another
+			// account holds the recorded name, naming it is the move (owner ruling 17 Nov 2026): the
+			// binding goes to the holder, and nothing on any account is written.
 			{
 				s, m := c.server(t)
 				rr := postOperation(t, s, "account.adopt",
 					`{"call_id":"a1","subject":"sub-1","actor":"op_1","params":{"username":"`+c.binding.Username+`"}}`)
+				nameHeld := c.conflict && strings.Contains(c.name, "name held")
 				switch {
+				case nameHeld:
+					// Never by the name alone: the move needs the account the operator was shown.
+					if b, _, _ := s.store.GetBinding("sub-1"); rr.Code != http.StatusConflict ||
+						!strings.Contains(rr.Body.String(), "needs the account you were shown") || b.UID != c.binding.UID {
+						t.Fatalf("adopt the holder by name alone: want 409 and nothing moved, got %d %s, %+v", rr.Code, rr.Body.String(), b)
+					}
+					rr = postOperation(t, s, "account.adopt", `{"call_id":"a2","subject":"sub-1","actor":"op_1","params":{"username":"`+
+						c.binding.Username+`","account_id":"`+itoa(c.holderUID(t))+`"}}`)
+					var res OperationResult
+					_ = json.Unmarshal(rr.Body.Bytes(), &res)
+					b, _, _ := s.store.GetBinding("sub-1")
+					if rr.Code != http.StatusOK || res.AccountID != itoa(c.holderUID(t)) || b.UID != c.holderUID(t) {
+						t.Fatalf("adopt the holder of the name: want the binding moved to %d, got %d %s, %+v",
+							c.holderUID(t), rr.Code, rr.Body.String(), b)
+					}
 				case c.conflict:
 					if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "now held by a different account") {
 						t.Fatalf("adopt: want 409, got %d %s", rr.Code, rr.Body.String())
@@ -358,7 +376,9 @@ func TestEveryCallerResolvesOneIdentity(t *testing.T) {
 						t.Fatalf("/subjects: want the one conflict, got %+v", got.Conflicts)
 					}
 					cf := got.Conflicts[0]
-					if cf.Subject != "sub-1" || cf.AccountID != itoa(c.holderUID(t)) || cf.Adoptable || cf.Detail == "" || cf.Next == "" {
+					// The holder is bound to nobody here, so the move is on offer (attributeOver).
+					if cf.Subject != "sub-1" || cf.AccountID != itoa(c.holderUID(t)) || !cf.Adoptable || cf.Detail == "" ||
+						!strings.HasPrefix(cf.Next, "Adopt "+cf.Username+" if it is theirs.") {
 						t.Errorf("/subjects: conflict %+v, want sub-1's with holder uid %d and its words", cf, c.holderUID(t))
 					}
 				case len(got.Conflicts) != 0:

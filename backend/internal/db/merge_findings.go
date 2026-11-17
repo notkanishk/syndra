@@ -49,6 +49,13 @@ const (
 	// ResolutionUnbound answers it the other way: Syndra stops managing the
 	// account rather than recreating it.
 	ResolutionUnbound = "unbound"
+	// ResolutionAdopted answers a binding_conflict: the account holding the
+	// person's recorded name or number is theirs, and account.adopt moves the
+	// binding to it (migration 000100).
+	ResolutionAdopted = "adopted"
+	// ResolutionKept answers a claimed_twice binding_conflict: the account is
+	// this person's, and the other person's binding is released (000100).
+	ResolutionKept = "kept"
 	// ResolutionAgreed is the one nobody chooses. The two sides now match — a
 	// policy changed, or the target did — so the disagreement this row records
 	// has stopped existing. Closing it is not automatic resolution: nothing was
@@ -324,7 +331,8 @@ func ReleaseMergeDecision(ctx context.Context, id, actor, decision string) error
 
 func isMergeResolution(v string) bool {
 	switch v {
-	case ResolutionKeepOurs, ResolutionTakeTheirs, ResolutionReprovisioned, ResolutionUnbound:
+	case ResolutionKeepOurs, ResolutionTakeTheirs, ResolutionReprovisioned, ResolutionUnbound,
+		ResolutionAdopted, ResolutionKept:
 		return true
 	}
 	return false

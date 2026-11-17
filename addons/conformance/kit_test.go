@@ -395,6 +395,9 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.OffWaitsOnOperator:        "standing.off",
 		reference.OmitsSubject:              "subjects.subject",
 		reference.ConflictAlsoAttributed:    "subjects.conflicts",
+		reference.AdoptIgnoresAccountID:     "adopt.not-shown",
+		reference.AdoptRefusesRepeat:        "adopt.shown",
+		reference.ReleaseIgnoresAccountID:   "release.not-shown",
 		// Advisory: an app may recycle ids (AUTHORING, chapter 2), so it warns and the run exits 0.
 		reference.ReusedID: "(TestAReusedIDWarnsAndNeverFailsTheRun)",
 		// A reply lost mid-call and two calls racing a limit are beyond a
