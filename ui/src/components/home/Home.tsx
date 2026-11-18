@@ -55,7 +55,7 @@ import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
 import { ShellNotices } from "@/components/shell/ShellNotices";
-import { firstName, greeting, isQuietHour, lastHere, WELCOME } from "@/lib/greeting";
+import { firstName, lastHere, PHASE_WORD, WELCOME } from "@/lib/greeting";
 import { useDayPhase } from "@/lib/useDayPhase";
 import { useTerms } from "@/lib/queries/useTerms";
 import { termDayLine, termHolding } from "@/lib/term-dates";
@@ -384,7 +384,7 @@ export function Home({ session }: { session: SessionUser }) {
             leaving one word stranded. */}
         {/* measure-exempt: the greeting's balance widths (D-1 §6), a display line, not a sentence. */}
         <h1 className="type-greeting max-w-[22ch] text-balance tablet:max-w-[34ch]">
-          {now ? greeting(now) : <span className="invisible">Afternoon</span>}
+          {phase ? PHASE_WORD[phase] : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}.{" "}
           <span className="text-faint">
             <Crossfade id={welcome ? WELCOME : headline} inline>
@@ -404,7 +404,7 @@ export function Home({ session }: { session: SessionUser }) {
         </div>
         {/* The term line (A-24 §3.1, Q3): from the terms setting and Ending soon's own read. It opens
             when its reads land, so nothing below jumps. */}
-        {now && terms.data && (
+        {now && (
           <Unfold open={Boolean(term)}>
             {term && <TermLine term={term} ending={summary.data?.expiring_grants ?? []} now={now} />}
           </Unfold>
@@ -476,7 +476,7 @@ export function Home({ session }: { session: SessionUser }) {
               (nothingCameIn && here ? `Since ${here.since}, nothing came in. ` : "") +
               "No open requests, and no access ending in the next 14 days." +
               // Late at night, on a calm day only: permission to stop (A-18 idea 9).
-              (now && isQuietHour(now) ? " It will keep until morning." : "")
+              (phase === "quiet" ? " It will keep until morning." : "")
             }
           />
         </div>

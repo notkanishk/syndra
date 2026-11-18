@@ -173,7 +173,7 @@ describe("usage", () => {
     const row = screen.getByText("46.0 GiB of 50.0 GiB").closest(".row-divider") as HTMLElement;
     expect(within(row).getByRole("meter").firstElementChild).toHaveClass("bg-warn");
     // A-24 Q18: one sentence under the meter, from the same read: what is left, said as a person asks it.
-    const room = within(row).getByText("Getting full: 4.0 GiB left.");
+    const room = within(row).getByText("4.0 GiB left.");
     expect(within(row).getByRole("meter").compareDocumentPosition(room) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const quack = screen.getByText("quack_share").closest(".row-divider") as HTMLElement;
     expect(within(quack).queryByText(/GiB|Nothing saved/)).toBeNull();

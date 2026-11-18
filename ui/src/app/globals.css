@@ -1104,6 +1104,13 @@
     color-mix(in srgb, var(--accent) calc(var(--hour-reach) * var(--hour-weight)), transparent),
     transparent 70%
   );
+  /* The pool fades to nothing inside its own box on every side (a mask is alpha only, so its
+     colour words are no colour on screen): where a place puts the light past the box's edge,
+     that edge is never seen as a line, in either room. */
+  mask-image:
+    linear-gradient(to right, transparent, black 18%, black 82%, transparent),
+    linear-gradient(to bottom, transparent, black 22%, black 78%, transparent);
+  mask-composite: intersect;
 
   /* Morning: low, from the left. */
   &[data-hour="morning"] {
@@ -1717,22 +1724,12 @@ html.theme-fading *::after {
     box-shadow: 0 0 14px 2px var(--mark-glow);
   }
 
-  /* The room's state in the rail (A-24 Q5). Needs you keeps the dot as built;
-     the others say themselves in the tokens their meaning already has: lime is
-     "nothing needed here" as a dot, which is exactly what --healthy allows;
-     amber is a broken assumption, and breathes because it is still going on;
-     faint is the quiet hours, when it will keep. Both rooms, from the tokens. */
-  .syndra-mark[data-room="clear"] {
-    --mark-dot: var(--healthy);
-    --mark-glow: color-mix(in srgb, var(--healthy) 45%, transparent);
-  }
+  /* The room's state in the rail (A-24 Q5), only where the reading proves it:
+     Zitadel not answering is a broken assumption, so amber, and it breathes
+     because it is still going on. Both rooms, from the tokens. */
   .syndra-mark[data-room="waiting"] {
     --mark-dot: var(--warn);
     --mark-glow: color-mix(in srgb, var(--warn) 45%, transparent);
-  }
-  .syndra-mark[data-room="quiet"] {
-    --mark-dot: var(--faint);
-    --mark-glow: transparent;
   }
 }
 

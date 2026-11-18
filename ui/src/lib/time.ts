@@ -114,6 +114,12 @@ export function civilDay(at: Date = new Date()): string {
   return `${w.year}-${pad(w.month)}-${pad(w.day)}`;
 }
 
+/**
+ * The makerspace's hour of an instant, 0 to 23: the wall clock in the
+ * configured zone, never the browser's (the standing rule of 14 Nov 2026).
+ */
+export const wallHour = (at: Date = new Date()): number => wall(at).hour % 24;
+
 /** Whether two instants fall on the same makerspace day. */
 export const isSameDay = (a: Date, b: Date): boolean => civilDay(a) === civilDay(b);
 

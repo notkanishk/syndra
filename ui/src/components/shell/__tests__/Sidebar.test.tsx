@@ -250,7 +250,7 @@ describe("the rail's active row", () => {
   });
 });
 
-// A-24 Q5: the mark says the room's state from this rail's own reading, and never more than it can prove.
+// A-24 Q5: the mark says the room only where this rail's own reading proves it.
 describe("the mark in the rail", () => {
   const quiet: Indicators = {
     pending_requests: 0,
@@ -264,32 +264,23 @@ describe("the mark in the rail", () => {
   };
   const room = () => document.querySelector(".syndra-mark")?.getAttribute("data-room");
 
-  it("is violet when anything the reading counts waits, whichever view shows", () => {
-    indicators.data = { ...quiet, drift: 3 };
-    view.audience = "basic";
-    renderRail();
-    expect(room()).toBe("needs");
-  });
-
-  it("is amber and breathing while Zitadel isn't answering, whatever the counts", () => {
-    indicators.data = { ...quiet, pending_requests: 2, zitadel_reachable: false };
+  it("is amber and breathing while Zitadel isn't answering", () => {
+    indicators.data = { ...quiet, zitadel_reachable: false };
     renderRail();
     expect(room()).toBe("waiting");
     expect(document.querySelector(".syndra-mark-dot")).toHaveClass("breathe");
   });
 
-  it("never says nothing waits: the reading does not carry all of Home's blocks, so the mark is as built", () => {
-    indicators.data = quiet;
-    renderRail();
+  it("is otherwise as built: with Zitadel answering, without a real reading, and for a member", () => {
+    indicators.data = { ...quiet, pending_requests: 2 };
+    const answering = renderRail();
     expect(room()).toBeNull();
-  });
-
-  it("is as built with no real reading, and for a member", () => {
-    indicators.data = { ...quiet, drift: 1 };
+    answering.unmount();
+    indicators.data = { ...quiet, zitadel_reachable: false };
     indicators.isPlaceholderData = true;
-    const { unmount } = renderRail();
+    const placeholder = renderRail();
     expect(room()).toBeNull();
-    unmount();
+    placeholder.unmount();
     indicators.isPlaceholderData = false;
     view.isOperator = false;
     view.audience = "member";

@@ -1,4 +1,3 @@
-import { meterState } from "@/components/ui/Meter";
 import { formatBytes } from "@/lib/format";
 import { NOTHING_TO_DO } from "@/lib/outcome";
 
@@ -17,13 +16,12 @@ export const PLENTY_BELOW = 0.5;
 
 /**
  * One sentence under the storage meter (A-24 Q18): how much is left, said as a
- * person asks it, from the same read the meter draws. Plenty of room under half;
- * what is left up to the meter's own "nearly full"; getting full past it. At the
+ * person asks it, from the same read the meter draws: plenty of room under
+ * half, then what is left (the meter itself says "nearly full" past 90%). At the
  * limit the card's own "Full." line says it, with its next step, so this is null.
  */
 export function roomLine(used: number, quota: number): string | null {
   if (quota <= 0 || used >= quota) return null;
   const left = formatBytes(quota - used);
-  if (used < quota * PLENTY_BELOW) return "Plenty of room.";
-  return meterState(used, quota) === "nearly" ? `Getting full: ${left} left.` : `${left} left.`;
+  return used < quota * PLENTY_BELOW ? "Plenty of room." : `${left} left.`;
 }

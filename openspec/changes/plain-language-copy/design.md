@@ -88,7 +88,7 @@ The character is in *when* she speaks and *how exactly*, not in extra words. Str
 | Where | Words |
 |---|---|
 | My access, calm | "Nothing needs you right now." (the same words as Home) |
-| My access, greeting | "Morning, Cody. Here's what you can use." (Morning before 12, Afternoon before 17, Evening after) |
+| My access, greeting | "Morning, Cody. Here's what you can use." (Morning before 12, Afternoon before 17, Evening after, and Evening through the quiet hours, 22:00 to 05:00, so nobody is told Morning at 2 a.m.; the hours are the makerspace's configured zone, never the browser's: `dayPhase`, the same part of the day as Home's light, A-24 §3.1) |
 | My access, quiet month | "Nothing has changed in the last 30 days." |
 | My access, access starts | "From today, you can use Laser cutting." |
 | Drift, all clear | "Everyone inside is on the list, and everyone on the list is inside." |
@@ -1005,7 +1005,7 @@ The foundation changes how things move and where a figure leads, and adds four p
 
 | Where | Words |
 |---|---|
-| Home's term line, beside the date line (§3.1, Q3) | {Name} term, day {n} of {total} · Ends {day}. For a screen reader, the whole line: {Name} term, day {n} of {total}. Access ends for {count} people on {days}. (the count in words, the days as the date line writes them). No line between terms. |
-| A person's page, the line under the name, in the lede's seat (§9, Q10) | Holds {n} roles across {m} projects. / Holds {n} role(s) in {project}. / Holds no roles. Then, no more than one: {Role} in {Project} ends today / tomorrow / in {n} days. · {Role} in {Project} isn't in Zitadel yet. ({n} roles they were given aren't in Zitadel yet.) · {Role} in {Project} is on its way to Zitadel. ({n} roles are on their way to Zitadel.) Says less, never a count, when the read is missing or failed: Zitadel couldn't be read just now, so what they hold isn't counted.; cut short: Zitadel's answer was cut short, so what they hold isn't counted.; loading: Checking what they hold. |
-| Network storage, the sentence under the meter (Q18) | Plenty of room. (under half) · {left} left. · Getting full: {left} left. (from the meter's nearly full) · nothing at the limit, where the card's Full. line says it. |
-| Home's light and the rail's mark (§3.1, Q5) | No words: both are hidden from assistive technology; the date line, the headline and the rail's own counts say what they show. |
+| Home's term line, one of the head's lines (§3.1, Q3) | Plain text: {Name} term, day {n} of {total} · Ends {day}. Its track alone is named, and only when something ends on it: Access ends for {count} people on {days}. (the count in words, the days as the date line writes them). No line between terms. |
+| A person's page, the line under the name, in the lede's seat (§9, Q10) | Holds {n} roles across {m} projects. / Holds {n} role(s) in {project}. / Holds no roles. (counted as the People row counts). Then, no more than one: {Role} in {Project} ends today / tomorrow / in {n} days. (never for a role a second source also gives) · Not in Zitadel: {Role} in {Project}. (Not in Zitadel: {n} roles they were given.) · {Role} in {Project} is on its way to Zitadel. ({n} roles are on their way to Zitadel.) With no count to say (loading, or Zitadel's read missing, failed or cut short): Checking what Zitadel shows. The page's own read warning says which. |
+| Network storage, the sentence under the meter (Q18) | Plenty of room. (under half) · {left} left. (the meter itself says nearly full past 90%) · nothing at the limit, where the card's Full. line says it. |
+| Home's light and the rail's mark (§3.1, Q5) | No words: both are hidden from assistive technology; the greeting, the date line and the rail's own counts say what they show. The mark changes only while Zitadel isn't answering (amber, breathing). |

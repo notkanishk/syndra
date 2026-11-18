@@ -200,7 +200,7 @@ export function hasAccess(entry: UserListEntry): boolean {
  * a capped sweep deletes nothing and simply never reaches some people, which
  * looks exactly like holding nothing.
  */
-export function observedHolding(entry: UserListEntry): number | undefined {
+export function observedHolding(entry: Pick<UserListEntry, "observed_role_count" | "observation">): number | undefined {
   if (entry.observed_role_count === undefined) return undefined;
   if (entry.observed_role_count > 0) return entry.observed_role_count;
   const basis = entry.observation;

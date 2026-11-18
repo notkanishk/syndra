@@ -64,7 +64,7 @@ import { useTargets } from "@/lib/queries/useTargets";
 import { projectSignInLine } from "@/lib/sign-in-line";
 import { sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
-import { personLine } from "@/components/people/personLine";
+import { CHECKING, personLine } from "@/components/people/personLine";
 
 type Tab = "access" | "requests" | "activity";
 
@@ -132,7 +132,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
           <PageHeader
             className="w-full flex-1"
             title={seed.name}
-            lede={personLine(undefined, { role: () => "" })}
+            lede={CHECKING}
             meta={<MetaRow>{[seed.email, seed.title || null, seed.team || null]}</MetaRow>}
           />
         </div>

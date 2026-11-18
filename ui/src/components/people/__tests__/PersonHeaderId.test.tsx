@@ -72,7 +72,7 @@ describe("a person's header", () => {
   // A-24 §9: the line that knows sits where the lede was, and with no read of Zitadel it says so.
   it("opens on the line that knows, not the lede every person had", () => {
     renderPerson();
-    expect(screen.getByText("Zitadel hasn't answered yet, so what they hold isn't counted.")).toBeInTheDocument();
+    expect(screen.getByText("Checking what Zitadel shows.")).toBeInTheDocument();
     expect(screen.queryByText(/Everything this person can use/)).toBeNull();
   });
 });
