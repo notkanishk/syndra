@@ -28,6 +28,8 @@ import {
 import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestDecisions } from "@/lib/request-decisions";
 import { isRefused, refusalCause } from "@/lib/wait-reason";
+import { recall, remember } from "@/lib/memory";
+import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useDrainPropagations, useGaveUpPropagations, useMarkGaveUpSeen } from "@/lib/queries/usePropagation";
 import { useAutoRetry, useIndicatorsRead } from "@/lib/queries/useIndicators";
 import { useMissedOnboarding, type MissedOnboardingReport } from "@/lib/queries/useOperations";
@@ -233,6 +235,13 @@ export function Home({ session }: { session: SessionUser }) {
     advanced,
     rows: queue.rows.length + gaps.rows.length,
   });
+  // Home emptied in front of the reader (A-24 §4.1): the all-clear lifts, and its dot blooms when it was
+  // their own act (a write of theirs that landed in the last 30s). Home's work is one queue for this.
+  const { cleared } = useQueueCleared(calm ? NO_WORK : WORK, !loading && !error, true, advanced);
+  const mine = Boolean(cleared?.mine);
+  // The list closes, the vivid ending, at most once a day on this device and only by their own hand.
+  const [closes, setCloses] = useState(false);
+  useEffect(() => setCloses(mine && closesToday()), [mine]);
   // A swap held for the pointer (S5) keeps the grid as it last was, and the
   // headline with it: what leaves is what was there.
   const held = useRef<{ grid: React.ReactNode; blocks: number }>({ grid: null, blocks: 0 });
@@ -440,6 +449,10 @@ export function Home({ session }: { session: SessionUser }) {
         <div className="panel">
           <EmptyState
             resolved
+            lift={cleared !== null}
+            bloom={mine}
+            closes={closes}
+            plate="shut"
             title="Nothing here needs you."
             guidance={
               // Since they were last here (A-20 P18), in the guidance's own seat: no row is added.
@@ -493,6 +506,19 @@ function QueueColumn({
       </CardGrid>
     </section>
   );
+}
+
+// Home's work, as one queue for `useQueueCleared`: something, or nothing. Stable, so a render is no change.
+const WORK = ["work"];
+const NO_WORK: string[] = [];
+
+const CLOSED = "syndra:home-closed";
+/** True the first time today (the reader's own clock, as the greeting's): the list closes once a day at most. */
+function closesToday(): boolean {
+  const today = new Date().toDateString();
+  if (recall("local", CLOSED) === today) return false;
+  remember("local", CLOSED, today);
+  return true;
 }
 
 /**

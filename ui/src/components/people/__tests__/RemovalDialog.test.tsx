@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
@@ -353,6 +353,41 @@ describe("the sheet is its result (A-22)", () => {
     expect(await screen.findByText("Not revoked")).toBeInTheDocument();
     expect(screen.getByText(/will lose this role/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Revoke this role" })).toBeInTheDocument();
+  });
+});
+
+// A-24 §5: the revocation's trail, only when one was queued for this role and nothing kept it.
+describe("the revocation's trail", () => {
+  const trail = () => screen.queryByRole("list", { name: "The change's way to Zitadel" });
+  const revoke = async (answer: object) => {
+    removeDirect.mockResolvedValueOnce(answer);
+    open({ sources: [direct], grantId: "g_88" });
+    await planRead();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke this role" }));
+    await screen.findByRole("button", { name: "Close" });
+  };
+
+  it("follows a revoke Zitadel took: recorded, sent, and not read back until a read says it is gone", async () => {
+    await revoke({ status: "applied", revoked_roles: ["trained"] });
+    expect(trail()).toHaveTextContent("Step 1: Recorded in Syndra.Step 2: Sent to Zitadel.Step 3: Not read back from Zitadel yet.");
+  });
+
+  it("still follows this role's revoke when the cascade kept some other role", async () => {
+    await revoke({ status: "applied", revoked_roles: ["pLaser/trained"], retained_roles: ["pLaser/member"] });
+    expect(trail()).not.toBeNull();
+  });
+
+  it("says a revoke that waits is not removed from Zitadel yet", async () => {
+    await revoke({ status: "pending", wait_reason: "role_waits" });
+    expect(trail()).toHaveTextContent("Step 2: Not sent to Zitadel yet.Step 3: Not removed from Zitadel yet.");
+  });
+
+  it("is not drawn when nothing was queued, or something else still gives the role", async () => {
+    await revoke({ status: "applied", retained_roles: ["pLaser/trained"] });
+    expect(trail()).toBeNull();
+    cleanup();
+    await revoke({});
+    expect(trail()).toBeNull();
   });
 });
 

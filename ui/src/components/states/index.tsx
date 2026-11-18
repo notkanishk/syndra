@@ -104,6 +104,8 @@ export function EmptyState({
   resolved = false,
   bloom = false,
   lift = false,
+  closes = false,
+  plate,
 }: {
   title: string;
   guidance?: string;
@@ -113,14 +115,28 @@ export function EmptyState({
   bloom?: boolean;
   /** The list just emptied in front of the reader: the line rises into its place. */
   lift?: boolean;
+  /**
+   * The list closes (A-24 §4.1 vivid): the sentence takes the heading size and a
+   * lime hairline draws along the top edge over one flash, then rests. Home's
+   * all-clear only, by the reader's own hand, once a day. Never on a consent, a
+   * refusal, a failure or a loss of access.
+   */
+  closes?: boolean;
+  /** Its drawing (A-24 §7, Q9): shut for a queue that is clear, open for a list just beginning. */
+  plate?: PlateKind;
 }) {
   return (
-    <div role="status" className={`${lift ? "lift-in" : "tint-in"} flex flex-col justify-center gap-2.5 px-6 py-(--empty-y) tablet:px-(--card-x)`}>
+    <div
+      role="status"
+      className={`${lift ? "lift-in" : "tint-in"} relative flex items-center gap-6 px-6 py-(--empty-y) tablet:px-(--card-x)`}
+    >
+      {closes && <span aria-hidden data-close-line className="close-line" />}
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-2.5">
       <div className="flex items-center gap-2.5">
         {resolved && (
           <StatusDot tone="healthy" bloom={bloom} />
         )}
-        <div className="type-empty-title">{title}</div>
+        <div className={closes ? "type-section-title" : "type-empty-title"}>{title}</div>
       </div>
       {guidance && <p className="measure text-body text-muted">{guidance}</p>}
       {action && (
@@ -134,7 +150,34 @@ export function EmptyState({
           )}
         </div>
       )}
+      </div>
+      {PLATES_SHOWN && plate && <Plate kind={plate} />}
     </div>
+  );
+}
+
+export type PlateKind = "shut" | "open";
+
+/**
+ * Plates are drawn and ready, and not shown (A-24 Q9: the owner judges them at
+ * true size on staging first). Turning them on is this one constant.
+ */
+export const PLATES_SHOWN = false;
+
+/**
+ * A plate (A-24 §7): a drawing from the door, in hairlines with one lit point,
+ * in the empty state's right seat. Shut, with a lime point, for a queue that is
+ * clear; open, with violet light, for a list that is only beginning. None for a
+ * search that missed or a read that failed: tone follows the cause. Decoration,
+ * so hidden from assistive technology; the sentence beside it says everything.
+ */
+export function Plate({ kind }: { kind: PlateKind }) {
+  return (
+    <span aria-hidden data-plate={kind} className="plate">
+      <span className="plate-arch" />
+      <span className="plate-floor" />
+      <span className="plate-point" />
+    </span>
   );
 }
 

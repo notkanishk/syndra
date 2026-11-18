@@ -10,6 +10,7 @@ import {
   type SourceKind,
 } from "@/components/access/AccessSource";
 import { RoleRef } from "@/components/names";
+import { ChangeTrail } from "@/components/people/ChangeTrail";
 import { useShownNames } from "@/components/names/shownNames";
 import { sortNames } from "@/lib/sort";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -294,6 +295,8 @@ function DirectDialog({
   const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [word, setWord] = useState<string | null>(null);
+  // The revocation's trail (A-24 §5): only when one was queued for this role and nothing kept it.
+  const [trail, setTrail] = useState<{ sent: boolean; at: number } | null>(null);
   const retained = others.length > 0;
   const roleLabel = useRoleLabel()(removal);
   const shown = useShownNames();
@@ -428,6 +431,9 @@ function DirectDialog({
         />
       )}
       {outcome && <ActionOutcome word={word ?? resultWord(outcome, cancelOnly ? "cancel" : "revoke")} outcome={outcome} person={userId} className="mx-6 mb-1" />}
+      {trail && userId && (
+        <ChangeTrail userId={userId} projectId={removal.projectId} roleKey={removal.roleKey} act="revoke" sent={trail.sent} at={trail.at} className="mx-6 mb-1 mt-3" />
+      )}
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
@@ -499,6 +505,11 @@ function DirectDialog({
                 // diff the server does — the UI must not hold a second opinion
                 // about somebody's access.
                 setOutcome(removalOutcome(result, roleLabel, shown, auto));
+                // Only this role's own revoke: one a bundle or rule still gives (`retained_roles`, "project/role") is not sent.
+                const kept = result.retained_roles?.includes(`${removal.projectId}/${removal.roleKey}`);
+                if (result.status && !kept && result.status !== "failed" && !isRefused(result.wait_reason)) {
+                  setTrail({ sent: result.status === "applied" && !result.wait_reason, at: Date.now() });
+                }
               } catch (error) {
                 held.release();
                 // Their access moved since the plan was read: nothing was written.

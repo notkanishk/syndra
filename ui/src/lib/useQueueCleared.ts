@@ -29,13 +29,22 @@ export interface QueueCleared<T> {
  * counts as theirs. It is still never claimed on arrival or on a refresh.
  *
  * Clears itself when the queue fills again.
+ *
+ * `scope` is what the queue is of (Home's view, Basic or Advanced): when it
+ * changes, the queue is a different one, so what it holds now is simply taken
+ * as seen. A switch to a view with less in it never reads as having emptied it.
  */
-export function useQueueCleared<T>(items: T[], ready: boolean, anyOwnAct = false) {
+export function useQueueCleared<T>(items: T[], ready: boolean, anyOwnAct = false, scope?: unknown) {
   const [seen, setSeen] = useState<T[]>([]);
   const [cleared, setCleared] = useState<QueueCleared<T> | null>(null);
+  const [scoped, setScoped] = useState(scope);
   const sending = useRef<{ count: number; at: number } | null>(null);
 
-  if (ready && items.length > 0 && !sameItems(items, seen)) {
+  if (scope !== scoped) {
+    setScoped(scope);
+    setSeen(items);
+    if (cleared) setCleared(null);
+  } else if (ready && items.length > 0 && !sameItems(items, seen)) {
     setSeen(items);
     if (cleared) setCleared(null);
   } else if (ready && items.length === 0 && seen.length > 0 && !cleared) {

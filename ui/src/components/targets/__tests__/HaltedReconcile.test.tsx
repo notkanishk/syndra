@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
+import { LONG_WAIT_MS } from "@/lib/useLongWait";
 
 /**
  * A pass that concluded nothing must not report three zeroes.
@@ -27,6 +28,7 @@ vi.mock("@/lib/queries/useTargetSystemHealth", () => ({
 
 // The pass the card shows; a test may swap it before rendering.
 const pass = vi.hoisted(() => ({
+  pending: false,
   data: {
     target: "truenas",
     bound: 0,
@@ -66,7 +68,7 @@ vi.mock("@/lib/queries/useTargets", () => {
     useSetLifecycle: inert,
     useReleaseBinding: inert,
     useAdoptAccount: inert,
-    useReconcileTarget: () => ({ ...inert(), data: pass.data }),
+    useReconcileTarget: () => ({ ...inert(), data: pass.data, isPending: pass.pending }),
   };
 });
 
@@ -152,5 +154,22 @@ describe("a reconcile pass that halted", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/addon_outdated/)).toBeNull();
     expect(screen.queryByText(/once it is reachable|older copy/)).toBeNull();
+  });
+});
+
+// A-24 §6: past ten seconds a check says so, once. Never that its result waits on return:
+// it is a mutation's answer, gone if the page is left (A-24 §13).
+describe("a check that takes long", () => {
+  it("says it is still reading, only after ten seconds, and never that you can leave", () => {
+    vi.useFakeTimers();
+    pass.pending = true;
+    renderTarget();
+    act(() => void vi.advanceTimersByTime(LONG_WAIT_MS - 1));
+    expect(screen.queryByText(/^Still reading /)).toBeNull();
+    act(() => void vi.advanceTimersByTime(1));
+    expect(screen.getByText(/^Still reading .+\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/You can leave this page/)).toBeNull();
+    pass.pending = false;
+    vi.useRealTimers();
   });
 });

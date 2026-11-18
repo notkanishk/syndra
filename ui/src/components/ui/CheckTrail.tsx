@@ -21,10 +21,14 @@ export interface TrailCheck {
  * The six-check trail (A-11, A-14 §1, S3): one dot and one sentence a check, in
  * the order a token is made, each step joined to the next by a quiet line.
  * `compact` is debug mode's form: details only where a check didn't pass.
+ *
+ * `label` makes it a route rather than a set of checks (A-24 §5, a change's
+ * trail): the list is named by it, and each step is read as "Step n:" with no
+ * pass or fail word, because its own sentence already says how far it got.
  */
-export function CheckTrail({ checks, compact = false }: { checks: TrailCheck[]; compact?: boolean }) {
+export function CheckTrail({ checks, compact = false, label }: { checks: TrailCheck[]; compact?: boolean; label?: string }) {
   return (
-    <ol className="flex flex-col" aria-label="Checks">
+    <ol className="flex flex-col" aria-label={label ?? "Checks"}>
       {checks.map((check, i) => {
         const details = !compact || check.tone !== "healthy";
         return (
@@ -35,7 +39,7 @@ export function CheckTrail({ checks, compact = false }: { checks: TrailCheck[]; 
             </span>
             <div className={`flex min-w-0 flex-col gap-1 ${i < checks.length - 1 ? "pb-3.5" : ""}`}>
               <span className="text-body leading-[1.5] text-ink [text-wrap:pretty]">
-                <span className="sr-only">{`Check ${i + 1}, ${TONE_WORD[check.tone]}: `}</span>
+                <span className="sr-only">{label ? `Step ${i + 1}: ` : `Check ${i + 1}, ${TONE_WORD[check.tone]}: `}</span>
                 <Ticks text={check.sentence} />
               </span>
               {details &&

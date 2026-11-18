@@ -15,6 +15,8 @@ import { motionInTests } from "@/test-utils/motion";
 
 const state = vi.hoisted(() => ({
   advanced: true,
+  // Whether a write of the reader's own landed in the last 30s (lib/query-client).
+  own: false,
   governance: {} as Record<string, unknown>,
 }));
 
@@ -65,6 +67,10 @@ vi.mock("@/lib/ui-view", () => ({
   useIsAdvanced: () => state.advanced,
   useUiView: () => ({ view: "basic", setView: () => {} }),
 }));
+vi.mock("@/lib/query-client", async (original) => ({
+  ...(await original<typeof import("@/lib/query-client")>()),
+  ownActWithin: () => state.own,
+}));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alreadyHeld: () => false, ApproveButton: ({ onClick }: { onClick: () => void }) => <button type="button" onClick={onClick}>Approve</button> }));
 
@@ -96,6 +102,7 @@ const drifting = () => ({ ...quiet(), drift: { count: 3, top: [] } });
 
 beforeEach(() => {
   state.advanced = true;
+  state.own = false;
   state.governance = drifting();
   Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
   vi.useFakeTimers();
@@ -212,5 +219,62 @@ describe("Home's calm line and grid hand over", () => {
     home.reread();
     expect(calmPhase()).toBe("open");
     expect(gridPhase()).toBeNull();
+  });
+});
+
+// A-24 §4.1: the ending of Home's queue. It lifts when Home empties in front of the reader,
+// blooms when their own act emptied it, and closes (the vivid ending) once a day at most.
+describe("Home's all-clear, as an ending", () => {
+  const line = () => screen.getByText("Nothing here needs you.").closest('[role="status"]')!;
+  const empty = () => {
+    const home = mount();
+    state.governance = quiet();
+    home.reread();
+    later(TINT_MS);
+    return home;
+  };
+
+  it("is simply there on arrival: no lift, no bloom, no close", () => {
+    state.governance = quiet();
+    mount();
+    expect(line()).toHaveClass("tint-in");
+    expect(line().querySelector(".bloom")).toBeNull();
+    expect(line().querySelector("[data-close-line]")).toBeNull();
+  });
+
+  it("emptied by a read, not by the reader: it lifts, and neither blooms nor closes", () => {
+    empty();
+    expect(line()).toHaveClass("lift-in");
+    expect(line().querySelector(".bloom")).toBeNull();
+    expect(line().querySelector("[data-close-line]")).toBeNull();
+  });
+
+  it("a switch to a view with less in it is not an emptying: no lift, no bloom, no close", () => {
+    state.own = true;
+    const home = mount(); // Advanced, with drift: Basic has no drift block
+    state.advanced = false;
+    home.reread();
+    later(TINT_MS);
+    expect(line()).not.toHaveClass("lift-in");
+    expect(line().querySelector(".bloom")).toBeNull();
+    expect(line().querySelector("[data-close-line]")).toBeNull();
+  });
+
+  it("emptied by the reader's own act: it blooms, the list closes, and only the first time today", () => {
+    state.own = true;
+    const home = empty();
+    expect(line().querySelector(".bloom")).not.toBeNull();
+    expect(line().querySelector("[data-close-line]")).toHaveClass("close-line");
+    expect(screen.getByText("Nothing here needs you.")).toHaveClass("type-section-title");
+
+    // Work comes in, and the reader clears it again the same day: it blooms, and does not close twice.
+    state.governance = drifting();
+    home.reread();
+    later(TINT_MS);
+    state.governance = quiet();
+    home.reread();
+    later(TINT_MS);
+    expect(line().querySelector(".bloom")).not.toBeNull();
+    expect(line().querySelector("[data-close-line]")).toBeNull();
   });
 });
