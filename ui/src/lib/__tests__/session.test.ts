@@ -1,11 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, expectTypeOf, vi, beforeEach, afterEach } from "vitest";
 import {
   createSessionValue,
+  getAccessToken,
   getDemoUser,
   getDemoUsers,
   createOidcSessionValue,
   getSession,
   SESSION_COOKIE_NAME,
+  type SessionUser,
 } from "@/lib/session";
 
 // Sessions are HMAC-signed (SC4); a secret must be present for encode/decode.
@@ -138,6 +140,53 @@ describe("getSession", () => {
     const session = await getSession();
     expect(session?.sessionType).toBe("oidc");
     expect(session?.id).toBe("z-1");
+  });
+
+  // Pages pass the session to client components, whose props are serialised
+  // into the HTML. The token must not be in it, under any key.
+  it("never carries the access token, so a page cannot serialise it", async () => {
+    expectTypeOf<SessionUser>().not.toHaveProperty("accessToken");
+    mockCookieValue = createOidcSessionValue({
+      type: "oidc",
+      accessToken: "tok-must-stay-server-side",
+      userId: "z-1",
+      role: "admin",
+      name: "Real User",
+      email: "real@example.com",
+      title: "",
+      team: "",
+      status: "active",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const session = await getSession();
+    expect(session?.sessionType).toBe("oidc");
+    expect(session).not.toHaveProperty("accessToken");
+    expect(JSON.stringify(session)).not.toContain("tok-must-stay-server-side");
+    expect(await getAccessToken()).toBe("tok-must-stay-server-side");
+  });
+
+  it("getAccessToken is null with no session, an expired one, or a demo one", async () => {
+    mockCookieValue = undefined;
+    expect(await getAccessToken()).toBeNull();
+
+    mockCookieValue = createOidcSessionValue({
+      type: "oidc",
+      accessToken: "tok-expired",
+      userId: "z-1",
+      role: "admin",
+      name: "Real User",
+      email: "real@example.com",
+      title: "",
+      team: "",
+      status: "active",
+      expiresAt: Math.floor(Date.now() / 1000) - 1,
+    });
+    expect(await getAccessToken()).toBeNull();
+    expect(await getSession()).toBeNull();
+
+    delete process.env.ZITADEL_DOMAIN;
+    mockCookieValue = createSessionValue("dev_admin")!;
+    expect(await getAccessToken()).toBeNull();
   });
 
   it("returns null when no cookie is present", async () => {
