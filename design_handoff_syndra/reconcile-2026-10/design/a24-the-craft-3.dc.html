@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A-24 · The craft · part 3</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+
+/* ── The board's own chrome (the D-1 board's, renamed) ──────────────────── */
+.c24b-fig{display:flex;flex-direction:column;gap:12px;margin:0}
+.c24b-cap{display:flex;align-items:baseline;gap:12px}
+.c24b-n{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 8px;box-sizing:border-box;border-radius:var(--radius-pill);border:1px solid var(--line-strong);font-size:12.5px;font-weight:700}
+.c24b-n.rec{border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
+.c24b-t{font-size:16px;font-weight:600}
+.c24b-d{font-size:12.5px;font-weight:600;color:var(--muted);padding:2px 10px;border-radius:var(--radius-pill);border:1px solid var(--line-strong)}
+.c24b-r{font-size:12.5px;font-weight:600;color:var(--accent-text)}
+.c24b-fig figcaption{font-size:14px;line-height:1.6;color:var(--muted);text-wrap:pretty;max-width:1100px}
+.c24b-note{margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty}
+
+/* ── A frame. The density tokens are D-1's, restated so the frame reads the same
+   whichever copy of the design system the canvas holds. ── */
+.c24{height:var(--c24-h);color:var(--ink);
+  --text-display:34px;--text-page:28px;--text-heading:22px;--text-title:17px;--text-body:14px;--text-small:13px;--text-fine:12.5px;
+  --control-sm:30px;--control-md:36px;--page-max:1280px;--measure:60ch;--card-x:20px;--row-y:10px;--row-gap:16px;--empty-y:20px;--dot-indent:14px}
+.c24 #app-root{height:var(--c24-h)}
+.c24-page{display:flex;flex-direction:column;gap:16px;max-width:1280px;margin-inline:auto}
+.c24-cut{margin:0;font-size:13px;color:var(--faint)}
+
+/* Home's head, as built (Home.tsx:360-397), and the two proposed parts: the light and the term line. */
+.c24-head{position:relative;isolation:isolate;display:flex;flex-direction:column;margin-bottom:12px}
+.c24-head h1{margin:0;max-width:34ch;text-wrap:balance}
+.c24-head .when{margin-top:8px;font-size:14px;color:var(--faint);font-variant-numeric:tabular-nums}
+.c24-head .line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding-top:4px;font-size:13px;color:var(--muted)}
+.c24-head .line a{color:var(--ink);font-weight:500}
+.c24-head .line i{font-style:normal;color:var(--faint)}
+.c24-light{position:absolute;inset:-24px -26px -28px;z-index:-1;pointer-events:none}
+.c24-term{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;margin:14px 0 6px;max-width:760px;font-size:12.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+.c24-term .track{position:relative;height:14px}
+.c24-term .track::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:var(--line-strong)}
+.c24-term .done{position:absolute;left:0;top:50%;height:1px;width:71.9%;background:var(--muted)}
+.c24-term .tick{position:absolute;top:2px;width:2px;height:10px;margin-left:-1px;border-radius:1px;background:var(--warn)}
+.c24-term .today{position:absolute;left:71.9%;top:50%;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+
+.c24-groups{display:flex;flex-direction:column;gap:40px}
+.c24-group .h{display:flex;flex-direction:column;gap:4px}
+.c24-group .h h2{margin:0}
+.c24-group .h span{font-size:13px;color:var(--muted)}
+.c24-group .blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr));align-items:start;gap:16px;margin-top:12px}
+.c24-name{width:170px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600}
+.c24-what{min-width:0;flex:1;font-size:14px;color:var(--muted)}
+.c24-when{width:110px;flex:none;text-align:right;font-size:12.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+.c24-text{min-width:0;flex:1;font-size:14px}
+.c24-seat{display:flex;flex:none;align-items:center;justify-content:flex-end;gap:8px;margin-left:auto;min-width:140px}
+@container syndra-frame (max-width:600px){.c24-name{width:auto;flex:1}.c24-what{order:3;flex-basis:100%}.c24-when{width:auto}.c24-term{grid-template-columns:minmax(0,1fr) auto}.c24-term .track{grid-column:1 / -1;grid-row:2}}
+.c24-lit{position:relative;border-radius:var(--radius-card)}
+.c24-lit::before{content:"";position:absolute;inset:-1px;z-index:0;border-radius:inherit;pointer-events:none;background:radial-gradient(ellipse 60% 90px at 18% 0,color-mix(in srgb,var(--accent) 30%,transparent),transparent 72%)}
+.c24-lit::after{content:"";position:absolute;left:24px;right:40%;top:0;height:1px;z-index:2;pointer-events:none;background:linear-gradient(to right,transparent,var(--accent) 24%,var(--accent) 60%,transparent)}
+.c24-lit > *{position:relative;z-index:1}
+
+/* Stills: one row of key frames, each with its time. */
+.c24-strip{display:flex;align-items:flex-start;gap:24px;height:100%;padding:22px 24px;box-sizing:border-box;background:var(--canvas)}
+.c24-still{display:flex;min-width:0;flex:1;flex-direction:column;gap:12px}
+.c24-still .cap{display:flex;flex-direction:column;gap:2px;min-height:64px}
+.c24-still .cap .t{font-family:var(--font-mono);font-size:12.5px;font-weight:600;color:var(--accent-text)}
+.c24-still .cap .w{font-size:13px;line-height:1.45;color:var(--muted);text-wrap:pretty}
+.c24-mini{position:relative;isolation:isolate;display:flex;flex-direction:column;gap:6px;padding:22px 20px 20px;border-radius:var(--radius-block);border:1px solid var(--line);overflow:hidden;background:var(--ground)}
+.c24-mini h3{margin:0;font-family:var(--font-display);font-size:22px;line-height:1.15;font-weight:600}
+.c24-mini span{font-size:12.5px;color:var(--faint)}
+.c24-marks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 14px;padding:18px 16px;border-radius:var(--radius-block);border:1px solid var(--line);background:var(--rail)}
+.c24-marks div{display:flex;align-items:center;gap:12px;font-size:12.5px;line-height:1.35;color:var(--muted)}
+.c24-marks b{display:block;font-weight:600;color:var(--ink)}
+
+/* The all-clear at rest (vivid), the ledger line, and the plates. */
+.c24-rest{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:28px;padding:28px 24px 24px}
+.c24-rest::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(to right,transparent,var(--healthy) 16%,var(--healthy) 56%,transparent)}
+.c24-rest h2{display:flex;align-items:center;gap:12px;margin:0}
+.c24-rest p{margin:8px 0 0;max-width:60ch;font-size:14px;line-height:1.5;color:var(--muted)}
+.c24-ledger{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:0 20px 16px 34px;font-size:13px;color:var(--faint);font-variant-numeric:tabular-nums}
+.c24-rest .c24-ledger{padding:14px 0 0}
+.c24-plate{position:relative;width:64px;height:76px;flex:none}
+.c24-plate .arch{position:absolute;left:10px;right:10px;top:0;bottom:0;border:1.5px solid var(--line-strong);border-bottom:0;border-radius:999px 999px 0 0}
+.c24-plate .floor{position:absolute;left:0;right:0;bottom:0;height:1.5px;background:var(--line-strong)}
+.c24-plate .pt{position:absolute;left:50%;bottom:-3px;width:7px;height:7px;margin-left:-3.5px;border-radius:50%}
+.c24-plate.shut .arch{background:var(--tint-1)}
+.c24-plate.shut .pt{background:var(--healthy);box-shadow:0 0 0 5px color-mix(in srgb,var(--healthy) 16%,transparent)}
+.c24-plate.open .arch{border-color:var(--accent-line);background:linear-gradient(to top,color-mix(in srgb,var(--accent) 40%,transparent),transparent 88%)}
+.c24-plate.open .pt{background:var(--accent);box-shadow:0 0 0 5px var(--accent-soft)}
+.c24-plate.list .arch{top:12px;bottom:16px;border:0;border-radius:0;background:repeating-linear-gradient(to bottom,var(--line-strong) 0 1.5px,transparent 1.5px 15px)}
+.c24-plate.list .pt{background:var(--healthy);box-shadow:0 0 0 5px color-mix(in srgb,var(--healthy) 16%,transparent)}
+.c24-pl{display:flex;align-items:center;gap:8px;padding-left:22px}
+.c24-pl > :last-child{min-width:0;flex:1}
+.c24-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 24px;width:100%}
+.c24-grid3 .lab{grid-column:1 / -1;font-size:12.5px;font-weight:600;color:var(--accent-text);font-family:var(--font-mono)}
+.c24-sheet{display:flex;flex-direction:column;gap:14px;padding:20px}
+.c24-sheet h3{margin:0}
+.c24-sheet .trail{padding:2px 4px 0}
+.c24-swap{min-width:0;flex:1;font-size:14px;color:var(--muted)}
+.c24-swap small{display:block;margin-top:2px;font-size:12.5px;color:var(--faint)}
+.c24-caption{margin:-4px 0 0;padding:0 20px 12px;max-width:calc(60ch + 40px);box-sizing:border-box;font-size:13px;line-height:1.45;color:var(--muted)}
+
+/* A person's access over time; the year of sessions; Go to; the small things. */
+.c24-runs{display:grid;grid-template-columns:230px minmax(0,1fr);gap:0 16px;padding:4px 20px 16px;font-size:14px}
+.c24-runs .nm{padding:9px 0;border-top:1px solid var(--divider);font-weight:600}
+.c24-runs .nm small{display:block;font-size:12.5px;font-weight:400;color:var(--faint);font-variant-numeric:tabular-nums}
+.c24-runs .tr{position:relative;border-top:1px solid var(--divider);background:linear-gradient(to right,transparent calc(41.4% - .5px),var(--line-strong) calc(41.4% - .5px) calc(41.4% + .5px),transparent calc(41.4% + .5px) calc(58.1% - .5px),var(--line-strong) calc(58.1% - .5px) calc(58.1% + .5px),transparent calc(58.1% + .5px) calc(88.2% - .5px),var(--accent) calc(88.2% - .5px) calc(88.2% + .5px),transparent calc(88.2% + .5px))}
+.c24-runs .first{border-top:0}
+.c24-run{position:absolute;top:50%;height:6px;margin-top:-3px;border-radius:3px}
+.c24-run.past{background:var(--line-strong)}
+.c24-run.now{background:var(--ink)}
+.c24-run.next{height:0;margin-top:-1px;border-top:2px dashed var(--warn);border-radius:0}
+.c24-axis{position:relative;grid-column:2;height:24px;font-size:12.5px;color:var(--faint)}
+.c24-axis span{position:absolute;top:6px;white-space:nowrap}
+.c24-cal-wrap{display:grid;grid-template-columns:36px auto;gap:6px 8px;padding:6px 20px 4px;width:max-content;max-width:100%}
+.c24-months{position:relative;grid-column:2;height:16px;font-size:12.5px;color:var(--faint)}
+.c24-months span{position:absolute;top:0;white-space:nowrap}
+.c24-wd{display:grid;grid-template-rows:repeat(7,14px);gap:3px;font-size:11px;line-height:14px;color:var(--faint)}
+.c24-cal{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,14px);grid-auto-columns:14px;gap:3px}
+.c24-cal i{border-radius:3px;background:var(--tint-1)}
+.c24-cal i.x{background:transparent}
+.c24-cal i.l1{background:color-mix(in srgb,var(--accent) 22%,var(--surface-1))}
+.c24-cal i.l2{background:color-mix(in srgb,var(--accent) 44%,var(--surface-1))}
+.c24-cal i.l3{background:color-mix(in srgb,var(--accent) 70%,var(--surface-1))}
+.c24-cal i.l4{background:var(--accent)}
+.c24-cal i.gap{background:repeating-linear-gradient(135deg,var(--line-strong) 0 2px,transparent 2px 5px)}
+.c24-cal i.read{outline:1.5px solid var(--ink);outline-offset:1px}
+.c24-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 28px;padding:14px 20px 18px;font-size:14px}
+.c24-facts b{display:block;font-family:var(--font-display);font-size:24px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums}
+.c24-facts span{color:var(--muted)}
+.c24-go{display:flex;flex-direction:column;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--surface-1)}
+.c24-go .f{display:flex;align-items:center;gap:2px;padding:14px 18px;border-bottom:1px solid var(--divider);font-size:15px}
+.c24-go .f .ph{color:var(--faint)}
+.c24-go .f .caret{width:1.5px;height:18px;background:var(--accent)}
+.c24-go .g{padding:12px 18px 4px}
+.c24-go .r{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 12px;padding:7px 18px;font-size:14px}
+.c24-go .r.on{background:var(--tint-2)}
+.c24-go .r small{grid-column:1;font-size:12.5px;color:var(--faint)}
+.c24-go .r .k{grid-row:1 / span 2;grid-column:2;align-self:center;font-size:12.5px;color:var(--faint)}
+.c24-go .ft{display:flex;gap:14px;margin-top:6px;padding:10px 18px;border-top:1px solid var(--divider);font-size:12.5px;color:var(--faint)}
+.c24-nums{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px;padding:16px 20px;font-size:14px}
+.c24-nums div{display:flex;flex-direction:column;align-items:flex-end;gap:6px;font-weight:600}
+.c24-nums small{align-self:flex-start;font-size:12.5px;font-weight:400;color:var(--faint)}
+.c24-digit{display:flex;justify-content:space-around;padding:22px 20px;font-family:var(--font-display);font-size:34px;font-weight:600;font-variant-numeric:tabular-nums}
+.c24-digit span{display:inline-grid}
+.c24-digit span > b{grid-area:1 / 1;font-weight:600}
+.c24-digit small{display:block;margin-top:4px;font-family:var(--font-mono);font-size:12.5px;font-weight:600;color:var(--accent-text);text-align:center}
+</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:80px 72px 120px;display:flex;flex-direction:column;gap:72px;background:var(--ground);min-height:100vh">
+
+  <header data-screen-label="{{ boardLabel }}" style="display:flex;flex-direction:column;gap:16px;max-width:1100px">
+    <span class="type-label" style="color:var(--label)">{{ boardEyebrow }}</span>
+    <h1 class="type-page-title" style="margin:0;font-size:44px;line-height:1.1">{{ boardTitle }}</h1>
+    <p style="margin:0;font-size:17px;line-height:1.65;color:var(--muted);text-wrap:pretty">{{ boardLede }}</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1900px">
+    <sc-for list="{{ cards }}" as="c" hint-placeholder-count="3">
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;border-color:{{ c.edge }}"><span class="type-label" style="color:var(--label)">{{ c.label }}</span><p class="c24b-note">{{ c.text }}</p></div>
+    </sc-for>
+  </section>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+    <section data-screen-label="{{ g.title }}" style="display:flex;flex-direction:column;gap:28px">
+      <div style="display:flex;flex-direction:column;gap:6px;max-width:1100px"><span class="type-label" style="color:var(--label)">{{ g.eyebrow }}</span><h2 class="type-section-title" style="margin:0">{{ g.title }}</h2><p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">{{ g.note }}</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:44px 36px;align-items:flex-start">
+        <sc-for list="{{ g.frames }}" as="f" hint-placeholder-count="2">
+          <figure class="c24b-fig" data-screen-label="{{ f.label }}">
+            <div class="c24b-cap"><span class="c24b-n {{ f.nClass }}">{{ f.n }}</span><span class="c24b-t">{{ f.label }}</span><span class="c24b-d">{{ f.dial }}</span><sc-if value="{{ f.rec }}" hint-placeholder-val="{{ false }}"><span class="c24b-r">Recommended</span></sc-if></div>
+            <div style="width:{{ f.w }}px;height:{{ f.h }}px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+            <figcaption style="max-width:{{ f.w }}px">{{ f.note }}</figcaption>
+          </figure>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+
+  <section style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;max-width:1900px">
+    <div class="card" style="padding:22px 24px;display:flex;flex-direction:column;gap:10px">
+      <span class="type-label" style="color:var(--label)">{{ footLeftLabel }}</span>
+      <p class="c24b-note" style="font-size:14px">{{ footLeft }}</p>
+    </div>
+    <div class="card" style="padding:22px 24px;display:flex;flex-direction:column;gap:10px;border-color:var(--accent-line)">
+      <span class="type-label" style="color:var(--label)">{{ footRightLabel }}</span>
+      <p class="c24b-note" style="font-size:14px">{{ footRight }}</p>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<div class="c24" style="--c24-h:{{ frameH }}px">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="{{ pathname }}" data="{{ rootData }}" hint-size="100%,100vh">
+
+<sc-if value="{{ isShell }}" hint-placeholder-val="{{ true }}">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+
+<sc-if value="{{ kHome }}" hint-placeholder-val="{{ true }}">
+<div class="c24-page">
+  <div class="c24-head">
+    <sc-if value="{{ hasLight }}" hint-placeholder-val="{{ false }}"><div class="c24-light" style="{{ lightStyle }}"></div></sc-if>
+    <h1 class="type-greeting" style="{{ s1 }}">Evening, Kanishk. <span style="color:var(--faint)">{{ headline }}</span></h1>
+    <div class="when" style="{{ s2 }}">Wednesday 18 Nov · last checked 18:42</div>
+    <sc-if value="{{ hasTerm }}" hint-placeholder-val="{{ false }}">
+      <div class="c24-term" style="{{ s2 }}" role="img" aria-label="Monsoon term, day 110 of 153. Access ends for three people on 24 Nov, 27 Nov and 1 Dec.">
+        <span>Monsoon term, day 110 of 153</span>
+        <span class="track"><span class="done"></span><sc-for list="{{ termTicks }}" as="t" hint-placeholder-count="3"><span class="tick" style="{{ t }}"></span></sc-for><span class="today"></span></span>
+        <span>Ends 31 Dec</span>
+      </div>
+    </sc-if>
+    <div class="line" style="{{ s3 }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import><span>Claims: delivered to every sign-in in the last 24h</span></div>
+    <div class="line" style="{{ s3 }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import><span>Checked, nothing waiting:</span><a href="#page">Holds due</a><i>·</i><a href="#page">Pending changes</a><i>·</i><a href="#page">Unfinished revocations</a></div>
+  </div>
+  <sc-if value="{{ showBlocks }}" hint-placeholder-val="{{ true }}">
+  <div class="c24-groups" style="{{ s4 }}">
+    <section class="c24-group">
+      <div class="h"><h2 class="type-section-title">Time-sensitive</h2><span>Access ends, stays wrong, or goes unseen if you wait.</span></div>
+      <div class="blocks">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,110px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Drift" count="{{ 47 }}" tone="danger" hint-size="100%,46px"></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,50px">
+            <div class="c24-text">47 grants Syndra can't explain</div>
+            <span class="c24-seat"><x-import component-from-global-scope="Syndra.ArrowLink" href="#page" hint-size="120px,20px">Review on Drift</x-import></span>
+          </x-import>
+        </x-import>
+        <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Direct access ending soon" count="{{ 3 }}" tone="warn" hint-size="100%,46px"></x-import>
+          <sc-for list="{{ ending }}" as="p" hint-placeholder-count="3">
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,50px">
+              <span class="c24-name">{{ p.name }}</span>
+              <div class="c24-what">{{ p.what }}</div>
+              <div class="c24-when">{{ p.when }}</div>
+              <span class="c24-seat"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="80px,30px">Extend</x-import></span>
+            </x-import>
+          </sc-for>
+        </x-import>
+        </sc-if>
+      </div>
+    </section>
+    <section class="c24-group">
+      <div class="h"><h2 class="type-section-title">When you're ready</h2><span>Nothing changes until you act.</span></div>
+      <div class="blocks">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,110px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Open requests" count="{{ 1 }}" tone="accent" hint-size="100%,46px"></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,50px">
+            <span class="c24-name">Liv Morgan</span>
+            <div class="c24-what">Member in Wood shop</div>
+            <span class="c24-seat"><x-import component-from-global-scope="Syndra.ArrowLink" href="#page" hint-size="120px,20px">Open the request</x-import></span>
+          </x-import>
+        </x-import>
+      </div>
+    </section>
+  </div>
+  </sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ kMe }}" hint-placeholder-val="{{ false }}">
+<div class="c24-page">
+  <div class="c24-head">
+    <h1 class="type-page-title">Evening, Cody. <span style="color:var(--faint)">Here's what you can use.</span></h1>
+    <div class="line"><x-import component-from-global-scope="Syndra.StatusDot" tone="accent" hint-size="6px,6px"></x-import><span>From today, you can use Laser cutting.</span></div>
+  </div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,100px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="3D printing" hint-size="100%,46px"></x-import>
+    <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,50px">
+      <span class="c24-name">Member</span>
+      <div class="c24-what">Use the printers during open hours.</div>
+      <div class="c24-when">No end date</div>
+    </x-import>
+  </x-import>
+  <div class="c24-lit">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,100px">
+      <x-import component-from-global-scope="Syndra.CardHeader" title="Laser cutting" note="From today" hint-size="100%,46px"></x-import>
+      <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,50px">
+        <span class="c24-name">Operator</span>
+        <div class="c24-what">Run the laser cutter on your own.</div>
+        <div class="c24-when">Ends 31 Dec</div>
+      </x-import>
+    </x-import>
+  </div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,100px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Recent changes" note="Last 30 days" hint-size="100%,46px"></x-import>
+    <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,50px">
+      <div class="c24-text">Operator in Laser cutting, given by makerspace staff</div>
+      <div class="c24-when">Today</div>
+    </x-import>
+  </x-import>
+</div>
+</sc-if>
+
+<sc-if value="{{ kClose }}" hint-placeholder-val="{{ false }}">
+<div class="c24-page">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Requests" hint-size="100%,60px"></x-import>
+  <p class="c24-cut">The lede and the filter bar are unchanged and left out of this frame.</p>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px">
+    <sc-if value="{{ closeQuiet }}" hint-placeholder-val="{{ true }}">
+      <x-import component-from-global-scope="Syndra.EmptyState" resolved="{{ true }}" title="No requests waiting." guidance="Requests appear here when a member asks for access." hint-size="100%,90px"></x-import>
+    </sc-if>
+    <sc-if value="{{ closeWarm }}" hint-placeholder-val="{{ false }}">
+      <x-import component-from-global-scope="Syndra.EmptyState" resolved="{{ true }}" title="No requests waiting." guidance="Requests appear here when a member asks for access." hint-size="100%,90px"></x-import>
+      <div class="c24-ledger"><span>You decided 4 requests today. All 4 are in Zitadel.</span><x-import component-from-global-scope="Syndra.ArrowLink" href="#page" hint-size="120px,20px">Change history</x-import></div>
+    </sc-if>
+    <sc-if value="{{ closeVivid }}" hint-placeholder-val="{{ false }}">
+      <div class="c24-rest">
+        <div>
+          <h2 class="type-section-title"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>No requests waiting.</h2>
+          <p>Requests appear here when a member asks for access.</p>
+          <div class="c24-ledger"><span>You decided 4 requests today. All 4 are in Zitadel.</span><x-import component-from-global-scope="Syndra.ArrowLink" href="#page" hint-size="120px,20px">Change history</x-import></div>
+        </div>
+        <span class="c24-plate list" aria-hidden="true"><span class="arch"></span><span class="floor"></span><span class="pt"></span></span>
+      </div>
+    </sc-if>
+  </x-import>
+</div>
+</sc-if>
+
+<sc-if value="{{ kPerson }}" hint-placeholder-val="{{ false }}">
+<div class="c24-page">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Becky Lynch" meta="becky.lynch@example.edu · Student · UG 2023" hint-size="100%,80px"></x-import>
+  <div class="c24-head" style="margin:-8px 0 0">
+    <div class="line"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import><span>Holds 2 roles across 2 projects. Operator in Laser cutting ends in 12 days.</span></div>
+  </div>
+  <sc-if value="{{ personVivid }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,260px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Access over time" note="This year" hint-size="100%,46px"></x-import>
+    <p class="c24-caption">Each line runs from the day a role was given to the day it ended. What she holds today is read from Zitadel; the dates are Syndra's record.</p>
+    <div class="c24-runs" role="img" aria-label="Four roles this year. Two are held today.">
+      <sc-for list="{{ runs }}" as="r" hint-placeholder-count="4">
+        <div class="nm {{ r.first }}">{{ r.role }}<small>{{ r.when }}</small></div>
+        <div class="tr {{ r.first }}"><span class="c24-run {{ r.kind }}" style="{{ r.style }}"></span><sc-if value="{{ r.hasNext }}" hint-placeholder-val="{{ false }}"><span class="c24-run next" style="{{ r.next }}"></span></sc-if></div>
+      </sc-for>
+      <div class="c24-axis"><span style="left:0">Spring term</span><span style="left:41.4%;padding-left:6px">Summer</span><span style="left:58.1%;padding-left:6px">Monsoon term</span><span style="left:88.2%;padding-left:6px;color:var(--accent-text)">Today</span></div>
+    </div>
+  </x-import>
+  </sc-if>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,100px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="3D printing" note="1 role" hint-size="100%,46px"></x-import>
+    <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,50px">
+      <span class="c24-name">Member</span>
+      <div class="c24-what">Carried by the Welcome bundle</div>
+      <x-import component-from-global-scope="Syndra.StatusSeat" tone="healthy" word="In Zitadel" hint-size="110px,22px"></x-import>
+      <div class="c24-when">No end date</div>
+    </x-import>
+  </x-import>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,100px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Laser cutting" note="1 role" hint-size="100%,46px"></x-import>
+    <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,50px">
+      <span class="c24-name">Operator</span>
+      <div class="c24-what">Given directly</div>
+      <x-import component-from-global-scope="Syndra.StatusSeat" tone="healthy" word="In Zitadel" hint-size="110px,22px"></x-import>
+      <div class="c24-when">Ends 30 Nov</div>
+      <span class="c24-seat"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="80px,30px">Extend</x-import></span>
+    </x-import>
+  </x-import>
+</div>
+</sc-if>
+
+<sc-if value="{{ kPulse }}" hint-placeholder-val="{{ false }}">
+<div class="c24-page">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Insights" hint-size="100%,60px"></x-import>
+  <p class="c24-cut">The tabs are unchanged and left out of this frame. This is the Usage tab.</p>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,330px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Storage sessions, day by day" note="A sample year, drawn to show a full record" hint-size="100%,46px"></x-import>
+    <div class="c24-cal-wrap">
+      <span></span>
+      <div class="c24-months"><sc-for list="{{ months }}" as="m" hint-placeholder-count="12"><span style="{{ m.style }}">{{ m.label }}</span></sc-for></div>
+      <div class="c24-wd"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span></div>
+      <div class="c24-cal" role="img" aria-label="Storage sessions for each day of the last twelve months."><sc-for list="{{ days }}" as="d" hint-placeholder-count="60"><i class="{{ d }}"></i></sc-for></div>
+    </div>
+    <p class="c24-caption" style="margin:6px 0 0">Thursday 12 Nov: 41 sessions. A striped day was not counted, and is not a zero.</p>
+    <div class="c24-facts row-divider">
+      <div><b>7,081</b><span>sessions in the last 12 months</span></div>
+      <div><b>9 to 15 Nov</b><span>the busiest week, 263 sessions</span></div>
+      <div><b>Thursdays</b><span>the busiest day of the week in term</span></div>
+    </div>
+  </x-import>
+</div>
+</sc-if>
+
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isStrip }}" hint-placeholder-val="{{ false }}">
+<div class="c24-strip">
+
+  <sc-if value="{{ kHours }}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{ hours }}" as="h" hint-placeholder-count="3">
+      <div class="c24-still">
+        <div class="cap"><span class="t">{{ h.t }}</span><span class="w">{{ h.cap }}</span></div>
+        <div class="c24-mini"><div class="c24-light" style="{{ h.light }}"></div><h3>{{ h.greet }} <span style="color:var(--faint)">{{ h.say }}</span></h3><span>{{ h.when }}</span></div>
+      </div>
+    </sc-for>
+    <div class="c24-still">
+      <div class="cap"><span class="t">The mark</span><span class="w">The rail's mark is the keeper's lamp. Its dot already blooms once when you come through the door. Proposed: it also says the room's state, at rest.</span></div>
+      <div class="c24-marks">
+        <sc-for list="{{ marks }}" as="m" hint-placeholder-count="4">
+          <div><span style="{{ m.style }}"><x-import component-from-global-scope="Syndra.SyndraMark" size="{{ 30 }}" hint-size="30px,30px"></x-import></span><span><b>{{ m.name }}</b>{{ m.when }}</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ kCloseStills }}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{ closeStills }}" as="s" hint-placeholder-count="3">
+      <div class="c24-still">
+        <div class="cap"><span class="t">{{ s.t }}</span><span class="w">{{ s.cap }}</span></div>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px">
+          <sc-if value="{{ s.row }}" hint-placeholder-val="{{ true }}">
+            <div style="{{ s.rowStyle }}">
+            <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,50px">
+              <span class="c24-name" style="width:110px">Liv Morgan</span>
+              <div class="c24-what">Member in Wood shop</div>
+              <x-import component-from-global-scope="Syndra.StatusSeat" tone="healthy" word="Approved" hint-size="100px,22px"></x-import>
+            </x-import>
+            </div>
+          </sc-if>
+          <sc-if value="{{ s.rest }}" hint-placeholder-val="{{ false }}">
+            <div class="c24-rest" style="padding:22px 20px 18px;gap:16px">
+              <div>
+                <h2 class="type-card-title"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>No requests waiting.</h2>
+                <div class="c24-ledger"><span>You decided 4 requests today. All 4 are in Zitadel.</span></div>
+              </div>
+              <span class="c24-plate list" aria-hidden="true"><span class="arch"></span><span class="floor"></span><span class="pt"></span></span>
+            </div>
+          </sc-if>
+        </x-import>
+      </div>
+    </sc-for>
+  </sc-if>
+
+  <sc-if value="{{ kTrail }}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{ trails }}" as="s" hint-placeholder-count="3">
+      <div class="c24-still">
+        <div class="cap"><span class="t">{{ s.t }}</span><span class="w">{{ s.cap }}</span></div>
+        <div class="card c24-sheet">
+          <h3 class="type-card-title">Give a role</h3>
+          <sc-if value="{{ s.pressing }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="Syndra.ActionForecast" word="Will be given" hint-size="160px,22px"></x-import>
+          </sc-if>
+          <sc-if value="{{ s.done }}" hint-placeholder-val="{{ true }}">
+            <x-import component-from-global-scope="Syndra.ActionOutcome" placement="block" word="{{ s.word }}" outcome="{{ s.outcome }}" hint-size="100%,120px"></x-import>
+          </sc-if>
+          <div class="trail"><x-import component-from-global-scope="Syndra.CheckTrail" checks="{{ s.checks }}" hint-size="100%,150px"></x-import></div>
+        </div>
+      </div>
+    </sc-for>
+  </sc-if>
+
+  <sc-if value="{{ kWait }}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{ waits }}" as="s" hint-placeholder-count="3">
+      <div class="c24-still">
+        <div class="cap"><span class="t">{{ s.t }}</span><span class="w">{{ s.cap }}</span></div>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,130px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Check for differences" hint-size="100%,46px"></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px">
+            <div class="c24-swap">{{ s.say }}<small>{{ s.more }}</small></div>
+            <span class="c24-seat" style="min-width:110px"><x-import component-from-global-scope="Syndra.Button" size="sm" is-pending="{{ s.pending }}" hint-size="100px,30px">Check now</x-import></span>
+          </x-import>
+        </x-import>
+      </div>
+    </sc-for>
+  </sc-if>
+
+  <sc-if value="{{ kEmpty }}" hint-placeholder-val="{{ false }}">
+    <div class="c24-grid3">
+      <span class="lab">Quiet · as built</span>
+      <sc-for list="{{ empties }}" as="e" hint-placeholder-count="3">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,110px">
+          <x-import component-from-global-scope="Syndra.EmptyState" resolved="{{ e.resolved }}" title="{{ e.title }}" guidance="{{ e.guidance }}" hint-size="100%,100px"></x-import>
+        </x-import>
+      </sc-for>
+      <span class="lab" style="margin-top:14px">Vivid · a plate where the state was earned or is a beginning, and none where it is a miss</span>
+      <sc-for list="{{ empties }}" as="e" hint-placeholder-count="3">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,110px">
+          <div class="c24-pl">
+            <sc-if value="{{ e.hasPlate }}" hint-placeholder-val="{{ true }}"><span class="c24-plate {{ e.plate }}" aria-hidden="true"><span class="arch"></span><span class="floor"></span><span class="pt"></span></span></sc-if>
+            <div><x-import component-from-global-scope="Syndra.EmptyState" resolved="{{ e.resolved }}" title="{{ e.title }}" guidance="{{ e.guidance }}" hint-size="100%,100px"></x-import></div>
+          </div>
+        </x-import>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ kGoTo }}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{ gotos }}" as="s" hint-placeholder-count="3">
+      <div class="c24-still">
+        <div class="cap"><span class="t">{{ s.t }}</span><span class="w">{{ s.cap }}</span></div>
+        <div class="c24-go">
+          <div class="f"><span class="{{ s.fieldClass }}">{{ s.field }}</span><span class="caret"></span></div>
+          <sc-for list="{{ s.groups }}" as="g" hint-placeholder-count="2">
+            <span class="g type-label" style="color:var(--label)">{{ g.name }}</span>
+            <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+              <div class="r {{ r.on }}"><span>{{ r.name }}</span><small>{{ r.sub }}</small><span class="k">{{ r.kind }}</span></div>
+            </sc-for>
+          </sc-for>
+          <div class="ft"><span>↑↓ move</span><span>Enter open</span><span>{{ s.esc }}</span></div>
+        </div>
+      </div>
+    </sc-for>
+  </sc-if>
+
+  <sc-if value="{{ kDetails }}" hint-placeholder-val="{{ false }}">
+    <div class="c24-still">
+      <div class="cap"><span class="t">Figures that hold their column</span><span class="w">Left, as built: each digit takes its own width, so a column of numbers has a ragged right edge and a changing count shifts. Right: every figure tabular, one rule in globals.css.</span></div>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,170px">
+        <div class="c24-nums">
+          <div style="font-variant-numeric:proportional-nums"><small>Today</small><span>1,111</span><span>7,081</span><span>588</span><span>47</span></div>
+          <div style="font-variant-numeric:tabular-nums"><small>Proposed</small><span>1,111</span><span>7,081</span><span>588</span><span>47</span></div>
+        </div>
+      </x-import>
+    </div>
+    <div class="c24-still">
+      <div class="cap"><span class="t">Only what changed, changes</span><span class="w">47 becomes 46. Today the whole number crossfades, so the 4 dims on its way to being itself. Proposed: the 4 holds still; only the last digit crossfades, on tint (120ms). Nothing ticks or rolls.</span></div>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,130px">
+        <div class="c24-digit">
+          <div><span><b>47</b></span><small>0ms</small></div>
+          <div><span><b>4<span style="opacity:.5">7</span></b><b style="opacity:.5"><span style="visibility:hidden">4</span>6</b></span><small>60ms</small></div>
+          <div><span><b>46</b></span><small>120ms</small></div>
+        </div>
+      </x-import>
+    </div>
+    <div class="c24-still">
+      <div class="cap"><span class="t">A number opens its list</span><span class="w">Usage figures and the counts on Trends are plain text today. Proposed: a figure that counts things you can open is a name link, ink until hovered, to the list behind it.</span></div>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,130px">
+        <div class="c24-facts" style="grid-template-columns:1fr 1fr">
+          <div><b>588</b><span>sessions in the last 30 days</span></div>
+          <div><b style="color:var(--accent-text);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px">23</b><span>people hold a role they have not used, under the pointer</span></div>
+        </div>
+      </x-import>
+    </div>
+  </sc-if>
+
+</div>
+</sc-if>
+
+</x-import>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":2060,"height":5700}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    // One source for the A-24 boards; the parts differ in this constant (as D-1's and A-23's do).
+    this.part = 3;
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame") || "";
+    this.frameH = Number(q.get("h")) || 640;
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.member = { id: "u9", name: "Cody Rhodes", email: "cody.rhodes@example.edu", title: "Student", team: "UG 2024", status: "active", avatar: "CR", role: "user", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 1, expiring_grants: 3, drift: 47, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 0 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+
+  // The hour's light: one violet pool whose place says the time of day. Tokens only.
+  light(where, strength) {
+    return "background:radial-gradient(" + where + ",color-mix(in srgb,var(--accent) " + strength + "%,transparent),transparent 70%)";
+  }
+
+  renderVals() {
+    const f = this.frame;
+    const base = f.replace(/-light$/, "");
+    const strips = ["hours", "close-stills", "trail", "wait", "empty", "goto", "details"];
+    const isStrip = strips.includes(base);
+    const kHome = /^(home|door)-/.test(base);
+    const kMe = /^me/.test(base);
+    const kClose = /^close-(quiet|warm|vivid)$/.test(base);
+    const kPerson = /^person-/.test(base);
+    const kPulse = base === "pulse";
+    const phone = /-phone$/.test(base);
+    const door = /^door-(\d)$/.exec(base);
+    const step = door ? Number(door[1]) : 2;
+    const evening = this.light("ellipse 58% 135% at 86% -30%", 24);
+    const lights = [this.light("ellipse 90px 260px at 70px 100%", 44), this.light("ellipse 34% 150% at 22% -10%", 32), evening];
+    const hid = "opacity:0";
+    return {
+      isBoard: !f, isFrame: !!f, isShell: !!f && !isStrip, isStrip,
+      kHome, kMe, kClose, kPerson, kPulse,
+      kHours: base === "hours", kCloseStills: base === "close-stills", kTrail: base === "trail", kWait: base === "wait",
+      kEmpty: base === "empty", kGoTo: base === "goto", kDetails: base === "details",
+      frameH: this.frameH,
+      pathname: kMe ? "/me" : kClose ? "/requests" : kPerson ? "/users/u7" : kPulse ? "/insights" : "/",
+      session: kMe ? this.member : this.operator,
+      rootData: this.rootData,
+
+      // Home.
+      headline: "Three things need you.",
+      hasLight: kHome && base !== "home-quiet",
+      lightStyle: door ? lights[step] : evening,
+      hasTerm: kHome && base !== "home-quiet" && !door,
+      termTicks: ["left:75.8%", "left:77.8%", "left:80.4%"],
+      s1: step === 0 ? hid : "",
+      s2: step === 0 ? hid : step === 1 ? "opacity:.45" : "",
+      s3: step < 2 ? hid : "",
+      s4: door ? "opacity:.5;transform:translateY(8px)" : "",
+      showBlocks: !door || step === 2,
+      wide: !phone,
+      ending: [
+        { name: "Bianca Belair", what: "Operator in Laser cutting", when: "Ends 24 Nov" },
+        { name: "Rhea Ripley", what: "Member in Wood shop", when: "Ends 27 Nov" },
+        { name: "Seth Rollins", what: "Trained in 3D printing", when: "Ends 1 Dec" },
+      ],
+      hours: [
+        { t: "08:10", cap: "Morning. The light comes in low from the left.", greet: "Morning, Kanishk.", say: "Nothing needs you right now.", when: "Wednesday 18 Nov · last checked 08:09", light: this.light("ellipse 60% 150% at 4% -20%", 26) },
+        { t: "14:30", cap: "Afternoon. Overhead, wide and thin.", greet: "Afternoon, Kanishk.", say: "One thing needs you.", when: "Wednesday 18 Nov · last checked 14:29", light: this.light("ellipse 80% 120% at 50% -60%", 20) },
+        { t: "23:40", cap: "Quiet hours, 22:00 to 05:00 (greeting.ts:10). A lamp beside the words, and the line Home already says.", greet: "Evening, Kanishk.", say: "Nothing needs you right now.", when: "It will keep until morning.", light: this.light("ellipse 26% 90% at 2% 40%", 22) },
+      ],
+      marks: [
+        { name: "Violet", when: "Something needs you. As built.", style: "display:inline-flex" },
+        { name: "Lime", when: "Nothing needs you right now.", style: "display:inline-flex;--mark-dot:var(--healthy);--mark-glow:color-mix(in srgb,var(--healthy) 45%,transparent)" },
+        { name: "Amber, breathing", when: "Zitadel isn't answering.", style: "display:inline-flex;--mark-dot:var(--warn);--mark-glow:color-mix(in srgb,var(--warn) 45%,transparent)" },
+        { name: "Dim", when: "Quiet hours. It will keep.", style: "display:inline-flex;--mark-dot:var(--faint);--mark-glow:transparent" },
+      ],
+
+      // Finishing.
+      closeQuiet: base === "close-quiet", closeWarm: base === "close-warm", closeVivid: base === "close-vivid",
+      closeStills: [
+        { t: "0ms · you press Approve", cap: "The row says its own outcome in its seat, and its dot blooms once: S4, as built.", row: true, rest: false, rowStyle: "" },
+        { t: "900ms · the beat, then the row leaves", cap: "Motion 5b, as built: the outcome is read, the row fades on tint (120ms), its gap folds (200ms).", row: true, rest: false, rowStyle: "opacity:.3" },
+        { t: "1,220ms · the list closes", cap: "Proposed: the line lifts 6px on settle (260ms), its dot blooms once, and the lime hairline draws left to right over one flash (900ms), then rests. Only when your own act emptied it.", row: false, rest: true, rowStyle: "" },
+      ],
+      trails: [
+        { t: "Pressing · 0ms to the answer", cap: "As built: the forecast breathes and both buttons hold. Proposed: the trail is already there, in rings, so the route is read before it is travelled.", pressing: true, done: false, word: "Given", outcome: { kind: "applied", message: "Becky Lynch holds Operator in Laser cutting", next: "Nothing for you to do." },
+          checks: [{ tone: "neutral", ring: true, sentence: "Recorded in Syndra." }, { tone: "neutral", ring: true, sentence: "Sent to Zitadel." }, { tone: "neutral", ring: true, sentence: "In Zitadel." }] },
+        { t: "A change that went straight", cap: "Each step fills on tint as it is observed, never before. The last one is the reader's own success on screen, so it alone blooms.", pressing: false, done: true, word: "Given",
+          outcome: { kind: "applied", message: "Becky Lynch holds Operator in Laser cutting", next: "Nothing for you to do." },
+          checks: [{ tone: "healthy", sentence: "Recorded in Syndra." }, { tone: "healthy", sentence: "Sent to Zitadel." }, { tone: "healthy", sentence: "In Zitadel.", faint: ["Read back at 18:43."] }] },
+        { t: "A role that always waits", cap: "The same three steps show exactly where it stopped: one dot, two rings. The outcome above keeps the one link to Pending changes, so the step left is said once.", pressing: false, done: true, word: "Recorded",
+          outcome: { kind: "queued", message: "Trained in Laser cutting is recorded for Becky Lynch. It always waits for you" },
+          checks: [{ tone: "healthy", sentence: "Recorded in Syndra." }, { tone: "neutral", ring: true, sentence: "Not sent to Zitadel yet." }, { tone: "neutral", ring: true, sentence: "Not in Zitadel yet." }] },
+      ],
+      waits: [
+        { t: "0 to 10s", cap: "As built: the button's dot breathes and the old words stay. Under one second nothing else is shown.", say: "Syndra checks by itself every six hours.", more: "", pending: true },
+        { t: "After 10s", cap: "Proposed: one sentence changes, once, on tint. No bar and no counter: a check has no steps Syndra could honestly count.", say: "Still reading TrueNAS.", more: "You can leave this page. The result will be here when you come back.", pending: true },
+        { t: "The answer lands", cap: "D-1 M4: the sentence crossfades and the row flashes once, colour only.", say: "4 people with a managed account · 1 fix waiting for you to send", more: "", pending: false },
+      ],
+      empties: [
+        { title: "Everyone inside is on the list, and everyone on the list is inside.", guidance: "A role in Zitadel that Syndra can't explain appears here.", resolved: true, hasPlate: true, plate: "shut" },
+        { title: "There's nobody here yet.", guidance: "People appear here once they exist in Zitadel.", resolved: false, hasPlate: true, plate: "open" },
+        { title: "Nobody matches that.", guidance: "Try a shorter search, part of an email address, or a role key.", resolved: false, hasPlate: false, plate: "" },
+      ],
+
+      // The person.
+      personVivid: base === "person-vivid",
+      runs: [
+        { first: "first", role: "Member in 3D printing", when: "Since 12 Jan", kind: "now", style: "left:3.3%;width:84.9%", hasNext: false, next: "" },
+        { first: "", role: "Operator in Laser cutting", when: "Since 14 Aug · ends 30 Nov", kind: "now", style: "left:61.9%;width:26.3%", hasNext: true, next: "left:88.2%;width:3.3%" },
+        { first: "", role: "Trained in Laser cutting", when: "2 Feb to 14 Aug", kind: "past", style: "left:9%;width:52.9%", hasNext: false, next: "" },
+        { first: "", role: "Member in Wood shop", when: "3 Mar to 31 May", kind: "past", style: "left:17%;width:24.4%", hasNext: false, next: "" },
+      ],
+
+      // The year.
+      ...this.year(),
+
+      // Go to.
+      gotos: [
+        { t: "Quiet · as built, and at once", cap: "Go to is opened by a key, dozens of times a day, so it appears with no rise and no scrim fade. Esc clears what is typed, then closes.", field: "bec", fieldClass: "", esc: "Esc clear, then close",
+          groups: [{ name: "People", rows: [{ on: "on", name: "Becky Lynch", sub: "Student · UG 2023", kind: "Person" }] }, { name: "Pages", rows: [{ on: "", name: "Bundles", sub: "", kind: "Page" }] }] },
+        { t: "Warm · where you have just been", cap: "With nothing typed, the last five places you opened, most recent first, above Pages. Kept on this device only.", field: "A person, a project, an app, or a page", fieldClass: "ph", esc: "Esc close",
+          groups: [{ name: "Lately", rows: [{ on: "on", name: "Becky Lynch", sub: "Student · UG 2023", kind: "Person" }, { on: "", name: "Pending changes", sub: "", kind: "Page" }, { on: "", name: "TrueNAS", sub: "", kind: "Page" }, { on: "", name: "Laser cutting", sub: "", kind: "Project" }] }, { name: "Pages", rows: [{ on: "", name: "Home", sub: "", kind: "Page" }, { on: "", name: "People", sub: "", kind: "Page" }] }] },
+        { t: "Vivid · it answers, and it acts", cap: "A name brings what Syndra knows in one observed line, and the acts you could take on that person. Enter on an act opens its own dialog, which still previews and asks.", field: "becky", fieldClass: "", esc: "Esc clear, then close",
+          groups: [{ name: "Becky Lynch", rows: [{ on: "on", name: "Open her page", sub: "2 roles across 2 projects · Operator in Laser cutting ends in 12 days", kind: "Person" }, { on: "", name: "Give Becky Lynch a role", sub: "", kind: "Act" }, { on: "", name: "Manage Becky Lynch's bundles", sub: "", kind: "Act" }] }, { name: "People", rows: [{ on: "", name: "Becky Lynch", sub: "Student · UG 2023", kind: "Person" }] }] },
+      ],
+
+      ...this.board(),
+    };
+  }
+
+  // A sample year of daily sessions with a makerspace's rhythm: weekdays, two breaks, two days the NAS was off.
+  year() {
+    let seed = 24;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const days = ["x", "x"]; // 19 Nov 2025 was a Wednesday; the grid's rows start on Monday.
+    for (let d = 0; d < 365; d++) {
+      const wd = (d + 2) % 7; // 0 = Monday
+      // Day d counts from 19 Nov 2025. Winter break: 20 Dec to 4 Jan. Summer: 1 Jun to 31 Jul.
+      const winter = d >= 31 && d <= 46, summer = d >= 194 && d <= 254;
+      let v = (wd === 6 ? 0.12 : wd === 5 ? 0.3 : wd === 3 ? 1 : 0.78) * (winter ? 0.12 : summer ? 0.4 : 1) + (rnd() - 0.5) * 0.3;
+      if (d >= 355 && d <= 361 && wd < 5) v = 1.1;
+      days.push(d === 139 || d === 140 ? "gap" : d === 358 ? "l4 read" : v > 0.92 ? "l4" : v > 0.66 ? "l3" : v > 0.4 ? "l2" : v > 0.16 ? "l1" : "");
+    }
+    const starts = [["Dec", 12], ["Jan", 43], ["Feb", 74], ["Mar", 102], ["Apr", 133], ["May", 163], ["Jun", 194], ["Jul", 224], ["Aug", 255], ["Sep", 286], ["Oct", 316], ["Nov", 347]];
+    const months = starts.map(([label, d]) => ({ label, style: "left:" + Math.floor((d + 2) / 7) * 17 + "px" }));
+    return { days, months };
+  }
+
+  board() {
+    if (this.frame) return {};
+    const src = (frame, h) => "a24-the-craft-" + this.part + ".dc.html?frame=" + frame + "&h=" + h;
+    const fr = (n, frame, label, dial, note, h, rec, w) => ({ n, label, dial, note, h, w: w || 1440, rec: !!rec, nClass: rec ? "rec" : "", edge: rec ? "1px solid var(--accent-line)" : "1px solid var(--line-strong)", src: src(frame, h) });
+    const dial = { label: "The dial", edge: "var(--accent-line)", text: "Every moment is drawn at up to three settings. Quiet is the product as it is, or one honest step from it. Warm adds one thing that is true and kind. Vivid is the bold version, drawn so you can feel it. One setting is recommended per moment; they need not match across moments." };
+    const rails = { label: "What holds at every setting", edge: "var(--line)", text: "Nothing expressive on a consent, a failure or anything that takes access away. Whatever plays, plays less with repetition: once a session, once a visit, or only when your own act caused it. Every movement has a still form. Nothing asks you to come back. Every warm sentence is built from the same read as the numbers beside it." };
+    const parts = {
+      1: {
+        boardTitle: "The craft, part 1: arriving",
+        boardLede: "Syndra already moves like a careful tool: one curve, a 10px cap, no toasts, nothing that ticks. What it has not had is a moment that is its own. These frames spend expression where it is rare: the first screen of the day, the first arrival of a session, and the first time a member can use something new. Each is drawn at 100%, in a 1440 window, with the phone beside it where it matters.",
+        cards: [dial, rails, { label: "Light is Syndra's material", edge: "var(--line)", text: "The sign-in door is an arch of violet light, and globals.css already says dark is home and light is daylight. Part 1 carries that one material inside: a pool of light that knows the hour, a line for the term, and a mark that says the room's state. No new colour, no illustration set, no second typeface." }],
+        groups: [
+          { eyebrow: "1 · Arrival on Home", title: "What is this, and is it working, in the first glance", note: "Home's head is already good: a greeting, a sentence that counts what needs you, a date line. The warm setting adds two still things that carry information without a word: where the light sits says the hour, and the term line says how far through the term today is and when access next ends.", frames: [
+            fr("1", "home-quiet", "Home today", "Quiet", "As built (Home.tsx:360-397). Recommended only with the arrival rule in A-24 §2: a place arrives once per session, and a visit by key never arrives.", 720, false),
+            fr("2", "home-warm", "The room knows the hour", "Warm", "The pool is one radial gradient of --accent mixed with transparent, still, behind the head only. Its place is set from the hour in the configured zone. The term line: a hairline for the term, a filled part for the days gone, a violet point for today, an amber mark for each day someone's direct access ends in the next 14 days (the same three people as the block below). Hover or focus on a mark reads its day, as the usage band does.", 720, true),
+            fr("2p", "home-phone", "On a phone", "Warm", "The same head at 390. The pool keeps its place; the term line takes the full width.", 720, true, 390),
+            fr("3", "home-warm-light", "In daylight", "Warm", "The same tokens in the light theme: the pool is a pale wash, and the greeting keeps its contrast because the light sits behind it at under a quarter strength.", 440, false),
+            fr("4", "hours", "Three hours, and the mark", "Warm", "Morning, afternoon and quiet hours, with the mark's four states. The mark's lime dot is the healthy token used as its own rule allows: a dot.", 300, false),
+          ] },
+          { eyebrow: "2 · The first arrival of a session", title: "You came through the door, and the door's light came with you", note: "Once per session, straight after sign-in, and never again until the next sign-in: the one place Syndra can afford a full second. Three key frames. The shell is still throughout.", frames: [
+            fr("5", "door-0", "0ms", "Vivid", "The shell is painted. In the head, only the light: the doorway's arch, where the greeting will stand. Reduced motion skips to frame 7.", 300, false),
+            fr("6", "door-1", "260ms", "Vivid", "The arch opens into the pool on settle (260ms, --ease-settle); the greeting tints in over it (120ms). The date line follows 40ms behind: light leads shape.", 300, false),
+            fr("7", "door-2", "700ms", "Vivid", "The pool rests where the hour puts it. The lines are in; the blocks arrive as they do today (420ms over 8px, 40ms apart, cap 5). Total: the same 700ms a page takes now. New: one keyframe, door-open, played once.", 440, false),
+          ] },
+          { eyebrow: "3 · A member's first time", title: "From today, you can use Laser cutting", note: "The member page is the product for most people who ever see Syndra. The line under the greeting already says the news (headerLine.ts). The vivid setting lights the card it is about, in its alphabetical place, for the first visit after it starts.", frames: [
+            fr("8", "me", "My access, the day something starts", "Vivid", "Nothing is pinned: Laser cutting stays between 3D printing and Recent changes. The card's top edge carries the door's light and a violet hairline; its note says From today. On the next visit it is a card like the others.", 580, true),
+            fr("8p", "me-phone", "On a phone", "Vivid", "The same, at 390.", 580, true, 390),
+          ] },
+        ],
+        footLeftLabel: "What this would change",
+        footLeft: "Inside today's tokens: everything in frames 1 and 8 except the lit edge. New tokens: --hour-x, --hour-y and --hour-reach for the pool, set by one small script from the configured zone; one keyframe, door-open. One written exception to the line in globals.css that says colour is never decorative: the light behind Home's head and on a first-time card, as the sign-in door already has. The mark's states use --mark-dot, which exists.",
+        footRightLabel: "Your call · A-24 §12",
+        footRight: "Q1 the dial's default. Q2 the light inside (frames 2 to 4). Q3 the term line. Q4 the first arrival (frames 5 to 7). Q5 the mark's states. Q6 the lit card for a member's first time. I recommend yes to each, with the first arrival built last and judged on staging.",
+      },
+      2: {
+        boardTitle: "The craft, part 2: finishing, waiting, and nothing to do",
+        boardLede: "People remember how a thing ended. Syndra's endings are exact already: a word, a sentence, a next step. These frames ask what the ending of a whole queue should feel like, how a change shows its own route to Zitadel, what a long wait says, and whether an empty card may carry a small drawing.",
+        cards: [dial, rails, { label: "Where delight is refused", edge: "var(--danger-line)", text: "Nothing on this board touches a consent, a revoke, a refusal or a failure. A queue that someone else emptied does not bloom. A search that matched nothing gets no drawing. The trail in group 5 fills only when a step is observed, so it can never run ahead of the truth." }],
+        groups: [
+          { eyebrow: "4 · Finishing a queue", title: "The last request, decided", note: "Deciding one request is frequent, and stays as it is. Emptying the list is rare, perhaps once a day, and it is the end of a job. Three settings for the state you are left looking at, then the vivid one as key frames.", frames: [
+            fr("9", "close-quiet", "As built", "Quiet", "EmptyState, resolved: the lime dot and two sentences. Home's all-clear does not pass lift or bloom today (Home.tsx:441).", 330, false),
+            fr("10", "close-warm", "The ledger line", "Warm", "The same, with lift and bloom when your own act emptied it (D-1 M3, everywhere), and one faint line: what you did here today, and that it reached Zitadel. The count is Syndra's record of your decisions; \"are in Zitadel\" is said only when read back.", 360, true),
+            fr("11", "close-vivid", "The list closes", "Vivid", "The sentence takes the heading size in the display face. A lime hairline runs along the card's top edge. A small plate, a list with nothing left on it, sits in the right seat.", 400, false),
+            fr("12", "close-vivid-light", "In daylight", "Vivid", "The same in the light theme. Lime is --healthy at the light theme's weight.", 400, false),
+            fr("13", "close-stills", "The vivid setting, in time", "Vivid", "Three key frames. Everything but the hairline is a movement Syndra already has.", 330, false),
+          ] },
+          { eyebrow: "5 · Preview, apply, settled", title: "The change shows its own route", note: "The plan is already strong: folds by how each change travels, a because-note, an Apply button that counts people. What the result does not show is the journey. CheckTrail is an existing part; here it carries three steps in Syndra's own words. This is the one place where calm and vivid are the same thing: the picture is the truth.", frames: [
+            fr("14", "trail", "The trail, in three states", "Warm", "Recommended in every setting. The trail sits under ActionOutcome in the sheet's result and, until a role is held, as the row's detail line. For a role that reaches a connected system a fourth step reads that system's own word, for example Ready to use on TrueNAS.", 520, true),
+          ] },
+          { eyebrow: "6 · Waiting", title: "A long wait says so once", note: "Syndra shows nothing under a second and a skeleton only after 200ms. Past ten seconds a person starts to doubt. A real count of steps does not exist for a check, so the honest signal is one changed sentence.", frames: [
+            fr("15", "wait", "Check now, at three moments", "Quiet", "For code to confirm before the second sentence ships: that a check's result is kept when the page is left. If it is not, the second line is cut.", 330, true),
+          ] },
+          { eyebrow: "7 · Empty and all-clear", title: "A plate, where it was earned", note: "EmptyState's own comment says no illustration. The vivid setting proposes the smallest possible exception: three plates drawn from the door, in hairlines, with one lit point. A shut door for a queue that is clear, an open one for a list that is only beginning, and nothing at all for a search that missed.", frames: [
+            fr("16", "empty", "Three empties, twice", "Vivid", "Top row as built. Bottom row with plates. The third card is the same in both rows on purpose.", 470, false),
+            fr("17", "empty-light", "In daylight", "Vivid", "The open door's light is --accent at 40% into transparent; the shut door's ground is --tint-1.", 470, false),
+          ] },
+        ],
+        footLeftLabel: "What this would change",
+        footLeft: "Inside today's tokens and parts: frames 9, 10, 14 and 15. CheckTrail needs a label prop, because its screen-reader words say Check and passes. The ledger line needs one read: today's decisions by this operator, and how many of them are held. New for the vivid setting: a Plate part of three drawings in CSS, and a hairline-draw keyframe on flash's duration.",
+        footRightLabel: "Your call · A-24 §12",
+        footRight: "Q7 the ending of a queue: quiet, warm or vivid. I recommend warm everywhere and vivid on Home's all-clear only. Q8 the trail: I recommend yes. Q9 plates: I recommend the shut door and the open door, in resolved and first-run states only, after you have seen them on staging.",
+      },
+      3: {
+        boardTitle: "The craft, part 3: a person, the numbers, and getting around",
+        boardLede: "The person page is where an operator spends the day, statistics are where Syndra can be beautiful without saying a word, and Go to is opened more often than anything else. Each gets the three settings, and the board ends on the small things that are felt before they are seen.",
+        cards: [dial, rails, { label: "Records explain, they never count", edge: "var(--line)", text: "Every number on this board that says what someone holds is read from Zitadel. Dates, causes and history are Syndra's records, and say so. The year of sessions is drawn from sample data to show a full record: the real one began on 6 Nov, and every earlier day would draw as not counted." }],
+        groups: [
+          { eyebrow: "8 · The person page", title: "One line that knows, and a year at a glance", note: "The page opens on a lede that is the same for every person, so by the tenth visit nobody reads it. My access solved this with one line picked from a ladder. The warm setting gives a person's page the same line. The vivid setting adds the picture an operator builds in their head from the Activity tab.", frames: [
+            fr("18", "person-warm", "The line that knows", "Warm", "Under the name, in place of the lede: what she holds, read from Zitadel, and the one thing worth knowing, from the same ladder as My access. The lede moves to the guard's LEDELESS list, as an app's page did (A-15).", 460, true),
+            fr("19", "person-vivid", "Access over time", "Vivid", "One card: a line per role from the day it was given to the day it ended, on one axis with the terms marked and today in violet. Ink is held today; grey has ended; the dashed amber run is the time left before an end. Roles are A to Z by what they are in.", 780, false),
+          ] },
+          { eyebrow: "9 · Statistics", title: "The makerspace has a rhythm, and it can be seen", note: "A-23 settled the usage card: one band per row, one axis, a figure in the display face. That is the quiet and warm answer, and it stays. The vivid setting is one new picture on Insights: a year of days. Weekends, the winter break and the summer show without a caption.", frames: [
+            fr("20", "pulse", "A year of days", "Vivid", "53 weeks by 7 days, each cell one of five steps of --accent mixed into the surface. A striped cell was not counted. The read day is outlined and said in a sentence below. Three findings in the stat face, each a ranking Syndra can compute.", 600, false),
+            fr("21", "pulse-light", "In daylight", "Vivid", "The same five steps over the light surface. The lightest step still clears the empty cell.", 600, false),
+          ] },
+          { eyebrow: "10 · Search and jump", title: "Go to, three ways", note: "Go to is opened by a key, so the frequency rule is strict: it must feel like no time passed. The settings differ in what it knows, not in how it moves.", frames: [
+            fr("22", "goto", "The panel, three settings", "Quiet · Warm · Vivid", "Quiet is recommended now. Warm needs your word, because Go to deliberately remembers nothing today (GoTo.tsx:18). Vivid is a later slice.", 470, false),
+          ] },
+          { eyebrow: "11 · The small things", title: "Felt before they are seen", note: "None of these is a feature. Each removes a flicker, a shift or a dead end that a person would never name and always notices.", frames: [
+            fr("23", "details", "Three of twelve", "Quiet", "The full list of twelve is in A-24 §11. All of them fit today's tokens, and nine are one rule each in globals.css.", 330, true),
+          ] },
+        ],
+        footLeftLabel: "What this would change",
+        footLeft: "Inside today's tokens: frames 18, 22 (quiet) and 23. The line that knows reuses headerLine.ts's ladder with an operator's wording. Access over time needs each role's given and ended dates for the year, which the Activity tab's audit read already holds. A year of days needs a daily series for twelve months, where the usage card reads thirty days and twelve monthly totals.",
+        footRightLabel: "Your call · A-24 §12",
+        footRight: "Q10 the person's line: I recommend yes. Q11 access over time: I recommend yes, in Advanced first. Q12 a year of days: I recommend yes, on Insights only, once counting has run a term. Q13 Go to remembering your last five places on this device: I recommend yes.",
+      },
+    };
+    const p = parts[this.part];
+    return { boardLabel: "A-24 · The craft · part " + this.part, boardEyebrow: "A-24 · Proposed, 18 Nov 2026 · part " + this.part + " of 3", ...p };
+  }
+}
+</script>
+</body>
+</html>
