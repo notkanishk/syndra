@@ -40,7 +40,7 @@ export const Sizes = () => (
 /** Beside the name, as people lists pair them. */
 export const WithName = () => (
   <SyndraRoot data={seed}>
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 15 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: "var(--text-body)" }}>
       {["284019337710552064", "284019337710553311", "284019337710554187"].map((id) => (
         <div key={id} style={{ ...row, gap: 10 }}>
           <UserAvatar id={id} size="list" />

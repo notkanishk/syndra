@@ -24,13 +24,13 @@ const catalog = {
 };
 const seed = [{ key: ["name-catalog"], value: catalog }, { key: ["name-bundles"], value: [] }];
 
-const muted = { flex: 1, fontSize: 14.5, color: "var(--muted)" } as const;
-const who = { width: 170, fontSize: 15, fontWeight: 600 } as const;
+const muted = { flex: 1, fontSize: "var(--text-body)", color: "var(--muted)" } as const;
+const who = { width: 170, fontSize: "var(--text-body)", fontWeight: 600 } as const;
 
 /** Always the pair: the project resolved to its name, the role key in mono. */
 export const Pair = () => (
   <SyndraRoot data={seed}>
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 15 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: "var(--text-body)" }}>
       <RoleRef projectId="382075332397630470" roleKey="operator" />
       <RoleRef projectId="382075332397630481" roleKey="supervisor" />
     </div>
@@ -56,6 +56,6 @@ export const InRows = () => (
 /** Half a pair is no pair: either side missing renders the dash. */
 export const Missing = () => (
   <SyndraRoot data={seed}>
-    <div style={{ fontSize: 15 }}><RoleRef projectId="382075332397630470" roleKey={null} /></div>
+    <div style={{ fontSize: "var(--text-body)" }}><RoleRef projectId="382075332397630470" roleKey={null} /></div>
   </SyndraRoot>
 );

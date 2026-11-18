@@ -9,9 +9,9 @@ const at = (minutesAgo: number) => {
   const d = new Date(Date.now() - minutesAgo * 60_000);
   return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
 };
-const person = (name: string) => <span style={{ fontSize: 14.5, fontWeight: 600 }}>{name}</span>;
+const person = (name: string) => <span style={{ fontSize: "var(--text-body)", fontWeight: 600 }}>{name}</span>;
 const body = (
-  <div style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.55 }}>
+  <div style={{ fontSize: "var(--text-small)", color: "var(--muted)", lineHeight: 1.55 }}>
     Syndra read her roles from Zitadel, found Operator on the laser cutter, and left the CNC router out because it is not in this app&apos;s roles.
   </div>
 );

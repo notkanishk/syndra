@@ -5,7 +5,7 @@
 import { Avatar } from "ui";
 
 const row = { display: "flex", alignItems: "center", gap: 16 } as const;
-const item = { display: "flex", alignItems: "center", gap: 10, fontSize: 15, fontWeight: 600 } as const;
+const item = { display: "flex", alignItems: "center", gap: 10, fontSize: "var(--text-body)", fontWeight: 600 } as const;
 
 export const Sizes = () => (
   <div style={row}>

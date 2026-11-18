@@ -24,7 +24,7 @@ const catalog = {
 };
 const seed = [{ key: ["name-catalog"], value: catalog }, { key: ["name-bundles"], value: [] }];
 
-const col = { display: "flex", flexDirection: "column", gap: 10, fontSize: 15 } as const;
+const col = { display: "flex", flexDirection: "column", gap: 10, fontSize: "var(--text-body)" } as const;
 
 /** Ids the catalog knows resolve to the person's name; showEmail adds the address. */
 export const Resolved = () => (
@@ -60,7 +60,7 @@ export const SystemAndEmpty = () => (
 /** In an audit line, the way the change history composes it. */
 export const InSentence = () => (
   <SyndraRoot data={seed}>
-    <p style={{ fontSize: 14.5, color: "var(--muted)", margin: 0 }}>
+    <p style={{ fontSize: "var(--text-body)", color: "var(--muted)", margin: 0 }}>
       <UserName id="284019337710554187" /> ended laser cutter access for <UserName id="284019337710553311" />.
     </p>
   </SyndraRoot>

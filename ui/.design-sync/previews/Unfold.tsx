@@ -21,7 +21,7 @@ export function Toggle() {
         </Notice>
       </Unfold>
       <Card>
-        <div style={{ padding: "14px 20px", fontSize: 14.5 }}>Laser Cutter · 23 people hold Operator</div>
+        <div style={{ padding: "14px 20px", fontSize: "var(--text-body)" }}>Laser Cutter · 23 people hold Operator</div>
       </Card>
     </div>
   );

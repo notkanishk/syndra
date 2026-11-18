@@ -21,7 +21,7 @@ export function UnderItsTrigger() {
             background: "var(--surface-1)",
             borderRadius: 10,
             padding: "12px 14px",
-            fontSize: 13.5,
+            fontSize: "var(--text-small)",
             lineHeight: 1.5,
             color: "var(--ink)",
           }}

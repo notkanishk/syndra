@@ -4,7 +4,7 @@
 // moves:end
 import { WithheldPill } from "ui";
 
-const line = { display: "flex", alignItems: "center", gap: 10, fontSize: 14.5 } as const;
+const line = { display: "flex", alignItems: "center", gap: 10, fontSize: "var(--text-body)" } as const;
 
 export const Alone = () => <WithheldPill />;
 

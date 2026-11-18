@@ -4,7 +4,7 @@
 // moves:end
 import { CountChip } from "ui";
 
-const row = { display: "flex", alignItems: "center", gap: 16, fontSize: 15, fontWeight: 600 } as const;
+const row = { display: "flex", alignItems: "center", gap: 16, fontSize: "var(--text-body)", fontWeight: 600 } as const;
 
 export const Filled = () => <div style={row}>Open requests <CountChip n={4} /></div>;
 

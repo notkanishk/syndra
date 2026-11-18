@@ -1255,6 +1255,35 @@ describe("density and alignment (D-1)", () => {
     expect(found, `Use measure:\n  ${found.join("\n  ")}`).toEqual([]);
   });
 
+  // §6 pass 5: the canvas mounts the parts D-1 built, so the boards can drop their override block.
+  // Every part Card.tsx exports is a design-system card with a preview, and a preview's own glue
+  // reads the type scale, never a number of its own (BRIDGE, "The design system").
+  it("puts every part of the row and the card on the canvas, its glue on the type scale", () => {
+    const UI = resolve(SRC_ROOT, "..");
+    const config = JSON.parse(readFileSync(resolve(UI, ".design-sync/config.json"), "utf8")) as { componentSrcMap: Record<string, string> };
+    const exported = Array.from(
+      readFileSync(resolve(SRC_ROOT, "components/ui/Card.tsx"), "utf8").matchAll(/^export function ([A-Z]\w*)/gm),
+      (m) => m[1],
+    );
+    expect(exported).toEqual(expect.arrayContaining(["CardRow", "CardGrid", "ActionSeat", "CardColumns", "CardHeader"]));
+    for (const name of exported) {
+      expect(config.componentSrcMap[name], `${name} is a design-system card`).toBe("src/components/ui/Card.tsx");
+      expect(readdirSync(resolve(UI, ".design-sync/previews")), `${name} has a preview`).toContain(`${name}.tsx`);
+    }
+    const literal: string[] = [];
+    for (const file of readdirSync(resolve(UI, ".design-sync/previews"))) {
+      const source = readFileSync(resolve(UI, ".design-sync/previews", file), "utf8");
+      for (const m of Array.from(source.matchAll(/fontSize:\s*\d/g))) literal.push(`${file}:${source.slice(0, m.index).split("\n").length}`);
+    }
+    expect(literal, `A preview's glue reads a step (fontSize: "var(--text-body)"):\n  ${literal.join("\n  ")}`).toEqual([]);
+    // The previews of the row show the seat, the detail line and the caption.
+    const row = readFileSync(resolve(UI, ".design-sync/previews/CardRow.tsx"), "utf8");
+    expect(row).toMatch(/seat="default"[\s\S]*action=/);
+    expect(row).toMatch(/detail=/);
+    expect(readFileSync(resolve(UI, ".design-sync/previews/CardHeader.tsx"), "utf8")).toMatch(/caption=/);
+    expect(readFileSync(resolve(UI, ".design-sync/previews/CardColumns.tsx"), "utf8")).toMatch(/seatLabel=/);
+  });
+
   it("takes no line for an empty detail", () => {
     expect(namedAtRuleBody(css, "@utility", "row-detail")).toMatch(/&:empty \{\s*display: none;\s*\}/);
   });

@@ -3093,4 +3093,25 @@ end to end) found no missing function; three regressions with one root cause
         - an avatar size without its marker.
   - [ ] 7u-5 Motion (§7: the five tokens, M1–M14, the eight motion tests).
   - [ ] 7u-6 Pass 5, resync the design system (`ui/.design-sync`, BRIDGE steps 1 to 3), after the owner's OK.
+    *Code side done, publishing waits on the owner (18 Nov 2026, branch `feat/addon-contract-d1-5`).* Steps 2 and 3 publish to the Syndra Design System artifact and copy it into the canvas. BRIDGE and the standing rule ("ask before any publish") put both after the owner's OK, and the owner is away, so neither ran and no board lost its override block. Pass 5 adds no motion: §7 is the next pass (7u-5).
+    - **Cards.**
+      - `CardGrid` and `ActionSeat` are design-system cards (`config.json` `componentSrcMap`), with previews: `CardGrid` Pair and Wide, `ActionSeat` OnAListRow.
+      - CardRow's preview shows the row D-1 built:
+        - ActionSeats: the table-level seat, an empty seat kept, the next step on the detail line, the caption, and the Status column at `--seat-status`;
+        - TopAligned;
+        - DisclosureWithControl, whose button is now in its seat.
+      - CardHeader gains Caption.
+      - CardColumns gains WithSeat (`seat` and `seatLabel`).
+      - `moves.json`: CardRow's Phone line says its seat wraps under it, and CardGrid and ActionSeat have their lines. The preview blocks and `MOVES.md` are regenerated (`node .design-sync/moves.mjs`).
+    - **Preview glue reads the type scale.** The 62 numeric font sizes in 41 previews became `var(--text-body | small | title)`, as pass 4 folded the app; the widths in the touched previews became the seat tokens.
+    - **Step 1, run locally (nothing published):**
+      - `bun .design-sync/build-css.mjs` and `resync.mjs` built `ds-bundle/`: 120 components, 120 previews, "bundle is complete".
+      - The 46 cards it captured have no errors; the ten render warns are the dialogs, GoTo, KeysSheet, PushedStep, RehearsalDialog and TouchNav, already listed in `NOTES.md`.
+      - The captures of CardRow ActionSeats, CardGrid Pair and CardColumns WithSeat read as the app does: seats right, detail lines under the row, cards top-aligned.
+      - `ds-bundle/` stays local (ignored) until the owner's OK. Then BRIDGE step 2 (`ds_merge.py`, `token_check.py`, publish) and step 3 (the canvas copy, then drop the D-1 boards' override block).
+    - **Guard** (`design-system.test.ts`):
+      - every part `Card.tsx` exports is a `Card.tsx` card in `componentSrcMap`, with a preview;
+      - no preview's glue sets a numeric `fontSize`;
+      - CardRow's preview shows a seat with an action and a detail line; CardHeader's shows a caption; CardColumns' shows a `seatLabel`.
+    - **Mutation-checked** (each red): `CardGrid` left out of `componentSrcMap`; a preview's `fontSize: 14.5`; CardRow's preview without its detail lines.
 - [ ] 7v Flaky conformance test (add-on track; noted 18 Nov 2026, not fixed). `addons/conformance` `TestAnUnansweredWithdrawThatBoundAnAccountIsOwnedUpTo` (`kit_test.go:1312`) failed once on PR #200's CI run, with no Go change in the PR (reported by the PR's review). Find the race or ordering it depends on (`go test -race -count=200 -run TestAnUnansweredWithdrawThatBoundAnAccountIsOwnedUpTo ./...` in `addons/conformance`), fix it at the root, and leave a guard that fails without the fix. `needs-triage`

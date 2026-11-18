@@ -5,7 +5,7 @@
 import { Mono } from "ui";
 
 const col = { display: "flex", flexDirection: "column", gap: 8 } as const;
-const line = { fontSize: 14.5, color: "var(--muted)" } as const;
+const line = { fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 export const RoleKeys = () => (
   <div style={col}>

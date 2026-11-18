@@ -4,7 +4,7 @@
 // moves:end
 import { Radio } from "ui";
 
-const label = { display: "flex", alignItems: "center", gap: 10, fontSize: 14.5 } as const;
+const label = { display: "flex", alignItems: "center", gap: 10, fontSize: "var(--text-body)" } as const;
 
 /** The one radio: a dot in the same seat. */
 export const Group = () => (

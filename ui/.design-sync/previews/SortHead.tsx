@@ -10,8 +10,8 @@ const rows = [
   { project: "Wood Shop", people: 41 },
   { project: "Electronics Bench", people: 17 },
 ];
-const name = { width: 250, fontSize: 15, fontWeight: 600 } as const;
-const num = { width: 110, textAlign: "right", fontSize: 14.5, color: "var(--muted)" } as const;
+const name = { width: 250, fontSize: "var(--text-body)", fontWeight: 600 } as const;
+const num = { width: 110, textAlign: "right", fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 /** Sort lives on the headings: the arrow shows only on the one in force. */
 export function ProjectList() {

@@ -5,7 +5,7 @@
 import { Relative } from "ui";
 
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
-const col = { display: "flex", flexDirection: "column", gap: 8, fontSize: 14.5 } as const;
+const col = { display: "flex", flexDirection: "column", gap: 8, fontSize: "var(--text-body)" } as const;
 const item = { display: "flex", gap: 12 } as const;
 const label = { width: 220, color: "var(--muted)" } as const;
 

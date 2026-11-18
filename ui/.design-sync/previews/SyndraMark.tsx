@@ -19,6 +19,6 @@ export const Sizes = () => (
 export const RailLockup = () => (
   <div style={{ ...row, gap: 10, background: "var(--rail)", padding: "20px 20px", width: 252, borderRight: "1px solid var(--line)" }}>
     <SyndraMark />
-    <span style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 600, letterSpacing: "-0.01em" }}>Syndra</span>
+    <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-title)", fontWeight: 600, letterSpacing: "-0.01em" }}>Syndra</span>
   </div>
 );

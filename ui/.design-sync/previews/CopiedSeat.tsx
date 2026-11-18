@@ -4,7 +4,7 @@
 // moves:end
 import { CopiedSeat } from "ui";
 
-const row = { display: "flex", flexWrap: "wrap", gap: 24, fontSize: 13, fontWeight: 600 } as const;
+const row = { display: "flex", flexWrap: "wrap", gap: 24, fontSize: "var(--text-small)", fontWeight: 600 } as const;
 
 /** One seat sized to the wider word, so the button never changes width. The words crossfade on tint; under reduced motion they swap at once. */
 export const IdleAndDone = () => (
