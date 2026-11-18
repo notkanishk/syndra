@@ -1,5 +1,5 @@
 import { isForeignOrigin } from "@/lib/request-url";
-import { getSession } from "@/lib/session";
+import { getAccessToken, getSession } from "@/lib/session";
 import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://backend:8080";
@@ -182,13 +182,14 @@ async function proxy(request: NextRequest, method: Method, path: string[]) {
   const target = new URL(`${BACKEND_URL}/api/v1/${path.join("/")}`);
   target.search = request.nextUrl.search;
 
-  if (session.sessionType === "oidc" && !session.accessToken) {
-    return refuse(401, "UNAUTHORIZED", "Your session ended before this ran.");
+  let authToken = API_KEY;
+  if (session.sessionType === "oidc") {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      return refuse(401, "UNAUTHORIZED", "Your session ended before this ran.");
+    }
+    authToken = accessToken;
   }
-
-  const authToken = session.sessionType === "oidc" && session.accessToken
-    ? session.accessToken
-    : API_KEY;
 
   const headers: Record<string, string> = { Authorization: `Bearer ${authToken}` };
   // Demo mode has no token to carry a subject, so the request would otherwise

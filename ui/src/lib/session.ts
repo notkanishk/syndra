@@ -1,3 +1,6 @@
+// Server only: this module holds the access token. Next resolves the marker
+// itself (installing the package is optional); a client import fails the build.
+import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { nameToAvatar } from "@/lib/oidc";
@@ -13,8 +16,8 @@ export interface SessionUser {
   status: string;
   avatar: string;
   role: SessionRole;
-  // Phase 3: present for OIDC sessions, undefined for demo sessions
-  accessToken?: string;
+  // No access token, ever: pages hand this to client components, whose props
+  // are serialised into the page. Server code that needs it calls getAccessToken().
   sessionType: "demo" | "oidc";
   // True for the session that recorded the person's first sign-in, and for no
   // other: the one-time welcome shows while this session lasts (A-18 Q9).
@@ -263,18 +266,34 @@ export function createOidcSessionValue(payload: OidcSessionCookie): string {
 // getSession — resolves cookie to SessionUser
 // ---------------------------------------------------------------------------
 
-export async function getSession(): Promise<SessionUser | null> {
+// One read for both accessors: the verified cookie payload, with an expired
+// OIDC session rejected before its token reaches the backend.
+async function readSessionCookie(): Promise<SessionCookiePayload | null> {
   const cookieStore = await cookies();
   const raw = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!raw) return null;
 
   const payload = decodeSessionPayload(raw);
   if (!payload) return null;
+  if (payload.type === "oidc" && Date.now() / 1000 > payload.expiresAt) return null;
+  return payload;
+}
+
+/**
+ * The signed-in person's Zitadel access token, or null (no session, expired,
+ * or demo). For the API proxy only, never a prop: session-token-boundary.test.ts
+ * holds every caller to that.
+ */
+export async function getAccessToken(): Promise<string | null> {
+  const payload = await readSessionCookie();
+  return payload?.type === "oidc" ? payload.accessToken : null;
+}
+
+export async function getSession(): Promise<SessionUser | null> {
+  const payload = await readSessionCookie();
+  if (!payload) return null;
 
   if (payload.type === "oidc") {
-    // Reject expired tokens before they reach the backend
-    if (Date.now() / 1000 > payload.expiresAt) return null;
-
     return {
       id: payload.userId,
       name: payload.name,
@@ -284,7 +303,6 @@ export async function getSession(): Promise<SessionUser | null> {
       status: payload.status,
       avatar: nameToAvatar(avatarSeed(payload.name, payload.email, payload.userId)),
       role: payload.role,
-      accessToken: payload.accessToken,
       sessionType: "oidc",
       ...(payload.firstVisit ? { firstVisit: true } : {}),
       ...(payload.previousSignIn ? { previousSignIn: payload.previousSignIn } : {}),
