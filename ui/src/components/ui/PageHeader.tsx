@@ -87,8 +87,13 @@ export function PageHeader({
   const head = usePageHead();
 
   return (
-    <div {...head} style={BELOW_HEADER}>
-      <div className={`flex flex-wrap items-end gap-4 ${className}`}>
+    // `className` sizes the root, the box a parent row lays out (the person
+    // page's `w-full flex-1` beside its avatar). On the inner row it left the
+    // root as wide as its text, so the actions sat wherever the text ended:
+    // the right seat (D-1) is the root's full width, the text block growing
+    // into it (`flex-auto`) and the actions at its end.
+    <div {...head} className={`${head.className} ${className}`} style={BELOW_HEADER}>
+      <div className="flex flex-wrap items-end gap-4">
       {/* `flex-auto` (basis: auto), not `flex-1` (basis: 0%) — with a 0%
           basis this block reports zero size to the wrap decision, so `actions`
           claims the whole line and this text is squeezed into whatever sliver
