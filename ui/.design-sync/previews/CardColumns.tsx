@@ -2,32 +2,61 @@
 // Moves: Nothing on it moves. Still: the same.
 // Phone: The same at every width.
 // moves:end
-import { Card, CardColumns, CardRow } from "ui";
+import { Button, Card, CardColumns, CardRow } from "ui";
 
-const flex = { flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600 } as const;
-const num = (w: number) => ({ width: w, flexShrink: 0, textAlign: "right" as const, fontSize: 15 });
-const apps = { width: 200, fontSize: 14, color: "var(--muted)" } as const;
+const flex = { flex: 1, minWidth: 0, fontSize: "var(--text-body)", fontWeight: 600 } as const;
+const num = { width: "var(--seat-number)", flexShrink: 0, textAlign: "right" as const, fontSize: "var(--text-body)" };
+const apps = { width: "var(--seat-action)", fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 /** Column headings over table-shaped rows (projects list). Hidden below tablet width. */
 export const ProjectsTable = () => (
   <Card>
     <CardColumns>
       <span style={{ flex: 1, minWidth: 0 }}>Project</span>
-      <span style={{ width: 92, flexShrink: 0, textAlign: "right" }}>People</span>
-      <span style={{ width: 60, flexShrink: 0, textAlign: "right" }}>Roles</span>
-      <span style={{ width: 200 }}>Apps served</span>
+      <span style={{ width: "var(--seat-number)", flexShrink: 0, textAlign: "right" }}>People</span>
+      <span style={{ width: "var(--seat-number)", flexShrink: 0, textAlign: "right" }}>Roles</span>
+      <span style={{ width: "var(--seat-action)" }}>Apps served</span>
     </CardColumns>
     <CardRow>
-      <span style={flex}>Fabrication Lab</span><span style={num(92)}>48</span><span style={num(60)}>6</span>
+      <span style={flex}>Fabrication Lab</span><span style={num}>48</span><span style={num}>6</span>
       <span style={apps}>Door access, Booking</span>
     </CardRow>
     <CardRow>
-      <span style={flex}>Electronics Bench</span><span style={num(92)}>21</span><span style={num(60)}>3</span>
+      <span style={flex}>Electronics Bench</span><span style={num}>21</span><span style={num}>3</span>
       <span style={apps}>TrueNAS</span>
     </CardRow>
     <CardRow>
-      <span style={flex}>Wood Shop</span><span style={num(92)}>12</span><span style={num(60)}>4</span>
+      <span style={flex}>Wood Shop</span><span style={num}>12</span><span style={num}>4</span>
       <span style={apps}>Door access</span>
+    </CardRow>
+  </Card>
+);
+
+/**
+ * The seat's heading cell (D-1 §4): `seat` draws it at the rows' width, so the other headings sit over
+ * their cells; `seatLabel` names it where a column of verbs needs a name ("Decision").
+ */
+export const WithSeat = () => (
+  <Card>
+    <CardColumns seat="default" seatLabel="Decision">
+      <span style={{ flex: 1, minWidth: 0 }}>Who</span>
+      <span style={{ width: "var(--seat-number)", flexShrink: 0, textAlign: "right" }}>When</span>
+    </CardColumns>
+    <CardRow
+      seat="default"
+      action={
+        <>
+          <Button size="sm" variant="accent">Approve</Button>
+          <Button size="sm">Decline</Button>
+        </>
+      }
+    >
+      <span style={flex}>Bayley asked for Laser cutter · Operator</span>
+      <span style={num}>2 days ago</span>
+    </CardRow>
+    <CardRow seat="default">
+      <span style={flex}>Iyo Sky asked for Wood shop · Member</span>
+      <span style={num}>5 days ago</span>
     </CardRow>
   </Card>
 );

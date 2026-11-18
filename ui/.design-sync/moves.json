@@ -255,7 +255,7 @@
     },
     "CardRow": {
       "moves": "A row that opens something tints to --hover and darkens to --tint-3 pressed, and never scales; its body opens by Unfold. Still: opens at once, the tint stays.",
-      "phone": "A row with more than two facts discloses the rest rather than wrapping."
+      "phone": "Below tablet its action seat wraps under the row and stays right-aligned; a row with more than two facts discloses the rest rather than wrapping."
     },
     "ReadGate": {
       "moves": "The skeleton appears only if the read is still going after 200ms and fades when it lands; the content then arrives. It never crossfades. Still: the swap is at once.",
@@ -344,6 +344,14 @@
     "ListStates": {
       "moves": "The skeleton waits 200ms and fades out as the rows arrive; an empty or failed list appears in place. Still: swaps at once.",
       "phone": "The same at every width."
+    },
+    "CardGrid": {
+      "moves": "Nothing on it moves; a card in it folds by its own Unfold. Still: the same.",
+      "phone": "One card under another where two cannot each be 420 wide (600 for wide)."
+    },
+    "ActionSeat": {
+      "moves": "Nothing on it moves. Still: the same.",
+      "phone": "Below tablet it wraps under its row and stays right-aligned."
     }
   }
 }

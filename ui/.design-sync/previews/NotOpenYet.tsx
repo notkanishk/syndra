@@ -4,8 +4,8 @@
 // moves:end
 import { Card, CardRow, NotOpenYet, StatCard } from "ui";
 
-const name = { width: 170, fontSize: 15, fontWeight: 600 } as const;
-const muted = { flex: 1, fontSize: 14.5, color: "var(--muted)" } as const;
+const name = { width: 170, fontSize: "var(--text-body)", fontWeight: 600 } as const;
+const muted = { flex: 1, fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 /** In a card: a 15px lead, the way on, and the contents drawn as they will be. */
 export const InCard = () => (
@@ -33,7 +33,7 @@ export const InCard = () => (
 /** No way on from here right now: the lead line only. */
 export const NoStep = () => (
   <NotOpenYet open={false} title="Laser Cutter jobs" why="Opens after your safety induction is recorded.">
-    <div style={{ fontSize: 14.5, color: "var(--muted)" }}>Your last 5 cut jobs will show here.</div>
+    <div style={{ fontSize: "var(--text-body)", color: "var(--muted)" }}>Your last 5 cut jobs will show here.</div>
   </NotOpenYet>
 );
 
@@ -57,6 +57,6 @@ export const PageSize = () => (
 /** Open: only its contents. */
 export const Open = () => (
   <NotOpenYet open title="Storage" why="Opens once your TrueNAS password is set.">
-    <div style={{ fontSize: 14.5 }}>projects · Read and write</div>
+    <div style={{ fontSize: "var(--text-body)" }}>projects · Read and write</div>
   </NotOpenYet>
 );

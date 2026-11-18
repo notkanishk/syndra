@@ -4,7 +4,7 @@
 // moves:end
 import { Kbd } from "ui";
 
-const row = { display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--faint)" } as const;
+const row = { display: "flex", alignItems: "center", gap: 6, fontSize: "var(--text-small)", color: "var(--faint)" } as const;
 
 /** A drawn key, written as it is printed on the key. */
 export const Keys = () => (

@@ -4,8 +4,8 @@
 // moves:end
 import { Card, CardRow, RowField } from "ui";
 
-const name = { width: 170, fontSize: 15, fontWeight: 600 } as const;
-const muted = { flex: 1, fontSize: 14.5, color: "var(--muted)" } as const;
+const name = { width: 170, fontSize: "var(--text-body)", fontWeight: 600 } as const;
+const muted = { flex: 1, fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 /** The label/value pairs a disclosed row is built from — what the column headings said on a wide screen. */
 export const InDisclosedRow = () => (

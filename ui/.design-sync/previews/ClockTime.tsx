@@ -4,7 +4,7 @@
 // moves:end
 import { ClockTime } from "ui";
 
-const line = { fontSize: 14, color: "var(--muted)" } as const;
+const line = { fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 export const LastChecked = () => (
   <div style={line}>Friday · last checked <ClockTime at={Date.UTC(2026, 9, 2, 3, 38)} /></div>

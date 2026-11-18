@@ -4,8 +4,8 @@
 // moves:end
 import { Card, CardRow, Unresolved } from "ui";
 
-const who = { width: 220, fontSize: 15, fontWeight: 600 } as const;
-const muted = { flex: 1, fontSize: 14.5, color: "var(--muted)" } as const;
+const who = { width: 220, fontSize: "var(--text-body)", fontWeight: 600 } as const;
+const muted = { flex: 1, fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 /** A name nothing could place: the shared faint phrase, then the id, copyable. */
 export const InRows = () => (

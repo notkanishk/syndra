@@ -24,8 +24,8 @@ export const InRows = () => {
             checked={!!picked[p.id]}
             onChange={() => setPicked({ ...picked, [p.id]: !picked[p.id] })}
           />
-          <span style={{ width: 150, fontSize: 15, fontWeight: 600 }}>{p.name}</span>
-          <span style={{ fontSize: 14.5, color: "var(--muted)" }}>{p.role}</span>
+          <span style={{ width: 150, fontSize: "var(--text-body)", fontWeight: 600 }}>{p.name}</span>
+          <span style={{ fontSize: "var(--text-body)", color: "var(--muted)" }}>{p.role}</span>
         </label>
       ))}
     </Card>

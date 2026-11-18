@@ -9,7 +9,7 @@ const col = { display: "grid", gap: 14, maxWidth: 640 } as const;
 /** Warn: data is stale or paused. The dot breathes while it is still going on. */
 export const Stale = () => (
   <div style={col}>
-    <Notice tone="warn" live title="Showing what Zitadel said 14 minutes ago">
+    <Notice tone="warn" live title="Showing what Zitadel said 14 minutes ago" nothingToDo="Syndra reads it again as soon as Zitadel answers.">
       {"Syndra can't reach Zitadel right now. Nothing below is wrong, but it may be out of date."}
     </Notice>
   </div>
@@ -23,6 +23,7 @@ export const ReadFailed = () => (
       title="Couldn't load who holds this role"
       action={{ label: "Try again", onClick: () => {} }}
       reference="req_7f3a91c2e4"
+      next="Try again. If it keeps failing, quote the reference to whoever runs Syndra."
     >
       The list may be incomplete. Try again, or quote the reference to the person who runs Syndra.
     </Notice>
@@ -32,7 +33,7 @@ export const ReadFailed = () => (
 /** Neutral: out of reach, and nothing is in doubt. */
 export const OutOfReach = () => (
   <div style={col}>
-    <Notice tone="neutral" title="TrueNAS is offline">
+    <Notice tone="neutral" title="TrueNAS is offline" nothingToDo="Changes go out once it is back.">
       Storage changes wait until it is back. Everything you can see is still current.
     </Notice>
   </div>
@@ -42,7 +43,7 @@ export const OutOfReach = () => (
 export const BlockingInCard = () => (
   <Card>
     <div style={{ padding: 20 }}>
-      <Notice tone="danger" blocking title="This rule can't be saved">
+      <Notice tone="danger" blocking title="This rule can't be saved" next="Choose a role that does not wait for you, or save the rule without it.">
         It gives Laser Cutter · Operator to everyone in Wood Shop, and Operator always waits for you.
       </Notice>
     </div>

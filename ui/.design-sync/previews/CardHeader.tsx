@@ -4,7 +4,7 @@
 // moves:end
 import { Card, CardHeader, CardHeaderLink, CardRow } from "ui";
 
-const body = { fontSize: 14.5, color: "var(--muted)" } as const;
+const body = { fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 /** Count tone is the axis: accent (work to do), warn (a deadline), danger (decide now). */
 export const Accent = () => (
@@ -38,5 +38,21 @@ export const ZeroCount = () => (
 export const TitleOnly = () => (
   <Card>
     <CardHeader title="Roles in this project" />
+  </Card>
+);
+
+/**
+ * D-1 §4 rule 7: the card's explanation is a caption, a line of its own under the title at the
+ * measure; the note at the right is only a short fact (48 characters at most).
+ */
+export const Caption = () => (
+  <Card>
+    <CardHeader
+      title="Not created by Syndra"
+      count={2}
+      note="All read"
+      caption="Accounts on TrueNAS that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person."
+    />
+    <CardRow first><span style={body}>root</span></CardRow>
   </Card>
 );

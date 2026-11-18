@@ -5,7 +5,7 @@
 import { StatusDot } from "ui";
 
 const col = { display: "flex", flexDirection: "column", gap: 10 } as const;
-const item = { display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 } as const;
+const item = { display: "flex", alignItems: "center", gap: 8, fontSize: "var(--text-small)" } as const;
 
 /** A dot and a word — never colour alone. */
 export const Tones = () => (

@@ -5,7 +5,9 @@
 import { useState } from "react";
 import { Card, CardHeader, RoleWordsTable } from "ui";
 
-const start = [
+type Row = { key: string; name: string; word: string; included: boolean; waits?: boolean; changed?: boolean; notes?: string[] };
+
+const start: Row[] = [
   { key: "fabrication-lead", name: "Fabrication lead", word: "fab_lead", included: true, waits: true },
   { key: "laser-operator", name: "Laser operator", word: "", included: true },
   { key: "wood-shop-supervisor", name: "Wood shop supervisor", word: "woodshop", included: true, changed: true, notes: ["Was `wood-shop-supervisor`."] },
@@ -14,7 +16,7 @@ const start = [
 
 function Table({ readOnly = false, dense = false }: { readOnly?: boolean; dense?: boolean }) {
   const [rows, setRows] = useState(start);
-  const patch = (key: string, p: Partial<(typeof start)[number]>) =>
+  const patch = (key: string, p: Partial<Row>) =>
     setRows((all) => all.map((r) => (r.key === key ? { ...r, ...p } : r)));
   return (
     <Card>

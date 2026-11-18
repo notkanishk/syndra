@@ -5,8 +5,8 @@
 import { useEffect, useRef } from "react";
 import { Card, CardRow, WaitsMark } from "ui";
 
-const role = { flex: 1, fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 } as const;
-const muted = { fontSize: 14, color: "var(--muted)" } as const;
+const role = { flex: 1, fontSize: "var(--text-body)", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 } as const;
+const muted = { fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 /** After a role that always waits for the operator. */
 export const AfterARole = () => (
@@ -32,7 +32,7 @@ export function Explained() {
     ref.current?.querySelector<HTMLElement>("[role=img]")?.focus();
   }, []);
   return (
-    <div ref={ref} style={{ minHeight: 120, fontSize: 15, fontWeight: 600 }}>
+    <div ref={ref} style={{ minHeight: 120, fontSize: "var(--text-body)", fontWeight: 600 }}>
       Supervisor <WaitsMark />
     </div>
   );

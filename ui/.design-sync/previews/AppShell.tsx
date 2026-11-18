@@ -31,8 +31,8 @@ const member = {
 
 /** Full-bleed: AppShell is h-dvh, so cancel the 24px card padding and let it fill the viewport. */
 const frame = { margin: -24, height: "100dvh", overflow: "hidden" } as const;
-const name = { width: 170, fontSize: 15, fontWeight: 600 } as const;
-const muted = { flex: 1, fontSize: 14.5, color: "var(--muted)" } as const;
+const name = { width: 170, fontSize: "var(--text-body)", fontWeight: 600 } as const;
+const muted = { flex: 1, fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 /** Pins the operator's view; AppShell's own UiViewProvider persists it, so every cell sets its own. */
 function View({ view }: { view: "basic" | "advanced" }) {

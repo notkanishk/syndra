@@ -54,10 +54,10 @@ export const AddAndRemove = () => {
 export const Opened = () => (
   <Card>
     <FormPart {...keep}>
-      <div style={{ padding: "12px 20px", fontSize: 14.5 }}>Laser cutter · Operator</div>
+      <div style={{ padding: "12px 20px", fontSize: "var(--text-body)" }}>Laser cutter · Operator</div>
     </FormPart>
     <FormPart {...keep}>
-      <div style={{ padding: "12px 20px", fontSize: 14.5 }}>Wood shop · Supervisor</div>
+      <div style={{ padding: "12px 20px", fontSize: "var(--text-body)" }}>Wood shop · Supervisor</div>
     </FormPart>
   </Card>
 );

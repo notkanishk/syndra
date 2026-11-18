@@ -4,7 +4,7 @@
 // moves:end
 import { ResolvedProjectName } from "ui";
 
-const heading = { fontSize: 17, fontWeight: 600 } as const;
+const heading = { fontSize: "var(--text-title)", fontWeight: 600 } as const;
 
 /** The server already named it: just the name. */
 export const Resolved = () => (

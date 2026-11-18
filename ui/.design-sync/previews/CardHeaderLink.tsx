@@ -4,7 +4,7 @@
 // moves:end
 import { Card, CardHeader, CardHeaderLink, CardRow } from "ui";
 
-const body = { fontSize: 14.5, color: "var(--muted)" } as const;
+const body = { fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 export const InCardHeader = () => (
   <Card>

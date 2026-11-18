@@ -4,8 +4,8 @@
 // moves:end
 import { Card, CardHeader, CardHeaderLink, CardRow, Badge, Button } from "ui";
 
-const name = { width: 170, fontSize: 15, fontWeight: 600 } as const;
-const muted = { flex: 1, fontSize: 14.5, color: "var(--muted)" } as const;
+const name = { width: 170, fontSize: "var(--text-body)", fontWeight: 600 } as const;
+const muted = { flex: 1, fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 export const OpenRequests = () => (
   <Card>

@@ -12,10 +12,10 @@ import { AdvancedLink, Card, CardHeader } from "ui";
  */
 export const GoingSomewhere = () => (
   <div style={{ display: "grid", gap: 8, justifyItems: "start" }}>
-    <AdvancedLink href="/governance/pending" className="link-hover" style={{ color: "var(--accent-text)", fontWeight: 600, fontSize: 13.5 }}>
+    <AdvancedLink href="/governance/pending" className="link-hover" style={{ color: "var(--accent-text)", fontWeight: 600, fontSize: "var(--text-small)" }}>
       Pending changes →
     </AdvancedLink>
-    <AdvancedLink href="/users" className="link-hover" style={{ color: "var(--accent-text)", fontWeight: 600, fontSize: 13.5 }}>
+    <AdvancedLink href="/users" className="link-hover" style={{ color: "var(--accent-text)", fontWeight: 600, fontSize: "var(--text-small)" }}>
       See everyone with access →
     </AdvancedLink>
   </div>
@@ -26,7 +26,7 @@ export const UnderACard = () => (
   <Card>
     <CardHeader title="Waiting for you" count={2} />
     <div style={{ padding: "12px 20px" }}>
-      <AdvancedLink href="/bundles" className="link-hover" style={{ color: "var(--accent-text)", fontWeight: 600, fontSize: 13.5 }}>
+      <AdvancedLink href="/bundles" className="link-hover" style={{ color: "var(--accent-text)", fontWeight: 600, fontSize: "var(--text-small)" }}>
         Open bundles →
       </AdvancedLink>
     </div>

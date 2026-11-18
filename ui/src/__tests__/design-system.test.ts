@@ -1255,6 +1255,42 @@ describe("density and alignment (D-1)", () => {
     expect(found, `Use measure:\n  ${found.join("\n  ")}`).toEqual([]);
   });
 
+  // §6 pass 5: the canvas mounts the parts D-1 built, so the boards can drop their override block.
+  // Every part Card.tsx exports is a design-system card with a preview, and a preview's own glue
+  // reads the type scale, never a number of its own (BRIDGE, "The design system").
+  it("puts every part of the row and the card on the canvas, its glue on the type scale", () => {
+    const UI = resolve(SRC_ROOT, "..");
+    const config = JSON.parse(readFileSync(resolve(UI, ".design-sync/config.json"), "utf8")) as { componentSrcMap: Record<string, string> };
+    const exported = Array.from(
+      readFileSync(resolve(SRC_ROOT, "components/ui/Card.tsx"), "utf8").matchAll(/^export function ([A-Z]\w*)/gm),
+      (m) => m[1],
+    );
+    expect(exported).toEqual(expect.arrayContaining(["CardRow", "CardGrid", "ActionSeat", "CardColumns", "CardHeader"]));
+    for (const name of exported) {
+      expect(config.componentSrcMap[name], `${name} is a design-system card`).toBe("src/components/ui/Card.tsx");
+      expect(readdirSync(resolve(UI, ".design-sync/previews")), `${name} has a preview`).toContain(`${name}.tsx`);
+    }
+    const literal: string[] = [];
+    for (const file of readdirSync(resolve(UI, ".design-sync/previews"))) {
+      const source = readFileSync(resolve(UI, ".design-sync/previews", file), "utf8");
+      // A numeric inline size, or an arbitrary pixel text class, either way a size of its own.
+      for (const m of Array.from(source.matchAll(/fontSize:\s*\d|text-\[\d+(?:\.\d+)?px\]/g))) {
+        literal.push(`${file}:${source.slice(0, m.index).split("\n").length} ${m[0]}`);
+      }
+    }
+    expect(literal, `A preview's glue reads a step (fontSize: "var(--text-body)", or text-body):\n  ${literal.join("\n  ")}`).toEqual([]);
+    // The ActionSeats story itself shows the seat holding actions and the detail line: read within its
+    // own block, so another story's `action=` cannot stand in for it.
+    const row = readFileSync(resolve(UI, ".design-sync/previews/CardRow.tsx"), "utf8");
+    const start = row.indexOf("export const ActionSeats");
+    const story = row.slice(start, row.indexOf("export const", start + 1));
+    expect(start, "CardRow's preview has its ActionSeats story").toBeGreaterThan(-1);
+    expect(story).toMatch(/seat="default"\s+action=\{/);
+    expect(story).toMatch(/detail=/);
+    expect(readFileSync(resolve(UI, ".design-sync/previews/CardHeader.tsx"), "utf8")).toMatch(/caption=/);
+    expect(readFileSync(resolve(UI, ".design-sync/previews/CardColumns.tsx"), "utf8")).toMatch(/seatLabel=/);
+  });
+
   it("takes no line for an empty detail", () => {
     expect(namedAtRuleBody(css, "@utility", "row-detail")).toMatch(/&:empty \{\s*display: none;\s*\}/);
   });

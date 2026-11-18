@@ -16,12 +16,12 @@ export function Toggle() {
         </Button>
       </div>
       <Unfold open={open} gap={16}>
-        <Notice tone="warn" title="Paused by Cody Rhodes">
+        <Notice tone="warn" title="Paused by Cody Rhodes" nothingToDo="Operator grants resume on Monday.">
           {"The laser cutter's extraction fan is being serviced. Operator grants resume on Monday."}
         </Notice>
       </Unfold>
       <Card>
-        <div style={{ padding: "14px 20px", fontSize: 14.5 }}>Laser Cutter · 23 people hold Operator</div>
+        <div style={{ padding: "14px 20px", fontSize: "var(--text-body)" }}>Laser Cutter · 23 people hold Operator</div>
       </Card>
     </div>
   );

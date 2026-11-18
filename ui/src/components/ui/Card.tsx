@@ -137,7 +137,7 @@ type RowProps = React.HTMLAttributes<HTMLDivElement> & {
    * show. Pass it on every row of the table, with or without an `action`, and
    * an empty seat keeps its place.
    */
-  seat?: Seat;
+  seat?: SeatWidth;
   /** More than one line: top-aligned from tablet, each part's first line on the seat's. */
   top?: boolean;
 };
@@ -268,7 +268,7 @@ export function CardColumns({
   seatLabel,
   children,
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & { seat?: Seat; seatLabel?: React.ReactNode }) {
+}: React.HTMLAttributes<HTMLDivElement> & { seat?: SeatWidth; seatLabel?: React.ReactNode }) {
   return (
     <div
       className={`row-cols hidden px-(--card-x) py-2 text-fine font-semibold uppercase tracking-[0.09em] text-label tablet:flex ${className}`}
@@ -288,9 +288,9 @@ export function CardColumns({
  * The seat's width: one of three, from the table (D-1 §4). `default` is one or
  * two verbs, `narrow` one short verb or one link, `wide` three verbs.
  */
-export type Seat = "narrow" | "default" | "wide";
+export type SeatWidth = "narrow" | "default" | "wide";
 
-function seatWidth(seat: Seat | undefined): "narrow" | "wide" | undefined {
+function seatWidth(seat: SeatWidth | undefined): "narrow" | "wide" | undefined {
   return seat === "default" ? undefined : seat;
 }
 
@@ -299,7 +299,7 @@ function seatWidth(seat: Seat | undefined): "narrow" | "wide" | undefined {
  * CardRow draws it; a list row built on `ROW` (a link, a row that stacks on a
  * phone) puts its action in one, so no page types `row-seat` itself.
  */
-export function ActionSeat({ seat, children }: { seat?: Seat; children?: React.ReactNode }) {
+export function ActionSeat({ seat, children }: { seat?: SeatWidth; children?: React.ReactNode }) {
   return (
     <div data-action-seat className="row-seat" data-seat={seatWidth(seat)}>
       {children}

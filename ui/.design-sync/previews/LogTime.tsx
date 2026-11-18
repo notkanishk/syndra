@@ -4,7 +4,7 @@
 // moves:end
 import { LogTime, Mono } from "ui";
 
-const row = { display: "flex", gap: 16, fontSize: 13.5, alignItems: "baseline" } as const;
+const row = { display: "flex", gap: 16, fontSize: "var(--text-small)", alignItems: "baseline" } as const;
 const t = { width: 64, color: "var(--faint)" } as const;
 
 /** The log ruler: 24-hour, in a mono column. */

@@ -24,7 +24,7 @@ const catalog = {
 };
 const seed = [{ key: ["name-catalog"], value: catalog }, { key: ["name-bundles"], value: [] }];
 
-const col = { display: "flex", flexDirection: "column", gap: 10, fontSize: 15 } as const;
+const col = { display: "flex", flexDirection: "column", gap: 10, fontSize: "var(--text-body)" } as const;
 
 /** Project ids resolve to their names from the catalog. */
 export const Resolved = () => (

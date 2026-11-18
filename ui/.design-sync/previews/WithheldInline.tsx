@@ -4,7 +4,7 @@
 // moves:end
 import { Card, CardRow, WithheldInline } from "ui";
 
-const name = { fontSize: 15, fontWeight: 600 } as const;
+const name = { fontSize: "var(--text-body)", fontWeight: 600 } as const;
 
 /** One line per hold, with the reason, inside a dense holder list. */
 export const InHolderList = () => (
