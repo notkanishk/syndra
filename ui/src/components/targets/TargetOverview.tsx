@@ -27,7 +27,7 @@ import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Card, CardHeader, CardRow, type Seat } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { ReadLine, SectionPill, type NavSection } from "@/components/ui/SectionNav";
-import { StandingLine } from "@/components/ui/StandingLine";
+import { StandingLine, StandingStep } from "@/components/ui/StandingLine";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -1427,29 +1427,44 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
               // access to a member, and purging it deletes the credential
               // Syndra reaches this target with. The add-on refuses both; this
               // says so before anybody meets the refusal.
+              //
+              // The standing's next step is a sentence, so it is the detail line, as on "Accounts Syndra
+              // manages": the status column holds the state and its short note only (D-1 §5 #39).
               detail={
-                account.self
-                  ? `Syndra\u2019s own account on ${name}, which cannot be assigned to anyone`
-                  : undefined
+                (account.standing || account.self) && (
+                  <>
+                    {account.standing && (
+                      <span className="block">
+                        <StandingStep standing={account.standing} system={name} audience="operator" />
+                      </span>
+                    )}
+                    {account.self && (
+                      <span className="block">{`Syndra\u2019s own account on ${name}, which cannot be assigned to anyone`}</span>
+                    )}
+                  </>
+                )
               }
-              // Under the row it is about, never at the foot of the list.
+              // Under the row it is about, never at the foot of the list. Always passed (a fragment), so
+              // the outcome arriving never changes the row's shape and remounts the control just pressed.
               expanded={result?.username === account.username}
               disclosure={
-                result?.username === account.username ? (
-                  <AdoptionOutcome
-                    result={result.result}
-                    username={result.username}
-                    person={result.person}
-                    name={name}
-                  />
-                ) : null
+                <>
+                  {result?.username === account.username && (
+                    <AdoptionOutcome
+                      result={result.result}
+                      username={result.username}
+                      person={result.person}
+                      name={name}
+                    />
+                  )}
+                </>
               }
             >
-              {/* Columns, as in "Accounts Syndra manages": the name in a seat of its own width, so
-                  the standing starts at one x whatever the username's length. */}
-              <span className="w-[220px] min-w-0 flex-none [overflow-wrap:anywhere] font-mono text-[13.5px]">{account.username}</span>
-              <span className="min-w-0 flex-1 basis-[200px]" data-standing-seat>
-                {account.standing && <StandingLine standing={account.standing} system={name} audience="operator" />}
+              {/* Columns, as in "Accounts Syndra manages": the account flexes, the status has its seat
+                  (`--seat-status`), so the standing starts at one x whatever the username's length. */}
+              <span className="min-w-0 flex-1 basis-[200px] [overflow-wrap:anywhere] font-mono text-[13.5px]">{account.username}</span>
+              <span className="w-(--seat-status) flex-none" data-standing-seat>
+                {account.standing && <StandingLine standing={account.standing} system={name} audience="operator" step={false} />}
               </span>
             </CardRow>
           ))}

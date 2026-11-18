@@ -2997,7 +2997,26 @@ end to end) found no missing function; three regressions with one root cause
     - **Left, low:**
       - while Check now waits, the check's own row says nothing beside the disabled button, because the wait line is RetryWait's row under it;
       - ServiceAccountPage's sources keep their pre-existing `order-last` on a phone.
-  - [ ] 7u-3 Pass 3, Home (Q6).
+  - [x] 7u-3 Pass 3, Home (Q6).
+    *Done (18 Nov 2026, branch `feat/addon-contract-d1-3`):*
+    - **Home (§5 #38; Q6, recommended, pending owner):**
+      - Home's two groups, Time-sensitive and When you're ready, stack a region apart (`flex-col gap-(--region-gap)`). Before, they sat in two pinned columns, so a short group left its column empty beside a long one.
+      - Each group's heading is a region's (`type-section-title`, no longer the card titles' size), and its note is `text-small`.
+      - A group's blocks sit in a grid, `repeat(auto-fit, minmax(min(100%, 600px), 1fr))`, gap 16, under `--region-head-gap`: two across where each can be 600 wide (the 1800 window), one under the other where they cannot (1440).
+      - `Block` no longer carries its own 14px. A block that has gone renders nothing, so it holds no cell and no gap.
+      - **To flip Q6** back to two pinned columns: `desktop:grid-cols-2` on the stack, and `col-start` on the groups.
+    - **Staging consistency (lead, 18 Nov):**
+      - **(1) "Not created by Syndra" follows the rule "Accounts Syndra manages" set.**
+        - The status column holds the state and its note: `StandingLine step={false}`, in a `--seat-status` seat.
+        - The next step (`StandingStep`, the same words) is the row's detail line.
+        - The account flexes, so the status starts at one x whatever the username's length.
+        - "No longer needed" has no status column (its rows say when each account last signed in), so there is nothing to move.
+        - Not created's adoption outcome panel is always passed (a fragment), so the outcome arriving never remounts the row.
+      - **(2) Syndra's own row** keeps an empty seat, and its sentence stays on the detail line, now beside the other rows' next steps.
+    - **Tests:**
+      - `HomeColumns.test.tsx`: an empty group leaves and the other stands at full width; each group's heading is `type-section-title`; its blocks use the 600px auto-fit grid.
+      - `TargetOverview.test.tsx`: Not created's status seat is `--seat-status`, with the next step in the detail line and not in the seat; Syndra's own sentence is in the detail line beside an empty seat.
+    - **Mutation-checked** (each red): the stack back to two columns; the heading back to a card title; the blocks' minimum at 420; Not created's step back in the status seat.
   - [ ] 7u-4 Pass 4, three text sizes (Q3), with §5 #40's remaining raw display sizes and #41 `/storage`; then no `text-[NNpx]` in components.
   - [ ] 7u-5 Motion (§7: the five tokens, M1–M14, the eight motion tests).
   - [ ] 7u-6 Pass 5, resync the design system (`ui/.design-sync`, BRIDGE steps 1 to 3), after the owner's OK.

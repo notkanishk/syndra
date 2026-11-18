@@ -261,10 +261,13 @@ export function Home({ session }: { session: SessionUser }) {
   // what the pointer and focus are inside of, for a swap that waits (S5).
   const grid = (
     <div className="flex flex-col gap-6" {...swap.holdProps}>
-      <div className="grid items-start gap-6 desktop:grid-cols-2">
+      {/* The two groups stacked, a region apart (D-1 §6 pass 3; Q6, recommended, pending owner: back to
+          two pinned columns is `desktop:grid-cols-2` here and `col-start` on the groups). A short group no
+          longer leaves half the page empty beside a long one. */}
+      <div className="flex flex-col gap-(--region-gap)">
         {/* Time-sensitive: access ends, stays wrong, or goes unseen if you wait.
             Drift leads, and a target Syndra cannot read stays beside the
-            findings it qualifies, in the same column. */}
+            findings it qualifies, in the same group. */}
         {/* A block or a column that empties while you are here folds (5b): it fades, then its
             gap closes. It never just vanishes under the pointer. */}
         <Unfold
@@ -274,7 +277,7 @@ export function Home({ session }: { session: SessionUser }) {
             (advanced &&
               ((drift?.count ?? 0) > 0 || unvouched.length > 0 || unconfirmedWrites.count > 0))
           }
-          className="min-w-0 desktop:col-start-1"
+          className="min-w-0"
         >
           <QueueColumn
             title="Time-sensitive"
@@ -314,7 +317,7 @@ export function Home({ session }: { session: SessionUser }) {
             unowned.length > 0 ||
             (advanced && (findings > 0 || unconfirmed > 0 || toSend > 0))
           }
-          className="min-w-0 desktop:col-start-2"
+          className="min-w-0"
         >
           <QueueColumn title="When you're ready" note="Nothing changes until you act.">
             <Block open={queue.rows.length > 0}>
@@ -460,8 +463,11 @@ export function Home({ session }: { session: SessionUser }) {
 }
 
 /**
- * One of the queue's two columns. Its `Unfold` pins its side (`col-start`), so a
- * column that leaves never pulls the other across into its place.
+ * One of the queue's two groups (D-1 §5 #38). Its heading is a region's
+ * (`type-section-title`), a step above the cards' titles it holds; its blocks sit
+ * two across where each can be 600 wide (`auto-fit`, Material 3's "add a pane
+ * past 1200"), one under the other where they cannot. A group that leaves takes
+ * its whole region with it, by its `Unfold`.
  */
 function QueueColumn({
   title,
@@ -474,22 +480,20 @@ function QueueColumn({
 }) {
   const id = `home-col-${title.replace(/\W+/g, "-").toLowerCase()}`;
   return (
-    <section aria-labelledby={id} className="flex min-w-0 flex-col">
+    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-(--region-head-gap)">
       <div className="flex flex-col gap-1">
-        <h2 id={id} className="type-card-title">
+        <h2 id={id} className="type-section-title">
           {title}
         </h2>
-        <span className="text-[13.5px] text-muted">{note}</span>
+        <span className="text-small text-muted">{note}</span>
       </div>
-      {children}
+      <div data-home-blocks className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,600px),1fr))] items-start gap-4">
+        {children}
+      </div>
     </section>
   );
 }
 
-/**
- * One work block in a column. The 14px above it is inside what folds, so closing
- * the block takes its gap with it and nothing hops when it is gone.
- */
 /**
  * Which of the calm line and the grid is open (A-12 §1). One hands over to the
  * other: the leaving one fades and folds at once, the arriving one opens one
@@ -562,10 +566,14 @@ function useCalmHandover(calm: boolean, now: { ready: boolean; advanced: boolean
   };
 }
 
+/**
+ * One work block in a group's grid. It opens and folds by `Unfold`; a block that
+ * has gone renders nothing, so it holds no cell and no gap.
+ */
 function Block({ open, children }: { open: boolean; children: React.ReactNode }) {
   return (
-    <Unfold open={open}>
-      <div className="pt-3.5">{children}</div>
+    <Unfold open={open} className="min-w-0">
+      {children}
     </Unfold>
   );
 }
