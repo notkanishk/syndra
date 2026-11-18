@@ -156,7 +156,6 @@ export function UsageCard({
   windows,
   target,
   step,
-  opens,
 }: {
   title?: string;
   label?: string;
@@ -164,9 +163,9 @@ export function UsageCard({
   windows: UsageWindows;
   target?: string;
   step?: string;
-  /** Where a per-person metric's figure opens the people behind it (A-24 §10); absent, figures stay plain. */
-  opens?: string;
 }) {
+  // A system's own card (it names its target): a per-person figure opens its people on Insights' Usage (A-24 §10).
+  const opens = target !== undefined ? insightsUsageHref(target) : undefined;
   return (
     <Card role="group" aria-label={title ?? label} className="@container">
       {title && <CardHeader title={title} />}
@@ -228,7 +227,7 @@ export function HomeMonth({ view, operator = false }: { view: MyTargetView; oper
   const changed = changeWords(p, metric.unit);
   return (
     <div data-home-month className="flex w-full max-w-[360px] flex-col gap-1">
-      {changed && <span className="text-small text-faint">{changed}</span>}
+      {changed && <span data-figure className="text-small text-faint">{changed}</span>}
       <Band
         plot={p}
         instrument={metric.instrument}

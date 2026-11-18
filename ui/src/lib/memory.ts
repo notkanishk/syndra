@@ -27,9 +27,11 @@ export function recall(kind: Memory, key: string): unknown {
   }
 }
 
+/** Keeps `value` under `key`; undefined or null forgets it. */
 export function remember(kind: Memory, key: string, value: unknown) {
   try {
-    store(kind)?.setItem(key, JSON.stringify(value));
+    if (value == null) store(kind)?.removeItem(key);
+    else store(kind)?.setItem(key, JSON.stringify(value));
   } catch {
     // Forgetting is the whole failure mode.
   }

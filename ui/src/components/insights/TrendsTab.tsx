@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, type ReactNode } from "react";
+import { useMemo } from "react";
 
 import { roleName as lensRoleName } from "@/components/insights/lens";
 import { buildModel } from "@/components/insights/model";
@@ -47,13 +47,13 @@ function minutes(m: number): string {
  * `opens` is given only where that list exists, and only when there is
  * something in it to open.
  */
-function Fact({ label, value, opens }: { label: string; value: ReactNode; opens?: { href: string; to: string } }) {
+function Fact({ label, value, opens }: { label: string; value: string | number; opens?: { href: string; to: string } }) {
   return (
     <div className="row-divider flex items-baseline justify-between gap-4 px-5 py-3 text-small">
       <span className="text-muted">{label}</span>
-      <span className="font-semibold">
+      <span data-figure className="font-semibold">
         {opens ? (
-          <AdvancedLink href={opens.href} aria-label={`${label}, ${String(value)}: open ${opens.to}`} className="link-hover">
+          <AdvancedLink href={opens.href} aria-label={`${label}, ${value}: open ${opens.to}`} className="link-hover">
             {value}
           </AdvancedLink>
         ) : (
@@ -216,10 +216,10 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
                         <span role="cell" className="text-muted">
                           {projectLabel(p.project_name)}
                         </span>
-                        <span role="cell" className="text-right font-semibold">
+                        <span role="cell" data-figure className="text-right font-semibold">
                           <EndingLink within={14} n={p.d14} />
                         </span>
-                        <span role="cell" className="text-right font-semibold">
+                        <span role="cell" data-figure className="text-right font-semibold">
                           <EndingLink within={30} n={p.d30} />
                         </span>
                       </div>

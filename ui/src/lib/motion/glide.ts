@@ -1,5 +1,6 @@
 "use client";
 
+import { flashOnce } from "./flash";
 import { stillMotion } from "./still";
 
 /** A CSS `cubic-bezier(a, b, c, d)` as a function of progress, or null if it can't be read. */
@@ -23,14 +24,8 @@ function bezier(css: string): ((t: number) => number) | null {
 /** A region marks the row that is its heading (`data-landing`); the landing flash is that row's, not the section's. */
 const LANDING = "[data-landing]";
 
-/** The landing heading's one wash: `.flash`, colour only, restarted if it is already on. */
-function flashLanding(section: HTMLElement) {
-  const target = section.querySelector<HTMLElement>(LANDING) ?? section;
-  target.classList.remove("flash");
-  void target.offsetWidth;
-  target.classList.add("flash");
-  target.addEventListener("animationend", () => target.classList.remove("flash"), { once: true });
-}
+/** The landing heading's one wash. */
+const flashLanding = (section: HTMLElement) => flashOnce(section.querySelector<HTMLElement>(LANDING) ?? section);
 
 let gliding = 0;
 

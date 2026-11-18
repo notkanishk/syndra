@@ -133,12 +133,12 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
       <span className="hidden min-w-0 flex-1 text-body text-muted [text-wrap:pretty] tablet:block">
         {bundle.description}
       </span>
-      <span className="text-body font-semibold tablet:w-(--seat-number) tablet:text-right">
+      <span data-figure className="text-body font-semibold tablet:w-(--seat-number) tablet:text-right">
         {bundle.role_count ?? "None"}
         <span className="text-small font-normal text-faint tablet:hidden">{bundle.role_count === 1 ? " role" : " roles"}</span>
       </span>
       {/* People is who Zitadel shows holding it; the assignments only explain it. */}
-      <span className="text-body font-semibold tablet:w-(--seat-number) tablet:text-right">
+      <span data-figure className="text-body font-semibold tablet:w-(--seat-number) tablet:text-right">
         {people.headline}
         <span className="text-small font-normal text-faint tablet:hidden">{peopleSuffix(people.headline)}</span>
         {people.note && (

@@ -330,7 +330,7 @@ export default function RolesPage() {
                   usedBy(role) || <span className="text-faint">—</span>
                 )}
               </span>
-              <span className="w-full text-body tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+              <span data-figure className="w-full text-body tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                 {holders.headline}
                 <span className="text-small text-faint tablet:hidden">
                   {peopleSuffix(holders.headline)}

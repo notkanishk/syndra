@@ -76,7 +76,7 @@ function Figure({ value, said, second, opens }: { value?: string; said: string; 
           </span>
         )}
       </span>
-      {second && <span className="text-small text-faint">{second}</span>}
+      {second && <span data-figure className="text-small text-faint">{second}</span>}
     </>
   );
 }
@@ -113,7 +113,7 @@ function LabelRow({ label, said }: { label: string; said: string }) {
 /** The section's axis: the window's first day, and the readout seat (today at rest, else the day being read). */
 export function Axis({ first, readout, inset = true }: { first: string; readout: string; inset?: boolean }) {
   return (
-    <div data-axis className={`flex justify-between gap-3 text-fine leading-[1.3] text-faint ${inset ? "pt-1.5 @tablet:pl-[224px] @tablet:pr-[264px]" : "pt-0.5"}`}>
+    <div data-axis data-figure className={`flex justify-between gap-3 text-fine leading-[1.3] text-faint ${inset ? "pt-1.5 @tablet:pl-[224px] @tablet:pr-[264px]" : "pt-0.5"}`}>
       <span>{dayWords(first)}</span>
       <span aria-live="polite" className="ml-auto text-right">
         <Crossfade id={readout} inline>

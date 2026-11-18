@@ -87,7 +87,7 @@ export default function ServiceAccountsPage() {
               <span className="order-4 w-full text-body tablet:order-3 tablet:w-[170px] tablet:shrink-0">
                 <Owner id={account.owner_id} />
               </span>
-              <span className="order-2 w-[64px] shrink-0 text-right text-body tablet:order-4 tablet:w-(--seat-number)">
+              <span data-figure className="order-2 w-[64px] shrink-0 text-right text-body tablet:order-4 tablet:w-(--seat-number)">
                 {account.role_count}
               </span>
             </CardRow>

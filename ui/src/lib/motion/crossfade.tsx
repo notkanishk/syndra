@@ -67,50 +67,55 @@ export function Crossfade({
 /**
  * A figure whose digits change in place (A-24 §11.2): only what changed,
  * changes. 47 becoming 46 crossfades its last digit and the 4 holds still.
- * Each digit is its own seat, counted from the right so units stay over units;
- * a digit that appears (9 to 10) is simply there. Nothing ticks or rolls.
+ * Digits are matched from the right, so units stay over units; a digit that
+ * appears (9 to 10) tints in where nothing was. Nothing ticks or rolls.
  *
- * The live digits are plain inline text, so the figure reads and copies as one
- * number (a grid seat per digit would be a block per digit to the clipboard
- * and to a screen reader). Only the digit leaving is laid over its seat, out of
- * the flow, hidden from assistive technology and from selection. Every seat is
- * one width, because every figure is tabular (the body rule in globals.css).
+ * At rest the figure is its plain text, one word to a screen reader and to the
+ * clipboard. Only for the one tint while a digit fades is it split: the new
+ * digits inline, the changed ones tinting in, and the old text laid over them
+ * from the right, out of the flow, hidden from assistive technology and from
+ * selection, with only its changed digits showing as they fade. Seats line up
+ * because every figure is tabular (`[data-figure]` in globals.css).
  */
 export function CrossfadeDigits({ text }: { text: string }) {
-  const chars = Array.from(text);
-  return (
-    <span data-figure>
-      {chars.map((char, index) => (
-        <Digit key={chars.length - index} char={char} />
-      ))}
-    </span>
-  );
-}
-
-function Digit({ char }: { char: string }) {
-  const last = useRef(char);
-  const [leaving, setLeaving] = useState<string | null>(null);
-  if (last.current !== char) {
-    const was = last.current;
-    last.current = char;
-    if (!stillTint()) setLeaving(was);
+  const last = useRef(text);
+  const [was, setWas] = useState<string | null>(null);
+  if (last.current !== text) {
+    const previous = last.current;
+    last.current = text;
+    if (!stillTint()) setWas(previous);
   }
 
   useEffect(() => {
-    if (leaving === null) return;
-    const timer = setTimeout(() => setLeaving(null), TINT_MS);
+    if (was === null) return;
+    const timer = setTimeout(() => setWas(null), TINT_MS);
     return () => clearTimeout(timer);
-  }, [leaving, char]);
+  }, [was, text]);
 
+  if (was === null) return <span data-figure className="relative">{text}</span>;
+  const now = Array.from(text);
+  const before = Array.from(was);
+  // The digit `r` places from the right, or undefined.
+  const at = (chars: string[], r: number) => chars[chars.length - 1 - r];
   return (
-    <span className="relative">
-      {leaving !== null && (
-        <span aria-hidden className="tint-out pointer-events-none absolute inset-0 select-none">
-          {leaving}
-        </span>
-      )}
-      <span key={char} className={leaving !== null ? "tint-in" : undefined}>
-        {char}
+    <span data-figure className="relative">
+      {now.map((char, i) => {
+        const r = now.length - 1 - i;
+        return (
+          <span key={r} className={at(before, r) === char ? undefined : "tint-in"}>
+            {char}
+          </span>
+        );
+      })}
+      <span aria-hidden className="pointer-events-none absolute right-0 top-0 select-none whitespace-nowrap">
+        {before.map((char, i) => {
+          const r = before.length - 1 - i;
+          return (
+            <span key={r} className={at(now, r) === char ? "invisible" : "tint-out"}>
+              {char}
+            </span>
+          );
+        })}
       </span>
     </span>
   );

@@ -23,7 +23,11 @@ export interface GoToItem {
   /** Unique within the list: a page's href, or `kind:id`. */
   key: string;
   name: string;
-  /** One quiet line: what it is in context. */
+  /**
+   * One quiet line: where it is, or what it holds. Empty when there is nothing
+   * to add to the kind on the right: a page at the top of the rail is a "Page"
+   * and nothing more, never "A page" said twice.
+   */
   descriptor: string;
   /** What it is, said on the right. */
   kind: string;
@@ -66,6 +70,9 @@ export function keepLately(path: string) {
   remember("local", LATELY, [path, ...recallLately().filter((kept) => kept !== path)].slice(0, LATELY_KEPT));
 }
 
+/** Forgets every place, at sign-out: the next person on this computer starts with none. */
+export const forgetLately = () => remember("local", LATELY, null);
+
 /** Case and accents aside. */
 export const fold = (text: string): string =>
   text
@@ -75,10 +82,12 @@ export const fold = (text: string): string =>
     .toLowerCase()
     .trim();
 
+const roleCount = (n = 0) => `${n} ${n === 1 ? "role" : "roles"}`;
+
 function pages(nav: NavEntry[]): GoToItem[] {
   return nav.flatMap((entry) =>
     entry.kind === "leaf"
-      ? [{ key: entry.href, name: entry.label, descriptor: "A page", kind: "Page", href: entry.href }]
+      ? [{ key: entry.href, name: entry.label, descriptor: "", kind: "Page", href: entry.href }]
       : entry.children.map((child) => ({
           key: child.href,
           name: child.label,
@@ -137,7 +146,7 @@ export function goTo(source: GoToSource, query: string): GoToResult[] {
     sortByName(projects, (p) => p.name).map((p) => ({
       key: `project:${p.id}`,
       name: p.name,
-      descriptor: `${p.roles?.length ?? 0} ${p.roles?.length === 1 ? "role" : "roles"}`,
+      descriptor: roleCount(p.roles?.length),
       kind: "Project",
       href: `/projects/${encodeURIComponent(p.id)}`,
     })),
@@ -164,7 +173,7 @@ export function goTo(source: GoToSource, query: string): GoToResult[] {
     sortByName(source.apps ?? [], (a) => a.name).map((a) => ({
       key: `app:${a.id}`,
       name: a.name,
-      descriptor: projectName.get(a.project_id) ?? "An app",
+      descriptor: projectName.get(a.project_id) ?? "",
       kind: "App",
       href: `/applications/${encodeURIComponent(a.id)}`,
     })),
@@ -175,7 +184,7 @@ export function goTo(source: GoToSource, query: string): GoToResult[] {
       sortByName(source.bundleList ?? [], (b) => b.name).map((b) => ({
         key: `bundle:${b.id}`,
         name: b.name,
-        descriptor: "A bundle of roles",
+        descriptor: roleCount(b.roles?.length),
         kind: "Bundle",
         href: `/bundles/${encodeURIComponent(b.id)}`,
       })),

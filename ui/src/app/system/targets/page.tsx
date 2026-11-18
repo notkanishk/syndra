@@ -262,7 +262,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           answered shows a dash, never 0: that would be a claim about the
           system rather than about Syndra's ignorance of it. Once it stops
           answering, the last count stays and says so. */}
-      <span className="flex flex-col gap-0.5 pt-px tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+      <span data-figure className="flex flex-col gap-0.5 pt-px tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
         {bound === undefined ? (
           <span className="text-body text-faint">Not yet</span>
         ) : (

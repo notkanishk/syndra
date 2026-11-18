@@ -2,38 +2,17 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import { forgetOpenedRow, handBackRow, moveBetweenRows, rowFocused, rowOpened, useRovingRows } from "@/lib/keys";
+import { ROW_STOP, moveBetweenRows, rowFocused, useRovingRows } from "@/lib/keys";
 import { recallPaths, remember } from "@/lib/memory";
+import { keepPlace, recallPlace, returnedTo, returnedToThisPage } from "@/lib/place";
 
+import { flashOnce } from "./flash";
 import { ARRIVE_MEMORY_MS, ARRIVE_SETTLED_MS } from "./still";
 
-// A screen arrives when you navigate to it (S11), and only then. Back and
-// Forward, and a reload, return you to somewhere you have been: it is simply
-// there. The browser says so with `popstate` (and the navigation entry's type
-// for a reload); the page asked for is remembered by path, so a link followed
-// straight after a Back still arrives.
-// ponytail: a time window, not a router hook. A read slower than the window
-// lands as a first paint; widen it if that is ever seen.
-let returned: { path: string; at: number } | null = null;
-const markReturned = () => {
-  returned = { path: window.location.pathname, at: Date.now() };
-};
-if (typeof window !== "undefined") {
-  window.addEventListener("popstate", markReturned);
-  const entry = window.performance?.getEntriesByType?.("navigation")[0] as
-    | PerformanceNavigationTiming
-    | undefined;
-  if (entry && entry.type !== "navigate") markReturned();
-}
-
-/** True when this mount is the reader coming back to a page, not going to it. */
-export function returnedToThisPage(): boolean {
-  return (
-    returned !== null &&
-    returned.path === window.location.pathname &&
-    Date.now() - returned.at < ARRIVE_MEMORY_MS
-  );
-}
+// A screen arrives when you navigate to it (S11), and only then. Back, Forward
+// and a reload return you to somewhere you have been, and it is simply there:
+// that is place's to know (`returnedToThisPage`, lib/place.ts), said here too.
+export { returnedToThisPage };
 
 // A place arrives once a session, and never by key (S11, A-24 §2 and Q14).
 // The first visit to a path in this tab's session arrives as built. A later
@@ -72,9 +51,8 @@ let page: { path: string; at: number; quiet: boolean } | null = null;
 export function notePage(path: string) {
   if (page?.path === path) return;
   const arrived = recallPaths("session", ARRIVED);
-  const recent = (mark: { path: string; at: number } | null) =>
-    mark !== null && mark.path === path && Date.now() - mark.at < ARRIVE_MEMORY_MS;
-  page = { path, at: Date.now(), quiet: arrived.includes(path) || recent(byKey) || recent(returned) };
+  const keyed = byKey !== null && byKey.path === path && Date.now() - byKey.at < ARRIVE_MEMORY_MS;
+  page = { path, at: Date.now(), quiet: arrived.includes(path) || keyed || returnedTo(path) };
   if (!arrived.includes(path)) remember("session", ARRIVED, [...arrived, path]);
 }
 /** True when the visit on screen does not arrive: a place already seen this session, reached by key, or by Back. */
@@ -86,7 +64,7 @@ export const pageSettled = () => page === null || Date.now() - page.at > ARRIVE_
 // Switching Basic and Advanced opens and closes parts of the page you are on
 // by Unfold, and nothing arrives (A-08 §3): a list inside a part the switch
 // opened, or one its first read fills a moment later, is simply there. Kept
-// by path like `returned`, so a page reached after the switch still arrives.
+// by path like a Back, so a page reached after the switch still arrives.
 let switched: { path: string; at: number } | null = null;
 export const markViewSwitched = () => {
   switched = { path: window.location.pathname, at: Date.now() };
@@ -149,14 +127,24 @@ export function ArriveList({
   useLayoutEffect(() => {
     if (returnedToThisPage() || switchedViewHere() || quietVisit()) setSettled(true);
     // A visit that is not a Back has no row to give back, so an older visit's row never flashes.
-    if (!returnedToThisPage()) forgetOpenedRow();
+    if (!returnedToThisPage()) keepPlace("row", null);
   }, []);
 
-  // Every render until it lands: the rows come with a read, often after the mount.
+  // Back gives you your row (A-24 §11.4): every render until it lands, as the rows come with a read.
+  // It takes the focus without scrolling (the scroll is the place's own) and keeps its tint for one
+  // flash, once: a reload after this is not another return to it.
   const handedBack = useRef(false);
   useEffect(() => {
-    if (handedBack.current || !node.current || !returnedToThisPage()) return;
-    handedBack.current = handBackRow(node.current);
+    const list = node.current;
+    if (handedBack.current || !list || !returnedToThisPage()) return;
+    const href = recallPlace("row");
+    const row = Array.from(list.querySelectorAll<HTMLElement>(ROW_STOP)).find((each) => each.getAttribute("href") === href);
+    if (!row) return;
+    handedBack.current = true;
+    keepPlace("row", null);
+    rowFocused(list, row);
+    row.focus({ preventScroll: true });
+    flashOnce(row);
   });
 
   useEffect(() => {
@@ -191,7 +179,12 @@ export function ArriveList({
     <div
       ref={node}
       onFocus={(event) => rowFocused(node.current, event.target)}
-      onClick={(event) => rowOpened(event.target)}
+      onClick={(event) => {
+        // Only a plain primary click opens the row here: a modified or middle click opens it elsewhere.
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const href = event.target instanceof Element ? event.target.closest(ROW_STOP)?.getAttribute("href") : null;
+        if (href) keepPlace("row", href);
+      }}
       onKeyDown={(event) => moveBetweenRows(node.current, event)}
       className={`${className} arrive-list`}
       data-settled={settled ? "" : undefined}

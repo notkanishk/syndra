@@ -118,7 +118,7 @@ export function PhoneNodes({
                 <NodeGlyph kind={node.kind} />
                 <span className="min-w-0 flex-1 text-body font-semibold">{name}</span>
                 {n != null && (
-                  <span className="text-small text-muted">
+                  <span data-figure className="text-small text-muted">
                     {n === 1 ? "1 person" : `${n} people`}
                     {unit ? ` ${unit}` : ""}
                   </span>

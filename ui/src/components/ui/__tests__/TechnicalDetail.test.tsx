@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CopyableValue } from "@/components/ui/CopyableValue";
@@ -7,8 +7,7 @@ import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDeta
 
 /** A-20 P11: the one disclosure for the machine's words. */
 afterEach(() => sessionStorage.clear());
-// A Back is what hands a place back; the store's own gate is exercised in place.test.
-vi.mock("@/lib/motion", async (orig) => ({ ...(await orig<typeof import("@/lib/motion")>()), returnedToThisPage: () => true }));
+// A Back is what hands a place back: the remount below follows a real one (popstate).
 
 describe("TechnicalDetail", () => {
   it("is closed by default: nothing inside is on the page until it is opened", () => {
@@ -69,6 +68,7 @@ describe("TechnicalDetail", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /Technical detail/ }));
     unmount();
+    act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
     render(
       <TechnicalDetail placeKey="k">
         <span>inside</span>

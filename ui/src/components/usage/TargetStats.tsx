@@ -44,6 +44,5 @@ export function TargetStats({ target, kind }: { target: string; kind?: string })
       </Card>
     );
   }
-  // A system's overview is Advanced's, as Insights' Usage is: a per-person figure opens its people there (A-24 §10).
-  return <UsageCard label={copy.OVERVIEW_TITLE} metrics={usage.metrics} windows={usage} target={target} step={usageStep(kind)} opens="/insights?tab=usage" />;
+  return <UsageCard label={copy.OVERVIEW_TITLE} metrics={usage.metrics} windows={usage} target={target} step={usageStep(kind)} />;
 }

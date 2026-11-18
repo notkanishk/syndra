@@ -221,7 +221,7 @@ export function LaneMap({
                         <ToneDot tone={MARK_WORDS[mark].tone} />
                       </span>
                     ))}
-                    {people != null && <span className="text-fine text-faint">{people}</span>}
+                    {people != null && <span data-figure className="text-fine text-faint">{people}</span>}
                   </button>
                 </div>
               );

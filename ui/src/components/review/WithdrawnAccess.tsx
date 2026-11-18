@@ -440,7 +440,7 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
 
       <span className="hidden w-[130px] flex-none pt-0.5 text-body text-muted desktop:block">{where}</span>
 
-      <span className="flex flex-col gap-0.5 pt-0.5 tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+      <span data-figure className="flex flex-col gap-0.5 pt-0.5 tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
         <span
           className={`text-small font-semibold ${
             row.spent ? "text-danger-text" : row.age_seconds >= AMBER_AFTER_SECONDS ? "text-warn-text" : "text-muted"

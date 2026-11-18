@@ -1,18 +1,20 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { Count } from "@/components/ui/Badge";
-import { GoTo } from "@/components/ui/GoTo";
+import { StatCard } from "@/components/ui/StatCard";
+import { Relative } from "@/components/ui/Time";
+import { GoTo, GoToPanel } from "@/components/ui/GoTo";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
 import { LATELY_SHOWN, goTo, keepLately, recallLately } from "@/lib/go-to";
-import { ArriveList, Crossfade, TIP_WARM_MS, notePage, quietVisit, visitByKey } from "@/lib/motion";
+import { ArriveList, Crossfade, TINT_MS, TIP_WARM_MS, notePage, quietVisit, visitByKey } from "@/lib/motion";
 import { ADVANCED_NAV, BASIC_NAV } from "@/lib/nav";
 import { NAME_CATALOG_KEY } from "@/lib/queries/useNameCatalog";
 import { setMediaQuery } from "@/test-utils/media";
@@ -146,6 +148,33 @@ describe("Back gives you your row (§11.4, §2 warm)", () => {
     expect(two).toHaveClass("flash");
     expect(two).toHaveAttribute("data-row-current");
     expect(screen.getByText("One")).not.toHaveClass("flash");
+
+    // Once: a reload after that is not another return to the row.
+    cleanup();
+    act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
+    render(list);
+    expect(screen.getByText("Two")).not.toHaveClass("flash");
+  });
+
+  it("remembers only a plain primary click: a modified or middle click opened the row elsewhere", () => {
+    window.history.pushState({}, "", "/a24/rows-elsewhere");
+    const list = (
+      <ArriveList>
+        <a data-row href="/a24/rows-elsewhere/one" onClick={(event) => event.preventDefault()}>
+          One
+        </a>
+      </ArriveList>
+    );
+    for (const click of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
+      const opened = render(list);
+      fireEvent.click(screen.getByText("One"), click);
+      opened.unmount();
+      // A reload of this page is a return to it: nothing was opened here, so nothing flashes.
+      act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
+      const back = render(list);
+      expect(screen.getByText("One"), JSON.stringify(click)).not.toHaveClass("flash");
+      back.unmount();
+    }
   });
 
   it("never gives back a row from an older visit: a fresh visit forgets it", () => {
@@ -313,6 +342,33 @@ describe("Lately in Go to (§8 warm, Q13)", () => {
     expect(window.localStorage.getItem("syndra:lately")).toBe('["/users","/users/u1"]');
   });
 
+  it("shows on the phone too, above the sheet's own list, and the sheet's list stays", () => {
+    keepLately("/users/u1");
+    const client = new QueryClient();
+    client.setQueryData(NAME_CATALOG_KEY, { users: [{ id: "u1", name: "Becky Lynch", email: "becky@example.org" }], projects: [], applications: [] });
+    render(
+      <QueryClientProvider client={client}>
+        <GoToPanel embedded nav={ADVANCED_NAV} onGo={() => {}} idle={<p>The sheet&apos;s pages</p>} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText("Lately")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Becky Lynch/ })).toBeInTheDocument();
+    // Only Lately: the sheet's own list is its Pages.
+    expect(screen.queryByText("Pages")).toBeNull();
+    expect(screen.getByText("The sheet's pages")).toBeInTheDocument();
+  });
+
+  it("says one thing per row: a top-level page is a Page, with no 'A page' under it", () => {
+    const rows = goTo({ nav: ADVANCED_NAV, names: true, bundles: true, bundleList: [{ id: "b1", name: "Printing basics", roles: ["a", "b"] }] as never }, "");
+    const leaf = rows.flatMap((g) => g.items).find((item) => item.href === "/users")!;
+    expect(leaf).toMatchObject({ kind: "Page", descriptor: "" });
+    const typed = goTo({ nav: ADVANCED_NAV, names: true, bundles: true, bundleList: [{ id: "b1", name: "Printing basics", roles: ["a", "b"] }] as never }, "printing");
+    expect(typed.flatMap((g) => g.items).find((item) => item.kind === "Bundle")?.descriptor).toBe("2 roles");
+    for (const item of goTo({ nav: ADVANCED_NAV }, "").flatMap((g) => g.items)) {
+      expect(item.descriptor, item.name).not.toMatch(/^An? (page|app|bundle)/);
+    }
+  });
+
   it("shows in Go to with nothing typed", () => {
     keepLately("/users/u1");
     renderGoTo();
@@ -324,8 +380,15 @@ describe("Lately in Go to (§8 warm, Q13)", () => {
 describe("reduced motion keeps tint (§11.10, Q15)", () => {
   it("keeps the tint utilities' own durations inside the reduced block, and nothing that travels", () => {
     const reduce = body(css, "@media (prefers-reduced-motion: reduce)");
-    for (const selector of [".motion-tint", ".hover-tint", ".link-hover"]) {
-      expect(body(reduce, `${selector} {`), selector).toMatch(/transition-duration:[^;]*var\(--duration-tint\)[^;]*!important/);
+    // One rule reads each utility's own list back, so a list is never copied and the ring still appears at once.
+    expect(reduce).toMatch(/\.motion-tint,\s*\.hover-tint,\s*\.link-hover\s*\{\s*transition-duration: var\(--tint-durations\) !important;/);
+    for (const name of ["motion-tint", "hover-tint", "link-hover"]) {
+      const utility = body(css, `@utility ${name} {`);
+      const count = (utility.match(/transition-property:([^;]*);/)?.[1] ?? "").split(",").length;
+      const list = utility.match(/--tint-durations:([^;]*);/)?.[1] ?? "";
+      expect(list.split(",").length, name).toBe(count);
+      expect(list.trim().endsWith("var(--ring-fade)"), name).toBe(true);
+      expect(utility, name).toContain("transition-duration: var(--tint-durations);");
     }
     expect(body(reduce, ".tint-in,")).toContain("animation-duration: var(--duration-tint) !important");
     expect(reduce).toMatch(/\.tint-in,\s*\.tint-out\s*\{/);
@@ -341,26 +404,51 @@ describe("reduced motion keeps tint (§11.10, Q15)", () => {
 });
 
 describe("figures (§11.1, §11.2)", () => {
-  it("are tabular by one rule on the body, and no part sets it again", () => {
-    expect(body(css, "  body {")).toContain("font-variant-numeric: tabular-nums");
+  it("are tabular by one rule, on figures only, and nothing else sets it", () => {
+    expect(body(css, "  [data-figure] {")).toContain("font-variant-numeric: tabular-nums");
+    expect(css.match(/font-variant-numeric\s*:/g)).toHaveLength(1);
+    expect(body(css, "  body {")).not.toContain("font-variant");
     const again: string[] = [];
-    for (const file of sources(SRC)) if (/\btabular-nums\b/.test(readFileSync(file, "utf8"))) again.push(file.replace(SRC, "src"));
+    for (const file of sources(SRC)) if (/\b(?:tabular|proportional)-nums\b/.test(readFileSync(file, "utf8"))) again.push(file.replace(SRC, "src"));
     expect(again).toEqual([]);
   });
 
-  it("change only where they changed: 47 to 46 fades the 7 and holds the 4", () => {
+  it("are carried by the parts that draw figures: Time, a count, StatCard", () => {
+    render(
+      <>
+        <Relative iso="2026-11-01T10:00:00Z" />
+        <Count n={12} />
+        <StatCard label="Waiting" value="3" detail="Changes not sent yet." />
+      </>,
+    );
+    expect(document.querySelector("time[data-figure]")).toHaveAttribute("dateTime", "2026-11-01T10:00:00Z");
+    expect(screen.getByText("12")).toHaveAttribute("data-figure");
+    expect(screen.getByText("3")).toHaveAttribute("data-figure");
+  });
+
+  it("change only where they changed: 47 to 46 fades the 7 and holds the 4, then is one word again", () => {
+    vi.useFakeTimers();
     motionInTests();
     const { container, rerender } = render(<Count n={47} />);
+    const figure = container.querySelector("[data-figure]")!;
+    // At rest, plain text: a screen reader hears "47", not "4, 7".
+    expect(figure.children).toHaveLength(0);
+    expect(figure).toHaveTextContent("47");
+
     rerender(<Count n={46} />);
-    const leaving = Array.from(container.querySelectorAll(".tint-out")).map((layer) => layer.textContent);
-    expect(leaving).toEqual(["7"]);
-    // The leaving digit is out of the flow, the reading and the selection; the live ones are plain inline text.
-    const gone = container.querySelector(".tint-out")!;
-    expect(gone).toHaveAttribute("aria-hidden");
-    expect(gone).toHaveClass("absolute", "select-none");
-    expect(container.querySelector("[data-figure] [class*='grid']")).toBeNull();
-    const shown = Array.from(container.querySelectorAll("[data-figure] > span > span:not([aria-hidden])"));
-    expect(shown.map((layer) => layer.textContent).join("")).toBe("46");
+    expect(Array.from(figure.querySelectorAll(".tint-out")).map((digit) => digit.textContent)).toEqual(["7"]);
+    expect(Array.from(figure.querySelectorAll(".tint-in")).map((digit) => digit.textContent)).toEqual(["6"]);
+    // The old text is out of the flow, the reading and the selection.
+    const old = figure.querySelector(".tint-out")!.parentElement!;
+    expect(old).toHaveAttribute("aria-hidden");
+    expect(old).toHaveClass("absolute", "select-none");
+    const live = Array.from(figure.children).filter((child) => !child.hasAttribute("aria-hidden"));
+    expect(live.map((digit) => digit.textContent).join("")).toBe("46");
+
+    act(() => void vi.advanceTimersByTime(TINT_MS));
+    expect(figure.children).toHaveLength(0);
+    expect(figure).toHaveTextContent("46");
+    vi.useRealTimers();
   });
 });
 

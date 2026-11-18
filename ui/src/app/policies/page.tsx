@@ -742,7 +742,7 @@ function RuleHolders({ rule }: { rule: MappingRuleRow }) {
   const seen = rule.observed_holder_count ?? undefined;
   const line = holdersLine(rule.holder_count ?? 0, seen, seen);
   return (
-    <span className="text-body tablet:w-(--seat-number) tablet:text-right">
+    <span data-figure className="text-body tablet:w-(--seat-number) tablet:text-right">
       {line.headline}
       {line.headline !== NOT_CHECKED && (
         <span className="text-small text-faint tablet:hidden">

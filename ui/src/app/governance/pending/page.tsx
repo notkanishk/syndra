@@ -511,7 +511,7 @@ function PendingGroups({
                       <CausedBy row={row} bundles={bundles} rules={rules} setOff={count < 2} />
                     </span>
 
-                    <span className="text-small text-faint tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+                    <span data-figure className="text-small text-faint tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                       <Relative iso={row.created_at} />
                     </span>
                   </div>

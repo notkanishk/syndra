@@ -987,5 +987,6 @@ The foundation changes how things move and where a figure leads, and adds four p
 |---|---|
 | Go to, with nothing typed, the group above Pages (§8 warm, Q13) | Lately. Its rows are the rows the groups below would list, in their own words; no sentence says they are remembered. |
 | Go to's footer, beside Esc (§8, §11.5) | While something is typed: Esc clear, then close. Empty: Esc close. |
+| Go to, the line under a row's name (§8, found on staging) | One label per row, never said twice: a page of its own in the rail has none (its kind, Page, is on the right); a page in a group, its group (Access, Review, System); a person, their title and team or their address; a project or a bundle, its roles (2 roles); a role, its project; an app, its project, or none. |
 | Trends, a figure that opens its list (§10 warm, §11.12), its accessible name | {label}, {figure}: open {list}. Drift waiting, 4: open Drift. People who left and still hold access, 2: open People. {role}, 3 people: open People. A zero has no link. |
 | A system's usage card, a per-person figure (§10 warm), its accessible name | {its sentence}: open Usage in Insights. 7 in the last 30 days: open Usage in Insights. |
