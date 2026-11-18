@@ -223,7 +223,7 @@ Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Coun
 
 | Pattern | Motion | Where it appears |
 |---|---|---|
-| A screen's first paint | **S11**: the shell never moves; the header tints in, then cards arrive (stagger 40ms, cap 5). Only when you navigate there; never on back, refresh, filter or sort. No route transitions. | Every route |
+| A screen's first paint | **S11**: the shell never moves; the header tints in, then cards arrive (stagger 40ms, cap 5). Only when you navigate there; never on back, refresh, filter or sort. No route transitions yet (D-1 §7a). | Every route |
 | Loading → content | **S7**: skeleton only after 200ms; skeleton fades, then rows arrive. No crossfade. | Every list and card that reads |
 | Hover, press, focus | **S8** and **S9**: colour only on hover; 3% press on buttons, chips, nav items and segments; rows and cards darken to `--tint-3` when pressed (A-08 §1; on an opaque card, a layer over its surface); the focus ring appears at once and fades on tint | Everywhere |
 | A link on hover | **A-08 2a**: every link ends on `--accent-text` with its underline tinted in from transparent (tint). A name link goes ink to accent; a violet link and ArrowLink keep their colour. No brightness lift. | Every link |
@@ -253,9 +253,9 @@ Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Coun
 | Breathe | The amber dot of a Notice for something stale or waiting (Zitadel isn't answering, a system waiting to retry, last known data), and Insights' node while an answer is computed. Nothing else loops. | Every amber Notice; Insights |
 | Insights answer | Lights travel once along the answer, then rest. Hovering or focusing a named person or role lights its line (tint). No halo, no travelling lights at rest. | route-insights |
 
-**Never:** a shake; a bounce; a count that ticks; a row that scales; a route transition; a loop other than breathe; a bloom for something the reader didn't do; arrive replaying on refresh, filter or sort; anything travelling more than 10px in the page.
+**Never:** a shake; a bounce; a count that ticks; a row that scales; a route transition (until D-1 §7a's spec lands: the owner wants page transitions, 18 Nov 2026); a loop other than breathe; a bloom for something the reader didn't do; arrive replaying on refresh, filter or sort; anything travelling more than 10px in the page.
 
-**Recommended, pending owner (Q8): the sign-in door is exempt (D-1 §7, M14).** The door at `/login` keeps its two ambient loops (the pool's breath and the grain) and its own timings: it is the one ceremonial screen, always the dark room. Its numbers are not typed in rules, though: each is a `--door-*` token in `globals.css`, and `ceremony.ts` mirrors its two easings with a test holding them equal. Both loops start only for a reader who has not asked for less motion, and the door's choreography collapses under reduced motion. The motion guards skip `ceremony.ts`, and the door's own timers elsewhere carry a `// door-exempt:` marker; nothing else is skipped. If the owner says no, the door's timings move onto the shared tokens.
+**Decided (owner, 18 Nov 2026, Q8): the sign-in door is exempt (D-1 §7, M14).** The door at `/login` keeps its two ambient loops (the pool's breath and the grain) and its own timings: it is the one ceremonial screen, always the dark room. Its numbers are not typed in rules, though: each is a `--door-*` token in `globals.css`, and `ceremony.ts` mirrors its two easings with a test holding them equal. Both loops start only for a reader who has not asked for less motion, and the door's choreography collapses under reduced motion. The motion guards skip `ceremony.ts`, and the door's own timers elsewhere carry a `// door-exempt:` marker; nothing else is skipped.
 
 **Reduced motion:**
 - Every movement has a still form (Motion v2's token table).

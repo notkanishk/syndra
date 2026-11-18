@@ -34,6 +34,14 @@ const options = [
   { value: "c", label: "C" },
 ];
 const indicator = () => document.querySelector<HTMLElement>("[data-indicator]");
+/** Where the indicator starts along the row and how wide it is, read from its transforms (it has no left or width). */
+const placed = () => {
+  const el = indicator()!;
+  const end = el.lastElementChild as HTMLElement;
+  const left = Number(/translate\((-?[\d.]+)px/.exec(el.style.transform)?.[1]);
+  const width = Number(/translateX\((-?[\d.]+)px/.exec(end.style.transform)?.[1]) + parseFloat(end.style.width);
+  return { left, width };
+};
 
 const controls = {
   Segmented: (value: string) => <Segmented label="Pick" options={options} value={value} onChange={() => {}} />,
@@ -45,14 +53,14 @@ describe.each(Object.entries(controls))("%s indicator", (_name, draw) => {
   it("is drawn once, under the active option", () => {
     render(draw("b"));
     expect(document.querySelectorAll("[data-indicator]")).toHaveLength(1);
-    expect(indicator()).toHaveStyle({ left: "50px", width: "70px" });
+    expect(placed()).toEqual({ left: 50, width: 70 });
   });
 
   it("follows the choice", () => {
     const { rerender } = render(draw("a"));
-    expect(indicator()).toHaveStyle({ left: "0px", width: "50px" });
+    expect(placed()).toEqual({ left: 0, width: 50 });
     rerender(draw("c"));
-    expect(indicator()).toHaveStyle({ left: "120px", width: "40px" });
+    expect(placed()).toEqual({ left: 120, width: 40 });
   });
 
   it("is not part of the accessibility tree", () => {

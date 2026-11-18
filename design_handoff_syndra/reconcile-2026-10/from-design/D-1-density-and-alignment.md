@@ -2,7 +2,7 @@
 
 **Asked by the owner, 18 Nov 2026, looking at staging at 100%:** "why is the button on a separate line. the whole page looks zoomed in with poor use of space and clunky. the design boards are okay, but in the actual page it feel too zoomed in" · "please look for misaligned buttons due to dynamic text or spacing" · and, later the same day, "build elegant enriching posh user experience with immersive consistent cohesive motion as well."
 
-**Status:** proposed, not published, local only. The owner is away, so every taste call below carries a default marked **recommended, pending owner**, and the build spec is complete on those defaults. The questions are gathered in §9.
+**Status:** decided. Every taste call below was first built on a default marked recommended, pending owner; the owner answered on 18 Nov 2026 ("Yes, do recommended" for Q1–Q6 and Q8; Q7 flipped, page transitions wanted). The answers are in §9.
 
 **Boards:** `design/d1-density-1.dc.html` to `-4` (3060 wide; one source, the parts differ in one constant; about 6,200 · 6,100 · 6,800 · 6,700 tall by estimate, each under 8,000). Every frame is drawn at 100%: 1440 or 1800 wide, never scaled. For the canvas's "App screens" page.
 
@@ -226,9 +226,9 @@ Five passes. Each is one PR and leaves the product consistent.
 
 **Pass 2 · seats** (§5 #1 to #29, #32): each row takes `action` / `detail`; each long `note` becomes `caption`. Start with `components/targets`, then Home, then the rest. `PeopleOnTarget.tsx:55` loses its data-driven width. The Name card (`TargetName.tsx:67-98`) becomes the form row; so does `StatsRetention.tsx:68-85`. Accounts gains the Status column (`PeopleOnTarget.tsx:106-202`).
 
-**Pass 3 · Home** (`Home.tsx:262-340`, `:466-488`): the grid becomes a stack of the two groups at `--region-gap`; each group's blocks are `grid-template-columns: repeat(auto-fit, minmax(min(100%, 600px), 1fr))`, gap 16; headings `type-section-title`. Recommended, pending owner (Q6).
+**Pass 3 · Home** (`Home.tsx:262-340`, `:466-488`): the grid becomes a stack of the two groups at `--region-gap`; each group's blocks are `grid-template-columns: repeat(auto-fit, minmax(min(100%, 600px), 1fr))`, gap 16; headings `type-section-title`. Decided (Q6).
 
-**Pass 4 · three text sizes**: a mechanical codemod. `text-[15px]`, `text-[14.5px]`, `text-[14px]` → `text-body`; `text-[13.5px]`, `text-[13px]` → `text-small`; `text-[12.5px]`, `text-[12px]` → `text-fine`; `body` in `globals.css:631` → 14px / 1.5. The dialog field (`Input.tsx:23`, 15px) and avatar initials are left alone. Recommended, pending owner (Q3).
+**Pass 4 · three text sizes**: a mechanical codemod. `text-[15px]`, `text-[14.5px]`, `text-[14px]` → `text-body`; `text-[13.5px]`, `text-[13px]` → `text-small`; `text-[12.5px]`, `text-[12px]` → `text-fine`; `body` in `globals.css:631` → 14px / 1.5. The dialog field (`Input.tsx:23`, 15px) and avatar initials are left alone. Decided (Q3).
 
 **Pass 5 · resync the design system** (`ui/.design-sync`, BRIDGE steps 1 to 3), after the owner's OK, so the canvas mounts the new parts and these boards lose their override block.
 
@@ -265,7 +265,7 @@ Material 3 puts a simple change at 100 to 200ms, a panel at 250 to 300 and a ful
 
 | Interaction | What moves | Tokens | Still form | Owned by | State |
 |---|---|---|---|---|---|
-| Page change | nothing travels; the shell is still | | | AppShell | built (Q7) |
+| Page change | nothing travels; the shell is still | | | AppShell | built; Q7: transitions wanted, §7a |
 | A page's first paint | header tints in; blocks arrive, 40ms apart, cap 5; only when navigated to | tint; arrive, `--travel-arrive`, step | appears | `page-head`, ArriveList | built; **M1**: regions join the stagger |
 | Loading to content | skeleton only after 200ms; it fades, rows arrive | tint, arrive | swap | ListStates, ReadGate | built |
 | Hover, press, focus | colour only; controls press 3%; rows darken; the ring appears at once, fades on tint | tint, press | press survives | `control`, `hover-tint` | built; **M10** two lane-map items |
@@ -310,9 +310,9 @@ Material 3 puts a simple change at 100 to 200ms, a panel at 250 to 300 and a ful
 | M11 | The new tokens replace their literals; `motion-press` and `motion-settle` have no uses and go | `globals.css:848, 883, 893, 916, 919, 1081, 1153` and the keyframes |
 | M12 | **One check for stillness**: Unfold decides by its own `animates()`; it asks `stillMotion()` first, so tests, the server and the reader's setting agree. The loose timing constants move into `still.ts` | `lib/motion/unfold.tsx`; `ReadFreshness.tsx:33, 35`; `states/index.tsx:61`; `lib/motion/arrive.tsx:9-11` |
 | M13 | A jump to a rule uses `scrollIntoView`; it becomes `glideTo` | `policies/page.tsx:417` |
-| M14 | The sign-in door keeps its two loops and its own timings, written into FINAL §4 as an exemption, with its literals named `--door-*`. Recommended, pending owner (Q8) | `globals.css:1807, 1880, 1889, 1961, 1999, 2003`; `components/login/ceremony.ts:35-36` |
+| M14 | The sign-in door keeps its two loops and its own timings, written into FINAL §4 as an exemption, with its literals named `--door-*`. Decided (Q8) | `globals.css:1807, 1880, 1889, 1961, 1999, 2003`; `components/login/ceremony.ts:35-36` |
 
-**Constraints kept.** No decorative motion: every row above answers "what changed". Nothing travels more than 10px. No count ticks. No route transition. Reduced motion is honoured in JS through `stillMotion()` and in CSS through the one block at `globals.css:671`.
+**Constraints kept.** No decorative motion: every row above answers "what changed". Nothing travels more than 10px. No count ticks. No route transition yet (Q7: wanted, §7a). Reduced motion is honoured in JS through `stillMotion()` and in CSS through the one block at `globals.css:671`.
 
 **Motion tests**
 
@@ -325,6 +325,10 @@ Material 3 puts a simple change at 100 to 200ms, a panel at 250 to 300 and a ful
 7. The regions wrapper carries the stagger attribute, and ArriveList's Back and view-switch memory still stop a replay.
 8. `glideTo` on a region flashes its heading, not the section.
 
+## 7a · Page transitions (Q7)
+
+The owner wants page transitions (18 Nov 2026), against the recommendation to stay still. A designer is specifying them separately; this section holds their place until that spec lands. Nothing is built for them yet: a page change is still the row above, the shell still. When the spec lands it takes FINAL §4's rules as they stand (a still form under reduced motion, nothing past the 10px travel cap unless the spec says why, exits shorter than entrances) and names the tokens it uses.
+
 ## 8 · What was kept, and what was set aside
 
 Kept as decided: 28 under a page header; 16 between cards; the stat figure at 24; the 12.5px floor; every phone layout and the 44px touch floor; the rail at 252; both themes, with no colour token touched; structure that never moves with data; Basic and Advanced in their seats; FINAL §4's motion rules, unchanged.
@@ -333,13 +337,13 @@ Set aside: a density switch for the reader (one density, chosen well, is the cal
 
 ## 9 · The owner's questions
 
-Each has a default the build spec already uses.
+Each had a default the build spec used; the owner answered all eight on 18 Nov 2026.
 
-1. **How much tighter?** A (32 / 24 / 18), B (28 / 22 / 17) or C (24 / 20 / 16): part 1, frames A to C. **Recommended, pending owner: B.**
-2. **A wide window:** a 1280 frame centred between the rail and the edge (part 3, frame 13), or left against the rail. **Recommended, pending owner: centred.**
-3. **Three body sizes:** fold today's six (15, 14.5, 14, 13.5, 13, 12.5) into three (14, 13, 12.5) in a mechanical second pass. **Recommended, pending owner: yes.**
-4. **Name:** one more row of the settings card the TrueNAS page opens with ("Change name", like "Choose folder"), removing the Name region (part 2, frame 6); or its own region, tightened (frame 5). **Recommended, pending owner: the row.** The spec builds frame 5 until you say, because the row changes structure.
-5. **"Nothing for you to do." in a table:** on every healthy row (part 2, frame 10), or silence for normal, with a step written only where there is one (frame 11; G17 and G12 against the next-step rule). **Recommended, pending owner: silence.** The spec builds frame 10 until you say, because it changes no words.
-6. **Home:** the two groups stacked, blocks side by side where each has 600px (part 3, frames 15 and 16), or the two pinned columns kept. **Recommended, pending owner: stacked.**
-7. **Page change:** stay with today's rule, no route transition; look once at a crossfade of the main column after the Next 16 upgrade. **Recommended, pending owner: stay.**
-8. **The sign-in door:** keep its own loops and timings as a written exemption. **Recommended, pending owner: exempt.**
+1. **How much tighter?** A (32 / 24 / 18), B (28 / 22 / 17) or C (24 / 20 / 16): part 1, frames A to C. **Decided (owner, 18 Nov 2026): B.**
+2. **A wide window:** a 1280 frame centred between the rail and the edge (part 3, frame 13), or left against the rail. **Decided (owner, 18 Nov 2026): centred.**
+3. **Three body sizes:** fold today's six (15, 14.5, 14, 13.5, 13, 12.5) into three (14, 13, 12.5) in a mechanical second pass. **Decided (owner, 18 Nov 2026): yes.**
+4. **Name:** one more row of the settings card the TrueNAS page opens with ("Change name", like "Choose folder"), removing the Name region (part 2, frame 6); or its own region, tightened (frame 5). **Decided (owner, 18 Nov 2026): the row.** Built: Name is the first row of the settings card in every state, Change name opens the one rename dialog, and the Name region is gone.
+5. **"Nothing for you to do." in a table:** on every healthy row (part 2, frame 10), or silence for normal, with a step written only where there is one (frame 11; G17 and G12 against the next-step rule). **Decided (owner, 18 Nov 2026): silence.** Built for table rows only: a healthy row with nothing to do says only its state; every other row, outcome, notice and empty state still ends on a step or "Nothing for you to do." (copy guide, `next-step.test.tsx`).
+6. **Home:** the two groups stacked, blocks side by side where each has 600px (part 3, frames 15 and 16), or the two pinned columns kept. **Decided (owner, 18 Nov 2026): stacked.**
+7. **Page change:** stay with today's rule, no route transition; look once at a crossfade of the main column after the Next 16 upgrade. **Decided (owner, 18 Nov 2026): page transitions wanted, spec to follow (§7a).** Flipped from the recommendation.
+8. **The sign-in door:** keep its own loops and timings as a written exemption. **Decided (owner, 18 Nov 2026): exempt.** FINAL §4's exemption is no longer pending.

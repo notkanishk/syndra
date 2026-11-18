@@ -11,7 +11,8 @@ import { Card, CardColumns, CardHeader, CardRow, type SeatWidth } from "@/compon
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UNKNOWN_ACCOUNT, UserAvatar, UserName } from "@/components/names";
-import { StandingLine, StandingStep } from "@/components/ui/StandingLine";
+import { StandingLine } from "@/components/ui/StandingLine";
+import { rowStep } from "@/lib/account-standing";
 import { accountField } from "@/lib/fields";
 import { schemaReason } from "@/components/states/SchemaState";
 import { useFieldSchemaState, useMappingFields, useSystemNames } from "@/lib/queries/useFieldSchema";
@@ -168,6 +169,7 @@ function PersonRow({
   const resolver = useNameResolver();
   const accountHref = useAccountHref();
   const name = resolver.resolveUser(account.subject_id).value?.display_name ?? UNKNOWN_ACCOUNT;
+  const step = account.standing && rowStep(account.standing, nameOf(target), "operator");
 
   return (
     <>
@@ -179,12 +181,13 @@ function PersonRow({
         seat={seat}
         // The standing's next step and the home folder line are sentences: the row's detail line, full width
         // under it, never inside the 240px Status column (D-1 §5 #39).
+        // A healthy row with nothing to do has no step, so no detail line (D-1 Q5).
         detail={
-          (account.standing || home) && (
+          (step || home) && (
             <>
-              {account.standing && (
-                <span className="block">
-                  <StandingStep standing={account.standing} system={nameOf(target)} audience="operator" />
+              {step && (
+                <span className="block" data-standing-step>
+                  {step}
                 </span>
               )}
               {home && <HomeLine home={home} />}

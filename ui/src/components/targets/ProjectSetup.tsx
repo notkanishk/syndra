@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { HomeLocationRow } from "@/components/kinds/storage/HomeLocation";
 import { SettingRow } from "@/components/targets/SettingRow";
+import { TargetNameRow } from "@/components/targets/TargetName";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
@@ -12,11 +13,12 @@ import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { mappedTo } from "@/lib/fields";
+import { isStorage } from "@/lib/nav";
 import { useFieldSchema, useSystemNames } from "@/lib/queries/useFieldSchema";
 import { useMappingHistory, useMappings } from "@/lib/queries/useMappings";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useProjects } from "@/lib/queries/useProjects";
-import { useSetTargetProject, useTargets } from "@/lib/queries/useTargets";
+import { useSetTargetProject, useTargets, type TargetSummary } from "@/lib/queries/useTargets";
 import { projectLabel } from "@/components/names/Unresolved";
 import { sortByName } from "@/lib/sort";
 
@@ -118,20 +120,44 @@ export function ProjectSet({ target, project }: { target: string; project: strin
 }
 
 /**
- * The system's settings, once the project is set (A-03 §1): one row per
- * setting, the label in a 170px seat, the value, then its way on in the 200px
- * right seat. The only link to the mappings, and the one place the home
- * location is chosen.
+ * The system's settings (A-03 §1): one row per setting, the label in its seat,
+ * the value, then its way on in the right seat. Its name first, always: a name
+ * changes nobody's access, so a system whose project is not chosen yet still
+ * has one (D-1 Q4). The rest once the project is set: the only link to the
+ * mappings, and the one place the home location is chosen.
  */
 export function SetupStrip({
   target,
+  registered,
   project,
   lastKnown = false,
 }: {
   target: string;
-  project: { id: string; name: string };
+  registered: TargetSummary;
+  /** Null while it is not chosen, and for the visit it was chosen in: the name row only. */
+  project: { id: string; name: string } | null;
   /** The system isn't answering: a setting that is chosen from what the system lists waits (A-13 §1.5). */
   lastKnown?: boolean;
+}) {
+  return (
+    <Card>
+      <TargetNameRow registered={registered} />
+      {project && <ProjectRows target={target} project={project} lastKnown={lastKnown} storage={isStorage(registered)} />}
+    </Card>
+  );
+}
+
+/** The rows that follow from the project, read only once there is one. */
+function ProjectRows({
+  target,
+  project,
+  lastKnown,
+  storage,
+}: {
+  target: string;
+  project: { id: string; name: string };
+  lastKnown: boolean;
+  storage: boolean;
 }) {
   const nameOf = useSystemNames();
   const name = nameOf(target);
@@ -143,7 +169,7 @@ export function SetupStrip({
   const version = history.data?.current_version;
 
   return (
-    <Card>
+    <>
       <SettingRow label="Zitadel project">
         <Link href={`/projects/${project.id}`} className="text-body font-semibold text-ink link-hover">
           {projectLabel(project.name || resolver.resolveProject(project.id).value?.name)}
@@ -165,8 +191,8 @@ export function SetupStrip({
               : `${roles} role${roles === 1 ? "" : "s"} to ${mappedTo(name, schema)}${version ? ` · version ${version}` : ""}`}
         </span>
       </SettingRow>
-      <HomeLocationRow target={target} lastKnown={lastKnown} />
-    </Card>
+      <HomeLocationRow target={target} lastKnown={lastKnown} expected={storage} />
+    </>
   );
 }
 

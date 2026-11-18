@@ -10,6 +10,7 @@ import {
   FOLD_MS,
   LIGHT_LEAD_MS,
 } from "@/lib/motion";
+import { PILL_FILL, PILL_SURFACE } from "@/components/ui/SectionNav";
 
 /**
  * Design-system canary.
@@ -613,6 +614,38 @@ describe("design system", () => {
     expect(frames, `a scrim only fades — @keyframes ${name} must not transform`).not.toContain(
       "transform",
     );
+  });
+
+  // A transition on left, top, width or height lays the group out on every
+  // frame of the glide (D-1, owner 18 Nov 2026). Transform only, on settle.
+  it("glides a control's indicator by transform alone", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const glide = atRuleBody(css, "@utility indicator-glide");
+    expect(glide, "globals.css must declare an indicator-glide utility").not.toBe("");
+    expect(/transition-property:\s*([^;]+);/.exec(glide)?.[1].trim()).toBe("transform");
+    expect(glide).not.toMatch(/transition:\s/);
+    expect(glide).toContain("var(--duration-settle)");
+    expect(glide).toContain("var(--ease-settle)");
+  });
+
+  // The section pill's selected fill vanished in light theme (staging, 18 Nov
+  // 2026): it was `bg-surface-2` on a `bg-surface-1` pill, and in light both
+  // are white. The fill must be a different colour from the pill in each theme.
+  it("marks the section pill's current section in a colour of its own, in both themes", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const token = (cls: string) => /^bg-([\w-]+)$/.exec(cls)?.[1];
+    const fill = token(PILL_FILL);
+    const surface = token(PILL_SURFACE);
+    expect(fill && surface, "the pill's fill and surface are bg-<token> classes").toBeTruthy();
+    expect(fill).not.toBe(surface);
+    for (const theme of ["dark", "light"]) {
+      const start = css.indexOf(`[data-theme="${theme}"] {`);
+      expect(start, `globals.css declares the ${theme} theme`).toBeGreaterThan(-1);
+      const block = css.slice(start, css.indexOf("\n  }", start));
+      const value = (name: string) => new RegExp(`--${name}:\\s*([^;]+);`).exec(block)?.[1].trim();
+      expect(value(fill!), `--${fill} in ${theme}`).toBeTruthy();
+      expect(value(fill!), `the pill's fill in ${theme}`).not.toBe(value(surface!));
+    }
   });
 
   // The class only decides when the wash comes OFF; the animation itself is

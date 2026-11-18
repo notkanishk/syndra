@@ -30,7 +30,8 @@ import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Card, CardGrid, CardHeader, CardRow, type SeatWidth } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { ReadLine, SectionPill, type NavSection } from "@/components/ui/SectionNav";
-import { StandingLine, StandingStep } from "@/components/ui/StandingLine";
+import { StandingLine } from "@/components/ui/StandingLine";
+import { rowStep } from "@/lib/account-standing";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -42,7 +43,6 @@ import { AdvancedOnly } from "@/components/ui/AdvancedOnly";
 import { lifecycleWhy } from "@/lib/lifecycle-reason";
 import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
-import { TargetName } from "@/components/targets/TargetName";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { formatBytes, formatClock, formatShortDate, inventoryNotRead, personLine, versionLabel, whyNotChecked } from "@/lib/format";
@@ -158,15 +158,19 @@ export function TargetOverview({ target }: { target: string }) {
       />
 
       {/* The project comes first: its step while unchosen, its result for the
-          visit it was chosen in, then a thin strip that is the only link to the
-          mappings. */}
+          visit it was chosen in. Then the settings card, which opens with the
+          system's name, its one write place (addon-contract 3.10a; D-1 Q4), in
+          every state: a name changes nobody's access, and a system nobody has
+          set up still has one. Its other rows, the only link to the mappings
+          among them, wait for the project. */}
       {gated && !justSet ? (
         <ProjectStep target={target} onSet={setJustSet} />
       ) : justSet ? (
         <ProjectSet target={target} project={justSet} />
-      ) : project ? (
-        <SetupStrip target={target} project={project} lastKnown={lastKnown} />
       ) : null}
+      {registered && (
+        <SetupStrip target={target} registered={registered} project={justSet ? null : project ?? null} lastKnown={lastKnown} />
+      )}
 
       {/* One chip per region at the right end of the read line (board, RULES):
           a way to skip a region, never a way to hide one, so a finding cannot
@@ -245,15 +249,6 @@ export function TargetOverview({ target }: { target: string }) {
             </>
           )}
         </Region>
-
-        {/* What members see it called: its one write place (addon-contract
-            3.10a). Above the project's gate, because a name changes nobody's
-            access and a system nobody has set up still has one. */}
-        {registered && (
-          <Region id="name" title="Name">
-            <TargetName registered={registered} />
-          </Region>
-        )}
 
         {/* What reports on the system and its pause stays live above; what
             waits for the project is drawn whole, inert, under one line. */}
@@ -1457,7 +1452,9 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
         }
       >
         <>
-          {leaving.rows.map((account, i) => (
+          {leaving.rows.map((account, i) => {
+            const step = account.standing && rowStep(account.standing, name, "operator");
+            return (
             <LeavingRow key={account.username} {...leaving.props(account.username)}>
             <CardRow
               first={i === 0}
@@ -1484,13 +1481,14 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
               // says so before anybody meets the refusal.
               //
               // The standing's next step is a sentence, so it is the detail line, as on "Accounts Syndra
-              // manages": the status column holds the state and its short note only (D-1 §5 #39).
+              // manages": the status column holds the state and its short note only (D-1 §5 #39). A
+              // healthy row with nothing to do has no step, so no detail line (D-1 Q5).
               detail={
-                (account.standing || account.self) && (
+                (step || account.self) && (
                   <>
-                    {account.standing && (
-                      <span className="block">
-                        <StandingStep standing={account.standing} system={name} audience="operator" />
+                    {step && (
+                      <span className="block" data-standing-step>
+                        {step}
                       </span>
                     )}
                     {account.self && (
@@ -1523,7 +1521,8 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
               </span>
             </CardRow>
             </LeavingRow>
-          ))}
+            );
+          })}
           {tooOldToAdopt && unmanaged.some((a) => !a.self) && (
             <div className="row-divider px-5 py-3 text-small leading-[1.5] text-faint [text-wrap:pretty]">
               Assigning waits for a current read of {name}: it ties an account and its files to a
