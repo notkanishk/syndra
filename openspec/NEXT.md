@@ -21,7 +21,7 @@ Source: `from-design/D-1-density-and-alignment.md` and boards `design/d1-density
 
 ## 0l. The craft, A-24 (owner, 18 Nov 2026: "yes to all A-24 recommendations")
 
-Source: `from-design/A-24-the-craft.md` and boards `design/a24-the-craft-1..3`; tracked as addon-contract **7w**, one PR per wave. Wave 1, the foundation, is built (7w-1); waves 2 to 4 follow it. Three answers are **not now**, and wait here:
+Source: `from-design/A-24-the-craft.md` and boards `design/a24-the-craft-1..3`; tracked as addon-contract **7w**, one PR per wave. Waves 1 to 3 are merged (7w-1 to 7w-3); wave 4, ceremony, is on staging for the owner (7w-4). Three answers are **not now**, and wait here:
 
 - **Q12 · A year of days** on Insights' Usage (§10 vivid): once counting has run a term. The record began 6 Nov 2026, so a year would be mostly empty before then. Needs a daily series for twelve months, where the card reads thirty days. `needs-triage`
 - **Q16 · The name carries you** from a row to its page's title (§2 vivid): a spike inside the Next 16 slice (0h2), with `<ViewTransition>`, kept only if it is still welcome on the hundredth open. It is one written exception to `--travel-cap`. `needs-triage`
@@ -30,6 +30,8 @@ Source: `from-design/A-24-the-craft.md` and boards `design/a24-the-craft-1..3`; 
 - **Access over time** (§9 vivid, Q11, wave 3): not built, because no read gives one person's roles over a year (A-24 tasks 7w-3 says why each existing read falls short). The smallest read, proposed: `GET /api/v1/users/{id}/access-history?since=`, read-only, operator, `[{project_id, role_key, given_at, ended_at, ended_how, source}]` from `audit_logs` and `direct_role_grants`, bundle roles resolved at assignment. Needs the owner's word before it is built. `needs-info`
 - **The mark's lime and dim** (Q5, wave 3): not built, because `/governance/indicators` does not carry every block Home counts (onboarding gaps, owner-less service accounts, merge findings, unvouched access), so "nothing waits" cannot be proved; the rail says only what it can, amber while Zitadel isn't answering. The smallest read that brings lime and dim back: those counts added to the indicators answer (read-only, the same summary Home reads); then the mark reads them as Home's headline does. `needs-info`
 - **What stays, before a revoke** (§5): traced (A-24 §13: the Zitadel user, the TrueNAS account locked not deleted, the home folder and files all stay), not yet said in the confirm, because it changes a consent. `needs-info`
+- **The plates, the lit card and the first arrival** (Q9, §3.3, §3.2, wave 4): built on `feat/addon-contract-a24-w4` and deployed to staging for the owner to judge at true size before merge. Plates off again is `PLATES_SHOWN`; the lit card and the door each have one gate (`lit-card` in MemberAccess, `takeFirstArrival` in Home). `ready-for-human`
+- **The access token in the client payload** (found in wave 4, read from code, not yet checked live): `app/layout.tsx` hands the whole `SessionUser`, `accessToken` included, to `AppShell`, and `app/page.tsx` to `Home` and `MemberAccess`, all client components, so the token is serialised into the page's RSC payload where page script can read it, which the httpOnly cookie exists to prevent. The fix is a client-safe session shape without the token at those three seams. `needs-triage`
 
 ## 0k. Deleting a TrueNAS account from Syndra (owner, 18 Nov 2026: implement later)
 

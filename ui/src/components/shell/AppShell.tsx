@@ -1,5 +1,7 @@
 "use client";
 
+import { useLayoutEffect } from "react";
+
 import { GoToHost } from "@/components/shell/GoToHost";
 import { KeysHost } from "@/components/shell/KeysHost";
 import { IntentPrefetchHost } from "@/components/shell/IntentPrefetchHost";
@@ -7,6 +9,7 @@ import { PlaceHost } from "@/components/shell/PlaceHost";
 import Sidebar from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { TouchNav } from "@/components/shell/TouchNav";
+import { noteSignIn } from "@/lib/motion/door";
 import { ShellNoticesProvider } from "@/components/shell/ShellNotices";
 import { PageCrumbProvider } from "@/lib/page-crumb";
 import type { SessionUser } from "@/lib/session";
@@ -54,6 +57,8 @@ export function AppShell({
   initialView?: UiView;
   children: React.ReactNode;
 }) {
+  // The sign-in's first page is this one, whichever it is (A-24 §3.2): Home opens the door only if it was.
+  useLayoutEffect(() => noteSignIn(session.signedInAt), [session.signedInAt]);
   return (
     <UiViewProvider isOperator={session.role === "admin"} selfId={session.id} initialView={initialView}>
       <PageCrumbProvider>

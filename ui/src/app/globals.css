@@ -370,6 +370,22 @@
     }
   }
 
+  /* The door opens (A-24 §3.2): the arch of light behind Home's greeting widens
+     into the pool and fades, once a sign-in. Its shape and its opacity change;
+     nothing moves, so it is outside the travel cap by having none. */
+  @keyframes door-open {
+    from {
+      --door-w: 90px;
+      --door-h: 260px;
+      opacity: 1;
+    }
+    to {
+      --door-w: 70%;
+      --door-h: 200%;
+      opacity: 0;
+    }
+  }
+
   /* A phone sheet rises from the bottom edge of the screen and nothing else:
      the scrim carries the fade. Its own travel, so not held to --travel-cap. */
   @keyframes sheet-rise {
@@ -1089,11 +1105,25 @@
 /* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind
    Home's head, its place set by the part of the day (`dayPhase`, the greeting's
    own clock). The ONE written exception to "colour is never decorative" above,
-   with its bounds: Home's head only; still (no animation, no loop); the accent,
+   with its bounds: Home's head, and a member's card on its first day (`lit-card`,
+   A-24 §3.3); still (no loop, and no animation but the door's, once a sign-in); the accent,
    never a status colour; the same rule in both rooms; gone under forced colours;
    and never strong enough to take a line of text in the head under 4.5:1 (the
    contrast test holds it, at the pool's strongest point, in both themes).
    `--hour-shape` is where the pool sits, `--hour-reach` how much accent it holds. */
+/* The door's arch, as sizes `door-open` can carry from one to the other: a
+   registered length interpolates, a bare custom property would only jump. */
+@property --door-w {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 90px;
+}
+@property --door-h {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 260px;
+}
+
 @utility hour-light {
   position: absolute;
   inset: -24px -26px -28px;
@@ -1133,6 +1163,29 @@
     --hour-reach: 22%;
   }
 
+  /* The first arrival of a sign-in (A-24 §3.2, Q4): once, the doorway's arch of light stands
+     where the greeting does and opens into the hour's pool (`door-open`), the pool coming up
+     behind it. The light's own extent grows and fades; nothing in the page travels, and nothing
+     waits for it. Reduced motion: the pool at rest, and no arch. The arch stands a quarter in and
+     rises from inside the box's faded floor (the board's 70px of a 300px frame), so the same mask
+     that gives the pool no edge gives the doorway none. */
+  &[data-hour="door"] {
+    --hour-shape: ellipse var(--door-w) var(--door-h) at 24% 80%;
+    --hour-reach: 30%;
+    animation: door-open var(--duration-arrive) var(--ease-settle) both;
+  }
+  &[data-door] {
+    animation: fade var(--duration-arrive) var(--ease-settle) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &[data-hour="door"] {
+      display: none;
+    }
+    &[data-door] {
+      animation: none;
+    }
+  }
+
   /* A phone's gutter is 16px, not the page's 26: the pool reaches to the edge and no further, so
      the scroller never gains a sideways scroll. */
   @media (width < theme(--breakpoint-tablet)) {
@@ -1141,6 +1194,46 @@
 
   @media (forced-colors: active) {
     display: none;
+  }
+}
+
+/* A member's card on its first day (A-24 §3.3, Q6): the door's light on its top
+   edge and a violet hairline, on the first visit after that access starts and
+   never again. The same light as Home's head, under the same bounds: still, the
+   accent at the same weight per room, clipped by the card's own edge, under
+   4.5:1 for nothing on it (the contrast test holds it), gone under forced colours. */
+@utility lit-card {
+  --lit-reach: 22%;
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(
+      ellipse 60% 90px at 18% 0,
+      color-mix(in srgb, var(--accent) calc(var(--lit-reach) * var(--hour-weight)), transparent),
+      transparent 72%
+    );
+  }
+  &::after {
+    content: "";
+    position: absolute;
+    inset-inline: 24px 40%;
+    top: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--accent) 24%, var(--accent) 60%, transparent);
+  }
+
+  @media (forced-colors: active) {
+    &::before,
+    &::after {
+      display: none;
+    }
   }
 }
 
@@ -1159,8 +1252,8 @@
 
 /* A plate (A-24 §7, Q9): the door, in hairlines with one lit point. Shut, with
    lime, for a queue that is clear; open, with violet light, for a list that is
-   beginning. Drawn in both rooms from the tokens; shown only once the owner has
-   seen them (PLATES_SHOWN). */
+   beginning. Drawn in both rooms from the tokens; shown for the owner to judge
+   at true size on staging (PLATES_SHOWN), at the three places the board draws. */
 @utility plate {
   position: relative;
   width: 64px;

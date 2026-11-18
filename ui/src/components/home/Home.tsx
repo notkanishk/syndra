@@ -49,7 +49,7 @@ import { StatusDot } from "@/components/ui/Badge";
 import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
-import { Unfold } from "@/lib/motion";
+import { takeFirstArrival, Unfold } from "@/lib/motion";
 import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
@@ -225,7 +225,13 @@ export function Home({ session }: { session: SessionUser }) {
   // by an invisible stand-in so nothing below moves (same rule as Relative).
   const [now, setNow] = useState<Date | null>(null);
   // Before paint, so a page reached by a link is drawn with its greeting and term line in place.
-  useLayoutEffect(() => setNow(new Date()), []);
+  // The first arrival of a sign-in (A-24 §3.2) is asked once, as Home mounts: only a yes is kept,
+  // so a second run of the effect (React's Strict Mode) can't take it back.
+  const [door, setDoor] = useState(false);
+  useLayoutEffect(() => {
+    setNow(new Date());
+    if (takeFirstArrival(session.signedInAt)) setDoor(true);
+  }, [session.signedInAt]);
   // The part of the day for the light, on the greeting's clock, turning with the rail's mark at 22:00.
   const phase = useDayPhase();
   const terms = useTerms();
@@ -376,7 +382,10 @@ export function Home({ session }: { session: SessionUser }) {
         {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
             place set by the part of the day on the greeting's own clock. The one written exception to
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
-        {phase && <div aria-hidden data-hour={phase} className="hour-light" />}
+        {/* The first arrival of a sign-in (A-24 §3.2): the doorway's arch of light opens into the pool,
+            once, behind the words. Nothing waits for it, and reduced motion shows the pool at rest. */}
+        {phase && door && <div aria-hidden data-hour="door" className="hour-light" />}
+        {phase && <div aria-hidden data-hour={phase} data-door={door ? "" : undefined} className="hour-light" />}
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and

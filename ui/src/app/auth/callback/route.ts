@@ -135,6 +135,8 @@ export async function GET(request: Request): Promise<Response> {
     expiresAt: fields.expiresAt,
     ...(firstVisit ? { firstVisit: true } : {}),
     ...(previousSignIn ? { previousSignIn } : {}),
+    // The door opens into the first page once for this sign-in, and no other (A-24 §3.2).
+    signedInAt: new Date().toISOString(),
   };
 
   const sessionValue = createOidcSessionValue(payload);

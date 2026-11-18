@@ -23,3 +23,4 @@ export * from "./leave";
 export * from "./crossfade";
 export * from "./flash";
 export * from "./tip";
+export * from "./door";

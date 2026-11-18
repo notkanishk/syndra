@@ -21,6 +21,8 @@ export interface SessionUser {
   firstVisit?: boolean;
   // When the person was last here before this sign-in (A-20 P18); absent on the first.
   previousSignIn?: string;
+  // When this sign-in happened: the one instant the first arrival is kept to (A-24 §3.2). OIDC only.
+  signedInAt?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,6 +48,7 @@ export interface OidcSessionCookie {
   expiresAt: number; // Unix seconds
   firstVisit?: boolean;
   previousSignIn?: string;
+  signedInAt?: string;
 }
 
 type SessionCookiePayload = DemoSessionCookie | OidcSessionCookie;
@@ -217,6 +220,7 @@ function decodeSessionPayload(value: string): SessionCookiePayload | null {
         expiresAt: parsed.expiresAt,
         ...(parsed.firstVisit === true ? { firstVisit: true } : {}),
         ...(typeof parsed.previousSignIn === "string" ? { previousSignIn: parsed.previousSignIn } : {}),
+        ...(typeof parsed.signedInAt === "string" ? { signedInAt: parsed.signedInAt } : {}),
       };
     }
 
@@ -273,6 +277,7 @@ export async function getSession(): Promise<SessionUser | null> {
       sessionType: "oidc",
       ...(payload.firstVisit ? { firstVisit: true } : {}),
       ...(payload.previousSignIn ? { previousSignIn: payload.previousSignIn } : {}),
+      ...(payload.signedInAt ? { signedInAt: payload.signedInAt } : {}),
     };
   }
 

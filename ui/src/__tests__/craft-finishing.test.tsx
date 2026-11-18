@@ -143,7 +143,7 @@ describe("a long wait says so once (§6)", () => {
   });
 });
 
-describe("the list closes, and plates wait for the owner (§4.1, §7, Q9)", () => {
+describe("the list closes, and the plates (§4.1, §7, Q9)", () => {
   it("closing: the sentence takes the heading size and a lime hairline draws once over one flash", () => {
     render(<EmptyState resolved closes title="Nothing here needs you." />);
     expect(screen.getByText("Nothing here needs you.")).toHaveClass("type-section-title");
@@ -153,9 +153,15 @@ describe("the list closes, and plates wait for the owner (§4.1, §7, Q9)", () =
     expect(rule).toContain("var(--healthy)");
   });
 
-  it("does not draw a plate until the owner has seen them at true size", () => {
-    expect(PLATES_SHOWN).toBe(false);
-    render(<EmptyState resolved plate="shut" title="Everyone inside is on the list." />);
+  it("draws a plate in the right seat where one is earned, and none where a search missed", () => {
+    // Shown on the wave-4 branch for the owner to judge at true size (Q9).
+    expect(PLATES_SHOWN).toBe(true);
+    const { unmount } = render(<EmptyState resolved plate="shut" title="Everyone inside is on the list." />);
+    const seat = screen.getByRole("status");
+    // Last in the row, after the words: the right seat, never between a sentence and its link.
+    expect(seat.lastElementChild).toHaveAttribute("data-plate", "shut");
+    unmount();
+    render(<EmptyState title="Nobody matches that." guidance="Try a shorter search." />);
     expect(document.querySelector("[data-plate]")).toBeNull();
   });
 

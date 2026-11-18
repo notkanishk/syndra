@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
-import { TINT_MS } from "@/lib/motion";
+import { noteSignIn, resetDoorForTests, TINT_MS } from "@/lib/motion";
 import { inZone } from "@/test-utils/zone";
 import type { SessionUser } from "@/lib/session";
 import { setMediaQuery } from "@/test-utils/media";
@@ -80,15 +80,15 @@ vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alrea
 const session = { id: "op", name: "Kanishk", email: "k@example.org" } as unknown as SessionUser;
 const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-function mount() {
+function mount(who: SessionUser = session) {
   const queries = client();
   const home = () => (
     <QueryClientProvider client={queries}>
-      <Home session={session} />
+      <Home session={who} />
     </QueryClientProvider>
   );
   const view = render(home());
-  return { reread: () => view.rerender(home()) };
+  return { reread: () => view.rerender(home()), unmount: view.unmount };
 }
 
 /** The phase of the outermost Unfold around `element`: the calm line's, or the grid's. */
@@ -361,6 +361,69 @@ describe("the room knows the hour", () => {
     vi.setSystemTime(new Date("2026-11-18T20:00:00Z"));
     mount();
     expect(document.querySelector(".hour-light")).toHaveAttribute("data-hour", "quiet");
+  });
+});
+
+// A-24 §3.2, Q4: the door's light opens into Home once, straight after signing in.
+describe("the first arrival of a sign-in", () => {
+  const signedIn = { ...session, signedInAt: "2026-11-19T08:00:00.000Z" } as SessionUser;
+  const arch = () => document.querySelector('.hour-light[data-hour="door"]');
+  const pool = () => document.querySelector('.hour-light:not([data-hour="door"])');
+  beforeEach(() => {
+    resetDoorForTests();
+    window.history.replaceState({}, "", "/");
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("opens the doorway's arch into the pool behind the words, with nothing waiting for it", () => {
+    mount(signedIn);
+    expect(arch()).toHaveAttribute("aria-hidden");
+    expect(arch()!.parentElement).toHaveClass("page-head", "isolate");
+    expect(pool()).toHaveAttribute("data-door");
+    // The words are there in the same paint: the light sits behind them and holds nothing back.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Kanishk/);
+  });
+
+  it("is once: not when Home is shown again, not on a reload, not for the same sign-in", () => {
+    const first = mount(signedIn);
+    expect(arch()).not.toBeNull();
+    first.unmount();
+    mount(signedIn); // back to Home in the same visit
+    expect(arch()).toBeNull();
+    expect(pool()).not.toHaveAttribute("data-door");
+    resetDoorForTests(); // a reload: this device remembers the sign-in it opened for
+    mount(signedIn);
+    expect(document.querySelectorAll('.hour-light[data-hour="door"]')).toHaveLength(0);
+  });
+
+  it("is spent by whichever page the sign-in lands on, so Home later is quiet", () => {
+    window.history.replaceState({}, "", "/users/u7");
+    noteSignIn(signedIn.signedInAt);
+    window.history.replaceState({}, "", "/");
+    mount(signedIn);
+    expect(arch()).toBeNull();
+  });
+
+  it("opens again for the next sign-in", () => {
+    mount(signedIn).unmount();
+    resetDoorForTests();
+    mount({ ...signedIn, signedInAt: "2026-11-20T08:00:00.000Z" } as SessionUser);
+    expect(arch()).not.toBeNull();
+  });
+
+  it("shows nothing extra when this device can't remember, rather than opening every time", () => {
+    // A private window or blocked site data: the store itself can't be reached.
+    vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    mount(signedIn);
+    expect(arch()).toBeNull();
+    expect(pool()).not.toHaveAttribute("data-door");
+  });
+
+  it("has no door without a sign-in instant to keep it to", () => {
+    mount(session);
+    expect(arch()).toBeNull();
   });
 });
 

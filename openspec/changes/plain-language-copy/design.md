@@ -1009,3 +1009,11 @@ The foundation changes how things move and where a figure leads, and adds four p
 | A person's page, the line under the name, in the lede's seat (§9, Q10) | Holds {n} roles across {m} projects. / Holds {n} role(s) in {project}. / Holds no roles. (counted as the People row counts). Then, no more than one: {Role} in {Project} ends today / tomorrow / in {n} days. (never for a role a second source also gives) · Not in Zitadel: {Role} in {Project}. (Not in Zitadel: {n} roles they were given.) · {Role} in {Project} is on its way to Zitadel. ({n} roles are on their way to Zitadel.) With no count to say (loading, or Zitadel's read missing, failed or cut short): Checking what Zitadel shows. The page's own read warning says which. |
 | Network storage, the sentence under the meter (Q18) | Plenty of room. (under half) · {left} left. (the meter itself says nearly full past 90%) · nothing at the limit, where the card's Full. line says it. |
 | Home's light and the rail's mark (§3.1, Q5) | No words: both are hidden from assistive technology; the greeting, the date line and the rail's own counts say what they show. The mark changes only while Zitadel isn't answering (amber, breathing). |
+
+### Wave 4 (A-24 §3.3, §3.2, Q9)
+
+| Where | Words |
+|---|---|
+| My access, the card of a project whose access began today, on the first visit after it starts (§3.3, Q6) | Its note: From today. (The line under the greeting already says "From today, you can use {projects}."; the card's light has no words and is hidden from assistive technology.) On the next visit the card has no note. |
+| Home, the first arrival of a sign-in (§3.2, Q4) | No words: the door's light opens behind the greeting and says nothing a reader needs. |
+| Empty states, plates (§7, Q9) | No words: a plate is hidden from assistive technology; the sentence beside it says everything. |
