@@ -184,7 +184,7 @@ describe("a count of zero", () => {
         <CardHeader title="Not going to happen" count={0} tone="danger" />
       </Card>,
     );
-    const badge = screen.getByText("0");
+    const badge = screen.getByText("0").closest(".rounded-pill")!;
     expect(badge.className).toContain("border");
     expect(badge.className, "danger fill on a zero says something is wrong").not.toContain(
       "bg-danger",
@@ -197,6 +197,6 @@ describe("a count of zero", () => {
         <CardHeader title="Not going to happen" count={4} tone="danger" />
       </Card>,
     );
-    expect(screen.getByText("4").className).toContain("bg-danger");
+    expect(screen.getByText("4").closest(".rounded-pill")!.className).toContain("bg-danger");
   });
 });

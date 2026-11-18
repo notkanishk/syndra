@@ -1035,6 +1035,33 @@ describe("adopting an account", () => {
     expect(screen.getByText("Assigned")).toBeInTheDocument();
     expect(outcome.textContent).toContain("iyo is now Iyo Sky");
   });
+
+  // D-1 M5: the account just assigned leaves the unmanaged list on the next read, and its row is
+  // what carries the outcome. The row stays until that outcome has been read.
+  it("keeps the assigned account's row, and the outcome under it, when the next read drops it", () => {
+    state.adopted = [];
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = twoAccounts;
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = () => (
+      <QueryClientProvider client={client}>
+        <UiViewProvider isOperator initialView="advanced">
+          <TargetOverview target="truenas" />
+        </UiViewProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree());
+    fireEvent.click(screen.getAllByRole("button", { name: "Assign to a person" })[1]);
+    chooseSai();
+    fireEvent.change(screen.getByLabelText(/Type the account name/), { target: { value: "iyo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Assign iyo to Iyo Sky" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    state.inventory = { ...twoAccounts, unmanaged: twoAccounts.unmanaged.filter((a) => a.username !== "iyo") };
+    rerender(tree());
+    expect(screen.getByText(/iyo is now Iyo Sky/)).toBeTruthy();
+  });
 });
 
 

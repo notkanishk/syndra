@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { NOTHING_TO_DO } from "@/lib/outcome";
-import { pageSettled } from "@/lib/motion";
-import { UnfoldOnArrival, useUnfoldOpening } from "@/lib/motion";
+import { FOLD_MS, TINT_MS, Unfold, UnfoldOnArrival, pageSettled, useExitPhase, useUnfoldOpening } from "@/lib/motion";
 
 /**
  * The one way Syndra says something is wrong with what you are looking at
@@ -71,6 +70,7 @@ export function Notice({
   action,
   reference,
   className = "",
+  open,
   next,
   nothingToDo,
 }: NoticeNextStep & {
@@ -84,10 +84,21 @@ export function Notice({
   /** A request id, shown copyable so it can be quoted. */
   reference?: string;
   className?: string;
+  /**
+   * Turned false by a caller whose condition has cleared: the Notice stays
+   * mounted through its own close, fading (tint) and then folding its space
+   * (fold), so what is below settles rather than jumps (D-1 M3).
+   */
+  open?: boolean;
 }) {
   const t = TONES[tone];
   const opening = useUnfoldOpening();
   const [late] = useState(() => painted && pageSettled() && !opening);
+  const exit = useExitPhase(open ?? true, TINT_MS + FOLD_MS);
+  // A Notice that arrives late opens its space after its first render (as
+  // UnfoldOnArrival does); one that is there from the first paint just is.
+  const [arrived, setArrived] = useState(!late);
+  useEffect(() => setArrived(true), []);
   const box = (
     <div
       role={blocking ? "alert" : "status"}
@@ -118,5 +129,13 @@ export function Notice({
       </div>
     </div>
   );
-  return late ? <UnfoldOnArrival>{box}</UnfoldOnArrival> : box;
+  // A caller that never closes it passes no `open`, and gets the plain Notice.
+  if (open === undefined) return late ? <UnfoldOnArrival>{box}</UnfoldOnArrival> : box;
+  // The Unfold stays mounted whatever `open` says (it draws nothing while closed), so a condition that
+  // arrives later opens its space rather than popping in.
+  return (
+    <div className="contents" data-closing={exit.leaving ? "" : undefined}>
+      <Unfold open={open && arrived}>{box}</Unfold>
+    </div>
+  );
 }

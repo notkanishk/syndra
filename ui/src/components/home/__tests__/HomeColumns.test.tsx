@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
+import { motionInTests } from "@/test-utils/motion";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
+import { TINT_MS } from "@/lib/motion";
 import type { SessionUser } from "@/lib/session";
 
 // route-home, layout 1c (chosen 2 Oct 2026): "Time-sensitive" on the left, work that
@@ -181,7 +183,7 @@ describe("Home's two columns", () => {
 
   // 5b: a block that empties while you are here is not unmounted; it fades, then its gap closes.
   it("a block that empties while you are here folds instead of vanishing", () => {
-    Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
+    Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true }); motionInTests(); // Unfold asks stillMotion() first
     try {
       everyBlock();
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -208,7 +210,7 @@ describe("Home's two columns", () => {
   // A-08 §3: one switch moves everything one way. Advanced's blocks open by Unfold, Basic's own
   // sentence folds away, and the blocks both views have hold still.
   it("switching Basic to Advanced opens its blocks by Unfold and folds Basic's footnote", () => {
-    Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
+    Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true }); motionInTests(); // Unfold asks stillMotion() first
     try {
       state.advanced = false;
       state.requests = [request];
@@ -234,7 +236,7 @@ describe("Home's two columns", () => {
         "opening",
       );
       // Folding, not gone: it fades first and its gap closes after.
-      expect(screen.getByRole("link", { name: "Drift" }).closest(".unfold")).toHaveAttribute(
+      expect(screen.getByRole("link", { name: "Drift", hidden: true }).closest(".unfold")).toHaveAttribute(
         "data-phase",
         "closing",
       );
@@ -246,7 +248,8 @@ describe("Home's two columns", () => {
   // The calm line and the block grid hand over by Unfold, not by a ternary: the switch (or a
   // read) that flips one flips the other, and neither may swap in a single frame.
   it("hands the calm line over to the grid by Unfold when Advanced brings work", () => {
-    Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
+    Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true }); motionInTests(); // Unfold asks stillMotion() first
+    vi.useFakeTimers();
     try {
       state.advanced = false;
       state.governance = { ...quiet(), drift: { count: 3, top: [] } };
@@ -264,9 +267,13 @@ describe("Home's two columns", () => {
       view.rerender(home());
 
       expect(screen.getByText("Nothing here needs you.").closest(".unfold")).toHaveAttribute("data-phase", "closing");
+      // The grid opens one tint behind the calm line's fade, so no frame shows both words at rest.
+      expect(screen.queryByText("Drift")).toBeNull();
+      act(() => void vi.advanceTimersByTime(TINT_MS));
       expect(screen.getByText("Drift").closest(".unfold[data-phase]")).not.toBeNull();
       expect(screen.getByRole("region", { name: "Time-sensitive" })).toBeTruthy();
     } finally {
+      vi.useRealTimers();
       delete (Element.prototype as { getAnimations?: unknown }).getAnimations;
     }
   });

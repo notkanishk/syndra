@@ -478,6 +478,7 @@ describe("every action in its seat (D-1)", () => {
     renderFindings();
     fireEvent.click(screen.getByRole("button", { name: "Decide" }));
     expect(screen.queryByRole("button", { name: "Decide" })).toBeNull();
-    expect(document.querySelector("[data-card-row] > [data-action-seat]")).toBeEmptyDOMElement();
+    // The seat keeps its place and its crossfade, with nothing in it but the word that left.
+    expect(document.querySelector("[data-card-row] > [data-action-seat]")).toHaveTextContent("");
   });
 });

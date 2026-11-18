@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { act } from "@testing-library/react";
 import { ApiError } from "@/lib/api-client";
+import { gapSettled } from "@/test-utils/leaving";
+import { motionInTests } from "@/test-utils/motion";
 import { DormantAccounts, sweepResult } from "@/components/targets/DormantAccounts";
 import type { DormantReport, SweepResult } from "@/lib/queries/useDormant";
 import type { OneShotSecret } from "@/lib/secret";
@@ -405,3 +407,42 @@ describe("the sign-in column", () => {
   });
 });
 
+
+// D-1 M5: an account that leaves the list fades where it was and its gap closes after, as in every other table.
+describe("a removed account leaves by fading and folding", () => {
+  beforeEach(() => motionInTests());
+  afterEach(() => motionInTests(false));
+
+  it("is marked leaving, and still drawn, before it goes", () => {
+    const { rerender, container } = renderDormant();
+    state.report = { ...state.report, accounts: state.report.accounts.filter((a) => a.account !== "former-member") };
+    rerender(tree());
+
+    const row = container.querySelector("[data-leaving]");
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toContain("former-member");
+    // The group still has its heading while its last row goes, and the count has not moved yet.
+    expect(screen.getByText(/Their membership ended/)).toBeInTheDocument();
+    expect(screen.getByTestId("card-count").textContent).toBe("2");
+
+    gapSettled(row!);
+    expect(screen.queryByText("former-member")).toBeNull();
+    expect(screen.queryByText(/Their membership ended/)).toBeNull();
+    expect(screen.getByTestId("card-count").textContent).toContain("1");
+  });
+
+  it("counts them, at zero too, when the list could not be read", () => {
+    state.error = new Error("down");
+    renderDormant();
+    expect(screen.getByTestId("card-count").textContent).toBe("0");
+  });
+
+  it("does not offer a leaving row to be selected", () => {
+    const { rerender } = renderDormant();
+    state.report = { ...state.report, accounts: state.report.accounts.filter((a) => a.account !== "former-member") };
+    rerender(tree());
+    // Inert and hidden while it goes: nobody can tick what is already gone.
+    expect(screen.queryByRole("checkbox", { name: "Select former-member" })).toBeNull();
+    expect(screen.getByLabelText("Select former-member").closest("[data-leaving]")).toHaveAttribute("inert");
+  });
+});

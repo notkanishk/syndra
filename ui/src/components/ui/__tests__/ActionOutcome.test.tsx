@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { Unfold } from "@/lib/motion";
+import { motionInTests } from "@/test-utils/motion";
 import { REVOKE_SENDS_ITSELF, REVOKE_SENDS_ITSELF_WORD } from "@/lib/outcome";
 
 const queued = { kind: "queued" as const, message: "Given in Syndra", detail: "It waits." };
@@ -169,5 +171,57 @@ describe("a queued revoke (Drift)", () => {
     render(<ActionOutcome placement="seat" word="Recorded" outcome={{ kind: "queued", message: "Recorded" }} />);
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeInTheDocument();
     expect(screen.queryByText(/send on their own/i)).toBeNull();
+  });
+});
+
+// D-1 M6: a block outcome opens its own space, so what is below settles rather than being pushed.
+describe("ActionOutcome block form arriving", () => {
+  const proto = Element.prototype as { getAnimations?: () => unknown[] };
+  afterEach(() => {
+    delete proto.getAnimations;
+    motionInTests(false);
+    vi.useRealTimers();
+  });
+
+  it("sits in an Unfold, as a Notice does", () => {
+    render(<ActionOutcome word="Saved" outcome={{ kind: "applied", message: "Done" }} />);
+    expect(screen.getByRole("status").closest(".unfold")).not.toBeNull();
+  });
+
+  it("opens from a collapsed first frame when it arrives with motion on", () => {
+    motionInTests();
+    proto.getAnimations = () => [];
+    render(<ActionOutcome word="Saved" outcome={{ kind: "applied", message: "Done" }} />);
+    // UnfoldOnArrival mounts closed and opens on the next effect: by then it is opening.
+    expect(screen.getByRole("status").closest(".unfold")?.getAttribute("data-phase")).toBe("opening");
+  });
+
+  it("does not open a second time when the Unfold it arrived in settles", () => {
+    motionInTests();
+    vi.useFakeTimers();
+    proto.getAnimations = () => [];
+    const outcome = { kind: "failed" as const, message: "Nope" };
+    const tree = (open: boolean) => (
+      <Unfold open={open}>
+        <ActionOutcome word="Not saved" outcome={outcome} />
+      </Unfold>
+    );
+    const { container, rerender } = render(tree(false));
+    rerender(tree(true));
+    // It mounted as its parent opened: it does not open itself inside it.
+    const alert = screen.getByRole("alert");
+    expect(container.querySelectorAll(".unfold").length).toBe(1);
+    // The parent settles. The same element stays (a remount would announce the alert again).
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(container.querySelector(".unfold")?.getAttribute("data-phase")).toBe("open");
+    expect(screen.getByRole("alert")).toBe(alert);
+    expect(container.querySelectorAll(".unfold").length).toBe(1);
+  });
+
+  it("leaves the inline and seat forms alone", () => {
+    const { container } = render(
+      <ActionOutcome placement="inline" word="Saved" outcome={{ kind: "applied", message: "Done" }} />,
+    );
+    expect(container.querySelector(".unfold")).toBeNull();
   });
 });

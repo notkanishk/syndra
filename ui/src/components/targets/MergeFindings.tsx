@@ -2,8 +2,9 @@
 import { personOr } from "@/lib/names";
 
 import { Term } from "@/components/ui/Term";
-import { useState } from "react";
-import { LeavingRow, useLeavingRows } from "@/lib/motion";
+import { useLayoutEffect, useRef, useState } from "react";
+import { Crossfade, LeavingRow, Unfold, useLeavingRows } from "@/lib/motion";
+import { AllClear, useEmptied } from "@/components/targets/AllClear";
 import {
   CHECKED_UPDATING,
   CONFLICT_NEXT_FALLBACK,
@@ -26,7 +27,7 @@ import { cooldownLine } from "@/components/results/copy";
 import { Radio } from "@/components/ui/Choice";
 import { whyNotChecked } from "@/lib/format";
 
-import { EmptyState, ListStates } from "@/components/states";
+import { ListStates } from "@/components/states";
 import { ApiError } from "@/lib/api-client";
 import { describeFailure, mayHaveGoneThrough, outcomeFromError, partialSentence, sentence } from "@/lib/outcome";
 import { UserName } from "@/components/names";
@@ -68,7 +69,19 @@ import {
  * operator asks first, it is the thing no surface could previously answer, and
  * it is the entire reason the merge base exists.
  */
-export function MergeFindings({ target }: { target: string }) {
+export function MergeFindings({
+  target,
+  onDrawn,
+}: {
+  target: string;
+  /**
+   * How many findings are drawn now, the ones still fading out included, and
+   * whether the reader's own decision is what is emptying the list. The region
+   * that counts them reads this and not the read, so its count changes after
+   * the row has gone.
+   */
+  onDrawn?: (n: number, byReader: boolean) => void;
+}) {
   const nameOf = useSystemNames();
   const findings = useMergeFindings(target);
   const resolve = useResolveMergeFinding(target);
@@ -86,6 +99,19 @@ export function MergeFindings({ target }: { target: string }) {
   // A resolved finding fades where it was and the gap closes after, rather than the list jumping.
   const leaving = useLeavingRows(findings.data ?? [], (f) => f.id, !findings.isLoading && !findings.error);
   const rows = leaving.rows;
+  const known = findings.data !== undefined;
+  const drawn = known ? rows.length : undefined;
+  const emptied = useEmptied(drawn);
+  // The findings this reader decided (saved), by id. The all-clear blooms only when what is leaving is
+  // theirs: nobody else's act, and no clock, decides it.
+  const mine = useRef(new Set<string>());
+  const byReaderRef = useRef(false);
+  const goingNow = rows.filter((f) => leaving.props(f.id).leaving);
+  if (goingNow.length > 0) byReaderRef.current = goingNow.every((f) => mine.current.has(f.id));
+  const byReader = byReaderRef.current;
+  useLayoutEffect(() => {
+    if (drawn !== undefined) onDrawn?.(drawn, byReader);
+  }, [drawn, byReader, onDrawn]);
   const name = nameOf(target);
   const advanced = useIsAdvanced();
 
@@ -93,7 +119,7 @@ export function MergeFindings({ target }: { target: string }) {
     <Card {...leaving.listProps}>
       <CardHeader
         title="Waiting on a decision"
-        count={findings.data?.length}
+        count={drawn}
         caption={
           // The term and its definition are the machine's vocabulary: Advanced. Basic says the thing.
           advanced ? (
@@ -118,9 +144,11 @@ export function MergeFindings({ target }: { target: string }) {
         // Says which read failed: the findings, or the system's fields they are worded from.
         errorTitle={findings.error ? "The findings could not be read" : `${name}'s fields could not be read`}
         empty={
-          <EmptyState
+          <AllClear
             title="Nothing disputed."
             guidance={`Every account Syndra manages on ${name} matches what Syndra expects, or differs in a way Syndra could explain.`}
+            emptied={emptied}
+            byReader={byReader}
           />
         }
       >
@@ -144,7 +172,9 @@ export function MergeFindings({ target }: { target: string }) {
                     });
                   resolve.mutate(
                     { id: f.id, resolution, reason },
-                    settled === "error" ? { onError: release } : { onSettled: release },
+                    settled === "error"
+                      ? { onError: release, onSuccess: () => void mine.current.add(f.id) }
+                      : { onSettled: release, onSuccess: () => void mine.current.add(f.id) },
                   );
                 }}
               >
@@ -160,10 +190,15 @@ export function MergeFindings({ target }: { target: string }) {
                     // it again"; this is that press, on the same repair route, safe to repeat.
                     finish(f.decision, FINISH_REASON, finishLabel(f.decision), "settled")
                   : undefined
-              ) : deciding === f.id ? undefined : (
-                <Button variant="outline" size="sm" onClick={() => setDeciding(f.id)}>
-                  Decide
-                </Button>
+              ) : (
+                // The seat's word crossfades when the form opens under it, and keeps its place (D-1 M6).
+                <Crossfade id={deciding === f.id ? "deciding" : "decide"} className="justify-items-end">
+                  {deciding === f.id ? null : (
+                    <Button variant="outline" size="sm" onClick={() => setDeciding(f.id)}>
+                      Decide
+                    </Button>
+                  )}
+                </Crossfade>
               );
             return (
             <LeavingRow key={f.id} {...leaving.props(f.id)}>
@@ -223,24 +258,32 @@ export function MergeFindings({ target }: { target: string }) {
                     <span className="w-full text-small text-muted">{FINISH_AGAIN_NOTE}</span>
                   )}
                 </CardRow>
-              ) : deciding === f.id ? (
-                <DecisionForm
-                  finding={f}
-                  name={name}
-                  schemaState={schemaState}
-                  pending={resolve.isPending}
-                  error={resolve.error}
-                  onCancel={() => setDeciding(null)}
-                  onResolve={(input, savedMessage) =>
-                    resolve.mutate(input, {
-                      onSuccess: () => {
-                        if (savedMessage) setSaved({ id: f.id, message: savedMessage });
-                        setDeciding(null);
-                      },
-                    })
-                  }
-                />
               ) : null}
+              {/* The form is the row's own panel, always mounted (a fragment), so the row's shape never
+                  changes and focus is kept: it opens under the row and closes by fading first (D-1 M6). */}
+                <Unfold open={!f.decision && deciding === f.id}>
+                  <>
+                    {!f.decision && deciding === f.id && (
+                      <DecisionForm
+                        finding={f}
+                        name={name}
+                        schemaState={schemaState}
+                        pending={resolve.isPending}
+                        error={resolve.error}
+                        onCancel={() => setDeciding(null)}
+                        onResolve={(input, savedMessage) =>
+                          resolve.mutate(input, {
+                            onSuccess: () => {
+                              mine.current.add(f.id);
+                              if (savedMessage) setSaved({ id: f.id, message: savedMessage });
+                              setDeciding(null);
+                            },
+                          })
+                        }
+                      />
+                    )}
+                  </>
+                </Unfold>
             </div>
             </LeavingRow>
             );

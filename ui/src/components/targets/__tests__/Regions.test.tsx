@@ -50,11 +50,24 @@ describe("the count chip", () => {
 
   it("distinguishes an empty region from a populated one", () => {
     const { rerender } = render(<CountChip n={0} />);
-    const hollow = screen.getByText("0").className;
+    const hollow = screen.getByText("0").closest(".rounded-pill")!.className;
 
     rerender(<CountChip n={3} />);
-    const filled = screen.getByText("3").className;
+    const filled = screen.getByText("3").closest(".rounded-pill")!.className;
 
     expect(hollow).not.toEqual(filled);
+  });
+});
+
+describe("the landing flash is the heading's", () => {
+  it("marks the heading row, not the section", () => {
+    const { container } = render(
+      <Region id="people" title="People" count={2}>
+        <p>rows</p>
+      </Region>,
+    );
+    const mark = container.querySelector("[data-landing]")!;
+    expect(mark).toContainElement(screen.getByRole("heading", { name: "People" }));
+    expect(container.querySelector("#people")).not.toBe(mark);
   });
 });

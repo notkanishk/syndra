@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { FLASH_MS } from "./still";
+
 /**
  * True for one `flash` while `value` differs from what it was last render.
  *
@@ -62,13 +64,3 @@ export function useFlashOnChange(value: unknown, ready = true): boolean {
 
   return flashing;
 }
-
-/**
- * How long the class stays on, in milliseconds.
- *
- * Must equal `--duration-flash` in globals.css: this only decides when the
- * class comes off, and the animation itself is authored there. If the two
- * drift, either the wash is cut short or the row sits in a finished animation
- * doing nothing. A design-system test holds them together.
- */
-export const FLASH_MS = 900;

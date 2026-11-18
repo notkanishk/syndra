@@ -73,6 +73,7 @@ export function LoginDoor({
   // The label lags the press by 200ms so the button's own dip reads first.
   useEffect(() => {
     if (mode !== "oidc" || scene !== "opening" || returned) return;
+    // door-exempt: the sign-in door keeps its own timings (FINAL §4, Q8, recommended, pending owner)
     const timer = setTimeout(() => setHandedOff(true), 200);
     return () => clearTimeout(timer);
   }, [mode, scene, returned]);

@@ -255,6 +255,8 @@ Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Coun
 
 **Never:** a shake; a bounce; a count that ticks; a row that scales; a route transition; a loop other than breathe; a bloom for something the reader didn't do; arrive replaying on refresh, filter or sort; anything travelling more than 10px in the page.
 
+**Recommended, pending owner (Q8): the sign-in door is exempt (D-1 §7, M14).** The door at `/login` keeps its two ambient loops (the pool's breath and the grain) and its own timings: it is the one ceremonial screen, always the dark room. Its numbers are not typed in rules, though: each is a `--door-*` token in `globals.css`, and `ceremony.ts` mirrors its two easings with a test holding them equal. Both loops start only for a reader who has not asked for less motion, and the door's choreography collapses under reduced motion. The motion guards skip `ceremony.ts`, and the door's own timers elsewhere carry a `// door-exempt:` marker; nothing else is skipped. If the owner says no, the door's timings move onto the shared tokens.
+
 **Reduced motion:**
 - Every movement has a still form (Motion v2's token table).
 - Press survives. Glides become jumps.

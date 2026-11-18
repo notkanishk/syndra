@@ -133,6 +133,8 @@ describe("Modal as a phone sheet (S3)", () => {
     const onClose = vi.fn();
     const { dialog, panel, grabber } = sheetOf(onClose);
     drag(grabber, 150)();
+    // Arriving back where it lives: settle's curve (M9).
+    expect(panel.style.transition).toContain("var(--ease-settle)");
     expect(panel.style.transform).toBe("");
     expect(dialog.style.backgroundColor).toBe("");
     act(() => void vi.advanceTimersByTime(600));
@@ -180,6 +182,8 @@ describe("Modal as a phone sheet (S3)", () => {
     const onClose = vi.fn();
     const { panel, grabber } = sheetOf(onClose);
     drag(grabber, 250)();
+    // Going, not arriving: exits are on tint's curve (FINAL §4), over settle's length.
+    expect(panel.style.transition).toContain("var(--ease-tint)");
     expect(panel.style.transform).toBe("translateY(100%)");
     expect(onClose).not.toHaveBeenCalled();
     act(() => void vi.advanceTimersByTime(260));

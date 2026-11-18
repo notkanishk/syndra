@@ -171,7 +171,10 @@ describe("choosing the two roles", () => {
       expect(scroll).not.toHaveBeenCalled();
       fireEvent.input(screen.getByRole("searchbox", { name: "Search the role to give" }), { target: { value: "tra" } });
       expect(scroll).toHaveBeenCalledWith({ block: "start" });
-      expect(scroll.mock.contexts[0]).toContainElement(screen.getByText("then also give them"));
+      const second = scroll.mock.contexts[0] as HTMLElement;
+      expect(second).toContainElement(screen.getByText("then also give them"));
+      // It scrolls the dialog's own panel: typing never washes the field block or glides the page behind.
+      expect(second).not.toHaveClass("flash");
     } finally {
       Element.prototype.scrollIntoView = was;
     }

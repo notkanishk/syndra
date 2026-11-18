@@ -3091,7 +3091,82 @@ end to end) found no missing function; three regressions with one root cause
         - CommandBlock's caption back at `max-w-[80ch]`;
         - the greeting's marker removed;
         - an avatar size without its marker.
-  - [ ] 7u-5 Motion (§7: the five tokens, M1–M14, the eight motion tests).
+  - [x] 7u-5 Motion (§7: the five tokens, M1–M14, the eight motion tests).
+    *Done (18 Nov 2026, branch `feat/addon-contract-d1-motion`).* There is one motion vocabulary: `lib/motion` and the tokens. Nothing travels over 10px, no count ticks, there is no route transition, and every movement has a still form (`stillMotion()` in JS, the one `prefers-reduced-motion` block in CSS).
+    - **Tokens** (`globals.css` `@theme`): `--duration-fold` 200ms, `--light-lead` 40ms, `--travel-arrive` 8px, `--travel-lift` 6px, `--travel-nudge` 4px. `still.ts` gains `FOLD_MS` beside `LIGHT_LEAD_MS`, and `design-system.test.ts` holds the mirrors.
+    - **M1:**
+      - The system page's region wrappers carry `data-arrive-through`.
+      - The `page-head` rule passes the stagger through a marked wrapper, and on through a nested one (`--arrive-k`, `--arrive-j`), capped at five.
+      - The section pill's sticky root takes no slot.
+    - **M2:**
+      - `Count` in `Badge.tsx` is a `Crossfade` keyed on the number. `CountChip`, `CardHeader`'s count and SectionNav's chip and pill counts read it.
+      - The first read shows one layer, and a failed read shows a dash.
+      - The rail's `settled` gate is reproduced by Crossfade's own first-mount rule, not shared, because the rail's flag lives in Sidebar.
+    - **M3:**
+      - `Notice` takes `open` and stays mounted through its close: it fades, then folds (`useExitPhase(TINT_MS + FOLD_MS)` and `Unfold`).
+      - The region's count is read from the rows still drawn (MergeFindings `onDrawn`).
+      - The all-clear (new `AllClear.tsx`) is `resolved`. It is `lift` only when the list emptied in front of the reader, and it blooms only when the rows that left are ones the reader resolved (a Set of resolved ids, not a clock).
+      - The anchor finding fades and folds while the count holds.
+    - **M4:**
+      - Check now's sentence is in a `Crossfade`, and the row flashes once when the result changed (`useFlashOnChange`).
+      - New stale rows arrive (`ArriveList`).
+      - Both follow the last settled result, held in a ref, so a pending check (the mutation's `data` is undefined while it runs) neither flashes nor replays.
+    - **M5:** "Not created by Syndra" and "No longer needed" use `useLeavingRows` / `LeavingRow`. Their counts come from the drawn rows, and the adoption outcome holds its row (`stay`).
+    - **M6:**
+      - `ActionOutcome`'s block form mounts in `UnfoldOnArrival`. Whether it sits inside an opening region is read once, at mount, so it never opens or announces twice.
+      - A finding's Decide form opens by `Unfold`, only while the finding is undecided, and Decide/Cancel crossfade in the seat.
+    - **M7:** the section pill keeps its arrow seats (pass 2), and its fill is the shared `GlideIndicator`. `glide-indicator.tsx` finds `aria-current="location"` and watches the group's segments of any tag.
+    - **M8:** `Region` marks its heading `data-landing`, and `glideTo` flashes a target's landing row when it has one.
+    - **M9:** already right in code. A sheet's settle-back was on settle's curve, and the dismissal stays on tint's (an exit; FINAL §4). The spec's line references pointed at the dismissal. A first build moved the dismissal and was reverted after review. `ModalMotion.test.tsx` holds both.
+    - **M10:** the lane map's two items press (`control press-scale`).
+    - **M11:**
+      - The new tokens replace their literals: the fold `calc`, every light-lead 40ms (including the scrim that borrowed `--arrive-step`), and the keyframes' travel.
+      - `motion-press` and `motion-settle` are gone; nothing used them.
+    - **M12:** `Unfold` asks `stillMotion()` first. The loose timing constants are in `still.ts`: `FLASH_MS`, `LANDED_HOLD_MS`, `PRESS_FORGET_MS`, `SKELETON_DELAY_MS` and the `ARRIVE_*` values. A closing `Unfold` is `inert` and `aria-hidden`, so a cancelled form's button cannot be pressed while it folds.
+    - **M13:** the policies page's one scroll is inside the rule dialog, whose panel scrolls itself, so it keeps `scrollIntoView`. `glideTo` is the page's glide, and M13 covers page jumps. There is no other jump on that page; the section chips and pill already glide.
+    - **M14** (Q8, recommended, pending owner): the door keeps its two loops and its own timings, named `--door-*`. `ceremony.ts` mirrors its two easings, with a test. FINAL §4 has the exemption, marked pending owner.
+    - **Guards** (`design-system.test.ts`):
+      - **Literal motion timings:**
+        - no literal `Nms`, `cubic-bezier(`, `duration:` / `delay:` number, or seconds value;
+        - no numeric timer delay, in components, app and `lib/` outside `lib/motion`;
+        - a timer that is not motion says so with `// not-motion: why` (four: a debounce, two clocks and a countdown);
+        - the door is exempt only in `ceremony.ts` and by `// door-exempt:`.
+      - **Reduced motion:**
+        - every movement in script (`.animate(`, `requestAnimationFrame`, an inline transition or animation) asks `stillMotion()` or calls a primitive that does;
+        - the reduced-motion block collapses durations, delays and iterations.
+      - **Tokens and wrappers:**
+        - the five tokens and their mirrors;
+        - no `40ms` and no fold `calc` left;
+        - `motion-press` and `motion-settle` gone;
+        - the page-head wrapper rule.
+    - **Tests** (§7's eight):
+      - `design-system.test.ts` (1);
+      - `Notice.test.tsx` (2);
+      - `CountCrossfade.test.tsx` (3);
+      - `MergeFindingsMotion` and `TargetOverviewMotion` (4, 6, the M3 order, M5, M6);
+      - `SectionNav.test.tsx` (5);
+      - `ArriveList.test.tsx`'s Back and view-switch cases (7);
+      - `motion.test.tsx` (8);
+      - plus `ModalMotion`, `UnfoldView`, `glideIndicator` and `ActionOutcome`.
+    - **Tests changed:** `motionInTests()` added where a test meant motion to be on, now that `Unfold` honours `stillMotion()`. `{ hidden: true }` added where a test reads content that is closing, now `aria-hidden`.
+    - **Mutation-checked** (each red):
+      - a literal `40ms`, and the fold `calc` restored;
+      - `--travel-lift` changed, `FOLD_MS` changed, and `--door-ease-exit` changed;
+      - delays dropped from the reduced-motion block;
+      - the wrapper's `animation: none` removed, the nested rule removed, and the pill's slot counted;
+      - a raw `260ms` in Modal, the dismissal or settle-back swapped, a `not-motion` marker removed, a `door-exempt` marker removed, a WAAPI duration in ArrowLink, and a bare `requestAnimationFrame` in Badge;
+      - the closing `inert` removed, and the indicator watching only buttons;
+      - the Crossfade keyed on a constant, and the landing lookup removed;
+      - the wrapper attribute, the count read from the data, the anchor hold, bloom always on, and lift dropped;
+      - the flash class, the Crossfade id, and both tables' `LeavingRow`;
+      - Notice not staying mounted, ActionOutcome's Unfold, and the Decide form's Unfold;
+      - the pending-gap replay, the remount on settle, a Notice that does not open late, lift on a first read, and the form under a decided finding;
+      - `glideTo` back in the rule dialog.
+    - **Opus review before the PR:** two blocking findings (the dialog jump, and Check now flashing on every press) and seven medium ones, all fixed as above.
+    - **Left as is:**
+      - the unconfirmed changes' count still comes from the read, since `UnconfirmedChanges` has no `onDrawn` yet;
+      - the pill's slot is selected as `.sticky:first-child`, a data attribute on SectionPill would be firmer;
+      - the page-head stagger is held as CSS text, because jsdom computes no delays.
   - [ ] 7u-6 Pass 5, resync the design system (`ui/.design-sync`, BRIDGE steps 1 to 3), after the owner's OK.
     *Code side done, publishing waits on the owner (18 Nov 2026, branch `feat/addon-contract-d1-5`).* Steps 2 and 3 publish to the Syndra Design System artifact and copy it into the canvas. BRIDGE and the standing rule ("ask before any publish") put both after the owner's OK, and the owner is away, so neither ran and no board lost its override block. Pass 5 adds no motion: §7 is the next pass (7u-5).
     - **Cards.**

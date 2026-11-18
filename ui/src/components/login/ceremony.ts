@@ -31,7 +31,12 @@ export interface Door {
   dispose(): void;
 }
 
-/** Default easing. `EXIT` is the one the arch itself moves on. */
+/**
+ * Default easing. `EXIT` is the one the arch itself moves on. The doorway keeps
+ * its own timings (FINAL §4, the exemption), named `--door-*` in globals.css;
+ * WAAPI needs a literal, so these two mirror `--door-ease` and `--door-ease-exit`,
+ * and design-system.test.ts holds each to its token.
+ */
 const EASE = "cubic-bezier(.22,.61,.36,1)";
 const EXIT = "cubic-bezier(.16,1,.3,1)";
 

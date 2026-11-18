@@ -17,7 +17,7 @@ Four buckets, in the order they actually unblock each other:
 
 ## 0j. Density, alignment and motion, D-1 (18 Nov 2026)
 
-Source: `from-design/D-1-density-and-alignment.md` and boards `design/d1-density-1..4`; tracked as addon-contract **7u**. Pass 1 (tokens and shared parts, #200), pass 2 (seats, #201), pass 3 (Home, #202) and pass 4 (type, #203) merged; pass 5's code side (the parts on the canvas, previews on the scale) built on branch `feat/addon-contract-d1-5`. Open: the motion pass, and pass 5's publish (BRIDGE steps 2 and 3, after the owner's OK). **Owner:** Q1–Q8 are built on the designer's defaults, each recommended, pending owner (7u lists each and where it flips).
+Source: `from-design/D-1-density-and-alignment.md` and boards `design/d1-density-1..4`; tracked as addon-contract **7u**. Pass 1 (tokens and shared parts, #200), pass 2 (seats, #201), pass 3 (Home, #202), pass 4 (type, #203) and pass 5's code side (#204) merged; the motion pass built on branch `feat/addon-contract-d1-motion`. Open: pass 5's publish (BRIDGE steps 2 and 3, after the owner's OK). **Owner:** Q1–Q8 are built on the designer's defaults, each recommended, pending owner (7u lists each and where it flips).
 
 ## 0. The second pass (A-20), first wave
 

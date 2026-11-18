@@ -7,6 +7,8 @@ import {
   ARRIVE_MS,
   ARRIVE_SETTLED_MS,
   ARRIVE_STEP_MS,
+  FOLD_MS,
+  LIGHT_LEAD_MS,
 } from "@/lib/motion";
 
 /**
@@ -182,6 +184,58 @@ function topLevelClassName(tagText: string): string | undefined {
   return undefined;
 }
 
+/** Source with its comments blanked, line numbers kept (a duration in a comment is prose). */
+function withoutComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/(^|\s)\/\/.*$/gm, (_m, lead) => lead);
+}
+
+/** Numeric delays above 0 given to setTimeout/setInterval: `{ line, delay }`. */
+function literalTimers(code: string): Array<{ line: number; delay: string }> {
+  const found: Array<{ line: number; delay: string }> = [];
+  for (const call of Array.from(code.matchAll(/\bset(?:Timeout|Interval)\(/g))) {
+    let depth = 1;
+    let comma = -1;
+    let quote = "";
+    let i = call.index + call[0].length;
+    for (; i < code.length && depth > 0; i += 1) {
+      const char = code[i];
+      if (quote) {
+        if (char === "\\") i += 1;
+        else if (char === quote) quote = "";
+      } else if (char === '"' || char === "'" || char === "`") quote = char;
+      else if ("([{".includes(char)) depth += 1;
+      else if (")]}".includes(char)) depth -= 1;
+      else if (char === "," && depth === 1) comma = i;
+    }
+    const arg = code.slice(comma + 1, i - 1).trim();
+    if (comma >= 0 && /^\d[\d_]*$/.test(arg) && Number(arg.replace(/_/g, "")) > 0) {
+      found.push({ line: code.slice(0, call.index).split("\n").length, delay: arg });
+    }
+  }
+  return found;
+}
+
+/** The sign-in door's choreography keeps its own timings (FINAL §4, Q8: recommended, pending owner). */
+const isDoorFile = (file: string) => file.endsWith("/components/login/ceremony.ts");
+/**
+ * `// not-motion: why` (a debounce, a poll) or `// door-exempt: why` (the door's own timer), on
+ * the line or the line above, says a number is not held to the motion tokens.
+ */
+const MARKER = /(?:not-motion|door-exempt):/;
+const markedNotMotion = (lines: string[], line: number) =>
+  MARKER.test(lines[line - 1] ?? "") || MARKER.test(lines[line - 2] ?? "");
+
+/** The literal times a line of code spells: ms, WAAPI `duration:`/`delay:`, or seconds on a style. */
+function literalTimeIn(text: string): string | null {
+  if (/\b\d+(?:\.\d+)?ms\b/.test(text)) return "a literal duration";
+  if (/\b(?:duration|delay)\s*:\s*\d/.test(text)) return "a literal duration or delay";
+  if (/(?:transition|animation|style|duration|delay)/i.test(text) && /(?<![\w.-])\d*\.?\d+s\b/.test(text)) return "a literal duration in seconds";
+  if (/cubic-bezier\(/.test(text)) return "a literal easing";
+  return null;
+}
+
 function describeOffenders(list: Array<{ file: string; matches: string[] }>): string {
   return list.map((entry) => `  - ${entry.file}: ${entry.matches.join(", ")}`).join("\n");
 }
@@ -329,8 +383,176 @@ describe("design system", () => {
     const found = offenders(["transition-colors", "transition-all", "duration-1", "duration-2"]);
     expect(
       found,
-      `Raw transition timings — use motion-tint / motion-press / motion-settle:\n${describeOffenders(found)}`,
+      `Raw transition timings — use motion-tint / control / the unfold and indicator utilities:\n${describeOffenders(found)}`,
     ).toEqual([]);
+
+    // The same rule for literals (D-1 M11, §7): a duration is a token or a
+    // still.ts constant, an easing is var(--ease-*). A debounce or a poll that
+    // is not motion says so with `// not-motion: why`; the door's own timers say `// door-exempt: why`.
+    const literals: Array<{ file: string; matches: string[] }> = [];
+    for (const file of Array.from(walk(SRC_ROOT))) {
+      if (isDoorFile(file) || !/\/(components|app|lib)\//.test(file) || file.includes("/lib/motion/")) continue;
+      const raw = readFileSync(file, "utf8");
+      const code = withoutComments(raw);
+      const rawLines = raw.split("\n");
+      const matches: string[] = [];
+      code.split("\n").forEach((text, index) => {
+        if (markedNotMotion(rawLines, index + 1)) return;
+        const literal = literalTimeIn(text);
+        if (literal) matches.push(`line ${index + 1}: ${literal}`);
+      });
+      for (const { line, delay } of literalTimers(code)) {
+        if (!markedNotMotion(rawLines, line)) matches.push(`line ${line}: timer of ${delay}`);
+      }
+      if (matches.length > 0) literals.push({ file: file.replace(SRC_ROOT, "src"), matches });
+    }
+    expect(
+      literals,
+      `Literal motion timings in components — use a token or a still.ts constant (or mark // not-motion: why):\n${describeOffenders(literals)}`,
+    ).toEqual([]);
+  });
+
+  // The guard above must actually catch what it claims to.
+  it("sees a literal duration, easing and timer, and honours the marker", () => {
+    const code = withoutComments("// 200ms in prose\nsetTimeout(() => go(a, b), 260);\nsetTimeout(run, 0);\nsetTimeout(run, DELAY_MS);\n");
+    expect(literalTimers(code)).toEqual([{ line: 2, delay: "260" }]);
+    expect(withoutComments("const a = 1; // 40ms\n/* 40ms */ const b = 2;")).not.toMatch(/40ms/);
+    expect(markedNotMotion(["// not-motion: debounce", "setTimeout(x, 250);"], 2)).toBe(true);
+    expect(markedNotMotion(["", "setTimeout(x, 250);"], 2)).toBe(false);
+    expect(markedNotMotion(["// door-exempt: the door", "setTimeout(x, 200);"], 2)).toBe(true);
+    // The literals a regex for "Nms" alone would miss.
+    expect(literalTimeIn("el.animate(f, { duration: 300 })")).not.toBeNull();
+    expect(literalTimeIn("opts = { delay: 40 }")).not.toBeNull();
+    expect(literalTimeIn('style={{ transition: "opacity 0.3s" }}')).not.toBeNull();
+    expect(literalTimeIn('el.style.transition = "all 1s ease"')).not.toBeNull();
+    expect(literalTimeIn('style={{ transitionDuration: "200ms" }}')).not.toBeNull();
+    expect(literalTimeIn("easing: 'cubic-bezier(.2,.8,.2,1)'")).not.toBeNull();
+    expect(literalTimeIn("const rows = 5; // after 5s")).toBeNull();
+    expect(literalTimeIn("transition: `transform ${SETTLE_MS}ms var(--ease-settle)`")).toBeNull();
+  });
+
+  // D-1 §7, motion test 1: the tokens that name numbers already in use, their
+  // JS mirrors, and the literals they replaced.
+  it("names the fold, the light lead and the travels once, and mirrors them in JS", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    for (const token of [
+      "--duration-fold: 200ms",
+      "--light-lead: 40ms",
+      "--travel-arrive: 8px",
+      "--travel-lift: 6px",
+      "--travel-nudge: 4px",
+    ]) {
+      expect(css, `globals.css must declare ${token}`).toContain(token);
+    }
+    expect(FOLD_MS, "FOLD_MS must equal --duration-fold").toBe(Number(/--duration-fold:\s*(\d+)ms/.exec(css)?.[1]));
+    expect(LIGHT_LEAD_MS, "LIGHT_LEAD_MS must equal --light-lead").toBe(Number(/--light-lead:\s*(\d+)ms/.exec(css)?.[1]));
+
+    // Outside the token's own declaration, no 40ms and no fold calc remain.
+    const code = withoutComments(css)
+      .split("\n")
+      .filter((line) => !/^\s*--[\w-]+:\s*40ms/.test(line))
+      .join("\n");
+    expect(code, "a 40ms literal is --light-lead").not.toMatch(/\b40ms\b/);
+    expect(code, "the fold is --duration-fold, not a calc").not.toMatch(/animation:\s*fold\s+calc\(/);
+    for (const px of ["translateY(8px)", "translateY(6px)", "translateY(4px)"]) {
+      expect(code, `${px} is a --travel-* token`).not.toContain(px);
+    }
+
+    // Two utilities nothing used.
+    expect(css).not.toContain("@utility motion-press");
+    expect(css).not.toContain("@utility motion-settle");
+    for (const file of Array.from(walk(SRC_ROOT))) {
+      expect(readFileSync(file, "utf8"), file).not.toMatch(/(?<![\w-])motion-(press|settle)(?![\w-])/);
+    }
+  });
+
+  // The doorway's literals are its own tokens, and ceremony.ts's easings mirror them.
+  it("holds the doorway's easings to its --door-* tokens", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const numbers = (text: string) => (/cubic-bezier\(([^)]*)\)/.exec(text)?.[1] ?? "").split(",").map(Number);
+    const ceremony = readFileSync(resolve(SRC_ROOT, "components/login/ceremony.ts"), "utf8");
+    expect(numbers(/const EASE = "([^"]*)"/.exec(ceremony)![1])).toEqual(numbers(/--door-ease:\s*([^;]*);/.exec(css)![1]));
+    expect(numbers(/const EXIT = "([^"]*)"/.exec(ceremony)![1])).toEqual(numbers(/--door-ease-exit:\s*([^;]*);/.exec(css)![1]));
+    // No raw time on the door's rules: each is a token.
+    const door = css.slice(css.indexOf("The doorway — /login"));
+    const rules = withoutComments(door)
+      .split("\n")
+      .filter((line) => !/^\s*--door-[\w-]+:/.test(line))
+      .join("\n");
+    expect(rules).not.toMatch(/\d(\.\d+)?m?s\s+(ease|ease-out|ease-in-out|steps)/);
+  });
+
+  // Regions inside one wrapper take the page's stagger (D-1 M1), and the
+  // wrapper itself holds still so it is not one slab.
+  it("passes the page-head stagger through a marked wrapper", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const head = atRuleBody(css, "@utility page-head");
+    expect(head).toMatch(/~ \[data-arrive-through\] \{\s*animation: none;/);
+    for (let k = 1; k <= 4; k += 1) {
+      expect(head).toContain(`> :nth-child(${k}) {\n    --arrive-k: ${k - 1};`);
+    }
+    for (let from = 0; from <= 3; from += 1) {
+      expect(head).toContain(`${"+ * ".repeat(from)}+ [data-arrive-through] {\n    --arrive-from: ${from};`);
+    }
+    expect(head).toContain("--arrive-from) + max(var(--arrive-k) - var(--arrive-skip), 0), var(--arrive-cap) - 1)");
+    // The section pill (a sticky h-0 first child) takes no slot, and does not arrive.
+    expect(head).toMatch(/\[data-arrive-through\]:has\(> \.sticky:first-child\) \{\s*--arrive-skip: 1;/);
+    expect(head).toMatch(/~ \[data-arrive-through\] > \.sticky:first-child \{\s*animation: none;/);
+    // A wrapper inside the wrapper holds still, and its children stagger on from its own slot.
+    expect(head).toMatch(/> \[data-arrive-through\] \{\s*animation: none;/);
+    for (let k = 1; k <= 4; k += 1) {
+      expect(head).toContain(`> [data-arrive-through] > :nth-child(${k}) {\n    --arrive-j: ${k - 1};`);
+    }
+    expect(head).toContain("max(var(--arrive-k) - var(--arrive-skip), 0) + var(--arrive-j)");
+  });
+
+  // Every animated part has a still form (WCAG 2.3.3): wherever script moves
+  // something, the file asks stillMotion(), or the movement itself is a call to
+  // a primitive that does; CSS is one block. A file that merely imports
+  // Crossfade does not get an unguarded requestAnimationFrame.
+  it("asks for stillness wherever script moves anything", () => {
+    // Calls that consult stillMotion() themselves.
+    const CONSULTS = /\b(?:stillMotion|glideTo|useExitPhase)\b/;
+    // Not animation: restores a scroll position on Back (a jump); a one-time paint flag.
+    const NOT_MOTION_FILES: Record<string, string> = {
+      "lib/place.ts": "restores a scroll position on Back, which is a jump",
+      "components/ui/Notice.tsx": "a flag that the first paint is over",
+    };
+    const MOVES = /\.animate\(|requestAnimationFrame|\.style\.(?:transition|animation)\b|[^-\w](?:transition|animation):/g;
+    const found: Array<{ file: string; matches: string[] }> = [];
+    for (const file of Array.from(walk(SRC_ROOT))) {
+      const rel = file.slice(SRC_ROOT.length + 1);
+      if (rel.startsWith("lib/motion/") || rel in NOT_MOTION_FILES || isDoorFile(file)) continue;
+      const raw = readFileSync(file, "utf8");
+      const code = withoutComments(raw);
+      const lines = raw.split("\n");
+      const matches: string[] = [];
+      for (const move of Array.from(code.matchAll(MOVES))) {
+        const line = code.slice(0, move.index).split("\n").length;
+        if (markedNotMotion(lines, line)) continue;
+        // The file asks, or the callback this sits in calls something that does.
+        if (/\bstillMotion\b/.test(code)) continue;
+        if (CONSULTS.test(code.slice(move.index, move.index + 400))) continue;
+        matches.push(`line ${line}: moves things, and nothing here asks stillMotion()`);
+      }
+      if (matches.length > 0) found.push({ file: `src/${rel}`, matches });
+    }
+    expect(found, `Animated parts with no still form:\n${describeOffenders(found)}`).toEqual([]);
+
+    // The door reads the reader's setting itself and collapses its own timings.
+    expect(readFileSync(resolve(SRC_ROOT, "components/login/ceremony.ts"), "utf8")).toContain("prefers-reduced-motion: reduce");
+
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const reduce = atRuleBody(css, "@media (prefers-reduced-motion: reduce)");
+    for (const rule of [
+      "animation-duration: 0.01ms !important",
+      "animation-iteration-count: 1 !important",
+      "transition-duration: 0.01ms !important",
+      "animation-delay: 0.01ms !important",
+      "transition-delay: 0.01ms !important",
+    ]) {
+      expect(reduce, `the reduced-motion block must keep ${rule}`).toContain(rule);
+    }
   });
 
   // "Only one thing loops" is the rule that makes a loop mean something. Two
@@ -401,9 +623,9 @@ describe("design system", () => {
     const declared = /--duration-flash:\s*(\d+)ms/.exec(css);
     expect(declared, "globals.css must declare --duration-flash").not.toBeNull();
 
-    const hook = readFileSync(resolve(SRC_ROOT, "lib/motion/flash.ts"), "utf8");
+    const hook = readFileSync(resolve(SRC_ROOT, "lib/motion/still.ts"), "utf8");
     const constant = /FLASH_MS = (\d+)/.exec(hook);
-    expect(constant, "useFlashOnChange must export FLASH_MS").not.toBeNull();
+    expect(constant, "still.ts must export FLASH_MS").not.toBeNull();
 
     expect(constant![1], "FLASH_MS must equal --duration-flash").toBe(declared![1]);
   });
@@ -472,13 +694,16 @@ describe("design system", () => {
     for (const name of ["arrive", "settle-in", "popover-in", "lift", "flash-value"]) {
       const frames = namedAtRuleBody(css, "@keyframes", name);
       expect(frames, `@keyframes ${name} must exist`).not.toBe("");
-      for (const [, px] of frames.matchAll(/translateY\((\d+)px\)/g)) {
-        expect(Number(px), `@keyframes ${name} travels ${px}px`).toBeLessThanOrEqual(cap);
+      // A distance is a token (D-1 M11): resolve it, then hold it to the cap.
+      for (const [, distance] of frames.matchAll(/translateY\(([^)]*\)?)\)/g)) {
+        const named = /var\((--travel-[a-z]+)\)/.exec(distance)?.[1];
+        const px = named ? Number(new RegExp(`${named}:\\s*(\\d+)px`).exec(css)?.[1]) : Number.parseFloat(distance);
+        expect(px, `@keyframes ${name} travels ${distance}`).toBeLessThanOrEqual(cap);
       }
     }
     // The dialog's own rise, and a success's lift (S1, S6).
-    expect(namedAtRuleBody(css, "@keyframes", "settle-in")).toContain("translateY(8px) scale(0.98)");
-    expect(namedAtRuleBody(css, "@keyframes", "lift")).toContain("translateY(6px)");
+    expect(namedAtRuleBody(css, "@keyframes", "settle-in")).toContain("translateY(var(--travel-arrive)) scale(0.98)");
+    expect(namedAtRuleBody(css, "@keyframes", "lift")).toContain("translateY(var(--travel-lift))");
   });
 
   // The arrive timers in TS are derived from the tokens, not repeated: a list
@@ -519,7 +744,7 @@ describe("design system", () => {
     const sheet = atRuleBody(css, "@utility sheet-in");
     expect(sheet).toContain("animation: settle-in var(--duration-settle)");
     expect(atRuleBody(sheet, "@media (width < theme(--breakpoint-tablet))")).toContain(
-      "animation: sheet-rise var(--duration-settle) var(--ease-settle) 40ms both",
+      "animation: sheet-rise var(--duration-settle) var(--ease-settle) var(--light-lead) both",
     );
   });
 
@@ -584,7 +809,7 @@ describe("design system", () => {
   // utilities replace the base layer's transition, so each lists outline-color.
   it("lists outline-color in every motion utility, so a ring fades on tint", () => {
     const css = readFileSync(GLOBALS_CSS, "utf8");
-    for (const name of ["motion-tint", "motion-press", "control", "hover-tint"]) {
+    for (const name of ["motion-tint", "control", "hover-tint"]) {
       expect(atRuleBody(css, `@utility ${name}`), `${name} must transition outline-color`).toContain("outline-color");
     }
     expect(atRuleBody(css, "@utility seat")).toContain("outline-color");
@@ -881,7 +1106,7 @@ describe("design system", () => {
       const matches: string[] = [];
       if (/(?<![-\w])hover:underline/.test(source)) matches.push("hover:underline");
       for (const tag of openingTags(source, "(?:Link|a)")) {
-        if (/hover:text-/.test(tag.text) && !/motion-tint|control|motion-press|transition|link-hover/.test(tag.text)) {
+        if (/hover:text-/.test(tag.text) && !/motion-tint|control|transition|link-hover/.test(tag.text)) {
           matches.push(`link line ${source.slice(0, tag.at).split("\n").length}: hover:text-* with no transition`);
         }
       }
@@ -1044,7 +1269,7 @@ describe("density and alignment (D-1)", () => {
 
   it("gives SectionPill the regions' own gap, as the token, so the two agree at every width", () => {
     const overview = readFileSync(resolve(SRC_ROOT, "components/targets/TargetOverview.tsx"), "utf8");
-    expect(overview).toContain('<div className="grid gap-(--region-gap)">');
+    expect(overview).toContain('<div data-arrive-through className="grid gap-(--region-gap)">');
     expect(overview).toMatch(/<SectionPill[^>]*gap="var\(--region-gap\)"/);
   });
 

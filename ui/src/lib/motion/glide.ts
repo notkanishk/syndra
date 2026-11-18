@@ -20,8 +20,12 @@ function bezier(css: string): ((t: number) => number) | null {
   };
 }
 
+/** A region marks the row that is its heading (`data-landing`); the landing flash is that row's, not the section's. */
+const LANDING = "[data-landing]";
+
 /** The landing heading's one wash: `.flash`, colour only, restarted if it is already on. */
-function flashLanding(target: HTMLElement) {
+function flashLanding(section: HTMLElement) {
+  const target = section.querySelector<HTMLElement>(LANDING) ?? section;
   target.classList.remove("flash");
   void target.offsetWidth;
   target.classList.add("flash");

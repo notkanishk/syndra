@@ -6,6 +6,8 @@ import { NOTHING_TO_DO, cooldownNext, outcomeFromError, type ActionOutcome as Ou
 import { formatBytes, formatSignIn } from "@/lib/format";
 import { useState } from "react";
 
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
+
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { EmptyState, ListStates } from "@/components/states";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
@@ -67,6 +69,11 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   const byName = (list: DormantAccount[]) => sortByName(list, (a) => a.account, (a) => a.account);
   const safe = byName(accounts.filter((a) => !a.subject_still_member));
   const lockouts = byName(accounts.filter((a) => a.subject_still_member));
+  // A removed account fades where it was and its gap closes after (D-1 M5). One list for both
+  // groups, so the pointer and focus guard is the card's, and a gap never closes under the cursor.
+  const leaving = useLeavingRows([...safe, ...lockouts], (a) => a.account, Boolean(dormant.data));
+  const safeRows = leaving.rows.filter((a) => !a.subject_still_member);
+  const lockoutRows = leaving.rows.filter((a) => a.subject_still_member);
   const chosen = safe.filter((a) => selected.has(a.account));
   // A removal refused inside the add-on's cooldown waits out its retry_after and is sent once more
   // by itself (RFC 9110 §10.2.3), so one press removes on a live read (owner Q1). The key rides in
@@ -123,10 +130,10 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   }
 
   return (
-    <Card stale={stale}>
+    <Card stale={stale} {...leaving.listProps}>
       <CardHeader
         title="No longer needed"
-        count={accounts.length}
+        count={leaving.rows.length}
         caption="Accounts Syndra created that no active role needs any more"
       />
 
@@ -157,7 +164,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         isLoading={dormant.isLoading}
         // A refusal is the line's to say, never a reason to take the list away while it is on hand.
         error={refused || dormant.data ? null : dormant.error}
-        isEmpty={accounts.length === 0}
+        isEmpty={leaving.rows.length === 0}
         onRetry={() => dormant.refetch()}
         errorTitle="This list could not be read"
         empty={
@@ -168,14 +175,15 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         }
       >
         <>
-          {safe.length > 0 && (
+          {safeRows.length > 0 && (
             <>
               <GroupHeading
                 title="Their membership ended"
                 blurb="Housekeeping. Removing these takes access from nobody, because nobody is left to take it from."
               />
-              {safe.map((account) => (
-                <CardRow key={account.account} className="flex-wrap">
+              {safeRows.map((account) => (
+                <LeavingRow key={account.account} {...leaving.props(account.account)}>
+                <CardRow className="flex-wrap">
                   {/* The same 24px glyph in a 44px box every other selectable
                       list uses. This one had its own 16px input, which is the
                       smallest target in the product in front of the most
@@ -187,23 +195,26 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
                   />
                   <AccountLine account={account} />
                 </CardRow>
+                </LeavingRow>
               ))}
             </>
           )}
 
-          {lockouts.length > 0 && (
+          {lockoutRows.length > 0 && (
             <>
               <GroupHeading
                 title="Still a member, but no role gives them access here"
                 blurb="Not housekeeping. Removing one of these locks the person out rather than tidying up. Give them a role that is mapped here, or revoke their access deliberately from the list above."
               />
-              {lockouts.map((account) => (
+              {lockoutRows.map((account) => (
                 // Unselectable, and the heading above says why. The bulk count
                 // never includes these, so the one bulk action in the product
                 // can only ever touch accounts that grant nobody anything.
-                <CardRow key={account.account}>
-                  <AccountLine account={account} />
-                </CardRow>
+                <LeavingRow key={account.account} {...leaving.props(account.account)}>
+                  <CardRow>
+                    <AccountLine account={account} />
+                  </CardRow>
+                </LeavingRow>
               ))}
             </>
           )}

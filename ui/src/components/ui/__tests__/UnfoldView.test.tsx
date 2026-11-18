@@ -15,6 +15,8 @@ import { motionInTests } from "@/test-utils/motion";
 const animationEnd = (el: Element) => act(() => void fireEvent(el, new Event("webkitAnimationEnd", { bubbles: true })));
 
 beforeEach(() => {
+  // Unfold asks stillMotion() first (M12): a test that watches it move opts in.
+  motionInTests();
   Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
 });
 afterEach(() => {
@@ -22,11 +24,11 @@ afterEach(() => {
 });
 
 describe("closing an Unfold (A-08 §3)", () => {
-  it("folds the gap in 200ms, which is the settle less half a tint, behind the fade", () => {
+  it("folds the gap in --duration-fold (200ms), behind the fade", () => {
     const css = readFileSync(resolve(__dirname, "../../../app/globals.css"), "utf8");
     const unfold = css.slice(css.indexOf("@utility unfold"), css.indexOf("@utility close-gap"));
     expect(unfold).toMatch(
-      /\[data-phase="closing"\] \{[^}]*animation: fold calc\(var\(--duration-settle\) - var\(--duration-tint\) \/ 2\) var\(--ease-settle\)\s+var\(--duration-tint\) both/,
+      /\[data-phase="closing"\] \{[^}]*animation: fold var\(--duration-fold\) var\(--ease-settle\)\s+var\(--duration-tint\) both/,
     );
     // The row that left on a later read is a different move, and keeps the settle.
     expect(css.slice(css.indexOf("@utility close-gap"))).toContain(
@@ -52,6 +54,27 @@ describe("closing an Unfold (A-08 §3)", () => {
     expect(screen.getByText("part")).toBeInTheDocument();
     animationEnd(region);
     expect(screen.queryByText("part")).toBeNull();
+  });
+
+  it("takes what is closing out of reach: inert and hidden from assistive tech, until it is gone", () => {
+    const onResolve = vi.fn();
+    const { rerender } = render(
+      <Unfold open>
+        <button onClick={onResolve}>Resolve</button>
+      </Unfold>,
+    );
+    const inner = screen.getByText("Resolve").closest(".unfold")!.firstElementChild!;
+    expect(inner).not.toHaveAttribute("inert");
+    expect(inner).not.toHaveAttribute("aria-hidden");
+
+    rerender(
+      <Unfold open={false}>
+        <button onClick={onResolve}>Resolve</button>
+      </Unfold>,
+    );
+    expect(screen.getByText("Resolve").closest(".unfold")).toHaveAttribute("data-phase", "closing");
+    expect(inner).toHaveAttribute("inert");
+    expect(inner).toHaveAttribute("aria-hidden", "true");
   });
 
   it("is over after its own length when no animation ends to say so (a rail hidden on a phone)", () => {
@@ -135,7 +158,9 @@ describe("a Notice that can leave (A-08 §5)", () => {
     expect(box.className).not.toContain("tint-in");
 
     rerender(notice(false));
-    expect(screen.getByRole("status").closest(".unfold")).toHaveAttribute("data-phase", "closing");
+    // Still drawn while it goes, but no longer a live status to assistive tech.
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("status", { hidden: true }).closest(".unfold")).toHaveAttribute("data-phase", "closing");
     animationEnd(box.closest(".unfold")!);
     expect(screen.queryByRole("status")).toBeNull();
   });

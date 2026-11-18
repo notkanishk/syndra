@@ -112,6 +112,7 @@ describe("Notice", () => {
   // space by Unfold (A-08 §5), in place and without a rise.
   it("opens by Unfold once the app has painted, and never rises", async () => {
     Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
+    motionInTests();
     try {
       const { Notice } = await import("@/components/ui/Notice");
       await new Promise((resolve) => setTimeout(resolve, 80));

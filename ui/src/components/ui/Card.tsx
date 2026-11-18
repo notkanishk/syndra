@@ -1,5 +1,6 @@
 import React from "react";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { Count } from "@/components/ui/Badge";
 import { Unfold } from "@/lib/motion";
 
 /**
@@ -83,7 +84,7 @@ export function CardHeader({
             count === 0 ? "border border-line-strong text-label" : badgeTone
           }`}
         >
-          {count}
+          <Count n={count} />
         </span>
       )}
       <span className="flex-1" />

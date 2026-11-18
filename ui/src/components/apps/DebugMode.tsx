@@ -47,6 +47,7 @@ const WINDOW = `${MINUTES} minutes`;
 function useMinute() {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    // not-motion: a once-a-minute clock tick, not a movement.
     const t = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(t);
   }, []);
