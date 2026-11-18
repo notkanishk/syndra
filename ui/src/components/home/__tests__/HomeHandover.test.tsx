@@ -103,6 +103,8 @@ const drifting = () => ({ ...quiet(), drift: { count: 3, top: [] } });
 beforeEach(() => {
   state.advanced = true;
   state.own = false;
+  // The day's close is kept on this device: every test starts with none.
+  window.localStorage.clear();
   state.governance = drifting();
   Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
   vi.useFakeTimers();
@@ -276,5 +278,38 @@ describe("Home's all-clear, as an ending", () => {
     later(TINT_MS);
     expect(line().querySelector(".bloom")).not.toBeNull();
     expect(line().querySelector("[data-close-line]")).toBeNull();
+  });
+
+  it("closes again the next day", () => {
+    state.own = true;
+    const home = empty();
+    expect(line().querySelector("[data-close-line]")).not.toBeNull();
+    state.governance = drifting();
+    home.reread();
+    later(TINT_MS);
+
+    vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
+    state.governance = quiet();
+    home.reread();
+    later(TINT_MS);
+    expect(line().querySelector("[data-close-line]")).not.toBeNull();
+  });
+
+  it("draws the closing title at its size from the first frame: no class changes after it is in", () => {
+    // Under reduced motion the calm line is in the same frame Home empties, with no tint to hide a resize.
+    setMediaQuery("(prefers-reduced-motion: reduce)", true);
+    state.own = true;
+    const changed: string[] = [];
+    const watch = new MutationObserver((records) => {
+      for (const record of records) if (record.target.textContent === "Nothing here needs you.") changed.push(String(record.attributeName));
+    });
+    watch.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"] });
+    empty();
+    watch.takeRecords().forEach((record) => {
+      if (record.target.textContent === "Nothing here needs you.") changed.push(String(record.attributeName));
+    });
+    watch.disconnect();
+    expect(screen.getByText("Nothing here needs you.")).toHaveClass("type-section-title");
+    expect(changed).toEqual([]);
   });
 });

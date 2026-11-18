@@ -66,10 +66,19 @@ describe("retiring a bundle or a rule (W1, W3)", () => {
 });
 
 describe("removing direct access (W7)", () => {
-  it("gone only when nothing waits", () => {
-    expect(removalOutcome({ retained_roles: [], status: "applied" }, "Laser")).toMatchObject({
+  // A-24 §13: only what was observed. Zitadel taking the call is said as that, never as gone.
+  it("says Zitadel took it when its own row says applied, and that it is not read back yet", () => {
+    const out = removalOutcome({ retained_roles: [], status: "applied" }, "Laser");
+    expect(out).toMatchObject({
       kind: "applied",
-      detail: "Nothing else was supplying it, so the access is gone.",
+      detail: "Nothing else was supplying it, and Zitadel took the revocation. It has not been read back yet.",
+    });
+    expect(out.detail).not.toMatch(/gone/);
+  });
+  it("with nothing waiting and nothing taken, says it is not in Zitadel yet", () => {
+    expect(removalOutcome({ retained_roles: [], status: "pending" }, "Laser")).toMatchObject({
+      kind: "queued",
+      detail: "Nothing else was supplying it. The revocation is not in Zitadel yet.",
     });
   });
   it("a role that waits: revoked in Syndra, leaves Zitadel when you send it", () => {

@@ -173,6 +173,7 @@ export function StatusDot({
     <span
       aria-hidden
       data-dot
+      data-ring={ring ? "" : undefined}
       style={fill ? { background: fill } : undefined}
       className={`size-1.5 shrink-0 rounded-pill motion-tint ${t.edge} ${ring ? "border-[1.5px]" : t.dot} ${bloom ? "bloom" : ""} ${className}`}
     />

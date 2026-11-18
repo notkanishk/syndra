@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
-import { ChangeTrail } from "@/components/people/ChangeTrail";
+import { ChangeTrail, changeTrailFor, type TrailStart } from "@/components/people/ChangeTrail";
 import { type PickerPlace, type RoleNote } from "@/components/bundles/RolePickerOne";
 import { givenAt } from "@/components/access/AccessSource";
 import { onItsWay } from "@/lib/standing";
@@ -72,7 +72,7 @@ function GrantDirectAccessOpen({
   const [preset, setPreset] = useState<Preset>("30");
   const [customDate, setCustomDate] = useState("");
   const [reason, setReason] = useState("");
-  const [result, setResult] = useState<{ word: string; outcome: Outcome; trail?: { sent: boolean; at: number } } | null>(null);
+  const [result, setResult] = useState<{ word: string; outcome: Outcome; trail?: TrailStart } | null>(null);
 
   const selectedRole = (roles.data ?? []).find((role) => role.project_id === projectId && role.role_key === roleKey);
   const resolved = resolveExpiry(preset, customDate, terms.data);
@@ -251,7 +251,7 @@ function GrantDirectAccessOpen({
       )}
       {result && <ActionOutcome outcome={result.outcome} word={result.word} person={userId} className="mx-6 mb-1" />}
       {result?.trail && (
-        <ChangeTrail userId={userId} projectId={projectId} roleKey={roleKey} act="give" sent={result.trail.sent} at={result.trail.at} className="mx-6 mb-1 mt-3" />
+        <ChangeTrail userId={userId} projectId={projectId} roleKey={roleKey} act="give" {...result.trail} className="mx-6 mb-1 mt-3" />
       )}
       {result && step.after}
 
@@ -342,16 +342,15 @@ function GrantDirectAccessOpen({
                   const alsoGave = queuedByRules > 0 && ruleLines.length > 0 ? ` ${ruleLines.join(" ")}` : "";
                   // A rule-given role that waits is said, and ends on Send,
                   // whatever happened to the role given here (re-audit R12).
-                  // The trail (A-24 §5) follows a give that queued its own row and was not refused. With no
-                  // row (a give that only cancelled a waiting removal) nothing went to Zitadel, and the
-                  // answer's "applied" says only that nothing waits: there is no trail to draw.
-                  const trail = made.outbox_id ? { sent: made.status === "applied" && !made.wait_reason, at: Date.now() } : undefined;
-                  const report = (r: { word: string; outcome: Outcome }, withTrail = true) =>
-                    setResult({ ...r, outcome: withRuleWaits(r.outcome, made.rule_waiting), trail: withTrail ? trail : undefined });
+                  // The trail (A-24 §5), by the one rule. Its status is the give's own row's: with no row (a give
+                  // that only cancelled a waiting removal) the answer's "applied" means only that nothing waits.
+                  const trail = changeTrailFor(made.outbox_id ? made.status : undefined, made.wait_reason);
+                  const report = (r: { word: string; outcome: Outcome }) =>
+                    setResult({ ...r, outcome: withRuleWaits(r.outcome, made.rule_waiting), trail });
                   if (isRefused(made.wait_reason) || made.status === "failed") {
                     // Final verification N1: Zitadel refused it outright; Send won't move it.
                     const out = refusedOutcome(`${grantedRole} is given to ${first} in Syndra`, made.wait_reason);
-                    report({ word: "Refused by Zitadel", outcome: { ...out, detail: `${out.detail ?? ""}${alsoGave}` } }, false);
+                    report({ word: "Refused by Zitadel", outcome: { ...out, detail: `${out.detail ?? ""}${alsoGave}` } });
                   } else if (made.wait_reason === RETRYING) {
                     // Zitadel didn't take it; Syndra sends it again on its own (lib/retry.ts).
                     const out = retryingOutcome(`${grantedRole} is given to ${first} in Syndra`, made.retry);

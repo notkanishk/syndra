@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
 import { LONG_WAIT_MS } from "@/lib/useLongWait";
@@ -160,6 +160,11 @@ describe("a reconcile pass that halted", () => {
 // A-24 §6: past ten seconds a check says so, once. Never that its result waits on return:
 // it is a mutation's answer, gone if the page is left (A-24 §13).
 describe("a check that takes long", () => {
+  afterEach(() => {
+    pass.pending = false;
+    vi.useRealTimers();
+  });
+
   it("says it is still reading, only after ten seconds, and never that you can leave", () => {
     vi.useFakeTimers();
     pass.pending = true;
@@ -169,7 +174,5 @@ describe("a check that takes long", () => {
     act(() => void vi.advanceTimersByTime(1));
     expect(screen.getByText(/^Still reading .+\.$/)).toBeInTheDocument();
     expect(screen.queryByText(/You can leave this page/)).toBeNull();
-    pass.pending = false;
-    vi.useRealTimers();
   });
 });

@@ -240,8 +240,8 @@ export function Home({ session }: { session: SessionUser }) {
   const { cleared } = useQueueCleared(calm ? NO_WORK : WORK, !loading && !error, true, advanced);
   const mine = Boolean(cleared?.mine);
   // The list closes, the vivid ending, at most once a day on this device and only by their own hand.
-  const [closes, setCloses] = useState(false);
-  useEffect(() => setCloses(mine && closesToday()), [mine]);
+  // Decided in render, so the title is never drawn one size and then another.
+  const closes = cleared?.mine ? closesOnce(cleared.mine.at) : false;
   // A swap held for the pointer (S5) keeps the grid as it last was, and the
   // headline with it: what leaves is what was there.
   const held = useRef<{ grid: React.ReactNode; blocks: number }>({ grid: null, blocks: 0 });
@@ -513,11 +513,16 @@ const WORK = ["work"];
 const NO_WORK: string[] = [];
 
 const CLOSED = "syndra:home-closed";
-/** True the first time today (the reader's own clock, as the greeting's): the list closes once a day at most. */
-function closesToday(): boolean {
+/**
+ * Whether the clearing at `at` closes the list: the first one today (the reader's own clock, as
+ * the greeting's), once a day at most. It keeps `{ day, at }`, so asking again about the same
+ * clearing (another render, strict mode's second one) answers the same, and is safe to call in render.
+ */
+function closesOnce(at: string): boolean {
   const today = new Date().toDateString();
-  if (recall("local", CLOSED) === today) return false;
-  remember("local", CLOSED, today);
+  const kept = recall("local", CLOSED) as { day?: string; at?: string } | undefined;
+  if (kept?.day === today) return kept.at === at;
+  remember("local", CLOSED, { day: today, at });
   return true;
 }
 

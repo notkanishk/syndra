@@ -554,9 +554,9 @@ describe("GrantDirectAccess · what the plan says before the press", () => {
 // A-24 §5: the change's trail under the result. Each step settles only on what was observed.
 describe("GrantDirectAccess · the change's trail", () => {
   const steps = () =>
-    Array.from(screen.getByRole("list", { name: "The change's way to Zitadel" }).querySelectorAll("li")).map((li) => ({
+    Array.from(screen.getByRole("list", { name: "On its way to Zitadel" }).querySelectorAll("li")).map((li) => ({
       text: li.textContent,
-      settled: !li.querySelector("[data-dot]")?.className.includes("border-[1.5px]"),
+      settled: !li.querySelector("[data-dot]")?.hasAttribute("data-ring"),
     }));
 
   it("is recorded and sent when Zitadel took it, and not read back until a read after the give says so", async () => {
@@ -616,13 +616,13 @@ describe("GrantDirectAccess · the change's trail", () => {
     state.mutateAsync.mockResolvedValue({ outbox_id: "", status: "applied" });
     open();
     await grant();
-    expect(screen.queryByRole("list", { name: "The change's way to Zitadel" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "On its way to Zitadel" })).toBeNull();
   });
 
   it("is not drawn for a give Zitadel refused: the failure says what happened", async () => {
     state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "failed", wait_reason: "refused:not_found" });
     open();
     await grant();
-    expect(screen.queryByRole("list", { name: "The change's way to Zitadel" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "On its way to Zitadel" })).toBeNull();
   });
 });

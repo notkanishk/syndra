@@ -67,8 +67,8 @@ describe("the change's trail settles only on what was observed (§5)", () => {
 
 describe("CheckTrail reads as a route when it is labelled", () => {
   it("names the list and reads each step as Step n, with no pass or fail word", () => {
-    render(<CheckTrail label="The change's way to Zitadel" checks={trailSteps("give", true, undefined)} />);
-    const list = screen.getByRole("list", { name: "The change's way to Zitadel" });
+    render(<CheckTrail label="On its way to Zitadel" checks={trailSteps("give", true, undefined)} />);
+    const list = screen.getByRole("list", { name: "On its way to Zitadel" });
     expect(list).toHaveTextContent("Step 1: Recorded in Syndra.Step 2: Sent to Zitadel.Step 3: Not read back from Zitadel yet.");
     expect(list).not.toHaveTextContent(/passes|fails|nothing to check/);
   });

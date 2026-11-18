@@ -358,7 +358,7 @@ describe("the sheet is its result (A-22)", () => {
 
 // A-24 §5: the revocation's trail, only when one was queued for this role and nothing kept it.
 describe("the revocation's trail", () => {
-  const trail = () => screen.queryByRole("list", { name: "The change's way to Zitadel" });
+  const trail = () => screen.queryByRole("list", { name: "On its way to Zitadel" });
   const revoke = async (answer: object) => {
     removeDirect.mockResolvedValueOnce(answer);
     open({ sources: [direct], grantId: "g_88" });

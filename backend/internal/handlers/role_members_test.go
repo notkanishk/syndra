@@ -66,8 +66,8 @@ func TestHandleDeleteUserDirectGrant_PlansTheRemovalRebuildsThenSends(t *testing
 	}
 }
 
-// A role the person still holds another way is never revoked: the answer says it is kept,
-// and what the send did to the row is its status.
+// A role the person still holds another way is never revoked: the answer says it is kept. The
+// status is this role's own revoke row's, and it has none, so a sibling's failed send is not its.
 func TestHandleDeleteUserDirectGrant_ARoleHeldAnotherWayIsRetained(t *testing.T) {
 	probe := stubAct(t)
 	// Removing the grant of trained also takes back a role a rule gave; trained itself stays.
@@ -87,8 +87,42 @@ func TestHandleDeleteUserDirectGrant_ARoleHeldAnotherWayIsRetained(t *testing.T)
 	if len(res.Revoked) != 1 || res.Revoked[0] != "pLaser/bench" || len(res.Retained) != 1 || res.Retained[0] != "pLaser/trained" {
 		t.Errorf("revoked and retained: %#v", res)
 	}
-	if res.Status != "failed" || res.WaitReason != "role_waits" {
-		t.Errorf("the send's outcome is said: %#v", res)
+	if res.Status != "pending" || res.WaitReason != "role_waits" {
+		t.Errorf("a kept role has no row of its own, so no sibling's status is said as its own: %#v", res)
+	}
+}
+
+// A cascade sends several revoke rows. The answer's status is this role's own row's, whatever
+// order the rows were sent in: a sibling sent last and refused does not make this one refused,
+// and a sibling that went does not make this one sent.
+func TestHandleDeleteUserDirectGrant_StatusIsTheRolesOwnRow(t *testing.T) {
+	probe := stubAct(t)
+	probe.Change = services.Change{ProjectID: "pLaser", RoleKey: "trained",
+		Writes: []services.Write{revokeWrite("trained", "ob_own"), revokeWrite("bench", "ob_sibling")}}
+	status := map[string]string{"ob_own": "applied", "ob_sibling": "failed"}
+	orig := dbGetPropagationStatus
+	t.Cleanup(func() { dbGetPropagationStatus = orig })
+	dbGetPropagationStatus = func(_ context.Context, id string) (string, error) { return status[id], nil }
+
+	read := func() services.DirectGrantRemoval {
+		t.Helper()
+		var res services.DirectGrantRemoval
+		if err := json.Unmarshal(removeGrant("").Body.Bytes(), &res); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return res
+	}
+
+	probe.Delivery = services.Delivery{Sent: []string{"ob_own", "ob_sibling"}}
+	if res := read(); res.Status != "applied" {
+		t.Errorf("own row applied, sibling sent last and failed: status = %q, want applied", res.Status)
+	}
+
+	// Only the sibling went; this role's own row waits.
+	probe.Delivery = services.Delivery{Sent: []string{"ob_sibling"}, Waiting: []string{"ob_own"}, Reason: map[string]string{"ob_own": "role_waits"}}
+	status["ob_sibling"] = "applied"
+	if res := read(); res.Status != "pending" {
+		t.Errorf("own row not sent: status = %q, want pending", res.Status)
 	}
 }
 
