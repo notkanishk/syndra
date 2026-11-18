@@ -89,8 +89,11 @@ export function AppShell({
                 half: unlike `overflow-hidden` it is never a scroll container, so no focus, find or
                 animation can scroll the window and push the top bar off. The app scrolls here, only.
                 A page with a sticky section band gets `scroll-padding-top` for it (globals.css), so a
-                link to an anchor or a focus that scrolls lands below it (WCAG 2.4.11). */}
-            <div id="app-scroll" className="relative min-h-0 flex-1 overflow-y-auto">
+                link to an anchor or a focus that scrolls lands below it (WCAG 2.4.11).
+                `scrollbar-gutter: stable` keeps the scrollbar's seat whether or not a page is tall enough to
+                need it, so moving between a short page and a long one never shifts the page sideways
+                (A-24 §11.3; CSS Overflow 3). */}
+            <div id="app-scroll" className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
               {/* Notices, not a band under the top bar (6a): every dysfunction
                   is said in the content column and pushes the page down
                   rather than covering it. They sit under the page's own

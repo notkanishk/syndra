@@ -43,7 +43,7 @@ export function StatCard({
   const body = (
     <>
       <div className="type-label mb-2">{label}</div>
-      <div className={`font-display text-figure ${valueTone}`}>{value}</div>
+      <div data-figure className={`font-display text-figure ${valueTone}`}>{value}</div>
       <p className="mt-1.5 measure text-small leading-[1.5] text-muted">{detail}</p>
     </>
   );

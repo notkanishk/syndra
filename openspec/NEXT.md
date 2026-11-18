@@ -19,6 +19,14 @@ Four buckets, in the order they actually unblock each other:
 
 Source: `from-design/D-1-density-and-alignment.md` and boards `design/d1-density-1..4`; tracked as addon-contract **7u**. Pass 1 (tokens and shared parts, #200), pass 2 (seats, #201), pass 3 (Home, #202), pass 4 (type, #203), pass 5's code side (#204) and the motion pass (#205) merged; the owner round (Q4 the Name row, Q5 silence in table rows, the Home folders row held while read, the pill's transform-only glide) built on branch `feat/addon-contract-d1-owner`. Open: pass 5's publish (BRIDGE steps 2 and 3, after the owner's OK). **Owner (18 Nov 2026): Q1–Q8 decided**, "yes, do recommended" for Q1–Q6 and Q8; Q7 flipped: page transitions are wanted, and a designer is specifying them (D-1 §7a). Open: **page transitions**, built from that spec when it lands.
 
+## 0l. The craft, A-24 (owner, 18 Nov 2026: "yes to all A-24 recommendations")
+
+Source: `from-design/A-24-the-craft.md` and boards `design/a24-the-craft-1..3`; tracked as addon-contract **7w**, one PR per wave. Wave 1, the foundation, is built (7w-1); waves 2 to 4 follow it. Three answers are **not now**, and wait here:
+
+- **Q12 · A year of days** on Insights' Usage (§10 vivid): once counting has run a term. The record began 6 Nov 2026, so a year would be mostly empty before then. Needs a daily series for twelve months, where the card reads thirty days. `needs-triage`
+- **Q16 · The name carries you** from a row to its page's title (§2 vivid): a spike inside the Next 16 slice (0h2), with `<ViewTransition>`, kept only if it is still welcome on the hundredth open. It is one written exception to `--travel-cap`. `needs-triage`
+- **Q19 · The term in review** (§4.2): a view on Insights that opens on a term's last day; its own slice, later. `needs-triage`
+
 ## 0k. Deleting a TrueNAS account from Syndra (owner, 18 Nov 2026: implement later)
 
 Research only, nothing built: [`changes/addon-contract/research-account-delete.md`](changes/addon-contract/research-account-delete.md) (15 Nov 2026, read against TrueNAS TS-25.10.7's middleware). Its answer: a purge deletes the account, its personal group and its quota row, and re-owns the home folder to root, mode 700, never removing it; on → off → deleted, with a hold; the exact account confirmed twice (a plan-gate surface and the add-on's `expect`); the physical-operation pipeline reused; a tombstone so a dead number is never inherited silently; no snapshots taken by Syndra. Its slice plan is numbered 7u-0 to 7u-5, written before D-1 took 7u: renumber when it is scheduled. **Owner, before any build: the research's 12 open questions (§7)**, among them the hold's length, the home's fate after a purge, snapshots, the purge key's own TrueNAS user, `effect: "physical"`, the per-sweep cap, and the two drifts to fix first (the "cannot remove one" comments, and `purgeAccount` never checking that the account is off). [needs-info]

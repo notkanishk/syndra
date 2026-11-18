@@ -740,6 +740,26 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Every figure is tabular (A-24 §11.1, CRAFT §4.4: every count, date, time,
+     size and figure), so a column of them holds and a changing number never
+     shifts its neighbours. A figure says so with `data-figure`: Time, Count
+     (CountChip, a card's and a section's count), the number seat, StatCard,
+     the stat face. Prose keeps proportional figures, which read better in a
+     sentence. Figtree and Bricolage both carry `tnum` (read from the font
+     files, 18 Nov 2026: Figtree's "1" is 410 units wide by default and 620
+     tabular, like every digit); JetBrains Mono is tabular by nature. MDN,
+     font-variant-numeric. This is the only rule that sets it. */
+  [data-figure] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The caret is Syndra's (A-24 §11.7): the accent in every field. */
+  input,
+  textarea,
+  [contenteditable] {
+    caret-color: var(--accent);
+  }
+
   /* Every interactive element gets a themed focus ring. The default browser
      ring is never acceptable — it vanishes against the dark ground. The
      4px offset is what lets the ring clear a violet button instead of
@@ -816,6 +836,22 @@
     }
     .flash {
       animation-duration: var(--duration-flash) !important;
+      animation-delay: 0s !important;
+    }
+    /* Tint survives (A-24 §11.10, Q15): colour and opacity crossfade, so a
+       status changing in place fades rather than snaps. Nothing here travels
+       or scales; that is what the preference asks to lose. Each tint utility
+       names its own list once (`--tint-durations`), so the focus ring still
+       appears at once (S9). */
+    .motion-tint,
+    .hover-tint,
+    .link-hover {
+      transition-duration: var(--tint-durations) !important;
+      transition-delay: 0s !important;
+    }
+    .tint-in,
+    .tint-out {
+      animation-duration: var(--duration-tint) !important;
       animation-delay: 0s !important;
     }
     .bloom::after {
@@ -941,10 +977,12 @@
 @utility motion-tint {
   transition-property: color, background-color, border-color, fill, stroke, opacity, box-shadow,
     filter, outline-color;
-  transition-duration:
+  /* One per property, named once: the reduced-motion block reads it back. */
+  --tint-durations:
     var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
     var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
     var(--ring-fade);
+  transition-duration: var(--tint-durations);
   transition-timing-function: var(--ease-tint);
 }
 
@@ -1356,6 +1394,11 @@ html.theme-fading *::after {
   &:not([data-settled]) {
     animation: fade var(--duration-tint) var(--ease-tint) both;
   }
+  /* A quiet visit (A-24 Q14: seen before this session, or reached by key): the
+     header tints in and nothing after it arrives; the content is simply there. */
+  &[data-quiet] {
+    animation: fade var(--duration-tint) var(--ease-tint) both;
+  }
 
   &:not([data-settled]) ~ * {
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
@@ -1700,8 +1743,8 @@ html.theme-fading *::after {
    sidebar and the table read as one surface. */
 @utility hover-tint {
   transition-property: color, background-color, border-color, outline-color;
-  transition-duration:
-    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--ring-fade);
+  --tint-durations: var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--ring-fade);
+  transition-duration: var(--tint-durations);
   transition-timing-function: var(--ease-tint);
 
   &:hover {
@@ -1728,7 +1771,8 @@ html.theme-fading *::after {
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   transition-property: color, text-decoration-color, outline-color;
-  transition-duration: var(--duration-tint), var(--duration-tint), var(--ring-fade);
+  --tint-durations: var(--duration-tint), var(--duration-tint), var(--ring-fade);
+  transition-duration: var(--tint-durations);
   transition-timing-function: var(--ease-tint);
 
   &.underline {

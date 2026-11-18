@@ -3,29 +3,40 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 
 import { ShellNotices } from "@/components/shell/ShellNotices";
-import { ARRIVE_SETTLED_MS, returnedToThisPage } from "@/lib/motion";
+import { ARRIVE_SETTLED_MS, quietVisit, returnedToThisPage } from "@/lib/motion";
 import { TINT_MS } from "@/lib/motion";
 
 /**
  * A screen's first paint (S11), for a header that is not a `PageHeader`: the
  * greeting on Home, the member's home, a screen that stands alone. Spread
  * `className` and `data-settled` onto the first child of the page; what follows
- * it arrives (`page-head` in globals.css). Only when you navigate there:
- * coming Back, or once it has run, the page is simply there.
+ * it arrives (`page-head` in globals.css). Only the first time you navigate
+ * there in a session (A-24 Q14): a later visit, or one made by key, is quiet,
+ * the header tinting in over content that is simply there; coming Back, or once
+ * it has run, the page is simply there.
  */
-export function usePageHead(): { className: string; "data-settled": string | undefined } {
+export function usePageHead(): {
+  className: string;
+  "data-settled": string | undefined;
+  "data-quiet": string | undefined;
+} {
   const [settled, setSettled] = useState(false);
+  const [quiet, setQuiet] = useState(false);
   // After mount rather than in the initial state: the server cannot know about
   // a Back, and a different first render is a hydration mismatch.
   useLayoutEffect(() => {
     if (returnedToThisPage()) setSettled(true);
+    else if (quietVisit()) {
+      setSettled(true);
+      setQuiet(true);
+    }
   }, []);
   useEffect(() => {
     if (settled) return;
     const timer = setTimeout(() => setSettled(true), TINT_MS + ARRIVE_SETTLED_MS);
     return () => clearTimeout(timer);
   }, [settled]);
-  return { className: "page-head", "data-settled": settled ? "" : undefined };
+  return { className: "page-head", "data-settled": settled ? "" : undefined, "data-quiet": quiet ? "" : undefined };
 }
 
 /**
@@ -76,7 +87,7 @@ export function PageHeader({
   const head = usePageHead();
 
   return (
-    <div className={head.className} data-settled={head["data-settled"]} style={BELOW_HEADER}>
+    <div {...head} style={BELOW_HEADER}>
       <div className={`flex flex-wrap items-end gap-4 ${className}`}>
       {/* `flex-auto` (basis: auto), not `flex-1` (basis: 0%) — with a 0%
           basis this block reports zero size to the wrap decision, so `actions`

@@ -217,13 +217,13 @@ The spec is `A-05-motion.md` and the `Motion v2` board (S1–S18 with still form
 - **Glide:** `--duration-glide` 520ms, on settle's curve. Scrolling only.
 - **`--travel-cap: 10px`.** Nothing in the page travels further. A phone sheet from its edge and a control's own indicator are outside the cap.
 
-Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Counts never animate. Hover is colour only. Rows and cards never scale.
+Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Counts never animate: a changed count tints only the digits that changed (A-24 §11.2), and every figure is tabular. Hover is colour only. Rows and cards never scale.
 
 ### Patterns, and where each one appears
 
 | Pattern | Motion | Where it appears |
 |---|---|---|
-| A screen's first paint | **S11**: the shell never moves; the header tints in, then cards arrive (stagger 40ms, cap 5). Only when you navigate there; never on back, refresh, filter or sort. No route transitions yet (D-1 §7a). | Every route |
+| A screen's first paint | **S11**: the shell never moves; the header tints in, then cards arrive (stagger 40ms, cap 5). **Once a session, and never by key (A-24 Q14, owner 18 Nov 2026):** only the first visit to a place in a session arrives. A later visit, or one made by key (Enter on a link, a row opened from Go to), is quiet: the header tints in and the content is simply there. Back, Forward and a reload: simply there, header included. Never on filter or sort. Coming Back, the row you opened has the focus and flashes once. No route transitions yet (D-1 §7a). | Every route |
 | Loading → content | **S7**: skeleton only after 200ms; skeleton fades, then rows arrive. No crossfade. | Every list and card that reads |
 | Hover, press, focus | **S8** and **S9**: colour only on hover; 3% press on buttons, chips, nav items and segments; rows and cards darken to `--tint-3` when pressed (A-08 §1; on an opaque card, a layer over its surface); the focus ring appears at once and fades on tint | Everywhere |
 | A link on hover | **A-08 2a**: every link ends on `--accent-text` with its underline tinted in from transparent (tint). A name link goes ink to accent; a violet link and ArrowLink keep their colour. No brightness lift. | Every link |
@@ -235,7 +235,7 @@ Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Coun
 | A status changing in place | **S4**: words crossfade on tint in a seat sized to the taller word; the dot changes colour where it sits; **blooms only for something that went well, because of you, on screen** | Requests' decision seat, Expiring (Extended, Recorded), Drift decisions, Holds (Lifted), a person's rows, Revocations, Pending rows, Service accounts' owner seat |
 | A row leaving | **S5**: changed by someone else, the row keeps its seat and says so; on the next read it fades, then its gap settles; the gap waits while the pointer or focus is in the list | Pending changes, Requests, Home blocks, Expiring, Drift, People (a person marked as a service account leaves on the next read) |
 | A Home block emptied while you're there | **Motion 5b**: its outcome shows, then it folds. The next row's buttons work during the beat. | Home |
-| A dialog | **S1**: scrim tints, then 40ms later the sheet rises 8px from 98% on settle; closing fades the sheet and sinks it 4px, then the scrim | Every Modal: asking, giving, keep, extend, lapse, rehearsal, publish, retire, term dates, mark as a service account, phone Filters |
+| A dialog | **S1**: scrim tints, then 40ms later the sheet rises 8px from 98% on settle; closing fades the sheet and sinks it 4px, then the scrim. **Go to is the one exception (A-24 §8):** opened by a key dozens of times a day, it appears at once and leaves at once (Modal's `still`). | Every Modal: asking, giving, keep, extend, lapse, rehearsal, publish, retire, term dates, mark as a service account, phone Filters |
 | A step pushed inside a sheet | **S2**: the form fades, the sheet's height settles to the step; the sheet doesn't move; Keep it reverses | Cancel a queued change (flow-cancel-queued), any confirm inside a dialog |
 | A phone sheet | **S3**: from the bottom edge on settle; follows the finger 1:1; let go short of a third and it settles back; while busy, 7a (15% resistance, capped at 10px, never closes) | Every dialog below tablet, Filters sheet, the AnchoredPanel you act in |
 | A dialog's result | **S6**: success rises 6px and its dot blooms once (`role="status"`); failure appears still on tint, steady danger dot (`role="alert"`) | Every dialog's end: Asked, Given, Extended, Saved, Marked, Not sent, Didn't save |
@@ -260,6 +260,7 @@ Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Coun
 **Reduced motion:**
 - Every movement has a still form (Motion v2's token table).
 - Press survives. Glides become jumps.
+- **Tint survives (A-24 Q15, owner 18 Nov 2026):** colour and opacity still crossfade on tint (`motion-tint`, `hover-tint`, `link-hover`, `tint-in`, `tint-out`, and a Crossfade's words), so a status changing in place fades rather than snaps. Nothing travels or scales.
 - Flash becomes colour only, with no bloom.
 - Breathe rests at full strength.
 - Sheets and dialogs appear and leave together with their scrim.

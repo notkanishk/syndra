@@ -140,3 +140,27 @@ describe("Trends freshness and a failed read (A-20 P12)", () => {
     expect(line.closest("[role=status]")?.querySelector("[data-dot]")).not.toBeNull();
   });
 });
+
+// A-24 §10, §11.12: a figure that counts things a list holds opens that list, and only then.
+describe("a number opens its list", () => {
+  it("opens Drift, and the holders of a role held but not used; a zero stays plain", async () => {
+    query = "tab=trends";
+    respond.mockImplementation((path: string) =>
+      Promise.resolve(
+        path.includes("/insights/usage")
+          ? { sources: { sign_in: { receiving: true } }, holders_observed: true, window_days: 90, held_not_used: [{ project_id: "p1", role_key: "operator", people: 3 }] }
+          : { ...trends("Monsoon 2026"), upkeep: { people_who_left_holding: 0, drift_open: 4, roles_nobody_has: 0, bundles_nothing_new: 0, overlaps: 0 } },
+      ),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Mount />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole("link", { name: "Drift waiting, 4: open Drift" })).toHaveAttribute("href", "/governance/drift");
+    const held = await screen.findByRole("link", { name: /3 people: open People/ });
+    expect(held).toHaveAttribute("href", expect.stringContaining("project=p1"));
+    expect(held).toHaveAttribute("href", expect.stringContaining("role=operator"));
+    expect(screen.queryByRole("link", { name: /People who left/ })).not.toBeInTheDocument();
+  });
+});

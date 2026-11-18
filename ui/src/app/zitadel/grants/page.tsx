@@ -72,6 +72,7 @@ export default function UpstreamGrantsPage() {
         }
         search={
           <Input
+            type="search"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);

@@ -102,6 +102,7 @@ export default function ProjectsPage() {
       <FilterBar
         search={
           <Input
+            type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search projects or apps…"
@@ -194,10 +195,10 @@ export default function ProjectsPage() {
                   different fact: nothing in it can be granted to anybody. The
                   count stays a count so the column reads as one, and the fact
                   is said beside the name, where there is width to say it. */}
-              <span className="hidden text-right text-body desktop:block desktop:w-(--seat-number) desktop:shrink-0">
+              <span data-figure className="hidden text-right text-body desktop:block desktop:w-(--seat-number) desktop:shrink-0">
                 {roleCount}
               </span>
-              <span className="shrink-0 text-body tablet:w-(--seat-number) tablet:text-right">
+              <span data-figure className="shrink-0 text-body tablet:w-(--seat-number) tablet:text-right">
                 {people.headline}
                 <span className="text-small text-faint tablet:hidden">
                   {peopleSuffix(people.headline)}

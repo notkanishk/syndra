@@ -33,6 +33,8 @@ export const leftOut = (n: number) =>
 
 /** A gauge: its latest value and the day it was taken. */
 export const latestOn = (value: string, day: string) => `${value} on ${day}`;
+/** A figure's link to the people behind it (A-24 §10): its own words, then where it goes. */
+export const opensUsage = (said: string) => `${said}: open Usage in Insights`;
 export const NO_RECENT_VALUE = "No value in the last 30 days";
 /** A level's change over the record: its latest value against its first counted day ("within rounding": the two read the same). */
 export const changeUp = (difference: string, day: string) => `Up ${difference} since ${day}`;

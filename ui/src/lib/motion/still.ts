@@ -46,6 +46,16 @@ export const COPIED_MS = 900;
 export function stillMotion(): boolean {
   if (typeof window === "undefined") return true;
   if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return true;
+  return stillTint();
+}
+
+/**
+ * True when even colour must not change over time: the server, or a test run
+ * that has not opted in. Reduced motion is not a reason (A-24 Q15): it keeps
+ * tint, so words changing in place still crossfade and nothing travels.
+ */
+export function stillTint(): boolean {
+  if (typeof window === "undefined") return true;
   return process.env.NODE_ENV === "test" && !(window as { __motionInTests?: boolean }).__motionInTests;
 }
 

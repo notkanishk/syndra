@@ -116,7 +116,7 @@ function ChangeRow({
           </ArrowLink>
         )}
       </span>
-      <span className="w-full text-small text-faint tablet:w-(--seat-number) tablet:flex-none tablet:text-right">{dayLabel(change.at)}</span>
+      <span data-figure className="w-full text-small text-faint tablet:w-(--seat-number) tablet:flex-none tablet:text-right">{dayLabel(change.at)}</span>
     </div>
   );
 }

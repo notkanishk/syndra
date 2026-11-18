@@ -978,3 +978,15 @@ A row's action sits in its right seat, so its label is the verb, not the row (D-
 | A system's settings card, Home folders while the settings are read (a storage system) | Two quiet lines (… and a skeleton line), its button's seat held. |
 | A system's settings card, Home folders when the settings did not come back (a storage system) | Could not be read. Try again in a minute. If it keeps failing, check the add-on's health under Whether changes can land. Its button: Try again. |
 | The section pill while scrolling, the section you are in | Marked by a tint over the pill (FilterPills' selection), in both themes. No words change. |
+
+## 18. The craft, wave 1 (A-24, owner 18 Nov 2026)
+
+The foundation changes how things move and where a figure leads, and adds four pieces of words. No joke, no celebration, no line that rotates (Q17).
+
+| Where | Words |
+|---|---|
+| Go to, with nothing typed, the group above Pages (§8 warm, Q13) | Lately. Its rows are the rows the groups below would list, in their own words; no sentence says they are remembered. |
+| Go to's footer, beside Esc (§8, §11.5) | While something is typed: Esc clear, then close. Empty: Esc close. |
+| Go to, the line under a row's name (§8, found on staging) | One label per row, never said twice: a page of its own in the rail has none (its kind, Page, is on the right); a page in a group, its group (Access, Review, System); a person, their title and team or their address; a project or a bundle, its roles (2 roles); a role, its project; an app, its project, or none. |
+| Trends, a figure that opens its list (§10 warm, §11.12), its accessible name | {label}, {figure}: open {list}. Drift waiting, 4: open Drift. People who left and still hold access, 2: open People. {role}, 3 people: open People. A zero has no link. |
+| A system's usage card, a per-person figure (§10 warm), its accessible name | {its sentence}: open Usage in Insights. 7 in the last 30 days: open Usage in Insights. |

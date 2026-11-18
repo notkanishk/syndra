@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/states";
 import { Input } from "@/components/ui/Input";
 import { Kbd } from "@/components/ui/Kbd";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
-import { flatItems, goTo, type GoToItem } from "@/lib/go-to";
+import { flatItems, goTo, recallLately, type GoToItem } from "@/lib/go-to";
+import { visitByKey } from "@/lib/motion";
 import type { NavEntry } from "@/lib/nav";
 import { useNameCatalog } from "@/lib/queries/useNameCatalog";
 import { useUiView } from "@/lib/ui-view";
@@ -15,8 +17,14 @@ import { useUiView } from "@/lib/ui-view";
 /**
  * Go to: one way to reach anything in Syndra by typing its name
  * (proposed/GoTo.md, A-19 P4). Opens pages, never runs a verb; nothing is
- * pinned and nothing is remembered. The word "Search" belongs to the per-page
+ * pinned. With nothing typed it lists Lately, the last places opened on this
+ * device, above Pages, or on the phone above the sheet's own list (A-24 §8, Q13);
+ * sign-out forgets them. The word "Search" belongs to the per-page
  * search, so it is "Go to" here.
+ *
+ * It is opened by a key dozens of times a day, so it appears at once and leaves
+ * at once (A-24 §8): a still Modal. Escape clears what is typed, then closes.
+ * A place it opens does not arrive (Q14).
  */
 type GoToProps = {
   open: boolean;
@@ -32,9 +40,12 @@ export const GO_TO_PLACEHOLDER = {
   advanced: "A person, a project, an app, a bundle, or a page",
 } as const;
 
+/** What Esc does now, said beside its key: with words typed it clears them first. */
+const GO_TO_ESC = { typed: "clear, then close", empty: "close" } as const;
+
 export function GoTo({ open, onClose, nav }: GoToProps) {
   return (
-    <Modal open={open} onClose={onClose} size="sm">
+    <Modal open={open} onClose={onClose} size="sm" still>
       <ModalHeader title="Go to" />
       <div className="px-6 pb-5">
         <GoToPanel nav={nav} onGo={onClose} />
@@ -63,6 +74,9 @@ export function GoToPanel({
 }) {
   const { audience } = useUiView();
   const { catalog, bundles } = useNameCatalog();
+  const here = usePathname();
+  // Read once, as it opens: the places opened before this one.
+  const [lately] = useState(recallLately);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const base = useId();
@@ -80,14 +94,18 @@ export function GoToPanel({
           projects: catalog?.projects,
           apps: catalog?.applications,
           bundleList: bundles,
+          lately,
+          here,
         },
         query,
       ),
-    [nav, audience, catalog, bundles, query],
+    [nav, audience, catalog, bundles, query, lately, here],
   );
-  const items = flatItems(groups);
   const typed = query.trim() !== "";
   const showIdle = embedded && !typed;
+  // The phone sheet's own list is its Pages: with nothing typed it keeps Lately above that list.
+  const shown = showIdle ? groups.filter(({ group }) => group === "Lately") : groups;
+  const items = flatItems(shown);
   const current = items.length ? items[Math.min(active, items.length - 1)] : undefined;
   const optionId = (item: GoToItem) => `${base}-${item.key.replace(/[^\w-]/g, "_")}`;
 
@@ -102,7 +120,7 @@ export function GoToPanel({
       event.preventDefault();
       const step = event.key === "ArrowDown" ? 1 : -1;
       setActive((index) => (Math.min(index, items.length - 1) + step + items.length) % items.length);
-    } else if (event.key === "Enter" && current && !showIdle) {
+    } else if (event.key === "Enter" && current) {
       event.preventDefault();
       // Enter is a press on the selected link, so it navigates exactly as a click does.
       activeRef.current?.click();
@@ -112,13 +130,14 @@ export function GoToPanel({
   return (
     <div className="flex flex-col gap-3">
       <Input
+        type="search"
         autoFocus={!embedded}
         role="combobox"
         aria-label={embedded ? "Go to by name" : "Go to"}
-        aria-expanded={!showIdle && items.length > 0}
+        aria-expanded={items.length > 0}
         aria-controls={listId}
         aria-autocomplete="list"
-        aria-activedescendant={!showIdle && current ? optionId(current) : undefined}
+        aria-activedescendant={current ? optionId(current) : undefined}
         autoComplete="off"
         spellCheck={false}
         placeholder={GO_TO_PLACEHOLDER[audience]}
@@ -130,11 +149,9 @@ export function GoToPanel({
         onKeyDown={onKeyDown}
       />
 
-      {showIdle ? (
-        idle
-      ) : (
+      {(!showIdle || items.length > 0) && (
         <div id={listId} role="listbox" aria-label="Where to go" className="-mx-6 flex flex-col">
-          {groups.map(({ group, items: rows }) => (
+          {shown.map(({ group, items: rows }) => (
             <div key={group} role="group" aria-labelledby={`${base}-${group}`} className="flex flex-col">
               <div id={`${base}-${group}`} className="px-6 pb-1 pt-3">
                 <span className="type-nav-group">{group}</span>
@@ -151,12 +168,15 @@ export function GoToPanel({
                     role="option"
                     aria-selected={selected}
                     tabIndex={-1}
-                    onClick={onGo}
+                    onClick={() => {
+                      visitByKey(item.href);
+                      onGo();
+                    }}
                     className={`motion-tint flex min-h-[var(--tap)] items-center gap-3 px-6 py-1.5 ${selected ? "bg-tint-2" : ""}`}
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate text-body font-semibold text-ink">{item.name}</span>
-                      <span className="truncate text-small text-muted">{item.descriptor}</span>
+                      {item.descriptor && <span className="truncate text-small text-muted">{item.descriptor}</span>}
                     </span>
                     <span className="flex-none text-fine text-faint">{item.kind}</span>
                   </Link>
@@ -171,6 +191,7 @@ export function GoToPanel({
           )}
         </div>
       )}
+      {showIdle && idle}
 
       {!embedded && (
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fine text-faint">
@@ -182,7 +203,7 @@ export function GoToPanel({
             <Kbd>Enter</Kbd> open
           </span>
           <span className="inline-flex items-center gap-1">
-            <Kbd>Esc</Kbd> close
+            <Kbd>Esc</Kbd> {query !== "" ? GO_TO_ESC.typed : GO_TO_ESC.empty}
           </span>
         </p>
       )}

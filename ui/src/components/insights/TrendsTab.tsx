@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, type ReactNode } from "react";
+import { useMemo } from "react";
 
 import { roleName as lensRoleName } from "@/components/insights/lens";
 import { buildModel } from "@/components/insights/model";
 import { projectLabel } from "@/components/names/Unresolved";
 import type { InsightsUrl } from "@/components/insights/useInsightsUrl";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { AdvancedLink } from "@/components/ui/AdvancedLink";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardGrid, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
@@ -15,6 +16,7 @@ import { FilterPills } from "@/components/ui/Select";
 import { useInsightsTrends, useInsightsUsage, type InsightsTrends, type TrendPeriod } from "@/lib/queries/useInsights";
 import { useTopology } from "@/lib/queries/useTopology";
 import { formatShortDate } from "@/lib/format";
+import { peopleHref } from "@/lib/people-filters";
 import { roleName as roleDisplayName } from "@/lib/names";
 
 const PERIODS: Array<{ value: TrendPeriod; label: string }> = [
@@ -39,12 +41,25 @@ function minutes(m: number): string {
   return hours(m / 60);
 }
 
-/** One fact: what it is, then its number, on a hairline. */
-function Fact({ label, value }: { label: string; value: ReactNode }) {
+/**
+ * One fact: what it is, then its number, on a hairline. A number that counts
+ * things a list holds opens that list (A-24 §10, §11.12), as Ending soon's do;
+ * `opens` is given only where that list exists, and only when there is
+ * something in it to open.
+ */
+function Fact({ label, value, opens }: { label: string; value: string | number; opens?: { href: string; to: string } }) {
   return (
     <div className="row-divider flex items-baseline justify-between gap-4 px-5 py-3 text-small">
       <span className="text-muted">{label}</span>
-      <span className="font-semibold tabular-nums">{value}</span>
+      <span data-figure className="font-semibold">
+        {opens ? (
+          <AdvancedLink href={opens.href} aria-label={`${label}, ${value}: open ${opens.to}`} className="link-hover">
+            {value}
+          </AdvancedLink>
+        ) : (
+          value
+        )}
+      </span>
     </div>
   );
 }
@@ -201,10 +216,10 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
                         <span role="cell" className="text-muted">
                           {projectLabel(p.project_name)}
                         </span>
-                        <span role="cell" className="text-right font-semibold tabular-nums">
+                        <span role="cell" data-figure className="text-right font-semibold">
                           <EndingLink within={14} n={p.d14} />
                         </span>
-                        <span role="cell" className="text-right font-semibold tabular-nums">
+                        <span role="cell" data-figure className="text-right font-semibold">
                           <EndingLink within={30} n={p.d30} />
                         </span>
                       </div>
@@ -230,14 +245,29 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
               ) : (
                 [...usage.held_not_used]
                   .sort((a, b) => b.people - a.people)
-                  .map((r) => <Fact key={`${r.project_id}:${r.role_key}`} label={roleName(r.project_id, r.role_key)} value={people(r.people)} />)
+                  .map((r) => (
+                    <Fact
+                      key={`${r.project_id}:${r.role_key}`}
+                      label={roleName(r.project_id, r.role_key)}
+                      value={people(r.people)}
+                      opens={{ href: peopleHref({ project: r.project_id, role: r.role_key }), to: "People" }}
+                    />
+                  ))
               )}
             </Card>
 
             <Card>
               <CardHeader title="Upkeep" />
-              <Fact label="People who left and still hold access" value={t.upkeep.people_who_left_holding} />
-              <Fact label="Drift waiting" value={t.upkeep.drift_open} />
+              <Fact
+                label="People who left and still hold access"
+                value={t.upkeep.people_who_left_holding}
+                opens={t.upkeep.people_who_left_holding > 0 ? { href: peopleHref({ attention: "departed" }), to: "People" } : undefined}
+              />
+              <Fact
+                label="Drift waiting"
+                value={t.upkeep.drift_open}
+                opens={t.upkeep.drift_open > 0 ? { href: "/governance/drift", to: "Drift" } : undefined}
+              />
               <Fact label="Roles nobody holds" value={t.upkeep.roles_nobody_has} />
               <Fact label="Bundles with nothing new to give" value={t.upkeep.bundles_nothing_new} />
               <Fact label="Overlapping bundles" value={t.upkeep.overlaps} />

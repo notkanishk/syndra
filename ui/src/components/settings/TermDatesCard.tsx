@@ -69,7 +69,7 @@ export function TermDatesCard() {
             className="row-divider flex flex-wrap items-baseline gap-x-[18px] gap-y-1 px-5 py-3.5"
           >
             <span className="w-[170px] shrink-0 text-body text-muted">{t.name}</span>
-            <span className="text-body tabular-nums">
+            <span data-figure className="text-body">
               {shortDay(t.start)} to {shortDay(t.end)}
               {standing[i] && <span className="text-faint">{` · ${standing[i]}`}</span>}
             </span>

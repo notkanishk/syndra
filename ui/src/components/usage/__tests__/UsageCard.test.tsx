@@ -8,6 +8,7 @@ import { MemberTargetCard } from "@/components/kinds/MemberTargetCard";
 import { STORAGE_USAGE_STEP } from "@/components/kinds/storage/captions";
 import * as copy from "@/components/usage/copy";
 import { TargetStats } from "@/components/usage/TargetStats";
+import { insightsUsageHref } from "@/components/usage/InsightsUsage";
 import { HomeMonth, UsageCard, ViewUsage } from "@/components/usage/UsageCard";
 import { formatRelative } from "@/lib/format";
 import type { StatsGap, StatsMetric } from "@/lib/queries/useStats";
@@ -32,7 +33,8 @@ afterEach(() => {
 
 const titles = (root: Element) => Array.from(root.querySelectorAll("svg title")).map((t) => t.textContent ?? "");
 const rows = (root: Element) => Array.from(root.querySelectorAll("[data-row]"));
-const figures = (root: Element) => Array.from(root.querySelectorAll("[data-figure]")).map((f) => f.textContent);
+/** Each row's figure, its first line: the second line and the axis are figures too, beside it. */
+const figures = (root: Element) => Array.from(root.querySelectorAll("[data-row] [data-figure]:first-child")).map((f) => f.textContent);
 const bands = () => screen.queryAllByRole("img");
 /** A level with no limit of its own, so the usage card is not the kind's meter. */
 const level = (over: Partial<StatsMetric> = {}) => homeBytes({ against: undefined, ...over });
@@ -754,5 +756,26 @@ describe("the storage kind's limit", () => {
     const readOnly = read(schema);
     readOnly.storage.places[0] = { ...readOnly.storage.places[0], access: "read" as never };
     expect(storageLimits(readOnly)).toEqual({});
+  });
+});
+
+// A-24 §10: on a system's overview a per-person figure opens the people behind it in Insights' Usage.
+describe("a figure opens its list", () => {
+  it("links a per-person metric's figures, and leaves one with no list behind it plain", () => {
+    render(
+      withQuery(
+        <UsageCard label="Usage" windows={windows()} metrics={[sessions(), sessions({ name: "volume.total", label: "Total", per_subject: false })]} target="nas" />,
+        true,
+      ),
+    );
+    const links = screen.getAllByRole("link", { name: /open Usage in Insights/ });
+    expect(links).toHaveLength(2); // the per-person metric's two series; the total's stay plain
+    for (const link of links) expect(link).toHaveAttribute("href", insightsUsageHref("nas"));
+    expect(links[0]).toHaveAccessibleName("7 in the last 30 days: open Usage in Insights");
+  });
+
+  it("has no link on a person's card, which names no system", () => {
+    render(withQuery(<UsageCard title={copy.MEMBER_TITLE} windows={windows()} metrics={[sessions()]} />));
+    expect(screen.queryByRole("link", { name: /open Usage in Insights/ })).toBeNull();
   });
 });

@@ -224,7 +224,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className={head.className} data-settled={head["data-settled"]} style={BELOW_HEADER}>
+      <div {...head} style={BELOW_HEADER}>
         <h1 className="type-page-title">
           {now ? greeting(now) : <span className="invisible">Afternoon</span>}, {firstName(session.name)}.{" "}
           <span className="text-faint">{session.firstVisit ? WELCOME : <>Here&rsquo;s what you can use.</>}</span>

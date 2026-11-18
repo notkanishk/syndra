@@ -115,6 +115,7 @@ export default function AuditPage() {
       <FilterBar
         search={
           <Input
+            type="search"
             value={actor}
             onChange={(event) => setActor(event.target.value)}
             placeholder="Search names or actions"

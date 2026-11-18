@@ -204,7 +204,7 @@ describe("connected systems", () => {
   it("says when the system last answered, under its status", () => {
     state.targets = [target()];
     render(<ConnectedSystemsPage />);
-    expect(screen.getByText(/^Answered /)).toBeTruthy();
+    expect(screen.getByText(/^Answered\b/)).toBeTruthy();
   });
 
   // A-07 §22: the API grows "Last answered", which freshness rests on. Without it the row says
@@ -223,13 +223,13 @@ describe("connected systems", () => {
       }),
     ];
     render(<ConnectedSystemsPage />);
-    expect(screen.getByText(/^Last answered /)).toHaveTextContent(/^Last answered 3 .*ago$/);
+    expect(screen.getByText(/^Last answered\b/)).toHaveTextContent(/^Last answered 3 .*ago$/);
   });
 
   it("says nothing of a last answer for a system that has never given one", () => {
     state.targets = [target({ health: { status: "unknown", recent: [], last_answered_at: null } })];
     render(<ConnectedSystemsPage />);
-    expect(screen.queryByText(/^Last answered /)).toBeNull();
+    expect(screen.queryByText(/^Last answered\b/)).toBeNull();
   });
 
   // Registration is a deployment fact and a manifest is a runtime one. Showing

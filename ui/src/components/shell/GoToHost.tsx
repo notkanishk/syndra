@@ -1,8 +1,10 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { GoTo } from "@/components/ui/GoTo";
+import { keepLately } from "@/lib/go-to";
 import { otherDialogOpen, typingIn } from "@/lib/keys";
 import { memberNav, navFor, targetNav } from "@/lib/nav";
 import { useMySystems } from "@/lib/queries/useMySystems";
@@ -20,6 +22,9 @@ export const OPEN_GO_TO = "syndra:open-go-to";
 export function GoToHost() {
   const [open, setOpen] = useState(false);
   const { audience, isOperator } = useUiView();
+  // Every place opened goes to the front of Lately (A-24 §8): mounted once in the shell, it sees each one.
+  const pathname = usePathname();
+  useEffect(() => keepLately(pathname), [pathname]);
   const { data: targets } = useTargets(isOperator);
   const { data: mine } = useMySystems(audience === "member");
   const nav =

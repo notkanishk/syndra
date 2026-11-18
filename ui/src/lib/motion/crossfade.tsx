@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { stillMotion, TINT_MS } from "./still";
+import { stillTint, TINT_MS } from "./still";
 
 /**
  * One seat whose words change in place (Motion v2 S4): the old layer fades out
@@ -10,7 +10,8 @@ import { stillMotion, TINT_MS } from "./still";
  * as big as the taller of the two and nothing around it shifts.
  *
  * `id` is what counts as a change of word. New children under the same id just
- * replace the old ones. Under reduced motion the words swap at once.
+ * replace the old ones. Reduced motion keeps the crossfade: it is tint, and tint
+ * survives (A-24 Q15).
  */
 export function Crossfade({
   id,
@@ -32,7 +33,7 @@ export function Crossfade({
   if (last.current.id !== id) {
     const was = last.current.children;
     last.current = { id, children };
-    if (!stillMotion()) {
+    if (!stillTint()) {
       setLeaving(was);
       setFading(true);
     }
@@ -60,5 +61,62 @@ export function Crossfade({
         {children}
       </Layer>
     </Layer>
+  );
+}
+
+/**
+ * A figure whose digits change in place (A-24 §11.2): only what changed,
+ * changes. 47 becoming 46 crossfades its last digit and the 4 holds still.
+ * Digits are matched from the right, so units stay over units; a digit that
+ * appears (9 to 10) tints in where nothing was. Nothing ticks or rolls.
+ *
+ * At rest the figure is its plain text, one word to a screen reader and to the
+ * clipboard. Only for the one tint while a digit fades is it split: the new
+ * digits inline, the changed ones tinting in, and the old text laid over them
+ * from the right, out of the flow, hidden from assistive technology and from
+ * selection, with only its changed digits showing as they fade. Seats line up
+ * because every figure is tabular (`[data-figure]` in globals.css).
+ */
+export function CrossfadeDigits({ text }: { text: string }) {
+  const last = useRef(text);
+  const [was, setWas] = useState<string | null>(null);
+  if (last.current !== text) {
+    const previous = last.current;
+    last.current = text;
+    if (!stillTint()) setWas(previous);
+  }
+
+  useEffect(() => {
+    if (was === null) return;
+    const timer = setTimeout(() => setWas(null), TINT_MS);
+    return () => clearTimeout(timer);
+  }, [was, text]);
+
+  if (was === null) return <span data-figure className="relative">{text}</span>;
+  const now = Array.from(text);
+  const before = Array.from(was);
+  // The digit `r` places from the right, or undefined.
+  const at = (chars: string[], r: number) => chars[chars.length - 1 - r];
+  return (
+    <span data-figure className="relative">
+      {now.map((char, i) => {
+        const r = now.length - 1 - i;
+        return (
+          <span key={r} className={at(before, r) === char ? undefined : "tint-in"}>
+            {char}
+          </span>
+        );
+      })}
+      <span aria-hidden className="pointer-events-none absolute right-0 top-0 select-none whitespace-nowrap">
+        {before.map((char, i) => {
+          const r = before.length - 1 - i;
+          return (
+            <span key={r} className={at(now, r) === char ? "invisible" : "tint-out"}>
+              {char}
+            </span>
+          );
+        })}
+      </span>
+    </span>
   );
 }

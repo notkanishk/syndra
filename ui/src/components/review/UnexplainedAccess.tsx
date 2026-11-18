@@ -593,6 +593,7 @@ export function UnexplainedAccess() {
         }
         search={
           <Input
+            type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search person or role…"
@@ -901,7 +902,7 @@ function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) 
           <p className="text-small leading-[1.55] text-muted [text-wrap:pretty]">{text}</p>
           {!inZitadel && <ArrowLink href="/governance/pending">Check Pending changes</ArrowLink>}
         </div>
-        <div className="text-small text-faint tablet:ml-auto tablet:w-(--seat-number) tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
+        <div data-figure className="text-small text-faint tablet:ml-auto tablet:w-(--seat-number) tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
           <span className="tablet:hidden">Compared </span>
           <Relative iso={comparedAt} />
         </div>
@@ -1013,7 +1014,7 @@ function TriageRow({
           <RiskPill item={item} />
         </WhatSeat>
 
-        <div className="text-small text-faint tablet:w-(--seat-number) tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
+        <div data-figure className="text-small text-faint tablet:w-(--seat-number) tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
           <span className="tablet:hidden">Found </span>
           <Relative iso={item.detected_at} />
         </div>

@@ -2,7 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
-import { returnedToThisPage } from "@/lib/motion";
+import { recall, remember } from "@/lib/memory";
+import { ARRIVE_MEMORY_MS } from "@/lib/motion/still";
 
 /**
  * Two kinds of memory, kept apart on purpose (A-19 P5 and P8).
@@ -18,47 +19,48 @@ import { returnedToThisPage } from "@/lib/motion";
  * filter chips never come here. The pill or arrow that holds the value is what
  * makes it visible.
  *
- * Every read and write is guarded: a blocked or full store is a page that
- * simply forgets.
+ * Every read and write goes through `lib/memory.ts`: a blocked or full store
+ * is a page that simply forgets.
  */
 const PLACE = "syndra:place:";
 const VIEW = "syndra:view:";
 
 const here = () => window.location.pathname + window.location.search;
 
-function store(kind: "session" | "local"): Storage | null {
-  try {
-    return kind === "session" ? window.sessionStorage : window.localStorage;
-  } catch {
-    return null;
-  }
+// Back and Forward, and a reload, return you to somewhere you have been (S11):
+// the page is simply there, and its place is handed back. The browser says so
+// with `popstate` (and the navigation entry's type for a reload); the page
+// asked for is remembered by path, so a link followed straight after a Back
+// is a new visit. Here, not in the motion module, because place is what it
+// decides; `arrive` reads it from here, so neither imports the other back.
+// ponytail: a time window, not a router hook. A read slower than the window
+// lands as a first paint; widen it if that is ever seen.
+let returned: { path: string; at: number } | null = null;
+const markReturned = () => {
+  returned = { path: window.location.pathname, at: Date.now() };
+};
+if (typeof window !== "undefined") {
+  window.addEventListener("popstate", markReturned);
+  const entry = window.performance?.getEntriesByType?.("navigation")[0] as PerformanceNavigationTiming | undefined;
+  if (entry && entry.type !== "navigate") markReturned();
 }
 
-function read(kind: "session" | "local", key: string): unknown {
-  try {
-    const raw = store(kind)?.getItem(key);
-    return raw == null ? undefined : JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
+/** True when the reader came back to `path` a moment ago (Back, Forward, a reload). */
+export const returnedTo = (path: string): boolean =>
+  returned !== null && returned.path === path && Date.now() - returned.at < ARRIVE_MEMORY_MS;
 
-function write(kind: "session" | "local", key: string, value: unknown) {
-  try {
-    store(kind)?.setItem(key, JSON.stringify(value));
-  } catch {
-    // Forgetting is the whole failure mode.
-  }
-}
+/** True when this mount is the reader coming back to a page, not going to it. */
+export const returnedToThisPage = (): boolean => returnedTo(window.location.pathname);
 
 /** What this route kept under `name`, only when the reader came back to it. */
 export function recallPlace(name: string): unknown {
   if (typeof window === "undefined" || !returnedToThisPage()) return undefined;
-  return read("session", `${PLACE}${here()}:${name}`);
+  return recall("session", `${PLACE}${here()}:${name}`);
 }
 
+/** Keeps `value` for this route under `name`; null forgets it. */
 export function keepPlace(name: string, value: unknown) {
-  if (typeof window !== "undefined") write("session", `${PLACE}${here()}:${name}`, value);
+  if (typeof window !== "undefined") remember("session", `${PLACE}${here()}:${name}`, value);
 }
 
 /** `useState` that a Back returns to its last value. `ok` rejects a stored value of the wrong shape. */
@@ -78,15 +80,15 @@ export function usePlace<T>(
 /** A list's remembered view, or undefined. */
 export function recallView<T>(list: string, name: string, ok: (value: unknown) => value is T): T | undefined {
   if (typeof window === "undefined") return undefined;
-  const all = read("local", `${VIEW}${list}`) as Record<string, unknown> | undefined;
+  const all = recall("local", `${VIEW}${list}`) as Record<string, unknown> | undefined;
   const kept = all?.[name];
   return ok(kept) ? kept : undefined;
 }
 
 export function keepView(list: string, name: string, value: unknown) {
   if (typeof window === "undefined") return;
-  const all = (read("local", `${VIEW}${list}`) as Record<string, unknown> | undefined) ?? {};
-  write("local", `${VIEW}${list}`, { ...all, [name]: value });
+  const all = (recall("local", `${VIEW}${list}`) as Record<string, unknown> | undefined) ?? {};
+  remember("local", `${VIEW}${list}`, { ...all, [name]: value });
 }
 
 /**
@@ -124,7 +126,7 @@ export function usePlaceScroll(route: string) {
     const path = route.split("?")[0];
     const samePage = lastPath.current === path;
     lastPath.current = path;
-    write("session", key, target === 0 && samePage ? box.scrollTop : target);
+    remember("session", key, target === 0 && samePage ? box.scrollTop : target);
 
     let live = true;
     let frame = 0;
@@ -147,7 +149,7 @@ export function usePlaceScroll(route: string) {
     let saving = 0;
     const save = () => {
       cancelAnimationFrame(saving);
-      saving = requestAnimationFrame(() => write("session", key, box.scrollTop));
+      saving = requestAnimationFrame(() => remember("session", key, box.scrollTop));
     };
     const ends = ["wheel", "touchstart", "keydown"];
     box.addEventListener("scroll", save, { passive: true });

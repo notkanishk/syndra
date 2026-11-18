@@ -72,7 +72,7 @@ describe("the roles index, as drawn", () => {
 
   it("searches by role name, key or project", () => {
     render(<RolesPage />);
-    const box = screen.getByRole("textbox", { name: "Search roles by name, key or project" });
+    const box = screen.getByRole("searchbox", { name: "Search roles by name, key or project" });
     expect(box).toHaveAttribute("placeholder", "Search role, key or project…");
     fireEvent.change(box, { target: { value: "studio" } });
     expect(order()).toEqual(["Beta"]);
@@ -162,7 +162,7 @@ describe("the roles index, searched", () => {
     motionInTests();
     render(<RolesPage />);
     const alpha = screen.getByText("Alpha");
-    fireEvent.change(screen.getByRole("textbox", { name: "Search roles by name, key or project" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search roles by name, key or project" }), {
       target: { value: "alpha" },
     });
     expect(screen.getByText("Alpha")).toBe(alpha);

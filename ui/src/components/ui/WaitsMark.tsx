@@ -3,6 +3,7 @@
 import { useId, useRef, useState } from "react";
 
 import { AnchoredPanel } from "@/components/ui/Anchored";
+import { useWarmTip } from "@/lib/motion";
 
 /**
  * The Waits-for-you mark (N18, 2c): a half-filled dot after a role that always
@@ -22,6 +23,8 @@ export function WaitsMark({
   const tip = useId();
   const show = () => setOpen(true);
   const hide = () => setOpen(false);
+  // Opened while a neighbour is open, or has just shut: at once (A-24 §11.11).
+  const warm = useWarmTip(open);
 
   return (
     <span
@@ -51,7 +54,7 @@ export function WaitsMark({
       >
         <span
           role="tooltip"
-          className="tint-in shadow-popover block rounded-inner border border-line-strong bg-surface-1 px-3 py-2 text-fine leading-[1.45] text-ink"
+          className={`${warm ? "" : "tint-in"} shadow-popover block rounded-inner border border-line-strong bg-surface-1 px-3 py-2 text-fine leading-[1.45] text-ink`}
         >
           Waits for you: when someone gains or loses this role, the change waits
           for you to send it.

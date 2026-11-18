@@ -65,7 +65,7 @@ function renderQueue(rows: AccessRequest[]) {
   );
 }
 
-const box = () => screen.getByRole("textbox", { name: /Search requests/ }) as HTMLInputElement;
+const box = () => screen.getByRole("searchbox", { name: /Search requests/ }) as HTMLInputElement;
 const type = (value: string) => fireEvent.change(box(), { target: { value } });
 
 beforeEach(() => {

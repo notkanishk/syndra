@@ -80,7 +80,7 @@ describe("Audit export", () => {
   it("is one FilterBar: search, then the window, then Export, and a read line", () => {
     log.entries = [entry(0, "system:onboarding"), entry(1)];
     render(<AuditPage />);
-    const search = screen.getByRole("textbox", { name: "Search the loaded entries" });
+    const search = screen.getByRole("searchbox", { name: "Search the loaded entries" });
     const window = screen.getByRole("combobox", { name: "Date range" });
     const exportButton = screen.getByRole("button", { name: "Export CSV" });
     expect(search.compareDocumentPosition(window) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

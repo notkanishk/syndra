@@ -225,7 +225,7 @@ function PersonRow({
         <span className={STATUS_SEAT}>
           {account.standing && <StandingLine standing={account.standing} system={nameOf(target)} audience="operator" step={false} />}
         </span>
-        <span className="w-(--seat-number) flex-none text-right text-small text-muted">{formatShortDate(account.bound_at)}</span>
+        <span data-figure className="w-(--seat-number) flex-none text-right text-small text-muted">{formatShortDate(account.bound_at)}</span>
       </CardRow>
       {dialog === "limit" && home && (
         <LimitDialog target={target} name={name} home={home} onClose={() => setDialog(null)} />

@@ -205,6 +205,7 @@ function Picker({
   return (
     <>
       <Input
+        type="search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder={bundles ? "Search roles and bundles in every project" : "Search roles in every project"}

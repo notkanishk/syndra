@@ -197,7 +197,7 @@ describe("the projects board", () => {
 
   it("searches by project name or by the app that reads it", () => {
     render(<ProjectsPage />);
-    const box = screen.getByRole("textbox", { name: "Search projects by name or app" });
+    const box = screen.getByRole("searchbox", { name: "Search projects by name or app" });
     expect(box).toHaveAttribute("placeholder", "Search projects or apps…");
     fireEvent.change(box, { target: { value: "kiosk" } });
     expect(names()).toEqual(["Wood shop"]);

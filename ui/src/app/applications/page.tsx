@@ -139,7 +139,7 @@ export default function AppsPage() {
                 <ClaimsCell entry={entry} />
               </span>
 
-              <span className="text-body tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+              <span data-figure className="text-body tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                 {people.headline}
                 <span className="text-small text-faint tablet:hidden">
                   {peopleSuffix(people.headline)}

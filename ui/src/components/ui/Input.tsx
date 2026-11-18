@@ -12,14 +12,37 @@ import { TINT_MS, useExitPhase } from "@/lib/motion";
 export const DENSE_FIELD = "min-h-[var(--tap)] py-[5px] text-body desktop:min-h-0 desktop:h-(--control-sm) desktop:py-0";
 
 /**
+ * Escape in two stages, in every search (A-24 §11.5): with words in it, Escape
+ * clears them and goes no further; empty, Escape goes on to whatever holds the
+ * field (Go to closes, a list leaves Select). The browsers disagree on a
+ * search field's own Escape (Chrome and Safari clear it, Firefox does not), so
+ * this owns it. A controlled field is cleared the way the browser would clear
+ * it, through the native value setter and an `input` event, so the caller's
+ * own `onChange` hears it and its state stays the only state.
+ */
+function clearOnEscape(event: React.KeyboardEvent<HTMLInputElement>) {
+  const field = event.currentTarget;
+  if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing || field.value === "") return;
+  event.preventDefault();
+  event.stopPropagation();
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "");
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/**
  * Text input. 14px radius rather than a pill: a field the operator types a
  * claim name or a date into should read as a container, not as a control.
+ * A `type="search"` field clears on its first Escape (`clearOnEscape`).
  */
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { dense?: boolean }>(
-  function Input({ className = "", dense = false, ...props }, ref) {
+  function Input({ className = "", dense = false, onKeyDown, ...props }, ref) {
     return (
       <input
         ref={ref}
+        onKeyDown={(event) => {
+          onKeyDown?.(event);
+          if (props.type === "search") clearOnEscape(event);
+        }}
         // A dialog field keeps its 15px (D-1 §6 pass 4), the size somebody types a claim name or a
         // date at; the dense field reads the body step. type-scale-exempt
         className={`block w-full rounded-inner border border-line-strong bg-transparent px-[15px] ${dense ? DENSE_FIELD : "py-3 text-[15px]"} text-ink motion-tint placeholder:text-faint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${className}`}

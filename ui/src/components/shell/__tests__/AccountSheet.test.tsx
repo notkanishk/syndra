@@ -76,6 +76,17 @@ describe("the account sheet", () => {
     expect(form).toHaveAttribute("method", "post");
   });
 
+  // A-24 §8: Go to's Lately is this device's. On a shared makerspace computer the next
+  // person to sign in must not see who the last one looked at.
+  it("forgets Go to's Lately as it signs out", () => {
+    window.localStorage.setItem("syndra:lately", '["/users/u1"]');
+    open();
+    const form = screen.getByRole("button", { name: "Sign out" }).closest("form")!;
+    form.addEventListener("submit", (event) => event.preventDefault());
+    fireEvent.submit(form);
+    expect(window.localStorage.getItem("syndra:lately")).toBeNull();
+  });
+
   it("names who is signed in, with the address under it", () => {
     open();
     const sheet = screen.getByRole("dialog");

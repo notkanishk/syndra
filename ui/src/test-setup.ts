@@ -4,6 +4,7 @@ import { createElement, type ComponentType } from "react";
 import { afterEach, beforeEach, vi } from "vitest";
 
 import { resetDisplayLocaleForTests, setDisplayLocale } from "@/lib/locale";
+import { resetTipsForTests } from "@/lib/motion/tip";
 import { layoutFindings } from "@/test-utils/layout";
 import { installMatchMedia, resetMediaQueries } from "@/test-utils/media";
 
@@ -109,6 +110,8 @@ installClipboard();
 beforeEach(() => {
   resetDisplayLocaleForTests();
   setDisplayLocale("en-GB");
+  // A tooltip shut by the last test would make this test's first one warm (lib/motion/tip.ts).
+  resetTipsForTests();
 });
 
 beforeEach(() => {

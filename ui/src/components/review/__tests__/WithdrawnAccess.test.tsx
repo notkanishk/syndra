@@ -193,7 +193,7 @@ describe("the board's anatomy", () => {
     expect(screen.getByText("1 given up")).toBeInTheDocument();
     expect(screen.getByText("2 on the way")).toBeInTheDocument();
     expect(screen.getByText("3 people")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: /Search unfinished revocations/ })).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: /Search unfinished revocations/ })).toBeInTheDocument();
     expect(screen.getByText(/This list/)).toBeInTheDocument();
     const chips = within(screen.getByRole("navigation", { name: "Sections of unfinished revocations" }));
     expect(chips.getByText("Given up")).toBeInTheDocument();
@@ -251,7 +251,7 @@ describe("the board's anatomy", () => {
 
   it("search narrows the rows and a section with none says so, not 'nothing given up'", async () => {
     await renderPage();
-    fireEvent.change(screen.getByRole("textbox", { name: /Search unfinished revocations/ }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: /Search unfinished revocations/ }), {
       target: { value: "tiffany" },
     });
     expect(screen.queryByText("Iyo Sky")).toBeNull();

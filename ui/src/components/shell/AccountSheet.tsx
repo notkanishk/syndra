@@ -10,6 +10,7 @@ import { SyndraMark, WELCOMED } from "@/components/shell/SyndraMark";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Segmented } from "@/components/ui/Select";
 import { STORAGE_NOTE } from "@/components/kinds/storage/captions";
+import { forgetLately } from "@/lib/go-to";
 import { firstName } from "@/lib/greeting";
 import { Unfold } from "@/lib/motion";
 import { accountNav } from "@/lib/nav";
@@ -195,6 +196,9 @@ export function AccountSheet({ session }: { session: SessionUser }) {
               try {
                 window.sessionStorage.removeItem(WELCOMED);
               } catch {}
+              // Go to's Lately is this device's: on a shared makerspace computer the next
+              // person to sign in must not see who the last one looked at (A-24 §8).
+              forgetLately();
             }}
           >
             <Button type="submit" variant="outline" className="w-full">

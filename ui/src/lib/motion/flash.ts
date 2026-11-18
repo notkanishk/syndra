@@ -5,6 +5,23 @@ import { useEffect, useRef, useState } from "react";
 import { FLASH_MS } from "./still";
 
 /**
+ * One wash of `.flash` on `element`, colour only: restarted if it is already
+ * on, and gone when it ends. The row Back hands you, the heading a glide lands
+ * on. The class has to leave for CSS to replay it, hence the reflow between.
+ */
+export function flashOnce(element: HTMLElement) {
+  element.classList.remove("flash");
+  void element.offsetWidth;
+  element.classList.add("flash");
+  // A child's own animation ends and bubbles here too: only its own end takes the class off.
+  element.addEventListener("animationend", function done(event) {
+    if (event.target !== element) return;
+    element.classList.remove("flash");
+    element.removeEventListener("animationend", done);
+  });
+}
+
+/**
  * True for one `flash` while `value` differs from what it was last render.
  *
  * This exists because "changed while you were looking elsewhere" is the one

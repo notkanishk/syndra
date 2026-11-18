@@ -263,7 +263,7 @@ function Holders({
                     <UserName id={holder.user_id} className="text-body font-semibold text-ink" />
                   </span>
                   <span className="min-w-0 flex-1 text-small text-muted">{howTheyGotIt(holder)}</span>
-                  <span className="w-(--seat-number) text-right text-small text-muted">
+                  <span data-figure className="w-(--seat-number) text-right text-small text-muted">
                     {formatShortDate(holder.assigned_at)}
                   </span>
                 </div>
@@ -465,7 +465,7 @@ function IncluderTile({
             ? `v${includer.draft_version} in its next version`
             : `Includes v${pinned}${behind ? `, ${gap === 1 ? "one" : gap} behind` : ""}`}
         </span>
-        <span className="w-(--seat-number) flex-none text-right text-small text-muted">
+        <span data-figure className="w-(--seat-number) flex-none text-right text-small text-muted">
           {includer.people} {includer.people === 1 ? "person" : "people"}
         </span>
       </CardRow>

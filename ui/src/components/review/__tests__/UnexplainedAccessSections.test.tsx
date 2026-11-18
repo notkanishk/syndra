@@ -257,7 +257,7 @@ describe("Drift — Check Zitadel again (S17)", () => {
 describe("Drift — search", () => {
   it("finds a person by name, across both sections", () => {
     renderPage();
-    fireEvent.change(screen.getByRole("textbox", { name: "Search drift by person or role" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search drift by person or role" }), {
       target: { value: "jimmy" },
     });
 
@@ -271,7 +271,7 @@ describe("Drift — search", () => {
       item({ id: "b", user_id: "u2", project_id: "p2", role_keys: ["member"] }),
     ];
     renderPage();
-    const box = screen.getByRole("textbox", { name: "Search drift by person or role" });
+    const box = screen.getByRole("searchbox", { name: "Search drift by person or role" });
 
     fireEvent.change(box, { target: { value: "wood" } });
     expect(screen.queryByText("Finn Balor")).toBeNull();
@@ -284,7 +284,7 @@ describe("Drift — search", () => {
 
   it("says nothing matches, and clearing is the way back", () => {
     renderPage();
-    fireEvent.change(screen.getByRole("textbox", { name: "Search drift by person or role" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search drift by person or role" }), {
       target: { value: "zzz" },
     });
 

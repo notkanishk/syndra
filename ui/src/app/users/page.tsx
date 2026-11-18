@@ -286,6 +286,7 @@ export default function PeoplePage() {
       <FilterBar
         search={
           <Input
+            type="search"
             value={queryDraft}
             onChange={(event) => setQueryDraft(event.target.value)}
             placeholder="Search name, email or role key…"

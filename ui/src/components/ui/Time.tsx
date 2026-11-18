@@ -11,6 +11,9 @@ import { formatClock, formatClockSeconds, formatRelative, formatShortDate } from
  * relative stamp in both places produces a hydration mismatch — React throws
  * the whole subtree away and re-renders it. The absolute date is stable, so it
  * is what the server sends; the relative reading appears on mount.
+ *
+ * Each is a `<time>` with its machine-readable `dateTime` (HTML, the time
+ * element), and a figure (`data-figure`, A-24 §11.1), so its digits are tabular.
  */
 export function Relative({ iso }: { iso: string | null | undefined }) {
   const [relative, setRelative] = useState<string | null>(null);
@@ -19,7 +22,11 @@ export function Relative({ iso }: { iso: string | null | undefined }) {
     setRelative(formatRelative(iso));
   }, [iso]);
 
-  return <>{relative ?? formatShortDate(iso)}</>;
+  return (
+    <time data-figure dateTime={iso ?? undefined}>
+      {relative ?? formatShortDate(iso)}
+    </time>
+  );
 }
 
 /**
@@ -41,7 +48,11 @@ export function LogTime({ iso }: { iso: string | null | undefined }) {
     setTime(formatClockSeconds(iso));
   }, [iso]);
 
-  return <>{time ?? "··:··:··"}</>;
+  return (
+    <time data-figure dateTime={iso ?? undefined}>
+      {time ?? "··:··:··"}
+    </time>
+  );
 }
 
 export function ClockTime({ at }: { at?: number | null }) {
@@ -69,5 +80,9 @@ export function ClockTime({ at }: { at?: number | null }) {
     if (at) setTime(formatClock(new Date(at).toISOString()));
   }, [at]);
 
-  return <>{at ? (time ?? "just now") : null}</>;
+  return at ? (
+    <time data-figure dateTime={new Date(at).toISOString()}>
+      {time ?? "just now"}
+    </time>
+  ) : null;
 }

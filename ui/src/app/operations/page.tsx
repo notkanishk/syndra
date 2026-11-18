@@ -427,7 +427,7 @@ function EventRow({
         <span className="hidden w-[150px] shrink-0 pt-px text-small desktop:block">
           {outcomeWord}
         </span>
-        <span className="type-mono hidden w-(--seat-number) shrink-0 pt-0.5 text-right text-fine text-muted tablet:block">
+        <span data-figure className="type-mono hidden w-(--seat-number) shrink-0 pt-0.5 text-right text-fine text-muted tablet:block">
           {when}
         </span>
       </div>

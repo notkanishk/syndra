@@ -24,6 +24,12 @@ interface ModalProps {
   /** Disable Esc and click-outside dismiss while a mutation is in flight. */
   busy?: boolean;
   size?: "sm" | "md" | "lg";
+  /**
+   * Appears at once and leaves at once: no scrim fade, no rise, no copy left
+   * behind (A-24 §8). Only for a dialog opened by a key dozens of times a day,
+   * where any motion is latency: Go to.
+   */
+  still?: boolean;
   children: React.ReactNode;
 }
 
@@ -152,7 +158,10 @@ export function useDialogFocusTrap(
     if (madeInert) root.setAttribute("inert", "");
 
     function handleKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busyRef.current) {
+      // An Escape something inside already used (a search clearing its words, A-24 §11.5) is spent.
+      // Checked here rather than trusted to stopPropagation: the app's React root is the document
+      // itself, so a stop there does not keep this listener on the same node from running.
+      if (event.key === "Escape" && !event.defaultPrevented && !busyRef.current) {
         event.preventDefault();
         // The dialog's Esc is the dialog's: a page behind it must not also act on it.
         event.stopPropagation();
@@ -300,6 +309,7 @@ export function Modal({
   describedBy,
   busy = false,
   size = "md",
+  still = false,
   children,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -312,7 +322,7 @@ export function Modal({
   const draggedAway = useRef(false);
   useDialogFocusTrap(panelRef, open, busy, onClose);
 
-  useSheetLeave(scrimRef, draggedAway, open);
+  useSheetLeave(scrimRef, draggedAway, open && !still);
 
   const grabber = useSheetDrag({ panelRef, scrimRef, busy, onClose, draggedAway });
 
@@ -335,7 +345,7 @@ export function Modal({
       aria-modal="true"
       aria-labelledby={labelledBy ?? titleId}
       aria-describedby={describedBy}
-      className="settle-scrim fixed inset-0 z-(--layer-dialog) flex items-end justify-center bg-scrim tablet:items-center tablet:px-4"
+      className={`${still ? "" : "settle-scrim"} fixed inset-0 z-(--layer-dialog) flex items-end justify-center bg-scrim tablet:items-center tablet:px-4`}
       onClick={(event) => {
         if (event.target === event.currentTarget && !busy) onClose();
       }}
@@ -352,10 +362,11 @@ export function Modal({
           because a mobile URL bar makes those two different numbers, and the
           one that lies is the one that hides the button. 32px keeps the
           gutter the scrim already sets on the horizontal axis. */}
-      {/* Long names, emails and ids in a title or row wrap inside the dialog instead of widening it. */}
+      {/* Long names, emails and ids in a title or row wrap inside the dialog instead of widening it.
+          `overscroll-contain`: scrolling past the sheet's end never drags the page behind it (A-24 §11.6). */}
       <div
         ref={panelRef}
-        className={`flex w-full ${SIZE_CLASS[size]} sheet-in flex-col overflow-y-auto [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
+        className={`flex w-full ${SIZE_CLASS[size]} ${still ? "" : "sheet-in"} flex-col overflow-y-auto overscroll-contain [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
       >
         <SheetGrabber busy={busy} onClose={onClose} drag={grabber} />
         <NameLinksContext.Provider value={false}>{children}</NameLinksContext.Provider>

@@ -23,7 +23,7 @@ export default function NotFound() {
   // A screen's first paint (S11): it tints in, and nothing else on it moves.
   const head = usePageHead();
   return (
-    <div className={head.className} data-settled={head["data-settled"]}>
+    <div {...head}>
       <EmptyState
         title="There’s nothing at this address."
         guidance="No page in Syndra has this address. If you followed a link, the link itself is wrong; nothing has been deleted. A person or a bundle that was removed would say so on its own page."
