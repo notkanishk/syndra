@@ -72,8 +72,8 @@ export default function BundlesPage() {
             <CardColumns>
               <span className="w-[min(260px,40%)]">Bundle</span>
               <span className="hidden flex-1 tablet:block">What it&rsquo;s for</span>
-              <span className="w-[110px] text-right">Roles</span>
-              <span className="w-[110px] text-right">People</span>
+              <span className="w-(--seat-number) text-right">Roles</span>
+              <span className="w-(--seat-number) text-right">People</span>
             </CardColumns>
           }
           isLoading={bundles.isLoading}
@@ -133,12 +133,12 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
       <span className="hidden min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty] tablet:block">
         {bundle.description}
       </span>
-      <span className="text-[15px] font-semibold tabular-nums tablet:w-[110px] tablet:text-right">
+      <span className="text-[15px] font-semibold tabular-nums tablet:w-(--seat-number) tablet:text-right">
         {bundle.role_count ?? "None"}
         <span className="text-[13px] font-normal text-faint tablet:hidden">{bundle.role_count === 1 ? " role" : " roles"}</span>
       </span>
       {/* People is who Zitadel shows holding it; the assignments only explain it. */}
-      <span className="text-[15px] font-semibold tabular-nums tablet:w-[110px] tablet:text-right">
+      <span className="text-[15px] font-semibold tabular-nums tablet:w-(--seat-number) tablet:text-right">
         {people.headline}
         <span className="text-[13px] font-normal text-faint tablet:hidden">{peopleSuffix(people.headline)}</span>
         {people.note && (

@@ -350,7 +350,7 @@ function Live({ d, open }: { d: Delivery; open: ClaimFinding[] }) {
             <span className="tablet:w-[130px] tablet:shrink-0">Last sign-in</span>
             <span className="tablet:w-[130px] tablet:shrink-0">Last delivered</span>
             <span className="min-w-0 flex-1">Answers in the last day</span>
-            <span className="w-[110px] shrink-0 text-right">Answer time</span>
+            <span className="w-(--seat-number) shrink-0 text-right">Answer time</span>
           </CardColumns>
           {sortByName(d.apps, (a) => a.name ?? a.client_id, (a) => a.client_id).map((app) => (
             <AppRow key={app.client_id} app={app} />
@@ -402,7 +402,7 @@ function AppRow({ app }: { app: ClaimApp }) {
           </>
         )}
       </span>
-      <span className="text-[13.5px] tabular-nums text-muted tablet:w-[110px] tablet:shrink-0 tablet:text-right">{answerTime(app)}</span>
+      <span className="text-[13.5px] tabular-nums text-muted tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">{answerTime(app)}</span>
     </div>
   );
 }

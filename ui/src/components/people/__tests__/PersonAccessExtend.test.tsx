@@ -119,6 +119,15 @@ describe("a person's row that ends soon", () => {
     expect(screen.getByRole("button", { name: /^Extend/ })).toBeInTheDocument();
   });
 
+  it("puts Extend beside the removal verb in the row's one action seat (D-1)", () => {
+    state.endsInDays = 5;
+    renderPerson();
+    const seat = screen.getByRole("button", { name: /^Extend/ }).closest("[data-action-seat]") as HTMLElement;
+    expect(seat).not.toBeNull();
+    expect(seat.getAttribute("data-seat")).toBeNull();
+    expect(seat.querySelectorAll("button")).toHaveLength(2);
+  });
+
   it("offers Extend on the last day itself", () => {
     state.endsInDays = 14;
     renderPerson();

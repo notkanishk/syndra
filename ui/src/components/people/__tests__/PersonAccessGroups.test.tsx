@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonAccess } from "@/components/people/PersonAccess";
@@ -288,5 +288,44 @@ describe("Back keeps the project folds", () => {
     expect(screen.queryByText("Member")).toBeNull();
     expect(screen.getByRole("button", { name: "Open Wood shop" })).toHaveAttribute("aria-expanded", "false");
     window.sessionStorage.clear();
+  });
+});
+
+// D-1 §5 #5, #6, #22: every action sits in its row's seat, on the first line, and a table's seat is one width.
+describe("every action in its seat (D-1)", () => {
+  it("a role row keeps its verbs in the one action seat, the same width on every row", () => {
+    renderPerson();
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('[id^="role-"]'));
+    expect(rows).toHaveLength(4);
+    for (const row of rows) {
+      const line = row.querySelector("[data-card-row]") as HTMLElement;
+      const seat = line.querySelector("[data-action-seat]") as HTMLElement;
+      expect(seat.getAttribute("data-seat"), row.id).toBeNull();
+      expect(within(seat).getAllByRole("button").length, row.id).toBeGreaterThan(0);
+    }
+    const verbs = rows.map((row) => within(row.querySelector("[data-action-seat]") as HTMLElement).getAllByRole("button")[0].textContent);
+    expect(verbs).toEqual(["Revoke", "Cancel", "Remove", "Remove"]);
+  });
+
+  it("the unexplained role's link to Drift is in a seat, and a member's row has no seat at all", () => {
+    renderPerson();
+    const link = screen.getByRole("link", { name: /Decide on Drift/ });
+    expect(link.closest("[data-action-seat]")?.getAttribute("data-seat")).toBe("narrow");
+    expect(link.closest("[data-card-row]")).not.toBeNull();
+    cleanup();
+    renderPerson(false);
+    expect(screen.queryByRole("link", { name: /Decide on Drift/ })).toBeNull();
+    // No verbs for a member: the role lines carry no seat (the rule's own row keeps its button).
+    for (const row of Array.from(document.querySelectorAll('[id^="role-"]'))) {
+      expect(row.querySelector("[data-card-row]")!.querySelector("[data-action-seat]"), row.id).toBeNull();
+    }
+  });
+
+  it("'Show the rule' is in the seat of its own row, with the sentence as the row's words", () => {
+    renderPerson();
+    const button = screen.getByRole("button", { name: "Show the rule", hidden: true });
+    const seat = button.closest("[data-action-seat]") as HTMLElement;
+    expect(seat).not.toBeNull();
+    expect(seat.closest("[data-card-row]")?.textContent).toContain("This came from an automatic rule.");
   });
 });

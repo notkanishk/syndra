@@ -7,7 +7,7 @@ import { RolePicker } from "@/components/bundles/RolePicker";
 import { AnchoredPanel } from "@/components/ui/Anchored";
 import { Chip, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Card, CardRow } from "@/components/ui/Card";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { FormPart } from "@/components/ui/FormPart";
@@ -125,12 +125,16 @@ export function ShapeCard({
             <LineHead key={l.rows[0]} line={l} first={i === 0 && l.roles} />
           ))}
           <Unreached unreached={unreached} />
-          <div className="row-divider flex flex-wrap items-center gap-x-3 gap-y-1 px-[22px] pb-4 pt-3">
+          <CardRow
+            seat="default"
+            action={
+              <ArrowLink href={`/projects/${shape.application.project_id}#claims-default`} className="text-[13.5px]">
+                {projectName}&rsquo;s default
+              </ArrowLink>
+            }
+          >
             <span className="text-[13px] leading-[1.5] text-faint">In {landsIn(shape.profile.lands)}.</span>
-            <ArrowLink href={`/projects/${shape.application.project_id}#claims-default`} className="text-[13.5px]">
-              {projectName}&rsquo;s default
-            </ArrowLink>
-          </div>
+          </CardRow>
           <NewAppOffer shape={shape} draft={draft} setDraft={setDraft} templates={templates} project={projectName} heldBack={heldBack} onOpenTemplate={onOpenTemplate} />
         </>
       ) : (

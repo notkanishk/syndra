@@ -952,3 +952,12 @@ One meter draws every "used of limit" in the product (`components/ui/Meter.tsx`)
 | Section jumps | A page with a sticky section band (`#app-scroll:has([data-section-band])`) keeps `--section-band` of room above what a link, a focus or a glide lands on; `glideTo` reads the scroller's own scroll padding and the target's own scroll margin, as the browser does |
 
 Basic hides the machine's words (ids, Maintenance, What the add-on also says, a finding's exact sides, the Merge findings term) and never a section: see `basic-advanced-ia` design.
+
+## 17. Density and alignment (D-1, pass 2: every action in its seat)
+
+A row's action sits in its right seat, so its label is the verb, not the row (D-1 §4 rule 8): the row already says the name. One label changes and one column heading is added; nothing else D-1 moves changes a word.
+
+| Where | Words |
+|---|---|
+| Holds due, the button on each row (§5 #25: one width for every row's button) | Lift the hold. Its accessible name keeps the row: Lift the hold on {label}. While it retries: Try again. |
+| Accounts on a system's page, the column heading over each account's standing (§5 #39) | Status |

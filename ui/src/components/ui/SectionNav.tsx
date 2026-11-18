@@ -180,11 +180,12 @@ export function SectionPill<T extends NavSection>({
               {section.tone && <StatusDot tone={section.tone} />}
               {section.label}
               {section.count !== undefined && <span className="font-medium text-faint">{section.count}</span>}
-              {!here && (
-                <span aria-hidden className="text-[12px] text-faint">
-                  {index < at ? "↑" : "↓"}
-                </span>
-              )}
+              {/* Every section keeps its arrow's seat, empty for the one you are in, so the pill holds its
+                  width as you scroll (D-1 §5 #35): an arrow on every section but the current one used to
+                  change the pill's width at every section boundary. */}
+              <span aria-hidden data-arrow-seat className="inline-block w-3 text-center text-[12px] text-faint">
+                {here ? "" : index < at ? "↑" : "↓"}
+              </span>
             </a>
           );
         })}

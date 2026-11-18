@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { seedAutoRetry } from "@/test-utils/drain";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PendingChangesPage from "@/app/governance/pending/page";
@@ -188,6 +188,21 @@ describe("Pending changes", () => {
     expect(screen.getAllByText(/Give it again from their page once the reason is fixed\./)).toHaveLength(2);
     // One read for the list, of the binding conflicts' systems: never per row.
     expect(conflicts.calls.every((targets) => targets.join() === "truenas,truenas")).toBe(true);
+  });
+
+  // D-1 #29: every stopped row has the same narrow seat, with a link or without one.
+  it("keeps each stopped row's link in the same narrow seat, and an empty seat in its place", () => {
+    gaveUp.data = [
+      row({ id: "t1", target: "truenas", status: "failed", wait_reason: "binding_conflict", last_error: "Held.", cascade_id: "c1" }),
+      row({ id: "t3", target: "truenas", status: "failed", wait_reason: "target_refused", last_error: "It is held.", cascade_id: "c3" }),
+    ];
+    conflicts.standing = ["truenas|u1"];
+    renderPending();
+    const seats = Array.from(document.querySelectorAll("[data-card-row]")).map((r) => r.querySelector("[data-action-seat]"));
+    expect(seats).toHaveLength(2);
+    expect(seats.every((x) => x?.getAttribute("data-seat") === "narrow")).toBe(true);
+    expect(within(seats[0] as HTMLElement).getByRole("link", { name: /Decide it under Waiting on you/ })).toBeTruthy();
+    expect(within(seats[1] as HTMLElement).getByRole("link", { name: "Their page" })).toBeTruthy();
   });
 
   it("says it is looking, never a step then a swap, while the system's findings are read", () => {

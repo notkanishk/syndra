@@ -88,6 +88,23 @@ describe("a person's connected systems (operators)", () => {
     expect(screen.getByRole("link", { name: "Open Door's page" })).toHaveAttribute("href", "/system/targets/door");
   });
 
+  it("puts every link in its row's action seat, and every row keeps the same one (D-1)", () => {
+    render(<PersonSystems userId="u1" name="Rey" />);
+    // The setup rows (label · value · seat); the reads below them are another part's rows.
+    const rows = Array.from(document.querySelectorAll("[data-card-row]")).filter((row) =>
+      ["Account", "Roles", "Hold"].includes(row.firstElementChild?.textContent ?? ""),
+    );
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows) {
+      const seat = row.querySelector("[data-action-seat]");
+      expect(seat, row.textContent ?? "").not.toBeNull();
+      expect(seat!.getAttribute("data-seat")).toBeNull();
+    }
+    for (const link of screen.getAllByRole("link", { name: /^(Open|Set on) .*'s page$/ })) {
+      expect(link.closest("[data-action-seat]")).not.toBeNull();
+    }
+  });
+
   it("is not drawn when every system is storage", () => {
     state.views = { data: [nas], error: null, refetch: () => {} };
     const { container } = render(<PersonSystems userId="u1" name="Rey" />);

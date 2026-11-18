@@ -105,7 +105,7 @@ function RulesLine({ request }: { request: AccessRequest }) {
   if (consent.failed) return <RuleConsentFailed consent={consent} />;
   const lines = [...consent.rules, foretell("Approving", consent.cancels)].filter(Boolean);
   if (lines.length === 0) return null;
-  return <span className="w-full text-[13px] text-muted">If you approve: {lines.join(" ")}</span>;
+  return <span className="block w-full text-[13px] text-muted">If you approve: {lines.join(" ")}</span>;
 }
 
 /** The plan for approving this request: one read, shared by the line and the button. */
@@ -167,7 +167,7 @@ function HeldLine({ request }: { request: AccessRequest }) {
     // Never a guessed pronoun: the first name, or nothing that needs one.
     const first = resolver.resolveUser(request.requester_id).value?.display_name?.trim().split(/\s+/)[0];
     return (
-      <span className="w-full text-[13px] text-muted">
+      <span className="block w-full text-[13px] text-muted">
         {holding.kind === "until"
           ? request.until
             ? `Approving moves ${first ? `${first}'s` : "their"} end date to ${formatShortDate(request.until)}. Nothing else changes.`

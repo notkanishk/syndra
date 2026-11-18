@@ -72,6 +72,19 @@ beforeEach(() => {
 });
 
 describe("dropping a role from a bundle's working copy", () => {
+  it("keeps the verb in the role row's one narrow seat, as Remove and then as Keep it (D-1)", () => {
+    state.roles = [
+      { zitadel_project_id: "p1", zitadel_role_key: "operator" },
+      { zitadel_project_id: "p1", zitadel_role_key: "viewer" },
+    ];
+    render(<BundlePage bundleId="b1" />);
+    const seats = Array.from(document.querySelectorAll("[data-card-row] [data-action-seat]"));
+    expect(seats.map((seat) => seat.getAttribute("data-seat"))).toEqual(["narrow", "narrow"]);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]);
+    expect(seats[0].contains(screen.getByRole("button", { name: "Keep it" }))).toBe(true);
+  });
+
   it("cannot be pressed a second time once it has landed", async () => {
     render(<BundlePage bundleId="b1" />);
 

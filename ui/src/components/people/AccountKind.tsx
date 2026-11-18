@@ -24,22 +24,26 @@ export function AccountKind({ user }: { user: Pick<UserProfile, "id" | "name" | 
   return (
     <Card>
       <CardHeader title="This account" />
-      <CardRow first>
-        <span className="w-full text-[13.5px] font-semibold text-muted tablet:w-[170px] tablet:shrink-0">Kind</span>
-        <span className="min-w-0 flex-1 text-[14.5px]">
-          <span className="font-semibold">{service ? "A service account" : "A person"}</span>
-          <span className="block text-[13px] text-faint">
-            {service ? "Listed under System, not People" : "Signs in with a password in Zitadel"}
-          </span>
-        </span>
-        <span className="flex w-full tablet:w-[240px] tablet:shrink-0 tablet:justify-end">
-          {service ? (
+      <CardRow
+        first
+        top
+        seat="wide"
+        action={
+          service ? (
             <ArrowLink href={serviceAccountHref(user.id)}>Open its service account page</ArrowLink>
           ) : (
             <Button size="sm" onClick={() => setMarking(true)}>
               Mark as a service account
             </Button>
-          )}
+          )
+        }
+      >
+        <span className="w-full text-[13.5px] font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">Kind</span>
+        <span className="min-w-0 flex-1 text-[14.5px]">
+          <span className="font-semibold">{service ? "A service account" : "A person"}</span>
+          <span className="block text-[13px] text-faint">
+            {service ? "Listed under System, not People" : "Signs in with a password in Zitadel"}
+          </span>
         </span>
       </CardRow>
       {marking && <ServiceAccountDialog mode="mark" account={{ id: user.id, name: user.name }} onClose={() => setMarking(false)} />}

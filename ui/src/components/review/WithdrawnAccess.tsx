@@ -8,7 +8,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArriveList } from "@/lib/motion";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
-import { Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
@@ -367,7 +367,7 @@ function RevocationSection({
               <EmptyState title={empty} resolved={resolved} />
             ) : (
               <>
-                <CardColumns>
+                <CardColumns seat="wide" seatLabel={<span className="sr-only">What happens next</span>}>
                   <span className="w-[180px] flex-none">
                     <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
                   </span>
@@ -377,11 +377,8 @@ function RevocationSection({
                   <span className="hidden w-[130px] flex-none desktop:block">
                     <SortHead label="Where" name="where" sort={sort} onSort={onSort} />
                   </span>
-                  <span className="w-[110px] flex-none text-right">
+                  <span className="w-(--seat-number) flex-none text-right">
                     <SortHead label="Revoked" name="when" sort={sort} onSort={onSort} />
-                  </span>
-                  <span className="hidden w-[240px] flex-none desktop:block">
-                    <span className="sr-only">What happens next</span>
                   </span>
                 </CardColumns>
                 <div className={view.className}>
@@ -442,7 +439,7 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
 
       <span className="hidden w-[130px] flex-none pt-0.5 text-[14px] text-muted desktop:block">{where}</span>
 
-      <span className="flex flex-col gap-0.5 pt-0.5 tablet:w-[110px] tablet:shrink-0 tablet:text-right">
+      <span className="flex flex-col gap-0.5 pt-0.5 tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
         <span
           className={`text-[13.5px] font-semibold ${
             row.spent ? "text-danger-text" : row.age_seconds >= AMBER_AFTER_SECONDS ? "text-warn-text" : "text-muted"
@@ -453,7 +450,7 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
         <span className="text-[12.5px] text-faint">{formatShortDate(row.created_at)}</span>
       </span>
 
-      <span className="flex w-full flex-none justify-end pt-0.5 desktop:w-[240px]">
+      <ActionSeat seat="wide">
         {row.spent ? (
           // Re-audit R11: Syndra's record of this access is already gone, so
           // the person's page has nothing left to revoke. Still held in
@@ -478,7 +475,7 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
               : `Tried ${row.attempts} ${row.attempts === 1 ? "time" : "times"}`}
           </span>
         )}
-      </span>
+      </ActionSeat>
     </div>
   );
 }

@@ -109,7 +109,7 @@ describe("Home names the onboarding gap instead of staying silent", () => {
 
     expect(await screen.findByText("New people without a bundle")).toBeTruthy();
     expect(screen.getByText(/No default/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Open bundles/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Open bundles/ }).closest("[data-action-seat]")).toHaveAttribute("data-seat", "narrow");
   });
 
   it("names a person the reconciler found holding nothing", async () => {

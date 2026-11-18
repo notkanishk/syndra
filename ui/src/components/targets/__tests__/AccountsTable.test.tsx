@@ -11,7 +11,14 @@ const people = [
 
 function account(i: number) {
   const [id, username] = people[i % 2];
-  return { subject_id: `${id}-${i}`, username: i < 2 ? username : `${username}${i}`, account_id: String(200000 + i), bound_at: "2026-10-15T10:00:00Z" };
+  return {
+    subject_id: `${id}-${i}`,
+    username: i < 2 ? username : `${username}${i}`,
+    account_id: String(200000 + i),
+    bound_at: "2026-10-15T10:00:00Z",
+    // Only the first has a standing: the others still keep the Status column's place.
+    standing: i === 0 ? { usable: true, waiting_on: "none" as const } : undefined,
+  };
 }
 
 const state = { count: 2 };
@@ -113,16 +120,77 @@ describe("accounts Syndra manages, as the board's table", () => {
 });
 
 // How the fields stand: known (the TrueNAS fixture), being read, failed, or read with no schema.
-const fields = vi.hoisted(() => ({ mode: "known" as "known" | "loading" | "failed" | "unread" }));
+const fields = vi.hoisted(() => ({ mode: "known" as "known" | "loading" | "failed" | "unread", noLimit: false }));
 vi.mock("@/lib/queries/useFieldSchema", async () => {
   const m = (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock;
   return {
     ...m,
+    // A system whose setup has no home limit field.
+    useMappingFields: () => (fields.noLimit ? {} : m.useMappingFields()),
     useFieldSchemaState: () => {
       if (fields.mode === "known") return m.useFieldSchemaState();
       return { schema: undefined, loading: fields.mode === "loading", error: fields.mode === "failed" ? new Error("down") : null, refetch: () => {} };
     },
   };
+});
+
+// D-1 §5 #18, #39: the seat is the system's, never the rows'; Status is a column of its own.
+describe("accounts table seats", () => {
+  afterEach(() => {
+    fields.noLimit = false;
+  });
+
+  it("puts every verb in the action seat, one width for every row and its heading, with or without a limit", () => {
+    state.count = 2;
+    for (const [noLimit, seat] of [[false, "wide"], [true, null]] as const) {
+      fields.noLimit = noLimit;
+      const { container, unmount } = render(<PeopleOnTarget target="truenas" />);
+      const seats = [...container.querySelectorAll("[data-card-row] [data-action-seat]")];
+      expect(seats).toHaveLength(2);
+      for (const s of seats) {
+        expect(s.getAttribute("data-seat")).toBe(seat);
+        expect(within(s as HTMLElement).getByRole("button", { name: "Revoke" })).toBeInTheDocument();
+        expect(within(s as HTMLElement).getByRole("button", { name: "Put on hold" })).toBeInTheDocument();
+      }
+      // The heading cell over the seat is the same width.
+      expect(container.querySelector(".row-cols .row-seat")?.getAttribute("data-seat")).toBe(seat);
+      unmount();
+    }
+  });
+
+  it("holds the wide seat until the system's setup is read, so the seat never moves when it lands", () => {
+    state.count = 2;
+    fields.noLimit = true;
+    for (const mode of ["loading", "failed"] as const) {
+      fields.mode = mode;
+      const { container, unmount } = render(<PeopleOnTarget target="truenas" />);
+      const seats = [...container.querySelectorAll("[data-card-row] [data-action-seat]")];
+      expect(seats).toHaveLength(2);
+      for (const s of seats) expect(s).toHaveAttribute("data-seat", "wide");
+      unmount();
+    }
+    fields.mode = "known";
+  });
+
+  it("has a Status column: heading, and the standing in its own cell, not under the username", () => {
+    state.count = 2;
+    render(<PeopleOnTarget target="truenas" />);
+
+    const heading = screen.getByText("Status");
+    const row = screen.getByText("Charlotte Flair").closest("[data-account]") as HTMLElement;
+    const standing = row.querySelector("[data-standing]") as HTMLElement;
+    expect(standing).toHaveTextContent("Ready to use");
+    // The next step is a sentence: the row's detail line, full width under the row, never in the status column.
+    expect(standing).not.toHaveTextContent("Nothing for you to do.");
+    expect(row.querySelector("[data-row-detail] [data-standing-step]")).toHaveTextContent("Nothing for you to do.");
+    expect(standing.parentElement).not.toBe(within(row).getByText("charlotte.l"));
+    // Heading and cells share one fixed seat; a row with no standing keeps the cell.
+    const cell = standing.parentElement as HTMLElement;
+    expect(cell.className).toBe(heading.className);
+    const other = screen.getByText("Sami Zayn").closest("[data-account]") as HTMLElement;
+    expect(other.querySelector("[data-standing]")).toBeNull();
+    expect([...other.children].some((c) => c.className === heading.className)).toBe(true);
+  });
 });
 
 describe("Put on hold before the fields are known", () => {

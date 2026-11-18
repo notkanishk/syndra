@@ -8,6 +8,7 @@ import {
   classifyRead,
   ReadAgainError,
   ReadFreshness,
+  RetryWait,
 } from "@/components/ui/ReadFreshness";
 
 /**
@@ -198,5 +199,26 @@ describe("a Read again that failed", () => {
     expect(container).toBeEmptyDOMElement();
     rerender(<ReadAgainError error={null} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("a wait that can be stopped (D-1 #11)", () => {
+  const retry = { waiting: true, seconds: 30, left: 12, takeFocus: false };
+
+  it("puts Stop waiting in the narrow seat, on the line that says it is waiting", () => {
+    render(<RetryWait name="TrueNAS" retry={retry} onStop={() => {}} />);
+    const stop = screen.getByRole("button", { name: "Stop waiting" });
+    const seat = stop.closest("[data-action-seat]") as HTMLElement;
+    expect(seat).toHaveAttribute("data-seat", "narrow");
+    expect(seat.parentElement).toHaveAttribute("data-card-row");
+    expect(stop).toHaveAccessibleDescription(/trying again by itself in 12 s$/);
+    expect(stop.closest("p")).toBeNull();
+  });
+
+  it("draws nothing but its status region before a wait", () => {
+    const { container } = render(<RetryWait name="TrueNAS" retry={{ ...retry, waiting: false }} onStop={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Stop waiting" })).toBeNull();
+    expect(container.querySelector("[data-card-row]")).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent(/^$/);
   });
 });

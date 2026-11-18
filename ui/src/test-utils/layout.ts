@@ -6,8 +6,11 @@
  * jsdom has no layout, so each rule is read from structure and class names.
  */
 
-/** An action a reader presses: a pill button, a link drawn as a pill, or an ArrowLink. */
-export const ACTIONS = "button.rounded-pill, a.rounded-pill, a[data-arrow-link]";
+/**
+ * An action a reader presses: a pill button, a link drawn as a pill, or an ArrowLink. Not a control
+ * that belongs to the words beside it (`data-inline`: a value's copy, a line's retry).
+ */
+export const ACTIONS = ":is(button.rounded-pill, a.rounded-pill, a[data-arrow-link]):not([data-inline])";
 
 /**
  * D-1 §4: an action is never inside a sentence. A sentence wraps, and an action
@@ -64,22 +67,40 @@ export function dotLinesOffIndent(root: Element): string[] {
 }
 
 /**
- * Found before D-1's seat pass and moved into seats by it (§5; tasks.md 7u-2).
- * Each is matched on its failure line; pass 2 empties this list.
+ * D-1 §4 rules 1 and 6: in a row (CardRow's line, `data-card-row`), every action is
+ * in the action seat, or in a form, which is its own row. An action anywhere
+ * else in the row has a place that depends on the words beside it.
  */
-export const PASS_2_SEATS: Array<{ match: RegExp; why: string }> = [
-  { match: /^button "Open Maintenance/, why: "§5 #1, TargetOverview's reach row" },
-  { match: /^a "Open People→" in "Nothing for you to do\./, why: "§5 #8, the usage card's end row" },
-  { match: /^a "Choose where home folders go→"/, why: "HomeMapping, the mapping dialog's home row (found 18 Nov)" },
-  { match: /^a "Syndra’s explanation of the same access→"/, why: "zitadel/users, the person's intro row (found 18 Nov)" },
-  { match: /^a "[^"]*→" in "Inside Syndra: /, why: "zitadel, the doors' rows (found 18 Nov)" },
-];
+export function actionsOutsideSeats(root: Element): string[] {
+  const found: string[] = [];
+  for (const row of Array.from(root.querySelectorAll("[data-card-row]"))) {
+    for (const action of Array.from(row.querySelectorAll(ACTIONS))) {
+      // A dialog's rows are A-22's, not D-1's. A fold's own toggle (`aria-expanded`, G3) belongs to the
+      // row it opens, wherever the row puts it; in a sentence it is still caught (actionsInProse).
+      if (action.matches("[aria-expanded]") || action.closest('[data-action-seat], form, [role="dialog"]')) continue;
+      found.push(`${describe(action)} in a row, outside its seat: "${words(row)}"`);
+    }
+  }
+  return found;
+}
 
-/** The guards' findings in `root`, less the pass-2 list. */
+/**
+ * D-1 §4 rule 7: a CardHeader's `note` is a short fact ("All read", a time);
+ * a sentence is its `caption`. A long note sits right when it fits and drops
+ * left when it does not, so where it lands depends on its words.
+ */
+export const NOTE_MAX = 48;
+
+export function longNotes(root: Element): string[] {
+  return Array.from(root.querySelectorAll("[data-card-note]"))
+    .map((note) => words(note))
+    .filter((text) => text.length > NOTE_MAX)
+    .map((text) => `a CardHeader note of ${text.length} characters (use caption): "${text}"`);
+}
+
+/** The guards' findings in `root`. */
 export function layoutFindings(root: Element): string[] {
-  return [...actionsInProse(root), ...dotLinesOffIndent(root)].filter(
-    (finding) => !PASS_2_SEATS.some(({ match }) => match.test(finding)),
-  );
+  return [...actionsInProse(root), ...dotLinesOffIndent(root), ...actionsOutsideSeats(root), ...longNotes(root)];
 }
 
 function describe(action: Element): string {

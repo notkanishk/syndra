@@ -157,6 +157,8 @@ describe("Insights, Usage", () => {
     await screen.findByText(/^41 people\./);
     expect(screen.getByText(copy.INSIGHTS_NEXT)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: new RegExp(copy.INSIGHTS_NEXT_LINK) })).toHaveAttribute("href", "/users");
+    // The page's closing caption carries its link at its end: prose, marked so (D-1 §4).
+    expect(screen.getByRole("link", { name: new RegExp(copy.INSIGHTS_NEXT_LINK) }).closest("[data-prose]")).not.toBeNull();
   });
 
   it("says nothing reports statistics yet, with its step, when no system does", async () => {

@@ -127,7 +127,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
       <CardHeader
         title="No longer needed"
         count={accounts.length}
-        note="Accounts Syndra created that no active role needs any more"
+        caption="Accounts Syndra created that no active role needs any more"
       />
 
       {(dormant.data || refused) && (
@@ -217,10 +217,8 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         </div>
       )}
 
-      {/* With the card, always: its status region is there before a wait starts (RetryWait). */}
-      <div className={retry.waiting ? "border-t border-line px-5 py-4" : undefined}>
-        <RetryWait name={name} retry={retry} onStop={stopWaiting} />
-      </div>
+      {/* With the card, always: its status region is there before a wait starts, and its row (a CardRow) draws its own divider. */}
+      <RetryWait name={name} retry={retry} onStop={stopWaiting} />
 
       {chosen.length > 0 && (
         <div className="grid gap-3 border-t border-line px-5 py-4">

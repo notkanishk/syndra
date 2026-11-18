@@ -141,6 +141,19 @@ describe("a service account's page", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent("Revoke Trained in Laser Lab?");
   });
 
+  it("puts each setting's button and each role's verb in the card's one action seat (D-1)", () => {
+    renderPage();
+    const settings = screen.getByText("This account").closest(".card") as HTMLElement;
+    const settingSeats = Array.from(settings.querySelectorAll("[data-card-row] [data-action-seat]"));
+    expect(settingSeats.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(settingSeats.map((seat) => seat.getAttribute("data-seat"))).size).toBe(1);
+    expect(within(settings).getByRole("button", { name: "Change purpose" }).closest("[data-action-seat]")).not.toBeNull();
+
+    const holds = screen.getByText("What it holds").closest(".card") as HTMLElement;
+    const revoke = within(holds).getByRole("button", { name: /^Revoke Trained in Laser Lab/ });
+    expect(revoke.closest("[data-action-seat]")?.closest("[data-card-row]")).not.toBeNull();
+  });
+
   it("lists what it holds by project name, A to Z, whatever order the read came in", () => {
     const base = holds.projects[0];
     read.access = {

@@ -535,6 +535,14 @@ describe("Identity provider · Change Zitadel directly", () => {
     expect(within(projectsRow).getByText(/Recorded in Syndra, then changed in Zitadel at once/)).toBeInTheDocument();
     expect(within(projectsRow).queryByText(/keeps no record/)).not.toBeInTheDocument();
     expect(within(projectsRow).getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects");
+    // D-1: both ways on are the row's, in its seat (the door, then Syndra's own page), never in the sentence.
+    for (const row of [peopleRow, projectsRow]) {
+      const seat = row.querySelector("[data-action-seat]") as HTMLElement;
+      expect(seat).not.toHaveAttribute("data-seat"); // the default width, the same on both rows
+      expect(within(seat).getAllByRole("link")).toHaveLength(2);
+      expect(within(row).getByText(/^Inside Syndra:/).querySelector("a")).toBeNull();
+    }
+    expect(within(peopleRow.querySelector("[data-action-seat]") as HTMLElement).getByRole("link", { name: "People" })).toHaveAttribute("href", "/users");
   });
 
   it("offers no way in, with the reason, while Zitadel is not answering", async () => {

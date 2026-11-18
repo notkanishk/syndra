@@ -117,6 +117,23 @@ describe("what has not gone away yet", () => {
   });
 });
 
+describe("what happens next sits in one seat (D-1)", () => {
+  it("is the same wide seat on a row still being tried and on one given up, and its heading cell matches", async () => {
+    payload = listing([row("r1", false), row("r2", true, { user_id: "u2" })]);
+    await renderPage();
+    const seats = Array.from(document.querySelectorAll<HTMLElement>("[data-action-seat]"));
+    expect(seats).toHaveLength(2);
+    expect(seats.map((seat) => seat.getAttribute("data-seat"))).toEqual(["wide", "wide"]);
+    // The row still being tried says how many tries so far; the given-up one points where to act.
+    // Given up comes first, always.
+    expect(within(seats[0]).getByRole("link")).toBeInTheDocument();
+    expect(seats[1].textContent).toMatch(/Tried 3 times/);
+    for (const heading of Array.from(document.querySelectorAll('.row-seat[aria-hidden="true"]'))) {
+      expect(heading.getAttribute("data-seat")).toBe("wide");
+    }
+  });
+});
+
 describe("why a given-up revocation stopped", () => {
   // The same helper as Pending changes (`stoppedLine`): a stored reason is never printed bare.
   it("says it in a sentence, never the stored text of an out-of-retries or a refusal alone", async () => {

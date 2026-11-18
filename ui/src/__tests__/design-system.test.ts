@@ -167,6 +167,21 @@ function openingTags(source: string, tag = "[A-Za-z][\\w.]*"): Array<{ at: numbe
   return found;
 }
 
+/** A tag's own `className` (a string or a template), skipping any inside its props' braces. */
+function topLevelClassName(tagText: string): string | undefined {
+  let depth = 0;
+  for (let i = 0; i < tagText.length; i += 1) {
+    const char = tagText[i];
+    if (char === "{") depth += 1;
+    else if (char === "}") depth -= 1;
+    else if (depth === 0 && tagText.startsWith("className=", i)) {
+      const m = /^className=(?:"([^"]*)"|\{`([^`]*)`\})/.exec(tagText.slice(i));
+      return m ? (m[1] ?? m[2]) : undefined;
+    }
+  }
+  return undefined;
+}
+
 function describeOffenders(list: Array<{ file: string; matches: string[] }>): string {
   return list.map((entry) => `  - ${entry.file}: ${entry.matches.join(", ")}`).join("\n");
 }
@@ -1000,6 +1015,7 @@ describe("density and alignment (D-1)", () => {
       "--seat-action-narrow: 140px",
       "--seat-action: 200px",
       "--seat-action-wide: 300px",
+      "--seat-status: 240px",
     ]) {
       expect(theme, `@theme must declare ${token}`).toContain(`${token};`);
     }
@@ -1079,8 +1095,9 @@ describe("density and alignment (D-1)", () => {
       const source = readFileSync(file, "utf8");
       // A CardRow's className never states a gap: the row has its grid.
       for (const tag of openingTags(source, "CardRow")) {
-        const cls = /className=(?:"([^"]*)"|\{`([^`]*)`\})/.exec(tag.text);
-        if (cls && /(?:^|\s)(?:[a-z]+:)?gap-/.test(cls[1] ?? cls[2])) found.push(`${rel}: <CardRow className> states a gap`);
+        // The row's own className, not one inside a prop's JSX (`action={<div className=…>}`).
+        const cls = topLevelClassName(tag.text);
+        if (cls && /(?:^|\s)(?:[a-z]+:)?gap-/.test(cls)) found.push(`${rel}: <CardRow className> states a gap`);
       }
       if (!source.includes("<CardColumns")) continue;
       for (const m of Array.from(source.matchAll(/(?:"|`)([^"`]*(?:row-divider|\$\{ROW\})[^"`]*)(?:"|`)/g))) {
@@ -1099,23 +1116,78 @@ describe("density and alignment (D-1)", () => {
   // §4: an action is never inside a sentence. The suite-wide DOM guard
   // (test-utils/layout.ts) reads what is rendered; this reads what is written,
   // so an untested screen is held too. A lede, a caption or a meta line may
-  // carry a link (they are prose); the rest wait on pass 2's seats.
+  // carry a link (they are prose); nothing else may (pass 2 seated the rest).
   it("never writes an action after a sentence's space", () => {
     const allowed: Record<string, { count: number; why: string }> = {
       "app/roles/page.tsx": { count: 1, why: "the page's caption: a link in a caption is prose" },
       "components/apps/AppTokenScreen.tsx": { count: 2, why: "the header's meta line: a link in a meta line is prose" },
-      "components/targets/TargetOverview.tsx": { count: 1, why: "pass 2, §5 #1" },
-      "components/kinds/storage/HomeMapping.tsx": { count: 1, why: "pass 2, the home row (found 18 Nov)" },
-      "app/zitadel/users/page.tsx": { count: 1, why: "pass 2, the intro row (found 18 Nov)" },
     };
     const found: string[] = [];
     for (const file of walk(SRC_ROOT)) {
       if (!file.endsWith(".tsx")) continue;
       const rel = file.replace(`${SRC_ROOT}/`, "");
       const hits = Array.from(readFileSync(file, "utf8").matchAll(/\{" "\}\s*(?:\{[^<{}]*&&\s*)?<(?:Button|ButtonLink|ArrowLink)\b/g));
-      if (hits.length > (allowed[rel]?.count ?? 0)) found.push(`${rel}: ${hits.length}`);
+      if (hits.length !== (allowed[rel]?.count ?? 0)) found.push(`${rel}: ${hits.length}`);
     }
     expect(found, `An action belongs in its row's seat, not after a sentence:\n  ${found.join("\n  ")}`).toEqual([]);
+  });
+
+  // A detail whose parts all render nothing (Home's request note when nothing is held) must not
+  // keep an empty line, and its gap, under the row. jsdom applies no CSS, so it is read here.
+  // A seat holds verbs and a button's reason (up to 46ch). On a phone it wraps under its row,
+  // and it must wrap inside itself too, never run past the card's edge (VersionBand's reason did).
+  it("keeps a seat inside its row: it wraps, and is never wider than the row", () => {
+    const seat = namedAtRuleBody(css, "@utility", "row-seat");
+    expect(seat).toContain("flex-wrap: wrap;");
+    expect(seat).toContain("max-width: 100%;");
+    for (const width of ["--seat-action", "--seat-action-narrow", "--seat-action-wide"]) {
+      expect(seat).toContain(`min-width: min(var(${width}), 100%);`);
+    }
+  });
+
+  // Staging, 18 Nov, 1481px: a detail line and a caption were `flex-basis: 100%` capped by a
+  // max-width of 60ch. Flex wraps an item by its basis clamped to its max-width, so on a wide card
+  // the 60ch line fitted beside a short first line and sat there: the reports card's titles went a
+  // word a line, and long captions sat at the right of their title. A line of its own is full width;
+  // the measure is padding.
+  it("gives a detail line and a caption a line of their own, the measure as padding, never a max-width", () => {
+    const detail = namedAtRuleBody(css, "@utility", "row-detail");
+    expect(detail).toContain("flex-basis: 100%;");
+    expect(detail).toContain("padding-inline-end: max(0px, calc(100% - var(--measure)));");
+    expect(detail).not.toMatch(/max-width/);
+    expect(readFileSync(resolve(SRC_ROOT, "components/ui/Card.tsx"), "utf8")).toMatch(/<p data-prose data-caption className="row-detail">/);
+    // And no screen builds the trap by hand: a full-line part capped by a measure.
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      if (!file.endsWith(".tsx")) continue;
+      for (const m of Array.from(readFileSync(file, "utf8").matchAll(/(?:"|`)([^"`]*)(?:"|`)/g))) {
+        const cls = ` ${m[1]} `;
+        const fullLine = /\sbasis-full\s/.test(cls) || (/\sorder-last\s/.test(cls) && /\sw-full\s/.test(cls));
+        if (fullLine && /\s(?:[a-z]+:)?(?:max-w-\S+|measure)\s/.test(cls)) found.push(`${file.replace(`${SRC_ROOT}/`, "")}: ${m[1]}`);
+      }
+    }
+    expect(found, `A line of its own capped by a max-width can sit beside the line above; use CardRow's detail:\n  ${found.join("\n  ")}`).toEqual([]);
+  });
+
+  it("takes no line for an empty detail", () => {
+    expect(namedAtRuleBody(css, "@utility", "row-detail")).toMatch(/&:empty \{\s*display: none;\s*\}/);
+  });
+
+  // §5 #29: seven hand-made seats at seven widths. A seat is ActionSeat, CardRow's
+  // `seat` or CardColumns' `seat`, whose width is one of the tokens; a number's
+  // seat is --seat-number. Neither is typed as pixels.
+  it("types no seat of its own: no pixel width beside justify-end, no 110px number seat", () => {
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      if (!file.endsWith(".tsx") || file.endsWith("components/ui/Card.tsx")) continue;
+      const rel = file.replace(`${SRC_ROOT}/`, "");
+      for (const m of Array.from(readFileSync(file, "utf8").matchAll(/(?:"|`)([^"`]*)(?:"|`)/g))) {
+        const cls = m[1];
+        if (/(?:^|\s)(?:[a-z]+:)?(?:min-)?w-\[\d+px\]/.test(cls) && /(?:^|\s)justify-end(?:\s|$)/.test(cls)) found.push(`${rel}: ${cls}`);
+        if (/(?:^|\s)(?:[a-z]+:)?w-\[110px\]/.test(cls) && /text-right/.test(cls)) found.push(`${rel}: ${cls}`);
+      }
+    }
+    expect(found, `Use ActionSeat / seat, or w-(--seat-number):\n  ${found.join("\n  ")}`).toEqual([]);
   });
 
   it("lays the page frame once: main, the top bar's row and the section band read --page-x", () => {

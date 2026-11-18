@@ -330,7 +330,7 @@ export default function EventActivityPage() {
                 onSort={flipOrSet}
               />
             </span>
-            <span className="w-[110px] shrink-0 text-right">
+            <span className="w-(--seat-number) shrink-0 text-right">
               <SortHead
                 label="Time"
                 name="time"
@@ -427,7 +427,7 @@ function EventRow({
         <span className="hidden w-[150px] shrink-0 pt-px text-[13.5px] desktop:block">
           {outcomeWord}
         </span>
-        <span className="type-mono hidden w-[110px] shrink-0 pt-0.5 text-right text-[12.5px] text-muted tablet:block">
+        <span className="type-mono hidden w-(--seat-number) shrink-0 pt-0.5 text-right text-[12.5px] text-muted tablet:block">
           {when}
         </span>
       </div>

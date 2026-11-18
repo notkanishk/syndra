@@ -76,6 +76,16 @@ describe("Expiring access, laid out as its board", () => {
     expect(screen.queryByText(/does, and what it doesn/)).toBeNull();
   });
 
+  // D-1 #26: the actions of every row sit in the table's one wide seat.
+  it("keeps each row's actions in the wide seat, whether or not it is decided", () => {
+    state.rows = [grant(), grant({ id: "g2", acknowledged: { by: "cody", at: "2026-08-04T09:00:00Z", note: "" } })];
+    renderPage();
+    const seats = screen.getAllByRole("button", { name: /Extend/ }).map((b) => b.closest("[data-action-seat]"));
+    expect(seats).toHaveLength(2);
+    expect(seats.every((s) => s?.getAttribute("data-seat") === "wide")).toBe(true);
+    expect(document.querySelector(".row-seat[aria-hidden]")).toHaveAttribute("data-seat", "wide");
+  });
+
   it("an empty window is one card with the healthy line and no column headings", () => {
     state.rows = [];
     renderPage();

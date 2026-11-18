@@ -78,6 +78,13 @@ describe("Roles that wait for you", () => {
       expect(screen.getByText("1 change to these roles")).toBeInTheDocument();
     });
 
+    it("keeps Stop waiting in the table's narrow seat, under its empty heading cell", () => {
+      render(<RolesThatWaitPage />);
+      const seat = screen.getByRole("button", { name: "Stop waiting" }).closest("[data-action-seat]");
+      expect(seat).toHaveAttribute("data-seat", "narrow");
+      expect(document.querySelector(".row-seat[aria-hidden]")).toHaveAttribute("data-seat", "narrow");
+    });
+
     it("opens Pending changes narrowed to the role from the role's own row", () => {
       render(<RolesThatWaitPage />);
       const links = screen.getAllByRole("link", { name: /Waiting for you to send/ });

@@ -158,7 +158,7 @@ function ServiceAccountView({
   );
 }
 
-/** Label 170, value, then a right seat of 200: the settings card's one row shape. */
+/** Label seat, value, then the action seat: the settings card's one row shape. */
 function SettingRow({
   label,
   action,
@@ -171,10 +171,9 @@ function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <CardRow first={first}>
-      <span className="w-full text-[13.5px] font-semibold text-muted tablet:w-[170px] tablet:shrink-0">{label}</span>
+    <CardRow first={first} seat="default" action={action}>
+      <span className="w-full text-[13.5px] font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">{label}</span>
       <span className="min-w-0 flex-1 text-[14.5px] [overflow-wrap:anywhere]">{children}</span>
-      <span className="flex w-full tablet:w-[200px] tablet:shrink-0 tablet:justify-end">{action}</span>
     </CardRow>
   );
 }
@@ -219,7 +218,32 @@ function Holds({ userId, name }: { userId: string; name: string }) {
           const verb = strongest?.queued ? "Cancel the change" : strongest?.kind === "direct" ? "Revoke" : "Remove";
           const roleName = shown.role(project.project_id, roleKey);
           return (
-            <CardRow key={`${project.project_id}::${roleKey}`} first={index === 0}>
+            <CardRow
+              key={`${project.project_id}::${roleKey}`}
+              first={index === 0}
+              seat="default"
+              action={
+                strongest ? (
+                  <Button
+                    size="sm"
+                    variant={verb === "Revoke" ? "danger" : "outline"}
+                    aria-label={`${verb} ${roleName} in ${project.project_name}`}
+                    onClick={() =>
+                      setRemoval({
+                        projectId: project.project_id,
+                        projectName: project.project_name,
+                        roleKey,
+                        sources,
+                        grantId: grantsByRole.get(`${project.project_id}::${roleKey}`)?.id,
+                        grantsResolved,
+                      })
+                    }
+                  >
+                    {verb}
+                  </Button>
+                ) : undefined
+              }
+            >
               <span className="min-w-0 flex-1 text-[15px] font-semibold tablet:flex-none tablet:basis-[260px]">
                 <ResolvedProjectName name={project.project_name} resolved={project.project_name_resolved} id={project.project_id} />
                 <span aria-hidden className="text-faint"> · </span>
@@ -228,25 +252,6 @@ function Holds({ userId, name }: { userId: string; name: string }) {
               <span className="order-last w-full min-w-0 tablet:order-none tablet:w-auto tablet:flex-1">
                 <AccessSourceList reasons={reasons} />
               </span>
-              {strongest && (
-                <Button
-                  size="sm"
-                  variant={verb === "Revoke" ? "danger" : "outline"}
-                  aria-label={`${verb} ${roleName} in ${project.project_name}`}
-                  onClick={() =>
-                    setRemoval({
-                      projectId: project.project_id,
-                      projectName: project.project_name,
-                      roleKey,
-                      sources,
-                      grantId: grantsByRole.get(`${project.project_id}::${roleKey}`)?.id,
-                      grantsResolved,
-                    })
-                  }
-                >
-                  {verb}
-                </Button>
-              )}
             </CardRow>
           );
         })}

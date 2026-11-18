@@ -118,13 +118,12 @@ export function CardTop({ target, name, status }: { target: string; name: string
   );
 }
 
-/** Label 170 · value · a 200 seat that holds a link or nothing (the setup card's row). */
+/** Label seat · value · the action seat, which holds a link or nothing (the setup card's row). */
 export function Row({ label, seat, first = false, children }: { label: string; seat?: ReactNode; first?: boolean; children: ReactNode }) {
   return (
-    <CardRow first={first}>
-      <span className="w-full text-[13.5px] font-semibold text-muted tablet:w-[170px] tablet:shrink-0">{label}</span>
+    <CardRow first={first} top seat="default" action={seat}>
+      <span className="w-full text-[13.5px] font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">{label}</span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-[15px] [overflow-wrap:anywhere]">{children}</span>
-      <span className="ml-auto flex tablet:w-[200px] tablet:shrink-0 tablet:justify-end">{seat}</span>
     </CardRow>
   );
 }

@@ -63,34 +63,38 @@ function RetentionForm({ target, days, set }: { target: string; days: number; se
           else submit(wanted);
         }}
       >
-        <div className="flex flex-col">
+        {/* A form row (D-1 §4 rule 6): the field and its buttons on one line, the hint under the
+            field, the reason under the button. */}
+        <div className="flex flex-col gap-1.5">
           <FieldLabel htmlFor={`retention-${target}`}>{copy.RETENTION_FIELD}</FieldLabel>
-          <Input
-            id={`retention-${target}`}
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={RETENTION_MAX}
-            step={1}
-            value={draft}
-            className="max-w-[140px]"
-            onChange={(event) => {
-              setDraft(event.target.value);
-              setDone(null);
-              save.reset(); // an old refusal is not about the number now typed
-            }}
-          />
-          <FieldHint>{copy.retentionHint(days, set)}</FieldHint>
-        </div>
-        <div className="flex flex-wrap items-start gap-3">
-          <Button type="submit" variant="accent" isPending={save.isPending} disabled={unchanged} reason={unchanged ? copy.RETENTION_UNCHANGED : undefined}>
-            {copy.RETENTION_SAVE}
-          </Button>
-          {set && (
-            <Button isPending={save.isPending} onClick={() => submit(null)}>
-              {copy.RETENTION_FULL}
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="w-full max-w-(--field-max)">
+              <Input
+                dense
+                id={`retention-${target}`}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={RETENTION_MAX}
+                step={1}
+                value={draft}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  setDone(null);
+                  save.reset(); // an old refusal is not about the number now typed
+                }}
+              />
+            </div>
+            <Button type="submit" variant="accent" size="sm" isPending={save.isPending} disabled={unchanged} reason={unchanged ? copy.RETENTION_UNCHANGED : undefined}>
+              {copy.RETENTION_SAVE}
             </Button>
-          )}
+            {set && (
+              <Button size="sm" isPending={save.isPending} onClick={() => submit(null)}>
+                {copy.RETENTION_FULL}
+              </Button>
+            )}
+          </div>
+          <FieldHint>{copy.retentionHint(days, set)}</FieldHint>
         </div>
         {asking !== null && (
           <Modal open onClose={() => !save.isPending && setAsking(null)} busy={save.isPending} size="sm">

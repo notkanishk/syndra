@@ -9,7 +9,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
@@ -679,20 +679,28 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
 
       <Unfold open={open}>
         {doors.map((door) => (
-          <div key={door.href} className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2.5 px-5 py-3.5">
+          // Both ways on, in the row's seat (D-1 §4): the door, then Syndra's own page instead.
+          <CardRow
+            key={door.href}
+            action={
+              <span className="flex flex-col items-end gap-1">
+                {reachable ? (
+                  <ArrowLink href={door.href}>{door.door}</ArrowLink>
+                ) : (
+                  <span className="text-[13.5px] font-semibold text-faint">{door.door}</span>
+                )}
+                <ArrowLink href={door.syndraHref}>{door.syndra}</ArrowLink>
+              </span>
+            }
+          >
             <span className="flex min-w-0 flex-[1_1_320px] flex-col gap-1">
               <span className="text-[14.5px] font-semibold">{door.label}</span>
               <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">{door.warning}</span>
               <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
-                {door.instead} <ArrowLink href={door.syndraHref}>{door.syndra}</ArrowLink>
+                {door.instead}
               </span>
             </span>
-            {reachable ? (
-              <ArrowLink href={door.href}>{door.door}</ArrowLink>
-            ) : (
-              <span className="text-[13.5px] font-semibold text-faint">{door.door}</span>
-            )}
-          </div>
+          </CardRow>
         ))}
 
         {!reachable && (

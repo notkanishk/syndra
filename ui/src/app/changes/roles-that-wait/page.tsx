@@ -11,7 +11,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns } from "@/components/ui/Card";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { NextStep } from "@/components/ui/NextStep";
 import { RunLabel, SortHead, orderBy, runStarts, useSort } from "@/components/ui/SortHead";
@@ -168,17 +168,16 @@ function WaitingRoles({
     <Card>
       <ListStates
         head={
-          <CardColumns>
+          <CardColumns seat="narrow">
             <span className="flex-1">
               <SortHead label="Role" name="role" sort={sort} onSort={setSort} />
             </span>
             <span className="hidden w-[200px] tablet:block">
               <SortHead label="Marked" name="marked" sort={sort} onSort={setSort} />
             </span>
-            <span className="w-[110px] text-right">
+            <span className="w-(--seat-number) text-right">
               <SortHead label="People" name="people" sort={sort} onSort={setSort} />
             </span>
-            <span className="w-[140px]" aria-hidden />
           </CardColumns>
         }
         isLoading={isLoading}
@@ -229,13 +228,13 @@ function WaitingRoles({
                     <UserName id={m.marked_by} fallback={personOr(null, true)} />,{" "}
                     {formatShortDate(m.marked_at)}
                   </span>
-                  <span className="w-full text-[15px] font-semibold tabular-nums tablet:w-[110px] tablet:shrink-0 tablet:text-right">
+                  <span className="w-full text-[15px] font-semibold tabular-nums tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                     {peopleOf(role)}
                     <span className="text-[13px] font-normal text-faint tablet:hidden">
                       {peopleSuffix(peopleOf(role))}
                     </span>
                   </span>
-                  <span className="flex w-[140px] justify-end whitespace-nowrap">
+                  <ActionSeat seat="narrow">
                     <Button
                       size="sm"
                       disabled={stop.isPending}
@@ -261,7 +260,7 @@ function WaitingRoles({
                     >
                       Stop waiting
                     </Button>
-                  </span>
+                  </ActionSeat>
                 </div>
               </div>
             );

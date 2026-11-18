@@ -9,7 +9,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns } from "@/components/ui/Card";
 import { FieldLabel } from "@/components/ui/Input";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -91,9 +91,9 @@ export default function AutomaticRulesPage() {
       <Card>
         <ListStates
           head={
-            <CardColumns>
+            <CardColumns seat="default">
               <span className="flex-1">If &hellip; then</span>
-              <span className="w-[110px] text-right">People</span>
+              <span className="w-(--seat-number) text-right">People</span>
             </CardColumns>
           }
           isLoading={rules.isLoading}
@@ -145,9 +145,11 @@ export default function AutomaticRulesPage() {
                     in Syndra's records) only explains it. */}
                 <RuleHolders rule={rule} />
               </button>
-              <Button variant="danger" size="sm" onClick={() => setRetiring(rule)}>
-                Retire rule
-              </Button>
+              <ActionSeat seat="default">
+                <Button variant="danger" size="sm" onClick={() => setRetiring(rule)}>
+                  Retire rule
+                </Button>
+              </ActionSeat>
             </div>
           ))}
         </ListStates>
@@ -739,7 +741,7 @@ function RuleHolders({ rule }: { rule: MappingRuleRow }) {
   const seen = rule.observed_holder_count ?? undefined;
   const line = holdersLine(rule.holder_count ?? 0, seen, seen);
   return (
-    <span className="text-[15px] tablet:w-[110px] tablet:text-right">
+    <span className="text-[15px] tablet:w-(--seat-number) tablet:text-right">
       {line.headline}
       {line.headline !== NOT_CHECKED && (
         <span className="text-[13px] text-faint tablet:hidden">

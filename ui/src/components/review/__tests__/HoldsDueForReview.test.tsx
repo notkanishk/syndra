@@ -51,6 +51,24 @@ describe("holds due", () => {
     expect(screen.getByText(/It stays at 50 GB until it is kept or ended/)).toBeTruthy();
   });
 
+  it("puts each row's one action in the table's one seat, and the reason in the detail line (D-1)", () => {
+    const { container } = render(<HoldsDueForReview />);
+    const seats = Array.from(container.querySelectorAll<HTMLElement>("[data-action-seat]"));
+    expect(seats).toHaveLength(2);
+    // Same width on both kinds of row.
+    expect(new Set(seats.map((seat) => seat.getAttribute("data-seat"))).size).toBe(1);
+    // Short verb on the screen, the whole name for a screen reader.
+    const lift = screen.getByRole("button", { name: /Lift the hold on their TrueNAS account/ });
+    expect(lift.textContent).toBe("Lift the hold");
+    expect(seats[0].contains(lift)).toBe(true);
+    expect(seats[1].contains(screen.getByRole("link", { name: "Review it on TrueNAS's page" }))).toBe(true);
+    const details = Array.from(container.querySelectorAll("[data-row-detail]"));
+    expect(details).toHaveLength(2);
+    expect(details[0].textContent).toContain("safety review");
+    expect(details[1].textContent).toContain("thesis data");
+    expect(details[1].textContent).toMatch(/It stays at 50 GB until it is kept or ended/);
+  });
+
   it("reads the list's age under the title, not inside the card", () => {
     render(<HoldsDueForReview />);
     expect(screen.getByText(/This list/)).toBeTruthy();

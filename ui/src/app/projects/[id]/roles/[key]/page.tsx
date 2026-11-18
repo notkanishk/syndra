@@ -18,7 +18,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { ProjectName, projectLabel } from "@/components/names";
-import { Card, CardHeader, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardHeader, ROW } from "@/components/ui/Card";
 import { FilterPills } from "@/components/ui/Select";
 import { WithheldInline } from "@/components/ui/Withheld";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -321,6 +321,7 @@ function MemberRow({
 
       {/* The action is named after the thing being removed. Where nothing can
           be removed here, the row offers the rule instead of a dead control. */}
+      <ActionSeat seat="wide">
       {strongest?.kind === "mapping" ? (
         <Button variant="outline" size="sm" onClick={() => open("mapping")}>
           Open the rule
@@ -334,6 +335,7 @@ function MemberRow({
           Revoke direct access
         </Button>
       )}
+      </ActionSeat>
     </div>
   );
 }

@@ -133,22 +133,24 @@ function OwnValueRow({ hold, first, schemaOf }: { hold: Hold; first: boolean; sc
   const limit = field ? limitWordsFor(field, hold.value) : null;
   const what = field ? `their own ${fieldNoun(field)}, ${limit}` : `their own value, which Syndra cannot word until it has read ${system}'s fields`;
   return (
-    <CardRow first={first} className="flex-wrap">
+    <CardRow
+      first={first}
+      seat="default"
+      action={<ArrowLink href={`/system/targets/${hold.target}`}>Review it on {system}&apos;s page</ArrowLink>}
+      detail={
+        <>
+          <span className="block">{hold.reason || <span className="text-faint">No reason recorded.</span>}</span>
+          <span className="block text-faint">
+            Review date passed <Relative iso={hold.review_date} />. {limit ? `It stays at ${limit}` : "It stays as it is"} until it is kept or ended.
+          </span>
+        </>
+      }
+    >
       <Subject id={hold.subject_id} />
       <span className="text-[13.5px]">{what}</span>
       <span className="text-[13px] text-faint">
         on {system} · set by <UserName id={hold.actor_id} /> <Relative iso={hold.created_at} />
       </span>
-      <span className="flex-1" />
-      <ArrowLink href={`/system/targets/${hold.target}`}>
-        Review it on {system}&apos;s page
-      </ArrowLink>
-      <p className="w-full text-[13.5px] text-muted">
-        {hold.reason || <span className="text-faint">No reason recorded.</span>}
-      </p>
-      <p className="w-full text-[13px] text-faint">
-        Review date passed <Relative iso={hold.review_date} />. {limit ? `It stays at ${limit}` : "It stays as it is"} until it is kept or ended.
-      </p>
     </CardRow>
   );
 }
@@ -159,79 +161,78 @@ function HoldRow({ hold, first, schemaOf }: { hold: Hold; first: boolean; schema
   const label = holdLabel(hold, schemaOf(hold.target), schemaOf.nameOf(hold.target));
 
   return (
-    <CardRow first={first} className="flex-wrap">
+    // Lifting is rung 1: it restores access a role already grants, and holding it again is one click
+    // away on the person's own page. Lifted and "couldn't lift it" take the seat the button held (a
+    // failed lift keeps the button, as Try again), so nothing moves under the hand.
+    <CardRow
+      first={first}
+      seat="default"
+      action={
+        <Crossfade id={outcome?.kind === "applied" ? "outcome" : lift.isPending ? "forecast" : "open"}>
+        {lift.isPending ? (
+          <ActionForecast word={FORECAST.lift} />
+        ) : outcome?.kind === "applied" ? (
+          <ActionOutcome
+            placement="seat"
+            word="Lifted"
+            outcome={{
+              kind: "applied",
+              message: "",
+              detail: `${label[0].toUpperCase()}${label.slice(1)} returns when the connected system is next brought in line.`,
+            }}
+          />
+        ) : (
+          <span className="flex flex-col items-end gap-2">
+            {outcome && (
+              <ActionOutcome placement="seat" className="tint-in" word="Not lifted" outcome={outcome} />
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              isPending={lift.isPending}
+              aria-label={outcome ? undefined : `Lift the hold on ${label}`}
+              onClick={async () => {
+                try {
+                  await lift.mutateAsync(hold.id);
+                  // Not "they have it again": lifting is one column in Syndra
+                  // (`handleLiftAllowance` → `dbLiftAllowance`, HTTP 200 and
+                  // return). Nothing queues a convergence, so the account on the
+                  // connected system is still without the access until the next
+                  // pass. Reporting the stronger thing sent an operator away
+                  // believing somebody could work.
+                  setOutcome({ kind: "applied", message: "" });
+                } catch (error) {
+                  const failed = outcomeFromError(error);
+                  setOutcome({
+                    ...failed,
+                    message: failed.partial
+                      ? partialSentence(failed.partial)
+                      : `${sentence(failed.message)} ${NOTHING_CHANGED}`,
+                  });
+                }
+              }}
+            >
+              {outcome ? "Try again" : "Lift the hold"}
+            </Button>
+          </span>
+        )}
+        </Crossfade>
+      }
+      detail={
+        <>
+          <span className="block">{hold.reason || <span className="text-faint">No reason recorded.</span>}</span>
+          <span className="block text-faint">
+            Review date passed <Relative iso={hold.review_date} />.
+          </span>
+        </>
+      }
+    >
       <Subject id={hold.subject_id} />
       <span className="text-[13.5px]">{label}</span>
       <span className="text-[13px] text-faint">
         on {schemaOf.nameOf(hold.target)} · placed by <UserName id={hold.actor_id} />{" "}
         <Relative iso={hold.created_at} />
       </span>
-      <span className="flex-1" />
-      {/* Lifting is rung 1: it restores access a role already grants,
-          and doing the opposite — holding it again — is one click away
-          on the person's own page.
-
-          Rung 1 is about the CEREMONY, not about whether the control is
-          visible. `ghost` is the quieter half of a pair, and this row
-          has no pair — drawn borderless it read as text until hovered,
-          which on a phone is never. */}
-      {/* Lifted and "couldn't lift it" take the seat the button held (route-holds:
-          lifted, lift-failed). The row stays until the next read, so nothing moves
-          under the hand; a failed lift keeps the button, as Try again. */}
-      <Crossfade id={outcome?.kind === "applied" ? "outcome" : lift.isPending ? "forecast" : "open"}>
-      {lift.isPending ? (
-        <ActionForecast word={FORECAST.lift} />
-      ) : outcome?.kind === "applied" ? (
-        <ActionOutcome
-          placement="seat"
-          word="Lifted"
-          outcome={{
-            kind: "applied",
-            message: "",
-            detail: `${label[0].toUpperCase()}${label.slice(1)} returns when the connected system is next brought in line.`,
-          }}
-        />
-      ) : (
-        <span className="flex flex-col items-start gap-2">
-          {outcome && (
-            <ActionOutcome placement="seat" className="tint-in" word="Not lifted" outcome={outcome} />
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            isPending={lift.isPending}
-            onClick={async () => {
-              try {
-                await lift.mutateAsync(hold.id);
-                // Not "they have it again": lifting is one column in Syndra
-                // (`handleLiftAllowance` → `dbLiftAllowance`, HTTP 200 and
-                // return). Nothing queues a convergence, so the account on the
-                // connected system is still without the access until the next
-                // pass. Reporting the stronger thing sent an operator away
-                // believing somebody could work.
-                setOutcome({ kind: "applied", message: "" });
-              } catch (error) {
-                const failed = outcomeFromError(error);
-                setOutcome({
-                  ...failed,
-                  message: failed.partial
-                    ? partialSentence(failed.partial)
-                    : `${sentence(failed.message)} ${NOTHING_CHANGED}`,
-                });
-              }
-            }}
-          >
-            {outcome ? "Try again" : `Lift the hold on ${label}`}
-          </Button>
-        </span>
-      )}
-      </Crossfade>
-      <p className="w-full text-[13.5px] text-muted">
-        {hold.reason || <span className="text-faint">No reason recorded.</span>}
-      </p>
-      <p className="w-full text-[13px] text-faint">
-        Review date passed <Relative iso={hold.review_date} />.
-      </p>
     </CardRow>
   );
 }

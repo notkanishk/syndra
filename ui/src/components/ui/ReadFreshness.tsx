@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useId, useRef, useState } from "r
 import { copyLine, cooldownLine, READ_AGAIN, READING, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
+import { CardRow } from "@/components/ui/Card";
 import { Crossfade } from "@/lib/motion";
 import { formatClock, formatRelative } from "@/lib/format";
 import { outcomeFromError } from "@/lib/outcome";
@@ -399,14 +400,18 @@ export function RetryWait({ name, retry, onStop }: {
         {waiting ? retryingLine(name, retry.seconds) : ""}
       </span>
       {waiting && (
-        <span className="flex flex-wrap items-center gap-3">
+        <CardRow
+          seat="narrow"
+          action={
+            <Button id={stopId} variant="outline" size="sm" aria-describedby={lineId} onClick={onStop}>
+              {STOP_WAITING}
+            </Button>
+          }
+        >
           <span id={lineId} className="flex-1 text-[14px] text-warn-text">
             {retryingLine(name, retry.left)}
           </span>
-          <Button id={stopId} variant="outline" size="sm" aria-describedby={lineId} onClick={onStop}>
-            {STOP_WAITING}
-          </Button>
-        </span>
+        </CardRow>
       )}
     </>
   );

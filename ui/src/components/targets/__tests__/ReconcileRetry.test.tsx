@@ -95,7 +95,7 @@ describe("Check now inside the add-on's cooldown", () => {
     renderTarget();
     // The status region is there, empty, before any wait: it is filled, not born, when one starts.
     const pressed = screen.getByRole("button", { name: "Check now" });
-    const row = within(pressed.parentElement!.parentElement!);
+    const row = within(pressed.closest(".card") as HTMLElement);
     const region = row.getByRole("status");
     expect(region).toHaveTextContent(/^$/);
     pressed.focus();
@@ -108,6 +108,9 @@ describe("Check now inside the add-on's cooldown", () => {
     expect(screen.getByText(/was read moments ago; trying again by itself in 5 s$/, { selector: ".text-warn-text" })).toBeInTheDocument();
     const stop = screen.getByRole("button", { name: "Stop waiting" });
     expect(stop).toHaveFocus();
+    // D-1 #11 and #2: Stop waiting and Check now each sit in their row's narrow seat.
+    expect(stop.closest("[data-action-seat]")).toHaveAttribute("data-seat", "narrow");
+    expect(pressed.closest("[data-action-seat]")).toHaveAttribute("data-seat", "narrow");
     expect(stop).toHaveAccessibleDescription(/trying again by itself in 5 s$/);
     expect(screen.queryByText(/stopped before it concluded anything/i)).toBeNull();
     // Off until the count ends, with the line as its reason, linked (§13).
@@ -151,7 +154,7 @@ describe("Check now inside the add-on's cooldown", () => {
     const pressed = screen.getByRole("button", { name: "Check now" });
     pressed.focus();
     fireEvent.click(pressed);
-    expect(within(pressed.parentElement!.parentElement!).getByRole("status")).toHaveTextContent(/trying again by itself in 60 s$/);
+    expect(within(pressed.closest(".card") as HTMLElement).getByRole("status")).toHaveTextContent(/trying again by itself in 60 s$/);
     act(() => void vi.advanceTimersByTime(10_000));
     fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
     // The skip it held is said, counting from when it arrived, with its step.

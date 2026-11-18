@@ -94,7 +94,7 @@ export function MergeFindings({ target }: { target: string }) {
       <CardHeader
         title="Waiting on a decision"
         count={findings.data?.length}
-        note={
+        caption={
           // The term and its definition are the machine's vocabulary: Advanced. Basic says the thing.
           advanced ? (
             <>
@@ -125,10 +125,50 @@ export function MergeFindings({ target }: { target: string }) {
         }
       >
         <>
-          {rows.map((f, i) => (
+          {rows.map((f, i) => {
+            // The one control of a finding sits in the seat on its first line, whatever the
+            // finding is waiting on; the seat keeps its width when there is none.
+            const finish = (resolution: "unbound" | "adopted" | "kept", reason: string, label: string, settled: "error" | "settled") => (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={finishing.has(f.id)}
+                isPending={resolve.isPending && (resolution === "unbound" || finishing.has(f.id))}
+                onClick={() => {
+                  setFinishing((prev) => new Set(prev).add(f.id));
+                  const release = () =>
+                    setFinishing((prev) => {
+                      const copy = new Set(prev);
+                      copy.delete(f.id);
+                      return copy;
+                    });
+                  resolve.mutate(
+                    { id: f.id, resolution, reason },
+                    settled === "error" ? { onError: release } : { onSettled: release },
+                  );
+                }}
+              >
+                {label}
+              </Button>
+            );
+            const action =
+              f.decision === "unbound" ? (
+                finish("unbound", "Finishing an unbind that did not complete", "Finish: stop tracking it", "error")
+              ) : f.decision ? (
+                f.outcome === "binding_conflict" && (f.decision === "adopted" || f.decision === "kept")
+                  ? // A choice that reached the system and not Syndra's own records answers "choose
+                    // it again"; this is that press, on the same repair route, safe to repeat.
+                    finish(f.decision, FINISH_REASON, finishLabel(f.decision), "settled")
+                  : undefined
+              ) : deciding === f.id ? undefined : (
+                <Button variant="outline" size="sm" onClick={() => setDeciding(f.id)}>
+                  Decide
+                </Button>
+              );
+            return (
             <LeavingRow key={f.id} {...leaving.props(f.id)}>
             <div>
-              <CardRow first={i === 0} className="flex-wrap">
+              <CardRow first={i === 0} seat="default" action={action} detail={describe(f, name, schema)}>
                 <Person id={f.subject_id} />
                 {f.field ? <span className="text-[13.5px] text-muted">{fieldWords(f.field, schema)}</span> : null}
                 <span className="flex-1" />
@@ -136,55 +176,30 @@ export function MergeFindings({ target }: { target: string }) {
                   first seen <Relative iso={f.detected_at} />
                 </span>
               </CardRow>
-              <div className="px-5 pb-3 text-[13.5px] text-muted">
-                {describe(f, name, schema)}
-                {f.outcome === "binding_conflict" && <ConflictWho finding={f} name={name} />}
-                {rawSides(f) && (
-                  <AdvancedOnly>
-                    <TechnicalDetail className="mt-2" placeKey={`finding:${f.id}`}>
-                      <TechnicalPayload>{rawSides(f)}</TechnicalPayload>
-                    </TechnicalDetail>
-                  </AdvancedOnly>
-                )}
-              </div>
+              {(f.outcome === "binding_conflict" || rawSides(f)) && (
+                // `empty:hidden`: in Basic, or when there is no other person to name, nothing here renders.
+                <div className="px-5 pb-3 text-[13.5px] text-muted empty:hidden">
+                  {f.outcome === "binding_conflict" && <ConflictWho finding={f} name={name} />}
+                  {rawSides(f) && (
+                    <AdvancedOnly>
+                      <TechnicalDetail className="mt-2" placeKey={`finding:${f.id}`}>
+                        <TechnicalPayload>{rawSides(f)}</TechnicalPayload>
+                      </TechnicalDetail>
+                    </AdvancedOnly>
+                  )}
+                </div>
+              )}
               {f.decision === "unbound" ? (
                 // Decided as unbound and still standing means the unbind did not
                 // finish: it settles immediately when it works, because nothing
                 // will ever observe that subject again. So this row is a repair,
                 // not a wait — and hiding its control is what turned a
                 // recoverable half-write into a wedge.
-                <CardRow className="flex-wrap">
+                <CardRow>
                   <span className="text-[13px] text-warn-text">
                     {name} may already have let go of this account while Syndra&rsquo;s records
                     were not updated. Pressing again changes nothing on {name}.
                   </span>
-                  <span className="flex-1" />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={finishing.has(f.id)}
-                    isPending={resolve.isPending}
-                    onClick={() => {
-                      setFinishing((prev) => new Set(prev).add(f.id));
-                      resolve.mutate(
-                        {
-                          id: f.id,
-                          resolution: "unbound",
-                          reason: "Finishing an unbind that did not complete",
-                        },
-                        {
-                          onError: () =>
-                            setFinishing((prev) => {
-                              const copy = new Set(prev);
-                              copy.delete(f.id);
-                              return copy;
-                            }),
-                        },
-                      )
-                    }}
-                  >
-                    Finish: stop tracking it
-                  </Button>
                 </CardRow>
               ) : f.decision ? (
                 // Decided and waiting. The convergence is queued or the policy
@@ -205,33 +220,7 @@ export function MergeFindings({ target }: { target: string }) {
                       : `waiting for ${name} to match`}
                   </span>
                   {f.outcome === "binding_conflict" && (f.decision === "adopted" || f.decision === "kept") && (
-                    // A choice that reached the system and not Syndra's own records answers "choose
-                    // it again"; this is that press, on the same repair route, safe to repeat.
-                    <>
-                      <span className="w-full text-[13px] text-muted">{FINISH_AGAIN_NOTE}</span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={finishing.has(f.id)}
-                        isPending={resolve.isPending && finishing.has(f.id)}
-                        onClick={() => {
-                          setFinishing((prev) => new Set(prev).add(f.id));
-                          resolve.mutate(
-                            { id: f.id, resolution: f.decision as "adopted" | "kept", reason: FINISH_REASON },
-                            {
-                              onSettled: () =>
-                                setFinishing((prev) => {
-                                  const copy = new Set(prev);
-                                  copy.delete(f.id);
-                                  return copy;
-                                }),
-                            },
-                          );
-                        }}
-                      >
-                        {finishLabel(f.decision)}
-                      </Button>
-                    </>
+                    <span className="w-full text-[13px] text-muted">{FINISH_AGAIN_NOTE}</span>
                   )}
                 </CardRow>
               ) : deciding === f.id ? (
@@ -251,17 +240,11 @@ export function MergeFindings({ target }: { target: string }) {
                     })
                   }
                 />
-              ) : (
-                <CardRow>
-                  <span className="flex-1" />
-                  <Button variant="outline" size="sm" onClick={() => setDeciding(f.id)}>
-                    Decide
-                  </Button>
-                </CardRow>
-              )}
+              ) : null}
             </div>
             </LeavingRow>
-          ))}
+            );
+          })}
         </>
       </ListStates>
     </Card>

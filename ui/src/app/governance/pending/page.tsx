@@ -250,7 +250,7 @@ export default function PendingChangesPage() {
             <span className="w-[130px]">Who</span>
             <span className="flex-1">Change</span>
             <span className="w-[130px]">Caused by</span>
-            <span className="w-[110px] text-right">Waiting</span>
+            <span className="w-(--seat-number) text-right">Waiting</span>
           </CardColumns>
         )}
 
@@ -364,7 +364,20 @@ function StoppedRow({ row, conflicts }: { row: PendingPropagationRow; conflicts:
   const looking = lookingUp(row, conflicts.loading);
   const decideHere = decideAt(row, conflicts.stands);
   return (
-            <CardRow>
+            <CardRow
+              seat="narrow"
+              action={
+                looking ? null : decideHere ? (
+                  <ArrowLink href={decideHere}>{DECIDE_IT}</ArrowLink>
+                ) : revocation && zitadel ? (
+                  <ArrowLink href="/governance/drift">Drift</ArrowLink>
+                ) : revocation ? (
+                  <ArrowLink href={`/system/targets/${encodeURIComponent(row.target ?? "")}`}>{`Open ${system}`}</ArrowLink>
+                ) : (
+                  <ArrowLink href={`/users/${encodeURIComponent(row.user_id)}`}>Their page</ArrowLink>
+                )
+              }
+            >
               <span className="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
                 <UserName id={row.user_id} />
               </span>
@@ -401,17 +414,6 @@ function StoppedRow({ row, conflicts }: { row: PendingPropagationRow; conflicts:
                         : "Give it again from their page once the reason is fixed."}{" "}
                   Then mark it seen on Home.
                 </span>
-              </span>
-              <span className="tablet:w-[140px] tablet:shrink-0 tablet:text-right">
-                {looking ? null : decideHere ? (
-                  <ArrowLink href={decideHere}>{DECIDE_IT}</ArrowLink>
-                ) : revocation && zitadel ? (
-                  <ArrowLink href="/governance/drift">Drift</ArrowLink>
-                ) : revocation ? (
-                  <ArrowLink href={`/system/targets/${encodeURIComponent(row.target ?? "")}`}>{`Open ${system}`}</ArrowLink>
-                ) : (
-                  <ArrowLink href={`/users/${encodeURIComponent(row.user_id)}`}>Their page</ArrowLink>
-                )}
               </span>
             </CardRow>
   );
@@ -508,7 +510,7 @@ function PendingGroups({
                       <CausedBy row={row} bundles={bundles} rules={rules} setOff={count < 2} />
                     </span>
 
-                    <span className="text-[13px] text-faint tablet:w-[110px] tablet:shrink-0 tablet:text-right">
+                    <span className="text-[13px] text-faint tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                       <Relative iso={row.created_at} />
                     </span>
                   </div>

@@ -123,6 +123,47 @@ describe("what the target reports", () => {
     expect(screen.getByText(/930\.9 GiB of 36\.4 TiB used/)).toBeInTheDocument();
   });
 
+  // D-1, from staging (18 Nov, 1481px): the sentence was a detail line capped at the measure, so it
+  // fitted beside a short title on the half-width card and sat there, squeezing the title to a word a
+  // line ("A / disk / reports / errors…"). jsdom draws no layout, so this holds the structure the
+  // layout comes from; design-system.test.ts holds the CSS (the detail line is never capped by a
+  // max-width, so it always takes a line of its own).
+  it("gives each reading's title the row's first line and its sentence the line under it", () => {
+    state.health = {
+      target: "truenas",
+      readable: true,
+      system: { hostname: "truenas", version: "25.10.5" },
+      alerts: [
+        {
+          level: "CRITICAL",
+          klass: "SMARTUncorrectedErrors",
+          text: "Device: /dev/sdc [SAT], 8 Offline uncorrectable sectors.",
+          at: "2026-11-17T22:04:00Z",
+          dismissed: false,
+        },
+      ],
+      pools: [
+        { name: "raid-z1-slow", status: "DEGRADED", healthy: false, warning: false, free_bytes: 1, allocated_bytes: 2, size_bytes: 3 },
+      ],
+      services: [{ service: "cifs", state: "RUNNING", enable: true }],
+    };
+    renderTarget();
+
+    for (const title of ["A disk reports errors it could not correct", "Storage pool raid-z1-slow"]) {
+      const words = screen.getByText(title);
+      const row = words.closest("[data-card-row]") as HTMLElement;
+      const detail = row.querySelector("[data-row-detail]") as HTMLElement;
+      expect(detail, title).toHaveClass("row-detail");
+      expect(detail).not.toContainElement(words);
+      // The title's part flexes; it is never a fixed-width label column beside the sentence.
+      const part = row.firstElementChild as HTMLElement;
+      expect(part).toContainElement(words);
+      expect(part.className).toMatch(/(^|\s)flex-1(\s|$)/);
+      expect(part.className).not.toMatch(/(^|\s)w-[[(]/);
+    }
+    expect(screen.getByText(/8 Offline uncorrectable sectors/).closest("[data-row-detail]")).not.toBeNull();
+  });
+
   it("does not claim health for a report it could not read", () => {
     state.health = { target: "truenas", readable: false, detail: "no route to host" };
     renderTarget();

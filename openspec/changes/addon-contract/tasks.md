@@ -2893,7 +2893,110 @@ end to end) found no missing function; three regressions with one root cause
     **Decisions:** `ROW` is the row's box (floor, inset, padding), not CardRow's whole line: the list rows stack on a phone (`flex-col`) and CardRow wraps, and one class carrying both alignments would let generated CSS order decide (§8 keeps every phone layout). A pill's height is a floor at the token (`desktop:min-h-(--control-*)`), not the board's fixed `height`: the same 30 / 36 for a one-line label, and a label that has to wrap grows its pill instead of spilling out of it. `--seat-number`, `--field-max`, `--text-figure` and `--text-fine` are declared and emitted, and no part reads them yet (pass 2 and pass 4 do). The `data-wide` opt-out for Insights' map is not built: nothing sets it; add it when the lane map needs the room. The motion section (§7, M1–M14 and the five motion tokens) is not one of the five passes; it is its own pass after pass 3.
     **Tests:** `design-system.test.ts` "density and alignment (D-1)" (every token at its value in `@theme`, the phone step; each display role reads its step and line-height, no clamp; `REGION_GAP` is `--region-gap`; the page frame is read by main, the top bar and the band, no `26px` left; no `min-h-[60px]` without `tablet:min-h-0`; no `pl-[14px]`/`pl-[15px]`), the type-floor test now resolves `var(--text-*)` at every declared value, the scroller test requires the `@container`; `RowSeat.test.tsx` (the seat is the last part before the detail, carries `data-action-seat`, `row-seat` and its width; the heading's empty cell and an empty seat take the table's width; no seat when none is asked; `row-top` never beside `items-center`; the seat in a disclosing row; CardRow is built on `ROW`; the caption is a `p` at the measure on its own line; SettingRow's seats; no control in a sentence across Notice, EmptyState, CardHeader and CardRow; StandingLine's step in StatusSeat's column); `Button.test.tsx` (accent and outline of one size, one height class from the token, no padding); `touch-targets.test.tsx` and `ActionOutcome.test.tsx` updated to the token. Mutation-checked (each red): the action outside the seat; `items-center` beside `row-top`; the detail without its marker; every seat at the default width; the heading cell missing; the caption drawn as the note; `ROW` without `tablet:min-h-0`; SettingRow's hand-made 200px seat; StandingLine's step outside the grid; `PILL` built from `py`, an outline variant with padding of its own; `REGION_GAP` 32; a clamp back in `type-page-title`; `--row-y` 14; the phone step removed; `pl-[15px]` back in NextStep; a list row typing its own box; the top bar's `26px`; the column without `@container`; a 12px title step; EmptyState's action in a `p`.
     *Fix round (18 Nov 2026, Opus on #200 `ac39590d`):* **(1) one column grid.** `row-cols` (`column-gap: var(--row-gap)`) is the table's grid: `CardColumns` and `ROW` carry it, and the hand-built table rows take it and state only `gap-y-*` (roles-that-wait, projects/[id], operations, bundles, InsightsUsage, RecordsList, ClaimsDelivery ×2, UnexplainedAccess ×2, ClaimHistory, BundleVersions, zitadel/grants, policies' row and button), so a heading sits over its cell; the fifteen `ROW` rows drop `tablet:gap-(--row-gap)`; `<CardRow className>` no longer states a gap (InsightsUsage, PeopleOnTarget). **(2) every phone layout kept (§8).** The phone block holds each density token a phone reads at its old value (`--text-title` 19, `--region-gap` 32, `--region-head-gap` 14, `--card-head-y` 16, `--row-y` 14, `--row-gap` 18, `--empty-y` 32), and the parts scope what a token cannot say to tablet and up (EmptyState `px-6`, Notice `py-4`, CardHeader's 11px wrap, a wrapped row part 18px down, Region's 6px). `SectionPill`'s `gap` is a CSS length and TargetOverview passes `var(--region-gap)`, so `REGION_GAP` (a JS mirror that would now disagree on a phone) is gone. **Known phone differences left:** body and control text follow the type scale at every width (§3; Q3 folds them in pass 4); `ActionOutcome`'s block title is the title step, 19 on a phone (it was 22, outside the scale, §5 #40); one row box means the six list rows that had `py-3` are 14px on a phone, `SettingRow` (now a CardRow) is 14px with an 18px gap, and RecordsList, zitadel/grants and the policies row have an 18px column gap where they had 16 or 12. **(3) `row-top`** is no longer a utility: its offset is a `@layer components` rule at zero specificity (`:where`), only from tablet, so a part's own `py-*` wins and a phone row is not padded; a `top` row is `items-center tablet:items-start`. **(4) one way to build a row.** `ActionSeat` is exported; `SettingRow` is a `CardRow` (`seat="default"`); `CardRowProps` is a union, so `onToggle` with `action` or `detail` does not compile. **(5) guards.** `test-utils/layout.ts` runs after every test in the suite (`test-setup.ts`), over whatever it rendered: an action (pill button, pill link, `ArrowLink`, now `data-arrow-link`) in a `<p>` or after text in one inline flow fails, a link in a lede, caption or meta line (`data-prose` on PageHeader's lede and meta, Region's lede, CardHeader's caption, the roles page's caption) passes; any `pl-*` other than the token on a line under a status dot fails. `PASS_2_SEATS` lists the five it finds that pass 2 seats (§5 #1, #8, and three found here: HomeMapping's home row, zitadel/users' intro row, the zitadel doors). Home's two links sit in a `div`, not a `p`; `VersionBand` (`pl-[18px]`, gap 10) and the connected systems' reading lines (`pl-4`) are at the token. The `{" "}<Button|ArrowLink>` source guard is in now, with a counted allowlist (the roles caption, AppTokenScreen's meta line, and the three pass-2 rows). The 48-character note test stays with pass 2. Mutation-checked (each red): a table row back at `gap-x-[18px]`; a gap on `<CardRow className>`; the phone `--row-y` removed; EmptyState's phone inset; the wrapped part's phone gap; `row-top` unscoped; `{" "}<ArrowLink>` in UpstreamShell; VersionBand back at `pl-[18px]`; PageHeader's lede without `data-prose`; Home's links back in a `p`; a `PASS_2_SEATS` entry removed; the guard's `p` rule and its inline-flow rule each off; SettingRow without its seat; `CardRowProps` letting `onToggle` take `action` (typecheck).
-  - [ ] 7u-2 Pass 2, seats: §5 #1–#29, #32 (`action` / `detail`; long `note`s become `caption`; `PeopleOnTarget`'s data-driven seat; the Name and retention form rows; Accounts' Status column), and the three rows found by the prose guard. Empties `PASS_2_SEATS` and the pass-2 entries of the `{" "}` source guard. Guards then: no hand-typed `w-[NNNpx]` seat beside `justify-end` outside `Card.tsx`; a string `note` over 48 characters fails in test; every action in a CardRow or a `ROW` row in its seat.
+  - [x] 7u-2 Pass 2, seats: §5 #1–#29, #32, #35 (`action` / `detail`; long `note`s become `caption`; `PeopleOnTarget`'s data-driven seat; the Name and retention form rows; Accounts' Status column), and the three rows found by the prose guard.
+    *Done (18 Nov 2026, branch `feat/addon-contract-d1-2`):*
+    - **Shared parts** (`Card.tsx`, `globals.css`, `SectionNav.tsx`):
+      - `CardRow`'s line carries `data-card-row`, and a CardHeader `note` carries `data-card-note`.
+      - `CardColumns` takes `seatLabel`, a heading for the seat ("Decision", "Outcome", "Needs you"; an sr-only "What happens next").
+      - `row-seat` wraps and is never wider than its row (`max-width: 100%`, `min-width: min(token, 100%)`). A button's reason or three verbs never run off a phone card.
+      - `row-detail:empty` takes no line.
+      - A new token, `--seat-status` (240): the Status column on a system's accounts and a person's role rows (§5 #22, #39).
+      - The section pill keeps an arrow seat on every segment, empty and hidden for the current one, so it holds its width as you scroll (#35).
+      - `CopyableValue`'s button and the consent retry are `data-inline`: they belong to the words beside them.
+      - Every hand-made number seat (`w-[110px]` with `text-right`) is `w-(--seat-number)`.
+    - **Seats.** Every action in a row moved to the seat; sentences moved to the detail line or caption, word for word.
+      - **targets:**
+        - reach, with "Open Maintenance" in a narrow seat (#1, #30);
+        - Check now as a `top` row (#2);
+        - accounts no longer there (#3);
+        - Not created by Syndra (#19);
+        - Maintenance, where the reason form opens in the row's panel, so the verb, then Cancel, stays where it was pressed (#17);
+        - findings, with Decide on the finding's line, Finish in the seat and the sentence as detail (#4, #12);
+        - RetryWait (#11);
+        - Name and what is kept as form rows (#13, #14; Q4 recommended, pending owner: Name stays its region);
+        - HomeMapping's home row;
+        - PeopleOnTarget: the seat is `wide` when the system's setup has a home limit field and `default` when it has none, held `wide` until the setup is read (#18). Status is its own column (#39; Q5: "Nothing for you to do." kept on every row);
+        - mapping rows, with three verbs in the wide seat, "Nobody holds this role" as detail (never while holders load), and Technical detail under the row (#20);
+        - version rows, Say what happened, and Publish (#21);
+        - the long notes as captions (#32).
+      - **Home:** the request rows' seat, with the held and rules lines as detail (#29, #36); Extend, whose result opens in the row's panel (#27); Open bundles (#10); Send it now (#27); Mark seen (#27); Open {system} (#10, #27); Review on Drift; the "and N more" rows; and the expiring note as caption.
+      - **Usage:** the usage card's end row is a CardRow with Open Usage in its seat (#8). Insights' closing line stays a caption with its link (`data-prose`).
+      - **Change history:** Pending changes in a narrow seat (#7).
+      - **Connected systems:** what needs you is the row's seat under a "Needs you" seat heading.
+      - **People:**
+        - PersonAccess: Show the rule (#5), Decide on Drift (#6), and the role row's status seat with its default action seat (#22);
+        - PersonSystems and PersonStorage;
+        - AccountKind (#29);
+        - PersonRequests (#29), with the holding note after the seat;
+        - MemberAccess (#28), where "Asked to keep it" takes the button's place in the seat;
+        - ServiceAccountPage (#28, #29);
+        - RequestsScreen (#28, #29).
+      - **Review:** Drift, with Adopt, Revoke and Owned elsewhere in the wide seat and the explanation as detail (#15); Holds due, with "Lift the hold" and an aria-label keeping its name (#25, the one forced word change); WithdrawnAccess (#29).
+      - **Bundles:** the role rows (#24), the newer-version row (#16) and BundleVersions (#29).
+      - **ShapeCard:** "In {where}." with its link in the seat (#9).
+      - **Pages:**
+        - policies, with Retire rule and its heading cell (#24);
+        - a role's people (#23);
+        - expiring access (#26);
+        - roles that wait (#29);
+        - pending's stopped rows (#29);
+        - zitadel/users' intro row;
+        - the zitadel doors, with the door and Syndra's page in one seat;
+        - zitadel/projects and ClaimHistory, whose hand-made seats are now `ActionSeat`;
+        - TrendsTab's note as caption.
+      - **Copy guide** §17: "Lift the hold" and "Status".
+    - **Guards:**
+      - `test-utils/layout.ts`, after every test in the suite: an action in a CardRow outside its seat, a form or a dialog fails (a fold's own `aria-expanded` toggle excepted); a CardHeader `note` over 48 characters fails, pointing at `caption`. `PASS_2_SEATS` is gone, and the suite runs with no exceptions.
+      - `design-system.test.ts`:
+        - the `{" "}` source guard allows exactly the roles caption and AppTokenScreen's meta line;
+        - no pixel width beside `justify-end` and no `w-[110px]` number seat outside `Card.tsx`;
+        - `<CardRow className>` never states a gap (read at the tag's top level);
+        - the seat wraps inside its row;
+        - an empty detail takes no line;
+        - `--seat-status`.
+    - **Tests:** every moved row has a seat test, in its component's test file. Each asserts the action in `[data-action-seat]`, one `data-seat` on every row of the table including rows with no action, and `[data-row-detail]` where there is one. `RowSeat.test.tsx` covers the seat and note guards and `seatLabel`; `SectionNav.test.tsx` covers the arrow seat; `AccountsTable.test.tsx` covers the held wide seat.
+    - **Mutation-checked** (each red):
+      - the seat guard without its seat exemption, and the note limit raised;
+      - copy controls counted as actions;
+      - PeopleOnTarget's seat read from the rows, and its seat not held while loading;
+      - Holds due without its aria-label;
+      - `seatLabel` dropped;
+      - `row-detail:empty` removed;
+      - the arrow seat's width removed;
+      - a hand-made pixel seat restored;
+      - a gap on `<CardRow className>`.
+    - **Opus review round** (before the PR), every blocking and medium finding fixed:
+      - the Maintenance form moved into the row's panel; it now stays mounted, so the pressed button keeps its focus;
+      - the seat can no longer overflow on a phone;
+      - MemberAccess's answer is back in the seat;
+      - the request note is in blocks and after the seat, and the consent retry is `data-inline`;
+      - no `order-*` row hacks (Extend's result and Technical detail);
+      - expiring's seat is right-aligned at every width;
+      - PeopleOnTarget's seat is held while loading;
+      - UsageCard's end row and the zitadel doors are CardRows;
+      - BundleVersions uses the default seat;
+      - "Nobody holds this role" is not shown while loading;
+      - MergeFindings has no empty padded div;
+      - Holds' retry is right-aligned;
+      - fold toggles are exempt only from the seat guard, not from the prose guard.
+    - **Staging round** (18 Nov 2026; lead in Chrome, 1481px, dark):
+      - **(1) The reports card's titles went a word a line, and (2) long captions sat at the right of their titles.** One cause:
+        - The detail line (and the caption) was `flex-basis: 100%` capped by `max-width: 60ch`. Flex wraps an item by its basis clamped to its max-width, so on a wide card a 60ch line fitted beside a short first line and sat there.
+        - On a reading it squeezed the title's `flex-1` part to a word a line ("A / disk / reports / errors…"). On a CardHeader, the `flex-1` spacer pushed the caption to the right.
+        - The 48-character note guard was right: both were already captions, not notes. The guard reads a note's rendered text, string or node alike.
+      - **Fix (2):** `row-detail` is full width, with the measure as padding (`padding-inline-end: max(0px, calc(100% - var(--measure)))`), never a max-width. CardHeader's caption takes `row-detail`'s shape.
+      - **Fix (1):** the connected systems' reading sentence, the one hand-made copy of the trap (`order-last w-full max-w-[80ch]`), is now the row's `detail`.
+      - **No label seat was involved.** The narrow "label column" was the title squeezed by the detail beside it. The label seats (`--seat-label`) hold only short labels.
+      - **(3)** The accounts table's Status column holds the state and its note only (`StandingLine step={false}`). The next step (`StandingStep`, the same words) is the row's detail line, with the home folder line, full width under the row.
+      - **Guards:**
+        - `design-system.test.ts`: the detail line is full width with the measure as padding and no max-width; the caption is `row-detail`; no class string anywhere builds a full line (`basis-full`, or `order-last` with `w-full`) capped by a `max-w-*` or `measure`.
+        - `SystemHealth.test.tsx`: the reports card with a CRITICAL SMART alert and a degraded `raid-z1-slow` pool, the title in the row's flexing first part and never a fixed-width column, the sentence in `[data-row-detail]`.
+        - `AccountsTable.test.tsx`: the step is in the detail line, not the status cell.
+        - jsdom draws no layout, so the CSS rule is the guard that fails locally on this class of defect.
+      - **Mutation-checked** (each red): the detail line back to a max-width; the caption back to `measure basis-full`; the systems reading's hand-made line; the step back in the status cell.
+    - **Left, low:**
+      - while Check now waits, the check's own row says nothing beside the disabled button, because the wait line is RetryWait's row under it;
+      - ServiceAccountPage's sources keep their pre-existing `order-last` on a phone.
   - [ ] 7u-3 Pass 3, Home (Q6).
   - [ ] 7u-4 Pass 4, three text sizes (Q3), with §5 #40's remaining raw display sizes and #41 `/storage`; then no `text-[NNpx]` in components.
   - [ ] 7u-5 Motion (§7: the five tokens, M1–M14, the eight motion tests).

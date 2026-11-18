@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { DRAIN_UNKNOWN_NEXT, outcomeFromError, succeeded, type ActionOutcome as Outcome, type AutoRetry } from "@/lib/outcome";
 import { RETRYING, refusedNext, retryLine, retryNextStep } from "@/lib/retry";
 import { refusalCause } from "@/lib/wait-reason";
-import { Card, CardHeader, ROW } from "@/components/ui/Card";
+import { Card, CardHeader, CardRow, ROW } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
@@ -323,10 +323,12 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         }
       />
 
-      <div className="row-divider px-5 py-3 text-[13.5px] leading-[1.55] text-muted">
-        Everything below is what Zitadel holds for this person.{" "}
-        <ArrowLink href={`/users/${userId}`}>Syndra&rsquo;s explanation of the same access</ArrowLink>
-      </div>
+      <CardRow
+        seat="wide"
+        action={<ArrowLink href={`/users/${userId}`}>Syndra&rsquo;s explanation of the same access</ArrowLink>}
+      >
+        <span className="text-[13.5px] leading-[1.55] text-muted">Everything below is what Zitadel holds for this person.</span>
+      </CardRow>
 
       <ListStates
         isLoading={grants.isLoading}

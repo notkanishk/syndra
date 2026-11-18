@@ -135,7 +135,7 @@ describe("Recent changes rows", () => {
   it("the date sits in its own seat", () => {
     const r = row({});
     const seat = r.lastElementChild as HTMLElement;
-    expect(seat.className).toContain("w-[110px]");
+    expect(seat.className).toContain("w-(--seat-number)");
     expect(seat.textContent).toBe("2 Oct");
     expect(dayLabel(new Date().toISOString())).toBe("Today");
   });

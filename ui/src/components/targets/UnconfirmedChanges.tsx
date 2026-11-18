@@ -13,7 +13,7 @@ import { UserName } from "@/components/names";
 import { useAccountHref } from "@/components/system/ServiceAccountTag";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Card, CardRow } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -177,7 +177,16 @@ function UnconfirmedRow({
   const accountHref = useAccountHref();
 
   return (
-    <div className={`${first ? "" : "row-divider "}flex flex-wrap items-start gap-x-[18px] gap-y-2.5 px-5 py-4`}>
+    <CardRow
+      first={first}
+      top
+      seat="default"
+      action={
+        <Button variant="outline" size="sm" onClick={onSay} aria-label={`Say what happened: ${w.question}`}>
+          Say what happened
+        </Button>
+      }
+    >
       <span className="flex min-w-0 flex-[1_1_380px] flex-col gap-1">
         <span className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
           <span className="text-[15px] font-semibold [text-wrap:pretty]">
@@ -206,12 +215,7 @@ function UnconfirmedRow({
           )}
         </span>
       </span>
-      <span className="ml-auto inline-flex flex-none whitespace-nowrap">
-        <Button variant="outline" size="sm" onClick={onSay} aria-label={`Say what happened: ${w.question}`}>
-          Say what happened
-        </Button>
-      </span>
-    </div>
+    </CardRow>
   );
 }
 

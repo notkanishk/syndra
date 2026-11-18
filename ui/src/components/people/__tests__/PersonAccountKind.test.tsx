@@ -67,6 +67,14 @@ describe("This account · Kind", () => {
     expect(screen.getByRole("heading", { name: "Mark Cody Rhodes as a service account" })).toBeInTheDocument();
   });
 
+  it("holds the button in the row's action seat (D-1)", () => {
+    renderPerson();
+    const card = screen.getByText("This account").closest(".card") as HTMLElement;
+    const seat = card.querySelector("[data-action-seat]") as HTMLElement;
+    expect(seat.getAttribute("data-seat")).toBe("wide");
+    expect(within(seat).getByRole("button", { name: "Mark as a service account" })).toBeInTheDocument();
+  });
+
   it("is Advanced, and an operator's: Basic and a member never see it", () => {
     state.advanced = false;
     renderPerson();

@@ -138,7 +138,17 @@ describe("the Publish column stays inside the card", () => {
     for (let el: HTMLElement | null = reason; el && !el.className.includes("rounded-card"); el = el.parentElement) {
       expect(el.className, el.tagName).not.toMatch(/(^|\s)whitespace-nowrap/);
     }
-    expect(reason.closest("span.max-w-full")?.className).toContain("[&_button]:whitespace-nowrap");
+    // D-1 §5 #21: Publish is in the row's action seat, its reason beneath it.
+    const seat = reason.closest("[data-action-seat]");
+    expect(seat).not.toBeNull();
+    expect(seat).toContainElement(screen.getByRole("button", { name: /Publish/ }));
+  });
+
+  it("keeps Publish's seat when nothing is waiting, and says so as the detail line", () => {
+    render(<VersionBand target="truenas" history={history({ unpublished: false })} />);
+    const seat = screen.getByRole("button", { name: "Publish" }).closest("[data-action-seat]");
+    expect(seat).not.toBeNull();
+    expect(screen.getByText("Nothing to publish").closest("[data-row-detail]")).not.toBeNull();
   });
 });
 

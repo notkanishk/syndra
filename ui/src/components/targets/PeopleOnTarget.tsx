@@ -7,14 +7,14 @@ import { HoldDialog } from "@/components/review/HoldDialog";
 import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
 import { RevokeDialog } from "@/components/targets/RevokeDialog";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, type Seat } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UNKNOWN_ACCOUNT, UserAvatar, UserName } from "@/components/names";
-import { StandingLine } from "@/components/ui/StandingLine";
+import { StandingLine, StandingStep } from "@/components/ui/StandingLine";
 import { accountField } from "@/lib/fields";
 import { schemaReason } from "@/components/states/SchemaState";
-import { useFieldSchemaState, useSystemNames } from "@/lib/queries/useFieldSchema";
+import { useFieldSchemaState, useMappingFields, useSystemNames } from "@/lib/queries/useFieldSchema";
 import { formatShortDate } from "@/lib/format";
 import { glideTo } from "@/lib/motion";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -37,6 +37,12 @@ import { useShownNames } from "@/components/names/shownNames";
  * visible; putting them on different screens would make the heavier one the
  * only one an operator remembers.
  */
+/**
+ * The Status column's seat, `--seat-status`: as wide as the longest status the table can say
+ * ("Waiting on makerspace staff"), for the heading and every row.
+ */
+const STATUS_SEAT = "w-(--seat-status) flex-none";
+
 /** `stale`: the system isn't answering, so this is its last read and the card recedes (A-13). */
 export function PeopleOnTarget({ target, stale = false }: { target: string; stale?: boolean }) {
   const nameOf = useSystemNames();
@@ -51,8 +57,12 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
   // closing the gap after, and not under the pointer.
   const leaving = useLeavingRows(accounts, (a) => a.subject_id, !inventory.isLoading && !inventory.error);
   const drawn = leaving.window(paging.limit);
-  // A limit verb widens the actions seat (A-03 §3); the heads follow the rows.
-  const seat = accounts.some((a) => limitVerb(homeOf.get(a.subject_id))) ? "tablet:w-[380px]" : "tablet:w-[260px]";
+  // The seat is the table's, decided by the system's setup (does it have a home limit?) and never
+  // by the rows read: three verbs where it has one, two where it has none (D-1 §5 #18). Wide until the
+  // setup is known (or if it can't be read): a seat that narrowed or widened when a read landed would move.
+  const setupKnown = Boolean(useFieldSchemaState(target).schema);
+  const hasLimit = Boolean(useMappingFields(target).limit);
+  const seat: Seat = setupKnown && !hasLimit ? "default" : "wide";
 
   // `?person=<id>#accounts` from a person's page (A-10 §3): the list opens far
   // enough to hold their row, the page glides there and the row flashes once
@@ -103,11 +113,11 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
         <>
           {/* Name · description · numbers (8b): the person, the account they
               have there, and since when in the last seat. */}
-          <CardColumns>
+          <CardColumns seat={seat}>
             <span className="w-[220px] flex-none">Person</span>
             <span className="min-w-0 flex-1">Account on {name}</span>
-            <span className="w-[110px] flex-none text-right">Since</span>
-            <span className={`flex-none ${seat}`} />
+            <span className={STATUS_SEAT}>Status</span>
+            <span className="w-(--seat-number) flex-none text-right">Since</span>
           </CardColumns>
           {drawn.map((account) => (
             <LeavingRow key={account.subject_id} {...leaving.props(account.subject_id)}>
@@ -141,7 +151,7 @@ function PersonRow({
   target: string;
   account: BoundAccount;
   /** The actions seat's width, shared with the column heads. */
-  seat: string;
+  seat: Seat;
   /** Their home folder limit and where it comes from; absent until read. */
   home?: AccountHome;
 }) {
@@ -161,7 +171,44 @@ function PersonRow({
 
   return (
     <>
-      <CardRow id={`person-${account.subject_id}`} data-account={account.subject_id} className="scroll-mt-4">
+      <CardRow
+        id={`person-${account.subject_id}`}
+        data-account={account.subject_id}
+        className="scroll-mt-4"
+        top
+        seat={seat}
+        // The standing's next step and the home folder line are sentences: the row's detail line, full width
+        // under it, never inside the 240px Status column (D-1 §5 #39).
+        detail={
+          (account.standing || home) && (
+            <>
+              {account.standing && (
+                <span className="block">
+                  <StandingStep standing={account.standing} system={nameOf(target)} audience="operator" />
+                </span>
+              )}
+              {home && <HomeLine home={home} />}
+            </>
+          )
+        }
+        action={
+          <>
+            {/* Its home folder limit first, the one write place for it (A-03 §3);
+                then pause it, or end it, the reversible one first. */}
+            {verb && (
+              <Button variant="outline" size="sm" onClick={() => setDialog("limit")}>
+                {verb}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" disabled={!accountName} reason={why} onClick={() => setDialog("hold")}>
+              Put on hold
+            </Button>
+            <Button variant="danger" size="sm" onClick={() => setDialog("revoke")}>
+              Revoke
+            </Button>
+          </>
+        }
+      >
         <span className="flex w-[220px] flex-none items-center gap-2.5">
           <UserAvatar id={account.subject_id} size="row" />
           <span className="min-w-0">
@@ -171,35 +218,11 @@ function PersonRow({
         </span>
         <span className="min-w-0 flex-1 basis-[200px] [overflow-wrap:anywhere] font-mono text-[13.5px] text-ink">
           {account.username}
-          {account.standing && (
-            <span className="mt-1 block font-sans">
-              <StandingLine standing={account.standing} system={nameOf(target)} audience="operator" />
-            </span>
-          )}
         </span>
-        <span className="w-[110px] flex-none text-right text-[13.5px] text-muted">{formatShortDate(account.bound_at)}</span>
-        <span className={`flex flex-none flex-wrap items-center justify-end gap-2 ${seat}`}>
-          {/* Its home folder limit first, the one write place for it (A-03 §3);
-              then pause it, or end it, the reversible one first. */}
-          {verb && (
-            <Button variant="outline" size="sm" onClick={() => setDialog("limit")}>
-              {verb}
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!accountName}
-            reason={why}
-            onClick={() => setDialog("hold")}
-          >
-            Put on hold
-          </Button>
-          <Button variant="danger" size="sm" onClick={() => setDialog("revoke")}>
-            Revoke
-          </Button>
+        <span className={STATUS_SEAT}>
+          {account.standing && <StandingLine standing={account.standing} system={nameOf(target)} audience="operator" step={false} />}
         </span>
-        {home && <HomeLine home={home} />}
+        <span className="w-(--seat-number) flex-none text-right text-[13.5px] text-muted">{formatShortDate(account.bound_at)}</span>
       </CardRow>
       {dialog === "limit" && home && (
         <LimitDialog target={target} name={name} home={home} onClose={() => setDialog(null)} />

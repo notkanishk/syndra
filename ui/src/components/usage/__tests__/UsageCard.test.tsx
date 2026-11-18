@@ -431,6 +431,8 @@ describe("the target overview", () => {
     expect(await screen.findByText(copy.OVERVIEW_NEXT)).toBeInTheDocument();
     const link = screen.getByRole("link", { name: new RegExp(copy.OVERVIEW_NEXT_LINK) });
     expect(link).toHaveAttribute("href", "/insights?tab=usage#usage-gym");
+    expect(link.closest("[data-action-seat]")).toHaveAttribute("data-seat", "narrow");
+    expect(link.closest("[data-end]")!.querySelector("[data-action-seat]")).toBe(link.closest("[data-action-seat]"));
     // The newest count's age, said once for the card.
     expect(screen.getAllByText(/Last counted/)).toHaveLength(1);
     expect(screen.getByText(copy.lastCounted(formatRelative(new Date(Date.now() - 4 * 60_000).toISOString())))).toBeInTheDocument();
@@ -502,6 +504,7 @@ describe("the target overview", () => {
     stubStats(t);
     const { container } = render(withQuery(<TargetStats target="gym" kind="storage" />));
     await screen.findByText("61");
+    expect(container.querySelector("[data-end] [data-action-seat]")).toHaveAttribute("data-seat", "narrow"); // empty, and still in its place
     expect(container.querySelector("[data-end]")!.textContent).toMatch(new RegExp(`^${copy.NOTHING_TO_DO}`));
     expect(screen.queryByRole("link", { name: new RegExp(copy.OVERVIEW_NEXT_LINK) })).toBeNull();
     expect(screen.queryByText(STORAGE_USAGE_STEP)).toBeNull();

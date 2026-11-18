@@ -412,7 +412,7 @@ export default function PeoplePage() {
                 <SortHead label="Bundles" name="bundles" sort={sort} onSort={setSort} />
               </span>
               <span className="min-w-[170px] flex-1">Access</span>
-              <span className="w-[110px] shrink-0 text-right">
+              <span className="w-(--seat-number) shrink-0 text-right">
                 <SortHead label="Attention" name="attention" sort={sort} onSort={setSort} />
               </span>
             </CardColumns>
@@ -618,7 +618,7 @@ function PersonRow({
         {describeAccess(entry)}
       </span>
 
-      <span className="tablet:w-[110px] tablet:shrink-0 tablet:text-right">
+      <span className="tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
         <NeedsAttention entry={entry} />
       </span>
     </>

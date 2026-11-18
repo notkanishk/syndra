@@ -79,7 +79,7 @@ function show(v: PersonTargetView) {
 
 /** The value cell of the row whose label is `label`. */
 function rowOf(label: string) {
-  const cell = screen.getAllByText(label).find((el) => el.className.includes("tablet:w-[170px]"));
+  const cell = screen.getAllByText(label).find((el) => el.className.includes("tablet:w-(--seat-label)"));
   if (!cell?.parentElement) throw new Error(`no ${label} row`);
   return cell.parentElement;
 }
@@ -117,6 +117,16 @@ describe("a person's network storage (A-10 Part 1)", () => {
     );
     expect(within(rowOf("Hold")).getByText("None")).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull(); // read-only: no verbs here
+    // D-1: each link is in its row's action seat, and every row's seat is the table's one width,
+    // with or without a link in it (Password has none).
+    for (const label of ["Account", "Password", "Home folder", "Folders", "Hold"]) {
+      const seat = rowOf(label).querySelector("[data-action-seat]");
+      expect(seat, label).not.toBeNull();
+      expect(seat!.getAttribute("data-seat"), label).toBeNull();
+    }
+    for (const label of ["Home folder", "Folders", "Hold"]) {
+      expect(within(rowOf(label).querySelector<HTMLElement>("[data-action-seat]")!).getByRole("link")).toBeInTheDocument();
+    }
   });
 
   it("an adopted account's password follows TrueNAS, never 'Not set'", () => {

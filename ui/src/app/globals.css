@@ -187,6 +187,7 @@
      grows it and the right edge never moves; an empty seat keeps its place. */
   --seat-label: 170px; /* a setting's label */
   --seat-number: 110px; /* a number or a date, right-aligned (G16) */
+  --seat-status: 240px; /* a status a table can say, as wide as its longest ("Waiting on makerspace staff"; §5 #22, #39) */
   --seat-action-narrow: 140px; /* one short verb, or one link */
   --seat-action: 200px; /* one or two verbs: the default */
   --seat-action-wide: 300px; /* three verbs */
@@ -1541,28 +1542,44 @@ html.theme-fading *::after {
   margin-left: auto;
   display: flex;
   flex: none;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  min-width: var(--seat-action);
+  /* Never wider than its row: on a phone the seat wraps under the row, and its verbs and a
+     button's reason wrap inside it, right-aligned, instead of running off the card. */
+  max-width: 100%;
+  min-width: min(var(--seat-action), 100%);
 
   &[data-seat="narrow"] {
-    min-width: var(--seat-action-narrow);
+    min-width: min(var(--seat-action-narrow), 100%);
   }
   &[data-seat="wide"] {
-    min-width: var(--seat-action-wide);
+    min-width: min(var(--seat-action-wide), 100%);
   }
 }
 
-/* The sentence that explains a row, under its first line, so a long one can
-   never push the seat down or squeeze it. */
+/* The sentence that explains a row (or a card: CardHeader's caption), on a line of
+   its own under the first, so a long one can never push the seat down or squeeze
+   the title beside it.
+
+   The line is the row's full width, and the measure is padding, never a
+   max-width: flex wraps an item by its basis clamped to its max-width, so a
+   detail capped at 60ch fitted beside a short first line on a wide card and sat
+   there, squeezing the title to a word a line (staging, 18 Nov). Full width, it
+   always takes a line of its own; its words still stop at the measure. */
 @utility row-detail {
   flex-basis: 100%;
-  max-width: var(--measure);
+  padding-inline-end: max(0px, calc(100% - var(--measure)));
   font-size: var(--text-small);
   line-height: var(--text-small--line-height);
   color: var(--muted);
   text-wrap: pretty;
+
+  /* A detail whose parts all said nothing (a note that renders null) takes no line, and no gap. */
+  &:empty {
+    display: none;
+  }
 }
 
 /* A row of more than one line: top-aligned, with each part's first line

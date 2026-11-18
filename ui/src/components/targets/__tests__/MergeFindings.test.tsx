@@ -435,3 +435,49 @@ describe("the Ends on / Review on choice on a finding", () => {
     expect(screen.queryByText(/ending on 1 Mar/)).toBeNull();
   });
 });
+
+// D-1 pass 2: a finding's one control is in its seat, on its first line.
+describe("every action in its seat (D-1)", () => {
+  const seatOf = (el: HTMLElement) => el.closest("[data-action-seat]") as HTMLElement;
+
+  it("puts Decide and Finish in the finding's own seat, with the sentence as its detail line", () => {
+    state.decideOnSave = false;
+    state.findings = [
+      finding({ id: "f1", subject_id: "sub-1" }),
+      finding({ id: "f2", subject_id: "sub-2", outcome: "deleted_upstream", field: undefined, decision: "unbound", decided_by: "op-1" }),
+      finding({ id: "f3", subject_id: "sub-3", decision: "keep_ours", decided_by: "op-1" }),
+    ];
+    renderFindings();
+    const rowOf = (who: string) => screen.getByText(who).closest("[data-card-row]") as HTMLElement;
+
+    const decide = within(rowOf("sub-1")).getByRole("button", { name: "Decide" });
+    const finish = within(rowOf("sub-2")).getByRole("button", { name: "Finish: stop tracking it" });
+    // The same seat width on every finding, a decided one included, which has no verb to show.
+    const waiting = rowOf("sub-3").querySelector("[data-action-seat]") as HTMLElement;
+    expect(waiting).toBeEmptyDOMElement();
+    for (const seat of [seatOf(decide), seatOf(finish), waiting]) {
+      expect(seat.parentElement).toHaveAttribute("data-card-row");
+      expect(seat).not.toHaveAttribute("data-seat");
+    }
+    // The sentence about the finding is its detail line, under the first line.
+    expect(within(rowOf("sub-1")).getByText(/was true when Syndra last saw it/)).toHaveAttribute("data-row-detail");
+    // The repair's own sentence stays a row of words: no second button on a row of its own.
+    expect(screen.getAllByRole("button", { name: /Decide|Finish/ })).toHaveLength(2);
+  });
+
+  it("explains the header as a caption, not a note", () => {
+    state.findings = [finding({})];
+    renderFindings();
+    const card = screen.getByText("Waiting on a decision").closest(".card") as HTMLElement;
+    expect(card.querySelector("[data-card-note]")).toBeNull();
+    expect(card.querySelector("p[data-prose]")).toHaveTextContent(/Differences between Syndra and TrueNAS/);
+  });
+
+  it("asking Decide opens the form and the seat stays", () => {
+    state.findings = [finding({})];
+    renderFindings();
+    fireEvent.click(screen.getByRole("button", { name: "Decide" }));
+    expect(screen.queryByRole("button", { name: "Decide" })).toBeNull();
+    expect(document.querySelector("[data-card-row] > [data-action-seat]")).toBeEmptyDOMElement();
+  });
+});

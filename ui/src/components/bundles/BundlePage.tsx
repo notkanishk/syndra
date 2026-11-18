@@ -16,7 +16,7 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Chip, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { useLeavingRows } from "@/lib/motion";
@@ -489,7 +489,28 @@ function WhatItGives({
               return (
                 <FormPart key={id} appear={arrived.has(id)} {...drawn.props(id)}>
                 <div className={`row-divider motion-tint ${isLeaving ? "bg-warn-soft" : ""}`}>
-                  <div className="flex flex-wrap items-center gap-x-[18px] gap-y-2 px-5 py-3.5">
+                  <CardRow
+                    first
+                    top
+                    seat="narrow"
+                    action={
+                      isLeaving ? (
+                        <Button
+                          size="sm"
+                          isPending={keep.isPending}
+                          onClick={() =>
+                            keep.mutate({ project_id: role.zitadel_project_id, role_key: role.zitadel_role_key })
+                          }
+                        >
+                          Keep
+                        </Button>
+                      ) : (
+                        <Button size="sm" onClick={() => setRemoving(open ? null : role)}>
+                          {open ? "Keep it" : "Remove"}
+                        </Button>
+                      )
+                    }
+                  >
                     <div className="min-w-[min(240px,100%)] flex-1">
                       <span className="text-[15px] font-semibold">
                         {roleName(entry?.display_name, role.zitadel_role_key)}
@@ -509,24 +530,7 @@ function WhatItGives({
                         {isLeaving ? `Leaves in v${next}` : `New in v${next}`}
                       </span>
                     )}
-                    <span className="flex justify-end whitespace-nowrap">
-                      {isLeaving ? (
-                        <Button
-                          size="sm"
-                          isPending={keep.isPending}
-                          onClick={() =>
-                            keep.mutate({ project_id: role.zitadel_project_id, role_key: role.zitadel_role_key })
-                          }
-                        >
-                          Keep
-                        </Button>
-                      ) : (
-                        <Button size="sm" onClick={() => setRemoving(open ? null : role)}>
-                          {open ? "Keep it" : "Remove"}
-                        </Button>
-                      )}
-                    </span>
-                  </div>
+                  </CardRow>
                   <Unfold open={open}>
                     <div className="px-5 pb-4">
                       {open && removing && (
@@ -1111,7 +1115,20 @@ function IncludedBundleCard({
       {newer && (
         // A next step, not a fault: the lead and its caption sit on the row with
         // the action, with no box around them.
-        <div className="row-divider flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3">
+        <CardRow
+          seat="default"
+          action={
+            <Button
+              size="sm"
+              isPending={update.isPending}
+              onClick={() =>
+                run(() => update.mutateAsync({ child: include.child_bundle_id, version: include.child_latest_version }))
+              }
+            >
+              Add to next version
+            </Button>
+          }
+        >
           <span className="min-w-[min(300px,100%)] flex-1 text-[14px] leading-[1.5] text-muted [text-wrap:pretty]">
             <strong className="font-semibold text-ink">
               {child} v{include.child_latest_version} is out.
@@ -1119,16 +1136,7 @@ function IncludedBundleCard({
             {adds.length > 0 && `It adds ${formatList(adds.map(label))}. `}
             Nothing changes for {parentName} until you add it and publish.
           </span>
-          <Button
-            size="sm"
-            isPending={update.isPending}
-            onClick={() =>
-              run(() => update.mutateAsync({ child: include.child_bundle_id, version: include.child_latest_version }))
-            }
-          >
-            Add to next version
-          </Button>
-        </div>
+        </CardRow>
       )}
       {failure && <ActionOutcome outcome={failure} word="Not changed" className="mx-5 my-3" />}
       {sortByName(

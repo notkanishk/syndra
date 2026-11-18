@@ -8,7 +8,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/Badge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate } from "@/lib/format";
@@ -236,7 +236,7 @@ function Holders({
       <CardColumns>
         <span className="min-w-[min(220px,100%)] flex-1">Person</span>
         <span className="min-w-0 flex-1">How they got it</span>
-        <span className="w-[110px] text-right">Since</span>
+        <span className="w-(--seat-number) text-right">Since</span>
       </CardColumns>
       {Array.from(byVersion.entries())
         .sort((a, b) => b[0] - a[0])
@@ -263,7 +263,7 @@ function Holders({
                     <UserName id={holder.user_id} className="text-[14.5px] font-semibold text-ink" />
                   </span>
                   <span className="min-w-0 flex-1 text-[13.5px] text-muted">{howTheyGotIt(holder)}</span>
-                  <span className="w-[110px] text-right text-[13.5px] text-muted">
+                  <span className="w-(--seat-number) text-right text-[13.5px] text-muted">
                     {formatShortDate(holder.assigned_at)}
                   </span>
                 </div>
@@ -416,8 +416,33 @@ function IncluderTile({
     .join("");
 
   return (
-    <div className="row-divider px-5 py-3">
-      <div className="flex flex-wrap items-center gap-x-[18px] gap-y-2">
+    <div className="row-divider">
+      <CardRow
+        first
+        seat="default"
+        action={
+          behind ? (
+            waiting ? (
+              <span className="text-right text-[13px] text-faint">v{latest} in its next version</span>
+            ) : (
+              <Button
+                size="sm"
+                isPending={update.isPending}
+                onClick={async () => {
+                  setFailure(null);
+                  try {
+                    await update.mutateAsync({ child: childId, version: latest });
+                  } catch (error) {
+                    setFailure(outcomeFromError(error));
+                  }
+                }}
+              >
+                Update to v{latest}
+              </Button>
+            )
+          ) : undefined
+        }
+      >
         <span className="flex min-w-0 flex-[1_1_260px] items-center gap-3">
           <span
             aria-hidden
@@ -440,32 +465,11 @@ function IncluderTile({
             ? `v${includer.draft_version} in its next version`
             : `Includes v${pinned}${behind ? `, ${gap === 1 ? "one" : gap} behind` : ""}`}
         </span>
-        <span className="w-[110px] flex-none text-right text-[13.5px] text-muted">
+        <span className="w-(--seat-number) flex-none text-right text-[13.5px] text-muted">
           {includer.people} {includer.people === 1 ? "person" : "people"}
         </span>
-        <span className="flex w-[150px] flex-none justify-end">
-          {behind &&
-            (waiting ? (
-              <span className="text-right text-[13px] text-faint">v{latest} in its next version</span>
-            ) : (
-              <Button
-                size="sm"
-                isPending={update.isPending}
-                onClick={async () => {
-                  setFailure(null);
-                  try {
-                    await update.mutateAsync({ child: childId, version: latest });
-                  } catch (error) {
-                    setFailure(outcomeFromError(error));
-                  }
-                }}
-              >
-                Update to v{latest}
-              </Button>
-            ))}
-        </span>
-      </div>
-      {failure && <ActionOutcome outcome={failure} word="Not updated" className="mt-2.5" />}
+      </CardRow>
+      {failure && <ActionOutcome outcome={failure} word="Not updated" className="mx-5 mb-3" />}
     </div>
   );
 }

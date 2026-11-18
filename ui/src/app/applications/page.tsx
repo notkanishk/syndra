@@ -84,7 +84,7 @@ export default function AppsPage() {
               </span>
               <span className="min-w-[140px] flex-1">Reads roles from</span>
               <span className="w-[220px] shrink-0 text-right">Claims</span>
-              <span className="w-[110px] shrink-0 text-right">
+              <span className="w-(--seat-number) shrink-0 text-right">
                 <SortHead label="People" name="people" sort={sort} onSort={setSort} />
               </span>
             </CardColumns>
@@ -139,7 +139,7 @@ export default function AppsPage() {
                 <ClaimsCell entry={entry} />
               </span>
 
-              <span className="text-[15px] tablet:w-[110px] tablet:shrink-0 tablet:text-right">
+              <span className="text-[15px] tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                 {people.headline}
                 <span className="text-[13px] text-faint tablet:hidden">
                   {peopleSuffix(people.headline)}
