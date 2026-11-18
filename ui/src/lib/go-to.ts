@@ -1,3 +1,4 @@
+import { recallPaths, remember } from "@/lib/memory";
 import type { NavEntry } from "@/lib/nav";
 import { sortAccounts, sortByName } from "@/lib/sort";
 import type { ApplicationCatalog, Bundle, ProjectCatalog, UserProfile } from "@/lib/types";
@@ -7,10 +8,15 @@ import type { ApplicationCatalog, Bundle, ProjectCatalog, UserProfile } from "@/
  *
  * Pure, so the surface and the phone sheet match the same way. Groups are
  * fixed and in this order; inside a group the rows are A to Z by the name
- * shown, never by score and never by recency (RULES: alphabetical, always;
- * nothing is pinned). A group with no match is left out.
+ * shown, never by score (RULES: alphabetical, always; nothing is pinned). A
+ * group with no match is left out.
+ *
+ * The one list in time order is Lately (A-24 §8, Q13): with nothing typed, the
+ * last places opened on this device, most recent first, above Pages. Each is a
+ * path, drawn from what this session can open now, so a place this view has no
+ * page for, or that is gone, is simply not listed.
  */
-export const GO_TO_GROUPS = ["Pages", "People", "Projects", "Roles", "Apps", "Bundles"] as const;
+export const GO_TO_GROUPS = ["Lately", "Pages", "People", "Projects", "Roles", "Apps", "Bundles"] as const;
 export type GoToGroup = (typeof GO_TO_GROUPS)[number];
 
 export interface GoToItem {
@@ -40,6 +46,24 @@ export interface GoToSource {
   projects?: ProjectCatalog[];
   apps?: ApplicationCatalog[];
   bundleList?: Bundle[];
+  /** Paths opened on this device, most recent first (`recallLately`). */
+  lately?: string[];
+  /** The path on screen: Lately never offers the place you are in. */
+  here?: string;
+}
+
+/** How many places Lately lists. */
+export const LATELY_SHOWN = 5;
+// Kept a little longer than shown: some paths will not be listable in this view.
+const LATELY_KEPT = 12;
+const LATELY = "syndra:lately";
+
+/** The places opened on this device, most recent first. */
+export const recallLately = (): string[] => recallPaths("local", LATELY);
+
+/** Notes a place as opened: to the front, once, and the oldest falls off. Its path, nothing else. */
+export function keepLately(path: string) {
+  remember("local", LATELY, [path, ...recallLately().filter((kept) => kept !== path)].slice(0, LATELY_KEPT));
 }
 
 /** Case and accents aside. */
@@ -65,18 +89,36 @@ function pages(nav: NavEntry[]): GoToItem[] {
   );
 }
 
-export function goTo(source: GoToSource, query: string): GoToResult[] {
+/**
+ * Typed: each group's matches, in its own order. Nothing typed: Lately, then
+ * Pages, and nothing else. Lately's rows are the very rows this session would
+ * list, found by path, so they open what the group below would.
+ */
+function narrow(all: GoToResult[], query: string, source: GoToSource): GoToResult[] {
   const needle = fold(query);
-  const hit = (name: string) => !needle || fold(name).includes(needle);
+  const every = all.flatMap((group) => group.items);
+  const shown = needle
+    ? all.map(({ group, items }) => ({ group, items: items.filter((item) => fold(item.name).includes(needle)) }))
+    : [
+        {
+          group: "Lately" as const,
+          items: (source.lately ?? [])
+            .filter((path) => path !== source.here)
+            .flatMap((path) => every.find((item) => item.href === path) ?? [])
+            .slice(0, LATELY_SHOWN)
+            .map((item) => ({ ...item, key: `lately:${item.key}` })),
+        },
+        all[0],
+      ];
+  return shown.filter((group) => group.items.length > 0);
+}
+
+export function goTo(source: GoToSource, query: string): GoToResult[] {
   const out: GoToResult[] = [];
-  const add = (group: GoToGroup, items: GoToItem[]) => {
-    const matched = items.filter((item) => hit(item.name));
-    if (matched.length) out.push({ group, items: matched });
-  };
+  const add = (group: GoToGroup, items: GoToItem[]) => out.push({ group, items });
 
   add("Pages", sortByName(pages(source.nav), (item) => item.name, (item) => item.key));
-  // With nothing typed the list is Pages only.
-  if (!needle || !source.names) return out;
+  if (!source.names) return narrow(out, query, source);
 
   // People A to Z, then service accounts A to Z, as every picker does.
   add(
@@ -139,7 +181,7 @@ export function goTo(source: GoToSource, query: string): GoToResult[] {
       })),
     );
   }
-  return out;
+  return narrow(out, query, source);
 }
 
 /** Rows in the order they are drawn, for arrow keys. */

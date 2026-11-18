@@ -227,6 +227,7 @@ export default function UpstreamUsersPage() {
       <FilterBar
         search={
           <Input
+            type="search"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);

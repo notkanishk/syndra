@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { stillMotion, TINT_MS } from "./still";
+import { stillTint, TINT_MS } from "./still";
 
 /**
  * One seat whose words change in place (Motion v2 S4): the old layer fades out
@@ -10,7 +10,8 @@ import { stillMotion, TINT_MS } from "./still";
  * as big as the taller of the two and nothing around it shifts.
  *
  * `id` is what counts as a change of word. New children under the same id just
- * replace the old ones. Under reduced motion the words swap at once.
+ * replace the old ones. Reduced motion keeps the crossfade: it is tint, and tint
+ * survives (A-24 Q15).
  */
 export function Crossfade({
   id,
@@ -32,7 +33,7 @@ export function Crossfade({
   if (last.current.id !== id) {
     const was = last.current.children;
     last.current = { id, children };
-    if (!stillMotion()) {
+    if (!stillTint()) {
       setLeaving(was);
       setFading(true);
     }
@@ -60,5 +61,57 @@ export function Crossfade({
         {children}
       </Layer>
     </Layer>
+  );
+}
+
+/**
+ * A figure whose digits change in place (A-24 §11.2): only what changed,
+ * changes. 47 becoming 46 crossfades its last digit and the 4 holds still.
+ * Each digit is its own seat, counted from the right so units stay over units;
+ * a digit that appears (9 to 10) is simply there. Nothing ticks or rolls.
+ *
+ * The live digits are plain inline text, so the figure reads and copies as one
+ * number (a grid seat per digit would be a block per digit to the clipboard
+ * and to a screen reader). Only the digit leaving is laid over its seat, out of
+ * the flow, hidden from assistive technology and from selection. Every seat is
+ * one width, because every figure is tabular (the body rule in globals.css).
+ */
+export function CrossfadeDigits({ text }: { text: string }) {
+  const chars = Array.from(text);
+  return (
+    <span data-figure>
+      {chars.map((char, index) => (
+        <Digit key={chars.length - index} char={char} />
+      ))}
+    </span>
+  );
+}
+
+function Digit({ char }: { char: string }) {
+  const last = useRef(char);
+  const [leaving, setLeaving] = useState<string | null>(null);
+  if (last.current !== char) {
+    const was = last.current;
+    last.current = char;
+    if (!stillTint()) setLeaving(was);
+  }
+
+  useEffect(() => {
+    if (leaving === null) return;
+    const timer = setTimeout(() => setLeaving(null), TINT_MS);
+    return () => clearTimeout(timer);
+  }, [leaving, char]);
+
+  return (
+    <span className="relative">
+      {leaving !== null && (
+        <span aria-hidden className="tint-out pointer-events-none absolute inset-0 select-none">
+          {leaving}
+        </span>
+      )}
+      <span key={char} className={leaving !== null ? "tint-in" : undefined}>
+        {char}
+      </span>
+    </span>
   );
 }

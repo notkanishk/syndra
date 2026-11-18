@@ -40,7 +40,7 @@ beforeEach(() => {
  */
 describe("Projects, searched", () => {
   const search = (value: string) =>
-    fireEvent.change(screen.getByRole("textbox", { name: "Search projects by name or app" }), { target: { value } });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search projects by name or app" }), { target: { value } });
 
   it("holds the rows that match, fades the others where they were, and opens them back", () => {
     render(<ProjectsPage />);

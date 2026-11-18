@@ -151,7 +151,7 @@ describe("Expiring access — folding", () => {
 });
 
 describe("Expiring access — search", () => {
-  const box = () => screen.getByRole("textbox", { name: "Search expiring access by person or role" });
+  const box = () => screen.getByRole("searchbox", { name: "Search expiring access by person or role" });
 
   it("finds a person by name across both cards, and the lede counts what matched", () => {
     renderPage();

@@ -206,6 +206,7 @@ export function WithdrawnAccess() {
             read={read}
             search={
               <Input
+                type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search person or role…"

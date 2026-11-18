@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
+import { recall as read, remember as write } from "@/lib/memory";
 import { returnedToThisPage } from "@/lib/motion";
 
 /**
@@ -18,38 +19,13 @@ import { returnedToThisPage } from "@/lib/motion";
  * filter chips never come here. The pill or arrow that holds the value is what
  * makes it visible.
  *
- * Every read and write is guarded: a blocked or full store is a page that
- * simply forgets.
+ * Every read and write goes through `lib/memory.ts`: a blocked or full store
+ * is a page that simply forgets.
  */
 const PLACE = "syndra:place:";
 const VIEW = "syndra:view:";
 
 const here = () => window.location.pathname + window.location.search;
-
-function store(kind: "session" | "local"): Storage | null {
-  try {
-    return kind === "session" ? window.sessionStorage : window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-function read(kind: "session" | "local", key: string): unknown {
-  try {
-    const raw = store(kind)?.getItem(key);
-    return raw == null ? undefined : JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
-
-function write(kind: "session" | "local", key: string, value: unknown) {
-  try {
-    store(kind)?.setItem(key, JSON.stringify(value));
-  } catch {
-    // Forgetting is the whole failure mode.
-  }
-}
 
 /** What this route kept under `name`, only when the reader came back to it. */
 export function recallPlace(name: string): unknown {

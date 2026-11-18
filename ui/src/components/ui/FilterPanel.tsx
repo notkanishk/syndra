@@ -152,7 +152,7 @@ export function FilterPanel({
           {/* The fields scroll, the footer does not. Six of them run past the
               bottom of a laptop window, and Clear and Done are the two
               controls somebody needs once they have finished choosing. */}
-          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain">
             {children}
           </div>
           <div className="mt-4 flex shrink-0 items-center justify-between border-t border-line pt-3.5">

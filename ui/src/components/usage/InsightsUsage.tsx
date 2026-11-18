@@ -40,7 +40,7 @@ function Spread({ metric, row }: { metric: InsightsStatsMetric; row: InsightsSer
     <CardRow>
       <span className="flex min-w-0 flex-1 basis-[260px] flex-col gap-0.5">
         {where && <span className="text-body font-semibold [overflow-wrap:anywhere]">{where}</span>}
-        <span className="text-small tabular-nums text-muted">
+        <span className="text-small text-muted">
           {row.members === 0 ? copy.NOBODY_RECENTLY : <>{copy.members(row.members)}. {copy.spread(p50, p90)}</>}
         </span>
       </span>
@@ -94,11 +94,11 @@ function People({ metric, row, what }: { metric: InsightsStatsMetric; row: Insig
                 <Unresolved label={UNKNOWN_ACCOUNT} id={p.user_id} idLabel={copy.ACCOUNT_ID} href={nameHref.user(p.user_id)} />
               )}
             </span>
-            <span role="cell" className="flex flex-col tabular-nums tablet:w-[130px] tablet:shrink-0 tablet:text-right">
+            <span role="cell" className="flex flex-col tablet:w-[130px] tablet:shrink-0 tablet:text-right">
               <span className="text-fine text-faint tablet:hidden">{copy.LAST_30_COLUMN}</span>
               {value(p.last_30d)}
             </span>
-            <span role="cell" className="flex flex-col tabular-nums tablet:w-[130px] tablet:shrink-0 tablet:text-right">
+            <span role="cell" className="flex flex-col tablet:w-[130px] tablet:shrink-0 tablet:text-right">
               <span className="text-fine text-faint tablet:hidden">{copy.LAST_12_COLUMN}</span>
               {value(p.last_12m)}
             </span>

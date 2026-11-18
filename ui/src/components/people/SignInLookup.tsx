@@ -72,7 +72,7 @@ export function SignInLookup({
                     key={`${s.user_id}-${s.at}-${i}`}
                     className={`flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-4 py-2.5 text-body ${i > 0 ? "row-divider" : ""}`}
                   >
-                    <span className="w-[130px] flex-none tabular-nums text-muted">{formatWhen(s.at)}</span>
+                    <span className="w-[130px] flex-none text-muted">{formatWhen(s.at)}</span>
                     {forPerson ? (
                       <span>{appName(s.app_id) ?? <span className="text-faint">App unknown</span>}</span>
                     ) : (

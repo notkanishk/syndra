@@ -156,6 +156,7 @@ export function UsageCard({
   windows,
   target,
   step,
+  opens,
 }: {
   title?: string;
   label?: string;
@@ -163,12 +164,14 @@ export function UsageCard({
   windows: UsageWindows;
   target?: string;
   step?: string;
+  /** Where a per-person metric's figure opens the people behind it (A-24 §10); absent, figures stay plain. */
+  opens?: string;
 }) {
   return (
     <Card role="group" aria-label={title ?? label} className="@container">
       {title && <CardHeader title={title} />}
       {metrics.map((metric, i) => (
-        <MetricBlock key={metric.name} metric={metric} windows={windows} first={i === 0} titled={Boolean(title)} />
+        <MetricBlock key={metric.name} metric={metric} windows={windows} first={i === 0} titled={Boolean(title)} opens={opens} />
       ))}
       <Fold metrics={metrics} windows={windows} />
       <End metrics={metrics} windows={windows} target={target} step={step} />
@@ -225,7 +228,7 @@ export function HomeMonth({ view, operator = false }: { view: MyTargetView; oper
   const changed = changeWords(p, metric.unit);
   return (
     <div data-home-month className="flex w-full max-w-[360px] flex-col gap-1">
-      {changed && <span className="text-small tabular-nums text-faint">{changed}</span>}
+      {changed && <span className="text-small text-faint">{changed}</span>}
       <Band
         plot={p}
         instrument={metric.instrument}

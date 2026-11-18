@@ -272,8 +272,10 @@ Each has my recommended answer. The first thirteen are drawn on the boards.
 ## 13 · For code to verify (not the owner's)
 
 - Whether Figtree and Bricolage, as loaded by `next/font` (`app/layout.tsx:19-40`), carry tabular figures. If Bricolage does not, the stat face keeps proportional figures and only its column aligns.
+  **Answered (code, 18 Nov 2026, wave 1):** both do. Read from the font files themselves (`ui/src/app/fonts/*.woff2`, through the fontkit that ships in `next`): Figtree and Bricolage both list `tnum` and `pnum`, and their default figures are proportional (Figtree "0/1/4/7" are 638/410/616/530 units; with `tnum` every one is 620. Bricolage 594/310/607/498, and 580 with `tnum`). JetBrains Mono has no `tnum` and needs none: every glyph is 600. So one rule on `body` makes every figure tabular, the stat face included.
 - Whether a check's result (Check now) is kept when the page is left. If not, §6's second sentence is cut for that caller.
 - Whether Escape already clears a FilterBar's search before anything else. **UNVERIFIED.**
+  **Answered (code, 18 Nov 2026, wave 1):** it did not. FilterBar's search was a plain `Input` with no key handling, so Escape did nothing in it, or went straight on to what held it (on People it left Select). Wave 1 gives every search field `type="search"` and `Input` the two stages: the first Escape clears, and only an empty field lets Escape go on.
 - What a revoke leaves in place on each connected system, traced through every modal, plan row, outcome and audit word, before any "what stays" line is written (§5).
 - Whether today's acts by one operator, and how many of them are held, can be read in one call (§4.1).
 - Whether `<ViewTransition>` can name one element per row without duplicate names when a person appears twice on a page (§2, vivid).

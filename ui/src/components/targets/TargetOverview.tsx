@@ -1618,6 +1618,7 @@ function AdoptPanel({
         <div className="flex flex-col gap-2">
           <FieldLabel htmlFor="adopt-q">Person</FieldLabel>
           <Input
+            type="search"
             id="adopt-q"
             value={q}
             placeholder="Search by name or email"

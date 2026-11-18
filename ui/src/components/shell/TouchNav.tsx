@@ -366,7 +366,7 @@ function NavSheet({
     >
       <div
         ref={panelRef}
-        className="sheet-in max-h-[86dvh] w-full overflow-y-auto rounded-t-[24px] border-t border-line-strong bg-rail px-3.5 pb-[max(24px,env(safe-area-inset-bottom))] pt-3"
+        className="sheet-in max-h-[86dvh] w-full overflow-y-auto overscroll-contain rounded-t-[24px] border-t border-line-strong bg-rail px-3.5 pb-[max(24px,env(safe-area-inset-bottom))] pt-3"
       >
         <button
           type="button"

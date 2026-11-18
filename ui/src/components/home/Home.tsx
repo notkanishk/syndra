@@ -357,7 +357,7 @@ export function Home({ session }: { session: SessionUser }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className={head.className} data-settled={head["data-settled"]} style={BELOW_HEADER}>
+      <div {...head} style={BELOW_HEADER}>
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and

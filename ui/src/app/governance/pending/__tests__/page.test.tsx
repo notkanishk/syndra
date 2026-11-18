@@ -440,7 +440,7 @@ describe("Pending changes · board layout", () => {
     load.loading = true;
     renderPending();
     expect(screen.getByRole("button", { name: "Send changes" })).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: /Search pending changes/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox", { name: /Search pending changes/ })).not.toBeInTheDocument();
   });
 
   it("has four columns, and the extra reason column is gone", () => {
@@ -552,7 +552,7 @@ describe("Pending changes · board layout", () => {
       ];
     });
     const type = (value: string) =>
-      fireEvent.change(screen.getByRole("textbox", { name: /Search pending changes/ }), {
+      fireEvent.change(screen.getByRole("searchbox", { name: /Search pending changes/ }), {
         target: { value },
       });
 
@@ -625,7 +625,7 @@ describe("Pending changes · board layout", () => {
   it("shows the resolved empty state with no search, and Send off", () => {
     renderPending();
     expect(screen.getByText("Nothing is waiting for you to send.")).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: /Search pending changes/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox", { name: /Search pending changes/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Send / })).toBeDisabled();
   });
 });

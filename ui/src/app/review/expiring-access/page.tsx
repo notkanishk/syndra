@@ -305,6 +305,7 @@ export default function ExpiringAccessPage() {
         search={
           showRows ? (
             <Input
+              type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search person or role…"

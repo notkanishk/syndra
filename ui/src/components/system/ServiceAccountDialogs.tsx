@@ -212,6 +212,7 @@ function OwnerPicker({
   return (
     <div className="flex flex-col gap-1.5">
       <Input
+        type="search"
         id={id}
         value={q}
         placeholder="Search by name or email"

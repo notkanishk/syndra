@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/states";
 import { Input } from "@/components/ui/Input";
 import { Kbd } from "@/components/ui/Kbd";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
-import { flatItems, goTo, type GoToItem } from "@/lib/go-to";
+import { flatItems, goTo, recallLately, type GoToItem } from "@/lib/go-to";
+import { visitByKey } from "@/lib/motion";
 import type { NavEntry } from "@/lib/nav";
 import { useNameCatalog } from "@/lib/queries/useNameCatalog";
 import { useUiView } from "@/lib/ui-view";
@@ -15,8 +17,13 @@ import { useUiView } from "@/lib/ui-view";
 /**
  * Go to: one way to reach anything in Syndra by typing its name
  * (proposed/GoTo.md, A-19 P4). Opens pages, never runs a verb; nothing is
- * pinned and nothing is remembered. The word "Search" belongs to the per-page
+ * pinned. With nothing typed it lists Lately, the last places opened on this
+ * device, above Pages (A-24 §8, Q13). The word "Search" belongs to the per-page
  * search, so it is "Go to" here.
+ *
+ * It is opened by a key dozens of times a day, so it appears at once and leaves
+ * at once (A-24 §8): a still Modal. Escape clears what is typed, then closes.
+ * A place it opens does not arrive (Q14).
  */
 type GoToProps = {
   open: boolean;
@@ -32,9 +39,12 @@ export const GO_TO_PLACEHOLDER = {
   advanced: "A person, a project, an app, a bundle, or a page",
 } as const;
 
+/** What Esc does now, said beside its key: with words typed it clears them first. */
+export const GO_TO_ESC = { typed: "clear, then close", empty: "close" } as const;
+
 export function GoTo({ open, onClose, nav }: GoToProps) {
   return (
-    <Modal open={open} onClose={onClose} size="sm">
+    <Modal open={open} onClose={onClose} size="sm" still>
       <ModalHeader title="Go to" />
       <div className="px-6 pb-5">
         <GoToPanel nav={nav} onGo={onClose} />
@@ -63,6 +73,9 @@ export function GoToPanel({
 }) {
   const { audience } = useUiView();
   const { catalog, bundles } = useNameCatalog();
+  const here = usePathname();
+  // Read once, as it opens: the places opened before this one.
+  const [lately] = useState(recallLately);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const base = useId();
@@ -80,10 +93,12 @@ export function GoToPanel({
           projects: catalog?.projects,
           apps: catalog?.applications,
           bundleList: bundles,
+          lately,
+          here,
         },
         query,
       ),
-    [nav, audience, catalog, bundles, query],
+    [nav, audience, catalog, bundles, query, lately, here],
   );
   const items = flatItems(groups);
   const typed = query.trim() !== "";
@@ -112,6 +127,7 @@ export function GoToPanel({
   return (
     <div className="flex flex-col gap-3">
       <Input
+        type="search"
         autoFocus={!embedded}
         role="combobox"
         aria-label={embedded ? "Go to by name" : "Go to"}
@@ -151,7 +167,10 @@ export function GoToPanel({
                     role="option"
                     aria-selected={selected}
                     tabIndex={-1}
-                    onClick={onGo}
+                    onClick={() => {
+                      visitByKey(item.href);
+                      onGo();
+                    }}
                     className={`motion-tint flex min-h-[var(--tap)] items-center gap-3 px-6 py-1.5 ${selected ? "bg-tint-2" : ""}`}
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
@@ -182,7 +201,7 @@ export function GoToPanel({
             <Kbd>Enter</Kbd> open
           </span>
           <span className="inline-flex items-center gap-1">
-            <Kbd>Esc</Kbd> close
+            <Kbd>Esc</Kbd> {query !== "" ? GO_TO_ESC.typed : GO_TO_ESC.empty}
           </span>
         </p>
       )}

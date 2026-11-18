@@ -102,6 +102,7 @@ export default function ProjectsPage() {
       <FilterBar
         search={
           <Input
+            type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search projects or apps…"

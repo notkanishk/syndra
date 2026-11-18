@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { anchoredStyle, useAnchoredBox } from "@/components/ui/Anchored";
 import { ToBody } from "@/components/ui/Modal";
 import { GLOSSARY, type TermName } from "@/lib/glossary";
-import { TINT_MS, useExitPhase } from "@/lib/motion";
+import { TINT_MS, useExitPhase, useWarmTip } from "@/lib/motion";
 
 /**
  * A word that carries its own definition.
@@ -88,6 +88,8 @@ export function Term({ name, children }: { name: TermName; children?: React.Reac
   // While it fades the shut copy already carries the id, so the fading one
   // gives it up.
   const { rendered, leaving } = useExitPhase(shown, TINT_MS);
+  // Opened while a neighbour is open, or has just shut: at once, with no rise (A-24 §11.11).
+  const warm = useWarmTip(shown);
 
   const panel = (
     <span
@@ -95,7 +97,7 @@ export function Term({ name, children }: { name: TermName; children?: React.Reac
       role="note"
       aria-hidden={leaving ? true : undefined}
       style={anchoredStyle(box)}
-      className={`${leaving ? "tint-out pointer-events-none" : "popover-in"} rounded-panel border border-line-strong bg-surface-2 px-3.5 py-3 text-left shadow-popover`}
+      className={`${leaving ? "tint-out pointer-events-none" : warm ? "" : "popover-in"} rounded-panel border border-line-strong bg-surface-2 px-3.5 py-3 text-left shadow-popover`}
     >
       <span className="block type-label">{entry.title}</span>
       <span className="mt-1 block text-small font-normal leading-[1.55] text-muted">

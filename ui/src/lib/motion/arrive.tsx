@@ -2,7 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import { moveBetweenRows, rowFocused, useRovingRows } from "@/lib/keys";
+import { forgetOpenedRow, handBackRow, moveBetweenRows, rowFocused, rowOpened, useRovingRows } from "@/lib/keys";
+import { recallPaths, remember } from "@/lib/memory";
 
 import { ARRIVE_MEMORY_MS, ARRIVE_SETTLED_MS } from "./still";
 
@@ -34,13 +35,51 @@ export function returnedToThisPage(): boolean {
   );
 }
 
-// The page on screen, and when it was shown. The top bar notes it as it
-// renders, which is before the page's own parts render in the same pass, so a
-// part can ask whether it is part of the page's first paint or came after it.
-let page: { path: string; at: number } | null = null;
-export function notePage(path: string) {
-  if (page?.path !== path) page = { path, at: Date.now() };
+// A place arrives once a session, and never by key (S11, A-24 §2 and Q14).
+// The first visit to a path in this tab's session arrives as built. A later
+// visit, or one made by key (Enter on a link, a row opened from Go to), is
+// quiet: the header tints in and the content is simply there, because an
+// arrival that informed the first time is only latency the thirtieth. A Back,
+// a Forward and a reload are quiet too, and stiller still (`returnedToThisPage`).
+// The paths that have arrived live in sessionStorage; a new tab starts afresh.
+// ponytail: every path is kept for the tab's life; a day of a hundred people
+// pages is a few kilobytes. Trim it if a session ever grows past that.
+const ARRIVED = "syndra:arrived";
+let byKey: { path: string; at: number } | null = null;
+
+/** The next visit to `href` was asked for by key, so it does not arrive (Go to, Enter on a link). */
+export function visitByKey(href: string) {
+  if (typeof window !== "undefined") byKey = { path: new URL(href, window.location.href).pathname, at: Date.now() };
 }
+if (typeof document !== "undefined") {
+  // A link pressed with Enter is a click with no pointer: `detail` counts pointer clicks and is 0 here
+  // (UI Events, `detail` for click). Captured, so it is noted before the router moves.
+  document.addEventListener(
+    "click",
+    (event) => {
+      const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (link && event.detail === 0) visitByKey(link.getAttribute("href") ?? "");
+    },
+    true,
+  );
+}
+
+// The page on screen, when it was shown, and whether this visit is quiet. The
+// top bar notes it as it renders, which is before the page's own parts render
+// in the same pass, so a part can ask whether it is part of the page's first
+// paint or came after it.
+let page: { path: string; at: number; quiet: boolean } | null = null;
+export function notePage(path: string) {
+  if (page?.path === path) return;
+  const arrived = recallPaths("session", ARRIVED);
+  const recent = (mark: { path: string; at: number } | null) =>
+    mark !== null && mark.path === path && Date.now() - mark.at < ARRIVE_MEMORY_MS;
+  page = { path, at: Date.now(), quiet: arrived.includes(path) || recent(byKey) || recent(returned) };
+  if (!arrived.includes(path)) remember("session", ARRIVED, [...arrived, path]);
+}
+/** True when the visit on screen does not arrive: a place already seen this session, reached by key, or by Back. */
+export const quietVisit = () =>
+  page !== null && page.quiet && typeof window !== "undefined" && page.path === window.location.pathname;
 /** True once this page's first paint is over (or no page was noted): what mounts now is late. */
 export const pageSettled = () => page === null || Date.now() - page.at > ARRIVE_SETTLED_MS;
 
@@ -86,7 +125,9 @@ export const armedRecently = () => Date.now() - armedAt <= ARRIVE_MEMORY_MS;
  * Key the rows by id so rows that stay are not remounted.
  *
  * It also carries the list's keys (A-19 P7): a row link marked `data-row` is a
- * stop for the arrow keys, with roving focus (`lib/keys.ts`).
+ * stop for the arrow keys, with roving focus (`lib/keys.ts`). And it gives your
+ * row back (A-24 §11.4): the row you opened is remembered, and when Back brings
+ * you to this list again that row has the focus and keeps its tint for one flash.
  */
 export function ArriveList({
   children,
@@ -106,8 +147,17 @@ export function ArriveList({
   // After mount, not in the initial state: the server cannot know about a Back,
   // and a different first render is a hydration mismatch.
   useLayoutEffect(() => {
-    if (returnedToThisPage() || switchedViewHere()) setSettled(true);
+    if (returnedToThisPage() || switchedViewHere() || quietVisit()) setSettled(true);
+    // A visit that is not a Back has no row to give back, so an older visit's row never flashes.
+    if (!returnedToThisPage()) forgetOpenedRow();
   }, []);
+
+  // Every render until it lands: the rows come with a read, often after the mount.
+  const handedBack = useRef(false);
+  useEffect(() => {
+    if (handedBack.current || !node.current || !returnedToThisPage()) return;
+    handedBack.current = handBackRow(node.current);
+  });
 
   useEffect(() => {
     if (settled) return;
@@ -141,6 +191,7 @@ export function ArriveList({
     <div
       ref={node}
       onFocus={(event) => rowFocused(node.current, event.target)}
+      onClick={(event) => rowOpened(event.target)}
       onKeyDown={(event) => moveBetweenRows(node.current, event)}
       className={`${className} arrive-list`}
       data-settled={settled ? "" : undefined}

@@ -1,6 +1,6 @@
 import React from "react";
 
-import { Crossfade } from "@/lib/motion";
+import { CrossfadeDigits } from "@/lib/motion";
 
 /**
  * Count and status pills. Tone follows the semantic palette and nothing else:
@@ -211,14 +211,10 @@ export function CountChip({ n }: { n: number | null | undefined }) {
 }
 
 /**
- * A count in its seat (D-1 M2): a changed number crossfades on tint, in place; it never ticks or
- * travels. The first read mounts the seat and shows one layer, and a failed read (`CountChip`'s
+ * A count in its seat (D-1 M2): a changed number crossfades on tint, in place, only in the digits
+ * that changed (A-24 §11.2); it never ticks or travels. The first read mounts the seat and shows one layer, and a failed read (`CountChip`'s
  * dash) is a different seat, so only a change between two real numbers fades, as the rail's badge does.
  */
 export function Count({ n }: { n: number }) {
-  return (
-    <Crossfade id={String(n)} inline>
-      {n}
-    </Crossfade>
-  );
+  return <CrossfadeDigits text={String(n)} />;
 }

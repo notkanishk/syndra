@@ -1,5 +1,7 @@
 import { useEffect, type KeyboardEvent as ReactKeyEvent, type RefObject } from "react";
 
+import { recall, remember } from "@/lib/memory";
+
 /**
  * Syndra's keys (A-19 P7, Q8): `/` Go to, `?` Keys, Esc closes, arrows move
  * between rows and Enter opens one. No letter is a verb: an accidental Revoke
@@ -63,6 +65,45 @@ export function useRovingRows(list: RefObject<HTMLElement | null>) {
 /** `onFocus` for the list: the row focused becomes the one in the Tab order. */
 export function rowFocused(list: HTMLElement | null, target: EventTarget | null) {
   if (list && target instanceof HTMLElement && target.matches(ROW_STOP)) rove(list, target);
+}
+
+// Back gives you your row (A-24 §11.4, CRAFT §2.8): the row link opened from a
+// route, kept for this session by route (path and query) and nothing else.
+const OPENED = "syndra:opened:";
+const route = () => window.location.pathname + window.location.search;
+
+/** `onClick` for the list: remembers the row link opened, so a Back can hand it back. */
+export function rowOpened(target: EventTarget | null) {
+  const row = target instanceof Element ? target.closest(ROW_STOP) : null;
+  const href = row?.getAttribute("href");
+  if (href) remember("session", OPENED + route(), href);
+}
+
+/** A visit that is not a Back starts with no row to give back. */
+export function forgetOpenedRow() {
+  if (typeof window !== "undefined") remember("session", OPENED + route(), null);
+}
+
+/**
+ * On a Back: the row last opened from this route takes the focus, without
+ * scrolling (the scroll is the place's own), and keeps its tint for one flash,
+ * so the eye lands where it left. False while that row has not rendered yet.
+ */
+export function handBackRow(list: HTMLElement): boolean {
+  const href = recall("session", OPENED + route());
+  const row = typeof href === "string" ? rowsIn(list).find((each) => each.getAttribute("href") === href) : undefined;
+  if (!row) return false;
+  // Once: a reload of the page after this is not another return to that row.
+  forgetOpenedRow();
+  rove(list, row);
+  row.focus({ preventScroll: true });
+  row.classList.add("flash");
+  row.addEventListener("animationend", function done(event) {
+    if (event.target !== row) return;
+    row.classList.remove("flash");
+    row.removeEventListener("animationend", done);
+  });
+  return true;
 }
 
 /** `onKeyDown` for the list: ↑ and ↓ between its rows. Only from a row, never from a field. */

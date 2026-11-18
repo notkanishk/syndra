@@ -756,3 +756,24 @@ describe("the storage kind's limit", () => {
     expect(storageLimits(readOnly)).toEqual({});
   });
 });
+
+// A-24 §10: on a system's overview a per-person figure opens the people behind it in Insights' Usage.
+describe("a figure opens its list", () => {
+  it("links a per-person metric's figures, and leaves one with no list behind it plain", () => {
+    render(
+      withQuery(
+        <UsageCard label="Usage" windows={windows()} metrics={[sessions(), sessions({ name: "volume.total", label: "Total", per_subject: false })]} opens="/insights?tab=usage" />,
+        true,
+      ),
+    );
+    const links = screen.getAllByRole("link", { name: /open Usage in Insights/ });
+    expect(links).toHaveLength(2); // the per-person metric's two series; the total's stay plain
+    for (const link of links) expect(link).toHaveAttribute("href", "/insights?tab=usage");
+    expect(links[0]).toHaveAccessibleName("7 in the last 30 days: open Usage in Insights");
+  });
+
+  it("has no link where no list is named", () => {
+    render(withQuery(<UsageCard title={copy.MEMBER_TITLE} windows={windows()} metrics={[sessions()]} />));
+    expect(screen.queryByRole("link", { name: /open Usage in Insights/ })).toBeNull();
+  });
+});

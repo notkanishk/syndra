@@ -738,6 +738,20 @@
     line-height: var(--text-body--line-height);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Every figure is tabular (A-24 §11.1, CRAFT §4.4): one rule, so a count,
+       a date, a time and the stat face all hold their column and a changing
+       number never shifts its neighbours. Figtree and Bricolage both carry
+       `tnum` (read from the font files, 18 Nov 2026: Figtree's "1" is 410 units
+       wide by default and 620 tabular, like every digit); JetBrains Mono is
+       tabular by nature. MDN, font-variant-numeric. No part sets it again. */
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The caret is Syndra's (A-24 §11.7): the accent in every field. */
+  input,
+  textarea,
+  [contenteditable] {
+    caret-color: var(--accent);
   }
 
   /* Every interactive element gets a themed focus ring. The default browser
@@ -816,6 +830,30 @@
     }
     .flash {
       animation-duration: var(--duration-flash) !important;
+      animation-delay: 0s !important;
+    }
+    /* Tint survives (A-24 §11.10, Q15): colour and opacity crossfade, so a
+       status changing in place fades rather than snaps. Nothing here travels
+       or scales; that is what the preference asks to lose. Each list is its
+       utility's own, so the focus ring still appears at once (S9). */
+    .motion-tint {
+      transition-duration:
+        var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+        var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+        var(--ring-fade) !important;
+      transition-delay: 0s !important;
+    }
+    .hover-tint {
+      transition-duration: var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--ring-fade) !important;
+      transition-delay: 0s !important;
+    }
+    .link-hover {
+      transition-duration: var(--duration-tint), var(--duration-tint), var(--ring-fade) !important;
+      transition-delay: 0s !important;
+    }
+    .tint-in,
+    .tint-out {
+      animation-duration: var(--duration-tint) !important;
       animation-delay: 0s !important;
     }
     .bloom::after {
@@ -1354,6 +1392,11 @@ html.theme-fading *::after {
    named, so nothing outside the page content can be pulled into it. */
 @utility page-head {
   &:not([data-settled]) {
+    animation: fade var(--duration-tint) var(--ease-tint) both;
+  }
+  /* A quiet visit (A-24 Q14: seen before this session, or reached by key): the
+     header tints in and nothing after it arrives; the content is simply there. */
+  &[data-quiet] {
     animation: fade var(--duration-tint) var(--ease-tint) both;
   }
 

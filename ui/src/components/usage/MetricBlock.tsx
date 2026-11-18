@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 
 import * as copy from "@/components/usage/copy";
 import { Band, cellWords } from "@/components/usage/Band";
+import { AdvancedLink } from "@/components/ui/AdvancedLink";
 import { Crossfade } from "@/lib/motion";
 import type { StatsMetric, StatsSeries, UsageWindows } from "@/lib/queries/useStats";
 import { CAP, capText, change, dayWords, daysSince, formatValue, plot, seriesName, windowDays, type Plot } from "@/lib/usage";
@@ -49,10 +50,12 @@ function inWindow(value: string, own: string, began: string | undefined, windows
 /**
  * The figure's first line: the value in the stat face (StatCard's figure) and the rest of its
  * sentence in muted, one line of text with a real space, so it reads and copies as words. With no
- * value, the sentence alone.
+ * value, the sentence alone. `opens`: the list this figure counts, where one exists (A-24 §10): the
+ * value is its name link, and its words say where it goes.
  */
-function Figure({ value, said, second }: { value?: string; said: string; second?: string | null }) {
+function Figure({ value, said, second, opens }: { value?: string; said: string; second?: string | null; opens?: string }) {
   const rest = value && said.startsWith(`${value} `) ? said.slice(value.length + 1) : null;
+  const face = <span className="font-display text-figure leading-none text-ink">{value}</span>;
   return (
     <>
       <span className="flex @tablet:min-h-10 items-end @tablet:justify-end">
@@ -62,12 +65,18 @@ function Figure({ value, said, second }: { value?: string; said: string; second?
           </span>
         ) : (
           <span data-figure className="block text-small leading-none @tablet:text-right">
-            <span className="font-display text-figure leading-none text-ink">{value}</span>{" "}
+            {opens ? (
+              <AdvancedLink href={opens} aria-label={copy.opensUsage(said)} className="link-hover">
+                {face}
+              </AdvancedLink>
+            ) : (
+              face
+            )}{" "}
             <span className="ml-[3px] text-muted">{rest}</span>
           </span>
         )}
       </span>
-      {second && <span className="text-small tabular-nums text-faint">{second}</span>}
+      {second && <span className="text-small text-faint">{second}</span>}
     </>
   );
 }
@@ -83,17 +92,17 @@ export function changeWords(cells: Plot, unit: StatsMetric["unit"]): string | nu
   return c.last > c.first ? copy.changeUp(difference, day) : copy.changeDown(difference, day);
 }
 
-function figureFor(metric: StatsMetric, series: StatsSeries, cells: Plot, windows: UsageWindows, began: string | undefined): ReactNode {
+function figureFor(metric: StatsMetric, series: StatsSeries, cells: Plot, windows: UsageWindows, began: string | undefined, opens?: string): ReactNode {
   if (metric.instrument === "counter") {
     // Cut short by retention or by the record, a sum is of the days it covers and says so; both
     // windows starting on one day are one sum, said once.
     const a = inWindow(formatValue(series.sum_30d ?? 0, metric.unit), windows.window_30d_from, began, windows, copy.inDays);
     const b = inWindow(formatValue(series.sum_12m ?? 0, metric.unit), windows.window_12m_from, began, windows, copy.inMonths);
-    return <Figure value={formatValue(series.sum_30d ?? 0, metric.unit)} said={a.said} second={b.start === a.start ? null : b.said} />;
+    return <Figure value={formatValue(series.sum_30d ?? 0, metric.unit)} said={a.said} second={b.start === a.start ? null : b.said} opens={opens} />;
   }
   if (!series.latest) return <Figure said={copy.NO_RECENT_VALUE} />;
   const value = formatValue(series.latest.value, metric.unit);
-  return <Figure value={value} said={copy.latestOn(value, dayWords(series.latest.day))} second={changeWords(cells, metric.unit)} />;
+  return <Figure value={value} said={copy.latestOn(value, dayWords(series.latest.day))} second={changeWords(cells, metric.unit)} opens={opens} />;
 }
 
 /** A row with no band: the metric's label in the name seat, an empty band seat, a sentence in the figure seat. */
@@ -104,7 +113,7 @@ function LabelRow({ label, said }: { label: string; said: string }) {
 /** The section's axis: the window's first day, and the readout seat (today at rest, else the day being read). */
 export function Axis({ first, readout, inset = true }: { first: string; readout: string; inset?: boolean }) {
   return (
-    <div data-axis className={`flex justify-between gap-3 text-fine tabular-nums leading-[1.3] text-faint ${inset ? "pt-1.5 @tablet:pl-[224px] @tablet:pr-[264px]" : "pt-0.5"}`}>
+    <div data-axis className={`flex justify-between gap-3 text-fine leading-[1.3] text-faint ${inset ? "pt-1.5 @tablet:pl-[224px] @tablet:pr-[264px]" : "pt-0.5"}`}>
       <span>{dayWords(first)}</span>
       <span aria-live="polite" className="ml-auto text-right">
         <Crossfade id={readout} inline>
@@ -120,7 +129,7 @@ export function Axis({ first, readout, inset = true }: { first: string; readout:
  * retention; a totals page's never are). The day the record began is the add-on's (`metric.began`,
  * its began gap). `first`/`titled`: the section's place in its card.
  */
-export function MetricBlock({ metric, windows, first = false, titled = false }: { metric: StatsMetric; windows: UsageWindows; first?: boolean; titled?: boolean }) {
+export function MetricBlock({ metric, windows, first = false, titled = false, opens }: { metric: StatsMetric; windows: UsageWindows; first?: boolean; titled?: boolean; opens?: string }) {
   const [read, setRead] = useState<{ row: number; index: number } | null>(null);
   const began = metric.began ?? undefined;
   const label = capText(metric.label, CAP.label);
@@ -167,7 +176,7 @@ export function MetricBlock({ metric, windows, first = false, titled = false }: 
                 onRead={(index) => setRead(index === null ? null : { row: i, index })}
               />
             }
-            figure={figureFor(metric, s, plots[i], windows, began)}
+            figure={figureFor(metric, s, plots[i], windows, began, metric.per_subject ? opens : undefined)}
           />
         ))}
         <Axis first={days[0]} readout={readout} />

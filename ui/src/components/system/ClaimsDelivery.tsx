@@ -402,7 +402,7 @@ function AppRow({ app }: { app: ClaimApp }) {
           </>
         )}
       </span>
-      <span className="text-small tabular-nums text-muted tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">{answerTime(app)}</span>
+      <span className="text-small text-muted tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">{answerTime(app)}</span>
     </div>
   );
 }

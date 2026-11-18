@@ -228,7 +228,7 @@ function WaitingRoles({
                     <UserName id={m.marked_by} fallback={personOr(null, true)} />,{" "}
                     {formatShortDate(m.marked_at)}
                   </span>
-                  <span className="w-full text-body font-semibold tabular-nums tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+                  <span className="w-full text-body font-semibold tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                     {peopleOf(role)}
                     <span className="text-small font-normal text-faint tablet:hidden">
                       {peopleSuffix(peopleOf(role))}
