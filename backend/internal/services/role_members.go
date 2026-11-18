@@ -526,7 +526,9 @@ type DirectGrantRemoval struct {
 	// Retained lists pairs the person keeps because another source still
 	// covers them. Nothing is queued for these.
 	Retained []string `json:"retained_roles"`
-	Status   string   `json:"status"`
+	// Status is this role's own revoke row's, once sent ("applied" when Zitadel
+	// took it), and "pending" otherwise: never a sibling row's from the cascade.
+	Status string `json:"status"`
 }
 
 // ExpiredGrantRevocation is what one expired grant produced.

@@ -143,6 +143,9 @@ describe("revoking access on a target", () => {
     // The result screen's own disclosure — drains on its own, no operator
     // action needed — must not have been contradicted by the form it replaced.
     expect(screen.getByText(/drains on its own/i)).toBeInTheDocument();
+    // A-24 §13: the lock is queued, so it is On its way, never Revoked, while it is.
+    expect(screen.getByText("On its way")).toBeInTheDocument();
+    expect(screen.queryByText("Revoked")).toBeNull();
   });
 
   // Half of it going through is its own outcome, and the surface names which

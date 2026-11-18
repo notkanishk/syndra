@@ -26,6 +26,7 @@ import { describeFailure, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
 import { formatAt, formatBytes, formatClock, formatList, formatShortDate } from "@/lib/format";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
+import { useLongWait } from "@/lib/useLongWait";
 import {
   useSetStorageCredential,
   type MyTargetView,
@@ -658,7 +659,7 @@ function PasswordForm({
   const refused = status === "rejected" || status === "unreached";
   // Step 3's line, until this visit's own answer speaks for the change.
   const returned = Boolean(view.password_change) && !set.data && !set.isPending;
-  const slow = useSlow(set.isPending);
+  const slow = useLongWait(set.isPending, SLOW_ANSWER_MS);
   const scope = `Only for ${label}: not your Syndra sign-in or your Google account.`;
 
   return (
@@ -773,18 +774,4 @@ function PasswordForm({
       )}
     </form>
   );
-}
-
-/** True once a pending send has gone SLOW_ANSWER_MS without an answer; false again when it settles. */
-function useSlow(pending: boolean): boolean {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    if (!pending) {
-      setSlow(false);
-      return;
-    }
-    const timer = setTimeout(() => setSlow(true), SLOW_ANSWER_MS);
-    return () => clearTimeout(timer);
-  }, [pending]);
-  return slow;
 }

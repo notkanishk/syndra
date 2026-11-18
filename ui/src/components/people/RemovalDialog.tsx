@@ -10,6 +10,7 @@ import {
   type SourceKind,
 } from "@/components/access/AccessSource";
 import { RoleRef } from "@/components/names";
+import { ChangeTrail, changeTrailFor, type TrailStart } from "@/components/people/ChangeTrail";
 import { useShownNames } from "@/components/names/shownNames";
 import { sortNames } from "@/lib/sort";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -107,9 +108,10 @@ const resultWord = (outcome: Outcome | null, act: "revoke" | "remove" | "cancel"
 };
 
 /**
- * What removing a direct grant did, from the server's answer (W7). "The access
- * is gone" only when nothing was queued or Zitadel took the revocation; a role
- * that waits, a send that stopped, and a send Zitadel didn't take each say so.
+ * What removing a direct grant did, from the server's answer (W7), saying only
+ * what was observed (A-24 §13): Zitadel took the revocation when this role's own
+ * row says applied, and that is accepted, not read back; a role that waits, a
+ * send that stopped, and a send Zitadel didn't take each say so.
  */
 export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel: string, names?: ShownNames, auto: AutoRetry = true): Outcome {
   const raw = result?.retained_roles ?? [];
@@ -154,12 +156,18 @@ export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel
       sendsItself: true,
     };
   }
+  // Nothing waits. What is said is what was observed (nothing says what doesn't happen): Zitadel
+  // took the revocation when the role's own row says applied, which is accepted, not yet read back
+  // (the trail says when it is). Without that, the revocation is recorded and not in Zitadel yet.
+  const taken = result?.status === "applied";
   return {
-    kind: "applied",
+    kind: taken || retained.length ? "applied" : "queued",
     message: `Direct access to ${roleLabel} revoked`,
     detail: retained.length
       ? `They still hold ${retained.join(", ")}, from a bundle or a rule.`
-      : "Nothing else was supplying it, so the access is gone.",
+      : taken
+        ? "Nothing else was supplying it, and Zitadel took the revocation. It has not been read back yet."
+        : "Nothing else was supplying it. The revocation is not in Zitadel yet.",
   };
 }
 
@@ -294,6 +302,8 @@ function DirectDialog({
   const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [word, setWord] = useState<string | null>(null);
+  // The revocation's trail (A-24 §5): only when one was queued for this role and nothing kept it.
+  const [trail, setTrail] = useState<TrailStart | undefined>(undefined);
   const retained = others.length > 0;
   const roleLabel = useRoleLabel()(removal);
   const shown = useShownNames();
@@ -428,6 +438,9 @@ function DirectDialog({
         />
       )}
       {outcome && <ActionOutcome word={word ?? resultWord(outcome, cancelOnly ? "cancel" : "revoke")} outcome={outcome} person={userId} className="mx-6 mb-1" />}
+      {trail && userId && (
+        <ChangeTrail userId={userId} projectId={removal.projectId} roleKey={removal.roleKey} act="revoke" {...trail} className="mx-6 mb-1 mt-3" />
+      )}
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
@@ -499,6 +512,10 @@ function DirectDialog({
                 // diff the server does — the UI must not hold a second opinion
                 // about somebody's access.
                 setOutcome(removalOutcome(result, roleLabel, shown, auto));
+                // The trail, by the one rule. A role a bundle or rule still gives (`retained_roles`, "project/role")
+                // has no revoke row of its own, so nothing of it went toward Zitadel.
+                const kept = result.retained_roles?.includes(`${removal.projectId}/${removal.roleKey}`);
+                setTrail(changeTrailFor(kept ? undefined : result.status, result.wait_reason));
               } catch (error) {
                 held.release();
                 // Their access moved since the plan was read: nothing was written.

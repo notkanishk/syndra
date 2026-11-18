@@ -7,6 +7,7 @@ import { checkAgainNext, cooldownLine, retryingLine } from "@/components/results
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { ArriveList, Crossfade, FOLD_MS, LeavingRow, TINT_MS, UnfoldOnArrival, Unfold, useExitPhase, useFlashOnChange, useLeavingRows } from "@/lib/motion";
+import { useLongWait } from "@/lib/useLongWait";
 
 import { ADOPT_STAYS, SERVICE_STOPPED, STORAGE_OPERATION_LABEL, UNAUDITED_LABEL, UnauditedShares, serviceName } from "@/components/kinds/storage/readings";
 
@@ -581,6 +582,9 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
       ? `halted:${result.reason ?? ""}:${result.detail ?? ""}:${result.retry_after ?? ""}`
       : `read:${result.current}:${result.bound}:${result.queued}:${result.stale?.length ?? 0}`;
   const changed = useFlashOnChange(resultKey);
+  // A check past ten seconds says so, once, on tint (A-24 §6). Only that: its result is a mutation's
+  // answer, gone if the page is left, so it never says the result will be here on return (§13).
+  const long = useLongWait(run.isPending);
   function check() {
     run.mutate(undefined, {
       onSuccess: (pass) => {
@@ -624,8 +628,10 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
           </Button>
         }
       >
-        <Crossfade id={waiting ? "waiting" : skipped ? "skipped" : resultKey} className="flex-1 text-body text-muted">
-          {waiting ? null : skipped ? (
+        <Crossfade id={long ? "long" : waiting ? "waiting" : skipped ? "skipped" : resultKey} className="flex-1 text-body text-muted">
+          {long ? (
+            `Still reading ${name}.`
+          ) : waiting ? null : skipped ? (
             <span className="text-warn-text">
               {left > 0 ? `${cooldownLine(name, left)}. ` : ""}
               {checkAgainNext(left)}

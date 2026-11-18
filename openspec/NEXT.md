@@ -26,6 +26,8 @@ Source: `from-design/A-24-the-craft.md` and boards `design/a24-the-craft-1..3`; 
 - **Q12 · A year of days** on Insights' Usage (§10 vivid): once counting has run a term. The record began 6 Nov 2026, so a year would be mostly empty before then. Needs a daily series for twelve months, where the card reads thirty days. `needs-triage`
 - **Q16 · The name carries you** from a row to its page's title (§2 vivid): a spike inside the Next 16 slice (0h2), with `<ViewTransition>`, kept only if it is still welcome on the hundredth open. It is one written exception to `--travel-cap`. `needs-triage`
 - **Q19 · The term in review** (§4.2): a view on Insights that opens on a term's last day; its own slice, later. `needs-triage`
+- **The ledger line** (§4.1 warm, wave 2): not built, because no read gives one operator's acts today and how many are in Zitadel. The smallest read, proposed in A-24 §13: `GET /me/today`, read-only, `{decided, sent, in_zitadel, since}` from `audit_logs` joined to each act's outbox rows. Needs the owner's word before it is built. `needs-info`
+- **What stays, before a revoke** (§5): traced (A-24 §13: the Zitadel user, the TrueNAS account locked not deleted, the home folder and files all stay), not yet said in the confirm, because it changes a consent. `needs-info`
 
 ## 0k. Deleting a TrueNAS account from Syndra (owner, 18 Nov 2026: implement later)
 

@@ -80,12 +80,16 @@ export function RevokeDialog({
           the typed name unmount with the body; the header keeps its title. */}
       {result ? (
         <div className="grid gap-3 px-6">
+          {/* Only what was observed (A-24 §13): the password is replaced at once, and the lock is
+              queued, so it is On its way (the copy guide's word for a revocation that sends itself),
+              never Revoked, until nothing of it is still on its way. */}
           <ActionOutcome
-            word={result.status === "revoked" ? "Revoked" : "Partly done"}
+            word={result.status !== "revoked" ? "Partly done" : result.queued ? "On its way" : "Revoked"}
             outcome={{
-              kind: result.status === "revoked" ? "applied" : "queued",
+              kind: result.status === "revoked" && !result.queued ? "applied" : "queued",
               message: result.detail ?? "",
               detail: result.disclosure,
+              ...(result.status === "revoked" && result.queued ? { sendsItself: true } : {}),
               ...(result.outstanding ? { next: `Still outstanding: ${result.outstanding}.` } : {}),
             }}
           />

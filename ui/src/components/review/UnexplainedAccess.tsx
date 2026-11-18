@@ -448,6 +448,7 @@ export function UnexplainedAccess() {
               title="Everyone inside is on the list, and everyone on the list is inside."
               guidance="Every piece of access in Zitadel traces back to something Syndra did, and everything Syndra gave is there."
               resolved
+              plate="shut"
               lift={clearedByMe}
               bloom={clearedByMe}
             />

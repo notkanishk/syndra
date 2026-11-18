@@ -440,6 +440,8 @@ export default function PeoplePage() {
           empty={
             <EmptyState
               title={hasAnyFilter(filters) ? "Nobody matches that." : "There's nobody here yet."}
+              // A beginning has its open door; a search that missed has no drawing (A-24 §7).
+              plate={hasAnyFilter(filters) ? undefined : "open"}
               guidance={
                 hasAnyFilter(filters)
                   ? "Try a shorter search, part of an email address, or a role key."

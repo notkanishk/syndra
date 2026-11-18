@@ -291,13 +291,15 @@ func removeGrantPlanned(w http.ResponseWriter, r *http.Request, userID, grantID 
 	rebuildUserCacheDetachedFn(r.Context(), userID)
 
 	res := services.DirectGrantRemoval{Status: "pending", Revoked: []string{}, Retained: []string{}}
-	revokesOwn := false
+	revokesOwn, ownRow := false, ""
 	for _, wr := range ch.Writes {
 		if wr.OpType != "revoke" {
 			continue
 		}
 		res.Revoked = append(res.Revoked, wr.ProjectID+"/"+wr.RoleKeys[0])
-		revokesOwn = revokesOwn || (wr.ProjectID == ch.ProjectID && wr.RoleKeys[0] == ch.RoleKey)
+		if wr.ProjectID == ch.ProjectID && wr.RoleKeys[0] == ch.RoleKey {
+			revokesOwn, ownRow = true, wr.OutboxID
+		}
 		if wr.OutboxID != "" {
 			res.OutboxIDs = append(res.OutboxIDs, wr.OutboxID)
 		}
@@ -307,8 +309,10 @@ func removeGrantPlanned(w http.ResponseWriter, r *http.Request, userID, grantID 
 	}
 	d := svcDeliverChange(r.Context(), ch)
 	res.WaitReason, res.Retry = d.WaitReason(), d.Drain.Retry
-	for _, id := range d.Sent {
-		if st, serr := dbGetPropagationStatus(r.Context(), id); serr == nil && st != "" {
+	// The status is this role's own revoke row's, never a sibling's: a cascade sends several rows,
+	// and the last one sent says nothing about whether this role's revocation reached Zitadel.
+	if ownRow != "" && slices.Contains(d.Sent, ownRow) {
+		if st, serr := dbGetPropagationStatus(r.Context(), ownRow); serr == nil && st != "" {
 			res.Status = st
 		}
 	}

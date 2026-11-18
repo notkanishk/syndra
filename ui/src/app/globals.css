@@ -357,6 +357,17 @@
     }
   }
 
+  /* A list closes (A-24 §4.1): its lime hairline draws left to right, once, and
+     rests. A line growing along its own length, not content travelling. */
+  @keyframes hairline-draw {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: none;
+    }
+  }
+
   /* A phone sheet rises from the bottom edge of the screen and nothing else:
      the scrim carries the fade. Its own travel, so not held to --travel-cap. */
   @keyframes sheet-rise {
@@ -1066,6 +1077,65 @@
    appears in place on tint and stays steady. */
 @utility lift-in {
   animation: lift var(--duration-settle) var(--ease-settle) both;
+}
+
+/* The list closes (A-24 §4.1 vivid; Home's all-clear only, once a day, by the
+   reader's own hand): a lime hairline along the top edge, drawn over one flash
+   and then at rest. Under reduced motion it is simply there, drawn. */
+@utility close-line {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--healthy) 16%, var(--healthy) 56%, transparent);
+  transform-origin: left;
+  animation: hairline-draw var(--duration-flash) var(--ease-flash) both;
+}
+
+/* A plate (A-24 §7, Q9): the door, in hairlines with one lit point. Shut, with
+   lime, for a queue that is clear; open, with violet light, for a list that is
+   beginning. Drawn in both rooms from the tokens; shown only once the owner has
+   seen them (PLATES_SHOWN). */
+@utility plate {
+  position: relative;
+  width: 64px;
+  height: 76px;
+  flex: none;
+
+  & > .plate-arch {
+    position: absolute;
+    inset: 0 10px;
+    border: 1.5px solid var(--line-strong);
+    border-bottom: 0;
+    border-radius: 999px 999px 0 0;
+    background: var(--tint-1);
+  }
+  & > .plate-floor {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 1.5px;
+    background: var(--line-strong);
+  }
+  & > .plate-point {
+    position: absolute;
+    left: 50%;
+    bottom: -3px;
+    width: 7px;
+    height: 7px;
+    margin-left: -3.5px;
+    border-radius: 50%;
+    background: var(--healthy);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--healthy) 16%, transparent);
+  }
+  &[data-plate="open"] > .plate-arch {
+    border-color: var(--accent-line);
+    background: linear-gradient(to top, color-mix(in srgb, var(--accent) 40%, transparent), transparent 88%);
+  }
+  &[data-plate="open"] > .plate-point {
+    background: var(--accent);
+    box-shadow: 0 0 0 5px var(--accent-soft);
+  }
 }
 
 /* The shared bloom: a 9px ring of the dot's own colour, on flash's duration

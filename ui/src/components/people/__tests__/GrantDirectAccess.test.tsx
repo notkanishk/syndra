@@ -24,6 +24,10 @@ const state = vi.hoisted(() => ({
   queuedAt: undefined as string | undefined,
   // The backend's standing for the operator role; the dialog only reads it.
   standing: undefined as string | undefined,
+  // When the person was last read (ms): a read older than the act says nothing about it.
+  readAt: 0,
+  // When Zitadel was last read for them (the server's): only a newer read settles the trail's last step.
+  zitadelAt: "2026-11-09T09:00:00Z",
   terms: undefined as Array<{ name: string; start: string; end: string }> | undefined,
   // What the planner answers (GET /users/{id}/plan), and the reads it was asked.
   plan: undefined as unknown as ActPlan,
@@ -84,7 +88,9 @@ vi.mock("@/lib/queries/useUsers", () => ({
   useCreateGrant: () => ({ mutateAsync: state.mutateAsync, isPending: false }),
   useUserGrants: () => ({ data: state.grants }),
   useUserAccess: () => ({
+    dataUpdatedAt: state.readAt,
     data: {
+      observation: { read_at: state.zitadelAt, current: true, truncated: false },
       projects: [
         {
           project_id: "p1",
@@ -107,6 +113,8 @@ beforeEach(() => {
   state.queued = [];
   state.queuedAt = undefined;
   state.standing = undefined;
+  state.readAt = 0;
+  state.zitadelAt = "2026-11-09T09:00:00Z";
   state.terms = undefined;
   state.plan = actPlan();
   state.planFails = false;
@@ -540,5 +548,81 @@ describe("GrantDirectAccess · what the plan says before the press", () => {
     expect(await screen.findByText("Nothing to give.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Give Operator" })).toBeDisabled();
     expect(screen.getByText("Charlotte already has Operator.")).toBeInTheDocument();
+  });
+});
+
+// A-24 §5: the change's trail under the result. Each step settles only on what was observed.
+describe("GrantDirectAccess · the change's trail", () => {
+  const steps = () =>
+    Array.from(screen.getByRole("list", { name: "On its way to Zitadel" }).querySelectorAll("li")).map((li) => ({
+      text: li.textContent,
+      settled: !li.querySelector("[data-dot]")?.hasAttribute("data-ring"),
+    }));
+
+  it("is recorded and sent when Zitadel took it, and not read back until a read after the give says so", async () => {
+    // Zitadel shows it held, but in a read from before the give: that says nothing about it.
+    state.mutateAsync.mockImplementation(async () => {
+      state.standing = "held";
+      return { outbox_id: "o1", status: "applied" };
+    });
+    state.readAt = 0;
+    open();
+    await grant();
+    expect(steps()).toEqual([
+      { text: "Step 1: Recorded in Syndra.", settled: true },
+      { text: "Step 2: Sent to Zitadel.", settled: true },
+      { text: "Step 3: Not read back from Zitadel yet.", settled: false },
+    ]);
+  });
+
+  it("settles In Zitadel from a read made after the give, with when it was read", async () => {
+    state.mutateAsync.mockImplementation(async () => {
+      state.standing = "held";
+      state.readAt = Number.MAX_SAFE_INTEGER;
+      return { outbox_id: "o1", status: "applied" };
+    });
+    const view = open();
+    await grant();
+    // Then Zitadel is read again, after the give, and the person is fetched with it.
+    state.zitadelAt = "2026-11-09T09:43:00Z";
+    view.rerender(withPlanClient(<GrantDirectAccess userId="u1" userName="Charlotte Flair" open onClose={vi.fn()} />));
+    expect(steps()[2]).toEqual({ text: expect.stringMatching(/^Step 3: In Zitadel\.Read back at \d\d:\d\d\.$/), settled: true });
+  });
+
+  it("stops where a waiting role waits: recorded, not sent, not in Zitadel", async () => {
+    state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "pending", wait_reason: "role_waits" });
+    open();
+    await grant();
+    expect(steps().map((s) => [s.text, s.settled])).toEqual([
+      ["Step 1: Recorded in Syndra.", true],
+      ["Step 2: Not sent to Zitadel yet.", false],
+      ["Step 3: Not in Zitadel yet.", false],
+    ]);
+  });
+
+  it("a read fetched after the give but carrying Zitadel's older read settles nothing", async () => {
+    state.mutateAsync.mockImplementation(async () => {
+      state.standing = "held";
+      state.readAt = Number.MAX_SAFE_INTEGER; // fetched after, Zitadel not read again
+      return { outbox_id: "o1", status: "applied" };
+    });
+    open();
+    await grant();
+    expect(steps()[2]).toEqual({ text: "Step 3: Not read back from Zitadel yet.", settled: false });
+  });
+
+  it("is not drawn for a give that queued no row of its own: nothing went to Zitadel", async () => {
+    // The answer says "applied" when nothing waits, which with no row means nothing was sent.
+    state.mutateAsync.mockResolvedValue({ outbox_id: "", status: "applied" });
+    open();
+    await grant();
+    expect(screen.queryByRole("list", { name: "On its way to Zitadel" })).toBeNull();
+  });
+
+  it("is not drawn for a give Zitadel refused: the failure says what happened", async () => {
+    state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "failed", wait_reason: "refused:not_found" });
+    open();
+    await grant();
+    expect(screen.queryByRole("list", { name: "On its way to Zitadel" })).toBeNull();
   });
 });
