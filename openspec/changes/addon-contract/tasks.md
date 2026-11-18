@@ -2997,7 +2997,37 @@ end to end) found no missing function; three regressions with one root cause
     - **Left, low:**
       - while Check now waits, the check's own row says nothing beside the disabled button, because the wait line is RetryWait's row under it;
       - ServiceAccountPage's sources keep their pre-existing `order-last` on a phone.
-  - [ ] 7u-3 Pass 3, Home (Q6).
+  - [x] 7u-3 Pass 3, Home (Q6).
+    *Done (18 Nov 2026, branch `feat/addon-contract-d1-3`):*
+    - **Home (§5 #38; Q6, recommended, pending owner):**
+      - Home's two groups, Time-sensitive and When you're ready, stack a region apart (`flex-col gap-(--region-gap)`). Before, they sat in two pinned columns, so a short group left its column empty beside a long one.
+      - Each group's heading is a region's (`type-section-title`, no longer the card titles' size), and its note is `text-small`.
+      - A group's blocks sit in a grid, `repeat(auto-fit, minmax(min(100%, 600px), 1fr))`, gap 16, under `--region-head-gap`: two across where each can be 600 wide (the 1800 window), one under the other where they cannot (1440).
+      - `Block` no longer carries its own 14px. A block that has gone renders nothing, so it holds no cell and no gap.
+      - **To flip Q6** back to two pinned columns: `desktop:grid-cols-2` on the stack, and `col-start` on the groups.
+    - **Staging consistency (lead, 18 Nov):**
+      - **(1) "Not created by Syndra" follows the rule "Accounts Syndra manages" set.**
+        - The status column holds the state and its note: `StandingLine step={false}`, in a `--seat-status` seat.
+        - The next step (`StandingStep`, the same words) is the row's detail line.
+        - The account flexes, so the status starts at one x whatever the username's length.
+        - "No longer needed" has no status column (its rows say when each account last signed in), so there is nothing to move.
+        - Not created's adoption outcome panel is always passed (a fragment), so the outcome arriving never remounts the row.
+      - **(2) Syndra's own row** keeps an empty seat, and its sentence stays on the detail line, now beside the other rows' next steps.
+    - **Tests:**
+      - `HomeColumns.test.tsx`: an empty group leaves and the other stands at full width; each group's heading is `type-section-title`; its blocks use the 600px auto-fit grid.
+      - `TargetOverview.test.tsx`: Not created's status seat is `--seat-status`, with the next step in the detail line and not in the seat; Syndra's own sentence is in the detail line beside an empty seat.
+    - **Mutation-checked** (each red): the stack back to two columns; the heading back to a card title; the blocks' minimum at 420; Not created's step back in the status seat.
+    - **Staging round** (18 Nov 2026; lead, 1481px): Home's "Gaps" stretched to the height of "Roles most people hold" (about 370px, one row), in the makerspace's hand-built grid with no start alignment. When you're ready's short block sat beside a long one.
+      - **One rule, one primitive.** `CardGrid` (`Card.tsx`): `grid items-start gap-4`, as many across as can each be `min` wide (`pair` 420, `wide` 600).
+      - **Why top-aligned, rows first:** a card is as tall as what it says, never stretched, and the space under a short card is the page's.
+      - **Why not a column flow:** it would fill that space, but it moves a card from one column to the other whenever a count changes (structure moving with data), reads down before across, and breaks a block's fold animation at a column break. Stacking would waste the 1800 frame.
+      - **Applied** to Home's blocks (`wide`), the makerspace's Gaps and Roles (`pair`), the system page's reach and reports cards and its "What it can do" and "Check for differences" cards (`pair`), and Insights' trends (`pair`; the full-width chart is `col-span-full`).
+      - **Left as they are:** a band of stat tiles (`StatCard`, now `data-stat-tile`) is equal tiles, not cards, and keeps its own grid.
+      - **Guards:**
+        - `test-utils/layout.ts`, after every test: a grid that splits into columns and holds two or more cards (directly, or each in one wrapper) outside `CardGrid` fails.
+        - `design-system.test.ts`: `CardGrid` is `items-start`, and no hand-built column grid holds a `Card` or `…Card` part in source.
+        - `RowSeat.test.tsx`: `CardGrid`'s classes, and the guard catching a hand grid while leaving stat tiles alone.
+      - **Mutation-checked** (each red): the makerspace back to its hand grid (caught by the suite-wide guard over the Home tests); the system page's "What runs here" as a hand grid; `CardGrid` without `items-start`.
   - [ ] 7u-4 Pass 4, three text sizes (Q3), with §5 #40's remaining raw display sizes and #41 `/storage`; then no `text-[NNpx]` in components.
   - [ ] 7u-5 Motion (§7: the five tokens, M1–M14, the eight motion tests).
   - [ ] 7u-6 Pass 5, resync the design system (`ui/.design-sync`, BRIDGE steps 1 to 3), after the owner's OK.

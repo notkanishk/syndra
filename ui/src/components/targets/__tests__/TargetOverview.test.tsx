@@ -541,14 +541,23 @@ describe("one target's page", () => {
       current: true,
       read_at: new Date().toISOString(),
       unmanaged: [
-        { username: "a", account_id: "1" },
+        { username: "a", account_id: "1", standing: { usable: false, waiting_on: "none", note: "Switched off on TrueNAS." } },
         { username: "a-much-longer-service-account", account_id: "2" },
       ],
     };
     renderTarget();
+    // As on "Accounts Syndra manages": the account flexes and the status has a fixed seat before the
+    // action seat, so it starts at one x whatever the username's length.
     const names = ["a", "a-much-longer-service-account"].map((n) => screen.getByText(n));
-    for (const n of names) expect(n).toHaveClass("w-[220px]", "flex-none");
-    expect(document.querySelectorAll("[data-standing-seat]")).toHaveLength(2);
+    for (const n of names) expect(n).toHaveClass("flex-1");
+    const seats = document.querySelectorAll("[data-standing-seat]");
+    expect(seats).toHaveLength(2);
+    for (const s of Array.from(seats)) expect(s).toHaveClass("w-(--seat-status)", "flex-none");
+    // The status column holds the state and its note; the next step is the row's detail line (D-1 §5 #39).
+    const row = names[0].closest("[data-card-row]") as HTMLElement;
+    const step = row.querySelector("[data-row-detail] [data-standing-step]") as HTMLElement;
+    expect(step.textContent).toMatch(/\S/);
+    expect(row.querySelector("[data-standing-seat]")).not.toHaveTextContent(step.textContent!);
   });
 
   // A-01: Syndra's breaker is "waiting to retry", and it sends the operator to
@@ -619,7 +628,7 @@ describe("one target's page", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.inventory = { target: "truenas", bound: 0, unmanaged: [{ username: "root", account_id: "0" }], current: true };
     renderTarget();
-    expect(document.querySelector("[data-standing-seat]")).toHaveClass("basis-[200px]");
+    expect(document.querySelector("[data-standing-seat]")).toHaveClass("w-(--seat-status)");
   });
 
   // 1.19 — the inventory is reported, never triaged. Nothing on this page calls
@@ -1334,8 +1343,10 @@ describe("every action in its seat (D-1)", () => {
     renderTarget();
     const assign = screen.getByRole("button", { name: "Assign to a person" });
     expect(seatOf(assign)).not.toHaveAttribute("data-seat");
+    // Syndra's own row keeps its seat empty and its sentence on the detail line, where the other rows say
+    // their next step, so the two read aligned.
     const own = screen.getByText(/cannot be assigned to anyone/);
-    expect(own).toHaveAttribute("data-row-detail");
+    expect(own.closest("[data-row-detail]")).not.toBeNull();
     const ownSeat = own.closest("[data-card-row]")!.querySelector("[data-action-seat]");
     expect(ownSeat).toBeEmptyDOMElement();
     expect(ownSeat).not.toHaveAttribute("data-seat");

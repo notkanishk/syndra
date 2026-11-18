@@ -98,9 +98,29 @@ export function longNotes(root: Element): string[] {
     .map((text) => `a CardHeader note of ${text.length} characters (use caption): "${text}"`);
 }
 
+/**
+ * Cards side by side go through `CardGrid`, which top-aligns them: a grid built
+ * by hand stretched a one-line card to the height of the list beside it (Home's
+ * "Gaps", 370px; staging, 18 Nov). A grid that splits into columns and holds two
+ * or more cards (directly, or each in one wrapper, as Home's folding blocks are)
+ * is CardGrid's. A band of stat tiles (`data-stat-tile`) is equal tiles, not cards.
+ */
+export function cardGridsByHand(root: Element): string[] {
+  const found: string[] = [];
+  for (const grid of Array.from(root.querySelectorAll(".grid:not([data-card-grid])"))) {
+    if (!/(?:^|\s)(?:[a-z]+:)?grid-cols-(?:2|\[repeat\(auto-fit)/.test(grid.getAttribute("class") ?? "")) continue;
+    const cards = Array.from(grid.children).filter((cell) => {
+      const card = cell.matches(".card") ? cell : cell.firstElementChild?.matches(".card") ? cell.firstElementChild : null;
+      return card !== null && !card.matches("[data-stat-tile]");
+    });
+    if (cards.length >= 2) found.push(`${cards.length} cards side by side in a grid built by hand (use CardGrid): "${words(grid).slice(0, 60)}"`);
+  }
+  return found;
+}
+
 /** The guards' findings in `root`. */
 export function layoutFindings(root: Element): string[] {
-  return [...actionsInProse(root), ...dotLinesOffIndent(root), ...actionsOutsideSeats(root), ...longNotes(root)];
+  return [...actionsInProse(root), ...dotLinesOffIndent(root), ...actionsOutsideSeats(root), ...longNotes(root), ...cardGridsByHand(root)];
 }
 
 function describe(action: Element): string {

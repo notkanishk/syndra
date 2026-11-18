@@ -1169,6 +1169,26 @@ describe("density and alignment (D-1)", () => {
     expect(found, `A line of its own capped by a max-width can sit beside the line above; use CardRow's detail:\n  ${found.join("\n  ")}`).toEqual([]);
   });
 
+  // Staging, 18 Nov: Home's "Gaps" stretched to 370px beside a long list, in a grid built by hand
+  // without start alignment. Cards side by side go through CardGrid, which top-aligns them.
+  it("puts cards side by side only through CardGrid, which top-aligns them", () => {
+    const card = readFileSync(resolve(SRC_ROOT, "components/ui/Card.tsx"), "utf8");
+    expect(card).toMatch(/data-card-grid className=\{`grid items-start gap-4 /);
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      if (!file.endsWith(".tsx") || file.endsWith("components/ui/Card.tsx")) continue;
+      const source = readFileSync(file, "utf8");
+      for (const m of Array.from(source.matchAll(/<div className="(grid [^"]*(?:grid-cols-2|auto-fit)[^"]*)">([\s\S]*?)<\/div>/g))) {
+        // A grid whose cells are cards (a Card, or a part named …Card): CardGrid's job. A row of stat
+        // tiles (StatCard) is a band of equal tiles, not cards of different heights, and stays its own.
+        if (/<(?:Card|(?!StatCard)[A-Z]\w*Card)[\s>]/.test(m[2])) {
+          found.push(`${file.replace(`${SRC_ROOT}/`, "")}:${source.slice(0, m.index).split("\n").length} ${m[1]}`);
+        }
+      }
+    }
+    expect(found, `Use CardGrid for cards side by side:\n  ${found.join("\n  ")}`).toEqual([]);
+  });
+
   it("takes no line for an empty detail", () => {
     expect(namedAtRuleBody(css, "@utility", "row-detail")).toMatch(/&:empty \{\s*display: none;\s*\}/);
   });

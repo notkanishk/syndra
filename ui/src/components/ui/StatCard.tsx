@@ -52,11 +52,14 @@ export function StatCard({
     <AdvancedLink
       href={href}
       aria-label={label}
+      data-stat-tile
       className={`${frame} block text-inherit no-underline motion-tint hover:shadow-[0_0_0_1px_var(--accent-line)] active:[background-image:linear-gradient(var(--tint-3),var(--tint-3))]`}
     >
       {body}
     </AdvancedLink>
   ) : (
-    <div className={frame}>{body}</div>
+    <div data-stat-tile className={frame}>
+      {body}
+    </div>
   );
 }

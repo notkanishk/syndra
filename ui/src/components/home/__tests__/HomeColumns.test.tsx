@@ -153,14 +153,30 @@ describe("Home's two columns", () => {
     expect(screen.getByText("Nothing changes until you act.")).toBeTruthy();
   });
 
-  it("a column with nothing in it leaves, and the other keeps its own side", () => {
+  // D-1 pass 3 (Q6, recommended, pending owner): the two groups stack, a region apart; a group with
+  // nothing in it leaves, and the other takes the page's width, not half of it.
+  it("a group with nothing in it leaves, and the other stands alone at full width", () => {
     state.requests = [request];
     renderHome();
 
     expect(screen.queryByRole("region", { name: "Time-sensitive" })).toBeNull();
-    const right = screen.getByRole("region", { name: "When you're ready" });
-    // Not pulled across into the empty column's place: the same seat as when both are full.
-    expect(right.closest(".unfold")!.className).toContain("desktop:col-start-2");
+    const ready = screen.getByRole("region", { name: "When you're ready" });
+    const stack = ready.closest(".unfold")!.parentElement!;
+    expect(stack.className).toContain("flex-col");
+    expect(stack.className).toContain("gap-(--region-gap)");
+    expect(stack.className).not.toMatch(/grid-cols-2/);
+  });
+
+  it("heads each group as a region, and sets its blocks two across where each can be 600 wide", () => {
+    everyBlock();
+    renderHome();
+    for (const name of ["Time-sensitive", "When you're ready"]) {
+      const group = screen.getByRole("region", { name });
+      expect(within(group).getByRole("heading", { level: 2, name })).toHaveClass("type-section-title");
+      const blocks = group.querySelector("[data-home-blocks]") as HTMLElement;
+      expect(blocks.className).toContain("grid-cols-[repeat(auto-fit,minmax(min(100%,600px),1fr))]");
+      expect(blocks.className).toContain("gap-4");
+    }
   });
 
   // 5b: a block that empties while you are here is not unmounted; it fades, then its gap closes.
