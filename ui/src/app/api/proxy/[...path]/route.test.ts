@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest";
 import type { Mock } from "vitest";
 import { NextRequest } from "next/server";
 import { readFileSync } from "node:fs";
@@ -6,8 +6,19 @@ import { resolve } from "node:path";
 
 import { makeProxyFetch } from "@/test-utils/proxyFetch";
 
-vi.mock("@/lib/session", () => ({ getSession: vi.fn() }));
-import { getSession } from "@/lib/session";
+// The route reads its shared key at import, so it is set before the imports run
+// (and put back after, so no other file in this worker sees it).
+const { SHARED_KEY, PRIOR_KEY } = vi.hoisted(() => {
+  const PRIOR_KEY = process.env.SYNDRA_API_KEY;
+  process.env.SYNDRA_API_KEY = "test-shared-key";
+  return { SHARED_KEY: "test-shared-key", PRIOR_KEY };
+});
+afterAll(() => {
+  if (PRIOR_KEY === undefined) delete process.env.SYNDRA_API_KEY;
+  else process.env.SYNDRA_API_KEY = PRIOR_KEY;
+});
+vi.mock("@/lib/session", () => ({ getSession: vi.fn(), getAccessToken: vi.fn() }));
+import { getAccessToken, getSession } from "@/lib/session";
 import * as proxyRoute from "@/app/api/proxy/[...path]/route";
 import { GET, POST, PUT, DELETE, PATCH } from "@/app/api/proxy/[...path]/route";
 
@@ -283,6 +294,41 @@ function upstream(body: BodyInit | null, init?: ResponseInit) {
   global.fetch = fn as unknown as typeof fetch;
   return fn;
 }
+
+// The token is read server-side through getAccessToken, never off the session
+// a page could hand to a client component.
+describe("proxy route bearer", () => {
+  const OIDC = { id: "oidc-1", role: "admin", sessionType: "oidc" as const };
+
+  it("sends an OIDC session's own access token as the bearer", async () => {
+    (getSession as Mock).mockResolvedValue(OIDC);
+    (getAccessToken as Mock).mockResolvedValue("tok-oidc");
+    const fn = upstream(JSON.stringify([]));
+    const res = await call(GET, "GET", ["catalog"]);
+    expect(res.status).toBe(200);
+    const [, init] = fn.mock.calls[0] as unknown as [URL, RequestInit];
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok-oidc");
+  });
+
+  it("refuses an OIDC session with no token, without reaching the backend", async () => {
+    (getSession as Mock).mockResolvedValue(OIDC);
+    (getAccessToken as Mock).mockResolvedValue(null);
+    const fn = upstream(JSON.stringify([]));
+    const res = await call(GET, "GET", ["catalog"]);
+    expect(res.status).toBe(401);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("keeps a demo session on the shared key, never a session token", async () => {
+    (getSession as Mock).mockResolvedValue(ADMIN);
+    (getAccessToken as Mock).mockClear().mockResolvedValue("tok-should-not-be-used");
+    const fn = upstream(JSON.stringify([]));
+    await call(GET, "GET", ["catalog"]);
+    const [, init] = fn.mock.calls[0] as unknown as [URL, RequestInit];
+    expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${SHARED_KEY}`);
+    expect(getAccessToken).not.toHaveBeenCalled();
+  });
+});
 
 describe("proxy route contract", () => {
   beforeEach(() => (getSession as Mock).mockResolvedValue(ADMIN));
