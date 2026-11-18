@@ -180,5 +180,15 @@ describe("the list closes, and the plates (§4.1, §7, Q9)", () => {
     const rule = css.slice(css.indexOf("@utility plate"), css.indexOf("/* The shared bloom"));
     expect(rule).not.toMatch(/#[0-9a-f]{3,6}\b/i);
     expect(rule).toContain('&[data-plate="open"]');
+    // At true size: 1px lines on whole pixels, and an 8px point centred on the floor.
+    expect(rule).not.toMatch(/\d\.\dpx/);
+    expect(rule).toMatch(/& > \.plate-arch \{[^}]*border: 1px solid var\(--line-strong\);/);
+    expect(rule).toMatch(/& > \.plate-floor \{[^}]*height: 1px;/);
+    expect(rule).toMatch(/& > \.plate-point \{[^}]*width: 8px;\s*height: 8px;\s*margin-left: -4px;/);
+    // Open reads as open, not a different fill: the floor breaks at the jambs and the light spills through.
+    expect(rule).toMatch(/&\[data-plate="open"\] > \.plate-floor \{[^}]*transparent 10px calc\(100% - 10px\)/);
+    expect(rule).toMatch(/&\[data-plate="open"\] > \.plate-floor::after \{[^}]*var\(--accent\)/);
+    // Gone under forced colours, with the other lights.
+    expect(rule).toMatch(/@media \(forced-colors: active\)\s*\{\s*display: none;/);
   });
 });

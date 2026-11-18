@@ -81,11 +81,18 @@ export function MemberAccess({ session }: { session: SessionUser }) {
     project.standings?.[roleKey] ?? null;
 
   // The lit card (A-24 §3.3, Q6): a project whose access began today is lit on the
-  // first visit after it starts, and on no other. Decided once, when Zitadel and
-  // the feed have both answered, so a read that fails or hasn't landed lights
-  // nothing; every start is spent then, lit or not, so it is never lit later.
+  // first visit after it starts, and on no other. Decided once, on this visit's own
+  // answers from Zitadel and the feed: a cached answer, a read that failed or one
+  // that hasn't landed decides nothing. Only a start Zitadel holds is spent then,
+  // so one on its way or not yet held is still lit on the visit after it starts.
   const [lit, setLit] = useState<ReadonlySet<string> | null>(null);
-  const read = Boolean(access.data?.observation?.read_at) && changes.data !== undefined && !changes.error;
+  const read =
+    access.isFetchedAfterMount &&
+    !access.error &&
+    Boolean(access.data?.observation?.read_at) &&
+    changes.isFetchedAfterMount &&
+    changes.data !== undefined &&
+    !changes.error;
   useEffect(() => {
     if (lit !== null || !now || !read) return;
     const who = idHash(session.id);
@@ -324,6 +331,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
       ) : (
         <div className="flex flex-wrap gap-4">
           {sortByName(projects, (p) => p.project_name || "", (p) => p.project_id).map((project) => {
+            const isLit = lit?.has(project.project_id) ?? false;
             const roles = [...project.source_roles, ...project.derived_roles]
               .map((role) => ({
                 ...role,
@@ -338,11 +346,10 @@ export function MemberAccess({ session }: { session: SessionUser }) {
               // In its alphabetical place, lit or not: nothing is pinned (A-24 frame 8).
               <Card
                 key={project.project_id}
-                data-lit={lit?.has(project.project_id) ? "" : undefined}
-                className={`min-w-[min(420px,100%)] flex-1${lit?.has(project.project_id) ? " lit-card" : ""}`}
+                className={`min-w-[min(420px,100%)] flex-1${isLit ? " lit-card" : ""}`}
               >
                 <CardHeader
-                  note={lit?.has(project.project_id) ? "From today" : undefined}
+                  note={isLit ? "From today" : undefined}
                   title={
                     // The id is the target of the header line's jump: its title flashes on landing.
                     <span id={`card-${project.project_id}`}>

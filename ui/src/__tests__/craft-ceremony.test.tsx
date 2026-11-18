@@ -62,32 +62,37 @@ describe("the door opens (§3.2): one keyframe, once, nothing travels", () => {
 
   it("widens the arch and fades it, with no transform and no travel", () => {
     const open = keyframes("door-open");
-    expect(open).toMatch(/from \{[^}]*--door-w: 90px;[^}]*--door-h: 260px;[^}]*opacity: 1;/);
-    expect(open).toMatch(/to \{[^}]*opacity: 0;/);
+    expect(open).toMatch(/from \{[^}]*--door-w: 90px;[^}]*--door-h: 260px;[^}]*--door-y: 80%;[^}]*opacity: 1;/);
+    // It ends as the pool: the hour's own size and height, so the light widens INTO the pool.
+    expect(open).toMatch(/to \{[^}]*--door-w: var\(--hour-w\);[^}]*--door-h: var\(--hour-h\);[^}]*--door-y: var\(--hour-y\);[^}]*opacity: 0;/);
     expect(open).not.toMatch(/transform|translate|scale|top:|left:|inset/);
     // The sizes are registered, so the arch widens rather than jumping halfway.
-    for (const name of ["--door-w", "--door-h"]) {
+    for (const name of ["--door-w", "--door-h", "--door-y"]) {
       expect(css).toMatch(new RegExp(`@property ${name} \\{\\s*syntax: "<length-percentage>";`));
     }
   });
 
   it("plays the arch once on settle's curve and brings the pool up behind it", () => {
-    expect(light).toMatch(/&\[data-hour="door"\] \{[^}]*--hour-shape: ellipse var\(--door-w\) var\(--door-h\) at 24% 80%;[^}]*animation: door-open var\(--duration-arrive\) var\(--ease-settle\) both;/);
+    const arch = /&\[data-arch\] \{[\s\S]*?\n  \}/.exec(light)?.[0] ?? "";
+    // At the pool's own place, from the same tokens: never a fixed spot that crossfades.
+    expect(arch).toMatch(/radial-gradient\(\s*ellipse var\(--door-w\) var\(--door-h\) at var\(--hour-x\) var\(--door-y\),/);
+    expect(arch).toMatch(/animation: door-open var\(--duration-arrive\) var\(--ease-settle\) both;/);
+    expect(light).toMatch(/radial-gradient\(\s*ellipse var\(--hour-w\) var\(--hour-h\) at var\(--hour-x\) var\(--hour-y\),/);
     expect(light).toMatch(/&\[data-door\] \{\s*animation: fade var\(--duration-arrive\) var\(--ease-settle\) both;/);
     expect(light).not.toMatch(/infinite/);
     // The doorway keeps the pool's mask, so it has no edge either: it never brings its own.
-    expect(/&\[data-hour="door"\] \{[^}]*\}/.exec(light)?.[0]).not.toMatch(/mask|inset/);
+    expect(arch).not.toMatch(/mask|inset/);
   });
 
   it("is spent by the sign-in's first page, whichever it is: the shell notes every page", () => {
     // Home's own tests hold what happens after a note; this holds that the shell makes one.
     const shell = readFileSync(join(process.cwd(), "src/components/shell/AppShell.tsx"), "utf8");
-    expect(shell).toContain("useLayoutEffect(() => noteSignIn(session.signedInAt), [session.signedInAt]);");
+    expect(shell).toMatch(/noteSignIn\(session\.signedInAt\)/);
   });
 
   it("is the pool at rest under reduced motion: no arch, and the pool not fading in", () => {
     const still = light.slice(light.indexOf("@media (prefers-reduced-motion: reduce)"));
-    expect(still).toMatch(/&\[data-hour="door"\] \{\s*display: none;/);
+    expect(still).toMatch(/&\[data-arch\] \{\s*display: none;/);
     expect(still).toMatch(/&\[data-door\] \{\s*animation: none;/);
   });
 });

@@ -61,6 +61,7 @@ describe("createSessionValue", () => {
       type: "demo",
       userId: "dev_admin",
       role: "admin",
+      signedInAt: expect.any(String),
     });
   });
 
@@ -295,7 +296,25 @@ describe("the first-visit flag", () => {
   it("carries the sign-in's own instant, the one the first arrival is kept to (A-24 §3.2)", async () => {
     mockCookieValue = cookie(false, undefined, "2026-11-19T08:00:00.000Z");
     expect((await getSession())?.signedInAt).toBe("2026-11-19T08:00:00.000Z");
-    mockCookieValue = cookie();
-    expect((await getSession())?.signedInAt).toBeUndefined();
   });
+
+  it("stamps every sign-in where it becomes a session, the dev identity picker's too", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-19T09:30:00.000Z"));
+    try {
+      mockCookieValue = cookie();
+      expect((await getSession())?.signedInAt).toBe("2026-11-19T09:30:00.000Z");
+      vi.stubEnv("ZITADEL_DOMAIN", "");
+      mockCookieValue = createSessionValue("dev_admin")!;
+      const demo = await getSession();
+      expect(demo?.sessionType).toBe("demo");
+      expect(demo?.signedInAt).toBe("2026-11-19T09:30:00.000Z");
+      // The catalogue's own record is never written to: each sign-in is its own copy.
+      expect(getDemoUser("dev_admin")?.signedInAt).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+      vi.useRealTimers();
+    }
+  });
+
 });

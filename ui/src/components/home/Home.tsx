@@ -49,7 +49,8 @@ import { StatusDot } from "@/components/ui/Badge";
 import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
-import { takeFirstArrival, Unfold } from "@/lib/motion";
+import { Unfold } from "@/lib/motion";
+import { takeFirstArrival } from "@/lib/motion/door";
 import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
@@ -382,9 +383,10 @@ export function Home({ session }: { session: SessionUser }) {
         {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
             place set by the part of the day on the greeting's own clock. The one written exception to
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
-        {/* The first arrival of a sign-in (A-24 §3.2): the doorway's arch of light opens into the pool,
-            once, behind the words. Nothing waits for it, and reduced motion shows the pool at rest. */}
-        {phase && door && <div aria-hidden data-hour="door" className="hour-light" />}
+        {/* The first arrival of a sign-in (A-24 §3.2): a doorway's arch of light rises where this hour's
+            pool is and widens into it, once, behind the words. Nothing waits for it, and reduced
+            motion shows the pool at rest. */}
+        {phase && door && <div aria-hidden data-hour={phase} data-arch className="hour-light" />}
         {phase && <div aria-hidden data-hour={phase} data-door={door ? "" : undefined} className="hour-light" />}
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in

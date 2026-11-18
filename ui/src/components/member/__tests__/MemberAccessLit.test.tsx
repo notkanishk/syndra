@@ -9,7 +9,8 @@ import { inZone } from "@/test-utils/zone";
 // A-24 §3.3, Q6: a member's card is lit on the first visit after its access starts, and never again.
 
 const access = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
-const changes = vi.hoisted(() => ({ value: [] as unknown[] | undefined, error: null as Error | null }));
+// `fresh`: whether this visit has had its own answer (TanStack's isFetchedAfterMount), not a cached one.
+const changes = vi.hoisted(() => ({ value: [] as unknown[] | undefined, error: null as Error | null, fresh: true }));
 
 vi.mock("@/components/member/MemberCatalog", () => ({ MemberCatalog: () => null }));
 vi.mock("@/components/requests/AskForAccess", () => ({ AskForAccess: () => null }));
@@ -23,7 +24,7 @@ vi.mock("@/lib/queries/useUsers", () => ({
 vi.mock("@/lib/queries/useMyStorage", () => ({ useMyStorage: () => ({ data: [] }) }));
 vi.mock("@/lib/queries/useRequests", () => ({ useRequestsMine: () => ({ data: [] }) }));
 vi.mock("@/lib/queries/useMyChanges", () => ({
-  useMyChanges: () => ({ data: changes.value, error: changes.error, isLoading: false }),
+  useMyChanges: () => ({ data: changes.value, error: changes.error, isLoading: false, isFetchedAfterMount: changes.fresh }),
 }));
 vi.mock("@/lib/queries/useCatalogUsers", () => ({ useCatalogProjects: () => ({ data: [] }) }));
 vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);
@@ -44,17 +45,18 @@ const project = (id: string, name: string, standing: string | null) => ({
 });
 
 const READ = { read_at: "2026-11-19T06:00:00Z", current: true, truncated: false };
-function view(laser: string | null = "held", observation: Record<string, unknown> = READ) {
+function view(laser: string | null = "held", observation: Record<string, unknown> = READ, fresh = true, error: Error | null = null) {
   access.value = {
     isLoading: false,
-    error: null,
+    isFetchedAfterMount: fresh,
+    error,
     data: { projects: [project("p1", "3D printing", "held"), project("p2", "Laser cutting", laser), project("p3", "Wood shop", "held")], bundles: [], allowances: [], observation },
   };
 }
 const given = (at: string, extra: Record<string, unknown> = {}) => ({ kind: "given", at, project_id: "p2", role_key: "operator", via: null, ...extra });
 
 const card = (name: string) => screen.getByText(name, { selector: "span" }).closest(".card")!;
-const litCards = () => Array.from(document.querySelectorAll(".card[data-lit]"));
+const litCards = () => Array.from(document.querySelectorAll(".card.lit-card"));
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -64,6 +66,7 @@ beforeEach(() => {
   view();
   changes.value = [given("2026-11-19T04:00:00Z")];
   changes.error = null;
+  changes.fresh = true;
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -76,7 +79,6 @@ describe("the lit card", () => {
     render(<MemberAccess session={member("u1")} />);
     const lit = card("Laser cutting");
     expect(lit).toHaveClass("lit-card");
-    expect(lit).toHaveAttribute("data-lit");
     expect(lit.querySelector("[data-card-note]")).toHaveTextContent("From today");
     expect(litCards()).toEqual([lit]);
     // Nothing is pinned: it stays between 3D printing and Wood shop.
@@ -146,6 +148,30 @@ describe("the lit card", () => {
     view();
     render(<MemberAccess session={member("u2")} />);
     expect(litCards()).toHaveLength(1);
+  });
+
+  it("decides only on this visit's own answers: a cached read spends nothing", () => {
+    // Zitadel's answer from the cache, the feed fresh: nothing lit, nothing spent.
+    view("held", READ, false);
+    render(<MemberAccess session={member("u1")} />).unmount();
+    expect(litCards()).toEqual([]);
+    // The feed from the cache, Zitadel fresh: the same.
+    view();
+    changes.fresh = false;
+    render(<MemberAccess session={member("u1")} />).unmount();
+    expect(litCards()).toEqual([]);
+    // Both answered on this visit: the first that may show it.
+    changes.fresh = true;
+    render(<MemberAccess session={member("u1")} />);
+    expect(litCards()).toHaveLength(1);
+  });
+
+  it("never when the access read failed, even with an answer still in hand", () => {
+    view("held", READ, true, new Error("down"));
+    render(<MemberAccess session={member("u1")} />);
+    // The page shows its error, and the start is not spent on it.
+    expect(litCards()).toEqual([]);
+    expect(window.localStorage.getItem("syndra:lit")).toBeNull();
   });
 
   it("shows nothing extra when this device can't remember, rather than lighting every visit", () => {

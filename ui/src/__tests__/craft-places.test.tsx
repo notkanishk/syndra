@@ -60,7 +60,7 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
     // Four parts of the day, and the door's arch (§3.2): every reach is held by the contrast test below.
     expect(reaches).toHaveLength(5);
     // Still, but for the door opening once a sign-in: no other rule moves it.
-    const still = light.replace(/&\[data-hour="door"\][^}]*\}|&\[data-door\][^}]*\}/g, "");
+    const still = light.replace(/&\[data-arch\] \{[\s\S]*?\n  \}|&\[data-door\][^}]*\}/g, "");
     expect(still).not.toMatch(/animation|transition/);
     expect(light).toContain("var(--accent)");
     expect(light).not.toMatch(/--(healthy|warn|danger)\b|#[0-9a-f]{3,6}\b/i);

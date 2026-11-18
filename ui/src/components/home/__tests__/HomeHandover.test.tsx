@@ -4,7 +4,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
-import { noteSignIn, resetDoorForTests, TINT_MS } from "@/lib/motion";
+import { TINT_MS } from "@/lib/motion";
+import { noteSignIn, resetDoorForTests } from "@/lib/motion/door";
 import { inZone } from "@/test-utils/zone";
 import type { SessionUser } from "@/lib/session";
 import { setMediaQuery } from "@/test-utils/media";
@@ -367,8 +368,8 @@ describe("the room knows the hour", () => {
 // A-24 §3.2, Q4: the door's light opens into Home once, straight after signing in.
 describe("the first arrival of a sign-in", () => {
   const signedIn = { ...session, signedInAt: "2026-11-19T08:00:00.000Z" } as SessionUser;
-  const arch = () => document.querySelector('.hour-light[data-hour="door"]');
-  const pool = () => document.querySelector('.hour-light:not([data-hour="door"])');
+  const arch = () => document.querySelector(".hour-light[data-arch]");
+  const pool = () => document.querySelector(".hour-light:not([data-arch])");
   beforeEach(() => {
     resetDoorForTests();
     window.history.replaceState({}, "", "/");
@@ -380,6 +381,15 @@ describe("the first arrival of a sign-in", () => {
     expect(arch()).toHaveAttribute("aria-hidden");
     expect(arch()!.parentElement).toHaveClass("page-head", "isolate");
     expect(pool()).toHaveAttribute("data-door");
+    // It rises where this hour's pool is, from the same part of the day.
+    expect(arch()).toHaveAttribute("data-hour", pool()!.getAttribute("data-hour")!);
+  });
+
+  it("rises where the evening's pool is in the evening, not at a fixed place", () => {
+    vi.setSystemTime(new Date("2026-11-19T13:00:00Z")); // 18:30 at the makerspace
+    mount(signedIn);
+    expect(pool()).toHaveAttribute("data-hour", "evening");
+    expect(arch()).toHaveAttribute("data-hour", "evening");
     // The words are there in the same paint: the light sits behind them and holds nothing back.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Kanishk/);
   });
@@ -393,7 +403,7 @@ describe("the first arrival of a sign-in", () => {
     expect(pool()).not.toHaveAttribute("data-door");
     resetDoorForTests(); // a reload: this device remembers the sign-in it opened for
     mount(signedIn);
-    expect(document.querySelectorAll('.hour-light[data-hour="door"]')).toHaveLength(0);
+    expect(document.querySelectorAll(".hour-light[data-arch]")).toHaveLength(0);
   });
 
   it("is spent by whichever page the sign-in lands on, so Home later is quiet", () => {
