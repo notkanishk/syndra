@@ -334,7 +334,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
               <FilterChip onClear={toToday} clearLabel="Back to now">
                 Showing {dayLabel(url.asof!)}
               </FilterChip>
-              <span className="text-[13px] text-faint">{AS_OF_LENS}</span>
+              <span className="text-small text-faint">{AS_OF_LENS}</span>
             </>
           ) : (
             !phone && (
@@ -403,7 +403,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
           />
         )}
       </Unfold>
-      {phone && panel && question && !finding && <p className="text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">{PHONE_NOTE}</p>}
+      {phone && panel && question && !finding && <p className="text-small leading-[1.5] text-faint [text-wrap:pretty]">{PHONE_NOTE}</p>}
 
       {/* ponytail: an earlier date has no rest: today's findings under "Showing 3 Oct" would say the wrong day. */}
       {phone && !panel && !asOn && findings.ready && <RestCards cards={findings.rest} />}

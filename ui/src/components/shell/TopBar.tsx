@@ -42,7 +42,7 @@ export function TopBar({ session }: { session: SessionUser }) {
       <span className="flex-none tablet:hidden">
         <SyndraMark size={16} welcome />
       </span>
-      <nav aria-label="Where you are" className="min-w-0 truncate text-[14.5px]">
+      <nav aria-label="Where you are" className="min-w-0 truncate text-body">
         {trail.length === 0 ? (
           <span className="font-semibold text-ink">Syndra</span>
         ) : (
@@ -82,7 +82,7 @@ export function TopBar({ session }: { session: SessionUser }) {
           type="button"
           onClick={() => window.dispatchEvent(new Event(OPEN_GO_TO))}
           aria-label="Go to a person, a project, an app, or a page"
-          className="inline-flex min-h-[var(--tap)] flex-none items-center rounded-pill px-3 text-[14.5px] font-semibold text-ink control press-scale tablet:hidden"
+          className="inline-flex min-h-[var(--tap)] flex-none items-center rounded-pill px-3 text-body font-semibold text-ink control press-scale tablet:hidden"
         >
           Go to
         </button>

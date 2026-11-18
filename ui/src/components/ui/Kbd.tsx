@@ -7,7 +7,7 @@
 export function Kbd({ children, className = "" }: { children: string; className?: string }) {
   return (
     <kbd
-      className={`inline-flex h-5 min-w-[22px] items-center justify-center rounded-[6px] border border-line-strong bg-tint-1 px-1.5 font-mono text-[12.5px] leading-none text-muted ${className}`}
+      className={`inline-flex h-5 min-w-[22px] items-center justify-center rounded-[6px] border border-line-strong bg-tint-1 px-1.5 font-mono text-fine leading-none text-muted ${className}`}
     >
       {children}
     </kbd>

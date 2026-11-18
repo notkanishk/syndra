@@ -122,7 +122,7 @@ export default function AutomaticRulesPage() {
                 onClick={() => setEditing(rule)}
                 className="row-cols flex min-w-0 flex-1 flex-col items-start gap-y-1.5 py-(--row-y) text-left hover-tint tablet:flex-row tablet:flex-wrap tablet:items-center"
               >
-                <span className="w-full text-[14.5px] tablet:min-w-[320px] tablet:flex-1">
+                <span className="w-full text-body tablet:min-w-[320px] tablet:flex-1">
                   <span className="text-muted">
                     <ProjectName id={rule.source_project} link={false} /> /{" "}
                     <Mono>{rule.source_role}</Mono>
@@ -435,7 +435,7 @@ function RuleEditor({
         </div>
 
         {sourceRole && targetRole && (
-          <p className="text-[14px] leading-[1.55] text-muted">
+          <p className="text-body leading-[1.55] text-muted">
             {targetWaits
               ? `${targetName} always waits for you, so what this rule gives will wait for you to send.`
               : "What this rule gives goes straight to Zitadel."}
@@ -461,12 +461,12 @@ function RuleEditor({
             // The check's findings are the What-happens list: plain lines, an amber dot each (A-22 §3.7).
             <div className="flex flex-col gap-3">
               {validated.notes.length === 0 ? (
-                <p className="text-[14px] leading-[1.55] text-muted">
+                <p className="text-body leading-[1.55] text-muted">
                   <strong className="font-semibold text-ink">Checked.</strong> Saving gives the second role
                   to nobody new today: everybody who holds the first role, however they got it, already has it.
                 </p>
               ) : (
-                <div role="group" aria-label="What happens" className="rounded-inner bg-warn-soft px-4 py-3.5 text-[14px] leading-[1.55]">
+                <div role="group" aria-label="What happens" className="rounded-inner bg-warn-soft px-4 py-3.5 text-body leading-[1.55]">
                   <div className="type-label mb-1 text-warn-text">What happens</div>
                   <ul className="flex flex-col gap-1.5 text-muted">
                     {validated.notes.map((note) => (
@@ -629,7 +629,7 @@ function DeleteRuleConfirm({
         </div>
       ) : (
       <div className="px-6">
-        <div className="danger-note px-4 py-3.5 text-[14px] leading-[1.55]">
+        <div className="danger-note px-4 py-3.5 text-body leading-[1.55]">
           <div className="type-label mb-1 text-danger-text">What happens</div>
           <ul className="flex flex-col gap-1 text-muted">
             <li>The rule stops giving {label} to anybody, and can&rsquo;t be used again. It stays in the history.</li>
@@ -714,7 +714,7 @@ function DeleteRuleConfirm({
  */
 function ruleChip(rule: MappingRuleRow) {
   return (
-    <span className="text-[13px]">
+    <span className="text-small">
       <RoleRef
         projectId={rule.source_project}
         roleKey={rule.source_role}
@@ -741,14 +741,14 @@ function RuleHolders({ rule }: { rule: MappingRuleRow }) {
   const seen = rule.observed_holder_count ?? undefined;
   const line = holdersLine(rule.holder_count ?? 0, seen, seen);
   return (
-    <span className="text-[15px] tablet:w-(--seat-number) tablet:text-right">
+    <span className="text-body tablet:w-(--seat-number) tablet:text-right">
       {line.headline}
       {line.headline !== NOT_CHECKED && (
-        <span className="text-[13px] text-faint tablet:hidden">
+        <span className="text-small text-faint tablet:hidden">
           {line.headline === "1" ? " person has" : " people have"} the second role from this rule
         </span>
       )}
-      {line.note && <span className={`block text-[12.5px] ${holdersToneClass[line.tone]}`}>{line.note}</span>}
+      {line.note && <span className={`block text-fine ${holdersToneClass[line.tone]}`}>{line.note}</span>}
     </span>
   );
 }

@@ -86,9 +86,9 @@ export default function RoleMembersPage({
         meta={
           <span className="flex flex-wrap items-center gap-3">
             {advanced && <Mono className="text-faint">{roleKey}</Mono>}
-            {view?.group && <span className="text-[13.5px] text-faint">Group: {view.group}</span>}
+            {view?.group && <span className="text-small text-faint">Group: {view.group}</span>}
             {view?.cloned_from && (
-              <span className="text-[13.5px] text-faint">cloned from {view.cloned_from}</span>
+              <span className="text-small text-faint">cloned from {view.cloned_from}</span>
             )}
           </span>
         }
@@ -210,12 +210,12 @@ export default function RoleMembersPage({
             >
               <Avatar name={person.name} />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-semibold">{person.name}</span>
-                <span className="block truncate text-[13px] text-faint">{person.email}</span>
+                <span className="block truncate text-body font-semibold">{person.name}</span>
+                <span className="block truncate text-small text-faint">{person.email}</span>
                 {/* Held is why they are listed; only a removal on its way is news. */}
                 {standing && standing !== "held" && (
                   <span
-                    className={`block text-[12.5px] ${
+                    className={`block text-fine ${
                       standingTone(standing) === "warn" ? "font-semibold text-warn-text" : "text-faint"
                     }`}
                   >
@@ -271,12 +271,12 @@ function MemberRow({
       <Avatar name={member.user.name} />
       <Link
         href={`/users/${member.user.id}`}
-        className="w-[210px] shrink-0 truncate text-[15px] font-semibold link-hover"
+        className="w-[210px] shrink-0 truncate text-body font-semibold link-hover"
       >
         {member.user.name}
       </Link>
       <div
-        className="w-[170px] shrink-0 truncate text-[14px] text-muted"
+        className="w-[170px] shrink-0 truncate text-body text-muted"
         title={member.user.title || member.user.team || member.user.email}
       >
         {member.user.title || member.user.team || member.user.email}
@@ -286,7 +286,7 @@ function MemberRow({
             the card's title, not on every row. */}
         {member.standing && member.standing !== "held" && (
           <span
-            className={`mb-0.5 block text-[12.5px] ${
+            className={`mb-0.5 block text-fine ${
               standingTone(member.standing) === "warn" ? "font-semibold text-warn-text" : "text-faint"
             }`}
           >
@@ -311,7 +311,7 @@ function MemberRow({
           />
         )}
       </div>
-      <div className="w-[120px] shrink-0 text-[13.5px] text-faint">
+      <div className="w-[120px] shrink-0 text-small text-faint">
         {member.expires
           ? `Ends ${formatShortDate(member.expires)}`
           : member.since

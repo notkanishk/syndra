@@ -41,20 +41,20 @@ export function HomeLocationRow({ target, lastKnown }: { target: string; lastKno
       >
         <span className="flex flex-col gap-0.5">
           {home.value ? (
-            <span className="text-[15px] text-ink">
-              In <span className="type-mono text-[14px]">{home.labels?.[home.value] ?? home.value}</span>
+            <span className="text-body text-ink">
+              In <span className="type-mono text-body">{home.labels?.[home.value] ?? home.value}</span>
             </span>
           ) : (
             <>
-              <span className="text-[15px] text-muted">Not chosen yet</span>
-              <span className="text-[13px] text-faint">
+              <span className="text-body text-muted">Not chosen yet</span>
+              <span className="text-small text-faint">
                 Mappings work without it; none can give a home folder until it is chosen.
               </span>
             </>
           )}
           {/* The value's second line, as the board draws it: one reason, no tooltip. */}
           {lastKnown && (
-            <span className="text-[13px] text-faint">
+            <span className="text-small text-faint">
               {verb} waits too: it lists the folders on {name}.
             </span>
           )}
@@ -147,22 +147,22 @@ export function HomeLocationDialog({
         {changing && (
           <div className="flex flex-col rounded-inner border border-line-strong">
             <div className="flex gap-3.5 px-4 py-3">
-              <span className="w-[72px] flex-none text-[12.5px] font-semibold text-label">Changes</span>
-              <span className="text-[14px] leading-[1.5]">
-                New home folders are made in <span className="type-mono text-[13px]">{label(chosen)}</span>.
+              <span className="w-[72px] flex-none text-fine font-semibold text-label">Changes</span>
+              <span className="text-body leading-[1.5]">
+                New home folders are made in <span className="type-mono text-small">{label(chosen)}</span>.
               </span>
             </div>
             <div className="row-divider flex gap-3.5 px-4 py-3">
-              <span className="w-[72px] flex-none text-[12.5px] font-semibold text-label">Stays</span>
-              <span className="text-[14px] leading-[1.5] text-muted [text-wrap:pretty]">
+              <span className="w-[72px] flex-none text-fine font-semibold text-label">Stays</span>
+              <span className="text-body leading-[1.5] text-muted [text-wrap:pretty]">
                 The {already !== undefined ? `${already} ` : ""}home folder{already === 1 ? "" : "s"} already in{" "}
-                <span className="type-mono text-[13px]">{label(current)}</span> stay there, with their files, and
+                <span className="type-mono text-small">{label(current)}</span> stay there, with their files, and
                 their people keep connecting to them where they are. Syndra never moves or deletes a home folder.
               </span>
             </div>
           </div>
         )}
-        {save.error && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(save.error))}</p>}
+        {save.error && <p className="text-small text-danger-text">{sentence(describeFailure(save.error))}</p>}
       </div>
       )}
       <ModalFooter

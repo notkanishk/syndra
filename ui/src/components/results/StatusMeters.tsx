@@ -28,14 +28,14 @@ export function StatusMeters({ result, name, reader }: { result: StatusResult; n
   return (
     <div className="flex flex-col gap-3">
       {meters.length === 0 && !unread ? (
-        <p className="m-0 text-[14px] text-muted">{emptyMeters(name)}</p>
+        <p className="m-0 text-body text-muted">{emptyMeters(name)}</p>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-3 p-0">
           {meters.map((m) => (
             <li key={m.label} className="flex flex-col gap-1.5">
               <span className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <span className="text-[14px] font-semibold [overflow-wrap:anywhere]">{m.label}</span>
-                <span className="text-[13px] text-muted">
+                <span className="text-body font-semibold [overflow-wrap:anywhere]">{m.label}</span>
+                <span className="text-small text-muted">
                   {amount(m.used, m.unit)} · {m.limit === undefined ? NO_LIMIT : ofLimit(amount(m.limit, m.unit))}
                 </span>
               </span>

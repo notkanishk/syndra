@@ -169,15 +169,15 @@ export default function ProjectsPage() {
                   is the one with room. Below desktop the Roles count folds in
                   as a line under the name. */}
               <span className="flex w-full min-w-0 flex-col gap-0.5 tablet:w-[250px] tablet:min-w-[170px] tablet:shrink-0">
-                <span className="truncate text-[15.5px] font-semibold">
+                <span className="truncate text-body font-semibold">
                   {entry.project.name}
                 </span>
                 {roleCount === 0 ? (
-                  <span className="text-[13px] text-faint [text-wrap:pretty]">
+                  <span className="text-small text-faint [text-wrap:pretty]">
                     No roles yet.
                   </span>
                 ) : (
-                  <span className="text-[13px] text-faint desktop:hidden">
+                  <span className="text-small text-faint desktop:hidden">
                     {roleCount} {roleCount === 1 ? "role" : "roles"}
                   </span>
                 )}
@@ -187,25 +187,25 @@ export default function ProjectsPage() {
                   <Badge key={name}>{name}</Badge>
                 ))}
                 {!appsByProject.has(entry.project.id) && (
-                  <span className="text-[13px] text-faint">No app reads this yet</span>
+                  <span className="text-small text-faint">No app reads this yet</span>
                 )}
               </span>
               {/* A project with no roles is not a small number, it is a
                   different fact: nothing in it can be granted to anybody. The
                   count stays a count so the column reads as one, and the fact
                   is said beside the name, where there is width to say it. */}
-              <span className="hidden text-right text-[15px] desktop:block desktop:w-(--seat-number) desktop:shrink-0">
+              <span className="hidden text-right text-body desktop:block desktop:w-(--seat-number) desktop:shrink-0">
                 {roleCount}
               </span>
-              <span className="shrink-0 text-[15px] tablet:w-(--seat-number) tablet:text-right">
+              <span className="shrink-0 text-body tablet:w-(--seat-number) tablet:text-right">
                 {people.headline}
-                <span className="text-[13px] text-faint tablet:hidden">
+                <span className="text-small text-faint tablet:hidden">
                   {peopleSuffix(people.headline)}
                 </span>
                 {/* Recorded is what Syndra decided; this is what Zitadel shows
                     right now — never the same word, never the same line. */}
                 {people.note && (
-                  <span className={`block text-[12.5px] ${holdersToneClass[people.tone]}`}>
+                  <span className={`block text-fine ${holdersToneClass[people.tone]}`}>
                     {people.note}
                   </span>
                 )}

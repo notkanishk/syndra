@@ -36,7 +36,7 @@ export function AppSignInStrip({ usage }: { usage: AppSignIns }) {
           />
         ))}
       </span>
-      <span className="min-w-0 flex-[1_1_200px] text-[14px] text-muted">
+      <span className="min-w-0 flex-[1_1_200px] text-body text-muted">
         {total} in 30 days, by {people} {people === 1 ? "person" : "people"}
       </span>
     </ToolRow>

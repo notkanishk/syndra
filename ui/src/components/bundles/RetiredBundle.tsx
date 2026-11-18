@@ -26,7 +26,7 @@ type Tab = "history" | "gave";
 export function RetiredStatus({ at, by }: { at?: string | null; by?: string }) {
   return (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-      <Chip className="!py-1 text-[13px] text-muted">Retired {formatShortDate(at ?? "")}</Chip>
+      <Chip className="!py-1 text-small text-muted">Retired {formatShortDate(at ?? "")}</Chip>
       {by && (
         <span>
           by <UserName id={by} />
@@ -127,7 +127,7 @@ function RetiredBundleView({ bundleId, bundle }: { bundleId: string; bundle: Bun
               {sortByName(gave.data ?? [], (r) => names.roleRef(r.zitadel_project_id, r.zitadel_role_key), (r) => `${r.zitadel_project_id}:${r.zitadel_role_key}`).map((role) => (
                 <div
                   key={`${role.zitadel_project_id}:${role.zitadel_role_key}`}
-                  className="row-divider px-5 py-3.5 text-[14.5px]"
+                  className="row-divider px-5 py-3.5 text-body"
                 >
                   <RoleRef projectId={role.zitadel_project_id} roleKey={role.zitadel_role_key} />
                 </div>
@@ -179,8 +179,8 @@ function RetiredBundleRows() {
           href={`/bundles/${encodeURIComponent(b.id)}`}
           className="row-divider flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3.5 hover-tint"
         >
-          <span className="min-w-0 flex-1 text-[14.5px] font-semibold">{b.name}</span>
-          <span className="text-[13px] text-faint">
+          <span className="min-w-0 flex-1 text-body font-semibold">{b.name}</span>
+          <span className="text-small text-faint">
             <RetiredStatus at={b.retired_at} />
           </span>
         </Link>

@@ -30,7 +30,7 @@ export function SignInRow({
   children: ReactNode;
 }) {
   const check = (
-    <span className="inline-flex items-center justify-end gap-2 text-[13.5px] font-semibold">
+    <span className="inline-flex items-center justify-end gap-2 text-small font-semibold">
       <StatusDot tone={verdict.tone} />
       {verdict.word}
     </span>
@@ -47,11 +47,11 @@ export function SignInRow({
         >
           <FoldChevron open={open} />
         </button>
-        <span className="type-mono w-[96px] flex-none text-[13px]">{time}</span>
+        <span className="type-mono w-[96px] flex-none text-small">{time}</span>
         <span className="ml-auto tablet:hidden">{check}</span>
         <span className="flex w-full min-w-0 items-center gap-2.5 tablet:w-[210px] tablet:flex-none">{person}</span>
-        <span className="w-full text-[14px] text-muted tablet:w-[120px] tablet:flex-none">{asked}</span>
-        <span className="min-w-[150px] flex-1 text-[13.5px] [overflow-wrap:anywhere]">{answered}</span>
+        <span className="w-full text-body text-muted tablet:w-[120px] tablet:flex-none">{asked}</span>
+        <span className="min-w-[150px] flex-1 text-small [overflow-wrap:anywhere]">{answered}</span>
         <span className="hidden w-[120px] flex-none text-right tablet:block">{check}</span>
       </div>
       <Unfold open={open}>

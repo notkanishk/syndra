@@ -113,7 +113,7 @@ export function PaginationRow({
   );
 
   return (
-    <div className="row-divider flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-[13px] text-faint">
+    <div className="row-divider flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-small text-faint">
       {ended && !known && <span>{since ? `That's everything since ${since}` : "That's everything"}</span>}
       {ended && !known && dot}
       <span>

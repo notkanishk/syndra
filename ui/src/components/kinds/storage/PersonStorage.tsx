@@ -154,7 +154,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
     body = (
       <>
         <Row label="Account" first>
-          <span className="font-mono text-[14.5px]">{view.account.username}</span>
+          <span className="font-mono text-body">{view.account.username}</span>
           <Faint>
             {view.adopted ? (
               <>
@@ -171,7 +171,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
         {drawRead && (
           <Row label="Home folder" seat={onPage}>
             {!readable ? (
-              <span className="text-[14px] text-muted">
+              <span className="text-body text-muted">
                 {label} {noAnswer}
               </span>
             ) : (
@@ -182,7 +182,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
         {drawRead && (
           <Row label="Folders" seat={onMappings}>
             {!readable || storage?.places_readable === false ? (
-              <span className="text-[14px] text-muted">
+              <span className="text-body text-muted">
                 {label} {noAnswer}
               </span>
             ) : folders.length === 0 ? (
@@ -318,12 +318,12 @@ function LimitLines({ view }: { view: PersonTargetView }) {
   return (
     <>
       {own.review_due ? (
-        <span className="inline-flex items-baseline gap-2 text-[13.5px] text-warn-text [text-wrap:pretty]">
+        <span className="inline-flex items-baseline gap-2 text-small text-warn-text [text-wrap:pretty]">
           <StatusDot tone="warn" />
           Review was due {formatShortDate(own.review_date)}. It stays at {gbWords(own.bytes)} until you keep it or end it.
         </span>
       ) : (
-        <span className="text-[13.5px] text-ink [text-wrap:pretty]">
+        <span className="text-small text-ink [text-wrap:pretty]">
           {own.bytes === 0 ? "No limit" : `Up to ${gbWords(own.bytes)}`}, their own ·{" "}
           {own.expires_at ? `ends ${formatShortDate(own.expires_at)}` : `review on ${formatShortDate(own.review_date)}`} · “
           {own.reason}”
@@ -350,7 +350,7 @@ function HomeUse({ view }: { view: PersonTargetView }) {
   return (
     <>
       {used === undefined ? (
-        <span className="text-[14px] text-muted">{label} couldn&apos;t say how much is used just now</span>
+        <span className="text-body text-muted">{label} couldn&apos;t say how much is used just now</span>
       ) : over ? (
         <span className="text-warn-text [text-wrap:pretty]">
           Full. They can open and delete files here, but can&apos;t save new ones until they&apos;re under {size(quota)}.
@@ -391,11 +391,11 @@ function FolderList({ places, roleNames }: { places: StoragePlace[]; roleNames: 
           <li key={p.path} className="flex flex-col">
             <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
               <span className="font-semibold [overflow-wrap:anywhere]">{folderName(p)}</span>
-              <span className="text-[13px] text-muted">{p.access === "change" ? "Can change files" : "Read only"}</span>
-              {roles.length > 0 && <span className="text-[13px] text-faint">from {formatList(roles)}</span>}
+              <span className="text-small text-muted">{p.access === "change" ? "Can change files" : "Read only"}</span>
+              {roles.length > 0 && <span className="text-small text-faint">from {formatList(roles)}</span>}
             </span>
             <Tinted show={advanced}>
-              <span className="block font-mono text-[12.5px] text-faint [overflow-wrap:anywhere]">
+              <span className="block font-mono text-fine text-faint [overflow-wrap:anywhere]">
                 {[p.share, p.folder].filter(Boolean).join("/")}
               </span>
             </Tinted>

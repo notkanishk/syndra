@@ -57,17 +57,17 @@ function Figure({ value, said, second }: { value?: string; said: string; second?
     <>
       <span className="flex @tablet:min-h-10 items-end @tablet:justify-end">
         {rest === null ? (
-          <span data-figure className="text-[14px] leading-[1.3] text-muted">
+          <span data-figure className="text-body leading-[1.3] text-muted">
             {said}
           </span>
         ) : (
-          <span data-figure className="block text-[13px] leading-none @tablet:text-right">
-            <span className="font-display text-[24px] font-semibold leading-none text-ink">{value}</span>{" "}
+          <span data-figure className="block text-small leading-none @tablet:text-right">
+            <span className="font-display text-figure leading-none text-ink">{value}</span>{" "}
             <span className="ml-[3px] text-muted">{rest}</span>
           </span>
         )}
       </span>
-      {second && <span className="text-[13px] tabular-nums text-faint">{second}</span>}
+      {second && <span className="text-small tabular-nums text-faint">{second}</span>}
     </>
   );
 }
@@ -104,7 +104,7 @@ function LabelRow({ label, said }: { label: string; said: string }) {
 /** The section's axis: the window's first day, and the readout seat (today at rest, else the day being read). */
 export function Axis({ first, readout, inset = true }: { first: string; readout: string; inset?: boolean }) {
   return (
-    <div data-axis className={`flex justify-between gap-3 text-[12.5px] tabular-nums leading-[1.3] text-faint ${inset ? "pt-1.5 @tablet:pl-[224px] @tablet:pr-[264px]" : "pt-0.5"}`}>
+    <div data-axis className={`flex justify-between gap-3 text-fine tabular-nums leading-[1.3] text-faint ${inset ? "pt-1.5 @tablet:pl-[224px] @tablet:pr-[264px]" : "pt-0.5"}`}>
       <span>{dayWords(first)}</span>
       <span aria-live="polite" className="ml-auto text-right">
         <Crossfade id={readout} inline>
@@ -151,7 +151,7 @@ export function MetricBlock({ metric, windows, first = false, titled = false }: 
             className={`${i > 0 ? "row-divider" : "pt-0"} ${i === rows.length - 1 ? "pb-0" : ""}`}
             name={
               many ? (
-                <span className="text-[15.5px] font-semibold leading-[1.25] [overflow-wrap:anywhere]">{names[i]}</span>
+                <span className="text-body font-semibold leading-[1.25] [overflow-wrap:anywhere]">{names[i]}</span>
               ) : (
                 <h3 className="type-label text-label [overflow-wrap:anywhere]">{label}</h3>
               )
@@ -178,9 +178,9 @@ export function MetricBlock({ metric, windows, first = false, titled = false }: 
     <section aria-label={label} className={`flex flex-col gap-3 px-5 py-[18px] ${first ? (titled ? "pt-1.5" : "") : "row-divider"}`}>
       {many && <h3 className="type-label text-label [overflow-wrap:anywhere]">{label}</h3>}
       {body && <div className="flex flex-col">{body}</div>}
-      {metric.series.length > rows.length && rows.length > 0 && <span className="text-[13px] text-faint">{copy.noMoreLines(metric.series.length - rows.length)}</span>}
+      {metric.series.length > rows.length && rows.length > 0 && <span className="text-small text-faint">{copy.noMoreLines(metric.series.length - rows.length)}</span>}
       {quiet.map((s) => (
-        <span key={s} className="max-w-[80ch] text-[13px] text-faint [text-wrap:pretty]">
+        <span key={s} className="measure text-small text-faint [text-wrap:pretty]">
           {s}
         </span>
       ))}

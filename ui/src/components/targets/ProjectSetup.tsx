@@ -51,7 +51,7 @@ export function ProjectStep({ target, onSet }: { target: string; onSet: (name: s
           note="Step 1 of 2"
         />
         <div className="flex flex-col gap-4 px-5 pb-5">
-          <p className="max-w-[72ch] text-[14.5px] leading-[1.55] text-ink [text-wrap:pretty]">
+          <p className="measure text-body leading-[1.55] text-ink [text-wrap:pretty]">
             Its roles decide who gets an account on {name}, so nothing below can give anyone access until it
             is set. Next, you map those roles to {mappedTo(name, schema)}.
           </p>
@@ -84,11 +84,11 @@ export function ProjectStep({ target, onSet }: { target: string; onSet: (name: s
               </Button>
             </span>
           </form>
-          <span className="text-[13px] leading-[1.5] text-muted [text-wrap:pretty]">
+          <span className="text-small leading-[1.5] text-muted [text-wrap:pretty]">
             A project serves one system, so one already in use can&apos;t be picked. Changing it later means
             removing its mappings first.
           </span>
-          {set.error && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error))}</p>}
+          {set.error && <p className="text-small text-danger-text">{sentence(describeFailure(set.error))}</p>}
         </div>
       </Card>
     </section>
@@ -145,7 +145,7 @@ export function SetupStrip({
   return (
     <Card>
       <SettingRow label="Zitadel project">
-        <Link href={`/projects/${project.id}`} className="text-[15px] font-semibold text-ink link-hover">
+        <Link href={`/projects/${project.id}`} className="text-body font-semibold text-ink link-hover">
           {projectLabel(project.name || resolver.resolveProject(project.id).value?.name)}
         </Link>
       </SettingRow>
@@ -157,7 +157,7 @@ export function SetupStrip({
           </CardHeaderLink>
         }
       >
-        <span className="text-[15px] text-ink">
+        <span className="text-body text-ink">
           {mappings.isLoading
             ? "…"
             : roles === 0

@@ -156,7 +156,7 @@ function SelectionBarBody({
     ) : null;
 
   const summary = (
-    <span className={stacked ? "min-w-0 flex-1 pt-[3px] text-[14.5px] leading-[1.45]" : "text-[14.5px]"}>
+    <span className={stacked ? "min-w-0 flex-1 pt-[3px] text-body leading-[1.45]" : "text-body"}>
       <strong className="font-semibold">
         {wholeScope ? `All ${things}` : things} selected
       </strong>
@@ -197,7 +197,7 @@ function SelectionBarBody({
           <button
             type="button"
             onClick={onClear}
-            className="-my-2 -mr-2 min-h-[var(--tap)] flex-none rounded-pill px-2 text-[13px] font-semibold text-muted control press-scale hover:text-ink"
+            className="-my-2 -mr-2 min-h-[var(--tap)] flex-none rounded-pill px-2 text-small font-semibold text-muted control press-scale hover:text-ink"
           >
             Clear the selection
           </button>
@@ -246,7 +246,7 @@ function SelectionBarBody({
         <button
           type="button"
           onClick={onClear}
-          className="min-h-[var(--tap)] rounded-pill px-3 text-[13px] font-semibold text-muted control press-scale hover:text-ink desktop:min-h-0 desktop:py-1.5"
+          className="min-h-[var(--tap)] rounded-pill px-3 text-small font-semibold text-muted control press-scale hover:text-ink desktop:min-h-0 desktop:py-1.5"
         >
           Clear the selection
         </button>
@@ -321,7 +321,7 @@ export function SelectionAction({
   children: React.ReactNode;
 }) {
   // The phone bar's second row is 14px and shares its width (A-12 §2); the desktop row is the sm pill as it is.
-  const phone = wide === undefined ? "" : wide ? "min-w-0 flex-1 text-[14px]" : "flex-none text-[14px]";
+  const phone = wide === undefined ? "" : wide ? "min-w-0 flex-1 text-body" : "flex-none text-body";
   // The button's own surface, not `<Button>`: its reason wrapper would keep `flex-1` from reaching the row.
   return (
     <button
@@ -393,7 +393,7 @@ export function SelectModeToggle({
       type="button"
       onClick={onToggle}
       aria-pressed={active}
-      className={`min-h-[var(--tap)] rounded-pill border px-4 text-[13.5px] font-semibold control press-scale desktop:min-h-0 desktop:py-[7px] ${
+      className={`min-h-[var(--tap)] rounded-pill border px-4 text-small font-semibold control press-scale desktop:min-h-0 desktop:py-[7px] ${
         active
           ? "border-accent-line bg-accent-soft text-accent-text"
           : "border-line-strong hover:bg-[var(--hover)]"
@@ -451,9 +451,9 @@ export function SelectAllRow({
         <Seat {...props} />
       </span>
       <span className="flex flex-col">
-        <span className="text-[14px] font-semibold">{label}</span>
+        <span className="text-body font-semibold">{label}</span>
         {wider ? (
-          <span className="text-[12.5px] text-faint">
+          <span className="text-fine text-faint">
             {total} {total === 1 ? noun[0] : noun[1]} in all.
           </span>
         ) : null}

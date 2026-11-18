@@ -196,7 +196,7 @@ function SendSentence({ entry }: { entry: AuditEntry }) {
   return (
     <span className="flex flex-col gap-0.5">
       <span>{headline}</span>
-      {sends && <span className="text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">{sends}</span>}
+      {sends && <span className="text-small leading-[1.5] text-faint [text-wrap:pretty]">{sends}</span>}
     </span>
   );
 }

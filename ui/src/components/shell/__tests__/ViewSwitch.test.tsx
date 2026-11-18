@@ -19,7 +19,7 @@ describe("the Basic / Advanced switch", () => {
     expect(screen.getByRole("radio", { name: "Advanced" })).toBeChecked();
     expect(screen.getByRole("radio", { name: "Basic" })).not.toBeChecked();
     // Segmented sm's own padding, not the md pill's.
-    expect(screen.getByRole("radio", { name: "Basic" }).className).toContain("text-[12.5px]");
+    expect(screen.getByRole("radio", { name: "Basic" }).className).toContain("text-fine");
   });
 
   it("says what each view shows, in the segment and for a screen reader", () => {

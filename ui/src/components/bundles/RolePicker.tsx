@@ -224,7 +224,7 @@ function Picker({
       )}
 
       {legend && all.some((r) => r.waits_for_send) && (
-        <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted">
+        <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-muted">
           <WaitsMark withLabel />
           <span>means a change waits in Pending changes until you send it.</span>
           <ArrowLink href="/changes/roles-that-wait">Set in Roles that wait</ArrowLink>
@@ -268,7 +268,7 @@ function Picker({
           </div>
         )}
         {groups.length === 0 && (!bundles || bundleMatches.length === 0) ? (
-          <p className="px-4 py-6 text-[14px] text-muted">
+          <p className="px-4 py-6 text-body text-muted">
             No role matches “{query}”. A role created directly in Zitadel may not be listed here
             yet. Check there, or create it in Syndra.
           </p>

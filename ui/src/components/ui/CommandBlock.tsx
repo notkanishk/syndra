@@ -98,7 +98,7 @@ export function CommandBlock({
     >
       {caption && (
         <p
-          className={`mb-2.5 max-w-[80ch] text-[13.5px] leading-[1.55] ${
+          className={`mb-2.5 measure text-small leading-[1.55] ${
             onWarn ? "text-warn-ink/[.78]" : "text-muted"
           }`}
         >
@@ -124,7 +124,7 @@ export function CommandBlock({
           aria-label={
             label ?? `${canCopy ? "Copy" : "Select"} command: ${command}`
           }
-          className={`min-h-[var(--tap)] shrink-0 rounded-pill px-3.5 text-[13px] font-semibold control press-scale ${
+          className={`min-h-[var(--tap)] shrink-0 rounded-pill px-3.5 text-small font-semibold control press-scale ${
             onWarn
               ? "border border-warn-ink/30 text-warn-ink hover:bg-warn-ink/10"
               : "border border-line-strong text-ink hover:bg-[var(--hover)]"
@@ -151,7 +151,7 @@ export function CommandBlock({
           {steps.map((step, index) => (
             <li
               key={index}
-              className={`flex gap-2.5 text-[13.5px] leading-[1.55] ${
+              className={`flex gap-2.5 text-small leading-[1.55] ${
                 onWarn ? "text-warn-ink/[.78]" : "text-muted"
               }`}
             >
@@ -160,7 +160,7 @@ export function CommandBlock({
               >
                 {index + 1}.
               </span>
-              <span className="max-w-[76ch]">{step}</span>
+              <span className="measure">{step}</span>
             </li>
           ))}
         </ol>

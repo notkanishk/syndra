@@ -264,7 +264,7 @@ function ActionDialog({
           (step.view.readable ? (
             <>
               <ReadResult read={step.view} name={view.name} reader={MEMBER} />
-              {step.noChange && <p className="m-0 text-[14px] text-muted">{copy.PREVIEW_NO_CHANGE}</p>}
+              {step.noChange && <p className="m-0 text-body text-muted">{copy.PREVIEW_NO_CHANGE}</p>}
             </>
           ) : (
             <Notice tone="warn" title={copy.PREVIEW_UNREADABLE_TITLE} next={copy.PREVIEW_UNREADABLE_NEXT}>

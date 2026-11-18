@@ -32,8 +32,8 @@ export function WhoSeat({
     <div className={`flex w-full min-w-0 items-center gap-3 ${className}`}>
       <UserAvatar id={id} size="row" />
       <span className="min-w-0">
-        <UserName id={id} href={href ?? accountHref(id)} className="block text-[14.5px] font-semibold" />
-        {sub ? <span className="block text-[12.5px] text-faint">{sub}</span> : <ServiceAccountTag id={id} />}
+        <UserName id={id} href={href ?? accountHref(id)} className="block text-body font-semibold" />
+        {sub ? <span className="block text-fine text-faint">{sub}</span> : <ServiceAccountTag id={id} />}
       </span>
     </div>
   );
@@ -57,16 +57,16 @@ export function WhatSeat({
   return (
     <div className={`flex w-full min-w-0 flex-col items-start gap-[3px] ${className}`}>
       {projectId ? (
-        <Link href={`/projects/${projectId}`} className="text-[14px] leading-[1.45] link-hover">
+        <Link href={`/projects/${projectId}`} className="text-body leading-[1.45] link-hover">
           <ProjectName id={projectId} link={false} />
           {roleKeys.length > 0 && ` · ${roleKeys.map(humanizeKey).join(", ")}`}
         </Link>
       ) : (
-        <span className="text-[14px] leading-[1.45]">{fallback}</span>
+        <span className="text-body leading-[1.45]">{fallback}</span>
       )}
       <span className="flex flex-wrap gap-x-3 gap-y-1">
         {roleKeys.map((key) => (
-          <Mono key={key} className="text-[12.5px] text-faint">
+          <Mono key={key} className="text-fine text-faint">
             {key}
           </Mono>
         ))}

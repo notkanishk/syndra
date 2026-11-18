@@ -382,7 +382,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
           <div className="panel flex flex-wrap items-center gap-3 px-5 py-4">
             <span className="type-label">Bundles</span>
             {access.data.bundles.length === 0 ? (
-              <span className="text-[14px] text-faint">None assigned</span>
+              <span className="text-body text-faint">None assigned</span>
             ) : (
               // A chip that names a bundle should reach the people in it —
             // "who else has this?" is the next question every single time,
@@ -421,7 +421,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
 
           {multiSource && (
             // An explanation, so a caption under the heading and not a box (A-04 §7.1a).
-            <p className="text-[14px] leading-[1.55] text-muted">
+            <p className="text-body leading-[1.55] text-muted">
               <strong className="font-semibold text-ink">
                 {multiSource.projectName} / {roleName(multiSource.projectId, multiSource.roleKey)} is held twice
               </strong>{" "}
@@ -523,7 +523,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                   />
                   {/* Use beside the access it uses, where Revoke is decided (A-10 §6). */}
                   {signInLine && (
-                    <span className="tint-in text-[13.5px] text-faint [text-wrap:pretty]">· {signInLine}</span>
+                    <span className="tint-in text-small text-faint [text-wrap:pretty]">· {signInLine}</span>
                   )}
                   {/* When Zitadel was read is the read line's job now; what stays
                       here is what is specific to THIS project's grant. */}
@@ -595,7 +595,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
 
           {/* Advisory notes. Never an error — cleanup_hints are opinions. */}
           {access.data.cleanup_hints.map((hint) => (
-            <p key={hint} className="max-w-[840px] px-1 text-[14px] leading-[1.55] text-muted">
+            <p key={hint} className="measure px-1 text-body leading-[1.55] text-muted">
               {hint}
             </p>
           ))}
@@ -665,7 +665,7 @@ function unexplainedIn(project: {
  */
 function ProjectRoleTally({ recorded, unexplained }: { recorded: number; unexplained: number }) {
   return (
-    <span className="flex flex-wrap items-center gap-2 text-[13.5px]">
+    <span className="flex flex-wrap items-center gap-2 text-small">
       {recorded > 0 || unexplained === 0 ? (
         <span className="text-faint">
           {recorded} {recorded === 1 ? "role" : "roles"}
@@ -723,14 +723,14 @@ function UnexplainedRoles({
         {isOperator && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <StatusSeat tone="warn" word="Not given by Syndra" />
-            <span className="text-[13.5px] text-muted">In Zitadel, with no bundle, rule or grant behind it.</span>
+            <span className="text-small text-muted">In Zitadel, with no bundle, rule or grant behind it.</span>
           </div>
         )}
         <div className={`${isOperator ? "mt-2.5 " : ""}flex flex-wrap items-center gap-2`}>
           {sortByName(roleKeys, (key) => roleName(projectId, key), (key) => key).map((key) => (
             <span
               key={key}
-              className="rounded-pill border border-line-strong px-2.5 py-1 text-[13.5px] font-semibold"
+              className="rounded-pill border border-line-strong px-2.5 py-1 text-small font-semibold"
             >
               {roleName(projectId, key)}
             </span>
@@ -779,11 +779,11 @@ function ZitadelGrantId({
 }) {
   if (loading) return null;
   if (!id) {
-    if (unsent) return <span className="text-[13px] text-faint">{standingWords("waiting", "operator")}</span>;
+    if (unsent) return <span className="text-small text-faint">{standingWords("waiting", "operator")}</span>;
     if (isOperator) {
       return <ArrowLink href={driftHref({ project: projectId, user: userId })}>Side by side on Drift</ArrowLink>;
     }
-    return <span className="text-[13px] text-faint">No grant in Zitadel yet</span>;
+    return <span className="text-small text-faint">No grant in Zitadel yet</span>;
   }
   // The grant id lives in the role's lineage, never in a heading (owner, A-17 Q6).
   return null;
@@ -955,7 +955,7 @@ function RoleGroup({
         return (
           <div key={role.role_key} id={`role-${projectId}-${role.role_key}`}>
           <CardRow first seat={isOperator ? "default" : undefined} action={isOperator ? actions : undefined}>
-            <div className="w-[230px] shrink-0 text-[15px] font-semibold">
+            <div className="w-[230px] shrink-0 text-body font-semibold">
               {roleName(projectId, role.role_key)}
               {waitsFor(role.role_key) && <WaitsMark className="ml-2" />}
               {/* The raw key is an operator's handle for this role — a member
@@ -973,7 +973,7 @@ function RoleGroup({
               <AccessSourceList reasons={role.reasons} />
             </div>
 
-            <span className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px] tablet:w-(--seat-status)">
+            <span className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-small tablet:w-(--seat-status)">
               {standing === "waiting" ? (
                 <>
                   {givenAt(role.reasons) && (
@@ -1028,7 +1028,7 @@ function RoleGroup({
           <Unfold open={advanced}>
             <div className="px-5 pb-3 pt-2.5">
               <div className="w-full">
-                <dl className="grid grid-cols-[118px_1fr] gap-x-4 gap-y-1.5 text-[13.5px]">
+                <dl className="grid grid-cols-[118px_1fr] gap-x-4 gap-y-1.5 text-small">
                   <dt className="text-faint">Grant id</dt>
                   <dd>
                     {grant ? (
@@ -1074,7 +1074,7 @@ function RoleGroup({
                 </Button>
               }
             >
-              <span className="min-w-0 flex-1 text-[13px] text-muted">This came from an automatic rule.</span>
+              <span className="min-w-0 flex-1 text-small text-muted">This came from an automatic rule.</span>
             </CardRow>
           </Unfold>
           </div>

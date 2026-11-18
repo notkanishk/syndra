@@ -22,7 +22,7 @@ export function RetryStatus({
 }) {
   const ended = retry.state === "waiting";
   return (
-    <span className={`inline-flex flex-col gap-0.5 text-[13px] ${className}`} role="status">
+    <span className={`inline-flex flex-col gap-0.5 text-small ${className}`} role="status">
       <span className="inline-flex items-center gap-2">
         <StatusDot tone={ended ? "danger" : "warn"} />
         <span className={ended ? "text-danger-text" : "text-warn-text"}>

@@ -47,15 +47,15 @@ export function OpensNote({ name, reach }: { name: string; reach: TargetReach | 
 export function OpensLine({ name, places }: { name: string; places: ReachPlace[] | undefined }) {
   if (!places) return null;
   if (places.length === 0) {
-    return <span className="text-[13.5px] text-warn-text">Opens nothing on {name} yet.</span>;
+    return <span className="text-small text-warn-text">Opens nothing on {name} yet.</span>;
   }
   return (
-    <span className="text-[13.5px] leading-[1.5] text-ink [text-wrap:pretty]">
+    <span className="text-small leading-[1.5] text-ink [text-wrap:pretty]">
       Opens{" "}
       {places.map((p, i) => (
         <Fragment key={p.path}>
           {i > 0 && (i === places.length - 1 ? ", and " : ", ")}
-          <span className="type-mono text-[12.5px]">{placeName(p)}</span>,{" "}
+          <span className="type-mono text-fine">{placeName(p)}</span>,{" "}
           {p.access === "change" ? "can change files" : "read only"}
         </Fragment>
       ))}
@@ -88,7 +88,7 @@ export function OpensRows({
   return (
       <span className="flex flex-col gap-0.5">
         {places.length === 0 ? (
-          <span className="flex items-baseline gap-2 text-[13px] leading-[1.5] text-warn-text [text-wrap:pretty]">
+          <span className="flex items-baseline gap-2 text-small leading-[1.5] text-warn-text [text-wrap:pretty]">
             <StatusDot tone="warn" ring={lastKnown} />
             <span>
               Opens nothing yet. No folder on {name} gives {group} anything, so its{" "}
@@ -99,9 +99,9 @@ export function OpensRows({
           </span>
         ) : (
           places.map((place, i) => (
-            <span key={place.path} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[13px] leading-[1.5] text-muted">
+            <span key={place.path} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-small leading-[1.5] text-muted">
               <span className="text-faint">{i === 0 ? "Opens" : "and"}</span>
-              <span className="type-mono text-[12.5px] text-ink">{placeName(place)}</span>
+              <span className="type-mono text-fine text-ink">{placeName(place)}</span>
               <span>{place.access === "change" ? "can change files" : "read only"}</span>
             </span>
           ))
@@ -113,11 +113,11 @@ export function OpensRows({
 /** "Home folder, up to 20 GB, in main › homes", read only: its one write place is the dialog (A-03 §2). */
 export function MappingHomeLine({ quota, homeRoot }: { quota: string | undefined; homeRoot: string }) {
   return (
-    <span className="text-[13px] leading-[1.5] text-muted">
+    <span className="text-small leading-[1.5] text-muted">
       Home folder, {limitWords(quota)}
       {homeRoot && (
         <>
-          , in <span className="type-mono text-[12.5px] text-ink">{homeRoot}</span>
+          , in <span className="type-mono text-fine text-ink">{homeRoot}</span>
         </>
       )}
     </span>

@@ -21,7 +21,7 @@ export const Select = React.forwardRef<
   return (
     <select
       ref={ref}
-      className={`block w-full appearance-none rounded-inner border bg-transparent px-[15px] ${dense ? DENSE_FIELD : "py-3 text-[15px]"} text-ink motion-tint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${
+      className={`block w-full appearance-none rounded-inner border bg-transparent px-[15px] ${dense ? DENSE_FIELD : "py-3 text-body"} text-ink motion-tint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${
         emphasis ? "border-accent-line" : "border-line-strong"
       } ${className}`}
       {...props}
@@ -100,8 +100,8 @@ export function Segmented<T extends string>({
   // where a segmented control sits in a dense toolbar.
   const pad =
     size === "sm"
-      ? "min-h-[var(--tap)] px-3 text-[12.5px] desktop:min-h-0 desktop:py-1"
-      : "min-h-[var(--tap)] px-4 text-[13px] desktop:min-h-0 desktop:py-1.5";
+      ? "min-h-[var(--tap)] px-3 text-fine desktop:min-h-0 desktop:py-1"
+      : "min-h-[var(--tap)] px-4 text-small desktop:min-h-0 desktop:py-1.5";
   const { ref, box } = useGlideIndicator(value);
   const keys = radioGroup(options, value, onChange);
   return (

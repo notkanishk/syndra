@@ -550,7 +550,7 @@ function SheetGrabber({ busy, onClose, drag }: { busy: boolean; onClose: () => v
     return (
       <div {...drag.handlers} className="flex flex-none touch-none flex-col items-center gap-1.5 pb-1 pt-3 tablet:hidden">
         <span aria-hidden className="h-1 w-[38px] rounded-pill bg-accent/40" />
-        <span className={`motion-tint text-[12.5px] ${drag.answered ? "text-ink" : "text-faint"}`}>
+        <span className={`motion-tint text-fine ${drag.answered ? "text-ink" : "text-faint"}`}>
           Applying your change. This sheet can&apos;t be closed until it finishes.
         </span>
       </div>
@@ -606,7 +606,7 @@ export function ModalHeader({
       <h2 id={titleId ?? dialogTitleId}className="type-dialog-title mb-2.5">
         {title}
       </h2>
-      {lede && <p className="mb-4 text-[14.5px] leading-[1.55] text-muted">{lede}</p>}
+      {lede && <p className="mb-4 text-body leading-[1.55] text-muted">{lede}</p>}
     </div>
   );
 }
@@ -653,7 +653,7 @@ export function ModalFooter({
         {children}
         {!CANCEL_FIRST && quiet}
       </div>
-      {note && <div className="text-[12.5px] leading-[1.5] text-faint">{note}</div>}
+      {note && <div className="text-fine leading-[1.5] text-faint">{note}</div>}
     </div>
   );
 }

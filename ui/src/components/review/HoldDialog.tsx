@@ -89,7 +89,7 @@ export function HoldDialog({
         {!succeeded && (
         <>
         <fieldset className="grid gap-2">
-          <legend className="mb-1 text-[14px]">What happens if nobody comes back to this</legend>
+          <legend className="mb-1 text-body">What happens if nobody comes back to this</legend>
           <ChoiceRow
             single
             name="hold-ending"

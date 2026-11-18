@@ -96,7 +96,7 @@ export function TargetIdInput({
           </Button>
         )}
       </div>
-      <p id={`${id}-hint`} className="mt-[7px] text-[13px] text-faint">
+      <p id={`${id}-hint`} className="mt-[7px] text-small text-faint">
         {hint}
       </p>
     </div>
@@ -160,16 +160,16 @@ export function CameraScanner({ onScan, onClose, closeLabel }: { onScan: (value:
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="m-0 text-[14px] text-muted">{SCAN_LEDE}</p>
+      <p className="m-0 text-body text-muted">{SCAN_LEDE}</p>
       {state === "denied" ? (
-        <p role="alert" className="m-0 text-[13.5px] text-danger-text">
+        <p role="alert" className="m-0 text-small text-danger-text">
           {SCAN_DENIED}
         </p>
       ) : (
         <div className="relative overflow-hidden rounded-inner border border-line-strong bg-surface-1">
           <video ref={video} muted playsInline className="block aspect-[4/3] w-full object-cover" />
           {state === "starting" && (
-            <p role="status" className="absolute inset-0 m-0 grid place-items-center text-[13.5px] text-muted">
+            <p role="status" className="absolute inset-0 m-0 grid place-items-center text-small text-muted">
               {SCAN_STARTING}
             </p>
           )}

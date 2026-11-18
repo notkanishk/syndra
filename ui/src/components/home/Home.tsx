@@ -363,6 +363,7 @@ export function Home({ session }: { session: SessionUser }) {
             sweeps rather than at a glance. It wraps rather than clipping, and
             `text-balance` keeps the two lines close in length instead of
             leaving one word stranded. */}
+        {/* measure-exempt: the greeting's balance widths (D-1 §6), a display line, not a sentence. */}
         <h1 className="type-greeting max-w-[22ch] text-balance tablet:max-w-[34ch]">
           {now ? greeting(now) : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}.{" "}
@@ -372,7 +373,7 @@ export function Home({ session }: { session: SessionUser }) {
             </Crossfade>
           </span>
         </h1>
-        <div className="mt-2 text-[14.5px] text-faint">
+        <div className="mt-2 text-body text-faint">
           {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>}
           {termDay && ` · ${termDay}`}
           {summary.data && (
@@ -391,7 +392,7 @@ export function Home({ session }: { session: SessionUser }) {
             Mounted with the first read, so it is simply there when the page arrives. */}
         {!error && !loading && (
           <Unfold open={swap.gridOpen && clear.length > 0}>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-[13.5px] text-muted">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-small text-muted">
             <StatusDot tone="healthy" />
             <span>Checked, nothing waiting:</span>
             {clear.map(([name, href], index) => (
@@ -678,14 +679,14 @@ function OpenRequests({
               }
             >
               <UserAvatar id={entry.requester_id} size="list" />
-              <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={entry.requester_id} />
-            <div className="w-full tablet:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
+              <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-body font-semibold" id={entry.requester_id} />
+            <div className="w-full tablet:w-[250px] shrink-0 text-body [text-wrap:pretty]">
               <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
             </div>
-            <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
+            <div className="min-w-0 flex-1 text-body text-muted [text-wrap:pretty]">
               {entry.justification ? `“${entry.justification}”` : "No reason given"}
             </div>
-            <div className="w-[66px] shrink-0 text-[13px] text-faint">
+            <div className="w-[66px] shrink-0 text-small text-faint">
               <Relative iso={entry.created_at} />
             </div>
           </CardRow>
@@ -767,17 +768,17 @@ function ExpiringRow({
       }
     >
       <UserAvatar id={grant.user_id} size="list" />
-      <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={grant.user_id} />
-      <div className="w-full tablet:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
+      <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-body font-semibold" id={grant.user_id} />
+      <div className="w-full tablet:w-[250px] shrink-0 text-body [text-wrap:pretty]">
         <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <AccessSource kind="direct" />
-        <span className="text-[14px] text-muted [text-wrap:pretty]">
+        <span className="text-body text-muted [text-wrap:pretty]">
           Ends {formatShortDate(grant.expires_at)}
         </span>
       </div>
-      <div className="w-[66px] shrink-0 text-[13.5px] font-semibold text-warn-text">
+      <div className="w-[66px] shrink-0 text-small font-semibold text-warn-text">
         {expiryLabel(grant.expires_at, "short") ?? "—"}
       </div>
       {extend.step.element}
@@ -817,7 +818,7 @@ function OnboardingGaps({
       <CardHeader title="New people without a bundle" count={report.missed.length} />
       {!report.welcome_bundle_configured && (
         <CardRow seat="narrow" action={<ArrowLink href="/bundles">Open bundles</ArrowLink>}>
-          <div className="flex-1 text-[14.5px]">
+          <div className="flex-1 text-body">
             No default <Term name="bundle">bundle</Term> is set for new members
             <span className="text-faint">. Anybody who joins gets nothing until one is set.</span>
           </div>
@@ -837,12 +838,12 @@ function OnboardingGaps({
               }
             >
               <UserAvatar id={person.user_id} size="list" />
-              <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={person.user_id} />
-              <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
+              <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-body font-semibold" id={person.user_id} />
+              <div className="min-w-0 flex-1 text-body text-muted [text-wrap:pretty]">
                 Holds no bundle
               </div>
               {person.joined && (
-                <div className="w-[66px] shrink-0 text-[13px] text-faint">
+                <div className="w-[66px] shrink-0 text-small text-faint">
                   <Relative iso={person.joined} />
                 </div>
               )}
@@ -872,11 +873,11 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
           <CardRow key={account.id} seat="narrow">
             <AdvancedLink
               href={serviceAccountHref(account.id)}
-              className="min-w-0 flex-1 text-[15px] font-semibold [overflow-wrap:anywhere] link-hover"
+              className="min-w-0 flex-1 text-body font-semibold [overflow-wrap:anywhere] link-hover"
             >
               {account.name}
             </AdvancedLink>
-            <div className="w-full tablet:w-[170px] shrink-0 text-[14px]">
+            <div className="w-full tablet:w-[170px] shrink-0 text-body">
               <Owner id={account.owner_id} />
             </div>
           </CardRow>
@@ -943,7 +944,7 @@ export function Retries({
             </AdvancedLink>
           }
         >
-          <span className="inline-flex flex-1 items-center gap-2 text-[14px]">
+          <span className="inline-flex flex-1 items-center gap-2 text-body">
             <StatusDot tone="warn" />
             <span className="text-warn-text">
               {systemsOf(retryingBy, nameOf)} didn&apos;t take {one(retrying)}.{" "}
@@ -982,7 +983,7 @@ export function Retries({
             </>
           }
         >
-          <span className="inline-flex flex-1 items-center gap-2 text-[14px]">
+          <span className="inline-flex flex-1 items-center gap-2 text-body">
             <StatusDot tone="danger" />
             <span className="text-danger-text">
               Syndra stopped sending {one(gaveUp)}, so {gaveUp === 1 ? "it isn't" : "they aren't"} in{" "}
@@ -1038,7 +1039,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           </Button>
         }
       >
-        <div className="flex-1 text-[14.5px]">
+        <div className="flex-1 text-body">
           {count} {count === 1 ? "change is" : "changes are"} waiting for you to send to Zitadel
           {/* Not "nothing has changed" — that flatly denies the count above it.
               The reassurance is about Zitadel, not the queue: it has not
@@ -1089,7 +1090,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
     <Card>
       <CardHeader title="Sent, and not seen back yet" count={count} tone="warn" />
       <CardRow>
-        <div className="flex-1 text-[14.5px]">
+        <div className="flex-1 text-body">
           Zitadel accepted {count === 1 ? "this change" : "these changes"} and hasn&rsquo;t shown{" "}
           {count === 1 ? "it" : "them"} back yet.
           <span className="text-faint">
@@ -1102,15 +1103,15 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
         {(row) => (
           <CardRow key={row.id} seat="narrow">
             <UserAvatar id={row.user_id} size="list" />
-            <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={row.user_id} />
+            <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-body font-semibold" id={row.user_id} />
             {row.role_keys && row.role_keys.length > 0 && (
-              <div className="w-full tablet:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
+              <div className="w-full tablet:w-[250px] shrink-0 text-body [text-wrap:pretty]">
                 {sortByName(row.role_keys, (key) => names.roleRef(row.project_id ?? "", key), (key) => key).map((key) => (
                   <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-2" />
                 ))}
               </div>
             )}
-            <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
+            <div className="min-w-0 flex-1 text-body text-muted [text-wrap:pretty]">
               Sent <Relative iso={row.applied_at} /> {sentTo(row.op_type, row.role_keys?.length ?? 0)}
             </div>
           </CardRow>
@@ -1159,7 +1160,7 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
             seat="narrow"
             action={<ArrowLink href={`/system/targets/${t.target}`}>{`Open ${nameOf(t.target)}`}</ArrowLink>}
           >
-            <div className="flex-1 text-[14.5px]">
+            <div className="flex-1 text-body">
               <strong className="font-semibold">{nameOf(t.target)}</strong> hasn&rsquo;t been
               read since <Relative iso={t.since} />.
               <span className="text-faint">
@@ -1167,7 +1168,7 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
                 Nothing found on it means nothing was looked at, not that it is clean.
               </span>
               {t.reason && (
-                <div className="mt-1 text-[13px] text-faint">{whyNotChecked(t.reason)}</div>
+                <div className="mt-1 text-small text-faint">{whyNotChecked(t.reason)}</div>
               )}
             </div>
           </CardRow>
@@ -1206,7 +1207,7 @@ function MergeFindingsWaiting({ count }: { count: number }) {
           </ArrowLink>
         ))}
       >
-        <div className="flex-1 text-[14.5px]">
+        <div className="flex-1 text-body">
           {count} {count === 1 ? "difference" : "differences"} Syndra found and can&rsquo;t
           resolve on its own
           <span className="text-faint">
@@ -1243,7 +1244,7 @@ function NotConfirmed({ count, bySystem }: { count: number; bySystem: Record<str
           seat="narrow"
           action={<ArrowLink href={`/system/targets/${target}#waiting`}>{`Open ${nameOf(target)}`}</ArrowLink>}
         >
-          <span className="flex-1 text-[14.5px]">
+          <span className="flex-1 text-body">
             {nameOf(target)} <span className="text-faint">· {n === 1 ? "1 change" : `${n} changes`}</span>
           </span>
         </CardRow>
@@ -1257,7 +1258,7 @@ function UnexplainedAccess({ count }: { count: number }) {
     <Card>
       <CardHeader title="Drift" count={count} tone="danger" />
       <CardRow seat="narrow" action={<ArrowLink href="/governance/drift">Review on Drift</ArrowLink>}>
-        <div className="flex-1 text-[14.5px]">
+        <div className="flex-1 text-body">
           {count} {count === 1 ? "grant" : "grants"} Syndra can&rsquo;t explain
         </div>
       </CardRow>

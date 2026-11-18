@@ -58,7 +58,7 @@ const SEAT_DOT: Record<Outcome["kind"], StatusTone> = {
  */
 export function ActionForecast({ word, className = "" }: { word: string; className?: string }) {
   return (
-    <span role="status" className={`inline-flex items-center gap-2 text-[13.5px] font-semibold text-ink ${className}`}>
+    <span role="status" className={`inline-flex items-center gap-2 text-small font-semibold text-ink ${className}`}>
       <StatusDot tone="warn" className="breathe" />
       {word}
     </span>
@@ -113,15 +113,15 @@ export function ActionOutcome({
         role={grave ? "alert" : "status"}
         className={`flex flex-col gap-1 ${className}`}
       >
-        <span className="inline-flex items-center gap-2 text-[13.5px] font-semibold text-ink">
+        <span className="inline-flex items-center gap-2 text-small font-semibold text-ink">
           {/* It went well, because of you, and you are looking: the one dot that blooms (S4). */}
           <StatusDot tone={dotTone(outcome)} bloom={outcome.kind === "applied"} />
           {word}
         </span>
         {/* Queued: why it waits, then the step left — the word above already
             wears the amber dot, so the link doesn't repeat it (route-requests). */}
-        {said && <span className="pl-(--dot-indent) text-[12.5px] leading-[1.45] text-faint">{said}</span>}
-        {next && <span className="pl-(--dot-indent) text-[12.5px] leading-[1.45] text-faint">{next}</span>}
+        {said && <span className="pl-(--dot-indent) text-fine leading-[1.45] text-faint">{said}</span>}
+        {next && <span className="pl-(--dot-indent) text-fine leading-[1.45] text-faint">{next}</span>}
         {waitsForSend(outcome) && <NextStep dot={false} person={person} className="pl-(--dot-indent)" />}
         {outcome.kind === "failed" && outcome.requestId && (
           <CopyableValue value={outcome.requestId} label="Reference" className="pl-(--dot-indent)" />
@@ -143,15 +143,15 @@ export function ActionOutcome({
         {waitsForSend(outcome) ? (
           <NextStep person={person} />
         ) : (
-          <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink">
+          <span className="inline-flex items-center gap-2 text-small font-semibold text-ink">
             <StatusDot tone={dotTone(outcome)} />
             {word}
           </span>
         )}
-        <span className="text-[13px] text-muted">{sentence(outcome.message)}</span>
+        <span className="text-small text-muted">{sentence(outcome.message)}</span>
         {(() => {
           const next = nextLine(outcome, [outcome.message]);
-          return next && <span className="text-[13px] text-faint">{next}</span>;
+          return next && <span className="text-small text-faint">{next}</span>;
         })()}
       </span>
     );
@@ -174,7 +174,7 @@ export function ActionOutcome({
           {word}
         </span>
       </div>
-      <p className="text-[15px] leading-[1.55] text-ink">
+      <p className="text-body leading-[1.55] text-ink">
         {sentence(outcome.message)}
         {/* Said once: a refusal whose own sentence already says it is not told twice (re-audit R20). */}
         {/* A refusal Syndra already recorded changed Syndra, so it is never "Nothing was changed." (N1). */}
@@ -183,11 +183,11 @@ export function ActionOutcome({
           : ""}
       </p>
       {outcome.detail && (
-        <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
+        <p className="text-small leading-[1.5] text-faint">{outcome.detail}</p>
       )}
       {(() => {
         const next = nextLine(outcome, [outcome.message, outcome.detail]);
-        return next && <p className="text-[13px] leading-[1.5] text-faint">{next}</p>;
+        return next && <p className="text-small leading-[1.5] text-faint">{next}</p>;
       })()}
       {waitsForSend(outcome) && <NextStep dot={false} person={person} />}
       {outcome.sessionEnded && <SignInAgain />}
@@ -208,7 +208,7 @@ function SignInAgain() {
       >
         Sign in again in a new tab <span aria-hidden>→</span>
       </a>
-      <p className="text-[12.5px] text-faint">
+      <p className="text-fine text-faint">
         This tab stays as it is. Come back here when you&rsquo;re signed in.
       </p>
     </div>

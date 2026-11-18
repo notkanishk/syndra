@@ -56,7 +56,7 @@ export function TokenBlock({
   empty?: ReactNode;
   className?: string;
 }) {
-  const frame = `rounded-inner border border-line bg-surface-0 px-[18px] py-3.5 font-mono text-[13px] leading-[1.8] ${className}`;
+  const frame = `rounded-inner border border-line bg-surface-0 px-[18px] py-3.5 font-mono text-small leading-[1.8] ${className}`;
   if (raw !== undefined) {
     return (
       <pre className={`${frame} whitespace-pre-wrap [overflow-wrap:anywhere] text-ink`}>

@@ -155,10 +155,10 @@ export function GoToPanel({
                     className={`motion-tint flex min-h-[var(--tap)] items-center gap-3 px-6 py-1.5 ${selected ? "bg-tint-2" : ""}`}
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-[14.5px] font-semibold text-ink">{item.name}</span>
-                      <span className="truncate text-[13px] text-muted">{item.descriptor}</span>
+                      <span className="truncate text-body font-semibold text-ink">{item.name}</span>
+                      <span className="truncate text-small text-muted">{item.descriptor}</span>
                     </span>
-                    <span className="flex-none text-[12.5px] text-faint">{item.kind}</span>
+                    <span className="flex-none text-fine text-faint">{item.kind}</span>
                   </Link>
                 );
               })}
@@ -173,7 +173,7 @@ export function GoToPanel({
       )}
 
       {!embedded && (
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-faint">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fine text-faint">
           <span className="inline-flex items-center gap-1">
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd> move

@@ -38,7 +38,7 @@ export default function AppError({ error }: { error: Error & { digest?: string }
   // the danger Notice in the content column, ending "Nothing was changed.",
   // the reference as a copy row, and the way home as a violet text link.
   return (
-    <div className="flex max-w-[76ch] flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <Notice
         tone="danger"
         blocking

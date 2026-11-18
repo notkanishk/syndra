@@ -206,7 +206,7 @@ export default function ProjectDetailPage({
                 className="row-divider row-cols flex flex-wrap items-start gap-y-[18px] px-5 py-3.5"
               >
                 <div className="min-w-[min(220px,100%)] flex-1">
-                  <div className="text-[15px] font-semibold">
+                  <div className="text-body font-semibold">
                     <Link
                       href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
                       className="link-hover"
@@ -225,24 +225,24 @@ export default function ProjectDetailPage({
                     </Mono>
                   </div>
                   {role.description && (
-                    <p className="mt-1 max-w-[80ch] text-[13.5px] leading-[1.5] text-muted [text-wrap:pretty]">
+                    <p className="mt-1 measure text-small leading-[1.5] text-muted [text-wrap:pretty]">
                       {role.description}
                     </p>
                   )}
                   {role.cloned_from_role && (
-                    <p className="mt-1 text-[12.5px] text-faint">
+                    <p className="mt-1 text-fine text-faint">
                       cloned from {role.cloned_from_project} /{" "}
                       {role.cloned_from_role}
                     </p>
                   )}
                 </div>
 
-                <span className="hidden w-[130px] shrink-0 text-[13.5px] text-muted [text-wrap:pretty] desktop:block">
+                <span className="hidden w-[130px] shrink-0 text-small text-muted [text-wrap:pretty] desktop:block">
                   {role.group || "—"}
                 </span>
 
                 {/* Read-only (N16): set only in Roles that wait. */}
-                <span className="hidden w-[140px] shrink-0 text-[13.5px] tablet:block">
+                <span className="hidden w-[140px] shrink-0 text-small tablet:block">
                   {role.waits_for_send ? (
                     <WaitsMark
                       withLabel
@@ -253,11 +253,11 @@ export default function ProjectDetailPage({
                   )}
                 </span>
 
-                <span className="flex w-[110px] shrink-0 flex-col items-end gap-0.5 text-[15px]">
+                <span className="flex w-[110px] shrink-0 flex-col items-end gap-0.5 text-body">
                   <span>{members.headline}</span>
                   {members.note && (
                     <span
-                      className={`text-[12.5px] font-normal ${holdersToneClass[members.tone]}`}
+                      className={`text-fine font-normal ${holdersToneClass[members.tone]}`}
                     >
                       {members.note}
                     </span>

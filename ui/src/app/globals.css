@@ -129,6 +129,10 @@
    * instead of growing with the window: a desktop no longer gets the largest
    * size because it is wider than 1080. 12.5 is the floor (A-09). Q1 and Q3,
    * recommended, pending owner: the scale is these eight numbers. */
+  /* Tailwind's own steps (text-xs … text-9xl) go: a namespace set to `initial` is
+     cleared (Tailwind v4, "Using a custom theme"), so `text-sm` renders nothing
+     rather than a ninth size beside the scale. */
+  --text-*: initial;
   --text-display: 34px; /* the greeting, the one loud moment */
   --text-display--line-height: 1.1;
   --text-page: 28px;
@@ -721,8 +725,9 @@
     background-color: var(--ground);
     color: var(--ink);
     font-family: var(--font-sans), system-ui, sans-serif;
-    font-size: 14.5px;
-    line-height: 1.55;
+    /* The body step (D-1 §3): every sentence that sets no size of its own. */
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

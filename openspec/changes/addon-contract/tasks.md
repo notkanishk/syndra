@@ -3028,7 +3028,69 @@ end to end) found no missing function; three regressions with one root cause
         - `design-system.test.ts`: `CardGrid` is `items-start`, and no hand-built column grid holds a `Card` or `…Card` part in source.
         - `RowSeat.test.tsx`: `CardGrid`'s classes, and the guard catching a hand grid while leaving stat tiles alone.
       - **Mutation-checked** (each red): the makerspace back to its hand grid (caught by the suite-wide guard over the Home tests); the system page's "What runs here" as a hand grid; `CardGrid` without `items-start`.
-  - [ ] 7u-4 Pass 4, three text sizes (Q3), with §5 #40's remaining raw display sizes and #41 `/storage`; then no `text-[NNpx]` in components.
+  - [x] 7u-4 Pass 4, three text sizes (Q3), with §5 #40's remaining raw display sizes and #41 `/storage`; then no `text-[NNpx]` in components.
+    *Done (18 Nov 2026, branch `feat/addon-contract-d1-4`):*
+    - **The fold** (Q3, recommended, pending owner): a mechanical codemod over 163 files, keeping every variant prefix.
+      - `text-[15px]`, `[15.5px]`, `[14.5px]` and `[14px]` become `text-body` (14, 1.5);
+      - `[13.5px]` and `[13px]` become `text-small` (13, 1.45);
+      - `[12.5px]` and `[12px]` become `text-fine` (12.5, 1.4).
+      - The 15.5 row names are a row's first line, so they read the body step (§3).
+      - `body` in `globals.css` reads `--text-body` and its line-height (was 14.5 / 1.55).
+      - To flip Q3: change the three tokens' values, since every caller reads a step.
+    - **§5 #40, the display sizes onto the scale:**
+      - **To the figure:** the stat tile's and the usage card's figure (24) became `text-figure` (24, 600 from the token).
+      - **To the heading:** Insights' answer title and `/storage`'s headline (24) became `text-heading` (22).
+      - **To the title:**
+        - AccessSource's expanded title (19), NotOpenYet's page line (19), and its other line (15, now `text-body`);
+        - the makerspace's counts (20 and 18), with `font-normal`, so a count keeps its weight;
+        - BundleVersions' version (17), also `font-normal`.
+    - **§5 #41 `/storage`:** headline at `--text-heading` (22); its sentences (66, 70 and 62ch) at `measure`; its fields (460px) at `--field-max`.
+    - **§6 test 6, every sentence at the measure:** the remaining hand-set caps (60 to 92ch, 15 files) became `measure`. Left alone:
+      - the greeting's balance widths (22, 34ch);
+      - CommandBlock's code;
+      - a stat tile's own detail (42ch);
+      - a button's reason (46ch).
+    - **Left at their pixel sizes,** each marked `type-scale-exempt` beside it:
+      - the avatar initials;
+      - the dialog field and textarea (15px);
+      - the sidebar's wordmark (18, the brand's, not a step).
+
+      Decoration nobody reads (`aria-hidden`: the sort and section arrows, the rule chain's arrow) also keeps its size.
+    - **Phone values (pass 1's note):** body and control text now follow the type scale at every width, as §3 sets it; that was the noted difference, and this fold is its resolution. Unchanged, and still noted:
+      - ActionOutcome's block title is the title step (19 on a phone, was 22);
+      - the six list rows that had `py-3` keep the one row box (14 on a phone).
+    - **Guards** (`design-system.test.ts`):
+      - no `text-[Npx]` anywhere in `src` but `aria-hidden` decoration and what is marked `type-scale-exempt` within the eight lines above;
+      - `body` reads `--text-body`;
+      - no `max-w-[Nch]` outside the four places named above.
+    - **Tests updated:** `UsageCard.test.tsx` (the figure is `text-figure`) and `ViewSwitch.test.tsx` (`text-fine`).
+    - **Mutation-checked** (each red):
+      - `text-[14.5px]` back in PageHeader's meta;
+      - the stat figure back to `text-[24px]`;
+      - `body` back to 14.5 / 1.55;
+      - `max-w-[60ch]` back in ErrorBoundary.
+    - **Review round** (18 Nov 2026, lead on #203):
+      - **(1)** TermDatesCard's and WelcomeClaimsCard's opening sentences: the divider and inset are on a full-width wrapper, and `measure` only on the `<p>`. The divider line was cut at 60ch.
+      - **(2)** DegradedBanner: `measure` moved from the container holding the command block onto the `<p>`, so the command and its Copy keep their width.
+      - **(3)** PersonAccess's cleanup hints: `max-w-[840px]` became `measure` (spec §3 row 78). ChoiceRow's 170px note is now `max-w-(--seat-label)`, the same width as a token.
+      - **(4)** The measure guard exempts by line marker, not by file. The only exemption left is the greeting's balance widths (`measure-exempt` on the line above). The rest moved to `measure`: CommandBlock's caption and step, the stat tile's detail, and a button's reason.
+      - **(5)** `error.tsx`: no cap on the column. The Notice sets its own measure, and the link is short.
+      - **(6)** The type guard:
+        - A marker covers only its own line or the line directly below it; the eight-line window is gone. Each avatar size and the dialog field and textarea carry their own.
+        - It also catches an inline `fontSize` literal and Tailwind's own steps (`text-xs` … `text-9xl`).
+        - Those steps are also cleared at the source: `--text-*: initial` in `@theme`, Tailwind v4's way to empty a namespace, so `text-sm` now renders nothing.
+        - `global-error.tsx` renders after the root layout failed, so `globals.css` and its tokens may never have loaded, and it may import nothing from the app. Its sizes are the scale's steps written out once, in a `TYPE` map with each line marked: heading 22, body 14, small 13, fine 12.5. They were 20, 14.5, 13, 12.5 and 13.5.
+        - The usage band's limit word (SVG `fontSize="12.5"`) is now `text-fine`.
+      - **(7)** NotOpenYet: the dead ternary is gone.
+      - **Mutation-checked** (each red):
+        - a marker moved two lines away from its size;
+        - `global-error` with a literal `fontSize`;
+        - a `text-sm`;
+        - `--text-*: initial` removed;
+        - PersonAccess back at `max-w-[840px]`;
+        - CommandBlock's caption back at `max-w-[80ch]`;
+        - the greeting's marker removed;
+        - an avatar size without its marker.
   - [ ] 7u-5 Motion (§7: the five tokens, M1–M14, the eight motion tests).
   - [ ] 7u-6 Pass 5, resync the design system (`ui/.design-sync`, BRIDGE steps 1 to 3), after the owner's OK.
 - [ ] 7v Flaky conformance test (add-on track; noted 18 Nov 2026, not fixed). `addons/conformance` `TestAnUnansweredWithdrawThatBoundAnAccountIsOwnedUpTo` (`kit_test.go:1312`) failed once on PR #200's CI run, with no Go change in the PR (reported by the PR's review). Find the race or ordering it depends on (`go test -race -count=200 -run TestAnUnansweredWithdrawThatBoundAnAccountIsOwnedUpTo ./...` in `addons/conformance`), fix it at the root, and leave a guard that fails without the fix. `needs-triage`

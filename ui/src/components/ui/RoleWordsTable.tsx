@@ -78,17 +78,17 @@ export function RoleWordsTable({
           >
             {dense ? (
               <span className="inline-flex w-full min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 tablet:w-[190px] tablet:flex-none">
-                <span className={`text-[14px] font-semibold ${r.included ? "text-ink" : "text-muted"}`}>{r.name}</span>
+                <span className={`text-body font-semibold ${r.included ? "text-ink" : "text-muted"}`}>{r.name}</span>
                 {r.waits && <WaitsMark />}
-                <span className="type-mono text-[12.5px] text-faint">{r.key}</span>
+                <span className="type-mono text-fine text-faint">{r.key}</span>
               </span>
             ) : (
               <span className="flex w-[170px] flex-none flex-col gap-px pt-0.5">
-                <span className="inline-flex items-center gap-[7px] text-[14.5px] font-semibold">
+                <span className="inline-flex items-center gap-[7px] text-body font-semibold">
                   {r.name}
                   {r.waits && <WaitsMark />}
                 </span>
-                <span className="type-mono text-[12.5px] text-faint">{r.key}</span>
+                <span className="type-mono text-fine text-faint">{r.key}</span>
               </span>
             )}
             <span className={`flex min-w-0 flex-col ${dense ? "flex-[1_1_150px] gap-0.5" : "flex-[1_1_170px] gap-1"}`}>
@@ -101,10 +101,10 @@ export function RoleWordsTable({
                 disabled={!r.included}
                 aria-label={`${app} calls ${r.name}`}
                 onChange={(e) => onWord(r.key, e.target.value)}
-                className={`w-full font-mono ${dense ? "" : "text-[13.5px]"} ${!r.included ? "border-transparent! text-muted" : r.changed ? "" : "border-transparent! hover:border-line! focus:border-accent-line!"}`}
+                className={`w-full font-mono ${dense ? "" : "text-small"} ${!r.included ? "border-transparent! text-muted" : r.changed ? "" : "border-transparent! hover:border-line! focus:border-accent-line!"}`}
               />
               {r.notes?.map((n) => (
-                <span key={n} className="text-[12.5px] leading-[1.45] text-faint [text-wrap:pretty]">
+                <span key={n} className="text-fine leading-[1.45] text-faint [text-wrap:pretty]">
                   <Ticks text={n} />
                 </span>
               ))}

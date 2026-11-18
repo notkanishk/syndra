@@ -347,13 +347,13 @@ export default function PeoplePage() {
       ))}
 
       {bulkMode && give.roleKey && (
-        <p className="text-[14px] text-muted">
+        <p className="text-body text-muted">
           Pick who should get <RoleRef projectId={give.projectId} roleKey={give.roleKey} />, then choose
           Give a role. Everyone is listed, including people who already hold it.
         </p>
       )}
       {bulkMode && give.bundleId && (
-        <p className="text-[14px] text-muted">
+        <p className="text-body text-muted">
           Pick who should get {bundles.data?.find((b) => b.id === give.bundleId)?.name ?? "the bundle"}, then
           choose Give a bundle.
         </p>
@@ -578,22 +578,22 @@ function PersonRow({
             <Link
               href={`/users/${entry.user.id}`}
               onClick={(event) => event.stopPropagation()}
-              className={`block truncate text-[15px] font-semibold link-hover ${departed ? "text-muted" : ""}`}
+              className={`block truncate text-body font-semibold link-hover ${departed ? "text-muted" : ""}`}
             >
               {entry.user.name}
             </Link>
           ) : (
-            <span className={`block truncate text-[15px] font-semibold ${departed ? "text-muted" : ""}`}>
+            <span className={`block truncate text-body font-semibold ${departed ? "text-muted" : ""}`}>
               {entry.user.name}
             </span>
           )}
-          <span className="block truncate text-[12.5px] text-faint" title={subtitle}>
+          <span className="block truncate text-fine text-faint" title={subtitle}>
             {subtitle}
           </span>
           {/* Below desktop the bundles fold into a line under the person, as the
               board draws them, so Access keeps its width. */}
           {bundleLine && (
-            <span className="block truncate text-[12.5px] text-faint desktop:hidden">{bundleLine}</span>
+            <span className="block truncate text-fine text-faint desktop:hidden">{bundleLine}</span>
           )}
         </span>
       </span>
@@ -614,7 +614,7 @@ function PersonRow({
       </span>
 
       {/* Wraps. What somebody holds is what the row is read for. */}
-      <span className="min-w-0 text-[13px] text-muted [text-wrap:pretty] tablet:min-w-[170px] tablet:flex-1 tablet:text-[14px]">
+      <span className="min-w-0 text-small text-muted [text-wrap:pretty] tablet:min-w-[170px] tablet:flex-1 tablet:text-body">
         {describeAccess(entry)}
       </span>
 
@@ -671,7 +671,7 @@ function NeedsAttention({ entry }: { entry: UserListEntry }) {
     return null;
   }
   return (
-    <span className={`text-[13.5px] font-semibold [text-wrap:pretty] ${attention.tone}`}>
+    <span className={`text-small font-semibold [text-wrap:pretty] ${attention.tone}`}>
       {attention.text}
     </span>
   );

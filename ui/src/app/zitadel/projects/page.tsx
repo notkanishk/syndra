@@ -105,7 +105,7 @@ export default function UpstreamProjectsPage() {
                   activeId === project.id ? "bg-accent-soft/60" : "hover-tint"
                 }`}
               >
-                <span className="text-[14.5px] font-semibold [overflow-wrap:anywhere]">{project.name}</span>
+                <span className="text-body font-semibold [overflow-wrap:anywhere]">{project.name}</span>
               </button>
             ))}
           </ListStates>
@@ -198,10 +198,10 @@ function RoleRow({
   return (
     <>
       <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center`}>
-        <span className="min-w-[200px] flex-1 text-[14.5px] [overflow-wrap:anywhere]">
+        <span className="min-w-[200px] flex-1 text-body [overflow-wrap:anywhere]">
           {role.displayName || role.key} <Mono className="text-faint">{role.key}</Mono>
         </span>
-        <span className="text-[13.5px] text-muted [overflow-wrap:anywhere] tablet:w-[160px]">{role.group || "—"}</span>
+        <span className="text-small text-muted [overflow-wrap:anywhere] tablet:w-[160px]">{role.group || "—"}</span>
         <ActionSeat>
           <Button size="sm" onClick={onEdit} aria-label={`Edit ${role.displayName || role.key}`}>
             Edit

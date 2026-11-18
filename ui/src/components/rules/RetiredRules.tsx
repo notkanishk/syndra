@@ -58,7 +58,7 @@ function RetiredRuleRows() {
     >
       {rows.map((rule) => (
         <div key={rule.id} className="row-divider flex flex-col gap-1.5 px-5 py-3.5">
-          <span className="text-[14.5px] text-muted">
+          <span className="text-body text-muted">
             <ProjectName id={rule.source_project} /> / <Mono>{rule.source_role}</Mono>
             <span aria-hidden className="mx-2.5 text-faint">
               ⇒
@@ -66,7 +66,7 @@ function RetiredRuleRows() {
             <span className="sr-only">then </span>
             <ProjectName id={rule.target_project} /> / <Mono>{rule.target_role}</Mono>
           </span>
-          <span className="text-[13px] text-faint">
+          <span className="text-small text-faint">
             <RetiredStatus at={rule.retired_at} by={rule.retired_by} />
           </span>
         </div>

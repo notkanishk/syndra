@@ -96,15 +96,15 @@ export function AnswerPanel({
             {panel.eyebrow}
           </span>
         )}
-        <h2 className="font-display text-[24px] font-semibold leading-[1.15] [text-wrap:pretty]">{panel.title}</h2>
-        {panel.meta && <span className="text-[13.5px] text-muted">{panel.meta}</span>}
+        <h2 className="font-display text-heading font-semibold [text-wrap:pretty]">{panel.title}</h2>
+        {panel.meta && <span className="text-small text-muted">{panel.meta}</span>}
       </div>
 
       <div className="flex min-w-0 flex-col gap-[7px] tablet:flex-[1_1_380px]">
         {panel.lines.map((line, i) => (
           <p
             key={i}
-            className="flex items-baseline gap-2.5 text-[14px] leading-[1.55] [text-wrap:pretty]"
+            className="flex items-baseline gap-2.5 text-body leading-[1.55] [text-wrap:pretty]"
             {...(onLight && line.lights
               ? {
                   tabIndex: 0,

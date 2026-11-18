@@ -43,12 +43,12 @@ export function NextStep({
         {dot && <StatusDot tone="warn" />}
         <AdvancedLink
           href={to}
-          className="text-[13.5px] font-semibold text-accent-text link-hover"
+          className="text-small font-semibold text-accent-text link-hover"
         >
           Waiting for you to send <span aria-hidden>→</span>
         </AdvancedLink>
       </span>
-      {why && <span className="pl-(--dot-indent) text-[12.5px] text-faint">{why}</span>}
+      {why && <span className="pl-(--dot-indent) text-fine text-faint">{why}</span>}
     </span>
   );
 }

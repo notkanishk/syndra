@@ -363,10 +363,10 @@ function OperatorQueue({ userId }: { userId?: string }) {
                 </span>
               )}
               <UserAvatar id={entry.requester_id} />
-              <div className="w-full text-[15px] font-semibold [text-wrap:pretty] tablet:w-[170px] tablet:shrink-0">
+              <div className="w-full text-body font-semibold [text-wrap:pretty] tablet:w-[170px] tablet:shrink-0">
                 <UserName id={entry.requester_id} />
               </div>
-              <div className="w-full text-[14.5px] text-ink [text-wrap:pretty] tablet:w-[250px] tablet:min-w-[160px] tablet:shrink">
+              <div className="w-full text-body text-ink [text-wrap:pretty] tablet:w-[250px] tablet:min-w-[160px] tablet:shrink">
                 {entry.kind === "extend" && "Keep "}
                 <Link
                   href={`/projects/${encodeURIComponent(entry.project_id)}/roles/${encodeURIComponent(entry.role_key)}`}
@@ -382,16 +382,16 @@ function OperatorQueue({ userId }: { userId?: string }) {
                 ) && <WaitsMark className="ml-2" />}
                 {/* Half of the ask. A decision made without it is a decision
                     about a different request. */}
-                <span className="block text-[12.5px] text-faint">
+                <span className="block text-fine text-faint">
                   {describeAsk(entry, terms.data)}
                 </span>
               </div>
               {/* What someone decides on is never cut off (RULES 9b): the reason wraps, and below
                   desktop the row wraps first, the decision seat taking the next line. */}
-              <div className="w-full min-w-0 text-[14px] text-muted [text-wrap:pretty] tablet:min-w-[180px] tablet:flex-1">
+              <div className="w-full min-w-0 text-body text-muted [text-wrap:pretty] tablet:min-w-[180px] tablet:flex-1">
                 {entry.justification || "No reason given"}
               </div>
-              <div className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
+              <div className="text-small text-faint tablet:w-[66px] tablet:shrink-0">
                 <Relative iso={entry.created_at} />
               </div>
               {/* The Decision seat (#96): the buttons, then the decision in
@@ -440,7 +440,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                   as exactly that. */}
               {entry.status === "pending" && !resolved.has(entry.id) && <HoldingNote request={entry} />}
               {entry.status === "pending" && !resolved.has(entry.id) && userId && entry.requester_id === userId && (
-                <span className="w-full text-[13px] text-faint">
+                <span className="w-full text-small text-faint">
                   Your own request. Approving it is allowed, and Change history records that you approved your own.
                 </span>
               )}
@@ -654,20 +654,20 @@ function YourRequests({
             <div className="w-full min-w-0 tablet:flex-1">
               {/* The role, not only the place: two asks on one project were
                   two identical rows. */}
-              <div className="text-[15px] font-semibold [text-wrap:pretty]">
+              <div className="text-body font-semibold [text-wrap:pretty]">
                 {entry.kind === "extend" && "Keep "}
                 <ProjectName id={entry.project_id} />{" "}
                 ·{" "}
                 {roleName(resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name, entry.role_key)}
               </div>
-              <div className="text-[13.5px] text-faint [text-wrap:pretty]">
+              <div className="text-small text-faint [text-wrap:pretty]">
                 {describeAskForMember(entry, terms.data)}
               </div>
-              <div className="text-[13.5px] text-muted [text-wrap:pretty]">
+              <div className="text-small text-muted [text-wrap:pretty]">
                 {entry.justification || "No reason given"}
               </div>
             </div>
-            <div className="w-(--seat-number) shrink-0 text-[13px] text-faint tablet:text-right">
+            <div className="w-(--seat-number) shrink-0 text-small text-faint tablet:text-right">
               <Relative iso={entry.created_at} />
             </div>
             {/* One status seat: dot, word, note. A withdrawal reports here,

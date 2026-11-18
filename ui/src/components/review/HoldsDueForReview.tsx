@@ -97,7 +97,7 @@ export function HoldsDueForReview() {
 function Subject({ id }: { id: string }) {
   const accountHref = useAccountHref();
   return (
-    <span className="text-[14px]">
+    <span className="text-body">
       <UserName id={id} href={accountHref(id)} />
       <ServiceAccountTag id={id} />
     </span>
@@ -147,8 +147,8 @@ function OwnValueRow({ hold, first, schemaOf }: { hold: Hold; first: boolean; sc
       }
     >
       <Subject id={hold.subject_id} />
-      <span className="text-[13.5px]">{what}</span>
-      <span className="text-[13px] text-faint">
+      <span className="text-small">{what}</span>
+      <span className="text-small text-faint">
         on {system} · set by <UserName id={hold.actor_id} /> <Relative iso={hold.created_at} />
       </span>
     </CardRow>
@@ -228,8 +228,8 @@ function HoldRow({ hold, first, schemaOf }: { hold: Hold; first: boolean; schema
       }
     >
       <Subject id={hold.subject_id} />
-      <span className="text-[13.5px]">{label}</span>
-      <span className="text-[13px] text-faint">
+      <span className="text-small">{label}</span>
+      <span className="text-small text-faint">
         on {schemaOf.nameOf(hold.target)} · placed by <UserName id={hold.actor_id} />{" "}
         <Relative iso={hold.created_at} />
       </span>

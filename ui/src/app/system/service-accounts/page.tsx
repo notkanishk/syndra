@@ -73,21 +73,21 @@ export default function ServiceAccountsPage() {
               <span className="order-1 min-w-0 flex-1 tablet:w-[220px] tablet:flex-none">
                 <Link
                   href={serviceAccountHref(account.id)}
-                  className="block text-[15px] font-semibold [overflow-wrap:anywhere] link-hover"
+                  className="block text-body font-semibold [overflow-wrap:anywhere] link-hover"
                 >
                   {account.name}
                 </Link>
-                <span className="block text-[13px] text-faint">
+                <span className="block text-small text-faint">
                   {kindLabel(account.kind)} · {howItSignsIn(account)}
                 </span>
               </span>
-              <span className="order-3 w-full min-w-0 text-[14px] text-muted [text-wrap:pretty] tablet:order-2 tablet:w-auto tablet:flex-1">
+              <span className="order-3 w-full min-w-0 text-body text-muted [text-wrap:pretty] tablet:order-2 tablet:w-auto tablet:flex-1">
                 {account.purpose || <span className="text-faint">Nothing written yet</span>}
               </span>
-              <span className="order-4 w-full text-[14px] tablet:order-3 tablet:w-[170px] tablet:shrink-0">
+              <span className="order-4 w-full text-body tablet:order-3 tablet:w-[170px] tablet:shrink-0">
                 <Owner id={account.owner_id} />
               </span>
-              <span className="order-2 w-[64px] shrink-0 text-right text-[14px] tabular-nums tablet:order-4 tablet:w-(--seat-number)">
+              <span className="order-2 w-[64px] shrink-0 text-right text-body tabular-nums tablet:order-4 tablet:w-(--seat-number)">
                 {account.role_count}
               </span>
             </CardRow>

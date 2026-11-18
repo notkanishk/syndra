@@ -289,7 +289,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
               Clear selection
             </Button>
           </div>
-          <p className="text-[13px] text-faint">
+          <p className="text-small text-faint">
             {/* Not queued, and said plainly, because everything else on these
                 screens is. A purge is a one-shot operation: it cannot be
                 rehearsed against a queue an operator could still inspect. */}
@@ -324,8 +324,8 @@ function filesSentence(chosen: DormantAccount[], name: string): string {
 function GroupHeading({ title, blurb }: { title: string; blurb: string }) {
   return (
     <div className="row-divider px-5 py-2.5">
-      <p className="text-[13px] font-semibold text-ink">{title}</p>
-      <p className="text-[13px] text-muted">{blurb}</p>
+      <p className="text-small font-semibold text-ink">{title}</p>
+      <p className="text-small text-muted">{blurb}</p>
     </div>
   );
 }
@@ -333,14 +333,14 @@ function GroupHeading({ title, blurb }: { title: string; blurb: string }) {
 function AccountLine({ account }: { account: DormantAccount }) {
   return (
     <>
-      <span className="font-mono text-[13.5px]">{account.account}</span>
+      <span className="font-mono text-small">{account.account}</span>
       {account.subject_id && (
-        <span className="text-[13.5px] text-muted">
+        <span className="text-small text-muted">
           <UserName id={account.subject_id} fallback={account.display_name || undefined} />
         </span>
       )}
       <span className="flex-1" />
-      <span className="text-[13px] text-faint">
+      <span className="text-small text-faint">
         {/* One rule for the whole column (A-10 §6): minutes or hours under a day, then the date. */}
         Last signed in <time dateTime={account.last_seen_at}>{formatSignIn(account.last_seen_at)}</time>
       </span>

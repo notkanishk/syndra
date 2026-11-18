@@ -76,7 +76,7 @@ function Held({ item, voice, schemaOf, className = "" }: { item: WithheldItem; v
 export function WithheldPill({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`inline-flex items-center rounded-pill bg-warn-soft px-2.5 py-0.5 text-[12.5px] font-semibold text-warn-text ${className}`}
+      className={`inline-flex items-center rounded-pill bg-warn-soft px-2.5 py-0.5 text-fine font-semibold text-warn-text ${className}`}
     >
       On hold
     </span>
@@ -118,7 +118,7 @@ export function Withheld({
     <div className={`rounded-inner border border-warn-line bg-warn-soft px-4 py-3 ${className}`}>
       <div className="flex items-center gap-2">
         <WithheldPill />
-        <p className="text-[13.5px] font-semibold text-warn-text">
+        <p className="text-small font-semibold text-warn-text">
           {audience === "member"
             ? items.length === 1
               ? "One part of your access is on hold"
@@ -128,8 +128,8 @@ export function Withheld({
       </div>
       <ul className="mt-2 grid gap-1.5">
         {byValue(items).map((item) => (
-          <li key={`${item.target ?? ""}:${item.field}:${item.value}`} className="text-[13.5px]">
-            <Held item={item} voice={audience === "member" ? "Your" : "Their"} schemaOf={schemaOf} className="text-[13px] text-ink" />
+          <li key={`${item.target ?? ""}:${item.field}:${item.value}`} className="text-small">
+            <Held item={item} voice={audience === "member" ? "Your" : "Their"} schemaOf={schemaOf} className="text-small text-ink" />
             {audience === "operator" && item.target && !accountHold(schemaOf, item) && (
               <span className="text-muted"> on {systemName(schemaOf, item.target)}</span>
             )}
@@ -156,7 +156,7 @@ export function Withheld({
         // The half of "why does this person have access to X" that says they do
         // not. A role-holder list reads as full access, and this is precisely
         // the case where it is not.
-        <p className="mt-2 text-[13px] text-faint">
+        <p className="mt-2 text-small text-faint">
           This person may still hold the role that normally gives this. The hold is why they
           cannot use it.
         </p>
@@ -164,7 +164,7 @@ export function Withheld({
       {audience === "member" && (
         // The mechanism, once, at the bottom. A member who reads this knows the
         // hold is a decision with an owner rather than a fault with a queue.
-        <p className="mt-2 text-[13px] text-faint">
+        <p className="mt-2 text-small text-faint">
           You still have your role; this one part of it is on hold. Makerspace staff can lift
           the hold, or it ends on its own on the review date. If you think this should be
           lifted, ask makerspace staff and mention the reason shown here.
@@ -200,7 +200,7 @@ export function WithheldInline({ items, schemaOf }: { items: WithheldItem[]; sch
       "the connected system",
     );
     return (
-      <p role="status" className="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-[13px]">
+      <p role="status" className="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-small">
         <WithheldPill />
         <span className="text-muted">{why}</span>
       </p>
@@ -211,10 +211,10 @@ export function WithheldInline({ items, schemaOf }: { items: WithheldItem[]; sch
       {byValue(items).map((item) => (
         <li
           key={`${item.target ?? ""}:${item.field}:${item.value}`}
-          className="flex flex-wrap items-baseline gap-x-1.5 text-[13px]"
+          className="flex flex-wrap items-baseline gap-x-1.5 text-small"
         >
           <WithheldPill />
-          <Held item={item} voice="Their" schemaOf={schemaOf} className="text-[12.5px] text-ink" />
+          <Held item={item} voice="Their" schemaOf={schemaOf} className="text-fine text-ink" />
           {item.target && !accountHold(schemaOf, item) && <span className="text-faint">on {systemName(schemaOf, item.target)}</span>}
           {item.reason && <span className="text-muted">{item.reason}</span>}
           {item.reviewDue && (

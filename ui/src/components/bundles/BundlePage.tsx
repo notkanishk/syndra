@@ -359,7 +359,7 @@ function UnpublishedPanel({
         }
       />
       <ChangeLines draft={draft} className="px-5 pb-3" />
-      <p className="px-5 pb-4 text-[13px] text-muted">
+      <p className="px-5 pb-4 text-small text-muted">
         {holders === 0
           ? `${name} is assigned to nobody yet, so publishing moves nobody.`
           : `Publishing asks whether the ${holders} ${
@@ -431,7 +431,7 @@ function WhatItGives({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="min-w-0 flex-1 text-[13.5px] text-muted">
+        <p className="min-w-0 flex-1 text-small text-muted">
           {next
             ? `Changes here go into v${next}. Nobody's access changes until you publish.`
             : "Changes here go into the next version. Nobody's access changes until you publish."}
@@ -512,20 +512,20 @@ function WhatItGives({
                     }
                   >
                     <div className="min-w-[min(240px,100%)] flex-1">
-                      <span className="text-[15px] font-semibold">
+                      <span className="text-body font-semibold">
                         {roleName(entry?.display_name, role.zitadel_role_key)}
                       </span>{" "}
                       <Mono className="font-normal text-faint">{role.zitadel_role_key}</Mono>
                       {entry?.waits_for_send && <WaitsMark className="ml-2" />}
                       {entry?.description && (
-                        <p className="mt-0.5 max-w-[80ch] text-[13.5px] text-muted [text-wrap:pretty]">
+                        <p className="mt-0.5 measure text-small text-muted [text-wrap:pretty]">
                           {entry.description}
                         </p>
                       )}
                     </div>
                     {(isNew || isLeaving) && next && (
                       <span
-                        className={`text-[13px] font-semibold ${isLeaving ? "text-warn-text" : "text-accent-text"}`}
+                        className={`text-small font-semibold ${isLeaving ? "text-warn-text" : "text-accent-text"}`}
                       >
                         {isLeaving ? `Leaves in v${next}` : `New in v${next}`}
                       </span>
@@ -580,8 +580,8 @@ function EndCards({
     <Card>
       <div className="row-divider flex flex-wrap items-center gap-3 px-5 py-4">
         <div className="min-w-[240px] flex-1">
-          <div className="text-[14.5px] font-semibold">Given to everyone who joins</div>
-          <p className="mt-0.5 text-[13px] text-muted">
+          <div className="text-body font-semibold">Given to everyone who joins</div>
+          <p className="mt-0.5 text-small text-muted">
             {isWelcome
               ? `${name} is given to new members now.`
               : welcomeName
@@ -616,8 +616,8 @@ function EndCards({
       )}
       <div className="flex flex-wrap items-center gap-3 px-5 py-4">
         <div className="min-w-[240px] flex-1">
-          <div className="text-[14.5px] font-semibold">Retire {name}</div>
-          <p className="mt-0.5 text-[13px] text-muted">
+          <div className="text-body font-semibold">Retire {name}</div>
+          <p className="mt-0.5 text-small text-muted">
             {refused ??
               (holders === 0
                 ? "It is assigned to nobody, so retiring it takes nothing from anyone."
@@ -794,7 +794,7 @@ function DeleteBundleDialog({
         </div>
       ) : (
       <div className="px-6">
-        <div className="danger-note px-4 py-3.5 text-[14px] leading-[1.55]">
+        <div className="danger-note px-4 py-3.5 text-body leading-[1.55]">
           <div className="type-label mb-1 text-danger-text">What happens</div>
           <ul className="flex flex-col gap-1 text-muted">
             {holders > 0 && (
@@ -948,12 +948,12 @@ function RemovalImpact({
         Removing <RoleRef projectId={role.zitadel_project_id} roleKey={role.zitadel_role_key} /> from the next
         version
       </div>
-      <p className="mb-2.5 max-w-[60ch] text-[13.5px] leading-[1.55] text-muted">
+      <p className="mb-2.5 measure text-small leading-[1.55] text-muted">
         This is what would happen to the {holders.length} {holders.length === 1 ? "person" : "people"}{" "}
         {bundleName} is assigned to <em>if</em> you publish the next version and move them onto it.
       </p>
 
-      <ul className="mb-4 flex flex-col gap-2 text-[14px] leading-[1.5]">
+      <ul className="mb-4 flex flex-col gap-2 text-body leading-[1.5]">
         <li className="flex items-start gap-2.5">
           <StatusDot tone="danger" className="mt-[7px] flex-none" />
           <span>
@@ -1100,7 +1100,7 @@ function IncludedBundleCard({
           {child}
         </Link>
         <Chip>Included bundle</Chip>
-        <span className="text-[13.5px] text-faint">
+        <span className="text-small text-faint">
           v{include.child_version} · {roles.length} {roles.length === 1 ? "role" : "roles"}
         </span>
         <span className="flex-1" />
@@ -1129,7 +1129,7 @@ function IncludedBundleCard({
             </Button>
           }
         >
-          <span className="min-w-[min(300px,100%)] flex-1 text-[14px] leading-[1.5] text-muted [text-wrap:pretty]">
+          <span className="min-w-[min(300px,100%)] flex-1 text-body leading-[1.5] text-muted [text-wrap:pretty]">
             <strong className="font-semibold text-ink">
               {child} v{include.child_latest_version} is out.
             </strong>{" "}
@@ -1148,19 +1148,19 @@ function IncludedBundleCard({
         return (
           <div key={idOf(role)} className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-5 py-3">
             <div className="min-w-[min(260px,100%)] flex-1">
-              <span className="text-[15px] font-semibold">
+              <span className="text-body font-semibold">
                 {roleName(entry?.display_name, role.zitadel_role_key)}
               </span>
               {entry?.waits_for_send && <WaitsMark className="ml-2" />}{" "}
-              <span className="text-[13.5px] text-muted">
+              <span className="text-small text-muted">
                 ·{" "}
                 <ProjectName id={role.zitadel_project_id} name={entry?.project_name} />
               </span>
               {entry?.description && (
-                <p className="mt-0.5 max-w-[80ch] text-[13.5px] text-muted [text-wrap:pretty]">{entry.description}</p>
+                <p className="mt-0.5 measure text-small text-muted [text-wrap:pretty]">{entry.description}</p>
               )}
             </div>
-            <span className="text-[13px] text-faint">Comes with {child}</span>
+            <span className="text-small text-faint">Comes with {child}</span>
           </div>
         );
       })}

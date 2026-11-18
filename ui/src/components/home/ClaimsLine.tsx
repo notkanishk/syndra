@@ -21,7 +21,7 @@ export function ClaimsLine() {
   const tone: StatusTone | null = !s ? null : s.status === "ok" ? "healthy" : s.status === "failing" ? "danger" : "warn";
 
   return (
-    <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-[13.5px] text-muted">
+    <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-small text-muted">
       {tone && <StatusDot tone={tone} />}
       <span>
         <Term name="claim">Claims</Term>:

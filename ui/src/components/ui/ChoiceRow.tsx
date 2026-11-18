@@ -72,18 +72,18 @@ export function ChoiceRow({
       {/* A blocked row's words stay readable: its reason is why it is blocked.
           The seat fades (an inactive control); the title steps down a shade. */}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-[14.5px] leading-[1.4]">
+        <span className="text-body leading-[1.4]">
           <span className={`font-semibold ${locked || blocked ? "text-muted" : "text-ink"}`}>{title}</span>
-          {meta && <span className="text-[13px] text-faint"> · {meta}</span>}
+          {meta && <span className="text-small text-faint"> · {meta}</span>}
         </span>
         {(note ?? description) && (
-          <span className="text-[13px] leading-[1.45] text-muted [text-wrap:pretty]">
+          <span className="text-small leading-[1.45] text-muted [text-wrap:pretty]">
             {note ?? description}
           </span>
         )}
       </span>
       {seatNote && (
-        <span className="mt-0.5 flex max-w-[170px] flex-none flex-col items-end gap-0.5 text-right text-[12.5px] leading-[1.4] text-muted">
+        <span className="mt-0.5 flex max-w-(--seat-label) flex-none flex-col items-end gap-0.5 text-right text-fine leading-[1.4] text-muted">
           {seatNote}
         </span>
       )}

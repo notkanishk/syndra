@@ -20,6 +20,8 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
     return (
       <input
         ref={ref}
+        // A dialog field keeps its 15px (D-1 §6 pass 4), the size somebody types a claim name or a
+        // date at; the dense field reads the body step. type-scale-exempt
         className={`block w-full rounded-inner border border-line-strong bg-transparent px-[15px] ${dense ? DENSE_FIELD : "py-3 text-[15px]"} text-ink motion-tint placeholder:text-faint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${className}`}
         {...props}
       />
@@ -40,6 +42,7 @@ export const Textarea = React.forwardRef<
     <textarea
       ref={ref}
       rows={rows}
+      // The dialog field's 15px, as Input's (D-1 §6 pass 4). type-scale-exempt
       className={`block w-full resize-y rounded-inner border border-line-strong bg-transparent px-[15px] py-3 text-[15px] text-ink motion-tint placeholder:text-faint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${className}`}
       {...props}
     />
@@ -65,7 +68,7 @@ export function FieldLabel({
     <label
       id={id}
       htmlFor={htmlFor}
-      className={`mb-[7px] block text-[12.5px] font-semibold text-faint ${className}`}
+      className={`mb-[7px] block text-fine font-semibold text-faint ${className}`}
     >
       {children}
     </label>
@@ -74,7 +77,7 @@ export function FieldLabel({
 
 /** The helper line beneath a field — plain language, never a spec. */
 export function FieldHint({ children }: { children: React.ReactNode }) {
-  return <p className="mt-[7px] text-[13px] text-faint">{children}</p>;
+  return <p className="mt-[7px] text-small text-faint">{children}</p>;
 }
 
 /**
@@ -96,7 +99,7 @@ export function FieldError({
   return (
     <p
       role="alert"
-      className={`mt-[7px] text-[13px] text-danger-text ${leaving ? "tint-out" : "tint-in"} ${className}`}
+      className={`mt-[7px] text-small text-danger-text ${leaving ? "tint-out" : "tint-in"} ${className}`}
       {...rest}
     >
       {said.current}

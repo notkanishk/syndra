@@ -43,7 +43,7 @@ export function FilterChip({
   }
   return (
     <span
-      className={`${leaving ? "tint-out pointer-events-none" : "tint-in"} inline-flex items-center gap-1 self-start rounded-pill bg-tint-2 py-1.5 pl-4 pr-1 text-[13.5px]`}
+      className={`${leaving ? "tint-out pointer-events-none" : "tint-in"} inline-flex items-center gap-1 self-start rounded-pill bg-tint-2 py-1.5 pl-4 pr-1 text-small`}
     >
       <span>{children}</span>
       <button

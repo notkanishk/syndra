@@ -90,7 +90,7 @@ export function ClaimsDelivery({ domain, connected }: { domain?: string; connect
             <Live d={d} open={open} />
             <Configuration d={d} connected={connected} names={names} />
             {settled.length > 0 && (
-              <p className="row-divider px-5 py-3 text-[13px] text-muted">
+              <p className="row-divider px-5 py-3 text-small text-muted">
                 Settled in the last 24h: {settled.length === 1 ? "1 problem" : `${settled.length} problems`}, the last at{" "}
                 {formatWhen(settled.map((f) => f.resolved_at!).sort().at(-1))}.
               </p>
@@ -297,9 +297,9 @@ function useFold(bad: boolean): [boolean, () => void] {
 function PartHead({ label, tone, sentence, fold }: { label: string; tone: StatusTone; sentence: ReactNode; fold: ReactNode }) {
   return (
     <div className="row-divider flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3.5">
-      <span className="w-full text-[14.5px] font-semibold">{label}</span>
+      <span className="w-full text-body font-semibold">{label}</span>
       <StatusDot tone={tone} />
-      <span className="min-w-0 flex-[1_1_320px] text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">{sentence}</span>
+      <span className="min-w-0 flex-[1_1_320px] text-body leading-[1.55] text-ink [text-wrap:pretty]">{sentence}</span>
       {fold}
     </div>
   );
@@ -335,7 +335,7 @@ function Live({ d, open }: { d: Delivery; open: ClaimFinding[] }) {
           <>
             {sentence}
             {restarted && (
-              <span className="block text-[13px] text-muted">
+              <span className="block text-small text-muted">
                 Syndra started checking at {formatClock(since)}. Sign-ins before that aren&rsquo;t checked, and none is counted as failed.
               </span>
             )}
@@ -365,7 +365,7 @@ function AppRow({ app }: { app: ClaimApp }) {
   const served = SERVED.reduce((n, o) => n + (app.outcomes[o] ?? 0), 0);
   const others = Object.entries(app.outcomes).filter(([o, n]) => n > 0 && !SERVED.includes(o));
   return (
-    <div className="row-divider row-cols flex flex-col gap-y-1.5 px-5 py-3 text-[14px] tablet:flex-row tablet:items-baseline">
+    <div className="row-divider row-cols flex flex-col gap-y-1.5 px-5 py-3 text-body tablet:flex-row tablet:items-baseline">
       <span className="flex min-w-0 flex-col gap-0.5 tablet:w-[220px] tablet:shrink-0">
         {app.name && app.app_id ? (
           <Link href={`/applications/${app.app_id}`} className="font-semibold text-ink link-hover">
@@ -376,18 +376,18 @@ function AppRow({ app }: { app: ClaimApp }) {
         ) : app.client_id === "-" ? (
           <>
             <span className="font-semibold">No app named</span>
-            <span className="text-[13px] text-faint">Zitadel&rsquo;s call named no app</span>
+            <span className="text-small text-faint">Zitadel&rsquo;s call named no app</span>
           </>
         ) : (
           <>
             <span className="font-semibold">Not an app in Syndra</span>
-            <CopyableValue inline value={app.client_id} label="Client id" className="truncate text-[12.5px]" />
+            <CopyableValue inline value={app.client_id} label="Client id" className="truncate text-fine" />
           </>
         )}
       </span>
-      <span className="text-[13px] text-faint tablet:w-[130px] tablet:shrink-0">{when(app.last_sign_in_at, "No sign-in")}</span>
-      <span className="text-[13px] text-faint tablet:w-[130px] tablet:shrink-0">{when(app.last_served_at, "Not delivered")}</span>
-      <span className="min-w-0 flex-1 text-[13.5px] text-muted [text-wrap:pretty]">
+      <span className="text-small text-faint tablet:w-[130px] tablet:shrink-0">{when(app.last_sign_in_at, "No sign-in")}</span>
+      <span className="text-small text-faint tablet:w-[130px] tablet:shrink-0">{when(app.last_served_at, "Not delivered")}</span>
+      <span className="min-w-0 flex-1 text-small text-muted [text-wrap:pretty]">
         {app.calls === 0 ? (
           <span className="text-faint">No calls</span>
         ) : (
@@ -402,7 +402,7 @@ function AppRow({ app }: { app: ClaimApp }) {
           </>
         )}
       </span>
-      <span className="text-[13.5px] tabular-nums text-muted tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">{answerTime(app)}</span>
+      <span className="text-small tabular-nums text-muted tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">{answerTime(app)}</span>
     </div>
   );
 }
@@ -476,35 +476,35 @@ function ConfigLine({ row, names }: { row: ConfigRow; names: Names }) {
       <span className="flex min-w-0 flex-1 items-baseline gap-2.5">
         <StatusDot tone={STATE_TONE[row.state]} />
         <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-[14px] text-ink [text-wrap:pretty]">
+          <span className="text-body text-ink [text-wrap:pretty]">
             {labelOf(row, names)}
           </span>
           {row.state === "cannot" ? (
-            <span className="text-[13px] leading-[1.5] text-muted">
+            <span className="text-small leading-[1.5] text-muted">
               {statusOf(row.facts) === 403 ? GRANT_VIEWER : `Zitadel didn't answer${row.facts?.error ? `: ${String(row.facts.error)}` : ""}.`}
             </span>
           ) : (
             problem && (
               <>
-                <span className="text-[13px] leading-[1.5] text-muted">
+                <span className="text-small leading-[1.5] text-muted">
                   Syndra expected something other than what Zitadel has.
                 </span>
                 {/* The machine's values, kept exact and folded (A-20 P11). */}
                 <TechnicalDetail placeKey={`claims:${row.subject}`}>
-                  <span className="text-[13px] leading-[1.5] text-muted [overflow-wrap:anywhere]">
+                  <span className="text-small leading-[1.5] text-muted [overflow-wrap:anywhere]">
                     Expected <Value v={row.check === "R5" ? landsWords(row.expected) : row.expected} />
                   </span>
-                  <span className="text-[13px] leading-[1.5] text-muted [overflow-wrap:anywhere]">
+                  <span className="text-small leading-[1.5] text-muted [overflow-wrap:anywhere]">
                     Found <Value v={row.check === "R5" ? reachWords(row.found) : row.found} />
                   </span>
                 </TechnicalDetail>
               </>
             )
           )}
-          {row.state === "info" && note(row) && <span className="text-[13px] leading-[1.5] text-muted">{note(row)}</span>}
+          {row.state === "info" && note(row) && <span className="text-small leading-[1.5] text-muted">{note(row)}</span>}
         </span>
       </span>
-      {fix && <span className="text-[13.5px] tablet:ml-auto tablet:w-[220px] tablet:shrink-0 tablet:text-right">{fix}</span>}
+      {fix && <span className="text-small tablet:ml-auto tablet:w-[220px] tablet:shrink-0 tablet:text-right">{fix}</span>}
     </li>
   );
 }
@@ -640,14 +640,14 @@ function fixFor(row: ConfigRow, names: Names): ReactNode {
 function AlertNote({ notes }: { notes: string[] }) {
   if (notes.includes("EXTERNAL_ALERT_UNREACHABLE")) {
     return (
-      <p className="row-divider px-5 py-3 text-[13px] text-muted">
+      <p className="row-divider px-5 py-3 text-small text-muted">
         Syndra couldn&rsquo;t reach the alert outside it on its last try, so a silence there may be Syndra&rsquo;s, not delivery&rsquo;s.
       </p>
     );
   }
   if (notes.includes("NO_EXTERNAL_ALERT")) {
     return (
-      <p className="row-divider px-5 py-3 text-[13px] text-muted">
+      <p className="row-divider px-5 py-3 text-small text-muted">
         No alert outside Syndra is set up, so if Syndra itself stops, nobody is told. Set <Mono>SYNDRA_DEADMAN_URL</Mono> in the
         server&rsquo;s .env to have one.
       </p>

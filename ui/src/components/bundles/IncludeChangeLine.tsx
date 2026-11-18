@@ -42,7 +42,7 @@ export function IncludeChangeLine({ change }: { change: IncludeChange }) {
  */
 export function ChangeLines({ draft, className = "" }: { draft: BundleDraft; className?: string }) {
   return (
-    <ul className={`flex flex-col gap-1.5 text-[14px] ${className}`}>
+    <ul className={`flex flex-col gap-1.5 text-body ${className}`}>
       {(draft.include_changes ?? []).map((change) => (
         <li key={`i${change.child_bundle_id}`} className="flex items-baseline gap-2">
           <IncludeChangeLine change={change} />

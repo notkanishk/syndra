@@ -62,10 +62,10 @@ function Fold({ metrics, windows }: { metrics: StatsMetric[]; windows: UsageWind
         className="inline-flex min-h-[var(--tap)] items-center gap-2.5 self-start text-left control press-scale tablet:min-h-0"
       >
         <FoldChevron open={open} />
-        <span className="text-[14px] font-semibold text-ink">{copy.FOLD_HEADING}</span>
+        <span className="text-body font-semibold text-ink">{copy.FOLD_HEADING}</span>
       </button>
       <Unfold open={open}>
-        <div className="flex max-w-[86ch] flex-col gap-1 pl-[38px] text-[13px] text-muted [overflow-wrap:anywhere]">
+        <div className="flex measure flex-col gap-1 pl-[38px] text-small text-muted [overflow-wrap:anywhere]">
           {shown.length > 0 && (
             <ul aria-label={copy.GAPS_HEADING} className="flex flex-col gap-1">
               {shown.map((l) => (
@@ -129,7 +129,7 @@ function End({ metrics, windows, target, step: insights }: { metrics: StatsMetri
       data-end
       seat="narrow"
       action={link ? <ArrowLink href={link}>{copy.OVERVIEW_NEXT_LINK}</ArrowLink> : undefined}
-      className="text-[13px] text-muted"
+      className="text-small text-muted"
     >
       <span className="min-w-0 flex-1">{step}</span>
       {right && (
@@ -194,7 +194,7 @@ export function ViewUsage({ view, person }: { view: MyTargetView; person?: strin
       <Card role="group" aria-label={title}>
         <CardHeader title={title} />
         <CardRow first>
-          <span className="text-[14px] text-muted">{copy.UNAVAILABLE}</span>
+          <span className="text-body text-muted">{copy.UNAVAILABLE}</span>
         </CardRow>
       </Card>
     );
@@ -225,7 +225,7 @@ export function HomeMonth({ view, operator = false }: { view: MyTargetView; oper
   const changed = changeWords(p, metric.unit);
   return (
     <div data-home-month className="flex w-full max-w-[360px] flex-col gap-1">
-      {changed && <span className="text-[13px] tabular-nums text-faint">{changed}</span>}
+      {changed && <span className="text-small tabular-nums text-faint">{changed}</span>}
       <Band
         plot={p}
         instrument={metric.instrument}

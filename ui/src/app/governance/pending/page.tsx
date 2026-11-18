@@ -203,7 +203,7 @@ export default function PendingChangesPage() {
                 </FilterChip>
               )}
               {(needle || filtered) && (
-                <span className="text-[13.5px] text-muted">
+                <span className="text-small text-muted">
                   {filtered ? (
                     <>
                       Showing{" "}
@@ -378,11 +378,11 @@ function StoppedRow({ row, conflicts }: { row: PendingPropagationRow; conflicts:
                 )
               }
             >
-              <span className="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
+              <span className="w-full text-body font-semibold tablet:w-[130px] tablet:shrink-0">
                 <UserName id={row.user_id} />
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                <span className="text-[14px]">
+                <span className="text-body">
                   {row.op_type === "apply" ? (
                     <SystemChange row={row} />
                   ) : (
@@ -394,13 +394,13 @@ function StoppedRow({ row, conflicts }: { row: PendingPropagationRow; conflicts:
                     </>
                   )}
                 </span>
-                <span className="inline-flex items-center gap-2 text-[13px]">
+                <span className="inline-flex items-center gap-2 text-small">
                   <StatusDot tone="danger" />
                   <span className="text-danger-text">
                     {stoppedLine(system, row)}
                   </span>
                 </span>
-                <span className="text-[12.5px] text-faint">
+                <span className="text-fine text-faint">
                   {looking
                     ? LOOKING_UP_NEXT
                     : decideHere
@@ -469,7 +469,7 @@ function PendingGroups({
                 >
                   <FoldChevron open={open} />
                 </button>
-                <p className="min-w-0 flex-1 text-[13.5px] leading-[1.5] text-muted">
+                <p className="min-w-0 flex-1 text-small leading-[1.5] text-muted">
                   These {count} changes come from one edit. {shared ? `${shared}. ` : ""}They are sent together or not at all.
                   {shown < count && ` ${shown} of ${count} shown.`}
                 </p>
@@ -480,12 +480,12 @@ function PendingGroups({
               {group.rows.map((row) => (
                 <LeavingRow key={row.id} {...leave(row.id)}>
                   <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:items-center`}>
-                    <span className="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
+                    <span className="w-full text-body font-semibold tablet:w-[130px] tablet:shrink-0">
                       <UserName id={row.user_id} />
                     </span>
 
                     <span className="flex w-full min-w-0 flex-col gap-[3px] tablet:flex-1">
-                      <span className="text-[14px]">
+                      <span className="text-body">
                         {row.op_type === "apply" ? (
                           <SystemChange row={row} />
                         ) : (
@@ -502,15 +502,15 @@ function PendingGroups({
                       {/* The operator's words, kept with the change (task 1.8a). A
                           connected system's row says its reason as its change. */}
                       {row.op_type !== "apply" && row.said && (
-                        <span className="text-[13px] text-ink">&ldquo;{row.said}&rdquo;</span>
+                        <span className="text-small text-ink">&ldquo;{row.said}&rdquo;</span>
                       )}
                     </span>
 
-                    <span className="w-full text-[13.5px] tablet:w-[130px] tablet:shrink-0">
+                    <span className="w-full text-small tablet:w-[130px] tablet:shrink-0">
                       <CausedBy row={row} bundles={bundles} rules={rules} setOff={count < 2} />
                     </span>
 
-                    <span className="text-[13px] text-faint tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+                    <span className="text-small text-faint tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                       <Relative iso={row.created_at} />
                     </span>
                   </div>
@@ -642,15 +642,15 @@ function RowStatus({ row, skipWait }: { row: PendingPropagationRow; skipWait?: s
       {line &&
         line !== skipWait &&
         (waitIsChosen(row.wait_reason) ? (
-          <span className="text-[12.5px] text-muted">{line}</span>
+          <span className="text-fine text-muted">{line}</span>
         ) : (
-          <span className="inline-flex items-center gap-2 text-[13px]">
+          <span className="inline-flex items-center gap-2 text-small">
             <StatusDot tone="warn" />
             <span className="text-warn-text">{line}</span>
           </span>
         ))}
       {row.sends_on_its_own && !waitIsChosen(row.wait_reason) && auto && (
-        <span className="text-[12.5px] text-faint">
+        <span className="text-fine text-faint">
           A revocation: it also sends on its own within a minute.
         </span>
       )}

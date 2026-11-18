@@ -202,7 +202,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
       action={
         // What needs you is the row's way on (D-1 §4): its seat, under the "Needs you" heading. A link per
         // thing, or the one line saying nothing does.
-        <span className="flex flex-col items-end gap-1 text-right text-[13.5px] leading-[1.45]">
+        <span className="flex flex-col items-end gap-1 text-right text-small leading-[1.45]">
           {row.project === null && <ArrowLink href={href}>Choose its Zitadel project</ArrowLink>}
           {needs.map((need) => (
             <ArrowLink key={need.text} href={need.href}>
@@ -216,34 +216,34 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
       }
     >
       <span className="flex min-w-[min(220px,100%)] flex-1 flex-col gap-0.5">
-        <Link href={href} className="text-[15.5px] font-semibold link-hover">
+        <Link href={href} className="text-body font-semibold link-hover">
           {name}
         </Link>
-        <span className={`text-[13px] ${product ? "text-muted" : "text-faint"}`}>
+        <span className={`text-small ${product ? "text-muted" : "text-faint"}`}>
           {product ?? "Not read yet"}
         </span>
         {/* The project it serves, read-only: it is set in one place, the
             system's own page. Absent is the row's Needs you. */}
         {row.project ? (
-          <span className="text-[13px] text-muted">
+          <span className="text-small text-muted">
             Zitadel project{" "}
             <Link href={`/projects/${row.project.id}`} className="text-ink link-hover">
               {projectLabel(row.project.name)}
             </Link>
           </span>
         ) : row.project === null ? (
-          <span className="text-[13px] text-faint">No Zitadel project yet</span>
+          <span className="text-small text-faint">No Zitadel project yet</span>
         ) : null}
       </span>
 
       {/* A dot and a word, the same idiom the target's own page uses — never
           colour alone — with the check pips when a check was missed, and the
           time it began faint under it. */}
-      <span className="flex flex-col gap-[3px] text-[13.5px] tablet:w-[180px] tablet:shrink-0">
+      <span className="flex flex-col gap-[3px] text-small tablet:w-[180px] tablet:shrink-0">
         <ReadingWord reading={reading} recent={row.health?.recent ?? []} />
-        {reading.line && <span className="pl-(--dot-indent) text-[12.5px] text-faint">{reading.line}</span>}
+        {reading.line && <span className="pl-(--dot-indent) text-fine text-faint">{reading.line}</span>}
         {row.health?.last_answered_at ? (
-          <span className="pl-(--dot-indent) text-[12.5px] text-faint">
+          <span className="pl-(--dot-indent) text-fine text-faint">
             Last answered <Relative iso={row.health.last_answered_at} />
           </span>
         ) : (
@@ -251,7 +251,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           !reading.line &&
           answering &&
           row.health?.checked_at && (
-            <span className="pl-(--dot-indent) text-[12.5px] text-faint">
+            <span className="pl-(--dot-indent) text-fine text-faint">
               Answered <Relative iso={row.health.checked_at} />
             </span>
           )
@@ -264,16 +264,16 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           answering, the last count stays and says so. */}
       <span className="flex flex-col gap-0.5 pt-px tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
         {bound === undefined ? (
-          <span className="text-[15px] text-faint">Not yet</span>
+          <span className="text-body text-faint">Not yet</span>
         ) : (
           <>
-            <span className={`text-[15px] ${answering ? "" : "text-muted"}`}>
+            <span className={`text-body ${answering ? "" : "text-muted"}`}>
               {bound}
-              <span className="text-[13px] text-muted tablet:hidden">
+              <span className="text-small text-muted tablet:hidden">
                 {bound === 1 ? " person" : " people"}
               </span>
             </span>
-            {!answering && <span className="text-[12.5px] text-faint">last known</span>}
+            {!answering && <span className="text-fine text-faint">last known</span>}
           </>
         )}
       </span>

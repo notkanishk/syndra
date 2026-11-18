@@ -60,8 +60,8 @@ describe("the usage card: a row", () => {
     }
     const value = within(rows(container)[0] as HTMLElement).getByText("7");
     expect(value.className).toContain("font-display");
-    expect(value.className).toContain("text-[24px]");
-    expect(value.className).toContain("font-semibold");
+    // The figure step (D-1 §3: 24px, 600, "I like big number"), its weight from the token.
+    expect(value.className).toContain("text-figure");
     // The card is the container the row answers to: it stacks under the tablet step of its own width.
     expect(screen.getByRole("group")).toHaveClass("@container");
   });

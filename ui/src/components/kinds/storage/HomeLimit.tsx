@@ -56,16 +56,16 @@ export function HomeLine({ home }: { home: AccountHome }) {
     const own = home.own;
     return (
       <span className="flex w-full flex-col gap-0.5 pl-0.5">
-        <span className="text-[13.5px] text-ink">
+        <span className="text-small text-ink">
           Home folder {own.bytes === 0 ? "with no limit" : `up to ${gbWords(own.bytes)}`}, their own
         </span>
         {own.review_due ? (
-          <span className="flex items-baseline gap-2 text-[13px] text-warn-text">
+          <span className="flex items-baseline gap-2 text-small text-warn-text">
             <StatusDot tone="warn" />
             Review was due {formatShortDate(own.review_date)}. It stays at {gbWords(own.bytes)} until you keep it or end it.
           </span>
         ) : (
-          <span className="text-[13px] text-faint">
+          <span className="text-small text-faint">
             {own.expires_at ? `Ends ${formatShortDate(own.expires_at)}` : `Review on ${formatShortDate(own.review_date)}`} · “
             {own.reason}”
           </span>
@@ -75,12 +75,12 @@ export function HomeLine({ home }: { home: AccountHome }) {
   }
   return (
     <span className="flex w-full flex-col gap-0.5 pl-0.5">
-      <span className="text-[13.5px] text-muted">
+      <span className="text-small text-muted">
         Home folder {home.roles_limit === undefined ? "with no limit" : roles}
         {from ? `, from ${from}` : ""}
       </span>
       {home.own_ended && home.roles_limit !== undefined && (
-        <span className="flex items-baseline gap-2 text-[13px] text-warn-text [text-wrap:pretty]">
+        <span className="flex items-baseline gap-2 text-small text-warn-text [text-wrap:pretty]">
           <StatusDot tone="warn" />
           Their own {gbWords(home.own_ended.bytes)} ended on {formatShortDate(home.own_ended.ended_at)} with{" "}
           {formatBytes(home.used_bytes ?? 0)} in their folder. They can open and delete files but can&apos;t save new
@@ -214,7 +214,7 @@ export function LimitDialog({
                 <span className="w-[110px]">
                   <Input aria-label="Limit in GB" type="number" min={1} value={gb} onChange={(e) => setGb(e.target.value)} />
                 </span>
-                <span className="text-[14px] text-muted">GB</span>
+                <span className="text-body text-muted">GB</span>
               </span>
             )}
           </span>
@@ -239,7 +239,7 @@ export function LimitDialog({
           />
         </div>
         {(set.error || lift.error) && (
-          <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error ?? lift.error))}</p>
+          <p className="text-small text-danger-text">{sentence(describeFailure(set.error ?? lift.error))}</p>
         )}
       </div>
       )}
@@ -288,6 +288,6 @@ export function LimitDialog({
  */
 export function HomesReason({ reason }: { reason: string }) {
   return (
-    <span className="text-[13.5px] text-warn-text">Home folders aren&apos;t shown. {whyNotChecked(reason)}</span>
+    <span className="text-small text-warn-text">Home folders aren&apos;t shown. {whyNotChecked(reason)}</span>
   );
 }

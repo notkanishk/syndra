@@ -92,7 +92,7 @@ function ReadCatalog({ heldByProject }: { heldByProject: Map<string, Set<string>
       {/* Stacked: a row here squeezed the heading and its caption side by side. */}
       <div>
         <h2 className="type-section-title">What else is here</h2>
-        <p className="mt-1 text-[13.5px] text-faint">
+        <p className="mt-1 text-small text-faint">
           Everything the makerspace offers. Ask for anything you need; makerspace staff decide.
         </p>
       </div>
@@ -142,10 +142,10 @@ function ReadCatalog({ heldByProject }: { heldByProject: Map<string, Set<string>
               >
                 <FoldChevron open={isOpen} />
                 <span className="flex min-w-0 flex-1 flex-col gap-px">
-                  <span className="text-[15px] font-semibold">{project.name}</span>
-                  {project.description && <span className="text-[13px] text-muted">{project.description}</span>}
+                  <span className="text-body font-semibold">{project.name}</span>
+                  {project.description && <span className="text-small text-muted">{project.description}</span>}
                 </span>
-                <span className={`text-right text-[13px] font-semibold ${countClass}`}>{count}</span>
+                <span className={`text-right text-small font-semibold ${countClass}`}>{count}</span>
               </button>
               <Unfold open={isOpen}>
                 <div className="pb-2 pl-[60px] pr-5">
@@ -160,13 +160,13 @@ function ReadCatalog({ heldByProject }: { heldByProject: Map<string, Set<string>
                         }`}
                       >
                         <span className="flex min-w-0 flex-[1_1_240px] flex-col gap-0.5">
-                          <span className="text-[14.5px] font-semibold">{role.label || role.key}</span>
+                          <span className="text-body font-semibold">{role.label || role.key}</span>
                           {role.description && (
-                            <span className="text-[13px] text-muted">{role.description}</span>
+                            <span className="text-small text-muted">{role.description}</span>
                           )}
                         </span>
                         {mine ? (
-                          <span className="text-[13px] text-faint">You have this</span>
+                          <span className="text-small text-faint">You have this</span>
                         ) : (
                           // A link, not a dialog: the ask belongs on the requests
                           // page beside the answers to earlier asks, and a link

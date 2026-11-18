@@ -504,7 +504,7 @@ export function UnexplainedAccess() {
             rest" is the answer somebody came for) — but only from a comparison
             that finished. A cut-off or failed one cannot say it. */}
         {diff.data && !diff.data.truncated && (
-          <span className="inline-flex items-center gap-2.5 px-1 text-[13.5px] text-muted">
+          <span className="inline-flex items-center gap-2.5 px-1 text-small text-muted">
             <StatusDot tone="healthy" />
             Everything else in Zitadel agrees with Syndra.
           </span>
@@ -570,7 +570,7 @@ export function UnexplainedAccess() {
           has it: Syndra's own stops say they wait, never that they are paused.
           The seat is Unfold's, so the list below does not jump when it comes. */}
       <Unfold open={paused}>
-        <p className="text-[13.5px] text-muted" role="status">
+        <p className="text-small text-muted" role="status">
           Adopting, revoking and marking as owned elsewhere wait until Zitadel answers.
         </p>
       </Unfold>
@@ -733,7 +733,7 @@ export function UnexplainedAccess() {
             stated where somebody would go looking for it. An operator who
             selects nine rows to revoke and finds two buttons that are not
             Revoke concludes the bar is broken, or hunts. */}
-        <span className="text-[13px] text-faint">Revoking is one row at a time.</span>
+        <span className="text-small text-faint">Revoking is one row at a time.</span>
         {/* Both open a plan; neither resolves anything on tap. */}
         <SelectionAction disabled={paused} onClick={() => setBulkOp("adopt")}>
           Preview adopting these
@@ -898,10 +898,10 @@ function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) 
         <WhoSeat id={row.userId} />
         <WhatSeat projectId={row.projectId} roleKeys={[row.role]} />
         <div className="order-last flex w-full min-w-0 flex-col items-start gap-1 desktop:order-none desktop:w-auto desktop:flex-1">
-          <p className="text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">{text}</p>
+          <p className="text-small leading-[1.55] text-muted [text-wrap:pretty]">{text}</p>
           {!inZitadel && <ArrowLink href="/governance/pending">Check Pending changes</ArrowLink>}
         </div>
-        <div className="text-[13px] text-faint tablet:ml-auto tablet:w-(--seat-number) tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
+        <div className="text-small text-faint tablet:ml-auto tablet:w-(--seat-number) tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
           <span className="tablet:hidden">Compared </span>
           <Relative iso={comparedAt} />
         </div>
@@ -1008,12 +1008,12 @@ function TriageRow({
 
         <WhatSeat projectId={item.project_id} roleKeys={role ? [role] : []} className="tablet:min-w-[160px] tablet:flex-1">
           {item.target !== "zitadel" && (
-            <span className="text-[12.5px] text-muted">On {systemName(item.target)}</span>
+            <span className="text-fine text-muted">On {systemName(item.target)}</span>
           )}
           <RiskPill item={item} />
         </WhatSeat>
 
-        <div className="text-[13px] text-faint tablet:w-(--seat-number) tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
+        <div className="text-small text-faint tablet:w-(--seat-number) tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
           <span className="tablet:hidden">Found </span>
           <Relative iso={item.detected_at} />
         </div>
@@ -1072,13 +1072,13 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
     <div className="row-divider grid gap-5 bg-surface-0 px-5 py-4 tablet:grid-cols-3">
       <div>
         <div className="type-label mb-1.5">If you revoke</div>
-        <p className="text-[13.5px] leading-[1.55] text-muted">
+        <p className="text-small leading-[1.55] text-muted">
           An app they are already signed in to keeps what it was told until they sign in again.
         </p>
       </div>
       <div>
         <div className="type-label mb-1.5">If you adopt</div>
-        <p className="text-[13.5px] leading-[1.55] text-muted">
+        <p className="text-small leading-[1.55] text-muted">
           Syndra records this as access you gave, and the row stops appearing here. Their access
           does not change here. An automatic rule that starts from this role also gives its role,
           and Adopt names it before you press.
@@ -1086,7 +1086,7 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
       </div>
       <div>
         <div className="type-label mb-1.5">Evidence</div>
-        <dl className="type-mono grid grid-cols-[84px_1fr] gap-x-3 gap-y-1 text-[12.5px] text-muted">
+        <dl className="type-mono grid grid-cols-[84px_1fr] gap-x-3 gap-y-1 text-fine text-muted">
           <dt className="text-faint">Zitadel id</dt>
           <dd>
             {item.zitadel_grant_id ? <CopyableValue value={item.zitadel_grant_id} label="Zitadel id" /> : "—"}
@@ -1214,31 +1214,31 @@ function ResolutionDialog({
       )}
       {!done && <div className="flex flex-col gap-3 px-6">
         {(planLines.length > 0 || cancelLine) && (
-          <ul className="flex flex-col gap-1 text-[13.5px] leading-[1.55] text-muted" data-testid="adopt-plan">
+          <ul className="flex flex-col gap-1 text-small leading-[1.55] text-muted" data-testid="adopt-plan">
             {planLines.map((line) => (
               <li key={line}>{line}</li>
             ))}
             {cancelLine && <li>{cancelLine}</li>}
           </ul>
         )}
-        {refusedReason && <p className="text-[13.5px] leading-[1.55] text-ink">{refusedReason}</p>}
+        {refusedReason && <p className="text-small leading-[1.55] text-ink">{refusedReason}</p>}
         {planned && (
-          <RuleConsentFailed consent={consent} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px] leading-[1.55] text-muted" />
+          <RuleConsentFailed consent={consent} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-small leading-[1.55] text-muted" />
         )}
 
         {resolution === "revoke" && (
           <>
-            <div className="danger-note px-4 py-3.5 text-[14.5px] leading-[1.5]">
+            <div className="danger-note px-4 py-3.5 text-body leading-[1.5]">
               <strong className="font-semibold text-danger-text">
                 They will lose this role.
               </strong>
             </div>
-            <p className="text-[13.5px] leading-[1.55] text-muted">
+            <p className="text-small leading-[1.55] text-muted">
               If another system adds this access back, it shows up here again after the next
               check.
             </p>
             {item.other_items_for_user > 0 && (
-              <p className="text-[13.5px] leading-[1.55] text-muted">
+              <p className="text-small leading-[1.55] text-muted">
                 Before you decide: this person has{" "}
                 <strong className="font-semibold text-ink">
                   {item.other_items_for_user} more{" "}
@@ -1457,7 +1457,7 @@ function WhoMadeIt({ item }: { item: DriftTriageItem }) {
     );
   }
   if (origin.isLoading) {
-    return <p className="mt-1 text-[12.5px] text-faint">Asking Zitadel…</p>;
+    return <p className="mt-1 text-fine text-faint">Asking Zitadel…</p>;
   }
 
   const data = origin.data;
@@ -1467,7 +1467,7 @@ function WhoMadeIt({ item }: { item: DriftTriageItem }) {
   // supports.
   if (origin.isError || !data || !data.readable) {
     return (
-      <p className="mt-1 text-[12.5px] text-warn-text">
+      <p className="mt-1 text-fine text-warn-text">
         Zitadel could not be asked. Somebody may still have made this; it is just not known who.
         {data?.detail ? ` ${data.detail}` : ""}
       </p>
@@ -1475,20 +1475,20 @@ function WhoMadeIt({ item }: { item: DriftTriageItem }) {
   }
   if (!data.recorded) {
     return (
-      <p className="mt-1 text-[12.5px] text-faint">
+      <p className="mt-1 text-fine text-faint">
         Zitadel&rsquo;s event log does not go back to when this was made.
       </p>
     );
   }
   if (!data.attributed) {
     return (
-      <p className="mt-1 text-[12.5px] text-faint">
+      <p className="mt-1 text-fine text-faint">
         Zitadel recorded the change and not who made it.
       </p>
     );
   }
   return (
-    <p className="mt-1 text-[12.5px] text-muted">
+    <p className="mt-1 text-fine text-muted">
       Made by{" "}
       <span className="font-semibold text-ink">
         {data.actor_name || (data.actor_id ? <UserName id={data.actor_id} /> : data.service)}

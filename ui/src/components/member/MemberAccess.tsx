@@ -230,7 +230,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
           <span className="text-faint">{session.firstVisit ? WELCOME : <>Here&rsquo;s what you can use.</>}</span>
         </h1>
         {/* One line, always there, in the same seat in every state, so nothing below it moves. */}
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0 text-[14.5px] text-muted">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0 text-body text-muted">
           {/* The welcome is the title's second sentence (A-20 P2), so the ladder
               speaks here on the first visit too: "From today, you can use …"
               is never hidden on its day. */}
@@ -370,7 +370,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                   (roleKey) => roleKey,
                 ).map((roleKey) => (
                     <div key={`held-${roleKey}`} className="row-divider px-5 py-3">
-                      <span className="text-[15px] font-semibold">{roleNameIn(project.project_id, roleKey)}</span>
+                      <span className="text-body font-semibold">{roleNameIn(project.project_id, roleKey)}</span>
                       <StandingMark standing={standing(project, roleKey)} unread={unread} />
                     </div>
                   ))}
@@ -417,7 +417,7 @@ function StandingMark({ standing, unread }: { standing: Standing; unread: boolea
   const words = standingWords(standing, "member");
   if (!words) return null;
   const warn = standingTone(standing) === "warn";
-  return <span className={`text-[13.5px] ${warn ? "font-semibold text-warn-text" : "text-faint"}`}>{words}</span>;
+  return <span className={`text-small ${warn ? "font-semibold text-warn-text" : "text-faint"}`}>{words}</span>;
 }
 
 /**
@@ -463,7 +463,7 @@ function RoleRow({
         ends ? (
           <Crossfade id={askedToKeep ? "asked" : "open"}>
             {askedToKeep ? (
-              <span className="inline-flex min-h-[32px] items-center gap-2 text-[13.5px] font-semibold text-muted">
+              <span className="inline-flex min-h-[32px] items-center gap-2 text-small font-semibold text-muted">
                 <StatusDot tone="neutral" />
                 Asked to keep it
               </span>
@@ -477,7 +477,7 @@ function RoleRow({
       }
     >
       <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-0.5">
-        <span className="text-[15px] font-semibold">{name}</span>
+        <span className="text-body font-semibold">{name}</span>
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {waiting || onItsWayStanding(standing) ? (
             // When it was queued, from the record; the feed's time only when the read has none.
@@ -504,11 +504,11 @@ function RoleRow({
 function OnItsWay({ at, sent }: { at?: string; sent?: boolean }) {
   return (
     <span className="flex flex-col gap-0.5">
-      <span className="inline-flex items-center gap-2 text-[13.5px] font-semibold text-muted">
+      <span className="inline-flex items-center gap-2 text-small font-semibold text-muted">
         <StatusDot tone="neutral" />
         On its way
       </span>
-      <span className="pl-(--dot-indent) text-[12.5px] text-faint">
+      <span className="pl-(--dot-indent) text-fine text-faint">
         {at ? `Given ${givenWhen(at)}. ` : ""}
         {sent ? "Syndra has sent it. It should show up soon." : "It starts working once makerspace staff send it."}
       </span>
@@ -535,24 +535,24 @@ function Reason({
   expiresAt?: string | null;
   endKnown: boolean;
 }) {
-  if (!strongest) return <span className="text-[13.5px] text-muted">Part of your membership</span>;
+  if (!strongest) return <span className="text-small text-muted">Part of your membership</span>;
 
   if (strongest.kind === "direct") {
     if (expiresAt) {
       return (
-        <span className="text-[13.5px] font-semibold text-warn-text">
+        <span className="text-small font-semibold text-warn-text">
           Given to you until {formatShortDate(expiresAt)} · {expiryLabel(expiresAt, "left")}
         </span>
       );
     }
     return (
-      <span className="text-[13.5px] text-muted">{endKnown ? "Given to you" : "End date unavailable"}</span>
+      <span className="text-small text-muted">{endKnown ? "Given to you" : "End date unavailable"}</span>
     );
   }
 
   if (strongest.kind === "bundle") {
     return (
-      <span className="text-[13.5px] text-muted">
+      <span className="text-small text-muted">
         Because you&rsquo;re in{" "}
         <strong className="font-semibold text-ink">{strongest.bundle_name ?? "a group"}</strong>
       </span>
@@ -561,7 +561,7 @@ function Reason({
 
   const from = sourceQualifier(strongest);
   return (
-    <span className="text-[13.5px] text-muted">
+    <span className="text-small text-muted">
       {from ? `Comes with ${humanizeKey(from.split("/").pop()?.trim() ?? from)}, automatically` : "Comes with your other access, automatically"}
     </span>
   );

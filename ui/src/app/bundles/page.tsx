@@ -120,29 +120,29 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
       <div className="w-[min(260px,40%)] min-w-0">
         <Link
           href={`/bundles/${encodeURIComponent(bundle.id)}`}
-          className="text-[15px] font-semibold text-ink link-hover"
+          className="text-body font-semibold text-ink link-hover"
         >
           {bundle.name}
         </Link>
         {notes.map((n) => (
-          <span key={n.text} className={`block text-[12.5px] font-semibold ${n.tone}`}>
+          <span key={n.text} className={`block text-fine font-semibold ${n.tone}`}>
             {n.text}
           </span>
         ))}
       </div>
-      <span className="hidden min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty] tablet:block">
+      <span className="hidden min-w-0 flex-1 text-body text-muted [text-wrap:pretty] tablet:block">
         {bundle.description}
       </span>
-      <span className="text-[15px] font-semibold tabular-nums tablet:w-(--seat-number) tablet:text-right">
+      <span className="text-body font-semibold tabular-nums tablet:w-(--seat-number) tablet:text-right">
         {bundle.role_count ?? "None"}
-        <span className="text-[13px] font-normal text-faint tablet:hidden">{bundle.role_count === 1 ? " role" : " roles"}</span>
+        <span className="text-small font-normal text-faint tablet:hidden">{bundle.role_count === 1 ? " role" : " roles"}</span>
       </span>
       {/* People is who Zitadel shows holding it; the assignments only explain it. */}
-      <span className="text-[15px] font-semibold tabular-nums tablet:w-(--seat-number) tablet:text-right">
+      <span className="text-body font-semibold tabular-nums tablet:w-(--seat-number) tablet:text-right">
         {people.headline}
-        <span className="text-[13px] font-normal text-faint tablet:hidden">{peopleSuffix(people.headline)}</span>
+        <span className="text-small font-normal text-faint tablet:hidden">{peopleSuffix(people.headline)}</span>
         {people.note && (
-          <span className={`block text-[12.5px] font-normal ${holdersToneClass[people.tone]}`}>{people.note}</span>
+          <span className={`block text-fine font-normal ${holdersToneClass[people.tone]}`}>{people.note}</span>
         )}
       </span>
     </div>
@@ -373,7 +373,7 @@ function StartFrom({
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-[13.5px] font-semibold">Start from</span>
+        <span className="text-small font-semibold">Start from</span>
         <Segmented<Source>
           size="sm"
           label="Start from"
@@ -394,7 +394,7 @@ function StartFrom({
           ]}
         />
         {source === "none" && (
-          <span className="text-[13px] text-faint">Ticks what they have, so you only untick what doesn&rsquo;t belong.</span>
+          <span className="text-small text-faint">Ticks what they have, so you only untick what doesn&rsquo;t belong.</span>
         )}
       </div>
 
@@ -444,7 +444,7 @@ function StartFrom({
 
       {ready && copied === key && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <p className="text-[13px] text-faint">
+          <p className="text-small text-faint">
             {source === "bundle"
               ? `Copied ${from?.name ?? "the bundle"}${from?.latest_version ? ` v${from.latest_version}` : ""}`
               : `Copied ${person?.name ?? "their"}${person ? "'s" : ""} access`}

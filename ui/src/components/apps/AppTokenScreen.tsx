@@ -105,7 +105,7 @@ function SeedHeader({ seed }: { seed: NonNullable<ReturnType<typeof useSeededApp
       <PageHeader
         title={seed.name}
         meta={
-          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-faint">
             {kindOf(seed.consumer)} · roles from{" "}
             <ArrowLink href={`/projects/${seed.project_id}`}>
               <ProjectName id={seed.project_id} link={false} />
@@ -216,7 +216,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
       <PageHeader
         title={app}
         meta={
-          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-faint">
             {kindOf(shape.application.consumer)} · roles from{" "}
             <ArrowLink href={`/projects/${projectId}`}>
               <ProjectName id={projectId} link={false} />

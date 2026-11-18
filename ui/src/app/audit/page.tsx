@@ -198,10 +198,10 @@ export default function AuditPage() {
               <Mono className="text-faint tablet:w-[124px] tablet:shrink-0">
                 {formatWhen(entry.created_at)}
               </Mono>
-              <span className="w-full text-[14.5px] font-semibold tablet:w-[150px] tablet:shrink-0">
+              <span className="w-full text-body font-semibold tablet:w-[150px] tablet:shrink-0">
                 <Actor id={entry.actor_id} />
               </span>
-              <span className="flex w-full flex-col items-start text-[14px] text-muted tablet:min-w-[240px] tablet:flex-1">
+              <span className="flex w-full flex-col items-start text-body text-muted tablet:min-w-[240px] tablet:flex-1">
                 <EventSentence entry={entry} />
                 <TraceCell entry={entry} />
               </span>
@@ -233,7 +233,7 @@ function Actor({ id }: { id: string }) {
   return (
     <>
       {humanizeKey(id.slice(7))}
-      <span className="block text-[12.5px] font-normal text-faint">Automatic</span>
+      <span className="block text-fine font-normal text-faint">Automatic</span>
     </>
   );
 }

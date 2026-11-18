@@ -272,10 +272,10 @@ export default function UpstreamUsersPage() {
                   activeId === user.id ? "bg-accent-soft/60" : "hover-tint"
                 }`}
               >
-                <span className="truncate text-[14.5px] font-semibold">
+                <span className="truncate text-body font-semibold">
                   {user.displayName || user.userName}
                 </span>
-                <span className="truncate text-[12.5px] text-faint">{user.email}</span>
+                <span className="truncate text-fine text-faint">{user.email}</span>
               </button>
             ))}
             <PaginationRow
@@ -327,7 +327,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         seat="wide"
         action={<ArrowLink href={`/users/${userId}`}>Syndra&rsquo;s explanation of the same access</ArrowLink>}
       >
-        <span className="text-[13.5px] leading-[1.55] text-muted">Everything below is what Zitadel holds for this person.</span>
+        <span className="text-small leading-[1.55] text-muted">Everything below is what Zitadel holds for this person.</span>
       </CardRow>
 
       <ListStates
@@ -346,7 +346,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
               key={grant.id}
               className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center`}
             >
-              <span className="min-w-[200px] flex-1 text-[14.5px] [overflow-wrap:anywhere]">
+              <span className="min-w-[200px] flex-1 text-body [overflow-wrap:anywhere]">
                 <ProjectName id={grant.projectId} /> <RoleKeys keys={grant.roleKeys} />
               </span>
               <span className="basis-full tablet:order-last">
@@ -473,21 +473,21 @@ function RevokeDialog({
       {w.stale && !done && <StaleNotice name={name} press={press} />}
       {!done && (
         <div className="flex flex-col gap-3.5 px-6">
-          <div className="text-[14.5px]">
+          <div className="text-body">
             <ProjectName id={grant.projectId} /> <RoleKeys keys={grant.roleKeys} />
           </div>
           {kept && kept.length > 0 && (
-            <p className="text-[13.5px] leading-[1.55] text-muted">
+            <p className="text-small leading-[1.55] text-muted">
               Stays, because a bundle or a rule still gives it: {formatList(sortNames(kept))}.
             </p>
           )}
-          {cancelLine && <p className="text-[13.5px] leading-[1.55] text-muted">{cancelLine}</p>}
+          {cancelLine && <p className="text-small leading-[1.55] text-muted">{cancelLine}</p>}
           {nothingGoes ? (
-            <p className="text-[13.5px] leading-[1.55] text-muted">
+            <p className="text-small leading-[1.55] text-muted">
               Nothing on this grant would be revoked: a bundle or a rule gives {name} every role on it.
             </p>
           ) : reading || unread ? (
-            <p className="text-[13.5px] leading-[1.55] text-muted">
+            <p className="text-small leading-[1.55] text-muted">
               {reading
                 ? "Reading what this would revoke…"
                 : "Syndra couldn't read what this would revoke, so it won't ask you to confirm a count. Try again in a minute."}
@@ -632,11 +632,11 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
               separated.
             </FieldHint>
             {available.length > 0 && (
-              <p className="mt-1.5 text-[12.5px] text-faint">Available: {available.join(", ")}</p>
+              <p className="mt-1.5 text-fine text-faint">Available: {available.join(", ")}</p>
             )}
           </div>
           {(ruleLines.length > 0 || rules.unread || cancelLine) && (
-            <div className="flex flex-col gap-1 text-[13px] leading-[1.5] text-muted" data-testid="rule-preview">
+            <div className="flex flex-col gap-1 text-small leading-[1.5] text-muted" data-testid="rule-preview">
               {ruleLines.map((line) => (
                 <span key={line}>{line}</span>
               ))}
@@ -759,7 +759,7 @@ function EditRolesDialog({
             <Input id="edit-roles" value={keys} onChange={(event) => setKeys(event.target.value)} />
             <FieldHint>The short name other systems see, e.g. trained, comma separated.</FieldHint>
           </div>
-          {cancelLine && <p className="text-[13.5px] leading-[1.55] text-muted">{cancelLine}</p>}
+          {cancelLine && <p className="text-small leading-[1.55] text-muted">{cancelLine}</p>}
           <DirectWriteWarning
             what="Replacing the roles revokes any you leave out, unless a bundle or a rule still gives it."
             sends={sendsWhen(waiting)}

@@ -168,8 +168,8 @@ export function PublishVersionDialog({
                 {byName.map((includer) => (
                   <div key={includer.bundle_id} className="flex flex-wrap items-center gap-3 border-t border-line py-2.5 first:border-t-0">
                     <span className="flex min-w-[min(200px,100%)] flex-1 flex-col gap-px">
-                      <span className="text-[14.5px] font-semibold">{includer.name}</span>
-                      <span className="text-[12.5px] text-muted">
+                      <span className="text-body font-semibold">{includer.name}</span>
+                      <span className="text-fine text-muted">
                         {people(includer.people)} · includes v{includer.included_version || includer.draft_version}
                       </span>
                     </span>

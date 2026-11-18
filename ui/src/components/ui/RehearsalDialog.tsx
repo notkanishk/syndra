@@ -673,7 +673,7 @@ export function RehearsalDialog({
               limit. Said first, so an operator who crosses the threshold once
               cannot mistake it for a form they filled in wrong — and one who
               never crosses it never learns the step exists. */}
-          <p role="status" className="text-[13.5px] leading-[1.55] text-muted">
+          <p role="status" className="text-small leading-[1.55] text-muted">
             This change reaches{" "}
             <strong className="font-semibold text-ink">
               {scope?.affected} {noun[1]}
@@ -729,7 +729,7 @@ export function RehearsalDialog({
           <PlanReview plan={plan} noun={noun} auto={auto} system={system} />
           {consequence && step !== "result" && (
             <div className="px-6">
-              <p className="text-[13.5px] leading-[1.55] text-warn-text">{consequence}</p>
+              <p className="text-small leading-[1.55] text-warn-text">{consequence}</p>
             </div>
           )}
         </>

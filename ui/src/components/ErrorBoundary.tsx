@@ -42,7 +42,7 @@ export class ErrorBoundary extends React.Component<
           className="flex flex-col gap-2.5 rounded-card border border-danger-line bg-surface-1 px-6 py-7"
         >
           <div className="type-empty-title">This page couldn&rsquo;t render.</div>
-          <p className="max-w-[60ch] text-[14px] text-muted">
+          <p className="measure text-body text-muted">
             Something went wrong while drawing it. Nothing was changed. Try again, or reload if it
             keeps happening.
           </p>

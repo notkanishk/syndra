@@ -27,6 +27,18 @@ import { useEffect } from "react";
  * Both themes are authored, because the shell that would have chosen one is
  * the thing that is gone.
  */
+/**
+ * The type scale's steps (D-1 §3), written out: this renders when the root layout
+ * failed, so `globals.css` and its `--text-*` tokens may never have loaded, and
+ * no import from the app is allowed (above). The values are the tokens', by name.
+ */
+const TYPE = {
+  heading: "22px", // type-scale-exempt: --text-heading, without the stylesheet
+  body: "14px", // type-scale-exempt: --text-body
+  small: "13px", // type-scale-exempt: --text-small
+  fine: "12.5px", // type-scale-exempt: --text-fine
+} as const;
+
 export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
   useEffect(() => {
     console.error("Syndra failed before the shell existed:", error);
@@ -71,10 +83,10 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
             padding: "28px 24px",
           }}
         >
-          <h1 style={{ margin: 0, fontSize: "20px", lineHeight: 1.2, fontWeight: 600 }}>
+          <h1 style={{ margin: 0, fontSize: TYPE.heading, lineHeight: 1.2, fontWeight: 600 }}>
             Syndra could not start.
           </h1>
-          <p style={{ margin: "8px 0 0", fontSize: "14.5px", lineHeight: 1.55, color: "rgba(243,245,239,.6)" }}>
+          <p style={{ margin: "8px 0 0", fontSize: TYPE.body, lineHeight: 1.5, color: "rgba(243,245,239,.6)" }}>
             This failed while starting Syndra, not while saving anything. Nothing was changed.
           </p>
 
@@ -82,7 +94,7 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
             <p
               style={{
                 margin: "16px 0 0",
-                fontSize: "13px",
+                fontSize: TYPE.small,
                 fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
                 // Selectable rather than copyable: the copy row is a component
                 // in the tree this boundary is not allowed to touch.
@@ -93,7 +105,7 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
             </p>
           ) : null}
           {error.digest ? (
-            <p style={{ margin: "4px 0 0", fontSize: "12.5px", color: "rgba(243,245,239,.6)" }}>
+            <p style={{ margin: "4px 0 0", fontSize: TYPE.fine, color: "rgba(243,245,239,.6)" }}>
               Quote this if you ask for help.
             </p>
           ) : null}
@@ -114,7 +126,7 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
               borderRadius: "999px",
               background: "#cebcff",
               color: "#141414",
-              fontSize: "13.5px",
+              fontSize: TYPE.small,
               fontWeight: 600,
               textDecoration: "none",
             }}

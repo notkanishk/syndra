@@ -212,7 +212,7 @@ export default function IdentityProviderPage() {
       {/* Fixed, under the health line: what Zitadel is doing with claims (§4g). */}
       {standIn ? (
         <Card id="claims-delivery">
-          <p className="px-5 py-4 text-[14px] leading-[1.55] text-muted">
+          <p className="px-5 py-4 text-body leading-[1.55] text-muted">
             The stand-in has no actions, event listener or claims setup, so these checks don&rsquo;t run on
             staging. {NOTHING_TO_DO}
           </p>
@@ -272,11 +272,11 @@ function SigningKey({
             <span className="type-card-title">Action signing key</span>
             {!loading && <StatusSeat tone={tone} word={word} />}
           </div>
-          <p className="max-w-[80ch] text-[14px] leading-[1.55] text-muted">
+          <p className="measure text-body leading-[1.55] text-muted">
             {loading ? "Checking when the key was last replaced…" : rotationSentence(status, error)}
           </p>
           {!loading && keyring && (
-            <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">{keyringSentence(keyring)}</p>
+            <p className="measure text-small leading-[1.55] text-muted">{keyringSentence(keyring)}</p>
           )}
         </div>
         {!loading && !error && !inFlight && (
@@ -524,7 +524,7 @@ function HealthLine({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-5 text-[13.5px]">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-5 text-small">
         <StatusSeat tone={reading.tone} word={word} />
         {pips && <CheckPips recent={Array(Math.min(misses, 3)).fill("missed")} />}
         <span className="text-muted">
@@ -599,18 +599,18 @@ function UpstreamInspection({ reachable }: { reachable: boolean }) {
       {rows.map((row) => (
         <div key={row.href} className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-1.5 px-5 py-3.5">
           <span className="flex min-w-0 flex-[1_1_260px] flex-col gap-0.5">
-            <span className="text-[14.5px] font-semibold">{row.label}</span>
-            <span className="text-[13px] leading-[1.5] text-muted">{row.sub}</span>
+            <span className="text-body font-semibold">{row.label}</span>
+            <span className="text-small leading-[1.5] text-muted">{row.sub}</span>
           </span>
           {reachable ? (
             <ArrowLink href={row.href}>{row.open}</ArrowLink>
           ) : (
-            <span className="text-[13.5px] font-semibold text-faint">{row.open}</span>
+            <span className="text-small font-semibold text-faint">{row.open}</span>
           )}
         </div>
       ))}
       {!reachable && (
-        <div className="row-divider px-5 py-3 text-[13.5px] text-muted">
+        <div className="row-divider px-5 py-3 text-small text-muted">
           Unavailable while Zitadel isn&rsquo;t answering: these read it live, and there is nothing
           to read.
         </div>
@@ -674,7 +674,7 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
       >
         <FoldChevron open={open} />
         <span className="type-card-title text-danger-text">Change Zitadel directly</span>
-        <span className="text-[13.5px] text-faint">last resort</span>
+        <span className="text-small text-faint">last resort</span>
       </button>
 
       <Unfold open={open}>
@@ -687,16 +687,16 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
                 {reachable ? (
                   <ArrowLink href={door.href}>{door.door}</ArrowLink>
                 ) : (
-                  <span className="text-[13.5px] font-semibold text-faint">{door.door}</span>
+                  <span className="text-small font-semibold text-faint">{door.door}</span>
                 )}
                 <ArrowLink href={door.syndraHref}>{door.syndra}</ArrowLink>
               </span>
             }
           >
             <span className="flex min-w-0 flex-[1_1_320px] flex-col gap-1">
-              <span className="text-[14.5px] font-semibold">{door.label}</span>
-              <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">{door.warning}</span>
-              <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
+              <span className="text-body font-semibold">{door.label}</span>
+              <span className="measure text-small leading-[1.55] text-muted">{door.warning}</span>
+              <span className="measure text-small leading-[1.55] text-muted">
                 {door.instead}
               </span>
             </span>
@@ -704,7 +704,7 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
         ))}
 
         {!reachable && (
-          <div className="row-divider px-5 py-3 text-[13.5px] text-muted">
+          <div className="row-divider px-5 py-3 text-small text-muted">
             Unavailable while Zitadel isn&rsquo;t answering: these change it directly.
           </div>
         )}

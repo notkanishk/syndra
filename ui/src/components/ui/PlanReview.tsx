@@ -85,12 +85,12 @@ export function PlanReview({
     <div className="px-6">
       <div className="max-h-[46vh] overflow-y-auto rounded-inner border border-line-strong">
         {missing ? (
-          <p className="px-4 py-3 text-[13.5px] text-faint">
+          <p className="px-4 py-3 text-small text-faint">
             The list of {noun[1]} did not load. The totals under the buttons are all that came
             back.
           </p>
         ) : outcomes.length === 0 && !plan.excluded?.length ? (
-          <p className="px-4 py-3 text-[13.5px] text-muted">{emptyNote(plan.op)}</p>
+          <p className="px-4 py-3 text-small text-muted">{emptyNote(plan.op)}</p>
         ) : (
           <>
             {groups
@@ -102,10 +102,10 @@ export function PlanReview({
             {plan.excluded?.map((left) => (
               <div key={left.user_id} className="row-divider flex items-start gap-4 px-4 py-3">
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[14.5px] font-semibold">
+                  <span className="block text-body font-semibold">
                     <UserName id={left.user_id} />
                   </span>
-                  <span className="block text-[13px] text-muted">
+                  <span className="block text-small text-muted">
                     Left out · this is you. Change your own access from{" "}
                     <Link
                       href={`/users/${encodeURIComponent(left.user_id)}`}
@@ -122,7 +122,7 @@ export function PlanReview({
         )}
       </div>
       {cancelled > 0 && (
-        <p role="note" className="mt-3 text-[13px] leading-[1.5] text-warn-text">
+        <p role="note" className="mt-3 text-small leading-[1.5] text-warn-text">
           Cancels {cancelled === 1 ? "a change that is" : `${cancelled} changes that are`} waiting for you to
           send: {cancels.map((c) => c.parts).join("; ")}. If anyone queues another first, this plan goes stale
           and nothing is cancelled unseen.
@@ -156,13 +156,13 @@ function PlanRow({ outcome, applied, word }: { outcome: BulkOutcome; applied: bo
   return (
     <div className="row-divider flex items-start gap-4 px-4 py-3">
       <span className="min-w-0 flex-1">
-        <span className="block text-[14.5px] font-semibold">
+        <span className="block text-body font-semibold">
           {/* A plan names people when its backend surface could; otherwise the
               resolver does, from the id every outcome carries. Never a dead
               "Name not available": that read as a broken group or person. */}
           {outcome.name || outcome.email || <UserName id={outcome.user_id} />}
         </span>
-        <span className="block text-[13px] text-muted">
+        <span className="block text-small text-muted">
           {outcome.detail}
           {outcome.consequence ? (
             <>
@@ -245,7 +245,7 @@ function FoldRow({ outcome, group, op, system }: { outcome: BulkOutcome; group: 
   return (
     <div className="row-divider px-4 py-3">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-1">
-        <span className="min-w-0 flex-1 text-[14.5px] font-semibold">
+        <span className="min-w-0 flex-1 text-body font-semibold">
           {outcome.name || outcome.email || <UserName id={outcome.user_id} />}
         </span>
         {group === "left" && (
@@ -254,13 +254,13 @@ function FoldRow({ outcome, group, op, system }: { outcome: BulkOutcome; group: 
           </Badge>
         )}
       </div>
-      <span className="block text-[13px] text-muted">
+      <span className="block text-small text-muted">
         {outcome.detail}
         {words ? <> {words}</> : null}
       </span>
       {applied && group === "wait" && <NextStep person={outcome.person || outcome.user_id} className="mt-1.5" />}
       {applied && group === "unanswered" && outcome.retry && <RetryStatus retry={outcome.retry} className="mt-1.5" />}
-      {group === "refused" && <p className="mt-1.5 text-[13px] leading-[1.5] text-danger-text">{refusedSeat(outcome, op, system)}</p>}
+      {group === "refused" && <p className="mt-1.5 text-small leading-[1.5] text-danger-text">{refusedSeat(outcome, op, system)}</p>}
     </div>
   );
 }

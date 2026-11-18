@@ -110,7 +110,7 @@ export function ShapeChooser({
               </div>
             );
           })}
-          {error && <p role="alert" className="px-3.5 text-[13px] text-danger-text">{error}</p>}
+          {error && <p role="alert" className="px-3.5 text-small text-danger-text">{error}</p>}
         </div>
         {footer(
           `Start from ${short}`,
@@ -139,7 +139,7 @@ export function ShapeChooser({
     <>
       <div className="flex flex-col gap-1.5 px-3.5 pb-3 pt-1">
         {others.length === 0 && (
-          <p className="px-2 py-2 text-[13.5px] text-faint">No other app has a shape of its own yet.</p>
+          <p className="px-2 py-2 text-small text-faint">No other app has a shape of its own yet.</p>
         )}
         {groups.map(([label, list], gi) =>
           list.length === 0 ? null : (
@@ -168,7 +168,7 @@ export function ShapeChooser({
             </Fragment>
           ),
         )}
-        {error && <p role="alert" className="px-3.5 text-[13px] text-danger-text">{error}</p>}
+        {error && <p role="alert" className="px-3.5 text-small text-danger-text">{error}</p>}
       </div>
       {footer(
         picked ? `Copy ${name}'s shape` : "Copy this shape",
@@ -184,7 +184,7 @@ export function ShapeChooser({
 function DotLine({ text, faint = false }: { text: string; faint?: boolean }) {
   if (faint) {
     return (
-      <span className="pl-(--dot-indent) text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
+      <span className="pl-(--dot-indent) text-small leading-[1.5] text-faint [text-wrap:pretty]">
         <Ticks text={text} />
       </span>
     );
@@ -194,7 +194,7 @@ function DotLine({ text, faint = false }: { text: string; faint?: boolean }) {
       <span aria-hidden className="flex w-1.5 flex-none pt-2">
         <StatusDot tone="neutral" />
       </span>
-      <span className="text-[13.5px] leading-[1.5] text-ink [text-wrap:pretty]">
+      <span className="text-small leading-[1.5] text-ink [text-wrap:pretty]">
         <Ticks text={text} />
       </span>
     </div>

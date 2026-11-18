@@ -85,7 +85,7 @@ export function PageHeader({
           the row still empty. `flex-auto` lets its real content size count,
           so `actions` wraps below once the two genuinely don't fit together. */}
       <div className="min-w-0 flex-auto">
-        {eyebrow && <div className="mb-1 text-[13.5px] text-faint">{eyebrow}</div>}
+        {eyebrow && <div className="mb-1 text-small text-faint">{eyebrow}</div>}
         <h1 className="type-page-title">{title}</h1>
         {meta && (
           <div data-prose className="mt-1.5 text-body text-muted">
@@ -123,7 +123,7 @@ export function MetaRow({ children }: { children: React.ReactNode[] }) {
   const items = children.filter(Boolean);
   return (
     <span className="-m-[3px] block overflow-hidden p-[3px]">
-      <span className="-ml-[15px] flex flex-wrap items-center gap-3 text-[14.5px] text-muted">
+      <span className="-ml-[15px] flex flex-wrap items-center gap-3 text-body text-muted">
         {items.map((item, index) => (
           <span key={index} className="flex items-center gap-3">
             <MetaDot />

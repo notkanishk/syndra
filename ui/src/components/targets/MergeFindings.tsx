@@ -170,15 +170,15 @@ export function MergeFindings({ target }: { target: string }) {
             <div>
               <CardRow first={i === 0} seat="default" action={action} detail={describe(f, name, schema)}>
                 <Person id={f.subject_id} />
-                {f.field ? <span className="text-[13.5px] text-muted">{fieldWords(f.field, schema)}</span> : null}
+                {f.field ? <span className="text-small text-muted">{fieldWords(f.field, schema)}</span> : null}
                 <span className="flex-1" />
-                <span className="text-[13px] text-faint">
+                <span className="text-small text-faint">
                   first seen <Relative iso={f.detected_at} />
                 </span>
               </CardRow>
               {(f.outcome === "binding_conflict" || rawSides(f)) && (
                 // `empty:hidden`: in Basic, or when there is no other person to name, nothing here renders.
-                <div className="px-5 pb-3 text-[13.5px] text-muted empty:hidden">
+                <div className="px-5 pb-3 text-small text-muted empty:hidden">
                   {f.outcome === "binding_conflict" && <ConflictWho finding={f} name={name} />}
                   {rawSides(f) && (
                     <AdvancedOnly>
@@ -196,7 +196,7 @@ export function MergeFindings({ target }: { target: string }) {
                 // not a wait — and hiding its control is what turned a
                 // recoverable half-write into a wedge.
                 <CardRow>
-                  <span className="text-[13px] text-warn-text">
+                  <span className="text-small text-warn-text">
                     {name} may already have let go of this account while Syndra&rsquo;s records
                     were not updated. Pressing again changes nothing on {name}.
                   </span>
@@ -212,7 +212,7 @@ export function MergeFindings({ target }: { target: string }) {
                       <ActionOutcome word="Saved" outcome={{ kind: "applied", message: saved.message }} />
                     </div>
                   )}
-                  <span className="text-[13px] text-faint">
+                  <span className="text-small text-faint">
                     {decisionLabel(f.decision, name)} by <Person id={f.decided_by ?? ""} /> ·{" "}
                     {f.outcome === "binding_conflict"
                       ? // Adopted or kept: the add-on has acted, and the next read closes it.
@@ -220,7 +220,7 @@ export function MergeFindings({ target }: { target: string }) {
                       : `waiting for ${name} to match`}
                   </span>
                   {f.outcome === "binding_conflict" && (f.decision === "adopted" || f.decision === "kept") && (
-                    <span className="w-full text-[13px] text-muted">{FINISH_AGAIN_NOTE}</span>
+                    <span className="w-full text-small text-muted">{FINISH_AGAIN_NOTE}</span>
                   )}
                 </CardRow>
               ) : deciding === f.id ? (
@@ -465,7 +465,7 @@ function DecisionForm({
       )}
       {limit && adopting && (
         <div className="grid gap-2.5 rounded-inner bg-tint-1 px-4 py-3.5" data-adopt-limit>
-          <p className="text-[13.5px] leading-[1.55] text-ink [text-wrap:pretty]">
+          <p className="text-small leading-[1.55] text-ink [text-wrap:pretty]">
             This saves {name}&apos;s value, {limitWordsFor(limit, valueOf(finding.theirs))}, as this person&apos;s own{" "}
             {fieldNoun(limit)}. It takes the place of what their roles give until it ends or you review it.
           </p>
@@ -514,7 +514,7 @@ function DecisionForm({
         // Rendered as text rather than as a disabled control: a disabled button
         // whose reason lives in a tooltip is a reason nobody on a keyboard or a
         // phone can find.
-        <div className="grid gap-1 text-[13px] text-muted">
+        <div className="grid gap-1 text-small text-muted">
           <span>{finding.why_not}</span>
           {(finding.policy ?? []).map((p) => (
             <span key={p.mapping_id} className="text-faint">
@@ -630,14 +630,14 @@ function ConflictDecision({
       <fieldset className="grid gap-1.5">
         <legend className="sr-only">What to do</legend>
         {choices.map((c) => (
-          <label key={c.answer} className="flex items-center gap-2 text-[13.5px] text-ink">
+          <label key={c.answer} className="flex items-center gap-2 text-small text-ink">
             <Radio name={`answer-${finding.id}`} checked={c.answer === chosen.answer} onChange={() => setAnswer(c.answer)} />
             {c.label}
           </label>
         ))}
       </fieldset>
       {/* What pressing does, beside the button that does it. */}
-      <p className="text-[13px] text-muted">{chosen.says}</p>
+      <p className="text-small text-muted">{chosen.says}</p>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="accent" isPending={checking ? run.isPending : pending} disabled={needsWhy || cooling}
           reason={needsWhy ? "Say why. This becomes the record of the decision." : undefined} onClick={confirm}>
@@ -648,7 +648,7 @@ function ConflictDecision({
           Cancel
         </Button>
       </div>
-      {said && <p className="text-[13px] text-warn-text">{said}</p>}
+      {said && <p className="text-small text-warn-text">{said}</p>}
     </>
   );
 }
@@ -746,7 +746,7 @@ function AlreadyDecided({
         </p>
       )}
 
-      <p className="mt-1 text-[13px] text-faint">
+      <p className="mt-1 text-small text-faint">
         The finding has not gone anywhere. It stays here as decided and waiting until Syndra next
         checks the account and finds {name} matches.
       </p>

@@ -99,7 +99,7 @@ export function FilterPanel({
       >
         Filters
         {activeCount > 0 && (
-          <span className="ml-2 rounded-pill bg-accent-dense px-2 py-0.5 text-[12.5px] font-bold text-accent-ink">
+          <span className="ml-2 rounded-pill bg-accent-dense px-2 py-0.5 text-fine font-bold text-accent-ink">
             {activeCount}
           </span>
         )}
@@ -160,7 +160,7 @@ export function FilterPanel({
               type="button"
               onClick={onClear}
               disabled={activeCount === 0}
-              className="text-[13.5px] font-semibold text-muted control press-scale hover:text-ink disabled:cursor-not-allowed disabled:text-faint"
+              className="text-small font-semibold text-muted control press-scale hover:text-ink disabled:cursor-not-allowed disabled:text-faint"
             >
               Clear all
             </button>
@@ -192,7 +192,7 @@ export function FilterField({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="type-label text-[12.5px] text-label">{label}</span>
+      <span className="type-label text-fine text-label">{label}</span>
       {children}
     </div>
   );

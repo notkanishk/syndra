@@ -122,15 +122,15 @@ export function CardTop({ target, name, status }: { target: string; name: string
 export function Row({ label, seat, first = false, children }: { label: string; seat?: ReactNode; first?: boolean; children: ReactNode }) {
   return (
     <CardRow first={first} top seat="default" action={seat}>
-      <span className="w-full text-[13.5px] font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">{label}</span>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-[15px] [overflow-wrap:anywhere]">{children}</span>
+      <span className="w-full text-small font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">{label}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-body [overflow-wrap:anywhere]">{children}</span>
     </CardRow>
   );
 }
 
 export function Faint({ children, tone }: { children: ReactNode; tone?: "warn" }) {
   return (
-    <span className={`text-[13px] leading-[1.5] [text-wrap:pretty] ${tone === "warn" ? "text-warn-text" : "text-faint"}`}>
+    <span className={`text-small leading-[1.5] [text-wrap:pretty] ${tone === "warn" ? "text-warn-text" : "text-faint"}`}>
       {children}
     </span>
   );
@@ -150,7 +150,7 @@ export function Status({ view }: { view: PersonTargetView }) {
   const offline = view.health === "offline";
   const held = view.holds.some((h) => roleOf(view.entitlement_schema, h.field) === "account");
   return (
-    <span role="status" className={`inline-flex items-center gap-2 text-[13px] ${offline ? "text-warn-text" : "text-muted"}`}>
+    <span role="status" className={`inline-flex items-center gap-2 text-small ${offline ? "text-warn-text" : "text-muted"}`}>
       <StatusDot tone={offline ? "warn" : held ? "neutral" : "healthy"} />
       {offline ? (
         <>
@@ -300,7 +300,7 @@ export function PersonSystemCard({ view, userId, name }: { view: PersonTargetVie
     body = (
       <>
         <Row label="Account" first>
-          <span className="font-mono text-[14.5px]">{view.account.username}</span>
+          <span className="font-mono text-body">{view.account.username}</span>
           {view.standing ? (
             <StandingLine standing={view.standing} system={system} audience="operator" />
           ) : (
