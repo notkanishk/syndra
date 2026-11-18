@@ -89,7 +89,7 @@ function phaseOf(element: Element | null): string | null {
   return region?.getAttribute("data-phase") ?? null;
 }
 const calmPhase = () => phaseOf(screen.queryByText("Nothing here needs you."));
-const gridPhase = () => phaseOf(screen.queryByRole("region", { name: "Time-sensitive" }));
+const gridPhase = () => phaseOf(screen.queryByRole("region", { name: "Time-sensitive", hidden: true })); // closing is inert and hidden
 const later = (ms: number) => act(() => vi.advanceTimersByTime(ms));
 
 const drifting = () => ({ ...quiet(), drift: { count: 3, top: [] } });

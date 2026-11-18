@@ -123,6 +123,14 @@ describe("the floating pill", () => {
     expect(links[0].querySelector("[data-arrow-seat]")).toBeEmptyDOMElement();
   });
 
+  it("draws the fill as the one shared indicator, and every link only tints", () => {
+    render(<Page />);
+    place(-40, { "sec-a": 10, "sec-b": 900 });
+    expect(pill().querySelectorAll("[data-indicator]")).toHaveLength(1);
+    const links = within(pill()).getAllByRole("link");
+    expect(links.every((a) => !a.classList.contains("bg-surface-2"))).toBe(true);
+  });
+
   it("moves the fill, and turns the arrows, as the reader passes into the next section", () => {
     render(<Page />);
     place(-40, { "sec-a": -600, "sec-b": 50 });

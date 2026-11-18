@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { SETTLE_MS, TINT_MS, useExitPhase } from "./still";
+import { SETTLE_MS, TINT_MS, stillMotion, useExitPhase } from "./still";
 
 type Phase = "opening" | "open" | "closing";
 
@@ -19,11 +19,12 @@ const UnfoldOpening = createContext(false);
 // and closes at once.
 //
 // Reduced motion is the same still form: the part appears and goes at once,
-// rather than running a 0.01ms animation and waiting on its end.
+// rather than running a 0.01ms animation and waiting on its end. `stillMotion()`
+// is asked first, so a test, the server and the reader's setting agree.
 const animates = () =>
+  !stillMotion() &&
   typeof Element !== "undefined" &&
-  "getAnimations" in Element.prototype &&
-  !window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  "getAnimations" in Element.prototype;
 
 /**
  * A region that opens to its own height and pushes the page down, and on
@@ -103,7 +104,8 @@ export function Unfold({
         setPhase((p) => (p === "closing" && gap ? null : p === "opening" && contents ? "open" : p));
       }}
     >
-      <div>
+      {/* What is closing is going: not read out, not focusable, not clickable. */}
+      <div aria-hidden={phase === "closing" ? true : undefined} inert={phase === "closing" ? true : undefined}>
         <UnfoldOpening.Provider value={phase === "opening"}>
           {gap ? (
             <div style={{ paddingBottom: gap }}>{open ? children : shown.current}</div>

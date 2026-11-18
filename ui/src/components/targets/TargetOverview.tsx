@@ -4,13 +4,16 @@ import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
 import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
 import { checkAgainNext, cooldownLine, retryingLine } from "@/components/results/copy";
-import { useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+
+import { ArriveList, Crossfade, FOLD_MS, LeavingRow, TINT_MS, UnfoldOnArrival, Unfold, useExitPhase, useFlashOnChange, useLeavingRows } from "@/lib/motion";
 
 import { ADOPT_STAYS, SERVICE_STOPPED, STORAGE_OPERATION_LABEL, UNAUDITED_LABEL, UnauditedShares, serviceName } from "@/components/kinds/storage/readings";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { DormantAccounts } from "@/components/targets/DormantAccounts";
 import { UnconfirmedChanges } from "@/components/targets/UnconfirmedChanges";
+import { AllClear, useEmptied } from "@/components/targets/AllClear";
 import { MergeFindings } from "@/components/targets/MergeFindings";
 import { OVERVIEW_LEDE, OVERVIEW_TITLE } from "@/components/usage/copy";
 import { StatsRetention } from "@/components/targets/StatsRetention";
@@ -89,10 +92,26 @@ export function TargetOverview({ target }: { target: string }) {
   // human, which is why they are one region and not two places.
   // And changes the system never answered, which a person must settle (A-09 §3).
   const unconfirmed = useUnconfirmedOperations(target);
-  const waiting = (findings.data?.length ?? 0) + anchorFinding + (unconfirmed.data?.length ?? 0);
+  //
+  // Counted from what is still drawn, not from the read (D-1 M3): a finding that has been decided
+  // leaves by fading and folding, and the count changes after its row has gone. The anchor's own
+  // Notice fades (tint) and then folds (fold), so the count follows the fade and the all-clear
+  // waits for the fold.
+  const [drawn, setDrawn] = useState<{ n: number; byReader: boolean } | null>(null);
+  const onDrawn = useCallback(
+    (n: number, byReader: boolean) =>
+      setDrawn((was) => (was && was.n === n && was.byReader === byReader ? was : { n, byReader })),
+    [],
+  );
+  const findingsDrawn = drawn?.n ?? findings.data?.length ?? 0;
+  const anchorCounted = useExitPhase(anchorFinding > 0, TINT_MS).rendered ? 1 : 0;
+  const anchorCleared = useExitPhase(anchorFinding > 0, TINT_MS + FOLD_MS).rendered ? 1 : 0;
+  const waiting = findingsDrawn + anchorCounted + (unconfirmed.data?.length ?? 0);
+  const clear = findingsDrawn + anchorCleared + (unconfirmed.data?.length ?? 0) === 0;
   const waitingKnown =
     !findings.isLoading && !findings.error && !health.isLoading && !health.error &&
     !unconfirmed.isLoading && !unconfirmed.error;
+  const emptied = useEmptied(waitingKnown ? (clear ? 0 : waiting) : undefined);
   const name = nameOf(target);
   // It isn't answering, so its own cards show the last read (A-13): they
   // recede, and the controls that need it live are off. Syndra's own cards
@@ -159,7 +178,7 @@ export function TargetOverview({ target }: { target: string }) {
         </ReadLine>
       )}
 
-      <div className="grid gap-(--region-gap)">
+      <div data-arrive-through className="grid gap-(--region-gap)">
         <SectionPill sections={sections} label="Regions of this page" gap="var(--region-gap)" />
         {/* Region 0 · whether changes can land.
 
@@ -198,15 +217,15 @@ export function TargetOverview({ target }: { target: string }) {
                 }
               />
 
-              {waitingKnown && anchorFinding > 0 && (
-                <Notice
-                  tone="danger"
-                  title="One item under Waiting on you needs a decision."
-                  next="Decide it under Waiting on you."
-                >
-                  Until this is settled, what {name} reports cannot be trusted.
-                </Notice>
-              )}
+              {/* Stays mounted through its own close: it fades, then its space folds (D-1 M3). */}
+              <Notice
+                open={waitingKnown && anchorFinding > 0}
+                tone="danger"
+                title="One item under Waiting on you needs a decision."
+                next="Decide it under Waiting on you."
+              >
+                Until this is settled, what {name} reports cannot be trusted.
+              </Notice>
 
               <CardGrid>
                 <ReachCard
@@ -245,7 +264,7 @@ export function TargetOverview({ target }: { target: string }) {
           why="Waiting on you, accounts and reconciliation open once it is set."
           step={{ label: "Choose it above ↑", href: "#project" }}
         >
-        <div className="grid gap-(--region-gap)">
+        <div data-arrive-through className="grid gap-(--region-gap)">
         {/* Region 1 · second on the page, and not first.
 
             Three findings on a target that has not answered for forty minutes
@@ -267,23 +286,30 @@ export function TargetOverview({ target }: { target: string }) {
               <RowSkeleton rows={1} avatar={false} label="Reading what is waiting on you" />
             </Card>
           )}
-          {waitingKnown && waiting === 0 && (
-            <Card>
-              <EmptyState
-                title="Nothing is waiting on you."
-                guidance={`A change ${name} never answered, an account two records disagree about, or a password that needs a new one appears here.`}
-              />
-            </Card>
+          {waitingKnown && clear && (
+            // The card opens with what is in it: its border does not arrive ahead of its words.
+            <AllClearCard emptied={emptied}>
+              <Card>
+                <AllClear
+                  title="Nothing is waiting on you."
+                  guidance={`A change ${name} never answered, an account two records disagree about, or a password that needs a new one appears here.`}
+                  emptied={emptied}
+                  inCard
+                  byReader={drawn?.byReader ?? false}
+                />
+              </Card>
+            </AllClearCard>
           )}
           <UnconfirmedChanges
             target={target}
             operations={unconfirmed.data ?? []}
             ready={!unconfirmed.isLoading && !unconfirmed.error}
           />
-          {health.data?.log_anchor?.violation_reason && (
-            <LogFinding anchor={health.data.log_anchor} />
-          )}
-          <MergeFindings target={target} />
+          {/* Leaves with its Notice: it fades, then its space folds, so the count follows a row that is drawn. */}
+          <Unfold open={anchorFinding > 0} gap={16}>
+            {health.data?.log_anchor?.violation_reason ? <LogFinding anchor={health.data.log_anchor} /> : null}
+          </Unfold>
+          <MergeFindings target={target} onDrawn={onDrawn} />
         </Region>
 
         {/* Region 2 · the second subject.
@@ -334,6 +360,11 @@ export function TargetOverview({ target }: { target: string }) {
       </div>
     </div>
   );
+}
+
+/** The all-clear's card, opened by Unfold when the list emptied in front of the reader. */
+function AllClearCard({ emptied, children }: { emptied: boolean; children: React.ReactNode }) {
+  return emptied ? <UnfoldOnArrival>{children}</UnfoldOnArrival> : <>{children}</>;
 }
 
 /**
@@ -532,7 +563,11 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
   // second is a split binding, and both are repaired by pressing again — so the
   // press must stay on screen, which is what marking the row released removed.
   const [unfinished, setUnfinished] = useState<Record<string, string>>({});
-  const result = run.data;
+  // The last settled result. A press makes a new mutation whose data is undefined until it answers;
+  // the old words stay on screen until the new are read, and the pending gap is not a change (D-1 M4).
+  const settled = useRef(run.data);
+  if (run.data) settled.current = run.data;
+  const result = settled.current;
   const name = nameOf(target);
   // A pass skipped inside the add-on's cooldown waits out its retry_after and runs once more by
   // itself (RFC 9110 §10.2.3), so one press ends on a live read; a second skip is shown as it is.
@@ -543,6 +578,14 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
   const [skippedAt, setSkippedAt] = useState(0);
   const skipped = !waiting && result?.halted && result.retry_after ? result.retry_after : undefined;
   const left = useCountdown(skipped, skippedAt);
+  // What the check concluded, as the sentence below is worded from it. A new result crossfades
+  // its words and washes the row once; the same result read again is not news (D-1 M4).
+  const resultKey = !result
+    ? "none"
+    : result.halted
+      ? `halted:${result.reason ?? ""}:${result.detail ?? ""}:${result.retry_after ?? ""}`
+      : `read:${result.current}:${result.bound}:${result.queued}:${result.stale?.length ?? 0}`;
+  const changed = useFlashOnChange(resultKey);
   function check() {
     run.mutate(undefined, {
       onSuccess: (pass) => {
@@ -562,6 +605,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
       <CardRow
         top
         seat="narrow"
+        className={changed ? "flash" : undefined}
         action={
           /* It reads the system first, so it waits while that can't answer
               (A-13 §1.5). The card's one control, so its reason rides on it. */
@@ -585,7 +629,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
           </Button>
         }
       >
-        <div className="flex-1 text-body text-muted">
+        <Crossfade id={waiting ? "waiting" : skipped ? "skipped" : resultKey} className="flex-1 text-body text-muted">
           {waiting ? null : skipped ? (
             <span className="text-warn-text">
               {left > 0 ? `${cooldownLine(name, left)}. ` : ""}
@@ -619,7 +663,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
           ) : (
             reconcileLine(result.bound, result.queued, result.stale?.length ?? 0, name)
           )}
-        </div>
+        </Crossfade>
       </CardRow>
       <RetryWait name={name} retry={retry} onStop={retry.stop} />
 
@@ -650,6 +694,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
               recorded as owning an account that is no longer on {name}
             </span>
           </CardRow>
+          <ArriveList>
           {sortByName(result!.stale!, (b) => b.username, (b) => b.subject_id).map((b) => (
             <CardRow
               key={b.subject_id}
@@ -721,6 +766,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
               <Mono className="min-w-0 [overflow-wrap:anywhere]">{b.username}</Mono>
             </CardRow>
           ))}
+          </ArriveList>
           {release.error && (
             <CardRow>
               <span className="text-small text-danger-text">
@@ -1361,12 +1407,21 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
   const tooOldToAdopt = !inventory.data || blocksIrreversibleAction(read);
   const name = nameOf(target);
   const unmanaged = inventory.data?.unmanaged ?? [];
+  // An account that is assigned fades where it was and its gap closes after (D-1 M5).
+  // The account just assigned keeps its row until the outcome under it has been read.
+  const stay = useMemo(() => new Set(result ? [result.username] : []), [result]);
+  const leaving = useLeavingRows(
+    sortByName(unmanaged, (a) => a.username, (a) => a.username),
+    (a) => a.username,
+    !inventory.isLoading && !inventory.error,
+    { stay },
+  );
 
   return (
-    <Card stale={stale || read.current === false}>
+    <Card stale={stale || read.current === false} {...leaving.listProps}>
       <CardHeader
         title="Not created by Syndra"
-        count={inventory.data?.unmanaged?.length}
+        count={inventory.data ? leaving.rows.length : undefined}
         caption={`Accounts on ${name} that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.`}
       />
       <div className="px-5 pb-2">
@@ -1391,7 +1446,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
       <ListStates
         isLoading={inventory.isLoading}
         error={inventory.error}
-        isEmpty={(inventory.data?.unmanaged ?? []).length === 0}
+        isEmpty={leaving.rows.length === 0}
         onRetry={() => inventory.refetch()}
         errorTitle="The account list could not be read"
         empty={
@@ -1402,9 +1457,9 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
         }
       >
         <>
-          {sortByName(unmanaged, (a) => a.username, (a) => a.username).map((account, i) => (
+          {leaving.rows.map((account, i) => (
+            <LeavingRow key={account.username} {...leaving.props(account.username)}>
             <CardRow
-              key={account.username}
               first={i === 0}
               seat="default"
               action={
@@ -1467,6 +1522,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
                 {account.standing && <StandingLine standing={account.standing} system={name} audience="operator" step={false} />}
               </span>
             </CardRow>
+            </LeavingRow>
           ))}
           {tooOldToAdopt && unmanaged.some((a) => !a.self) && (
             <div className="row-divider px-5 py-3 text-small leading-[1.5] text-faint [text-wrap:pretty]">

@@ -6,7 +6,7 @@ import { copyLine, cooldownLine, READ_AGAIN, READING, retryingLine, STOP_WAITING
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { CardRow } from "@/components/ui/Card";
-import { Crossfade } from "@/lib/motion";
+import { Crossfade, LANDED_HOLD_MS, PRESS_FORGET_MS } from "@/lib/motion";
 import { formatClock, formatRelative } from "@/lib/format";
 import { outcomeFromError } from "@/lib/outcome";
 import { cooldownOf, STALE, stamped, useCountdown, type Stale } from "@/lib/queries/fresh";
@@ -30,10 +30,6 @@ import { cooldownOf, STALE, stamped, useCountdown, type Stale } from "@/lib/quer
 export const STALE_AFTER_MS = 10 * 60_000;
 /** Below this, the read is the present tense. */
 const LIVE_UNTIL_MS = 60_000;
-/** How long a press that landed keeps its bloom: flash's 900ms, and a beat. */
-const LANDED_HOLD_MS = 1000;
-/** How long a press is remembered once it settles, in case its read is still on its way. */
-const PRESS_FORGET_MS = 250;
 
 export type Freshness = "live" | "ageing" | "stale" | "provisional";
 
@@ -256,6 +252,7 @@ export function ReadFreshness({
     // whose meaning changes while nobody touches the page: a read that was
     // fine when the page loaded is what an operator adopts from ten minutes
     // later.
+    // not-motion: the age line re-reads the clock twice a minute
     const id = setInterval(tick, 30_000);
     return () => clearInterval(id);
   }, [state.readAt, state.current]); // eslint-disable-line react-hooks/exhaustive-deps

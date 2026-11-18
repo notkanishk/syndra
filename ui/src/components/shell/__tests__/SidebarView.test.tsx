@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { motionInTests } from "@/test-utils/motion";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,7 +35,7 @@ const region = (label: string) => screen.getByText(label).closest(".unfold") as 
 beforeEach(() => {
   view.audience = "basic";
   view.isOperator = true;
-  Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
+  Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true }); motionInTests(); // Unfold asks stillMotion() first
 });
 afterEach(() => {
   delete (Element.prototype as { getAnimations?: unknown }).getAnimations;

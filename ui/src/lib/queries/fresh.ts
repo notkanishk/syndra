@@ -101,6 +101,7 @@ export function useCountdown(seconds: number | undefined, since?: number): numbe
     const sync = () => setLeft(secondsLeft(end));
     sync();
     if (!seconds) return;
+    // not-motion: a once-a-second countdown, not a movement
     const id = setInterval(() => {
       sync();
       if (Date.now() >= end) clearInterval(id);
@@ -147,6 +148,7 @@ export function useRetryOnce() {
       return true;
     };
     if (settle()) return setReturnTo(null);
+    // not-motion: a half-second poll for the returning focus, not a movement
     const id = setInterval(() => settle() && (clearInterval(id), setReturnTo(null)), 500);
     return () => clearInterval(id);
   }, [returnTo]);

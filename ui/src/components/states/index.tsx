@@ -13,7 +13,7 @@ import { Notice } from "@/components/ui/Notice";
 // reports a mutation. A read that fails and a write that fails were describing
 // the same 403 in two files until this import existed.
 import { NOTHING_CHANGED, failureMessage, zitadelFailed, mayHaveGoneThrough, nextStep, partialSentence, sentence } from "@/lib/outcome";
-import { TINT_MS, stillMotion } from "@/lib/motion";
+import { SKELETON_DELAY_MS, TINT_MS, stillMotion } from "@/lib/motion";
 import { useUiView } from "@/lib/ui-view";
 
 /**
@@ -57,8 +57,7 @@ export function RowSkeleton({
   );
 }
 
-/** A read that lands inside this never shows a skeleton at all (A-05 S7). */
-export const SKELETON_DELAY_MS = 200;
+export { SKELETON_DELAY_MS };
 
 /**
  * Shows its skeleton only if the read is still going after 200ms.

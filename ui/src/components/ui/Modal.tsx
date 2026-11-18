@@ -506,7 +506,8 @@ export function useSheetDrag({
           closeRef.current();
           return;
         }
-        // Settle's duration on tint's curve: it is going, not arriving.
+        // Settle's duration on tint's curve: it is going, not arriving (exits are tint's).
+        // The settle-back above is arriving, so it is settle's.
         const panel = panelRef.current;
         const scrim = scrimRef.current;
         if (panel) {

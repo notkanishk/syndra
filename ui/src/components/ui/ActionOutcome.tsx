@@ -1,9 +1,11 @@
 "use client";
 
+import { Fragment, useState } from "react";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { ARROW_LINK } from "@/components/ui/ArrowLink";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { NextStep } from "@/components/ui/NextStep";
+import { UnfoldOnArrival, useUnfoldOpening } from "@/lib/motion";
 import { useCountdown } from "@/lib/queries/fresh";
 import {
   NOTHING_CHANGED,
@@ -104,6 +106,10 @@ export function ActionOutcome({
   const left = useCountdown(given.retryAfter);
   const outcome = given.retryAfter === undefined ? given : { ...given, next: cooldownNext(left) };
   const grave = outcome.kind === "failed" || outcome.kind === "refused";
+  // Already opening inside a region that is itself unfolding: not opened twice.
+  // Frozen at mount, as Notice does: when the parent settles this must not become a second opening.
+  const opening = useUnfoldOpening();
+  const [inOpening] = useState(opening);
 
   if (placement === "seat") {
     const said = grave ? sentence(outcome.message) : outcome.detail ?? (outcome.sendsItself ? outcome.message : undefined);
@@ -161,7 +167,10 @@ export function ActionOutcome({
   // stays steady: a failure is under control, and a queued change has not
   // happened yet, so neither celebrates.
   const celebrates = outcome.kind === "applied";
+  // It opens its own space as it arrives, so what is below settles instead of being pushed (D-1 M6).
+  const Opens = inOpening ? Fragment : UnfoldOnArrival;
   return (
+    <Opens>
     <div
       role={grave ? "alert" : "status"}
       className={`${celebrates ? "lift-in" : "tint-in"} flex flex-col gap-2.5 rounded-inner border px-5 py-4 ${
@@ -193,6 +202,7 @@ export function ActionOutcome({
       {outcome.sessionEnded && <SignInAgain />}
       {outcome.requestId && <QuoteThis id={outcome.requestId} />}
     </div>
+    </Opens>
   );
 }
 

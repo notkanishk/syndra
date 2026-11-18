@@ -4,19 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 
 import { moveBetweenRows, rowFocused, useRovingRows } from "@/lib/keys";
 
-/**
- * The arrive tokens, for the places a timer has to agree with CSS. Held to
- * globals.css by design-system.test.ts.
- */
-export const ARRIVE_MS = 420; // --duration-arrive
-export const ARRIVE_STEP_MS = 40; // --arrive-step
-export const ARRIVE_CAP = 5; // --arrive-cap
-
-/** Row five is the last to have a delay of its own; everything after arrives with it. */
-export const ARRIVE_SETTLED_MS = ARRIVE_MS + (ARRIVE_CAP - 1) * ARRIVE_STEP_MS;
-
-/** How long a Back, or a Show more, is remembered. A read can land seconds after the click. */
-export const ARRIVE_MEMORY_MS = 5000;
+import { ARRIVE_MEMORY_MS, ARRIVE_SETTLED_MS } from "./still";
 
 // A screen arrives when you navigate to it (S11), and only then. Back and
 // Forward, and a reload, return you to somewhere you have been: it is simply

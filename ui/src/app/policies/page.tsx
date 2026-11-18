@@ -415,7 +415,8 @@ function RuleEditor({
 
         <div
           // The second list starts below the fold: typing in its search brings
-          // it up, so the matches are in view without scrolling (browser pass, 8 Nov).
+          // it up, so the matches are in view without scrolling (browser pass, 8 Nov). This scrolls the
+          // dialog's own panel, not the page: glideTo is the page's glide (D-1 M13 is page jumps, not a list in a dialog).
           onInput={(event) => {
             if ((event.target as HTMLInputElement).type === "search") event.currentTarget.scrollIntoView?.({ block: "start" });
           }}

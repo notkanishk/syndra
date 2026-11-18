@@ -147,6 +147,7 @@ export function CameraScanner({ onScan, onClose, closeLabel }: { onScan: (value:
           } catch {
             // A frame that could not be read is not an answer; the next one may be.
           }
+          // not-motion: a debounce for the identity lookup, not a movement.
           timer = setTimeout(look, 250);
         };
         void look();

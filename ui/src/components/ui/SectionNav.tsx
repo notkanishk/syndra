@@ -2,8 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
-import { Chip, StatusDot, type StatusTone } from "@/components/ui/Badge";
-import { glideTo } from "@/lib/motion";
+import { Chip, Count, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { GlideIndicator, glideTo, useGlideIndicator } from "@/lib/motion";
 
 /**
  * Getting to a section on a page that has two or more (RULES, grouped lists).
@@ -83,7 +83,11 @@ export function ReadLine<T extends NavSection>({
               <Chip className="gap-2 motion-tint group-hover:bg-tint-3">
                 {section.tone && <StatusDot tone={section.tone} />}
                 {section.label}
-                {section.count !== undefined && <span className="text-faint">{section.count}</span>}
+                {section.count !== undefined && (
+                  <span className="text-faint">
+                    <Count n={section.count} />
+                  </span>
+                )}
                 <span aria-hidden className="text-fine text-faint">
                   ↓
                 </span>
@@ -137,6 +141,7 @@ export function SectionPill<T extends NavSection>({
     return () => document.removeEventListener("scroll", read, true);
   }, [ids]);
 
+  const { ref: pillRef, box } = useGlideIndicator(spy.active);
   if (sections.length < 2) return null;
   const at = Math.max(0, sections.findIndex((section) => section.id === spy.active));
   return (
@@ -153,6 +158,7 @@ export function SectionPill<T extends NavSection>({
         }`}
       />
       <nav
+        ref={pillRef}
         aria-label={`${label} (while scrolling)`}
         aria-hidden={!spy.away}
         className={`absolute left-1/2 top-3 flex max-w-[calc(100%-24px)] -translate-x-1/2 gap-0.5 overflow-x-auto whitespace-nowrap rounded-pill border border-line-strong bg-surface-1 p-1 shadow-dialog motion-tint ${
@@ -161,6 +167,8 @@ export function SectionPill<T extends NavSection>({
           spy.away ? "drop-in opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
+        {/* The current section's fill is the one shared indicator: it glides, the links only tint. */}
+        <GlideIndicator box={box} kind="fill" className="bg-surface-2" />
         {sections.map((section, index) => {
           const here = index === at;
           return (
@@ -173,13 +181,18 @@ export function SectionPill<T extends NavSection>({
                 event.preventDefault();
                 go(section, onOpen);
               }}
-              className={`inline-flex min-h-9 items-center gap-2 rounded-pill px-3.5 text-small font-semibold control press-scale ${
-                here ? "bg-surface-2 text-ink" : "text-muted hover:bg-[var(--hover)] hover:text-ink"
+              className={`relative inline-flex min-h-9 items-center gap-2 rounded-pill px-3.5 text-small font-semibold control press-scale ${
+                // Until the indicator is measured (first paint) the current link wears its own fill.
+                here ? `${box ? "" : "bg-surface-2 "}text-ink` : "text-muted hover:bg-[var(--hover)] hover:text-ink"
               }`}
             >
               {section.tone && <StatusDot tone={section.tone} />}
               {section.label}
-              {section.count !== undefined && <span className="font-medium text-faint">{section.count}</span>}
+              {section.count !== undefined && (
+                <span className="font-medium text-faint">
+                  <Count n={section.count} />
+                </span>
+              )}
               {/* Every section keeps its arrow's seat, empty for the one you are in, so the pill holds its
                   width as you scroll (D-1 §5 #35): an arrow on every section but the current one used to
                   change the pill's width at every section boundary. */}

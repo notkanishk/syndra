@@ -16,7 +16,7 @@ import { stillMotion } from "./still";
  * the first measurement (server render, first paint) there is no box and the
  * caller gives the active button its own fill, so nothing is ever unmarked.
  */
-const ACTIVE = '[aria-checked="true"], [aria-current="page"]';
+const ACTIVE = '[aria-checked="true"], [aria-current="page"], [aria-current="location"]';
 
 type Box = { left: number; top: number; width: number; height: number };
 
@@ -41,7 +41,8 @@ export function useGlideIndicator(choice: unknown) {
     if (!group || typeof ResizeObserver === "undefined") return;
     const watch = new ResizeObserver(measure);
     watch.observe(group);
-    group.querySelectorAll("button").forEach((button) => watch.observe(button));
+    // The segments, whatever their tag (a button, a link); not the indicator itself.
+    group.querySelectorAll(":scope > :not([data-indicator]), :scope button, :scope a").forEach((segment) => watch.observe(segment));
     return () => watch.disconnect();
   }, [measure]);
 

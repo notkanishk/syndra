@@ -272,6 +272,10 @@
   --duration-arrive: 420ms;
   --duration-flash: 900ms;
   --duration-breathe: 2400ms;
+  /* A closing region's gap folds this quickly: quicker than it opened. */
+  --duration-fold: 200ms;
+  /* Light leads shape: a card follows its scrim, a tick follows its fill. */
+  --light-lead: 40ms;
   /* Scrolling only, on settle's curve: the one glide the page performs. */
   --duration-glide: 520ms;
   /* The focus ring fades out on tint and appears at once (S9). The outline-color
@@ -282,6 +286,10 @@
      entering from the screen's edge and a control's own indicator (Segmented's
      fill, Tabs' underline) are not page content and fall outside it. */
   --travel-cap: 10px;
+  /* The distances the keyframes travel, named once. Each is under the cap. */
+  --travel-arrive: 8px; /* a row, a screen's first paint, a dialog's card */
+  --travel-lift: 6px; /* an outcome that went well */
+  --travel-nudge: 4px; /* a popover, a chip, a card sinking as it goes */
 
   /* Rows stagger 40ms apart, and the stagger caps at five: a queue of forty
      must not take two seconds to become readable. */
@@ -291,7 +299,7 @@
   @keyframes arrive {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(var(--travel-arrive));
     }
     to {
       opacity: 1;
@@ -331,7 +339,7 @@
     }
     to {
       opacity: 0;
-      transform: translateY(4px);
+      transform: translateY(var(--travel-nudge));
     }
   }
 
@@ -341,7 +349,7 @@
   @keyframes settle-in {
     from {
       opacity: 0;
-      transform: translateY(8px) scale(0.98);
+      transform: translateY(var(--travel-arrive)) scale(0.98);
     }
     to {
       opacity: 1;
@@ -379,7 +387,7 @@
   @keyframes popover-in {
     from {
       opacity: 0;
-      transform: translateY(4px);
+      transform: translateY(var(--travel-nudge));
     }
     to {
       opacity: 1;
@@ -403,7 +411,7 @@
   @keyframes lift {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(var(--travel-lift));
     }
     to {
       opacity: 1;
@@ -456,7 +464,7 @@
   @keyframes flash-value {
     from {
       opacity: 0;
-      transform: translateY(4px);
+      transform: translateY(var(--travel-nudge));
     }
     to {
       opacity: 1;
@@ -940,18 +948,6 @@
   transition-timing-function: var(--ease-tint);
 }
 
-/* press · 180ms — anything that answers a click. */
-@utility motion-press {
-  transition-property: color, background-color, border-color, opacity, box-shadow, transform,
-    filter, outline-color;
-  transition-duration:
-    var(--duration-press), var(--duration-press), var(--duration-press), var(--duration-press),
-    var(--duration-press), var(--duration-press), var(--duration-press), var(--ring-fade);
-  transition-timing-function:
-    var(--ease-press), var(--ease-press), var(--ease-press), var(--ease-press), var(--ease-press),
-    var(--ease-press), var(--ease-press), var(--ease-tint);
-}
-
 /* A fold's chevron (or a sort arrow) turning: settle's duration and curve, the
    same as the Unfold it controls. Tailwind compiles rotate-90 / rotate-180 to
    the `rotate` property, not `transform`, so both are listed. Its colour and
@@ -975,18 +971,11 @@
   }
 }
 
-/* settle · 260ms — anything that changes the page's height. */
-@utility motion-settle {
-  transition-property: height, max-height, opacity, transform;
-  transition-duration: var(--duration-settle);
-  transition-timing-function: var(--ease-settle);
-}
-
 /* Dialogs: the card rises 8px from 98%, 40ms behind its scrim.
    It never zooms from screen centre — the destination is where the dialog
    will live, so the eye lands there and stays. */
 @utility settle-in {
-  animation: settle-in var(--duration-settle) var(--ease-settle) 40ms both;
+  animation: settle-in var(--duration-settle) var(--ease-settle) var(--light-lead) both;
 }
 
 /* The pill that follows the read line: 10px down into place on settle. It
@@ -1009,10 +998,10 @@
    the screen's own edge, so it is outside the 10px cap. Wider, it is the
    dialog's `settle-in`. Worn by `Modal` and the touch navigation sheet. */
 @utility sheet-in {
-  animation: settle-in var(--duration-settle) var(--ease-settle) 40ms both;
+  animation: settle-in var(--duration-settle) var(--ease-settle) var(--light-lead) both;
 
   @media (width < theme(--breakpoint-tablet)) {
-    animation: sheet-rise var(--duration-settle) var(--ease-settle) 40ms both;
+    animation: sheet-rise var(--duration-settle) var(--ease-settle) var(--light-lead) both;
   }
 }
 
@@ -1106,7 +1095,7 @@ html.theme-fading *::after {
   animation: sink-out var(--duration-tint) var(--ease-tint) both;
 }
 @utility leave-scrim {
-  animation: fade-out var(--duration-tint) var(--ease-tint) var(--arrive-step) both;
+  animation: fade-out var(--duration-tint) var(--ease-tint) var(--light-lead) both;
 }
 
 /* Anything that fades out and nothing else: a popover, a skeleton, a row. */
@@ -1174,7 +1163,7 @@ html.theme-fading *::after {
     transition-property: opacity, transform;
     transition-duration: var(--duration-settle);
     transition-timing-function: var(--ease-settle);
-    transition-delay: 40ms;
+    transition-delay: var(--light-lead);
   }
   /* Only a checkbox is ever "some chosen": a radio group with nothing picked
      matches :indeterminate too, and would paint every seat chosen. */
@@ -1244,10 +1233,8 @@ html.theme-fading *::after {
   &[data-phase="closing"] {
     /* Its own keyframes, not `unfold reverse`: reversing also reverses the
        easing, and the gap would start slow and snap shut. */
-    /* A-08 §3: the gap folds quicker than it opened, 200ms. No token was
-       granted for it, so it is the settle less half a tint (260 - 60). */
-    animation: fold calc(var(--duration-settle) - var(--duration-tint) / 2) var(--ease-settle)
-      var(--duration-tint) both;
+    /* A-08 §3: the gap folds quicker than it opened. */
+    animation: fold var(--duration-fold) var(--ease-settle) var(--duration-tint) both;
   }
   &[data-phase="closing"] > * {
     overflow: hidden;
@@ -1383,6 +1370,85 @@ html.theme-fading *::after {
   }
   &:not([data-settled]) + * + * + * + * {
     animation-delay: calc(var(--duration-tint) + 3 * var(--arrive-step));
+  }
+
+  /* A page's regions often sit in one wrapper, which would arrive as a single
+     slab. Marked `data-arrive-through`, the wrapper itself holds still and its
+     children take the stagger as siblings of the header would: each continues
+     from the wrapper's own place (`--arrive-from`, 0 to 4) by its own place
+     inside it (`--arrive-k`), on the same cap. */
+  &:not([data-settled]) ~ [data-arrive-through] {
+    animation: none;
+    --arrive-from: 4;
+    --arrive-skip: 0;
+  }
+  /* A sticky h-0 first child (the section pill) takes no slot and does not arrive. */
+  &:not([data-settled]) ~ [data-arrive-through]:has(> .sticky:first-child) {
+    --arrive-skip: 1;
+  }
+  &:not([data-settled]) + [data-arrive-through] {
+    --arrive-from: 0;
+  }
+  &:not([data-settled]) + * + [data-arrive-through] {
+    --arrive-from: 1;
+  }
+  &:not([data-settled]) + * + * + [data-arrive-through] {
+    --arrive-from: 2;
+  }
+  &:not([data-settled]) + * + * + * + [data-arrive-through] {
+    --arrive-from: 3;
+  }
+  &:not([data-settled]) ~ [data-arrive-through] > * {
+    --arrive-k: 4;
+    animation: arrive var(--duration-arrive) var(--ease-arrive) both;
+    animation-delay: calc(
+      var(--duration-tint) +
+        min(var(--arrive-from) + max(var(--arrive-k) - var(--arrive-skip), 0), var(--arrive-cap) - 1) *
+        var(--arrive-step)
+    );
+  }
+  &:not([data-settled]) ~ [data-arrive-through] > .sticky:first-child {
+    animation: none;
+  }
+  /* A wrapper inside the wrapper holds still too, and its children continue from its own slot
+     (`--arrive-k`, set by the outer rule) by their own (`--arrive-j`). */
+  &:not([data-settled]) ~ [data-arrive-through] > [data-arrive-through] {
+    animation: none;
+  }
+  &:not([data-settled]) ~ [data-arrive-through] > [data-arrive-through] > * {
+    --arrive-j: 4;
+    animation: arrive var(--duration-arrive) var(--ease-arrive) both;
+    animation-delay: calc(
+      var(--duration-tint) +
+        min(
+          var(--arrive-from) + max(var(--arrive-k) - var(--arrive-skip), 0) + var(--arrive-j),
+          var(--arrive-cap) - 1
+        ) * var(--arrive-step)
+    );
+  }
+  &:not([data-settled]) ~ [data-arrive-through] > [data-arrive-through] > :nth-child(1) {
+    --arrive-j: 0;
+  }
+  &:not([data-settled]) ~ [data-arrive-through] > [data-arrive-through] > :nth-child(2) {
+    --arrive-j: 1;
+  }
+  &:not([data-settled]) ~ [data-arrive-through] > [data-arrive-through] > :nth-child(3) {
+    --arrive-j: 2;
+  }
+  &:not([data-settled]) ~ [data-arrive-through] > [data-arrive-through] > :nth-child(4) {
+    --arrive-j: 3;
+  }
+  &:not([data-settled]) ~ [data-arrive-through] > :nth-child(1) {
+    --arrive-k: 0;
+  }
+  &:not([data-settled]) ~ [data-arrive-through] > :nth-child(2) {
+    --arrive-k: 1;
+  }
+  &:not([data-settled]) ~ [data-arrive-through] > :nth-child(3) {
+    --arrive-k: 2;
+  }
+  &:not([data-settled]) ~ [data-arrive-through] > :nth-child(4) {
+    --arrive-k: 3;
   }
 }
 
@@ -1757,6 +1823,18 @@ html.theme-fading *::after {
   --door-arch-inset: 44px;
   --door-wordmark: 58px;
   --door-stage-inset: 56px;
+
+  /* The doorway keeps its own two loops and its own timings (FINAL §4, the
+     exemption); they are named here so no component types them. `ceremony.ts`
+     mirrors the two easings, and a test holds the mirror to these. */
+  --door-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --door-ease-exit: cubic-bezier(0.16, 1, 0.3, 1);
+  --door-stroke-fade: 0.7s; /* the arch's stroke going amber */
+  --door-ring-fade: 0.25s;
+  --door-bloom-fade: 0.3s;
+  --door-link-fade: 0.15s;
+  --door-breath: 10s;
+  --door-grain: 0.75s;
 }
 
 /* The arch group is the one fixed-width thing here. Below ~480px it scales on
@@ -1990,7 +2068,7 @@ body:has(.login-stage) {
     -webkit-mask-image: var(--door-arch-mask);
     /* Transitioned rather than animated on purpose: a filling WAAPI animation
        outranks inline styles and would strand this colour amber forever. */
-    transition: border-color 0.7s ease;
+    transition: border-color var(--door-stroke-fade) ease;
   }
 
   /* Refused. The fade is removed, so the stroke renders as a complete closed
@@ -2063,7 +2141,7 @@ body:has(.login-stage) {
       #000 4%,
       transparent var(--door-ring-reach)
     );
-    transition: opacity 0.25s ease-out;
+    transition: opacity var(--door-ring-fade) ease-out;
   }
 
   .login-orb-bloom {
@@ -2072,7 +2150,7 @@ body:has(.login-stage) {
     border-radius: var(--radius-pill);
     background: radial-gradient(closest-side, rgba(170, 142, 255, 0.3), transparent 76%);
     opacity: 0;
-    transition: opacity 0.3s ease-out;
+    transition: opacity var(--door-bloom-fade) ease-out;
   }
 
   .login-orb-dot {
@@ -2144,7 +2222,7 @@ body:has(.login-stage) {
     color: var(--door-muted);
     font-size: 13px;
     cursor: pointer;
-    transition: border-color 0.15s ease-out, color 0.15s ease-out;
+    transition: border-color var(--door-link-fade) ease-out, color var(--door-link-fade) ease-out;
   }
 
   .login-identity:hover {
@@ -2182,11 +2260,11 @@ body:has(.login-stage) {
 @layer components {
   @media (prefers-reduced-motion: no-preference) {
     .login-pool {
-      animation: doorBreath 10s ease-in-out infinite alternate;
+      animation: doorBreath var(--door-breath) ease-in-out infinite alternate;
     }
 
     .login-grain {
-      animation: doorGrain 0.75s steps(1, end) infinite;
+      animation: doorGrain var(--door-grain) steps(1, end) infinite;
     }
   }
 }

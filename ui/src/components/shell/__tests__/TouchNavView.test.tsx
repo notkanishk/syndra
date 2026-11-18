@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { motionInTests } from "@/test-utils/motion";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -40,7 +41,7 @@ const animationEnd = (el: Element) => act(() => void fireEvent(el, new Event("we
 
 beforeEach(() => {
   view.audience = "advanced";
-  Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
+  Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true }); motionInTests(); // Unfold asks stillMotion() first
 });
 afterEach(() => {
   delete (Element.prototype as { getAnimations?: unknown }).getAnimations;
@@ -73,7 +74,7 @@ describe("the phone navigation sheet switching view", () => {
     fireEvent.click(screen.getByRole("button", { name: /Go to|Home/ }));
     view.audience = "basic";
     rerender(nav());
-    animationEnd(screen.getByRole("link", { name: "Bundles" }).closest(".unfold")!);
+    animationEnd(screen.getByRole("link", { name: "Bundles", hidden: true }).closest(".unfold")!);
 
     view.audience = "advanced";
     rerender(nav());

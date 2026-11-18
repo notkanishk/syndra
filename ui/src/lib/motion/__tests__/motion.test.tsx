@@ -45,6 +45,7 @@ describe("the tokens, all of them", () => {
       tint: motion.TINT_MS,
       press: motion.PRESS_MS,
       settle: motion.SETTLE_MS,
+      fold: motion.FOLD_MS,
       arrive: motion.ARRIVE_MS,
       flash: motion.FLASH_MS,
       breathe: motion.BREATHE_MS,
@@ -124,6 +125,15 @@ describe("reduced motion is first-class", () => {
       document.body.innerHTML = '<div id="app-scroll"></div><h2 id="t">Heading</h2>';
       const scroller = document.getElementById("app-scroll")!;
       scroller.scrollTo = vi.fn() as never;
+    });
+
+    it("flashes a region's marked heading row, not the region", async () => {
+      document.body.innerHTML =
+        '<div id="app-scroll"></div><section id="r"><div data-landing id="row"><h2>Heading</h2></div><p>body</p></section>';
+      document.getElementById("app-scroll")!.scrollTo = vi.fn() as never;
+      await motion.glideTo(document.getElementById("r")!);
+      expect(document.getElementById("row")!.classList.contains("flash")).toBe(true);
+      expect(document.getElementById("r")!.classList.contains("flash")).toBe(false);
     });
 
     it("jumps and still flashes the heading, which is the part the reader needs", async () => {
