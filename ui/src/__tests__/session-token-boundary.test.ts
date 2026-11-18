@@ -27,10 +27,12 @@ describe("the access token stays server-side", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("only the proxy route calls getAccessToken", () => {
-    const callers = [...sources("app"), ...sources("components")].filter((f) =>
+  // lib/ too: a helper wrapping getAccessToken would hand the token to any
+  // page that imports the helper, past the check above.
+  it("only the proxy route calls getAccessToken, and only lib/session.ts defines it", () => {
+    const callers = [...sources("app"), ...sources("components"), ...sources("lib")].filter((f) =>
       /\bgetAccessToken\b/.test(readFileSync(join(SRC, f), "utf8")),
     );
-    expect(callers).toEqual(["app/api/proxy/[...path]/route.ts"]);
+    expect(callers.sort()).toEqual(["app/api/proxy/[...path]/route.ts", "lib/session.ts"]);
   });
 });

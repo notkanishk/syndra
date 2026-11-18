@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest";
 import type { Mock } from "vitest";
 import { NextRequest } from "next/server";
 import { readFileSync } from "node:fs";
@@ -6,6 +6,17 @@ import { resolve } from "node:path";
 
 import { makeProxyFetch } from "@/test-utils/proxyFetch";
 
+// The route reads its shared key at import, so it is set before the imports run
+// (and put back after, so no other file in this worker sees it).
+const { SHARED_KEY, PRIOR_KEY } = vi.hoisted(() => {
+  const PRIOR_KEY = process.env.SYNDRA_API_KEY;
+  process.env.SYNDRA_API_KEY = "test-shared-key";
+  return { SHARED_KEY: "test-shared-key", PRIOR_KEY };
+});
+afterAll(() => {
+  if (PRIOR_KEY === undefined) delete process.env.SYNDRA_API_KEY;
+  else process.env.SYNDRA_API_KEY = PRIOR_KEY;
+});
 vi.mock("@/lib/session", () => ({ getSession: vi.fn(), getAccessToken: vi.fn() }));
 import { getAccessToken, getSession } from "@/lib/session";
 import * as proxyRoute from "@/app/api/proxy/[...path]/route";
@@ -310,11 +321,12 @@ describe("proxy route bearer", () => {
 
   it("keeps a demo session on the shared key, never a session token", async () => {
     (getSession as Mock).mockResolvedValue(ADMIN);
-    (getAccessToken as Mock).mockResolvedValue("tok-should-not-be-used");
+    (getAccessToken as Mock).mockClear().mockResolvedValue("tok-should-not-be-used");
     const fn = upstream(JSON.stringify([]));
     await call(GET, "GET", ["catalog"]);
     const [, init] = fn.mock.calls[0] as unknown as [URL, RequestInit];
-    expect((init.headers as Record<string, string>).Authorization).not.toContain("tok-should-not-be-used");
+    expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${SHARED_KEY}`);
+    expect(getAccessToken).not.toHaveBeenCalled();
   });
 });
 
