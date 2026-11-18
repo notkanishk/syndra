@@ -52,7 +52,7 @@ describe("the glide indicator's observer", () => {
 describe("the glide indicator's shape", () => {
   const parts = (el: Element) => [...el.children] as HTMLElement[];
 
-  it("places a fill by translating it, as two round caps and a middle that abut", () => {
+  it("places a fill by translating it, as two round caps and a middle tucked under each", () => {
     const { container } = render(<GlideIndicator box={{ left: 10, top: 4, width: 100, height: 30 }} kind="fill" className="bg-accent" />);
     const fill = container.querySelector<HTMLElement>("[data-indicator]")!;
     expect(fill.style.transform).toBe("translate(10px, 4px)");
@@ -60,7 +60,8 @@ describe("the glide indicator's shape", () => {
     const [start, middle, end] = parts(fill);
     expect(start).toHaveClass("rounded-l-pill", "bg-accent");
     expect([start.style.width, start.style.height, start.style.transform]).toEqual(["15px", "30px", ""]);
-    expect(middle.style.transform).toBe("translateX(15px) scaleX(70)");
+    // The middle runs 0.5px under each cap, so no seam shows where they meet.
+    expect(middle.style.transform).toBe("translateX(14.5px) scaleX(71)");
     expect(middle.className).not.toMatch(/rounded/);
     expect(end).toHaveClass("rounded-r-pill", "bg-accent");
     expect([end.style.width, end.style.height, end.style.transform]).toEqual(["15px", "30px", "translateX(85px)"]);
@@ -71,6 +72,6 @@ describe("the glide indicator's shape", () => {
     const line = container.querySelector<HTMLElement>("[data-indicator]")!;
     expect(line.style.transform).toBe("translate(10px, 33px)");
     expect(parts(line).map((p) => p.style.height)).toEqual(["2px", "2px", "2px"]);
-    expect(parts(line)[1].style.transform).toBe("translateX(1px) scaleX(98)");
+    expect(parts(line)[1].style.transform).toBe("translateX(0.5px) scaleX(99)");
   });
 });

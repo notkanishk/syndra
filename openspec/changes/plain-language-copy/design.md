@@ -217,7 +217,7 @@ kind its step and `ActionOutcome` draws it in every placement; `retryNextStep`
 `lib/__tests__/next-step.test.tsx` fails on any kind or state with no step.
 
 **A healthy table row is silent** (owner, 18 Nov 2026, D-1 Q5; G17): in a table,
-a row whose state is healthy and whose step would be "Nothing for you to do."
+a healthy row (usable, and waiting on nobody) whose step would be "Nothing for you to do."
 says only its state ("Ready to use"), and a step is written only where there is
 one. `rowStep` (`lib/account-standing.ts`) is the one place that decides it,
 for the account tables on a system's page. The exception is that narrow and no
@@ -967,12 +967,14 @@ Basic hides the machine's words (ids, Maintenance, What the add-on also says, a 
 
 ## 17. Density and alignment (D-1, pass 2: every action in its seat)
 
-A row's action sits in its right seat, so its label is the verb, not the row (D-1 §4 rule 8): the row already says the name. One label changes and one column heading is added; nothing else the five passes move changes a word. The owner's answers (18 Nov 2026) add the last three rows.
+A row's action sits in its right seat, so its label is the verb, not the row (D-1 §4 rule 8): the row already says the name. One label changes and one column heading is added; nothing else the five passes move changes a word. The owner's answers (18 Nov 2026) and their fix round add the rows after Status.
 
 | Where | Words |
 |---|---|
 | Holds due, the button on each row (§5 #25: one width for every row's button) | Lift the hold. Its accessible name keeps the row: Lift the hold on {label}. While it retries: Try again. |
 | Accounts on a system's page, the column heading over each account's standing (§5 #39) | Status |
 | A system's settings card, its first row (owner, 18 Nov 2026, Q4; the Name region is gone) | Label: Name. Value: the name, then what members see, the first half of the name hint ("Members see it as TrueNAS, the product's own name."). Its button: Change name, which opens the one rename dialog, titled What members see it called, whose field keeps the whole hint, Save name, Use the default name and the result (Named. Members see it as {name}. Nobody's access changed.). |
-| Accounts on a system's page, a healthy row with nothing to do (owner, 18 Nov 2026, Q5; the next-step rule above) | Its state only (Ready to use); no step. Every other row keeps its step. |
-| A system's settings card, Home folders while the settings are read | … (quiet), its button's seat held. |
+| Accounts on a system's page, a healthy row with nothing to do (owner, 18 Nov 2026, Q5; the next-step rule above) | Its state only (Ready to use); no step. Every other row keeps its step, a usable account still waiting on someone among them. |
+| A system's settings card, Home folders while the settings are read (a storage system) | Two quiet lines (… and a skeleton line), its button's seat held. |
+| A system's settings card, Home folders when the settings did not come back (a storage system) | Could not be read. Try again in a minute. If it keeps failing, check the add-on's health under Whether changes can land. Its button: Try again. |
+| The section pill while scrolling, the section you are in | Marked by a tint over the pill (FilterPills' selection), in both themes. No words change. |

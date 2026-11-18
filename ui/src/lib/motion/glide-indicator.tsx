@@ -20,6 +20,9 @@ const ACTIVE = '[aria-checked="true"], [aria-current="page"], [aria-current="loc
 
 type Box = { left: number; top: number; width: number; height: number };
 
+/** How far the indicator's middle runs under each cap, in px, so no seam shows where they meet. */
+const TUCK = 0.5;
+
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export function useGlideIndicator(choice: unknown) {
@@ -66,8 +69,9 @@ export function GlideIndicator({
   // group out again (CSS Transforms 1; the compositor's one cheap property with
   // opacity). A pill scaled whole would squash its rounded ends, so it is drawn
   // as three parts: two caps, translated and never scaled, so they stay round,
-  // and a square-ended middle, translated and scaled along x only. The parts
-  // abut, never overlap, so a translucent fill is one even colour.
+  // and a square-ended middle, translated and scaled along x only. The middle
+  // runs `TUCK` under each cap: two edges that only abut leave a hairline seam
+  // at a fractional position mid-glide (each is antialiased on its own).
   const cap = Math.min(height, width) / 2;
   // Absent under reduced motion, where it jumps.
   const glide = stillMotion() ? "" : "indicator-glide";
@@ -82,7 +86,7 @@ export function GlideIndicator({
       <span className={`${part} rounded-l-pill`} style={{ width: cap, height }} />
       <span
         className={`${part} origin-left`}
-        style={{ width: 1, height, transform: `translateX(${cap}px) scaleX(${Math.max(width - 2 * cap, 0)})` }}
+        style={{ width: 1, height, transform: `translateX(${cap - TUCK}px) scaleX(${Math.max(width - 2 * cap, 0) + 2 * TUCK})` }}
       />
       <span className={`${part} rounded-r-pill`} style={{ width: cap, height, transform: `translateX(${width - cap}px)` }} />
     </span>

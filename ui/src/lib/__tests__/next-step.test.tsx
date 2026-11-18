@@ -86,14 +86,16 @@ describe("a table row's step: silence for a healthy row, and only there", () => 
           it(`${usable ? "usable" : "not usable"}, waiting on ${waiting_on ?? "nobody said"}, ${next ? "with" : "no"} step, to ${audience}`, () => {
             const words = standingWords(standing, "TrueNAS", audience);
             const step = rowStep(standing, "TrueNAS", audience);
+            // Healthy is usable and waiting on nobody; a usable account still waiting on someone is not.
+            const healthy = usable && waiting_on === "none";
             if (step === undefined) {
-              expect(words.tone).toBe("healthy");
+              expect(healthy).toBe(true);
               expect(words.next).toBe(NOTHING_TO_DO);
             } else {
               expect(step).toBe(words.next);
               expect(step).toMatch(/[.!?]$/);
             }
-            if (words.tone !== "healthy") expect(step?.trim()).toBeTruthy();
+            if (!healthy) expect(step?.trim()).toBeTruthy();
           });
         }
       }
@@ -103,6 +105,13 @@ describe("a table row's step: silence for a healthy row, and only there", () => 
   it("still says Nothing for you to do. on a row that is not healthy and has no step of its own", () => {
     expect(rowStep({ usable: false } as Standing, "TrueNAS", "operator")).toBe(NOTHING_TO_DO);
     expect(rowStep({ usable: false, waiting_on: "target" }, "TrueNAS", "operator")).toMatch(/^Nothing for you to do\./);
+  });
+
+  it("writes the step of a usable account that is still waiting on someone", () => {
+    for (const waiting_on of ["member", "operator", "target"] as const) {
+      expect(rowStep({ usable: true, waiting_on }, "TrueNAS", "operator"), waiting_on).toBe(NOTHING_TO_DO);
+      expect(rowStep({ usable: true, waiting_on, next: "Set a storage password." }, "TrueNAS", "operator"), waiting_on).toBe("Set a storage password.");
+    }
   });
 
   it("is silent for a healthy row with nothing to do, and keeps a healthy row's own step", () => {

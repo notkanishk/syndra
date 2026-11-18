@@ -18,10 +18,11 @@ import { sortByName } from "@/lib/sort";
 /**
  * Where home folders go, on the system's setup card (A-03 §1): the row, and
  * the dialog it opens. Storage words, so they live in the storage kind; the
- * card renders this and knows nothing of what it says. While the settings of a
- * storage system are read, the row holds its place, quietly, its button's seat
- * filled, so nothing under it moves when they land; once read, it is drawn only
- * if the system offers this setting.
+ * card renders this and knows nothing of what it says. On a storage system the
+ * row is always there: two quiet lines and its button's seat while the settings
+ * are read, so nothing under it moves when they land, and "Could not be read"
+ * with Try again when they do not come back. Once read, it is drawn only if the
+ * system offers this setting.
  */
 export function HomeLocationRow({
   target,
@@ -39,19 +40,46 @@ export function HomeLocationRow({
   const [choosing, setChoosing] = useState(false);
   const home = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
   const verb = home?.value ? "Change folder" : "Choose folder";
-  if (settings.isLoading && expected) {
+  if (!(settings.data?.read && home)) {
+    // Read, and not offered; or a system that is not storage: no row.
+    if (!expected || settings.data?.read) return null;
+    // Two lines while reading or after a failed read, as "Not chosen yet" has, so the rows under it
+    // do not move when it lands.
+    if (settings.isLoading) {
+      return (
+        <SettingRow
+          label="Home folders"
+          action={<Skeleton className="min-h-(--tap) w-28 desktop:min-h-(--control-sm)" />}
+        >
+          <span aria-busy="true" className="flex flex-col gap-0.5">
+            <span className="text-body text-faint">…</span>
+            <span className="text-small">
+              <Skeleton className="inline-block h-3 w-48 align-middle" />
+            </span>
+          </span>
+        </SettingRow>
+      );
+    }
+    // Not read: said, with its step and the control that takes it (copy guide: a read that did not
+    // come back, to an operator).
     return (
       <SettingRow
         label="Home folders"
-        action={<Skeleton className="min-h-(--tap) w-28 desktop:min-h-(--control-sm)" />}
+        action={
+          <Button variant="outline" size="sm" isPending={settings.isFetching} onClick={() => void settings.refetch()}>
+            Try again
+          </Button>
+        }
       >
-        <span aria-busy="true" className="text-body text-faint">
-          …
+        <span className="flex flex-col gap-0.5">
+          <span className="text-body text-muted">Could not be read</span>
+          <span className="text-small text-faint">
+            Try again in a minute. If it keeps failing, check the add-on&apos;s health under Whether changes can land.
+          </span>
         </span>
       </SettingRow>
     );
   }
-  if (!settings.data?.read || !home) return null;
 
   return (
     <>

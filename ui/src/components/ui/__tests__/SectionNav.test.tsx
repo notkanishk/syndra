@@ -2,7 +2,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ReadLine, SectionPill, type NavSection } from "@/components/ui/SectionNav";
+import { PILL_FILL, ReadLine, SectionPill, type NavSection } from "@/components/ui/SectionNav";
 
 /**
  * The read line, its chips and the floating pill, through the one interface a
@@ -128,7 +128,8 @@ describe("the floating pill", () => {
     place(-40, { "sec-a": 10, "sec-b": 900 });
     expect(pill().querySelectorAll("[data-indicator]")).toHaveLength(1);
     const links = within(pill()).getAllByRole("link");
-    expect(links.every((a) => !a.classList.contains("bg-surface-2"))).toBe(true);
+    expect(links.every((a) => !a.classList.contains(PILL_FILL))).toBe(true);
+    expect(pill().querySelector("[data-indicator] > *")).toHaveClass(PILL_FILL);
   });
 
   it("moves the fill, and turns the arrows, as the reader passes into the next section", () => {

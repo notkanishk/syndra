@@ -199,6 +199,7 @@ describe("accounts table seats", () => {
   it.each([
     [{ usable: false, waiting_on: "member" }, "Ask them to do what it says above."],
     [{ usable: false }, "Nothing for you to do."],
+    [{ usable: true, waiting_on: "member" }, "Nothing for you to do."],
     [{ usable: true, waiting_on: "none", next: "Sign in once to finish." }, "Sign in once to finish."],
   ] as Array<[Standing, string]>)("writes the step where there is one (%#)", (standing, step) => {
     state.standing = standing;

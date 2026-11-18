@@ -50,6 +50,8 @@ const state = {
   projectSet: [] as string[],
   settings: { read: true, settings: [] as TargetSetting[] } as { read: boolean; settings?: TargetSetting[] },
   settingsLoading: false,
+  settingsError: null as unknown,
+  settingsRefetches: 0,
   settingPut: [] as Array<{ name: string; value: string }>,
   homes: { read: true, usage_read: true, accounts: [] as AccountHome[] },
 };
@@ -121,7 +123,14 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
     }),
     useSetLifecycle: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false }),
-    useTargetSettings: () => ({ data: state.settingsLoading ? undefined : state.settings, isLoading: state.settingsLoading, error: null, refetch: vi.fn() }),
+    useTargetSettings: () => ({
+      data: state.settingsLoading ? undefined : state.settings,
+      isLoading: state.settingsLoading,
+      error: state.settingsError,
+      refetch: () => {
+        state.settingsRefetches++;
+      },
+    }),
     useTargetHomes: () => ({ data: state.homes, isLoading: false, error: null }),
     useSetTargetSetting: () => ({
       mutate: (input: { name: string; value: string }, opts?: { onSuccess?: () => void }) => {
@@ -186,6 +195,9 @@ beforeEach(() => {
   state.healthLoading = false;
   state.findingsError = null;
   state.settingsLoading = false;
+  state.settingsError = null;
+  state.settingsRefetches = 0;
+  state.settings = { read: true, settings: [] };
 });
 
 describe("one target's page", () => {
@@ -560,6 +572,28 @@ describe("one target's page", () => {
     const step = row.querySelector("[data-row-detail] [data-standing-step]") as HTMLElement;
     expect(step.textContent).toMatch(/\S/);
     expect(row.querySelector("[data-standing-seat]")).not.toHaveTextContent(step.textContent!);
+  });
+
+  // D-1 Q5: a healthy row is silent here too; a usable account still waiting on someone is not.
+  it("leaves a healthy account it did not create without a step, and writes one where there is one", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = {
+      target: "truenas",
+      bound: 0,
+      current: true,
+      read_at: new Date().toISOString(),
+      unmanaged: [
+        { username: "healthy", account_id: "1", standing: { usable: true, waiting_on: "none" } },
+        { username: "waits", account_id: "2", standing: { usable: true, waiting_on: "member" } },
+      ],
+    };
+    renderTarget();
+    const row = (name: string) => screen.getByText(name).closest("[data-card-row]") as HTMLElement;
+    expect(row("healthy")).toHaveTextContent("Ready to use");
+    expect(row("healthy").querySelector("[data-row-detail]")).toBeNull();
+    expect(row("healthy")).not.toHaveTextContent("Nothing for you to do.");
+    expect(row("waits").querySelector("[data-row-detail] [data-standing-step]")).toHaveTextContent("Nothing for you to do.");
   });
 
   // A-01: Syndra's breaker is "waiting to retry", and it sends the operator to
@@ -1199,26 +1233,51 @@ describe("where home folders go", () => {
 
   // The row used to be absent until the settings were read, so everything under it jumped when they
   // landed. It holds its place, with its button's seat filled, before they resolve.
-  it("holds its row while a storage system's settings are read", () => {
-    state.roster = [{ ...summary([]), kind: "storage" }];
+  function openSettings(kind: string | undefined, settings: "loading" | "failed" | "unread" | "not offered") {
+    state.roster = [{ ...summary([]), kind }];
     state.health = { reachable: true, lifecycle: "active" };
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
-    state.settingsLoading = true;
-    renderTarget();
-    const row = screen.getByText("Home folders").closest("[data-card-row]") as HTMLElement;
-    expect(row.querySelector("[aria-busy]")).not.toBeNull();
+    state.settingsLoading = settings === "loading";
+    state.settingsError = settings === "failed" ? new Error("down") : null;
+    state.settings =
+      settings === "unread" ? { read: false } : settings === "failed" ? (undefined as never) : { read: true, settings: [] };
+    return renderTarget();
+  }
+  const homeRow = () => (screen.queryByText("Home folders")?.closest("[data-card-row]") ?? null) as HTMLElement | null;
+
+  it("holds its row, two lines tall as Not chosen yet is, while a storage system's settings are read", () => {
+    openSettings("storage", "loading");
+    const row = homeRow()!;
+    const value = row.querySelector("[aria-busy]") as HTMLElement;
+    expect(value.children).toHaveLength(2);
+    expect(value.lastElementChild!.querySelector(".skeleton-bar")).not.toBeNull();
     expect(row.querySelector("[data-action-seat] .skeleton-bar")).not.toBeNull();
     expect(within(row).queryByRole("button")).toBeNull();
   });
 
-  it("holds no row for a system that does not keep home folders", () => {
-    state.roster = [summary([])];
-    state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
-    state.settingsLoading = true;
-    renderTarget();
-    expect(screen.queryByText("Home folders")).toBeNull();
+  // A read that failed, or came back unread, keeps the row, says so, and offers the step.
+  it.each(["failed", "unread"] as const)("keeps the row when the settings are %s, with Try again", (how) => {
+    openSettings("storage", how);
+    const row = homeRow()!;
+    expect(row).toHaveTextContent("Could not be read");
+    expect(row).toHaveTextContent("Try again in a minute.");
+    const value = within(row).getByText("Could not be read").parentElement as HTMLElement;
+    expect(value.children).toHaveLength(2);
+    fireEvent.click(within(row).getByRole("button", { name: "Try again" }));
+    expect(state.settingsRefetches).toBe(1);
   });
+
+  // The same reads on a storage system draw the row (above), so each absence here is the kind's doing.
+  it.each(["loading", "failed", "unread", "not offered"] as const)(
+    "draws no row for a system that does not keep home folders (%s)",
+    (how) => {
+      const other = openSettings(undefined, how);
+      expect(homeRow()).toBeNull();
+      other.unmount();
+      openSettings("storage", how);
+      expect(homeRow() === null).toBe(how === "not offered");
+    },
+  );
 
   it("says when main has no folder to make homes in", () => {
     open("", []);

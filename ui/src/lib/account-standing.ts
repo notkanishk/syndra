@@ -68,12 +68,15 @@ export function standingWords(standing: Standing, system: string, audience: "mem
 
 /**
  * A table row's step: silence for normal (D-1 Q5, owner 18 Nov 2026; G17). A
- * healthy row with nothing to do says only its state; a step is written only
- * where there is one. This is the one exception to the next-step rule, and it
- * is for table rows only: every other row, and every outcome, notice and empty
- * state, still ends on a step or "Nothing for you to do." (`next-step.test.tsx`).
+ * healthy row, usable and waiting on nobody, with nothing to do, says only its
+ * state; a step is written only where there is one. A usable account that is
+ * still waiting on someone says so with its step. This is the one exception to
+ * the next-step rule, and it is for table rows only: every other row, and every
+ * outcome, notice and empty state, still ends on a step or "Nothing for you to
+ * do." (`next-step.test.tsx`).
  */
 export function rowStep(standing: Standing, system: string, audience: "member" | "operator"): string | undefined {
-  const w = standingWords(standing, system, audience);
-  return w.tone === "healthy" && w.next === NOTHING_TO_DO ? undefined : w.next;
+  const { next } = standingWords(standing, system, audience);
+  const healthy = standing.usable && standing.waiting_on === "none";
+  return healthy && next === NOTHING_TO_DO ? undefined : next;
 }

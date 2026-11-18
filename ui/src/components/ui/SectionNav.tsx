@@ -35,6 +35,16 @@ export type NavSection = {
 /** The chips' own id: where the pill reads "the read line has gone". */
 const CHIPS_ID = "section-chips";
 
+/**
+ * The pill's own surface, and the fill that marks the section you are in.
+ * The fill is FilterPills' selection (`bg-tint-3`), a tint over the surface,
+ * so it reads in both themes: `bg-surface-2` did not in light, where it and
+ * the pill's surface are the same white. `design-system.test.ts` holds the two
+ * apart in each theme.
+ */
+export const PILL_SURFACE = "bg-surface-1";
+export const PILL_FILL = "bg-tint-3";
+
 /** Opens a folded section on the way, then takes the reader to it. */
 function go<T extends NavSection>(section: T, onOpen?: (section: T) => void) {
   onOpen?.(section);
@@ -161,14 +171,14 @@ export function SectionPill<T extends NavSection>({
         ref={pillRef}
         aria-label={`${label} (while scrolling)`}
         aria-hidden={!spy.away}
-        className={`absolute left-1/2 top-3 flex max-w-[calc(100%-24px)] -translate-x-1/2 gap-0.5 overflow-x-auto whitespace-nowrap rounded-pill border border-line-strong bg-surface-1 p-1 shadow-dialog motion-tint ${
+        className={`absolute left-1/2 top-3 flex max-w-[calc(100%-24px)] -translate-x-1/2 gap-0.5 overflow-x-auto whitespace-nowrap rounded-pill border border-line-strong ${PILL_SURFACE} p-1 shadow-dialog motion-tint ${
           // Drops in 10px on settle once the read line has gone; leaves on tint,
           // where it stands (opacity only).
           spy.away ? "drop-in opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
         {/* The current section's fill is the one shared indicator: it glides, the links only tint. */}
-        <GlideIndicator box={box} kind="fill" className="bg-surface-2" />
+        <GlideIndicator box={box} kind="fill" className={PILL_FILL} />
         {sections.map((section, index) => {
           const here = index === at;
           return (
@@ -183,7 +193,7 @@ export function SectionPill<T extends NavSection>({
               }}
               className={`relative inline-flex min-h-9 items-center gap-2 rounded-pill px-3.5 text-small font-semibold control press-scale ${
                 // Until the indicator is measured (first paint) the current link wears its own fill.
-                here ? `${box ? "" : "bg-surface-2 "}text-ink` : "text-muted hover:bg-[var(--hover)] hover:text-ink"
+                here ? `${box ? "" : `${PILL_FILL} `}text-ink` : "text-muted hover:bg-[var(--hover)] hover:text-ink"
               }`}
             >
               {section.tone && <StatusDot tone={section.tone} />}
