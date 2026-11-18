@@ -98,7 +98,7 @@ export function CommandBlock({
     >
       {caption && (
         <p
-          className={`mb-2.5 max-w-[80ch] text-small leading-[1.55] ${
+          className={`mb-2.5 measure text-small leading-[1.55] ${
             onWarn ? "text-warn-ink/[.78]" : "text-muted"
           }`}
         >
@@ -160,7 +160,7 @@ export function CommandBlock({
               >
                 {index + 1}.
               </span>
-              <span className="max-w-[76ch]">{step}</span>
+              <span className="measure">{step}</span>
             </li>
           ))}
         </ol>

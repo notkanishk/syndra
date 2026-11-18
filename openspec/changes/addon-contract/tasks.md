@@ -3069,6 +3069,28 @@ end to end) found no missing function; three regressions with one root cause
       - the stat figure back to `text-[24px]`;
       - `body` back to 14.5 / 1.55;
       - `max-w-[60ch]` back in ErrorBoundary.
+    - **Review round** (18 Nov 2026, lead on #203):
+      - **(1)** TermDatesCard's and WelcomeClaimsCard's opening sentences: the divider and inset are on a full-width wrapper, and `measure` only on the `<p>`. The divider line was cut at 60ch.
+      - **(2)** DegradedBanner: `measure` moved from the container holding the command block onto the `<p>`, so the command and its Copy keep their width.
+      - **(3)** PersonAccess's cleanup hints: `max-w-[840px]` became `measure` (spec §3 row 78). ChoiceRow's 170px note is now `max-w-(--seat-label)`, the same width as a token.
+      - **(4)** The measure guard exempts by line marker, not by file. The only exemption left is the greeting's balance widths (`measure-exempt` on the line above). The rest moved to `measure`: CommandBlock's caption and step, the stat tile's detail, and a button's reason.
+      - **(5)** `error.tsx`: no cap on the column. The Notice sets its own measure, and the link is short.
+      - **(6)** The type guard:
+        - A marker covers only its own line or the line directly below it; the eight-line window is gone. Each avatar size and the dialog field and textarea carry their own.
+        - It also catches an inline `fontSize` literal and Tailwind's own steps (`text-xs` … `text-9xl`).
+        - Those steps are also cleared at the source: `--text-*: initial` in `@theme`, Tailwind v4's way to empty a namespace, so `text-sm` now renders nothing.
+        - `global-error.tsx` renders after the root layout failed, so `globals.css` and its tokens may never have loaded, and it may import nothing from the app. Its sizes are the scale's steps written out once, in a `TYPE` map with each line marked: heading 22, body 14, small 13, fine 12.5. They were 20, 14.5, 13, 12.5 and 13.5.
+        - The usage band's limit word (SVG `fontSize="12.5"`) is now `text-fine`.
+      - **(7)** NotOpenYet: the dead ternary is gone.
+      - **Mutation-checked** (each red):
+        - a marker moved two lines away from its size;
+        - `global-error` with a literal `fontSize`;
+        - a `text-sm`;
+        - `--text-*: initial` removed;
+        - PersonAccess back at `max-w-[840px]`;
+        - CommandBlock's caption back at `max-w-[80ch]`;
+        - the greeting's marker removed;
+        - an avatar size without its marker.
   - [ ] 7u-5 Motion (§7: the five tokens, M1–M14, the eight motion tests).
   - [ ] 7u-6 Pass 5, resync the design system (`ui/.design-sync`, BRIDGE steps 1 to 3), after the owner's OK.
 - [ ] 7v Flaky conformance test (add-on track; noted 18 Nov 2026, not fixed). `addons/conformance` `TestAnUnansweredWithdrawThatBoundAnAccountIsOwnedUpTo` (`kit_test.go:1312`) failed once on PR #200's CI run, with no Go change in the PR (reported by the PR's review). Find the race or ordering it depends on (`go test -race -count=200 -run TestAnUnansweredWithdrawThatBoundAnAccountIsOwnedUpTo ./...` in `addons/conformance`), fix it at the root, and leave a guard that fails without the fix. `needs-triage`

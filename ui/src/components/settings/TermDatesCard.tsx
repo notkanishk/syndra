@@ -46,10 +46,13 @@ export function TermDatesCard() {
           )
         }
       />
-      <p className="row-divider measure px-5 py-4 text-body leading-[1.55] text-muted [text-wrap:pretty]">
-        Trends, &quot;new this term&quot; and &quot;to the end of next term&quot; read these. Terms move each year, so
-        check them when one ends.
-      </p>
+      {/* The divider and inset are the row's, full width; the measure is the sentence's. */}
+      <div className="row-divider px-5 py-4">
+        <p className="measure text-body leading-[1.55] text-muted [text-wrap:pretty]">
+          Trends, &quot;new this term&quot; and &quot;to the end of next term&quot; read these. Terms move each year, so
+          check them when one ends.
+        </p>
+      </div>
       <ListStates
         isLoading={setting.isLoading}
         error={setting.data ? null : setting.error}

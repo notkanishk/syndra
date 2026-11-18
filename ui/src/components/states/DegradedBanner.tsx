@@ -138,8 +138,8 @@ export function DegradedBanner({ under = false }: { under?: boolean } = {}) {
               </Button>
             </div>
             <Unfold open={serverOpen}>
-              <div className="flex measure flex-col gap-2 pt-1">
-                <p className="text-small text-muted">
+              <div className="flex flex-col gap-2 pt-1">
+                <p className="measure text-small text-muted">
                   {data?.seed_active
                     ? "Sample data is still switched on, so a restart would put it back after you clear it. Set SYNDRA_SEED_DEMO=false first."
                     : "Sample data is switched off, so what remains is left over from an earlier run. Switching it off never removes what was already written."}

@@ -595,7 +595,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
 
           {/* Advisory notes. Never an error — cleanup_hints are opinions. */}
           {access.data.cleanup_hints.map((hint) => (
-            <p key={hint} className="max-w-[840px] px-1 text-body leading-[1.55] text-muted">
+            <p key={hint} className="measure px-1 text-body leading-[1.55] text-muted">
               {hint}
             </p>
           ))}

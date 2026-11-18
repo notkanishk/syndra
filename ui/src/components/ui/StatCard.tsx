@@ -44,7 +44,7 @@ export function StatCard({
     <>
       <div className="type-label mb-2">{label}</div>
       <div className={`font-display text-figure ${valueTone}`}>{value}</div>
-      <p className="mt-1.5 max-w-[42ch] text-small leading-[1.5] text-muted">{detail}</p>
+      <p className="mt-1.5 measure text-small leading-[1.5] text-muted">{detail}</p>
     </>
   );
   const frame = "card min-w-[260px] flex-1 px-5 py-4";

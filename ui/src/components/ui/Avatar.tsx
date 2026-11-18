@@ -4,13 +4,13 @@
  * still identifiable while the name resolver is in flight.
  */
 const SIZES = {
-  // type-scale-exempt (D-1 §6 pass 4: avatar initials keep their sizes), and
+  // Each line type-scale-exempt (D-1 §6 pass 4: avatar initials keep their sizes), and
   // type-floor-exempt: initials on an aria-hidden gradient. The name they
   // abbreviate is printed beside them, so nothing here is read — this is a
   // shape, and the floor governs what somebody has to read.
-  row: "h-[30px] w-[30px] text-[11px]",
-  list: "h-[34px] w-[34px] text-[12px]",
-  header: "h-[62px] w-[62px] text-[24px]",
+  row: "h-[30px] w-[30px] text-[11px]", // type-scale-exempt
+  list: "h-[34px] w-[34px] text-[12px]", // type-scale-exempt
+  header: "h-[62px] w-[62px] text-[24px]", // type-scale-exempt
 } as const;
 
 export function Avatar({

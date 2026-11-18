@@ -43,13 +43,13 @@ export function WelcomeClaimsCard() {
   return (
     <Card>
       <CardHeader title="First sign-in" />
-      <p
-        id={LEDE_ID}
-        className="row-divider measure px-5 py-4 text-body leading-[1.55] text-muted [text-wrap:pretty]"
-      >
-        For a new member&apos;s first sign-in only, apps are told the roles the welcome bundle is about to give, so
-        they see the right things straight away. Roles that wait for you are never sent early.
-      </p>
+      {/* The divider and inset are the row's, full width; the measure is the sentence's. */}
+      <div className="row-divider px-5 py-4">
+        <p id={LEDE_ID} className="measure text-body leading-[1.55] text-muted [text-wrap:pretty]">
+          For a new member&apos;s first sign-in only, apps are told the roles the welcome bundle is about to give, so
+          they see the right things straight away. Roles that wait for you are never sent early.
+        </p>
+      </div>
       <ListStates
         isLoading={setting.isLoading}
         error={setting.data ? null : setting.error}

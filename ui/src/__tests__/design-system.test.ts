@@ -1192,36 +1192,66 @@ describe("density and alignment (D-1)", () => {
   // §6 pass 4 (Q3, recommended, pending owner): six body sizes within 2.5px folded into three steps,
   // and the display sizes outside the scale onto it (§5 #40). A size is a step (`text-body`,
   // `text-small`, `text-fine`, `text-title`, `text-heading`, `text-figure`, or a `type-*` role),
-  // never a pixel count. Left as they are, each said where it is: decoration nobody reads
-  // (`aria-hidden`), and what is marked `type-scale-exempt` within the eight lines above it (the
-  // avatar initials, the dialog field, the wordmark).
+  // never a pixel count: not a `text-[Npx]`, not an inline `fontSize` of its own, and not one of
+  // Tailwind's own steps (`text-sm` and the rest are cleared with `--text-*: initial`, so they would
+  // render nothing). Left as they are, each said where it is: decoration nobody reads (`aria-hidden`),
+  // and a line marked `type-scale-exempt` on itself or on the line directly above (the avatar
+  // initials, the dialog field, the wordmark, and global-error's written-out steps, which render
+  // before any stylesheet could load).
   it("sets every size from the type scale, never a pixel count", () => {
     const found: string[] = [];
     for (const file of walk(SRC_ROOT)) {
       const source = readFileSync(file, "utf8");
+      const lines = source.split("\n");
       const tags = openingTags(source);
-      for (const size of Array.from(source.matchAll(/text-\[\d+(?:\.\d+)?px\]/g))) {
+      const marked = (line: number, marker: string) => lines[line - 1].includes(marker) || (lines[line - 2] ?? "").includes(marker);
+      const sizes = [
+        ...Array.from(source.matchAll(/text-\[\d+(?:\.\d+)?px\]/g)),
+        ...Array.from(source.matchAll(/fontSize\s*[:=]\s*\{?\s*["'`]?\d/g)),
+        ...Array.from(source.matchAll(/(?<=[\s"'`:])text-(?:xs|sm|base|lg|xl|[2-9]xl)(?=[\s"'`])/g)),
+      ];
+      for (const size of sizes) {
         const at = size.index;
         const holder = tags.find((tag) => tag.at <= at && tag.at + tag.text.length > at);
         if (holder?.text.includes("aria-hidden")) continue;
         const line = source.slice(0, at).split("\n").length;
-        if (source.split("\n").slice(Math.max(0, line - 9), line).join("\n").includes("type-scale-exempt")) continue;
+        if (marked(line, "type-scale-exempt")) continue;
         found.push(`${file.replace(`${SRC_ROOT}/`, "")}:${line} ${size[0]}`);
       }
     }
     expect(found, `Use a step of the type scale:\n  ${found.join("\n  ")}`).toEqual([]);
-    // The body reads the body step.
+    // The body reads the body step, and Tailwind's own steps are cleared before the scale is declared.
     expect(atRuleBody(css.slice(css.indexOf("@layer base {")), "body {")).toContain("font-size: var(--text-body);");
+    expect(theme.indexOf("--text-*: initial;")).toBeGreaterThan(-1);
+    expect(theme.indexOf("--text-*: initial;")).toBeLessThan(theme.indexOf("--text-display: 34px;"));
   });
 
-  // §3: "every sentence: lede, caption, Notice, guidance, a row's detail line" reads --measure. Left
-  // as they are: the greeting's balance widths, code (a command block is not a sentence), the tile's
-  // own detail and a button's reason under it.
-  it("caps every sentence at the measure, never a ch count of its own", () => {
-    const allowed = new Set(["components/home/Home.tsx", "components/ui/CommandBlock.tsx", "components/ui/StatCard.tsx", "components/ui/Button.tsx"]);
-    const found = Array.from(walk(SRC_ROOT))
-      .filter((file) => file.endsWith(".tsx") && !allowed.has(file.replace(`${SRC_ROOT}/`, "")))
-      .flatMap((file) => Array.from(readFileSync(file, "utf8").matchAll(/(?<![\w-])max-w-\[\d+ch\]/g), (m) => `${file.replace(`${SRC_ROOT}/`, "")}: ${m[0]}`));
+  // §3: "every sentence: lede, caption, Notice, guidance, a row's detail line" reads --measure, never
+  // a cap of its own: no `max-w-[Nch]` anywhere, and no `max-w-[Npx]` on prose (a `<p>`, or a part
+  // set in a text step, not a one-line label cut short). The one exemption is the greeting's balance widths (§6), marked
+  // `measure-exempt` on its line or the line directly above.
+  it("caps every sentence at the measure, never a ch or pixel count of its own", () => {
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      if (!file.endsWith(".tsx")) continue;
+      const source = readFileSync(file, "utf8");
+      const lines = source.split("\n");
+      const rel = file.replace(`${SRC_ROOT}/`, "");
+      const exempt = (at: number) => {
+        const line = source.slice(0, at).split("\n").length;
+        return lines[line - 1].includes("measure-exempt") || (lines[line - 2] ?? "").includes("measure-exempt");
+      };
+      for (const m of Array.from(source.matchAll(/(?<![\w-])max-w-\[\d+ch\]/g))) {
+        if (!exempt(m.index)) found.push(`${rel}: ${m[0]}`);
+      }
+      for (const tag of openingTags(source)) {
+        const cls = topLevelClassName(tag.text) ?? "";
+        const px = /(?<![\w-])max-w-\[\d+px\]/.exec(cls);
+        // A one-line label cut short (`truncate`, the account name in the top bar) is not a sentence.
+        const prose = (/^<p\b/.test(tag.text) || /(?:^|\s)text-(?:body|small|fine)(?:\s|$)/.test(cls)) && !/(?:^|\s)truncate(?:\s|$)/.test(cls);
+        if (px && prose && !exempt(tag.at)) found.push(`${rel}: ${px[0]} on prose`);
+      }
+    }
     expect(found, `Use measure:\n  ${found.join("\n  ")}`).toEqual([]);
   });
 

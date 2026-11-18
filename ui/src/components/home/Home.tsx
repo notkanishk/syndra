@@ -363,6 +363,7 @@ export function Home({ session }: { session: SessionUser }) {
             sweeps rather than at a glance. It wraps rather than clipping, and
             `text-balance` keeps the two lines close in length instead of
             leaving one word stranded. */}
+        {/* measure-exempt: the greeting's balance widths (D-1 §6), a display line, not a sentence. */}
         <h1 className="type-greeting max-w-[22ch] text-balance tablet:max-w-[34ch]">
           {now ? greeting(now) : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}.{" "}

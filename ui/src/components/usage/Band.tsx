@@ -159,7 +159,7 @@ export function Band({
           <>
             <line data-limit x1={baseLeft} x2={W} y1={y(limit) + 0.5} y2={y(limit) + 0.5} stroke="var(--line)" strokeWidth="1" />
             {wordAt && (
-              <text data-limit-word x={wordAt === "start" ? baseLeft : W} y={y(limit) - 4} textAnchor={wordAt} fontSize="12.5" fill="var(--faint)">
+              <text data-limit-word x={wordAt === "start" ? baseLeft : W} y={y(limit) - 4} textAnchor={wordAt} className="text-fine" fill="var(--faint)">
                 {word}
               </text>
             )}

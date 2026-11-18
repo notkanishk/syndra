@@ -52,7 +52,7 @@ export function NotOpenYet({
           <StatusDot tone="neutral" />
           {title}
         </span>
-        <span className={`text-muted [text-wrap:pretty] ${page ? "text-body" : "text-body"}`}>{why}</span>
+        <span className="text-body text-muted [text-wrap:pretty]">{why}</span>
         {step && (
           <a
             href={step.href}

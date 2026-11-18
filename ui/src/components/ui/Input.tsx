@@ -18,10 +18,10 @@ export const DENSE_FIELD = "min-h-[var(--tap)] py-[5px] text-body desktop:min-h-
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { dense?: boolean }>(
   function Input({ className = "", dense = false, ...props }, ref) {
     return (
-      // type-scale-exempt: a dialog field keeps its 15px (D-1 §6 pass 4), the size somebody types a
-      // claim name or a date at; the dense field reads the body step.
       <input
         ref={ref}
+        // A dialog field keeps its 15px (D-1 §6 pass 4), the size somebody types a claim name or a
+        // date at; the dense field reads the body step. type-scale-exempt
         className={`block w-full rounded-inner border border-line-strong bg-transparent px-[15px] ${dense ? DENSE_FIELD : "py-3 text-[15px]"} text-ink motion-tint placeholder:text-faint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${className}`}
         {...props}
       />
@@ -39,10 +39,10 @@ export const Textarea = React.forwardRef<
   React.TextareaHTMLAttributes<HTMLTextAreaElement>
 >(function Textarea({ className = "", rows = 2, ...props }, ref) {
   return (
-    // type-scale-exempt: the dialog field's 15px, as Input's (D-1 §6 pass 4).
     <textarea
       ref={ref}
       rows={rows}
+      // The dialog field's 15px, as Input's (D-1 §6 pass 4). type-scale-exempt
       className={`block w-full resize-y rounded-inner border border-line-strong bg-transparent px-[15px] py-3 text-[15px] text-ink motion-tint placeholder:text-faint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${className}`}
       {...props}
     />

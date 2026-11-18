@@ -83,7 +83,7 @@ export function ChoiceRow({
         )}
       </span>
       {seatNote && (
-        <span className="mt-0.5 flex max-w-[170px] flex-none flex-col items-end gap-0.5 text-right text-fine leading-[1.4] text-muted">
+        <span className="mt-0.5 flex max-w-(--seat-label) flex-none flex-col items-end gap-0.5 text-right text-fine leading-[1.4] text-muted">
           {seatNote}
         </span>
       )}
