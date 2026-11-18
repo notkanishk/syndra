@@ -265,7 +265,7 @@ Material 3 puts a simple change at 100 to 200ms, a panel at 250 to 300 and a ful
 
 | Interaction | What moves | Tokens | Still form | Owned by | State |
 |---|---|---|---|---|---|
-| Page change | nothing travels; the shell is still | | | AppShell | built; Q7: transitions wanted, §7a |
+| Page change | the page you leave fades out; the page you reach arrives as the next row says; the shell is still | tint | swap | `PageChange` in AppShell | **§7a** (owner, 18 Nov): today nothing travels; builds with the Next 16 slice |
 | A page's first paint | header tints in; blocks arrive, 40ms apart, cap 5; only when navigated to | tint; arrive, `--travel-arrive`, step | appears | `page-head`, ArriveList | built; **M1**: regions join the stagger |
 | Loading to content | skeleton only after 200ms; it fades, rows arrive | tint, arrive | swap | ListStates, ReadGate | built |
 | Hover, press, focus | colour only; controls press 3%; rows darken; the ring appears at once, fades on tint | tint, press | press survives | `control`, `hover-tint` | built; **M10** two lane-map items |
@@ -312,7 +312,7 @@ Material 3 puts a simple change at 100 to 200ms, a panel at 250 to 300 and a ful
 | M13 | A jump to a rule uses `scrollIntoView`; it becomes `glideTo` | `policies/page.tsx:417` |
 | M14 | The sign-in door keeps its two loops and its own timings, written into FINAL §4 as an exemption, with its literals named `--door-*`. Decided (Q8) | `globals.css:1807, 1880, 1889, 1961, 1999, 2003`; `components/login/ceremony.ts:35-36` |
 
-**Constraints kept.** No decorative motion: every row above answers "what changed". Nothing travels more than 10px. No count ticks. No route transition yet (Q7: wanted, §7a). Reduced motion is honoured in JS through `stillMotion()` and in CSS through the one block at `globals.css:671`.
+**Constraints kept.** No decorative motion: every row above answers "what changed". Nothing travels more than 10px. No count ticks. A page change is one fade and the arrival already built (§7a); nothing slides. Reduced motion is honoured in JS through `stillMotion()` and in CSS through the one block at `globals.css:671`.
 
 **Motion tests**
 
@@ -325,13 +325,56 @@ Material 3 puts a simple change at 100 to 200ms, a panel at 250 to 300 and a ful
 7. The regions wrapper carries the stagger attribute, and ArriveList's Back and view-switch memory still stop a replay.
 8. `glideTo` on a region flashes its heading, not the section.
 
-## 7a · Page transitions (Q7)
+## 7a · Page to page (owner, 18 Nov 2026)
 
-The owner wants page transitions (18 Nov 2026), against the recommendation to stay still. A designer is specifying them separately; this section holds their place until that spec lands. Nothing is built for them yet: a page change is still the row above, the shell still. When the spec lands it takes FINAL §4's rules as they stand (a still form under reduced motion, nothing past the 10px travel cap unless the spec says why, exits shorter than entrances) and names the tokens it uses.
+Q7 flipped: "a cohesive flow between pages". FINAL §4's "No route transitions" (`FINAL.md:226, 256`) becomes this.
+
+**The decision.** The page you leave fades out; the page you reach arrives exactly as it does today. Leaving is the only new motion. It needs no new token and adds no time, because it plays under the new header's tint.
+
+| Part | What it does | Tokens |
+|---|---|---|
+| Rail, top bar, phone tab bar, the column's frame | still, always | |
+| The page you leave (the main column's content) | fades out where it was scrolled to; no travel | `--duration-tint` 120ms, `--ease-tint` |
+| The page you reach | no page-level motion. M1 as built: header tints in over 0 to 120ms; blocks arrive from 120ms, 40ms apart, cap 5, each 420ms over `--travel-arrive` 8px on `--ease-arrive` | unchanged |
+
+The old page is gone at 120ms, as the first block starts to rise (closing fades first; light leads shape). The last block settles at 700ms, as today. The incoming snapshot is `animation: none`, so no page animates twice: M1 is the arrival. Nothing slides: a sliding column breaks the 10px cap, and the rail is a set of places, not a stack.
+
+| Case | What happens | What holds it |
+|---|---|---|
+| The path changes: a link, the rail, Go to, a redirect | leave, then M1 | the boundary is keyed on `usePathname()` |
+| Back, Forward, reload | still (S11) | React: "animations won't run for the back button"; `returnedToThisPage()` stills M1 (`arrive.tsx:29`) |
+| Same path: a hash jump, filter, sort or search (`users/page.tsx:131`) | no page motion; `glideTo` and lists keep theirs | key unchanged; `default="none"` |
+| Basic ↔ Advanced | no page motion; Unfold as built | `setView` is a plain `setState` (`ui-view.tsx:75`), which never starts a view transition; key unchanged |
+| A slow page | the old page stays, live, until the new one can paint; then leave, header, skeleton after 200ms as built | React holds the transition; no `loading.tsx` exists; reads are client-side |
+| Phone | the same; a nav sheet closes on its own settle | it sits outside the column |
+| Reduced motion | still: the pages swap | the block at `globals.css:777` must name the `::view-transition-*` pseudo-elements (its `*` misses them; React leaves this to us) |
+| No API in the browser | still, never broken | Next: "Without browser support, your application works normally; the transitions do not animate." |
+
+**Mechanism.** React's `<ViewTransition>`, as Next documents for the App Router ("route navigations are transitions, so `<ViewTransition>` animations activate automatically during navigation"), keyed as both docs show (`<ViewTransition key={url}>`). Not `document.startViewTransition` by hand: React says "you should never do that yourself", and every link and `router.push` would need wrapping. Not CSS alone: CSS cannot hold a page that has unmounted. Sources: [Next guide](https://nextjs.org/docs/app/guides/view-transitions) · [React reference](https://react.dev/reference/react/ViewTransition) · [React Labs](https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more) · [Next 15 flag](https://nextjs.org/docs/15/app/api-reference/config/next-config-js/viewTransition) · [MDN](https://developer.mozilla.org/en-US/docs/Web/API/Document/startViewTransition) ("Since October 2025, this feature works across the latest devices and browser versions").
+
+**When: with the Next 16 slice (`openspec/NEXT.md:42`), not on 15.5.** On 15.5.29 it is `unstable_ViewTransition` behind `experimental.viewTransition`, which Next 15's page calls "not recommended for production use", and the flag moves all of Syndra onto React's experimental build (`next/dist/lib/needs-experimental-react.js:11-12`). The current guide says "View transitions work in the App Router with no configuration" and "React 19.3 includes the `<ViewTransition>` component". **UNVERIFIED:** which 16.x ships React 19.3; the slice picks that or later.
+
+**Files**
+
+- `ui/src/lib/motion/page.tsx` (new, about ten lines): `PageChange` renders `<ViewTransition key={pathname} default="none" exit="page-leave" enter="page-arrive">`; exported from `index.ts`.
+- `AppShell.tsx:93-101`: mount it once. Try it around `#app-scroll` first: a captured element escapes its ancestors' clips, and the scroller's own clip keeps a scrolled old page off the top bar. If remounting the scroller costs Back its scroll position, wrap `{children}` (`:100`) and raise the top bar's and tab bar's groups by `z-index`. **UNVERIFIED** until spiked, as is `exit` and `enter` firing from a keyed boundary in a layout (Next's guide puts the wrapper in each page).
+- `globals.css`, beside `page-head`: `::view-transition-old(.page-leave)` plays `fade-out` (`:325`) on tint; `::view-transition-new(.page-arrive)` is `animation: none`; `::view-transition` takes no pointer events, so the rail answers during the fade; all three join the reduced-motion block.
+- `FINAL.md:226, 256` and the canvas copy. No change to `nav.ts`, `arrive.tsx`, `PageHeader` or any page.
+
+**Tests and guards**
+
+1. `design-system.test.ts`: the leave rule uses tint's two tokens and no literal; the arrive rule is `animation: none`; the reduced-motion block names the pseudo-elements; no new motion token.
+2. Guard: `ViewTransition`, `startViewTransition` and `view-transition-name` appear only in `lib/motion/page.tsx` and `globals.css`; `next.config` has no `experimental.viewTransition`.
+3. `PageChange`: a new path remounts its child; a new query or hash on the same path keeps the instance.
+4. Basic ↔ Advanced: with `document.startViewTransition` stubbed and motion opted in (`__motionInTests`), `setView` never calls it and the page instance is kept.
+5. Without `document.startViewTransition` (jsdom's default), a path change renders the new page and throws nothing.
+6. By eye, both themes, 1440 and 390, Chrome and Safari: a scrolled page leaves without touching the top bar or tab bar; Back, a filter and the view switch are still; reduced motion swaps.
+
+The two questions still the owner's (when; a fade alone or a fade that sinks) are in §9, Q7.
 
 ## 8 · What was kept, and what was set aside
 
-Kept as decided: 28 under a page header; 16 between cards; the stat figure at 24; the 12.5px floor; every phone layout and the 44px touch floor; the rail at 252; both themes, with no colour token touched; structure that never moves with data; Basic and Advanced in their seats; FINAL §4's motion rules, unchanged.
+Kept as decided: 28 under a page header; 16 between cards; the stat figure at 24; the 12.5px floor; every phone layout and the 44px touch floor; the rail at 252; both themes, with no colour token touched; structure that never moves with data; Basic and Advanced in their seats; FINAL §4's motion rules, unchanged but for the page change (§7a).
 
 Set aside: a density switch for the reader (one density, chosen well, is the calmer product); a narrower rail; a third column on Home; a second pane beside the People list (a real gain at 1800, and its own project); a progress bar for Check now (a check has no steps Syndra could honestly count).
 
@@ -345,5 +388,5 @@ Each had a default the build spec used; the owner answered all eight on 18 Nov 2
 4. **Name:** one more row of the settings card the TrueNAS page opens with ("Change name", like "Choose folder"), removing the Name region (part 2, frame 6); or its own region, tightened (frame 5). **Decided (owner, 18 Nov 2026): the row.** Built: Name is the first row of the settings card in every state, Change name opens the one rename dialog, and the Name region is gone.
 5. **"Nothing for you to do." in a table:** on every healthy row (part 2, frame 10), or silence for normal, with a step written only where there is one (frame 11; G17 and G12 against the next-step rule). **Decided (owner, 18 Nov 2026): silence.** Built for table rows only: a healthy row with nothing to do says only its state; every other row, outcome, notice and empty state still ends on a step or "Nothing for you to do." (copy guide, `next-step.test.tsx`).
 6. **Home:** the two groups stacked, blocks side by side where each has 600px (part 3, frames 15 and 16), or the two pinned columns kept. **Decided (owner, 18 Nov 2026): stacked.**
-7. **Page change:** stay with today's rule, no route transition; look once at a crossfade of the main column after the Next 16 upgrade. **Decided (owner, 18 Nov 2026): page transitions wanted, spec to follow (§7a).** Flipped from the recommendation.
+7. **Page change:** **decided, owner 18 Nov 2026: pages flow.** The page you leave fades on tint and the page you reach arrives as M1; the spec is §7a. Two questions remain. (a) When: with the Next 16 slice, or now on 15.5 on React's experimental build. **Recommended, pending owner: with Next 16.** (b) The leaving page: a fade alone, or a fade that also sinks 4px (`--travel-nudge`, as a dialog's card does). **Recommended, pending owner: the fade alone**; movement belongs to what arrives.
 8. **The sign-in door:** keep its own loops and timings as a written exemption. **Decided (owner, 18 Nov 2026): exempt.** FINAL §4's exemption is no longer pending.
