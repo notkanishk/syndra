@@ -220,7 +220,7 @@ function AskForAccessOpen({
 
             {!blockedArrival && extend && keep && keepChoice && current ? (
               <>
-                <p className="text-[14px] leading-[1.55] text-muted">
+                <p className="text-body leading-[1.55] text-muted">
                   You have this until {formatShortDate(current)}. Ask to keep it longer.
                 </p>
                 <div>
@@ -350,7 +350,7 @@ function ArrivalLine({ state, role }: { state: AskState; role: { place: string; 
           : "";
   if (!text) return null;
   return (
-    <p className="mt-2.5 flex items-start gap-2.5 text-[14px] leading-[1.5] text-muted [text-wrap:pretty]">
+    <p className="mt-2.5 flex items-start gap-2.5 text-body leading-[1.5] text-muted [text-wrap:pretty]">
       <StatusDot tone={ARRIVAL_TONE[state.kind] ?? "neutral"} className="mt-[7px]" />
       <span>{text}</span>
     </p>

@@ -243,7 +243,7 @@ export default function EventActivityPage() {
               />
               {((events.data?.length ?? 0) >= LOG_LIMIT ||
                 (triggers.data?.length ?? 0) >= LOG_LIMIT) && (
-                <span className="text-[13px] text-faint">
+                <span className="text-small text-faint">
                   The newest {LOG_LIMIT} of each log
                 </span>
               )}
@@ -395,20 +395,20 @@ function EventRow({
         }`}
       >
         <span className="flex min-w-0 flex-col gap-[3px] tablet:w-[200px] tablet:shrink-0">
-          <span className="text-[14px] font-semibold leading-[1.4] [text-wrap:pretty]">
+          <span className="text-body font-semibold leading-[1.4] [text-wrap:pretty]">
             {row.title}
           </span>
         </span>
         <span className="flex w-full min-w-0 flex-1 flex-col items-start gap-1.5">
           <span
-            className={`text-[13.5px] leading-[1.55] [text-wrap:pretty] ${
+            className={`text-small leading-[1.55] [text-wrap:pretty] ${
               row.failed ? "text-danger-text" : "text-muted"
             }`}
           >
             {row.sentence}
           </span>
           {/* Outcome has its own column from desktop up; below it, it sits under the sentence. */}
-          <span className="inline-flex items-center gap-2 text-[13px] desktop:hidden">
+          <span className="inline-flex items-center gap-2 text-small desktop:hidden">
             {outcomeWord}
             <span className="font-normal text-faint tablet:hidden">
               · {formatWhen(row.at)}
@@ -424,17 +424,17 @@ function EventRow({
             {open ? "Hide details" : "Show details"}
           </Button>
         </span>
-        <span className="hidden w-[150px] shrink-0 pt-px text-[13.5px] desktop:block">
+        <span className="hidden w-[150px] shrink-0 pt-px text-small desktop:block">
           {outcomeWord}
         </span>
-        <span className="type-mono hidden w-(--seat-number) shrink-0 pt-0.5 text-right text-[12.5px] text-muted tablet:block">
+        <span className="type-mono hidden w-(--seat-number) shrink-0 pt-0.5 text-right text-fine text-muted tablet:block">
           {when}
         </span>
       </div>
       {open && (
         <div className="row-divider flex flex-col gap-3 bg-surface-0 px-5 py-3.5">
           {/* Named facts first; the machine's words sit folded under them (A-20 P11). */}
-          <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-1.5 text-[14px] tablet:grid-cols-[150px_1fr]">
+          <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-1.5 text-body tablet:grid-cols-[150px_1fr]">
             {row.userId && (
               <>
                 <dt className="text-muted">Who</dt>

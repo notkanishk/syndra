@@ -139,7 +139,7 @@ export function Button({
     <span className="inline-flex flex-col items-start gap-1.5">
       {button}
       {reason && (
-        <span id={reasonId} className="max-w-[46ch] text-[12.5px] leading-[1.5] text-faint">
+        <span id={reasonId} className="max-w-[46ch] text-fine leading-[1.5] text-faint">
           {reason}
         </span>
       )}

@@ -92,7 +92,7 @@ export function RevokeDialog({
         </div>
       ) : (
       <div className="grid gap-4 px-6">
-        <div className="grid gap-1.5 text-[13.5px] text-muted">
+        <div className="grid gap-1.5 text-small text-muted">
           <p className="font-semibold text-ink">What happens</p>
           <ul className="list-disc pl-5">
             <li>Their storage password on {name} is replaced now.</li>
@@ -145,7 +145,7 @@ export function RevokeDialog({
         />
 
         {revoke.error && (
-          <p className="text-[13.5px] text-danger-text">
+          <p className="text-small text-danger-text">
             {sentence(describeFailure(revoke.error))}
           </p>
         )}

@@ -77,16 +77,16 @@ export function ClaimHistory({
             <ErrorState title="Couldn't load the history." error={versions.error} onRetry={() => versions.refetch()} />
           ) : !current ? (
             <>
-              <span className="text-[14.5px]">Nothing saved for {ctx.app} yet</span>
-              <span className="text-[13px] text-faint">It uses {project}&rsquo;s default.</span>
+              <span className="text-body">Nothing saved for {ctx.app} yet</span>
+              <span className="text-small text-faint">It uses {project}&rsquo;s default.</span>
             </>
           ) : (
             <>
-              <span className="text-[14.5px]">
+              <span className="text-body">
                 Version {current.version}
                 {current.note.startsWith(SEED) ? ", as Actions v1 sent it" : ""}
               </span>
-              <span className="text-[13px] text-faint">
+              <span className="text-small text-faint">
                 Saved {formatShortDate(current.saved_at)} by <UserName id={current.saved_by} fallback="Syndra" />.
               </span>
             </>
@@ -109,17 +109,17 @@ export function ClaimHistory({
           </CardColumns>
           {list.map((v, i) => (
             <div key={v.version} className="row-divider row-cols flex flex-wrap items-start gap-y-1.5 px-5 py-3.5">
-              <span className="w-[130px] flex-none text-[15px] font-semibold">Version {v.version}</span>
+              <span className="w-[130px] flex-none text-body font-semibold">Version {v.version}</span>
               <span className="flex min-w-[220px] flex-1 flex-col gap-0.5">
-                <span className="text-[14.5px] leading-[1.5] [text-wrap:pretty]">
+                <span className="text-body leading-[1.5] [text-wrap:pretty]">
                   <Ticks text={what(v)} />
                 </span>
-                {v.note && !v.note.startsWith(SEED) && <span className="text-[13px] text-faint">&ldquo;{v.note}&rdquo;</span>}
-                {v.note.startsWith(SEED) && <span className="text-[13px] text-faint">&ldquo;Carried over when Syndra took over from Actions v1.&rdquo;</span>}
+                {v.note && !v.note.startsWith(SEED) && <span className="text-small text-faint">&ldquo;{v.note}&rdquo;</span>}
+                {v.note.startsWith(SEED) && <span className="text-small text-faint">&ldquo;Carried over when Syndra took over from Actions v1.&rdquo;</span>}
               </span>
-              <span className="flex w-[150px] flex-none flex-col text-[14px] tablet:items-end">
+              <span className="flex w-[150px] flex-none flex-col text-body tablet:items-end">
                 {formatShortDate(v.saved_at)}
-                <span className="text-[13px] text-muted">
+                <span className="text-small text-muted">
                   <UserName id={v.saved_by} fallback="Syndra" />
                 </span>
               </span>
@@ -175,7 +175,7 @@ function GoBack({ appId, entry, next, app, heldBack, onClose }: { appId: string;
           />
         ) : (
           breaking && (
-            <label className="flex items-start gap-2.5 text-[14.5px] leading-[1.5]">
+            <label className="flex items-start gap-2.5 text-body leading-[1.5]">
               <Checkbox className="mt-1" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} />
               <span>I understand {app} will act on going back: people&rsquo;s groups change at their next sign-in.</span>
             </label>

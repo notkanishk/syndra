@@ -215,7 +215,7 @@ function WaitingRoles({
                   <div className="min-w-[min(220px,100%)] flex-1">
                     <Link
                       href={`/projects/${m.project_id}/roles/${encodeURIComponent(m.role_key)}`}
-                      className="text-[15px] font-semibold link-hover"
+                      className="text-body font-semibold link-hover"
                     >
                       {roleName(role?.display_name, m.role_key)}
                     </Link>{" "}
@@ -224,13 +224,13 @@ function WaitingRoles({
                       <NextStep className="mt-1 block" role={{ projectId: m.project_id, roleKey: m.role_key }} />
                     )}
                   </div>
-                  <span className="hidden w-[200px] text-[13.5px] text-muted tablet:block">
+                  <span className="hidden w-[200px] text-small text-muted tablet:block">
                     <UserName id={m.marked_by} fallback={personOr(null, true)} />,{" "}
                     {formatShortDate(m.marked_at)}
                   </span>
-                  <span className="w-full text-[15px] font-semibold tabular-nums tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+                  <span className="w-full text-body font-semibold tabular-nums tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                     {peopleOf(role)}
-                    <span className="text-[13px] font-normal text-faint tablet:hidden">
+                    <span className="text-small font-normal text-faint tablet:hidden">
                       {peopleSuffix(peopleOf(role))}
                     </span>
                   </span>
@@ -269,7 +269,7 @@ function WaitingRoles({
         {waitingChanges > 0 && (
           <div className="row-divider flex flex-wrap items-center gap-3 px-5 py-3.5">
             <NextStep />
-            <span className="text-[13px] text-faint">
+            <span className="text-small text-faint">
               {waitingChanges} {waitingChanges === 1 ? "change" : "changes"} to
               these roles
             </span>

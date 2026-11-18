@@ -189,7 +189,7 @@ function UnconfirmedRow({
     >
       <span className="flex min-w-0 flex-[1_1_380px] flex-col gap-1">
         <span className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-          <span className="text-[15px] font-semibold [text-wrap:pretty]">
+          <span className="text-body font-semibold [text-wrap:pretty]">
             {pre}
             {post !== null && (
               <>
@@ -200,12 +200,12 @@ function UnconfirmedRow({
           </span>
           <StatusSeat tone="warn" word="Not confirmed" />
         </span>
-        <span className="text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+        <span className="text-small leading-[1.55] text-muted [text-wrap:pretty]">
           Sent to {name} {formatAt(op.sent_at)}
           {today ? `, ${formatRelative(op.sent_at)}` : ""}. No answer came back, so it may or may not have
           happened.
         </span>
-        <span className="text-[12.5px] text-faint">
+        <span className="text-fine text-faint">
           {SYNDRA.test(op.actor_id) ? (
             "Asked by Syndra, bringing accounts in line"
           ) : (
@@ -256,7 +256,7 @@ function SayWhatHappened({
           <>
             <div className="flex flex-col gap-1.5">
               <span className="type-label text-label">How to tell</span>
-              <p className="text-[14.5px] leading-[1.55] text-ink [text-wrap:pretty]">{w.tell}</p>
+              <p className="text-body leading-[1.55] text-ink [text-wrap:pretty]">{w.tell}</p>
             </div>
             <div role="radiogroup" aria-label="What happened" className="flex flex-col gap-1.5">
               <ChoiceRow
@@ -279,7 +279,7 @@ function SayWhatHappened({
               />
             </div>
             {answer.error && (
-              <p role="alert" className="text-[13.5px] text-danger-text">
+              <p role="alert" className="text-small text-danger-text">
                 {sentence(describeFailure(answer.error))}
               </p>
             )}

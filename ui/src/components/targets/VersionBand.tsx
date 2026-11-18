@@ -103,12 +103,12 @@ export function VersionBand({ target, history }: { target: string; history?: Map
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <span className="flex items-center gap-2">
             <StatusDot tone={reading.tone} />
-            <span className={`text-[15.5px] font-semibold ${STATUS_TONE[reading.tone].label}`}>
+            <span className={`text-body font-semibold ${STATUS_TONE[reading.tone].label}`}>
               {reading.title}
             </span>
           </span>
 
-          <p className="pl-(--dot-indent) text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
+          <p className="pl-(--dot-indent) text-body leading-[1.55] text-muted [text-wrap:pretty]">
             {pending ? (
               <>
                 The rows below are live.{" "}
@@ -136,7 +136,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
 
       {pending && (
         <div className="row-divider px-5 py-4">
-          <p className="mb-2.5 text-[13px] text-faint">
+          <p className="mb-2.5 text-small text-faint">
             {nothingPublished
               ? "Not yet in any version"
               : `${changes.length === 1 ? "This one edit" : `These ${word(changes.length)} edits`} · what a rollback to version ${current} would undo`}
@@ -159,7 +159,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
       )}
 
       {Boolean(publish.error) && (
-        <div className="row-divider px-5 py-3 text-[13.5px] text-danger-text">
+        <div className="row-divider px-5 py-3 text-small text-danger-text">
           {sentence(describeFailure(publish.error))}
         </div>
       )}
@@ -186,7 +186,7 @@ const KIND: Record<MappingChange["kind"], { label: string; tone: StatusTone }> =
 function ChangeRow({ change, schema }: { change: MappingChange; schema: EntitlementField[] | undefined }) {
   const kind = KIND[change.kind];
   return (
-    <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 rounded-inner bg-tint-1 px-3.5 py-2.5 text-[13.5px]">
+    <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 rounded-inner bg-tint-1 px-3.5 py-2.5 text-small">
       <span className={`font-semibold ${STATUS_TONE[kind.tone].label}`}>{kind.label}</span>
       <span className="font-semibold">
         <RoleRef projectId={change.project_id} roleKey={change.role_key} />
@@ -209,7 +209,7 @@ function ChangeRow({ change, schema }: { change: MappingChange; schema: Entitlem
         )}
       </span>
       <span className="flex-1" />
-      <span className="text-[13px] text-faint">
+      <span className="text-small text-faint">
         {change.actor ? (
           <>
             <UserName id={change.actor} />

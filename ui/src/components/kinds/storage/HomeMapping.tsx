@@ -44,7 +44,7 @@ export function HomeChoice({
       {!homeRoot && !hadHome ? (
         // One control that can't act now: a sentence and the step.
         <div className="flex flex-wrap items-start gap-x-(--row-gap) gap-y-2">
-          <span className="min-w-0 flex-1 basis-[240px] text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">
+          <span className="min-w-0 flex-1 basis-[240px] text-body leading-[1.55] text-ink [text-wrap:pretty]">
             No mapping can give one until you choose where home folders go on {name}. This one works without
             it; give it a home folder later by changing it.
           </span>
@@ -95,7 +95,7 @@ export function HomeChoice({
                         onChange={(e) => onGb(e.target.value)}
                       />
                     </span>
-                    <span className="text-[14px] text-muted">GB</span>
+                    <span className="text-body text-muted">GB</span>
                   </span>
                 )}
               </span>

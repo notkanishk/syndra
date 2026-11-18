@@ -148,7 +148,7 @@ function GrantDirectAccessOpen({
     <Modal open onClose={onClose} busy={grant.isPending} size="md" labelledBy="grant-title">
       <PushedStep step={step}>
       <ModalHeader title={GIVE_ROLE_LABEL} titleId="grant-title" />
-      <div className="-mt-2 px-6 pb-3 text-[13px] text-faint">{userName}</div>
+      <div className="-mt-2 px-6 pb-3 text-small text-faint">{userName}</div>
       {stale && !result && (
         <Notice
           tone="warn"
@@ -207,11 +207,11 @@ function GrantDirectAccessOpen({
               onChange={(event) => setCustomDate(event.target.value)}
             />
           ) : (
-            <div className="flex items-center gap-2.5 rounded-inner border border-line-strong px-[15px] py-3 text-[15px]">
+            <div className="flex items-center gap-2.5 rounded-inner border border-line-strong px-[15px] py-3 text-body">
               {resolved.date ? (
                 <>
                   {formatShortDate(resolved.date)}
-                  <span className="text-[14px] text-faint">· {expiryLabel(resolved.date)}</span>
+                  <span className="text-body text-faint">· {expiryLabel(resolved.date)}</span>
                 </>
               ) : (
                 <span className="text-muted">No end date</span>

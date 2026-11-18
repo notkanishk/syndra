@@ -293,7 +293,7 @@ export const SigningKeyGuide = mountedWhileOpen(function SigningKeyGuide({
         {kept.step === 1 && (
           <>
             <CommandBlock command={command} />
-            <p role="status" className="flex items-center gap-2 text-[13.5px] text-muted">
+            <p role="status" className="flex items-center gap-2 text-small text-muted">
               <StatusDot tone="warn" className="breathe" />
               Watching for the new key. This moves on by itself once Syndra sees it.
             </p>
@@ -304,7 +304,7 @@ export const SigningKeyGuide = mountedWhileOpen(function SigningKeyGuide({
         )}
         {kept.step === 2 && !result && busy &&
           (setup ? (
-            <p role="status" className="flex items-center gap-2 text-[13.5px] font-semibold text-ink">
+            <p role="status" className="flex items-center gap-2 text-small font-semibold text-ink">
               <StatusDot tone="warn" className="breathe" />
               Checking the new key
             </p>
@@ -352,13 +352,13 @@ function NotSeenYet({ open, onToggle, setup }: { open: boolean; onToggle: () => 
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex min-h-[var(--tap)] items-center gap-2 text-left text-[13.5px] font-semibold text-muted"
+        className="flex min-h-[var(--tap)] items-center gap-2 text-left text-small font-semibold text-muted"
       >
         <FoldChevron open={open} />
         Not seen yet?
       </button>
       <Unfold open={open}>
-        <div className="flex flex-col gap-3 pb-2 text-[13.5px] leading-[1.55] text-muted">
+        <div className="flex flex-col gap-3 pb-2 text-small leading-[1.55] text-muted">
           <p>
             Syndra reads the key from Zitadel every minute, so a new one usually shows within a minute of the
             command finishing. Check the command ended without an error, and that it ran against the Zitadel

@@ -12,7 +12,7 @@ import { AdvancedLink } from "@/components/ui/AdvancedLink";
  * that stands on its own.
  */
 export const ARROW_LINK =
-  "inline-flex min-h-[var(--tap)] items-center gap-1 text-[13.5px] font-semibold text-accent-text link-hover desktop:min-h-0";
+  "inline-flex min-h-[var(--tap)] items-center gap-1 text-small font-semibold text-accent-text link-hover desktop:min-h-0";
 
 export function ArrowLink({
   href,

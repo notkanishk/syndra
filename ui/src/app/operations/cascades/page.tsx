@@ -58,7 +58,7 @@ export default function ChangeHistoryPage() {
           row here. Without this line that reads as "almost nothing happened"
           rather than "most of the period wasn't a cascade at all". */}
       {!asked && (
-        <p className="text-[13px] text-faint">
+        <p className="text-small text-faint">
           Cascades only: a bundle edit, an automatic rule, or someone&rsquo;s status changing.
           Direct, one-person grants don&rsquo;t appear here even though they&rsquo;re in the audit
           feed. Shows up to the 50 most recent.
@@ -124,12 +124,12 @@ function CascadeCard({ group, rules, one }: { group: CascadeGroupRow; rules?: Ma
         seat="narrow"
         action={group.waiting + group.failed > 0 ? <ArrowLink href="/governance/pending">Pending changes</ArrowLink> : undefined}
       >
-        <p className="min-w-0 flex-1 text-[14px] leading-[1.55] text-muted">{consequenceFor(group)}</p>
+        <p className="min-w-0 flex-1 text-body leading-[1.55] text-muted">{consequenceFor(group)}</p>
       </CardRow>
 
-      {group.said && <p className="row-divider px-5 py-3 text-[14px] leading-[1.55] text-ink">“{group.said}”</p>}
+      {group.said && <p className="row-divider px-5 py-3 text-body leading-[1.55] text-ink">“{group.said}”</p>}
 
-      <div className="row-divider flex flex-wrap gap-x-5 gap-y-1.5 px-5 py-3 text-[13.5px]">
+      <div className="row-divider flex flex-wrap gap-x-5 gap-y-1.5 px-5 py-3 text-small">
         {(one ? group.writes : group.writes.slice(0, 6)).map((write) => (
           <span key={write.id} className="text-muted">
             <UserName id={write.user_id} /> ·{" "}

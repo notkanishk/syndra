@@ -354,7 +354,7 @@ export function useCancelStep(options: CancelStepOptions): CancelStep {
       </span>
     ) : null,
     after: cancelled ? (
-      <p className="mx-6 mb-1 text-[13px] leading-[1.5] text-faint">{afterLine(cancelled, who)}</p>
+      <p className="mx-6 mb-1 text-small leading-[1.5] text-faint">{afterLine(cancelled, who)}</p>
     ) : null,
     element:
       options.standalone && asking && !asking.closed ? (
@@ -399,7 +399,7 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
         lede={ledeOf(changes, who)}
       />
       {fresh.size > 0 && (
-        <p className="mx-6 -mt-1 mb-3 flex items-start gap-2 text-[13.5px] leading-[1.5] text-ink">
+        <p className="mx-6 -mt-1 mb-3 flex items-start gap-2 text-small leading-[1.5] text-ink">
           <StatusDot tone="accent" className="mt-[7px]" />
           {freshLine(groups)}
         </p>
@@ -410,7 +410,7 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
         {visible.map((g, index) => (
           <section
             key={g.key}
-            className={`flex flex-col gap-1 px-4 py-3 text-[14px] ${index > 0 ? "border-t border-line" : ""} ${
+            className={`flex flex-col gap-1 px-4 py-3 text-body ${index > 0 ? "border-t border-line" : ""} ${
               g.fresh ? "flash bg-accent-soft" : ""
             }`}
           >
@@ -422,13 +422,13 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
                 {who.person(change.user_id)}
               </p>
             ))}
-            <p className="text-[13px] text-muted">
+            <p className="text-small text-muted">
               Queued by {g.by} · {formatAgoShort(g.when)}
             </p>
             {g.reason ? (
               <p className="text-ink">“{g.reason}”</p>
             ) : (
-              <p className="text-[13px] text-faint">{firstOf(g.by)} gave no reason.</p>
+              <p className="text-small text-faint">{firstOf(g.by)} gave no reason.</p>
             )}
           </section>
         ))}

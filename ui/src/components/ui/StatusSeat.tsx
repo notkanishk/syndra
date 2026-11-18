@@ -31,10 +31,10 @@ export function StatusSeat({
       <StatusDot tone={tone} className="mt-[7px]" />
       <Crossfade id={`${word}\n${note ?? ""}`}>
         <span className="flex flex-col gap-1">
-          <span className={`whitespace-nowrap text-[13.5px] font-semibold ${STATUS_TONE[tone].label}`}>
+          <span className={`whitespace-nowrap text-small font-semibold ${STATUS_TONE[tone].label}`}>
             {word}
           </span>
-          {note && <span className="text-[12.5px] leading-[1.45] text-faint">{note}</span>}
+          {note && <span className="text-fine leading-[1.45] text-faint">{note}</span>}
         </span>
       </Crossfade>
       {next && <span className="col-start-2">{next}</span>}

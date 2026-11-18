@@ -18,7 +18,7 @@ export function RetryPill({
   return (
     <span
       title={badge.label}
-      className={`rounded-pill px-1.5 py-0.5 text-[12.5px] font-semibold leading-none ${BADGE_TONE[badge.tone]} ${className}`}
+      className={`rounded-pill px-1.5 py-0.5 text-fine font-semibold leading-none ${BADGE_TONE[badge.tone]} ${className}`}
     >
       {/* "↻" only while Syndra really sends them again on its own (N2). */}
       <span aria-hidden>{badge.tone === "danger" ? "! " : badge.again ? "↻ " : ""}</span>

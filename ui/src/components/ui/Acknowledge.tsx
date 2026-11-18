@@ -64,7 +64,7 @@ export function AcknowledgeCount({
   const id = useId();
   return (
     <div className="rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
-      <label htmlFor={id} className="flex cursor-pointer items-start gap-3 text-[14px]">
+      <label htmlFor={id} className="flex cursor-pointer items-start gap-3 text-body">
         <Checkbox
           id={id}
           className="mt-1"
@@ -80,7 +80,7 @@ export function AcknowledgeCount({
           .
         </span>
       </label>
-      {consequence && <p className="mt-2 pl-7 text-[13px] text-muted">{consequence}</p>}
+      {consequence && <p className="mt-2 pl-7 text-small text-muted">{consequence}</p>}
     </div>
   );
 }
@@ -122,7 +122,7 @@ export function ConfirmByTyping({
   // pretending. Rungs 1 and 2 are unaffected: neither needs a keyboard.
   if (short) {
     return (
-      <p className="rounded-inner border border-line-strong bg-surface-0 px-4 py-3 text-[14px] leading-[1.55] text-muted">
+      <p className="rounded-inner border border-line-strong bg-surface-0 px-4 py-3 text-body leading-[1.55] text-muted">
         Turn your phone upright to confirm this. The warning, the name field and the button do
         not all fit beside a keyboard sideways.
       </p>
@@ -131,7 +131,7 @@ export function ConfirmByTyping({
 
   return (
     <div className="grid gap-1.5">
-      <label htmlFor={id} className="text-[13.5px] text-muted">
+      <label htmlFor={id} className="text-small text-muted">
         Type the {noun} <span className="font-mono text-ink">{expected}</span> to confirm. The
         button below unlocks when it matches.
       </label>

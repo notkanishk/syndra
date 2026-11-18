@@ -47,7 +47,7 @@ export function Meter({
       >
         <span className={`block h-full rounded-full ${state === "ok" ? "bg-accent" : "bg-warn"}`} style={{ width: `${value > 0 ? Math.max(pct, 1) : 0}%` }} />
       </span>
-      {word && <span className="shrink-0 whitespace-nowrap text-[13px] font-semibold text-warn-text">{word}</span>}
+      {word && <span className="shrink-0 whitespace-nowrap text-small font-semibold text-warn-text">{word}</span>}
     </span>
   );
 }

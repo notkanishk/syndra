@@ -145,9 +145,9 @@ export function LaneMap({
             style={{ top: 16, left: `${left(lane.l)}%`, width: `${LANE_W}%` }}
           >
             <span className="type-label">{lane.title}</span>
-            <span className="text-[12.5px] text-faint">{lane.total}</span>
+            <span className="text-fine text-faint">{lane.total}</span>
             {lane.l < LANES.length - 1 && (
-              <span aria-hidden className="ml-auto text-[12px] text-faint">
+              <span aria-hidden className="ml-auto text-fine text-faint">
                 →
               </span>
             )}
@@ -215,13 +215,13 @@ export function LaneMap({
                     style={nodeSurface(tone, node.id === focusId, unused.has(node.id), Boolean(highlight) && !tone)}
                   >
                     <NodeGlyph kind={node.kind} />
-                    <span className="min-w-0 flex-1 text-[13px] font-semibold leading-tight">{name}</span>
+                    <span className="min-w-0 flex-1 text-small font-semibold leading-tight">{name}</span>
                     {(marks.get(node.id) ?? []).map((mark) => (
                       <span key={mark} title={MARK_WORDS[mark].words} className="flex-none">
                         <ToneDot tone={MARK_WORDS[mark].tone} />
                       </span>
                     ))}
-                    {people != null && <span className="text-[12.5px] tabular-nums text-faint">{people}</span>}
+                    {people != null && <span className="text-fine tabular-nums text-faint">{people}</span>}
                   </button>
                 </div>
               );
@@ -234,7 +234,7 @@ export function LaneMap({
                 <button
                   type="button"
                   onClick={() => setOpened((s) => new Set(s).add(lane.kind))}
-                  className="motion-tint flex min-h-[var(--tap)] desktop:min-h-[38px] w-full items-center rounded-nav border border-line-strong px-3 text-left text-[13px] text-muted hover:text-ink"
+                  className="motion-tint flex min-h-[var(--tap)] desktop:min-h-[38px] w-full items-center rounded-nav border border-line-strong px-3 text-left text-small text-muted hover:text-ink"
                 >
                   {lane.more} more {lane.noun}
                 </button>
@@ -244,19 +244,19 @@ export function LaneMap({
         ))}
 
         <div className="absolute inset-x-5 bottom-3 flex flex-wrap items-center gap-x-[18px] gap-y-2">
-          <span className="inline-flex items-center gap-2 text-[12.5px] text-muted">
+          <span className="inline-flex items-center gap-2 text-fine text-muted">
             <span aria-hidden className="h-0.5 w-[22px] flex-none bg-line-strong" />
             Given
           </span>
-          <span className="inline-flex items-center gap-2 text-[12.5px] text-muted">
+          <span className="inline-flex items-center gap-2 text-fine text-muted">
             <span aria-hidden className="w-[22px] flex-none border-t-2 border-dashed border-line-strong" />
             Automatic
           </span>
-          {note && <span className="text-[12.5px] text-muted">{note}</span>}
+          {note && <span className="text-fine text-muted">{note}</span>}
           {(["drift", "send", "single"] as const)
             .filter(marked)
             .map((mark) => (
-              <span key={mark} className="inline-flex items-center gap-2 text-[12.5px] text-muted">
+              <span key={mark} className="inline-flex items-center gap-2 text-fine text-muted">
                 <ToneDot tone={MARK_WORDS[mark].tone} />
                 {MARK_WORDS[mark].words}
               </span>
@@ -280,7 +280,7 @@ export function LaneMap({
           <div role="dialog" aria-label="Keys" className="flex flex-col gap-[7px]">
             <span className="type-label pb-0.5">Keys</span>
             {KEYS.map(([key, text]) => (
-              <div key={key} className="flex items-baseline gap-3 text-[13px]">
+              <div key={key} className="flex items-baseline gap-3 text-small">
                 <span className="type-mono w-[54px] flex-none text-ink">{key}</span>
                 <span className="text-muted">{text}</span>
               </div>

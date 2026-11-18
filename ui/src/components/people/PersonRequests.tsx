@@ -94,7 +94,7 @@ export function PersonRequests({
       </ListStates>
 
       {isOperator && pending.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-x-4 border-t border-line px-5 py-3 text-[13px] text-faint">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 border-t border-line px-5 py-3 text-small text-faint">
           <span>{pending.length} still open. Deciding here is the same decision as on Requests.</span>
           <ArrowLink href="/requests">Open Requests</ArrowLink>
         </div>
@@ -125,16 +125,16 @@ function RequestRow({
 
   return (
     <div className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center`}>
-      <span className="w-full text-[14.5px] tablet:w-[250px] tablet:shrink-0">
+      <span className="w-full text-body tablet:w-[250px] tablet:shrink-0">
         <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
-        <span className="block text-[12.5px] text-faint">
+        <span className="block text-fine text-faint">
           {describeAsk(entry, terms.data)}
         </span>
       </span>
-      <span className="w-full text-[14px] text-muted [text-wrap:pretty] tablet:min-w-[200px] tablet:flex-1">
+      <span className="w-full text-body text-muted [text-wrap:pretty] tablet:min-w-[200px] tablet:flex-1">
         {entry.justification ? `“${entry.justification}”` : "No reason given"}
       </span>
-      <span className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
+      <span className="text-small text-faint tablet:w-[66px] tablet:shrink-0">
         <Relative iso={entry.created_at} />
       </span>
       {/* One seat: the buttons, then the decision in their place (#96). */}

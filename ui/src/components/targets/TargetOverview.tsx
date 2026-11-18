@@ -395,7 +395,7 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
         title={`What ${name} reports`}
         note={
           stale ? (
-            <span className="inline-flex items-center gap-1.5 text-[12.5px] text-warn-text">
+            <span className="inline-flex items-center gap-1.5 text-fine text-warn-text">
               <StatusDot tone="warn" ring />
               Last known · {formatClock(new Date(report.dataUpdatedAt).toISOString())}
             </span>
@@ -585,7 +585,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
           </Button>
         }
       >
-        <div className="flex-1 text-[14.5px] text-muted">
+        <div className="flex-1 text-body text-muted">
           {waiting ? null : skipped ? (
             <span className="text-warn-text">
               {left > 0 ? `${cooldownLine(name, left)}. ` : ""}
@@ -625,7 +625,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
 
       {run.error && (
         <CardRow>
-          <span className="text-[13.5px] text-danger-text">
+          <span className="text-small text-danger-text">
             {sentence(describeFailure(run.error))}
           </span>
         </CardRow>
@@ -634,7 +634,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
       {result && !result.current && !result.halted && !waiting && !skipped && (
         // A pass that concluded nothing must not read as a clean one.
         <CardRow>
-          <span className="text-[13.5px] text-warn-text">
+          <span className="text-small text-warn-text">
             Nothing was concluded: {result.reason ? whyNotChecked(result.reason) : `${name} could not be read.`}
           </span>
         </CardRow>
@@ -643,7 +643,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
       {(result?.stale?.length ?? 0) > 0 && (
         <>
           <CardRow>
-            <span className="text-[14px] font-semibold text-warn-text">
+            <span className="text-body font-semibold text-warn-text">
               {result!.stale!.length === 1
                 ? "One person is"
                 : `${result!.stale!.length} people are`}{" "}
@@ -723,7 +723,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
           ))}
           {release.error && (
             <CardRow>
-              <span className="text-[13.5px] text-danger-text">
+              <span className="text-small text-danger-text">
                 {sentence(describeFailure(release.error))}
               </span>
             </CardRow>
@@ -877,7 +877,7 @@ function ReachCard({
           <>
             {reading.word}
             {reading.pips && <CheckPips recent={recent} />}
-            {faint && <span className="text-[13px] font-normal text-faint">{faint}</span>}
+            {faint && <span className="text-small font-normal text-faint">{faint}</span>}
           </>
         }
       >
@@ -1015,7 +1015,7 @@ export function Capabilities({ registered }: { registered: TargetSummary }) {
         next={`Ask whoever looks after ${name}'s add-on to fix it. Syndra reads it again on its own.`}
       >
         Syndra is still using the last good one, so what this page lists has not changed. The reason:{" "}
-        <span data-last-error className="type-mono text-[13px] [overflow-wrap:anywhere]">{registered.last_error}</span>
+        <span data-last-error className="type-mono text-small [overflow-wrap:anywhere]">{registered.last_error}</span>
       </Notice>
     )}
     <Card>
@@ -1025,7 +1025,7 @@ export function Capabilities({ registered }: { registered: TargetSummary }) {
       />
       {!registered.callable ? (
         <div className="px-5 pb-5">
-          <p className="text-[14px] text-muted">
+          <p className="text-body text-muted">
             Configured, but {name} has not answered yet. Until it does, Syndra does not know
             what it can do here.
           </p>
@@ -1038,7 +1038,7 @@ export function Capabilities({ registered }: { registered: TargetSummary }) {
         ).map((op, i) => (
           <CardRow key={op.id} first={i === 0}>
             <span className="flex min-w-0 flex-[1_1_200px] flex-col gap-0.5">
-              <span className="text-[14px]">
+              <span className="text-body">
                 {OPERATION_LABEL[op.id] ?? `Something ${name} can do that Syndra has no name for`}
               </span>
             </span>
@@ -1050,7 +1050,7 @@ export function Capabilities({ registered }: { registered: TargetSummary }) {
             {!op.available && (
               // Shown disabled with its reason rather than omitted: omitted, an
               // operator wonders whether the feature exists.
-              <span className="basis-full text-[13px] text-warn-text">
+              <span className="basis-full text-small text-warn-text">
                 Not available: {op.unavailable_reason}
               </span>
             )}
@@ -1089,15 +1089,15 @@ export function AlsoSays({ lines, name }: { lines: string[] | undefined; name: s
         <>
           <ul className="grid gap-1">
             {lines.map((line, i) => (
-              <li key={i} className="type-mono text-[12.5px] leading-[1.5] text-muted [overflow-wrap:anywhere]">
+              <li key={i} className="type-mono text-fine leading-[1.5] text-muted [overflow-wrap:anywhere]">
                 {line}
               </li>
             ))}
           </ul>
-          <p className="text-[13px] text-faint">Shown as {name} sent it. Syndra does not use any of it.</p>
+          <p className="text-small text-faint">Shown as {name} sent it. Syndra does not use any of it.</p>
         </>
       ) : (
-        <p className="text-[13px] text-faint">Nothing beyond what Syndra uses.</p>
+        <p className="text-small text-faint">Nothing beyond what Syndra uses.</p>
       )}
     </div>
   );
@@ -1148,13 +1148,13 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
         If you do not know why the log changed, do not resolve this. Ask the person who runs the
         Syndra server.
       </p>
-      <p className="mt-1 text-[13px] text-faint">
+      <p className="mt-1 text-small text-faint">
         This stays until somebody resolves it. Syndra&rsquo;s <Term name="logAnchor">log anchor</Term>{" "}
         is the only thing that can notice entries disappearing, and resolving replaces it with a
         new <Term name="baseline">baseline</Term>.
       </p>
       <TechnicalDetail className="mt-2" placeKey={`log:${anchor.target}`}>
-        <p className="text-[13px] text-faint">
+        <p className="text-small text-faint">
           Syndra&rsquo;s note: {anchor.records} {anchor.records === 1 ? "entry" : "entries"}{" "}
           ending <Mono>{anchor.head.slice(0, 12)}</Mono>, made <Relative iso={anchor.anchored_at} />.{" "}
           {name} reported {anchor.violation_records ?? 0}{" "}
@@ -1219,7 +1219,7 @@ function ResolveFindingDialog({
       ) : (
       <div className="grid gap-4 px-6">
         <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
-          <p className="text-[13.5px] text-danger-text">
+          <p className="text-small text-danger-text">
             The records that went missing stay missing, and Syndra stops being able to tell
             you they did. Do this when you know why the log changed, such as a rebuilt Syndra server
             or a replaced volume, and not to clear a warning. If you do not know, ask the person
@@ -1317,7 +1317,7 @@ function Reading({
     >
       <div className="flex min-w-0 flex-1 gap-2">
         <StatusDot tone={tone} className="mt-[7px]" />
-        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[14.5px] font-semibold">{label}</span>
+        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-body font-semibold">{label}</span>
       </div>
     </CardRow>
   );
@@ -1384,7 +1384,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
       {inventory.data?.halted && (
         // A pass that stopped has an empty list it never measured; the add-on's words (or the reason's) say why instead.
         <CardRow>
-          <span className="text-[13.5px] text-warn-text">{inventoryNotRead(name, inventory.data.detail, inventory.data.reason)}</span>
+          <span className="text-small text-warn-text">{inventoryNotRead(name, inventory.data.detail, inventory.data.reason)}</span>
         </CardRow>
       )}
       {(!inventory.data && refused) || inventory.data?.halted ? null : (
@@ -1462,14 +1462,14 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
             >
               {/* Columns, as in "Accounts Syndra manages": the account flexes, the status has its seat
                   (`--seat-status`), so the standing starts at one x whatever the username's length. */}
-              <span className="min-w-0 flex-1 basis-[200px] [overflow-wrap:anywhere] font-mono text-[13.5px]">{account.username}</span>
+              <span className="min-w-0 flex-1 basis-[200px] [overflow-wrap:anywhere] font-mono text-small">{account.username}</span>
               <span className="w-(--seat-status) flex-none" data-standing-seat>
                 {account.standing && <StandingLine standing={account.standing} system={name} audience="operator" step={false} />}
               </span>
             </CardRow>
           ))}
           {tooOldToAdopt && unmanaged.some((a) => !a.self) && (
-            <div className="row-divider px-5 py-3 text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
+            <div className="row-divider px-5 py-3 text-small leading-[1.5] text-faint [text-wrap:pretty]">
               Assigning waits for a current read of {name}: it ties an account and its files to a
               person, and there is no undo.
             </div>
@@ -1611,14 +1611,14 @@ function AdoptPanel({
         {chosen && (
           <div className="flex flex-col rounded-inner border border-line-strong">
             <div className="flex gap-3.5 px-4 py-3">
-              <span className="w-[72px] flex-none text-[12.5px] font-semibold text-label">Changes</span>
-              <span className="text-[14px] leading-[1.5]">
+              <span className="w-[72px] flex-none text-fine font-semibold text-label">Changes</span>
+              <span className="text-body leading-[1.5]">
                 {username} belongs to <strong className="font-semibold">{chosen.name}</strong>, for good.
               </span>
             </div>
             <div className="row-divider flex gap-3.5 px-4 py-3">
-              <span className="w-[72px] flex-none text-[12.5px] font-semibold text-label">Stays</span>
-              <span className="text-[14px] leading-[1.5] text-muted [text-wrap:pretty]">
+              <span className="w-[72px] flex-none text-fine font-semibold text-label">Stays</span>
+              <span className="text-body leading-[1.5] text-muted [text-wrap:pretty]">
                 {ADOPT_STAYS} The next time Syndra brings
                 accounts in line, it adds what {first}&apos;s roles give them on top.
               </span>
@@ -1744,7 +1744,7 @@ function LifecycleControl({
         {isLoading ? (
           <RowSkeleton rows={2} label="Reading the maintenance state" />
         ) : (
-          <div className="px-5 pb-3.5 text-[14px] text-muted">
+          <div className="px-5 pb-3.5 text-body text-muted">
             Not read just now. {name}&rsquo;s maintenance state is unknown, so nothing is offered to change it.
           </div>
         )}
@@ -1780,11 +1780,11 @@ function LifecycleControl({
     <Card id="maintenance">
       <CardHeader title="Maintenance" />
       <CardRow first seat="narrow">
-        <span className="inline-flex items-center gap-2 text-[15px] font-semibold">
+        <span className="inline-flex items-center gap-2 text-body font-semibold">
           <StatusDot tone={current === "active" ? "healthy" : "accent"} />
           {current === "active" ? "Active" : stateLabel(current).replace(/^./, (c) => c.toUpperCase())}
         </span>
-        <span className="text-[14px] text-muted">
+        <span className="text-body text-muted">
           {current === "active"
             ? `${name} takes reads and changes. Two states you can put it in instead:`
             : `${
@@ -1858,7 +1858,7 @@ function LifecycleControl({
               </Button>
             }
           >
-            <span className="min-w-0 flex-[1_1_320px] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+            <span className="min-w-0 flex-[1_1_320px] text-small leading-[1.55] text-muted [text-wrap:pretty]">
               <span className="font-semibold text-ink">{action.head}</span> {action.more}
             </span>
           </CardRow>

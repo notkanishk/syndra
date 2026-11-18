@@ -46,13 +46,13 @@ export function NotOpenYet({
       <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
         <span
           className={`inline-flex items-center gap-2.5 font-semibold text-ink ${
-            page ? "font-display text-[19px]" : "text-[15px]"
+            page ? "font-display text-title" : "text-body"
           }`}
         >
           <StatusDot tone="neutral" />
           {title}
         </span>
-        <span className={`text-muted [text-wrap:pretty] ${page ? "text-[15px]" : "text-[14px]"}`}>{why}</span>
+        <span className={`text-muted [text-wrap:pretty] ${page ? "text-body" : "text-body"}`}>{why}</span>
         {step && (
           <a
             href={step.href}
@@ -63,7 +63,7 @@ export function NotOpenYet({
               event.preventDefault();
               glideTo(target);
             }}
-            className="ml-auto inline-flex min-h-[var(--tap)] items-center whitespace-nowrap text-[14px] font-semibold text-accent-text desktop:min-h-0 link-hover"
+            className="ml-auto inline-flex min-h-[var(--tap)] items-center whitespace-nowrap text-body font-semibold text-accent-text desktop:min-h-0 link-hover"
           >
             {step.label}
           </a>

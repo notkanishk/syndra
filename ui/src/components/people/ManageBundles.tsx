@@ -229,7 +229,7 @@ function ManageBundlesOpen({
     <Modal open onClose={onClose} busy={busy} size="md" labelledBy="manage-bundles-title">
       <PushedStep step={step}>
       <ModalHeader title="Manage bundles" titleId="manage-bundles-title" />
-      <div className="-mt-2 px-6 pb-1 text-[13px] text-faint">{userName}</div>
+      <div className="-mt-2 px-6 pb-1 text-small text-faint">{userName}</div>
 
       <div className="flex flex-col gap-1.5 px-6">
         {(bundles.data ?? []).map((bundle) => {
@@ -286,13 +286,13 @@ function ManageBundlesOpen({
               <div key={id} className="flex flex-col gap-1.5">
                 <div className="type-label">{bundle.name}</div>
                 {empty ? (
-                  <span className="text-[14px] text-faint">
+                  <span className="text-body text-faint">
                     {bundle.latest_version
                       ? `v${bundle.latest_version} of this bundle carries no roles, so this gives nothing.`
                       : "This bundle carries no roles yet."}
                   </span>
                 ) : (
-                  words && <p className={`text-[14px] leading-[1.5] ${plan ? "" : "text-faint"}`}>{words}</p>
+                  words && <p className={`text-body leading-[1.5] ${plan ? "" : "text-faint"}`}>{words}</p>
                 )}
                 {/*
                   Said here, on the screen that would otherwise be contradicted. A
@@ -301,7 +301,7 @@ function ManageBundlesOpen({
                   different set.
                 */}
                 {adding && (bundle.unpublished_changes ?? 0) > 0 && (
-                  <p className="text-[13px] leading-[1.5] text-muted">
+                  <p className="text-small leading-[1.5] text-muted">
                     {bundle.name} has {bundle.unpublished_changes} unpublished{" "}
                     {bundle.unpublished_changes === 1 ? "change" : "changes"}. Those are not part of this. An
                     assignment gives v{bundle.latest_version}, and publishing is what decides whether the people

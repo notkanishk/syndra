@@ -118,10 +118,10 @@ export default function AppsPage() {
               className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center`}
             >
               <span className="w-full min-w-0 tablet:w-[300px] tablet:min-w-[170px] tablet:shrink-0">
-                <span className="block text-[15.5px] font-semibold [text-wrap:pretty]">
+                <span className="block text-body font-semibold [text-wrap:pretty]">
                   {entry.application.name}
                 </span>
-                <span className="block text-[13px] text-faint [text-wrap:pretty]">
+                <span className="block text-small text-faint [text-wrap:pretty]">
                   {subLine.map((part, i) => (
                     <Fragment key={i}>
                       {i > 0 && " · "}
@@ -131,21 +131,21 @@ export default function AppsPage() {
                 </span>
               </span>
 
-              <span className="w-full text-[14px] text-muted tablet:min-w-[140px] tablet:flex-1">
+              <span className="w-full text-body text-muted tablet:min-w-[140px] tablet:flex-1">
                 <ProjectName id={entry.application.project_id} link={false} />
               </span>
 
-              <span className="text-[13px] tablet:w-[220px] tablet:shrink-0 tablet:text-right">
+              <span className="text-small tablet:w-[220px] tablet:shrink-0 tablet:text-right">
                 <ClaimsCell entry={entry} />
               </span>
 
-              <span className="text-[15px] tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+              <span className="text-body tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                 {people.headline}
-                <span className="text-[13px] text-faint tablet:hidden">
+                <span className="text-small text-faint tablet:hidden">
                   {peopleSuffix(people.headline)}
                 </span>
                 {people.note && (
-                  <span className={`block text-[12.5px] ${holdersToneClass[people.tone]}`}>
+                  <span className={`block text-fine ${holdersToneClass[people.tone]}`}>
                     {people.note}
                   </span>
                 )}

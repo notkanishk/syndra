@@ -339,7 +339,7 @@ export default function ExpiringAccessPage() {
           <SectionPill sections={sections} label="Sections of expiring access" onOpen={openSection} />
           {/* Not while another window is read: these rows answer the last one. */}
           {!anyUndecided && !grants.isPlaceholderData && (
-            <span className="inline-flex items-center gap-2.5 px-1 text-[13.5px] text-muted">
+            <span className="inline-flex items-center gap-2.5 px-1 text-small text-muted">
               <StatusDot tone="healthy" />
               Nothing here is waiting on a decision. Every role that ends in the next {within} days has
               been looked at.
@@ -618,14 +618,14 @@ function ExpiringRow({
 
       <WhatSeat projectId={grant.project_id} roleKeys={[grant.role_key]} className="tablet:flex-1">
         {/* Laptop width only: the Given by column needs a desktop, and a phone has none (#54). */}
-        <span className="hidden text-[12.5px] text-faint tablet:block desktop:hidden">
+        <span className="hidden text-fine text-faint tablet:block desktop:hidden">
           Given by <UserName id={grant.granted_by} fallback="somebody no longer listed" />,{" "}
           {formatShortDate(grant.created_at)}
         </span>
         {ack && (
           // Who and when, always. The point of a shared acknowledgement is that the next person
           // can see whose judgement they would be overriding.
-          <span className="mt-[3px] text-[13.5px] leading-[1.5] text-muted">
+          <span className="mt-[3px] text-small leading-[1.5] text-muted">
             <span className="font-semibold text-ink">
               <UserName id={ack.by} fallback="somebody no longer listed" />
             </span>{" "}
@@ -635,16 +635,16 @@ function ExpiringRow({
         )}
       </WhatSeat>
 
-      <div className="hidden w-[160px] shrink-0 text-[13.5px] leading-[1.45] text-muted desktop:block">
+      <div className="hidden w-[160px] shrink-0 text-small leading-[1.45] text-muted desktop:block">
         <UserName id={grant.granted_by} fallback="somebody no longer listed" />
-        <span className="block text-[12.5px] text-faint">{formatShortDate(grant.created_at)}</span>
+        <span className="block text-fine text-faint">{formatShortDate(grant.created_at)}</span>
       </div>
 
       <div className="flex flex-col gap-0.5 tablet:w-[110px] tablet:shrink-0">
-        <span className={`text-[13.5px] font-semibold ${soonest ? "text-warn-text" : "text-muted"}`}>
+        <span className={`text-small font-semibold ${soonest ? "text-warn-text" : "text-muted"}`}>
           {expiryLabel(grant.expires_at, "left") ?? "—"}
         </span>
-        <span className="text-[12.5px] text-faint">{formatShortDate(grant.expires_at)}</span>
+        <span className="text-fine text-faint">{formatShortDate(grant.expires_at)}</span>
       </div>
 
       <ActionSeat seat="wide">

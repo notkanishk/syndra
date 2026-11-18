@@ -44,7 +44,7 @@ export function RecordsList({ result, name, reader }: { result: RecordsResult; n
   return (
     <div className="flex flex-col gap-3">
       {result.records.length === 0 ? (
-        <p className="m-0 text-[14px] text-muted">{emptyRecords(name, reader)}</p>
+        <p className="m-0 text-body text-muted">{emptyRecords(name, reader)}</p>
       ) : (
         <div>
           <CardColumns className="!px-0">
@@ -63,11 +63,11 @@ export function RecordsList({ result, name, reader }: { result: RecordsResult; n
             {rows.map((r) => (
               <li key={r.id} className="row-divider row-cols flex flex-wrap items-start gap-y-2 py-3 first:border-t-0 first:pt-0 tablet:flex-nowrap">
                 <span className="flex min-w-[200px] flex-1 flex-col gap-0.5">
-                  <span className="text-[14.5px] font-semibold [overflow-wrap:anywhere]">{r.label}</span>
-                  {r.category && <span className="text-[13px] text-faint">{r.category}</span>}
+                  <span className="text-body font-semibold [overflow-wrap:anywhere]">{r.label}</span>
+                  {r.category && <span className="text-small text-faint">{r.category}</span>}
                 </span>
-                <span className="text-[13px] text-faint tablet:w-[110px] tablet:shrink-0">{r.since && sinceDate(formatShortDate(r.since))}</span>
-                <span className="text-[13px] text-faint tablet:w-[110px] tablet:shrink-0">{r.due && dueDate(formatShortDate(r.due))}</span>
+                <span className="text-small text-faint tablet:w-[110px] tablet:shrink-0">{r.since && sinceDate(formatShortDate(r.since))}</span>
+                <span className="text-small text-faint tablet:w-[110px] tablet:shrink-0">{r.due && dueDate(formatShortDate(r.due))}</span>
                 <span className="min-w-0 tablet:w-[240px] tablet:shrink-0">
                   {r.standing && <StandingLine standing={r.standing} system={name} audience={reader.audience} />}
                 </span>

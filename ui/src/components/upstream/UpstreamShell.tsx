@@ -169,7 +169,7 @@ export function DirectWriteWarning({
   // tick counts what changes; here the count is beside the point and the
   // absence is the entire risk.
   const tick = onAcknowledge ? (
-    <label className="mt-2 flex min-h-[var(--tap)] cursor-pointer items-center gap-3 text-[13.5px] text-ink">
+    <label className="mt-2 flex min-h-[var(--tap)] cursor-pointer items-center gap-3 text-small text-ink">
       <span className="flex size-[var(--tap)] shrink-0 items-center justify-center desktop:h-auto desktop:w-auto">
         <Checkbox checked={Boolean(acknowledged)} onChange={(event) => onAcknowledge(event.target.checked)} />
       </span>
@@ -183,7 +183,7 @@ export function DirectWriteWarning({
   // Every write on these screens is traced: an explanation, so a caption, not a box.
   return (
     <div>
-      <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
+      <p className="measure text-small leading-[1.55] text-muted">
         <strong className="font-semibold text-ink">This goes through Syndra’s record.</strong> {what} The
         grant, an audit line and the change are written together, so it is explained afterwards.{" "}
         {sends ?? sendsWhen(undefined)}

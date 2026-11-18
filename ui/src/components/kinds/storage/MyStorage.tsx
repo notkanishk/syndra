@@ -111,11 +111,11 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
       </Unfold>
 
       <div className="flex flex-col gap-2 px-5 pb-[22px] pt-[18px]">
-        <h2 className="font-display text-[24px] font-semibold leading-[1.25] tracking-[-0.01em] [text-wrap:pretty]">
+        <h2 className="font-display text-heading font-semibold tracking-[-0.01em] [text-wrap:pretty]">
           {headline}
         </h2>
-        <p className="max-w-[66ch] text-[15px] leading-[1.55] text-muted [text-wrap:pretty]">{body}</p>
-        {aside && <span className="text-[13.5px] text-faint">{aside}</span>}
+        <p className="measure text-body leading-[1.55] text-muted [text-wrap:pretty]">{body}</p>
+        {aside && <span className="text-small text-faint">{aside}</span>}
         {state === "none" && (
           <ArrowLink href="/requests?ask" className="mt-1 self-start">
             Ask for access in Requests
@@ -150,7 +150,7 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
         <>
           <div className="row-divider flex flex-col gap-2 px-5 py-[18px]">
             <span className="type-label text-label">Sign in as</span>
-            <div className="max-w-[460px]">
+            <div className="max-w-(--field-max)">
               <CopyableValue value={view.account.username} label="Your account name" />
             </div>
           </div>
@@ -325,7 +325,7 @@ function blockedSentence(view: MyTargetView, label: string) {
 /** The form's place while it can't be used: one sentence, or, with a change in doubt, the two as one line (A-13 §4). */
 function Blocked({ view, label }: { view: MyTargetView; label: string }) {
   if (view.password_change) return <UnconfirmedChange view={view} label={label} offline />;
-  return <span className="max-w-[66ch] text-[14.5px] leading-[1.55] text-ink">{blockedSentence(view, label)}</span>;
+  return <span className="measure text-body leading-[1.55] text-ink">{blockedSentence(view, label)}</span>;
 }
 
 /** The status beside the system's name: what the monitor can stand behind, and nothing when it can't tell. */
@@ -340,7 +340,7 @@ function SystemStatus({ view, state }: { view: MyTargetView; state: State }) {
     </>
   ) : null;
   return (
-    <span role="status" className={`tint-in inline-flex items-center gap-2 text-[13px] leading-[1.4] motion-tint ${offline ? "text-warn-text" : "text-muted"}`}>
+    <span role="status" className={`tint-in inline-flex items-center gap-2 text-small leading-[1.4] motion-tint ${offline ? "text-warn-text" : "text-muted"}`}>
       <StatusDot tone={offline ? "warn" : held ? "neutral" : "healthy"} />
       {offline ? (
         <>{SYSTEM_WORDS.offline}{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}</>
@@ -362,7 +362,7 @@ function Steps({ reached, state }: { reached: number; state: State }) {
   const inert = state === "none" || state === "held";
   const tone = (i: number) => (i <= reached ? "done" : i === reached + 1 && !inert ? "now" : "later");
   return (
-    <ol aria-label="Your progress" className="m-0 flex list-none flex-wrap items-center gap-x-5 gap-y-1 p-0 text-[13.5px] text-muted">
+    <ol aria-label="Your progress" className="m-0 flex list-none flex-wrap items-center gap-x-5 gap-y-1 p-0 text-small text-muted">
       {STEPS.map((step, i) => {
         const t = tone(i);
         return (
@@ -427,7 +427,7 @@ function Folders({
       </div>
 
       {state === "unread" || (storage && !storage.places_readable) ? (
-        <p className="text-[14px] text-muted">
+        <p className="text-body text-muted">
           {label} couldn&apos;t say which folders are open to you just now. Your access hasn&apos;t changed; this
           page reads it again on your next visit.
         </p>
@@ -538,22 +538,22 @@ function PlaceBlock({
       <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
         <span className="flex min-w-0 flex-[1_1_260px] flex-col gap-0.5">
           <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-            <span className="text-[15.5px] font-semibold [overflow-wrap:anywhere]">
+            <span className="text-body font-semibold [overflow-wrap:anywhere]">
               {placeName(place)}
             </span>
-            <span className="whitespace-nowrap text-[13px] text-muted">{can ? "Can change files" : "Read only"}</span>
+            <span className="whitespace-nowrap text-small text-muted">{can ? "Can change files" : "Read only"}</span>
           </span>
-          {where && <span className="text-[13px] text-faint [text-wrap:pretty]">{where}</span>}
+          {where && <span className="text-small text-faint [text-wrap:pretty]">{where}</span>}
         </span>
-        {use && <span className="ml-auto text-[13.5px] text-muted">{use}</span>}
+        {use && <span className="ml-auto text-small text-muted">{use}</span>}
       </div>
       {can && over && !offline && (
-        <span className="max-w-[70ch] text-[14px] leading-[1.55] text-warn-text [text-wrap:pretty]">
+        <span className="measure text-body leading-[1.55] text-warn-text [text-wrap:pretty]">
           Full. You can open and delete files here, but not save new ones until you&apos;re under {formatBytes(quota)}.
         </span>
       )}
       {homeKept && (
-        <span className="max-w-[70ch] text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">
+        <span className="measure text-body leading-[1.55] text-ink [text-wrap:pretty]">
           None of the roles you hold gives a home folder any more. It stays, with your files in it, and only you can
           open it. Syndra never moves or deletes a home folder.
         </span>
@@ -565,11 +565,11 @@ function PlaceBlock({
       {showAddresses && place.smb_address && place.unc_address && (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-x-3.5 gap-y-2.5">
           <div className="flex min-w-0 flex-col gap-[5px]">
-            <span className="text-[12.5px] text-muted">Mac and Linux · Connect to Server</span>
+            <span className="text-fine text-muted">Mac and Linux · Connect to Server</span>
             <CopyableValue value={place.smb_address} label="Address for Mac and Linux" />
           </div>
           <div className="flex min-w-0 flex-col gap-[5px]">
-            <span className="text-[12.5px] text-muted">Windows · File Explorer address bar</span>
+            <span className="text-fine text-muted">Windows · File Explorer address bar</span>
             <CopyableValue value={place.unc_address} label="Address for Windows" />
           </div>
         </div>
@@ -627,11 +627,11 @@ function Result({
   alert?: boolean;
 }) {
   return (
-    <div role={alert ? "alert" : "status"} className={`${bloom ? "lift-in " : ""}flex max-w-[66ch] items-start gap-2.5`}>
+    <div role={alert ? "alert" : "status"} className={`${bloom ? "lift-in " : ""}flex measure items-start gap-2.5`}>
       <StatusDot tone={tone} bloom={bloom} className="mt-2" />
       <span className="flex min-w-0 flex-col gap-1">
-        <span className="text-[14.5px] font-semibold leading-[1.55] text-ink [text-wrap:pretty]">{title}</span>
-        {body && <span className="text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">{body}</span>}
+        <span className="text-body font-semibold leading-[1.55] text-ink [text-wrap:pretty]">{title}</span>
+        {body && <span className="text-body leading-[1.55] text-muted [text-wrap:pretty]">{body}</span>}
       </span>
     </div>
   );
@@ -681,7 +681,7 @@ function PasswordForm({
           <UnconfirmedChange view={view} label={label} />
         </div>
       </Unfold>
-      <div className="flex max-w-[460px] flex-col gap-1.5">
+      <div className="flex max-w-(--field-max) flex-col gap-1.5">
         {accent && <FieldLabel htmlFor={passwordFieldId(view)}>Storage password</FieldLabel>}
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="min-w-0 flex-[1_1_220px]">
@@ -703,7 +703,7 @@ function PasswordForm({
         </div>
       </div>
       <Unfold open={slow && !retrying}>
-        <p role="status" className="max-w-[62ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+        <p role="status" className="measure text-small leading-[1.55] text-muted [text-wrap:pretty]">
           Still waiting for {label}. Keep this page open until it answers.
         </p>
       </Unfold>
@@ -750,7 +750,7 @@ function PasswordForm({
           }}
         />
       )}
-      <p className="max-w-[62ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+      <p className="measure text-small leading-[1.55] text-muted [text-wrap:pretty]">
         {accent ? (
           <>{scope} Syndra passes it to {label} and doesn&apos;t keep a copy.</>
         ) : changed ? (

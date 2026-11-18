@@ -128,12 +128,12 @@ export function ShapeCard({
           <CardRow
             seat="default"
             action={
-              <ArrowLink href={`/projects/${shape.application.project_id}#claims-default`} className="text-[13.5px]">
+              <ArrowLink href={`/projects/${shape.application.project_id}#claims-default`} className="text-small">
                 {projectName}&rsquo;s default
               </ArrowLink>
             }
           >
-            <span className="text-[13px] leading-[1.5] text-faint">In {landsIn(shape.profile.lands)}.</span>
+            <span className="text-small leading-[1.5] text-faint">In {landsIn(shape.profile.lands)}.</span>
           </CardRow>
           <NewAppOffer shape={shape} draft={draft} setDraft={setDraft} templates={templates} project={projectName} heldBack={heldBack} onOpenTemplate={onOpenTemplate} />
         </>
@@ -164,7 +164,7 @@ export function ShapeCard({
 function Unreached({ unreached }: { unreached?: string }) {
   if (!unreached) return null;
   return (
-    <p className="m-0 px-[22px] pb-3 text-[13px] leading-[1.5] text-danger-text">
+    <p className="m-0 px-[22px] pb-3 text-small leading-[1.5] text-danger-text">
       Doesn&rsquo;t reach {READS_LABEL[unreached] ?? "the app"}. Check 1 in the preview says why.
     </p>
   );
@@ -175,7 +175,7 @@ function NoRoles({ app, first }: { app: string; first: boolean }) {
   return (
     <div className={`flex items-start gap-x-3 pb-2 pl-[11px] pr-[22px] pt-1.5 ${first ? "" : "row-divider"}`}>
       <span className="size-[var(--tap)] flex-none" />
-      <span className="pt-[11px] text-[14.5px] leading-[1.5] text-ink">No roles. {app} gets none from Syndra.</span>
+      <span className="pt-[11px] text-body leading-[1.5] text-ink">No roles. {app} gets none from Syndra.</span>
     </div>
   );
 }
@@ -207,18 +207,18 @@ function LineHead({
       </span>
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-4 gap-y-0.5 pt-[11px]">
         <span className="min-w-0 flex-[0_0_132px] [overflow-wrap:anywhere]">
-          {line.key ? <Mono className="text-[14px]">{line.key}</Mono> : <span className="text-[14px] text-faint">unnamed</span>}
+          {line.key ? <Mono className="text-body">{line.key}</Mono> : <span className="text-body text-faint">unnamed</span>}
         </span>
         <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-0.5">
-          <span className="text-[14.5px] leading-[1.5] text-ink [text-wrap:pretty]">
+          <span className="text-body leading-[1.5] text-ink [text-wrap:pretty]">
             <Ticks text={line.words} />
           </span>
           {line.sub && (
-            <span className="text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
+            <span className="text-small leading-[1.5] text-faint [text-wrap:pretty]">
               <Ticks text={line.sub} />
             </span>
           )}
-          {line.warn && <span className="text-[13px] leading-[1.5] text-warn-text [text-wrap:pretty]">{line.warn}</span>}
+          {line.warn && <span className="text-small leading-[1.5] text-warn-text [text-wrap:pretty]">{line.warn}</span>}
         </span>
       </span>
     </>
@@ -254,7 +254,7 @@ function NewAppOffer({
   const [mode, setMode] = useState<"template" | "copy">("template");
   if (/truenas/i.test(app)) {
     return (
-      <div className="row-divider flex flex-col gap-2 px-[22px] py-4 text-[14px] text-muted">
+      <div className="row-divider flex flex-col gap-2 px-[22px] py-4 text-body text-muted">
         TrueNAS&rsquo;s web interface can&rsquo;t sign in with Zitadel. Access to what it holds goes through the TrueNAS add-on.
         <ArrowLink href="/system/targets">TrueNAS add-on</ArrowLink>
       </div>
@@ -296,7 +296,7 @@ function NewAppOffer({
                 {verb}
               </Button>
             </span>
-            <span className="min-w-0 flex-[1_1_220px] text-[13px] leading-[1.5] text-faint">{note}</span>
+            <span className="min-w-0 flex-[1_1_220px] text-small leading-[1.5] text-faint">{note}</span>
           </div>
         )}
       />
@@ -554,7 +554,7 @@ function ShapeForm({
       })}
       <Unreached unreached={unreached} />
       {draft?.notCopied.length ? (
-        <p className="row-divider m-0 px-[22px] py-3 text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
+        <p className="row-divider m-0 px-[22px] py-3 text-small leading-[1.5] text-faint [text-wrap:pretty]">
           <Ticks text={`Not in this project, so not copied: ${draft.notCopied.map((r) => `${r.name} (\`${r.role_key}\`)`).join(", ")}.`} />
         </p>
       ) : null}
@@ -565,8 +565,8 @@ function ShapeForm({
             <AddClaim label="Add a claim" app={app} profile={profile} onPick={(e) => add(e)} />
           </div>
           <div className="row-divider flex flex-wrap items-start gap-x-[18px] gap-y-2 px-[22px] py-3">
-            <span className="w-[130px] flex-none pt-[5px] text-[14px] font-semibold">Lands in</span>
-            <span className="min-w-0 flex-[1_1_140px] pt-[5px] text-[14px] text-ink">{LANDS_LABEL[profile.lands]}</span>
+            <span className="w-[130px] flex-none pt-[5px] text-body font-semibold">Lands in</span>
+            <span className="min-w-0 flex-[1_1_140px] pt-[5px] text-body text-ink">{LANDS_LABEL[profile.lands]}</span>
             <span className="ml-auto flex justify-end">
               <Segmented<Lands>
                 label="Lands in"
@@ -586,7 +586,7 @@ function ShapeForm({
 
       {/* The foot: where it came from, and the two ways to start again (A-16 §1). */}
       <div className="row-divider flex flex-wrap items-center gap-x-3 gap-y-2 px-[22px] pb-4 pt-3">
-        <span className="min-w-0 flex-[1_1_220px] text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
+        <span className="min-w-0 flex-[1_1_220px] text-small leading-[1.5] text-faint [text-wrap:pretty]">
           {advanced ? "" : `In ${landsIn(profile.lands)}. `}
           {tplLine ?? (
             <>
@@ -621,7 +621,7 @@ function ShapeForm({
               Discard the draft
             </Button>
           </span>
-          <span className={`flex min-w-0 flex-[1_1_240px] items-start gap-2 text-[13px] leading-[1.5] ${beforeLine.warn ? "text-warn-text" : "text-faint"}`}>
+          <span className={`flex min-w-0 flex-[1_1_240px] items-start gap-2 text-small leading-[1.5] ${beforeLine.warn ? "text-warn-text" : "text-faint"}`}>
             {beforeLine.warn && <StatusDot tone="warn" className="mt-[7px]" />}
             <span>
               {restoredAt && (
@@ -691,11 +691,11 @@ const INDENT = "pl-5 pr-[22px] tablet:pl-[67px]";
 function EditorRow({ label, note, seat, children }: { label: string; note?: string; seat?: ReactNode; children?: ReactNode }) {
   return (
     <div className={`row-divider flex flex-wrap items-start gap-x-4 gap-y-1.5 py-[9px] ${INDENT}`}>
-      <span className="w-full flex-none pt-1.5 text-[13.5px] font-semibold tablet:w-[130px]">{label}</span>
+      <span className="w-full flex-none pt-1.5 text-small font-semibold tablet:w-[130px]">{label}</span>
       <span className="flex min-w-0 flex-[1_1_180px] flex-col gap-1">
         {children}
         {note && (
-          <span className="text-[12.5px] leading-[1.5] text-faint [text-wrap:pretty]">
+          <span className="text-fine leading-[1.5] text-faint [text-wrap:pretty]">
             <Ticks text={note} />
           </span>
         )}
@@ -707,7 +707,7 @@ function EditorRow({ label, note, seat, children }: { label: string; note?: stri
 
 function Plain({ text }: { text: string }) {
   return (
-    <span className="pt-1.5 text-[13.5px] leading-[1.5] text-muted [text-wrap:pretty]">
+    <span className="pt-1.5 text-small leading-[1.5] text-muted [text-wrap:pretty]">
       <Ticks text={text} />
     </span>
   );
@@ -720,7 +720,7 @@ function EditorFoot({ children }: { children: ReactNode }) {
 function Literal({ text }: { text?: string }) {
   if (!text) return null;
   return (
-    <p className={`row-divider m-0 pb-1 pt-2.5 text-[12.5px] leading-[1.55] text-faint [overflow-wrap:anywhere] [text-wrap:pretty] ${INDENT}`}>
+    <p className={`row-divider m-0 pb-1 pt-2.5 text-fine leading-[1.55] text-faint [overflow-wrap:anywhere] [text-wrap:pretty] ${INDENT}`}>
       <Ticks text={text} />
     </p>
   );
@@ -729,7 +729,7 @@ function Literal({ text }: { text?: string }) {
 function RowError({ text }: { text?: string }) {
   if (!text) return null;
   return (
-    <p role="alert" className={`m-0 pb-1 pt-1.5 text-[13px] leading-[1.5] text-danger-text [text-wrap:pretty] ${INDENT}`}>
+    <p role="alert" className={`m-0 pb-1 pt-1.5 text-small leading-[1.5] text-danger-text [text-wrap:pretty] ${INDENT}`}>
       <Ticks text={text} />
     </p>
   );
@@ -790,7 +790,7 @@ function RolesPart({
           }
         >
           <Plain text={SENT_AS_WORDS[format]} />
-          {format !== "array" && <span className="text-[13px] leading-[1.5] text-warn-text [text-wrap:pretty]"><Ticks text={TEXT_WARN(ctx.app)} /></span>}
+          {format !== "array" && <span className="text-small leading-[1.5] text-warn-text [text-wrap:pretty]"><Ticks text={TEXT_WARN(ctx.app)} /></span>}
         </EditorRow>
       )}
       <div className="row-divider">
@@ -906,7 +906,7 @@ function KindRow({ ctx, row }: { ctx: EditorContext; row: number }) {
       <EditorRow label="If they hold">
         <span className="flex flex-wrap items-center gap-2">
           {(c.roles ?? []).map((k) => (
-            <Chip key={k} className="py-1 text-[13px]">
+            <Chip key={k} className="py-1 text-small">
               {ctx.roles.find((r) => r.key === k)?.label ?? k}
             </Chip>
           ))}
@@ -1082,7 +1082,7 @@ function ObjectEditor({ ctx, line }: { ctx: EditorContext; line: ClaimLine }) {
         return (
           <div key={i}>
             <div className={`row-divider flex flex-wrap items-center gap-x-2 gap-y-1.5 py-[7px] ${INDENT}`}>
-              {c.path.length > 2 && <span className="text-[12.5px] text-faint">{c.path.slice(1, -1).join(" › ")} ›</span>}
+              {c.path.length > 2 && <span className="text-fine text-faint">{c.path.slice(1, -1).join(" › ")} ›</span>}
               <span className="min-w-[120px] flex-[0_1_150px]">
                 <ClaimName ctx={ctx} row={i} />
               </span>
@@ -1197,8 +1197,8 @@ function AddClaim({
                   muted ? "cursor-default" : "hover:bg-[var(--hover)] focus-visible:bg-[var(--hover)]"
                 }`}
               >
-                <span className={`flex-1 text-[14px] font-semibold ${muted ? "text-muted" : "text-ink"}`}>{e.label.replace("{app}", app)}</span>
-                <span className="flex-none text-[12.5px] text-faint">
+                <span className={`flex-1 text-body font-semibold ${muted ? "text-muted" : "text-ink"}`}>{e.label.replace("{app}", app)}</span>
+                <span className="flex-none text-fine text-faint">
                   <Ticks text={right} />
                 </span>
               </button>

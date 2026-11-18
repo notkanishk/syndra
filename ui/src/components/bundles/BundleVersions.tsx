@@ -101,12 +101,12 @@ export function BundleVersions({
         {rows.map((version, index) => (
           <div key={version.id} className="row-divider px-5 py-3.5">
             <div className="flex flex-wrap items-baseline gap-3">
-              <span className="font-display text-[17px] leading-none">v{version.version}</span>
+              <span className="font-display text-title font-normal leading-none">v{version.version}</span>
               {index === 0 ? (
                 <Badge tone={readOnly ? "neutral" : "accent"}>{readOnly ? "Last" : "Current"}</Badge>
               ) : null}
               <span className="flex-1" />
-              <span className="text-[13px] text-faint">
+              <span className="text-small text-faint">
                 {version.published_by === "system" ? (
                   "Syndra (automatic)"
                 ) : (
@@ -118,12 +118,12 @@ export function BundleVersions({
             </div>
 
             {version.note && (
-              <p className="mt-1 max-w-[70ch] text-[13.5px] leading-[1.5] text-muted">
+              <p className="mt-1 measure text-small leading-[1.5] text-muted">
                 {version.note}
               </p>
             )}
 
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] text-muted">
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-small text-muted">
               {(version.roles ?? []).length === 0 ? (
                 <span className="text-faint">Contained no roles.</span>
               ) : (
@@ -246,7 +246,7 @@ function Holders({
             <section key={version} id={`on-v${version}`} className="scroll-mt-6 border-t border-line first:border-t-0">
               <div className="flex flex-wrap items-center gap-3 px-5 pb-2 pt-4">
                 <h3 className="type-card-title">On v{version}</h3>
-                <span className={`text-[13px] ${behind ? "font-semibold text-warn-text" : "text-faint"}`}>
+                <span className={`text-small ${behind ? "font-semibold text-warn-text" : "text-faint"}`}>
                   {people.length} {people.length === 1 ? "person" : "people"}
                   {behind ? ` · v${latest.version} is the latest` : ""}
                 </span>
@@ -260,10 +260,10 @@ function Holders({
                 <div key={holder.user_id} className="row-divider row-cols flex flex-wrap items-center gap-y-1 px-5 py-3">
                   <span className="flex min-w-[min(220px,100%)] flex-1 items-center gap-3">
                     <UserAvatar id={holder.user_id} size="row" />
-                    <UserName id={holder.user_id} className="text-[14.5px] font-semibold text-ink" />
+                    <UserName id={holder.user_id} className="text-body font-semibold text-ink" />
                   </span>
-                  <span className="min-w-0 flex-1 text-[13.5px] text-muted">{howTheyGotIt(holder)}</span>
-                  <span className="w-(--seat-number) text-right text-[13.5px] text-muted">
+                  <span className="min-w-0 flex-1 text-small text-muted">{howTheyGotIt(holder)}</span>
+                  <span className="w-(--seat-number) text-right text-small text-muted">
                     {formatShortDate(holder.assigned_at)}
                   </span>
                 </div>
@@ -368,12 +368,12 @@ export function ThroughOtherBundles({
     <section id="through-bundles" className="card scroll-mt-6 overflow-hidden">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-4">
         <h3 className="type-card-title">Through other bundles</h3>
-        <span className="text-[13.5px] text-faint">
+        <span className="text-small text-faint">
           {people} {people === 1 ? "person" : "people"} in {includers.length}{" "}
           {includers.length === 1 ? "bundle" : "bundles"}
         </span>
       </div>
-      <p className="row-divider px-5 py-2.5 text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+      <p className="row-divider px-5 py-2.5 text-small leading-[1.55] text-muted [text-wrap:pretty]">
         These bundles include {name}, so their people have it too. Each is pinned to a version. Updating one
         puts v{latest} into its next version; its people get it when that bundle publishes, with the usual
         review.
@@ -423,7 +423,7 @@ function IncluderTile({
         action={
           behind ? (
             waiting ? (
-              <span className="text-right text-[13px] text-faint">v{latest} in its next version</span>
+              <span className="text-right text-small text-faint">v{latest} in its next version</span>
             ) : (
               <Button
                 size="sm"
@@ -446,26 +446,26 @@ function IncluderTile({
         <span className="flex min-w-0 flex-[1_1_260px] items-center gap-3">
           <span
             aria-hidden
-            className="inline-flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-line-strong bg-surface-2 font-display text-[13px] font-semibold text-muted"
+            className="inline-flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-line-strong bg-surface-2 font-display text-small font-semibold text-muted"
           >
             {tile}
           </span>
           <span className="flex min-w-0 flex-col gap-px">
             <Link
               href={href}
-              className="text-[15px] font-semibold text-ink link-hover"
+              className="text-body font-semibold text-ink link-hover"
             >
               {includer.name}
             </Link>
-            {purpose && <span className="text-[12.5px] text-faint">{purpose}</span>}
+            {purpose && <span className="text-fine text-faint">{purpose}</span>}
           </span>
         </span>
-        <span className={`flex-[1_1_160px] text-[13.5px] ${behind ? "font-semibold text-warn-text" : "text-muted"}`}>
+        <span className={`flex-[1_1_160px] text-small ${behind ? "font-semibold text-warn-text" : "text-muted"}`}>
           {pinned === 0
             ? `v${includer.draft_version} in its next version`
             : `Includes v${pinned}${behind ? `, ${gap === 1 ? "one" : gap} behind` : ""}`}
         </span>
-        <span className="w-(--seat-number) flex-none text-right text-[13.5px] text-muted">
+        <span className="w-(--seat-number) flex-none text-right text-small text-muted">
           {includer.people} {includer.people === 1 ? "person" : "people"}
         </span>
       </CardRow>

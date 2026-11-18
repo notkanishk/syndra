@@ -284,7 +284,7 @@ export function ReadFreshness({
   const blooming = landed !== null && landed === (state.readAt ?? null) && (reading === "live" || reading === "ageing");
 
   return (
-    <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] ${className}`}>
+    <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-fine ${className}`}>
       {/* A dot for every reading, not only the healthy one. It is the thing
           the eye reaches before the sentence, and its absence on three of the
           four readings made "no dot" mean both "ageing" and "stale".
@@ -408,7 +408,7 @@ export function RetryWait({ name, retry, onStop }: {
             </Button>
           }
         >
-          <span id={lineId} className="flex-1 text-[14px] text-warn-text">
+          <span id={lineId} className="flex-1 text-body text-warn-text">
             {retryingLine(name, retry.left)}
           </span>
         </CardRow>

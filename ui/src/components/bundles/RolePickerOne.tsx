@@ -161,7 +161,7 @@ export function RolePickerOne({
         aria-label={labelledBy ? undefined : "Roles"}
       >
         {shown.length === 0 ? (
-          <p className="px-4 py-6 text-[14px] text-muted">
+          <p className="px-4 py-6 text-body text-muted">
             {operator
               ? `No role matches “${query}”. A role created directly in Zitadel may not be listed here yet. Check there, or create it in Syndra.`
               : `Nothing you can ask for matches “${query}”. Ask for access, and say what you need in Why.`}
@@ -185,7 +185,7 @@ export function RolePickerOne({
                 <Unfold open={open}>
                   <div className="flex flex-col gap-1.5 px-2 pb-2">
                     {roles.length === 0 ? (
-                      <p className="px-3.5 py-2 text-[14px] text-muted">
+                      <p className="px-3.5 py-2 text-body text-muted">
                         {operator
                           ? `${place.name} has no roles yet, so there's nothing to give. You can add one on its project page.`
                           : `${place.name} has no roles yet, so there's nothing to ask for. Makerspace staff can add them.`}

@@ -37,7 +37,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Dot({ text, warn = false }: { text: string; warn?: boolean }) {
   return (
-    <div className="flex items-start gap-2.5 text-[14px] leading-[1.55]">
+    <div className="flex items-start gap-2.5 text-body leading-[1.55]">
       <span aria-hidden className="flex w-1.5 flex-none pt-[9px]">
         <StatusDot tone={warn ? "warn" : "neutral"} />
       </span>
@@ -50,8 +50,8 @@ function Dot({ text, warn = false }: { text: string; warn?: boolean }) {
 
 function Glyph({ change, ctx }: { change: Change; ctx: SayContext }) {
   return (
-    <div className="flex items-start gap-2.5 text-[14.5px] leading-[1.5]">
-      <span aria-hidden className="w-[1.5ch] flex-none font-mono text-[13px] font-bold">
+    <div className="flex items-start gap-2.5 text-body leading-[1.5]">
+      <span aria-hidden className="w-[1.5ch] flex-none font-mono text-small font-bold">
         {GLYPH[change.kind]}
       </span>
       <span className="[text-wrap:pretty]">
@@ -98,7 +98,7 @@ export function TemplateSheet({
         {mine && (
           <Section title="Changed since you started from it">
             {mine.changes.length === 0 ? (
-              <p className="text-[14px] text-muted">Nothing yet. Your role choices and words are yours, so they don&rsquo;t count as changes.</p>
+              <p className="text-body text-muted">Nothing yet. Your role choices and words are yours, so they don&rsquo;t count as changes.</p>
             ) : (
               mine.changes.map((c, i) => <Glyph key={i} change={c} ctx={ctx} />)
             )}
@@ -235,7 +235,7 @@ export function SaveSummary({
         <div className="flex flex-col gap-[18px] px-6 pb-2">
           <Section title="What changes">
             {changes.length === 0 ? (
-              <p className="text-[14px] text-muted">The shape is the same as what {app} gets now; this saves it as {app}&rsquo;s own.</p>
+              <p className="text-body text-muted">The shape is the same as what {app} gets now; this saves it as {app}&rsquo;s own.</p>
             ) : (
               changes.map((c, i) => <Glyph key={i} change={c} ctx={ctx} />)
             )}
@@ -248,7 +248,7 @@ export function SaveSummary({
             </Section>
           )}
           {breaking.length > 0 && (
-            <label className="flex items-start gap-2.5 text-[14.5px] leading-[1.5]">
+            <label className="flex items-start gap-2.5 text-body leading-[1.5]">
               <Checkbox className="mt-1" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} />
               <span>
                 <Ticks text={understandLine(breaking, ctx)} />

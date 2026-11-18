@@ -38,10 +38,10 @@ export function AccountKind({ user }: { user: Pick<UserProfile, "id" | "name" | 
           )
         }
       >
-        <span className="w-full text-[13.5px] font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">Kind</span>
-        <span className="min-w-0 flex-1 text-[14.5px]">
+        <span className="w-full text-small font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">Kind</span>
+        <span className="min-w-0 flex-1 text-body">
           <span className="font-semibold">{service ? "A service account" : "A person"}</span>
-          <span className="block text-[13px] text-faint">
+          <span className="block text-small text-faint">
             {service ? "Listed under System, not People" : "Signs in with a password in Zitadel"}
           </span>
         </span>

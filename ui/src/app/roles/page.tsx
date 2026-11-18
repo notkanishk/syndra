@@ -211,7 +211,7 @@ export default function RolesPage() {
           all.length > 0 ? (
             <div className="flex flex-col gap-1">
               <ReadFreshness state={readState} subject="What Zitadel confirmed" />
-              <p data-prose className="max-w-[92ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+              <p data-prose className="measure text-small leading-[1.55] text-muted [text-wrap:pretty]">
                 Roles made straight in Zitadel, on a project Syndra cannot read, are not listed.{" "}
                 <ArrowLink href="/zitadel/projects" className="whitespace-nowrap">
                   Check a project&rsquo;s roles in Zitadel
@@ -291,30 +291,30 @@ export default function RolesPage() {
               {underRun ? (
                 <span aria-hidden className="hidden tablet:block tablet:w-[180px] tablet:shrink-0" />
               ) : (
-                <span className="w-full text-[12.5px] text-muted [text-wrap:pretty] tablet:w-[180px] tablet:shrink-0 tablet:text-[14.5px]">
+                <span className="w-full text-fine text-muted [text-wrap:pretty] tablet:w-[180px] tablet:shrink-0 tablet:text-body">
                   <ProjectName id={role.project_id} name={role.project_name} link={false} />
                 </span>
               )}
               <span className="w-full min-w-0 tablet:min-w-[200px] tablet:flex-1">
-                <span className="block text-[15px] font-semibold [text-wrap:pretty]">
+                <span className="block text-body font-semibold [text-wrap:pretty]">
                   {roleName(role.display_name, role.role_key)}
                   {role.waits_for_send && <WaitsMark className="ml-2" />}{" "}
                   <Mono className="font-normal text-faint">{role.role_key}</Mono>
                 </span>
                 {role.cloned_from_role && (
-                  <span className="block text-[12.5px] text-faint [text-wrap:pretty]">
+                  <span className="block text-fine text-faint [text-wrap:pretty]">
                     cloned from <ProjectName id={role.cloned_from_project} link={false} /> / {role.cloned_from_role}
                   </span>
                 )}
                 {/* Between tablet and desktop the group and what uses the role
                     fold into a line under it, so the role keeps its room. */}
-                <span className="block text-[12.5px] text-faint [text-wrap:pretty] desktop:hidden">
+                <span className="block text-fine text-faint [text-wrap:pretty] desktop:hidden">
                   {[role.group, role.is_unused ? "Unused" : usedBy(role)]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
               </span>
-              <span className="hidden w-[130px] shrink-0 text-[13.5px] text-muted [text-wrap:pretty] desktop:block">
+              <span className="hidden w-[130px] shrink-0 text-small text-muted [text-wrap:pretty] desktop:block">
                 {role.group || "—"}
               </span>
               {/*
@@ -322,22 +322,22 @@ export default function RolesPage() {
                 still be the input to a mapping rule or a member of a bundle,
                 and "0 people" alone reads as safe to delete when it isn't.
               */}
-              <span className="hidden w-[150px] shrink-0 text-[13.5px] text-muted [text-wrap:pretty] desktop:block">
+              <span className="hidden w-[150px] shrink-0 text-small text-muted [text-wrap:pretty] desktop:block">
                 {role.is_unused ? (
                   <Badge tone="neutral">Unused</Badge>
                 ) : (
                   usedBy(role) || <span className="text-faint">—</span>
                 )}
               </span>
-              <span className="w-full text-[15px] tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+              <span className="w-full text-body tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                 {holders.headline}
-                <span className="text-[13px] text-faint tablet:hidden">
+                <span className="text-small text-faint tablet:hidden">
                   {peopleSuffix(holders.headline)}
                 </span>
                 {/* Recorded is what Syndra decided; this is what Zitadel shows
                     right now — never the same word, never the same line. */}
                 {holders.note && (
-                  <span className={`block text-[12.5px] ${holdersToneClass[holders.tone]}`}>
+                  <span className={`block text-fine ${holdersToneClass[holders.tone]}`}>
                     {holders.note}
                   </span>
                 )}

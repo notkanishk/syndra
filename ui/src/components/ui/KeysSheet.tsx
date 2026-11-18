@@ -20,7 +20,7 @@ export function KeysSheet({ open, onClose }: { open: boolean; onClose: () => voi
                 <Kbd key={key}>{key === MOD ? modifierKey() : key}</Kbd>
               ))}
             </dt>
-            <dd className="text-[14.5px] text-ink">{does}</dd>
+            <dd className="text-body text-ink">{does}</dd>
           </div>
         ))}
       </dl>

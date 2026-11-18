@@ -1189,6 +1189,42 @@ describe("density and alignment (D-1)", () => {
     expect(found, `Use CardGrid for cards side by side:\n  ${found.join("\n  ")}`).toEqual([]);
   });
 
+  // §6 pass 4 (Q3, recommended, pending owner): six body sizes within 2.5px folded into three steps,
+  // and the display sizes outside the scale onto it (§5 #40). A size is a step (`text-body`,
+  // `text-small`, `text-fine`, `text-title`, `text-heading`, `text-figure`, or a `type-*` role),
+  // never a pixel count. Left as they are, each said where it is: decoration nobody reads
+  // (`aria-hidden`), and what is marked `type-scale-exempt` within the eight lines above it (the
+  // avatar initials, the dialog field, the wordmark).
+  it("sets every size from the type scale, never a pixel count", () => {
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      const source = readFileSync(file, "utf8");
+      const tags = openingTags(source);
+      for (const size of Array.from(source.matchAll(/text-\[\d+(?:\.\d+)?px\]/g))) {
+        const at = size.index;
+        const holder = tags.find((tag) => tag.at <= at && tag.at + tag.text.length > at);
+        if (holder?.text.includes("aria-hidden")) continue;
+        const line = source.slice(0, at).split("\n").length;
+        if (source.split("\n").slice(Math.max(0, line - 9), line).join("\n").includes("type-scale-exempt")) continue;
+        found.push(`${file.replace(`${SRC_ROOT}/`, "")}:${line} ${size[0]}`);
+      }
+    }
+    expect(found, `Use a step of the type scale:\n  ${found.join("\n  ")}`).toEqual([]);
+    // The body reads the body step.
+    expect(atRuleBody(css.slice(css.indexOf("@layer base {")), "body {")).toContain("font-size: var(--text-body);");
+  });
+
+  // §3: "every sentence: lede, caption, Notice, guidance, a row's detail line" reads --measure. Left
+  // as they are: the greeting's balance widths, code (a command block is not a sentence), the tile's
+  // own detail and a button's reason under it.
+  it("caps every sentence at the measure, never a ch count of its own", () => {
+    const allowed = new Set(["components/home/Home.tsx", "components/ui/CommandBlock.tsx", "components/ui/StatCard.tsx", "components/ui/Button.tsx"]);
+    const found = Array.from(walk(SRC_ROOT))
+      .filter((file) => file.endsWith(".tsx") && !allowed.has(file.replace(`${SRC_ROOT}/`, "")))
+      .flatMap((file) => Array.from(readFileSync(file, "utf8").matchAll(/(?<![\w-])max-w-\[\d+ch\]/g), (m) => `${file.replace(`${SRC_ROOT}/`, "")}: ${m[0]}`));
+    expect(found, `Use measure:\n  ${found.join("\n  ")}`).toEqual([]);
+  });
+
   it("takes no line for an empty detail", () => {
     expect(namedAtRuleBody(css, "@utility", "row-detail")).toMatch(/&:empty \{\s*display: none;\s*\}/);
   });

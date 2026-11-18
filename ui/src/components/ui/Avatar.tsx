@@ -4,6 +4,7 @@
  * still identifiable while the name resolver is in flight.
  */
 const SIZES = {
+  // type-scale-exempt (D-1 §6 pass 4: avatar initials keep their sizes), and
   // type-floor-exempt: initials on an aria-hidden gradient. The name they
   // abbreviate is printed beside them, so nothing here is read — this is a
   // shape, and the floor governs what somebody has to read.

@@ -42,7 +42,7 @@ function minutes(m: number): string {
 /** One fact: what it is, then its number, on a hairline. */
 function Fact({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="row-divider flex items-baseline justify-between gap-4 px-5 py-3 text-[13.5px]">
+    <div className="row-divider flex items-baseline justify-between gap-4 px-5 py-3 text-small">
       <span className="text-muted">{label}</span>
       <span className="font-semibold tabular-nums">{value}</span>
     </div>
@@ -95,14 +95,14 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
         {/* The term line: which term this is reading, then the one place its dates are set. */}
         {url.period === "term" && t ? (
           <>
-            <span className="text-[13px] text-faint">
+            <span className="text-small text-faint">
               This term is {t.window.label}, {formatShortDate(`${t.window.from}T12:00:00`)} to{" "}
               {formatShortDate(`${t.window.to}T12:00:00`)}
             </span>
             <ArrowLink href="/settings">Set in Makerspace settings</ArrowLink>
           </>
         ) : (
-          <span className="text-[13px] text-faint">{t?.window.label ?? ""}</span>
+          <span className="text-small text-faint">{t?.window.label ?? ""}</span>
         )}
       </div>
 
@@ -197,7 +197,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
                   {[...t.ending_soon]
                     .sort((a, b) => b.d30 - a.d30)
                     .map((p) => (
-                      <div key={p.project_id} role="row" className={`${ENDING_ROW} text-[13.5px]`}>
+                      <div key={p.project_id} role="row" className={`${ENDING_ROW} text-small`}>
                         <span role="cell" className="text-muted">
                           {projectLabel(p.project_name)}
                         </span>

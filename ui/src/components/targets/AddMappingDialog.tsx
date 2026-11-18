@@ -161,7 +161,7 @@ export function RoleMappingDialog({
           {role ? (
             <div className="grid gap-1.5">
               <span className="type-label text-label">Role in {project?.name || "its project"}</span>
-              <span className="text-[15px] font-semibold">{roleLabel}</span>
+              <span className="text-body font-semibold">{roleLabel}</span>
             </div>
           ) : (
             <div className="grid gap-1.5">
@@ -347,7 +347,7 @@ export function RefusedFields({ target }: { target: string }) {
   if (names.length === 0) return null;
   const many = names.length > 1;
   return (
-    <p className="px-1 text-[13.5px] leading-[1.55] text-muted">
+    <p className="px-1 text-small leading-[1.55] text-muted">
       {many ? "Some settings cannot" : "One setting cannot"} be mapped, on purpose: {formatList(names)}.{" "}
       {many ? "They follow" : "It follows"} from whether the person has any access to {nameOf(target)} at all. If a role
       could set {many ? "them" : "it"}, one role could switch an account off while another still gave that person access.

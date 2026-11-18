@@ -46,7 +46,7 @@ export function TermDatesCard() {
           )
         }
       />
-      <p className="row-divider max-w-[86ch] px-5 py-4 text-[14.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+      <p className="row-divider measure px-5 py-4 text-body leading-[1.55] text-muted [text-wrap:pretty]">
         Trends, &quot;new this term&quot; and &quot;to the end of next term&quot; read these. Terms move each year, so
         check them when one ends.
       </p>
@@ -65,8 +65,8 @@ export function TermDatesCard() {
             data-term-row
             className="row-divider flex flex-wrap items-baseline gap-x-[18px] gap-y-1 px-5 py-3.5"
           >
-            <span className="w-[170px] shrink-0 text-[14px] text-muted">{t.name}</span>
-            <span className="text-[15px] tabular-nums">
+            <span className="w-[170px] shrink-0 text-body text-muted">{t.name}</span>
+            <span className="text-body tabular-nums">
               {shortDay(t.start)} to {shortDay(t.end)}
               {standing[i] && <span className="text-faint">{` · ${standing[i]}`}</span>}
             </span>
@@ -95,7 +95,7 @@ const ROW_GRID =
   "grid grid-cols-2 items-start gap-x-3 gap-y-2.5 tablet:grid-cols-[minmax(0,1fr)_9.5rem_9.5rem_auto] tablet:gap-x-3.5";
 /** The visible field name on a phone, drawn by CSS so the words are in the DOM once, above the rows. */
 const PHONE_NAME =
-  "before:mb-[7px] before:block before:text-[12.5px] before:font-semibold before:text-faint before:content-[attr(data-label)] tablet:before:hidden";
+  "before:mb-[7px] before:block before:text-fine before:font-semibold before:text-faint before:content-[attr(data-label)] tablet:before:hidden";
 
 function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void }) {
   const next = useRef(terms.length);
@@ -180,7 +180,7 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
               )}
             </Unfold>
             <div>
-              <div aria-hidden className={`${ROW_GRID} hidden pb-2 text-[12.5px] font-semibold text-faint tablet:grid`}>
+              <div aria-hidden className={`${ROW_GRID} hidden pb-2 text-fine font-semibold text-faint tablet:grid`}>
                 <span>Name</span>
                 <span>First day</span>
                 <span>Last day</span>
@@ -260,7 +260,7 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
               >
                 Add a term
               </Button>
-              {atMost && <span className="text-[13px] text-faint">Twelve is the most.</span>}
+              {atMost && <span className="text-small text-faint">Twelve is the most.</span>}
             </div>
           </>
         )}

@@ -114,7 +114,7 @@ function RetentionForm({ target, days, set }: { target: string; days: number; se
             outcome={{ kind: "applied", message: copy.retentionSaved(done), detail: copy.RETENTION_SAVED_NEXT }}
           />
         )}
-        {save.error && <p role="alert" className="text-[13.5px] text-danger-text">{sentence(describeFailure(save.error))}</p>}
+        {save.error && <p role="alert" className="text-small text-danger-text">{sentence(describeFailure(save.error))}</p>}
       </form>
     </Card>
   );

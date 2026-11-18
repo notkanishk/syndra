@@ -47,7 +47,7 @@ export function ProjectClaimDefault({ projectId }: { projectId: string }) {
   return (
     <Card id="claims-default">
       <CardHeader title="Default shape" className="pb-1" />
-      <p className="px-5 pb-4 text-[14px] leading-[1.5] text-faint">
+      <p className="px-5 pb-4 text-body leading-[1.5] text-faint">
         What an app on {projectLabel(shape.data.project_name)} is told when it has no shape of its own.{" "}
         {onDefault.length === 0
           ? "Every app here has its own shape now, so this reaches none of them."
@@ -165,7 +165,7 @@ function ProfileForm({
           // default as easily as a deliberate choice, and printing it as
           // plain fact is how a list elsewhere ended up disagreeing with
           // this screen about the same app's real claim name.
-          <p className="mt-1 text-[13px] text-faint">
+          <p className="mt-1 text-small text-faint">
             Nobody has set this yet. Syndra sends the built-in default below.
           </p>
         )}
@@ -176,7 +176,7 @@ function ProfileForm({
               value={claimName}
               spellCheck={false}
               onChange={(event) => setClaimName(event.target.value)}
-              className="font-mono text-[13.5px]"
+              className="font-mono text-small"
               placeholder="syndra.laser.roles"
             />
           </Crossfade>
@@ -209,7 +209,7 @@ function ProfileForm({
         </div>
 
         {drawn.rows.length === 0 ? (
-          <p className="text-[13.5px] text-faint">
+          <p className="text-small text-faint">
             Only the roles are sent. Add a claim when the app also needs the person&rsquo;s email
             or team.
           </p>
@@ -227,7 +227,7 @@ function ProfileForm({
                   onChange={(event) =>
                     setExtras((prev) => replace(prev, extra.id, { ...extra, key: event.target.value }))
                   }
-                  className="min-w-[200px] flex-1 font-mono text-[13.5px]"
+                  className="min-w-[200px] flex-1 font-mono text-small"
                 />
                 <Select
                   aria-label="Where the value comes from"

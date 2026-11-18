@@ -79,7 +79,7 @@ export function CardHeader({
       {count !== undefined && (
         <span
           data-testid="card-count"
-          className={`rounded-pill px-2.5 py-0.5 text-[12.5px] font-bold ${
+          className={`rounded-pill px-2.5 py-0.5 text-fine font-bold ${
             count === 0 ? "border border-line-strong text-label" : badgeTone
           }`}
         >
@@ -88,7 +88,7 @@ export function CardHeader({
       )}
       <span className="flex-1" />
       {note && (
-        <span data-card-note className="text-[13.5px] text-faint">
+        <span data-card-note className="text-small text-faint">
           {note}
         </span>
       )}
@@ -271,7 +271,7 @@ export function CardColumns({
 }: React.HTMLAttributes<HTMLDivElement> & { seat?: Seat; seatLabel?: React.ReactNode }) {
   return (
     <div
-      className={`row-cols hidden px-(--card-x) py-2 text-[12.5px] font-semibold uppercase tracking-[0.09em] text-label tablet:flex ${className}`}
+      className={`row-cols hidden px-(--card-x) py-2 text-fine font-semibold uppercase tracking-[0.09em] text-label tablet:flex ${className}`}
       {...props}
     >
       {children}
@@ -360,7 +360,7 @@ export function RowField({ label, children }: { label: string; children: React.R
   return (
     <div className="flex flex-col gap-0.5 py-1.5">
       <span className="type-label">{label}</span>
-      <span className="text-[13.5px] text-ink">{children}</span>
+      <span className="text-small text-ink">{children}</span>
     </div>
   );
 }

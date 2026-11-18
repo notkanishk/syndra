@@ -29,7 +29,7 @@ export function TargetStats({ target, kind }: { target: string; kind?: string })
     return (
       <Card>
         <CardRow first>
-          <span className="text-[14px] text-muted">{copy.UNAVAILABLE}</span>
+          <span className="text-body text-muted">{copy.UNAVAILABLE}</span>
         </CardRow>
       </Card>
     );
@@ -39,7 +39,7 @@ export function TargetStats({ target, kind }: { target: string; kind?: string })
     return (
       <Card>
         <CardRow first>
-          <span className="text-[14px] text-muted">{copy.ABSENT}</span>
+          <span className="text-body text-muted">{copy.ABSENT}</span>
         </CardRow>
       </Card>
     );

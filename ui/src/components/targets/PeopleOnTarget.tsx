@@ -212,17 +212,17 @@ function PersonRow({
         <span className="flex w-[220px] flex-none items-center gap-2.5">
           <UserAvatar id={account.subject_id} size="row" />
           <span className="min-w-0">
-            <UserName id={account.subject_id} href={accountHref(account.subject_id)} className="[overflow-wrap:anywhere] text-[14.5px] font-semibold text-ink" />
+            <UserName id={account.subject_id} href={accountHref(account.subject_id)} className="[overflow-wrap:anywhere] text-body font-semibold text-ink" />
             <ServiceAccountTag id={account.subject_id} />
           </span>
         </span>
-        <span className="min-w-0 flex-1 basis-[200px] [overflow-wrap:anywhere] font-mono text-[13.5px] text-ink">
+        <span className="min-w-0 flex-1 basis-[200px] [overflow-wrap:anywhere] font-mono text-small text-ink">
           {account.username}
         </span>
         <span className={STATUS_SEAT}>
           {account.standing && <StandingLine standing={account.standing} system={nameOf(target)} audience="operator" step={false} />}
         </span>
-        <span className="w-(--seat-number) flex-none text-right text-[13.5px] text-muted">{formatShortDate(account.bound_at)}</span>
+        <span className="w-(--seat-number) flex-none text-right text-small text-muted">{formatShortDate(account.bound_at)}</span>
       </CardRow>
       {dialog === "limit" && home && (
         <LimitDialog target={target} name={name} home={home} onClose={() => setDialog(null)} />

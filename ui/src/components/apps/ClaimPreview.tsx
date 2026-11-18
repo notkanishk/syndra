@@ -84,12 +84,12 @@ export function ClaimPreview({
         title={
           <span className="flex flex-wrap items-center gap-2.5">
             Preview
-            <span className="text-[13.5px] font-normal text-faint">for</span>
+            <span className="text-small font-normal text-faint">for</span>
             <Select
               aria-label="Preview for"
               value={personId}
               onChange={(e) => onPerson(e.target.value)}
-              className="w-[200px] py-2 text-[14px]"
+              className="w-[200px] py-2 text-body"
             >
               {humans.map((u) => (
                 <option key={u.id} value={u.id}>
@@ -144,7 +144,7 @@ export function ClaimPreview({
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-5 pb-3">
               <StatusDot tone={verdict.tone} />
               <Crossfade id={verdict.text} inline>
-                <span className="text-[14.5px] font-semibold text-ink">{verdict.text}</span>
+                <span className="text-body font-semibold text-ink">{verdict.text}</span>
               </Crossfade>
               <span className="ml-1 inline-flex">
                 <Button size="sm" aria-expanded={open} onClick={() => setChoice({ bad, open: !open })}>
@@ -163,7 +163,7 @@ export function ClaimPreview({
             </div>
             {!asDraft && <LiveLine live={preview?.live?.[personId]} person={ctx.person} />}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 pb-5 pt-2.5">
-              <span className="min-w-0 flex-[1_1_260px] text-[13px] leading-[1.55] text-faint [text-wrap:pretty]">
+              <span className="min-w-0 flex-[1_1_260px] text-small leading-[1.55] text-faint [text-wrap:pretty]">
                 {foot && <Ticks text={foot} />}
               </span>
               <span className="ml-auto inline-flex flex-none whitespace-nowrap">
@@ -196,7 +196,7 @@ export function ClaimPreview({
 export function LiveLine({ live, person }: { live?: LiveCheck; person: string }) {
   if (!live) {
     return (
-      <p className="px-5 pt-2.5 text-[13px] leading-[1.55] text-faint [text-wrap:pretty]">
+      <p className="px-5 pt-2.5 text-small leading-[1.55] text-faint [text-wrap:pretty]">
         No sign-in of {person}&apos;s has been seen to compare with this. Turn on debug mode for them below, and their next sign-in is
         checked against it.
       </p>
@@ -211,7 +211,7 @@ export function LiveLine({ live, person }: { live?: LiveCheck; person: string })
     : `${person}'s last sign-in, at ${at}, carried something different in ${where}.`;
   return (
     <div className="flex flex-col gap-2 px-5 pt-2.5">
-      <span className="flex items-baseline gap-2.5 text-[13.5px] leading-[1.55] text-ink">
+      <span className="flex items-baseline gap-2.5 text-small leading-[1.55] text-ink">
         <StatusDot tone={live.match ? "healthy" : "warn"} />
         <span>
           <span className="sr-only">{live.match ? "Matches. " : "Doesn't match. "}</span>
@@ -226,7 +226,7 @@ export function LiveLine({ live, person }: { live?: LiveCheck; person: string })
             empty={<span className="text-muted">{"{}"}</span>}
             className="[overflow-wrap:anywhere]"
           />
-          <span className="text-[13px] leading-[1.55] text-faint">
+          <span className="text-small leading-[1.55] text-faint">
             If the shape or their roles changed after {at}, have them sign in again to compare.
           </span>
         </>

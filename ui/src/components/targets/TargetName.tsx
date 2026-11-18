@@ -108,7 +108,7 @@ export function TargetName({ registered }: { registered: TargetSummary }) {
             outcome={{ kind: "applied", message: `Members see it as ${done}.`, detail: "Nobody's access changed." }}
           />
         )}
-        {save.error && <p role="alert" className="text-[13.5px] text-danger-text">{sentence(describeFailure(save.error))}</p>}
+        {save.error && <p role="alert" className="text-small text-danger-text">{sentence(describeFailure(save.error))}</p>}
       </form>
     </Card>
   );

@@ -15,5 +15,5 @@ export function useAccountHref(): (id: string) => string {
 export function ServiceAccountTag({ id, className = "" }: { id: string; className?: string }) {
   const ids = useServiceAccountIds();
   if (!ids.has(id)) return null;
-  return <span className={`block text-[12.5px] text-faint ${className}`}>Service account</span>;
+  return <span className={`block text-fine text-faint ${className}`}>Service account</span>;
 }

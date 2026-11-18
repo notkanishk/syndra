@@ -67,6 +67,7 @@ export default function Sidebar() {
     <div className="hidden w-[252px] flex-none flex-col gap-5 overflow-y-auto border-r border-line bg-rail px-3 pb-[22px] pt-5 tablet:flex">
       <div className="flex items-center gap-2.5 px-2">
         <SyndraMark welcome />
+        {/* type-scale-exempt: the wordmark is the brand's, not a step of the type scale. */}
         <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
       </div>
 
@@ -150,7 +151,7 @@ function NavRow({
       // `min-h-[var(--tap)]` up to desktop: the rail appears at the tablet breakpoint and
       // a tablet is still a thumb, which is the whole argument
       // touch-targets.test.tsx makes. Its own links were 38-43px there.
-      className={`mt-[3px] flex min-h-[var(--tap)] items-center gap-[9px] rounded-nav text-[14.5px] control desktop:min-h-0 ${
+      className={`mt-[3px] flex min-h-[var(--tap)] items-center gap-[9px] rounded-nav text-body control desktop:min-h-0 ${
         changed ? "flash " : ""
       }${
         nested ? "py-2 pl-[21px] pr-3" : "px-3 py-[9px]"
@@ -173,7 +174,7 @@ function NavRow({
       {count !== undefined &&
         (count > 0 ? (
           <span
-            className={`rounded-pill px-2 py-0.5 text-[12.5px] font-semibold ${
+            className={`rounded-pill px-2 py-0.5 text-fine font-semibold ${
               // A count never travels: a changed one only tints in.
               changed ? "tint-in " : ""
             }${BADGE_TONE[item.tone ?? "accent"]}`}
@@ -183,7 +184,7 @@ function NavRow({
         ) : (
           // Hollow zero: the row keeps its seat and says so, rather than
           // vanishing and moving everything below it.
-          <span className="rounded-pill border border-line-strong px-2 py-0.5 text-[12.5px] text-label">
+          <span className="rounded-pill border border-line-strong px-2 py-0.5 text-fine text-label">
             0
           </span>
         ))}

@@ -71,9 +71,9 @@ export function CoreMemberCard({ view, untitled = false }: CardProps) {
       </Unfold>
       <CardRow first className="flex-wrap">
         {view.account ? (
-          <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-[13.5px]">{view.account.username}</span>
+          <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-small">{view.account.username}</span>
         ) : (
-          <span className="text-[14px] text-muted">
+          <span className="text-body text-muted">
             {view.entitled ? `Your account on ${name} is not made yet.` : `None of your roles reaches ${name}.`}
           </span>
         )}
@@ -83,7 +83,7 @@ export function CoreMemberCard({ view, untitled = false }: CardProps) {
         ) : !view.entitled ? (
           <ArrowLink href="/requests?ask">Ask for access in Requests</ArrowLink>
         ) : (
-          <span className="text-[13px] text-muted">{view.account ? NOTHING_TO_DO : SYNDRA_MAKES_IT}</span>
+          <span className="text-small text-muted">{view.account ? NOTHING_TO_DO : SYNDRA_MAKES_IT}</span>
         )}
       </CardRow>
       <Reads reads={view.reads} name={name} reader={MEMBER} />

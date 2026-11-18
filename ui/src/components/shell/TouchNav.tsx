@@ -167,7 +167,7 @@ function Tab({
         className={`h-[7px] w-[7px] rounded-pill motion-tint ${active ? "bg-accent-text" : "bg-ink/30"}`}
       />
       <span
-        className={`max-w-full truncate text-[12.5px] ${
+        className={`max-w-full truncate text-fine ${
           active ? "font-semibold text-accent-text" : "text-muted"
         }`}
       >
@@ -176,7 +176,7 @@ function Tab({
 
       {count !== undefined && count > 0 && (
         <span
-          className={`absolute right-2 top-1 min-w-[20px] rounded-pill px-1.5 text-center text-[12.5px] font-bold leading-[20px] ${
+          className={`absolute right-2 top-1 min-w-[20px] rounded-pill px-1.5 text-center text-fine font-bold leading-[20px] ${
             BADGE_TONE[destination.tone ?? "accent"]
           }`}
         >
@@ -238,7 +238,7 @@ function SheetTrigger({
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex min-h-[var(--tap)] w-full items-center gap-2.5 rounded-pill bg-tint-2 px-4 text-[13.5px] font-semibold text-ink control press-scale"
+        className="flex min-h-[var(--tap)] w-full items-center gap-2.5 rounded-pill bg-tint-2 px-4 text-small font-semibold text-ink control press-scale"
       >
         <span aria-hidden className="text-faint">
           •••
@@ -255,7 +255,7 @@ function SheetTrigger({
                 says "N things need you" on the same screen this bar can sit
                 under, and a places-count beside an items-count reads as two
                 answers to the same question. This one is somewhere else. */}
-            <span className="text-[12.5px] font-semibold text-muted">
+            <span className="text-fine font-semibold text-muted">
               {wanting === 1
                 ? "1 place elsewhere needs a look"
                 : `${wanting} places elsewhere need a look`}
@@ -578,7 +578,7 @@ function SheetRow({
       replace
       onClick={onPick}
       aria-current={active ? "page" : undefined}
-      className={`mt-0.5 flex min-h-[var(--tap)] items-center gap-2.5 rounded-[12px] text-[15px] control press-scale ${
+      className={`mt-0.5 flex min-h-[var(--tap)] items-center gap-2.5 rounded-[12px] text-body control press-scale ${
         nested ? "pl-7 pr-3.5" : "px-3.5"
       } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-muted"}`}
     >
@@ -595,7 +595,7 @@ function SheetRow({
       {count !== undefined &&
         (count > 0 ? (
           <span
-            className={`min-w-[20px] rounded-pill px-1.5 text-center text-[12.5px] font-bold leading-[20px] ${
+            className={`min-w-[20px] rounded-pill px-1.5 text-center text-fine font-bold leading-[20px] ${
               BADGE_TONE[tone ?? "accent"]
             }`}
           >
@@ -605,7 +605,7 @@ function SheetRow({
           // The hollow zero, same as the rail: the row keeps its seat and says
           // there is nothing, rather than vanishing and moving what is below it
           // under a thumb already on its way down.
-          <span className="min-w-[20px] rounded-pill border border-line-strong px-1.5 text-center text-[12.5px] leading-[18px] text-label">
+          <span className="min-w-[20px] rounded-pill border border-line-strong px-1.5 text-center text-fine leading-[18px] text-label">
             0
           </span>
         ))}

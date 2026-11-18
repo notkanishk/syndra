@@ -7,7 +7,7 @@
 export function ToolRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-5 py-3.5">
-      <span className="w-[170px] flex-none text-[14px] font-semibold">{label}</span>
+      <span className="w-[170px] flex-none text-body font-semibold">{label}</span>
       {children}
     </div>
   );

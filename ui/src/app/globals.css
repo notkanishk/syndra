@@ -721,8 +721,9 @@
     background-color: var(--ground);
     color: var(--ink);
     font-family: var(--font-sans), system-ui, sans-serif;
-    font-size: 14.5px;
-    line-height: 1.55;
+    /* The body step (D-1 §3): every sentence that sets no size of its own. */
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

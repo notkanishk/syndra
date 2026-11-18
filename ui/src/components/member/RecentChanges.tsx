@@ -87,7 +87,7 @@ function ChangeRow({
   return (
     <div className="row-divider flex flex-wrap items-baseline gap-x-4 gap-y-1.5 px-5 py-3.5">
       <span
-        className={`inline-flex w-[118px] flex-none items-center gap-2 text-[13.5px] font-semibold ${
+        className={`inline-flex w-[118px] flex-none items-center gap-2 text-small font-semibold ${
           tone === "danger" ? "text-danger-text" : "text-ink"
         }`}
       >
@@ -95,13 +95,13 @@ function ChangeRow({
         {word}
       </span>
       <span className="flex min-w-0 flex-[1_1_260px] flex-col gap-[5px]">
-        <span className="text-[14.5px] leading-[1.5] [text-wrap:pretty]">
+        <span className="text-body leading-[1.5] [text-wrap:pretty]">
           {pre}
           <strong className="font-semibold">{role}</strong>
           {post}
         </span>
         {change.note && (
-          <span className="text-[14px] leading-[1.55] [text-wrap:pretty]">
+          <span className="text-body leading-[1.55] [text-wrap:pretty]">
             {change.by && (
               <span className="text-muted">
                 <UserName id={change.by} />:{" "}
@@ -116,7 +116,7 @@ function ChangeRow({
           </ArrowLink>
         )}
       </span>
-      <span className="w-full text-[13px] text-faint tablet:w-(--seat-number) tablet:flex-none tablet:text-right">{dayLabel(change.at)}</span>
+      <span className="w-full text-small text-faint tablet:w-(--seat-number) tablet:flex-none tablet:text-right">{dayLabel(change.at)}</span>
     </div>
   );
 }

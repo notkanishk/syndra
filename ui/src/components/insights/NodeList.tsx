@@ -46,7 +46,7 @@ export function NodeList({
         <section key={lane.kind}>
           <div className="mb-2.5 flex flex-wrap items-baseline gap-2.5">
             <h2 className="type-label">{lane.title}</h2>
-            <span className="text-[13px] text-faint">
+            <span className="text-small text-faint">
               {model.lanes[lane.kind].length} · {BLURB[lane.kind]}
             </span>
           </div>
@@ -65,8 +65,8 @@ export function NodeList({
                   >
                     <NodeGlyph kind={node.kind} />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[14.5px] font-semibold">{model.nameOf(node.id)}</span>
-                      <span className="block text-[12.5px] text-faint">{connections(degree(node.id))}</span>
+                      <span className="block text-body font-semibold">{model.nameOf(node.id)}</span>
+                      <span className="block text-fine text-faint">{connections(degree(node.id))}</span>
                     </span>
                   </button>
                 </div>
@@ -116,9 +116,9 @@ export function PhoneNodes({
                 className="row-divider motion-tint flex min-h-[var(--tap)] w-full items-center gap-3 px-5 py-3 text-left aria-pressed:bg-accent-soft"
               >
                 <NodeGlyph kind={node.kind} />
-                <span className="min-w-0 flex-1 text-[14.5px] font-semibold">{name}</span>
+                <span className="min-w-0 flex-1 text-body font-semibold">{name}</span>
                 {n != null && (
-                  <span className="text-[13px] tabular-nums text-muted">
+                  <span className="text-small tabular-nums text-muted">
                     {n === 1 ? "1 person" : `${n} people`}
                     {unit ? ` ${unit}` : ""}
                   </span>

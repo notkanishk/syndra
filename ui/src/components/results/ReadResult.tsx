@@ -101,8 +101,8 @@ function AlsoSays({ lines }: { lines: string[] }) {
   const over = lines.length - LINES_CAP;
   return (
     <div className="flex flex-col gap-1.5" data-also-says>
-      <span className="text-[12.5px] font-semibold text-muted">{ALSO_SAYS}</span>
-      <ul className="m-0 flex list-none flex-col gap-0.5 p-0 font-mono text-[12.5px] leading-[1.5] text-faint [overflow-wrap:anywhere]">
+      <span className="text-fine font-semibold text-muted">{ALSO_SAYS}</span>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0 font-mono text-fine leading-[1.5] text-faint [overflow-wrap:anywhere]">
         {lines.slice(0, LINES_CAP).map((line, i) => (
           <li key={i}>{cut(line)}</li>
         ))}

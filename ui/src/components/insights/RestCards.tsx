@@ -18,12 +18,12 @@ export function RestCards({ cards }: { cards: RestCard[] }) {
       {cards.length === 0 && <EmptyState resolved title="Nothing needs a look right now." />}
       {cards.map((card) => (
         <div key={card.finding} className="row-divider flex flex-col gap-[5px] px-5 py-3.5">
-          <span className="flex items-center gap-2 text-[12.5px] font-semibold text-muted">
+          <span className="flex items-center gap-2 text-fine font-semibold text-muted">
             <StatusDot tone={DOT[card.finding]} />
             {card.kind}
           </span>
-          <span className="text-[15px] font-semibold [text-wrap:pretty]">{card.title}</span>
-          <span className="text-[13px] leading-[1.5] text-muted [text-wrap:pretty]">{card.line}</span>
+          <span className="text-body font-semibold [text-wrap:pretty]">{card.title}</span>
+          <span className="text-small leading-[1.5] text-muted [text-wrap:pretty]">{card.line}</span>
           <ArrowLink href={card.open.href} className="self-start">
             {card.open.label}
           </ArrowLink>

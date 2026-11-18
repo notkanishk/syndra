@@ -34,18 +34,18 @@ export function CheckTrail({ checks, compact = false }: { checks: TrailCheck[]; 
               {i < checks.length - 1 && <span aria-hidden className="mt-1.5 w-px flex-1 bg-line" />}
             </span>
             <div className={`flex min-w-0 flex-col gap-1 ${i < checks.length - 1 ? "pb-3.5" : ""}`}>
-              <span className="text-[14px] leading-[1.5] text-ink [text-wrap:pretty]">
+              <span className="text-body leading-[1.5] text-ink [text-wrap:pretty]">
                 <span className="sr-only">{`Check ${i + 1}, ${TONE_WORD[check.tone]}: `}</span>
                 <Ticks text={check.sentence} />
               </span>
               {details &&
                 check.faint?.map((line) => (
-                  <span key={line} className="text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
+                  <span key={line} className="text-small leading-[1.5] text-faint [text-wrap:pretty]">
                     <Ticks text={line} />
                   </span>
                 ))}
               {details && check.link && (
-                <a href={check.link.href} target="_blank" rel="noreferrer" className="text-[13.5px] font-semibold text-accent-text link-hover">
+                <a href={check.link.href} target="_blank" rel="noreferrer" className="text-small font-semibold text-accent-text link-hover">
                   {check.link.label} →
                 </a>
               )}

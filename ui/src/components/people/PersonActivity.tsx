@@ -66,7 +66,7 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
     {/* Sign-ins aren't history Syndra keeps (A-10 §6); they're read on demand
         from Zitadel's own log, with a reason (owner, 3 Nov). */}
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5">
-      <p className="m-0 min-w-0 flex-1 basis-[280px] text-[13.5px] leading-[1.5] text-faint [text-wrap:pretty]">
+      <p className="m-0 min-w-0 flex-1 basis-[280px] text-small leading-[1.5] text-faint [text-wrap:pretty]">
         Sign-ins aren&apos;t listed here. Look up sign-ins reads them from Zitadel&apos;s own log.
       </p>
       <Button variant="outline" size="sm" onClick={() => setLookingUp(true)}>
@@ -91,7 +91,7 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
       >
         {days.map((group) => (
           <div key={group.day}>
-            <div className="row-divider bg-tint-1 px-5 py-2 text-[12.5px] font-semibold text-muted">
+            <div className="row-divider bg-tint-1 px-5 py-2 text-fine font-semibold text-muted">
               {group.day}
             </div>
             {group.entries.map((entry) => (
@@ -111,7 +111,7 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
           />
         )}
         {atCap && (
-          <div className="flex flex-wrap items-center justify-between gap-x-4 border-t border-line px-5 py-3 text-[13px] text-faint">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 border-t border-line px-5 py-3 text-small text-faint">
             <span>Showing the most recent 200 entries, not their whole history.</span>
             <ArrowLink href={`/audit?user=${encodeURIComponent(userId)}`}>Audit</ArrowLink>
           </div>
@@ -204,8 +204,8 @@ function TargetActivityCard({
   return (
     <Card>
       <div className="row-divider flex flex-wrap items-baseline gap-2 px-5 py-3">
-        <span className="text-[14.5px] font-semibold">On {label}</span>
-        <span className="text-[13px] text-muted">
+        <span className="text-body font-semibold">On {label}</span>
+        <span className="text-small text-muted">
           Read from {label}&rsquo;s own audit log, not from Syndra&rsquo;s record.
         </span>
       </div>
@@ -250,7 +250,7 @@ function TargetActivityCard({
       )}
       <ReadAgainError error={again.error} />
       {data && !data.readable && data.reason === "no_account" ? (
-        <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
+        <div className="border-t border-line px-5 py-3 text-small text-faint">
           {label} has no account for this person, so there is nothing to read
           there.
         </div>
@@ -263,7 +263,7 @@ function TargetActivityCard({
       ) : null}
 
       {uncovered.length > 0 && (
-        <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
+        <div className="border-t border-line px-5 py-3 text-small text-faint">
           {storage ? (
             <UncoveredNote shares={uncovered} name={name} />
           ) : (
@@ -281,7 +281,7 @@ function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
 
   return (
     <div className="row-divider flex flex-wrap items-baseline gap-4 px-5 py-3">
-      <span className="w-[64px] shrink-0 text-[12.5px] text-faint">
+      <span className="w-[64px] shrink-0 text-fine text-faint">
         {formatClock(entry.created_at)}
       </span>
 
@@ -299,7 +299,7 @@ function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
           heading of this page. "Gave Bobby Roode a bundle" on
           Bobby's own Activity tab says his name twice and buries the one
           fact the row adds, which is who did it. */}
-      <span className="min-w-[240px] flex-1 text-[14px]">
+      <span className="min-w-[240px] flex-1 text-body">
         {isPasswordSend(entry) ? (
           <SendRow entry={entry} />
         ) : direction === "acted" ? (
@@ -338,7 +338,7 @@ function SendRow({ entry }: { entry: AuditEntry }) {
           <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
         </span>
       </span>
-      {sends && <span className="text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">{sends}</span>}
+      {sends && <span className="text-small leading-[1.5] text-faint [text-wrap:pretty]">{sends}</span>}
     </span>
   );
 }

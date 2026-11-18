@@ -196,12 +196,12 @@ function LiveList({
   return (
     <div onPointerEnter={() => setInside(true)} onPointerLeave={() => setInside(false)} onFocus={() => setInside(true)} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setInside(false)}>
       <div className="row-divider flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2.5">
-        <span className="inline-flex items-center gap-2 text-[13.5px] text-muted">
+        <span className="inline-flex items-center gap-2 text-small text-muted">
           <StatusDot tone={on ? "healthy" : "neutral"} />
           {on ? "Live · newest on top" : "Seen while it was on · newest on top"}
         </span>
         {on && waiting > 0 && (
-          <span className="ml-auto text-[13px] text-faint">
+          <span className="ml-auto text-small text-faint">
             {waiting === 1 ? "1 new sign-in waits" : `${waiting} new sign-ins wait`} until you {openSeq !== null ? "close this one" : "move off the list"}.
           </span>
         )}
@@ -228,7 +228,7 @@ function LiveList({
                 person={
                   <>
                     <UserAvatar id={s.user_id} size="row" />
-                    <UserName id={s.user_id} className="text-[14.5px] font-semibold" />
+                    <UserName id={s.user_id} className="text-body font-semibold" />
                   </>
                 }
                 asked={s.function.endsWith("preaccesstoken") ? "Access token" : "Userinfo"}
@@ -245,7 +245,7 @@ function LiveList({
         </>
       )}
       {!on && (
-        <p className="row-divider px-5 pb-4 pt-3 text-[13px] text-faint">
+        <p className="row-divider px-5 pb-4 pt-3 text-small text-faint">
           What it saw stays here until {clockOf(new Date(new Date(session.ended_at ?? session.ends_at).getTime() + 60 * 60_000).toISOString())}, then Syndra forgets it. It&rsquo;s gone sooner if Syndra restarts.
         </p>
       )}
@@ -334,22 +334,22 @@ function OpenedSignIn({ s, ctx }: { s: SignIn; ctx: CheckContext }) {
       <div className="flex flex-wrap gap-[22px]">
         <section className="flex min-w-0 flex-[1_1_380px] flex-col gap-2">
           <span className="type-label">What Zitadel sent</span>
-          <p className="text-[14px] leading-[1.5]">
+          <p className="text-body leading-[1.5]">
             Zitadel asked for {ctx.app}&rsquo;s {asked} claims for {ctx.person}, listing {roleCount === 1 ? "1 role" : `${roleCount} roles`} in {ctx.project}.
           </p>
-          <TokenBlock raw={s.request} className="text-[12.5px] leading-[1.7]" />
-          <span className="text-[12.5px] text-faint">Signed by Zitadel. The signature isn&rsquo;t shown.</span>
+          <TokenBlock raw={s.request} className="text-fine leading-[1.7]" />
+          <span className="text-fine text-faint">Signed by Zitadel. The signature isn&rsquo;t shown.</span>
           <span>
             <CopyButton idle="Copy request" value={s.request} />
           </span>
         </section>
         <section className="flex min-w-0 flex-[1_1_380px] flex-col gap-2">
           <span className="type-label">What Syndra answered</span>
-          <p className="text-[14px] leading-[1.5]">
+          <p className="text-body leading-[1.5]">
             Syndra added {claims.length === 1 ? "1 claim" : `${claims.length} claims`}, in {Math.round(s.duration_ms)} ms
             {built ? `, from their claims built at ${clockOf(built)}` : ""}.
           </p>
-          <TokenBlock raw={s.response} className="text-[12.5px] leading-[1.7]" />
+          <TokenBlock raw={s.response} className="text-fine leading-[1.7]" />
           <span>
             <CopyButton idle="Copy answer" value={s.response} />
           </span>
@@ -357,18 +357,18 @@ function OpenedSignIn({ s, ctx }: { s: SignIn; ctx: CheckContext }) {
       </div>
       <section className="flex flex-col gap-2">
         <span className="type-label">The checks for this sign-in</span>
-        {trail ? <CheckTrail checks={trail} compact /> : <p className="text-[14px] text-muted">Syndra couldn&rsquo;t check this sign-in.</p>}
+        {trail ? <CheckTrail checks={trail} compact /> : <p className="text-body text-muted">Syndra couldn&rsquo;t check this sign-in.</p>}
       </section>
       <section className="flex max-w-[760px] flex-col gap-2">
         <span className="flex flex-wrap items-center gap-2.5">
           <span className="type-label">Your claims, as {ctx.app} will see them</span>
           <Badge hollow>Rebuilt, not the signed token</Badge>
         </span>
-        <p className="max-w-[70ch] text-[13.5px] leading-[1.55] text-muted">
+        <p className="measure text-small leading-[1.55] text-muted">
           Zitadel adds its own claims, signs the token and hands it to {ctx.app} after Syndra answers, so Syndra never sees the token.
         </p>
         <TokenBlock lines={[...theirs, ...ours]} />
-        <span className="text-[12.5px] text-faint">
+        <span className="text-fine text-faint">
           The faded lines are Zitadel&rsquo;s own. <Mono>iss</Mono>, <Mono>aud</Mono> and the times are left out.
         </span>
       </section>
@@ -449,7 +449,7 @@ function DebugSheet({
         <div className="flex flex-col gap-3 px-6 pb-2">
           <div className="flex items-baseline gap-2.5">
             <span className="type-label">Whose sign-ins</span>
-            <span className="text-[12.5px] text-faint">One account at a time</span>
+            <span className="text-fine text-faint">One account at a time</span>
           </div>
           <div className="flex flex-col gap-1.5">
             {selfId && (
@@ -490,7 +490,7 @@ function DebugSheet({
               ))}
             </div>
           </div>
-          <p className="text-[13px] leading-[1.5] text-faint">
+          <p className="text-small leading-[1.5] text-faint">
             Syndra keeps what it sees in memory for an hour, never in its database. Names and emails show, because this is for you to debug. Signatures and secrets never do.
           </p>
           {outcome && <ActionOutcome outcome={outcome} word={mode === "on" ? "Not turned on" : "Not switched"} />}

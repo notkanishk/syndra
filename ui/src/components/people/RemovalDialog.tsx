@@ -372,7 +372,7 @@ function DirectDialog({
           // Never delivered, so there is nothing at the door to close: no box,
           // because nothing is wrong (RULES). The removal does not queue a
           // revocation; it cancels the give that was still waiting.
-          <p className="flex items-start gap-2.5 text-[15px] leading-[1.5]">
+          <p className="flex items-start gap-2.5 text-body leading-[1.5]">
             <StatusDot tone="neutral" className="mt-[8px]" />
             <span>
               <span className="text-muted">
@@ -381,14 +381,14 @@ function DirectDialog({
             </span>
           </p>
         ) : (
-        <div className="danger-note px-4 py-3.5 text-[15px] leading-[1.5]">
+        <div className="danger-note px-4 py-3.5 text-body leading-[1.5]">
           {retained ? (
             <>
               <strong className="font-semibold text-danger-text">
                 {subject} will still hold this role.
               </strong>
               <br />
-              <span className="text-[14px] text-muted">
+              <span className="text-body text-muted">
                 It also comes from {describeOthers(others)}, so nothing changes at the door today.
               </span>
             </>
@@ -398,7 +398,7 @@ function DirectDialog({
                 {subject} will lose this role.
               </strong>
               <br />
-              <span className="text-[14px] text-muted">
+              <span className="text-body text-muted">
                 No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel.{" "}
                 {roleWaits(removal.projectId, removal.roleKey)
                   ? `${roleLabel} always waits for you, so the change waits in Pending changes until you send it.`
@@ -411,10 +411,10 @@ function DirectDialog({
             </>
           )}
           {cancels.length > 0 && (
-            <span className="mt-1.5 block text-[14px] text-muted">{foretell("Revoking it", cancels)}</span>
+            <span className="mt-1.5 block text-body text-muted">{foretell("Revoking it", cancels)}</span>
           )}
           {rules.length > 0 && (
-            <span className="mt-1.5 block text-[14px] text-muted">{rules.join(" ")}</span>
+            <span className="mt-1.5 block text-body text-muted">{rules.join(" ")}</span>
           )}
         </div>
         )}
@@ -615,23 +615,23 @@ function BundleDialog({
             which is also what the backend now does, instead of enqueueing a
             revocation for access nobody ever received. */}
         <div className="type-label">{cancelOnly ? "Nothing to take back" : "They will lose"}</div>
-        <div className="flex flex-wrap items-center gap-2.5 text-[14px]">
+        <div className="flex flex-wrap items-center gap-2.5 text-body">
           <StatusDot tone={cancelOnly ? "neutral" : "danger"} />
           <RoleRef projectId={removal.projectId} roleKey={removal.roleKey} />
           {cancelOnly ? (
-            <span className="text-[13px] text-muted">· recorded, never sent</span>
+            <span className="text-small text-muted">· recorded, never sent</span>
           ) : (
-            others.length === 0 && <span className="text-[13px] text-muted">· no other source gives it</span>
+            others.length === 0 && <span className="text-small text-muted">· no other source gives it</span>
           )}
         </div>
 
         {others.length > 0 && (
           <>
             <div className="mt-2 type-label">They will keep</div>
-            <div className="flex flex-wrap items-center gap-2.5 text-[14px]">
+            <div className="flex flex-wrap items-center gap-2.5 text-body">
               <StatusDot tone="healthy" />
               <RoleRef projectId={removal.projectId} roleKey={removal.roleKey} />
-              <span className="text-[13px] text-muted">· still {describeOthers(others)}</span>
+              <span className="text-small text-muted">· still {describeOthers(others)}</span>
             </div>
           </>
         )}
@@ -795,17 +795,17 @@ function AutomaticDialog({
         }
       />
       <div className="flex flex-col gap-2.5 px-6">
-        <div className="text-[14.5px] leading-[1.5]">
+        <div className="text-body leading-[1.5]">
           <span className="text-muted">{input ?? "an input role"}</span>
           <span className="text-faint"> gives </span>
           <span className="font-semibold">
             <RoleRef projectId={removal.projectId} roleKey={removal.roleKey} />
           </span>
-          <div className="mt-1.5 text-[13.5px] text-faint">
+          <div className="mt-1.5 text-small text-faint">
             Editing the rule changes access for everyone it applies to.
           </div>
         </div>
-        <p className="text-[14px] leading-[1.55] text-muted">
+        <p className="text-body leading-[1.55] text-muted">
           To revoke this from {subject} alone, remove their{" "}
           <span className="text-ink">{input ?? "input role"}</span>. That is the input the rule
           reads.

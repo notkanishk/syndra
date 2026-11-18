@@ -211,7 +211,7 @@ function GapRow({
   if (count === 0) {
     return (
       <div className="row-divider flex items-baseline gap-3 px-5 py-3.5">
-        <span className="text-[14px] text-faint">{clear}</span>
+        <span className="text-body text-faint">{clear}</span>
       </div>
     );
   }
@@ -221,10 +221,10 @@ function GapRow({
       href={href}
       className="row-divider flex items-baseline gap-3 px-5 py-3.5 hover-tint"
     >
-      <span className="font-display text-[20px] leading-none text-accent-text">{count}</span>
-      <span className="text-[14.5px]">{headline}</span>
+      <span className="font-display text-title font-normal leading-none text-accent-text">{count}</span>
+      <span className="text-body">{headline}</span>
       <span className="flex-1" />
-      <span className="text-[13px] text-faint">{note}</span>
+      <span className="text-small text-faint">{note}</span>
     </AdvancedLink>
   );
 }
@@ -296,21 +296,21 @@ function AccessShape() {
                   href={`/projects/${encodeURIComponent(role.project_id)}/roles/${encodeURIComponent(role.role_key)}`}
                   className="row-divider flex items-baseline gap-3 px-5 py-3 hover-tint"
                 >
-                  <span className="w-[36px] shrink-0 font-display text-[18px] leading-none">
+                  <span className="w-[36px] shrink-0 font-display text-title font-normal leading-none">
                     {holders.headline}
                   </span>
                   {/* The project is the trailing column, so the name slot carries the
                       role alone — the pair is established by the row, the same way
                       the roles index establishes it with a Project column. */}
-                  <span className="min-w-0 flex-1 truncate text-[14.5px]">
+                  <span className="min-w-0 flex-1 truncate text-body">
                     {roleName(role.display_name, role.role_key)}
                   </span>
-                  <span className="shrink-0 truncate text-right text-[13px] text-faint">
+                  <span className="shrink-0 truncate text-right text-small text-faint">
                     {projectLabel(role.project_name)}
                     {/* What Zitadel shows right now, not Syndra's record of who
                         was granted this — see the confirmation line above. */}
                     {holders.note && (
-                      <span className={`block text-[12.5px] ${holdersToneClass[holders.tone]}`}>
+                      <span className={`block text-fine ${holdersToneClass[holders.tone]}`}>
                         {holders.note}
                       </span>
                     )}
@@ -331,7 +331,7 @@ function AccessShape() {
           does not reach them. They measured 16px tall on the screen this
           product opens on. */}
       {!loading && !failed && (
-        <div className="flex flex-wrap items-center gap-x-1.5 border-t border-line px-5 py-3 text-[13px] text-faint desktop:block desktop:py-3">
+        <div className="flex flex-wrap items-center gap-x-1.5 border-t border-line px-5 py-3 text-small text-faint desktop:block desktop:py-3">
           {unused === 0 && emptyBundles === 0 ? (
             "Every role and bundle is in use."
           ) : (
@@ -384,17 +384,17 @@ function RecentActivity() {
             {/* formatWhen prints a bare time for today ("14:32") but a full
                 date for anything older ("10 Sept 14:32") — wider than the
                 clock-only column this used to be. */}
-            <span className="w-[92px] shrink-0 text-[12.5px] text-faint">
+            <span className="w-[92px] shrink-0 text-fine text-faint">
               {formatWhen(entry.created_at)}
             </span>
-            <span className="w-[150px] shrink-0 truncate text-[14px] font-semibold">
+            <span className="w-[150px] shrink-0 truncate text-body font-semibold">
               <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
             </span>
             {/* The SAME renderer the Audit page uses. This panel used to hand
                 every target_id to the person resolver, so a bundle edit read
                 "Unknown account 9e93893d-…" here and "Community · Basic" there
                 — one event, two screens, disagreeing. */}
-            <span className="min-w-[min(240px,100%)] flex-1 text-[14px] text-muted">
+            <span className="min-w-[min(240px,100%)] flex-1 text-body text-muted">
               <EventSentence entry={entry} />
             </span>
           </div>

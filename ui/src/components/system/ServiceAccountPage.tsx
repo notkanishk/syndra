@@ -128,7 +128,7 @@ function ServiceAccountView({
           label="Kind"
           action={
             machine ? (
-              <span className="text-[13px] text-muted">Set by Zitadel</span>
+              <span className="text-small text-muted">Set by Zitadel</span>
             ) : (
               <Button size="sm" onClick={() => setDialog("person")}>
                 Mark as a person
@@ -137,7 +137,7 @@ function ServiceAccountView({
           }
         >
           <span className="font-semibold">{kindLabel(account.kind)}</span>
-          <span className="block text-[13px] text-faint">
+          <span className="block text-small text-faint">
             {machine ? (
               "A machine account in Zitadel: a key, no sign-in"
             ) : (
@@ -172,8 +172,8 @@ function SettingRow({
 }) {
   return (
     <CardRow first={first} seat="default" action={action}>
-      <span className="w-full text-[13.5px] font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">{label}</span>
-      <span className="min-w-0 flex-1 text-[14.5px] [overflow-wrap:anywhere]">{children}</span>
+      <span className="w-full text-small font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">{label}</span>
+      <span className="min-w-0 flex-1 text-body [overflow-wrap:anywhere]">{children}</span>
     </CardRow>
   );
 }
@@ -244,7 +244,7 @@ function Holds({ userId, name }: { userId: string; name: string }) {
                 ) : undefined
               }
             >
-              <span className="min-w-0 flex-1 text-[15px] font-semibold tablet:flex-none tablet:basis-[260px]">
+              <span className="min-w-0 flex-1 text-body font-semibold tablet:flex-none tablet:basis-[260px]">
                 <ResolvedProjectName name={project.project_name} resolved={project.project_name_resolved} id={project.project_id} />
                 <span aria-hidden className="text-faint"> · </span>
                 <span>{roleName}</span>

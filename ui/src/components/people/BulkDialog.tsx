@@ -185,7 +185,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
                 onChange={(event) => setDurationDays(Number(event.target.value))}
               />
               {op === "assign_role" && durationDays === 0 && (
-                <p className="mt-1.5 text-[12.5px] text-faint">
+                <p className="mt-1.5 text-fine text-faint">
                   0 grants access with no end date. It stays until somebody removes it.
                 </p>
               )}

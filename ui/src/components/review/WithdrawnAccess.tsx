@@ -425,7 +425,7 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
         fallback={row.reason ?? `Access on ${where}`}
         className="tablet:flex-1"
       >
-        <span className="text-[12.5px] text-faint desktop:hidden">{where}</span>
+        <span className="text-fine text-faint desktop:hidden">{where}</span>
         {row.cascade_id && (
           // The join key, as a link, exactly as it appears in the audit log and on a person's
           // activity. A finding an operator cannot trace back to the change that caused it is a
@@ -437,17 +437,17 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
         <LastError row={row} system={where} />
       </WhatSeat>
 
-      <span className="hidden w-[130px] flex-none pt-0.5 text-[14px] text-muted desktop:block">{where}</span>
+      <span className="hidden w-[130px] flex-none pt-0.5 text-body text-muted desktop:block">{where}</span>
 
       <span className="flex flex-col gap-0.5 pt-0.5 tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
         <span
-          className={`text-[13.5px] font-semibold ${
+          className={`text-small font-semibold ${
             row.spent ? "text-danger-text" : row.age_seconds >= AMBER_AFTER_SECONDS ? "text-warn-text" : "text-muted"
           }`}
         >
           <Relative iso={row.created_at} />
         </span>
-        <span className="text-[12.5px] text-faint">{formatShortDate(row.created_at)}</span>
+        <span className="text-fine text-faint">{formatShortDate(row.created_at)}</span>
       </span>
 
       <ActionSeat seat="wide">
@@ -459,7 +459,7 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
           // the stop is the person's binding conflict, which is decided in one
           // place while it still stands (decideAt).
           looking ? (
-            <span className="text-right text-[13px] text-muted">{LOOKING_UP_NEXT}</span>
+            <span className="text-right text-small text-muted">{LOOKING_UP_NEXT}</span>
           ) : decide ? (
             <ArrowLink href={decide}>{DECIDE_IT}</ArrowLink>
           ) : row.target === "zitadel" ? (
@@ -469,7 +469,7 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
           )
         ) : (
           // The API carries how many tries so far, not the limit or the next time, so neither is claimed (A-07 §21).
-          <span className="text-right text-[13px] text-muted">
+          <span className="text-right text-small text-muted">
             {row.attempts === 0
               ? "Not tried yet"
               : `Tried ${row.attempts} ${row.attempts === 1 ? "time" : "times"}`}
@@ -487,7 +487,7 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
 function LastError({ row, system }: { row: UnconfirmedRevocation; system: string }) {
   if (!row.spent || !row.last_error) return null;
   return (
-    <span className="mt-1 flex items-baseline gap-2 text-[12.5px] leading-[1.5] text-faint">
+    <span className="mt-1 flex items-baseline gap-2 text-fine leading-[1.5] text-faint">
       <StatusDot tone="danger" />
       {stoppedLine(system, row)}
     </span>

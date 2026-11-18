@@ -40,7 +40,7 @@ export function WaitsMark({
         className="inline-block size-[9px] flex-none rounded-pill border-[1.5px] border-muted bg-[linear-gradient(90deg,var(--muted)_50%,transparent_50%)]"
       />
       {withLabel && (
-        <span className="text-[13px] text-muted">Waits for you</span>
+        <span className="text-small text-muted">Waits for you</span>
       )}
       <AnchoredPanel
         anchor={anchor}
@@ -51,7 +51,7 @@ export function WaitsMark({
       >
         <span
           role="tooltip"
-          className="tint-in shadow-popover block rounded-inner border border-line-strong bg-surface-1 px-3 py-2 text-[12.5px] leading-[1.45] text-ink"
+          className="tint-in shadow-popover block rounded-inner border border-line-strong bg-surface-1 px-3 py-2 text-fine leading-[1.45] text-ink"
         >
           Waits for you: when someone gains or loses this role, the change waits
           for you to send it.

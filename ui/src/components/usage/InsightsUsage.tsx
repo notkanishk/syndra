@@ -39,8 +39,8 @@ function Spread({ metric, row }: { metric: InsightsStatsMetric; row: InsightsSer
   return (
     <CardRow>
       <span className="flex min-w-0 flex-1 basis-[260px] flex-col gap-0.5">
-        {where && <span className="text-[14.5px] font-semibold [overflow-wrap:anywhere]">{where}</span>}
-        <span className="text-[13px] tabular-nums text-muted">
+        {where && <span className="text-body font-semibold [overflow-wrap:anywhere]">{where}</span>}
+        <span className="text-small tabular-nums text-muted">
           {row.members === 0 ? copy.NOBODY_RECENTLY : <>{copy.members(row.members)}. {copy.spread(p50, p90)}</>}
         </span>
       </span>
@@ -86,7 +86,7 @@ function People({ metric, row, what }: { metric: InsightsStatsMetric; row: Insig
       </CardColumns>
       <div role="rowgroup" className={view.className}>
         {rows.map((p) => (
-          <div key={p.user_id} role="row" className="row-divider row-cols flex flex-wrap items-baseline gap-y-1 px-5 py-2 text-[14px] tablet:flex-nowrap">
+          <div key={p.user_id} role="row" className="row-divider row-cols flex flex-wrap items-baseline gap-y-1 px-5 py-2 text-body tablet:flex-nowrap">
             <span role="cell" className="w-full min-w-0 [overflow-wrap:anywhere] tablet:w-auto tablet:flex-1">
               {p.name ? (
                 <NameLink href={nameHref.user(p.user_id)} className="font-semibold">{p.name}</NameLink>
@@ -95,11 +95,11 @@ function People({ metric, row, what }: { metric: InsightsStatsMetric; row: Insig
               )}
             </span>
             <span role="cell" className="flex flex-col tabular-nums tablet:w-[130px] tablet:shrink-0 tablet:text-right">
-              <span className="text-[12.5px] text-faint tablet:hidden">{copy.LAST_30_COLUMN}</span>
+              <span className="text-fine text-faint tablet:hidden">{copy.LAST_30_COLUMN}</span>
               {value(p.last_30d)}
             </span>
             <span role="cell" className="flex flex-col tabular-nums tablet:w-[130px] tablet:shrink-0 tablet:text-right">
-              <span className="text-[12.5px] text-faint tablet:hidden">{copy.LAST_12_COLUMN}</span>
+              <span className="text-fine text-faint tablet:hidden">{copy.LAST_12_COLUMN}</span>
               {value(p.last_12m)}
             </span>
           </div>
@@ -138,10 +138,10 @@ export function InsightsUsage() {
 
   return (
     <>
-      <p className="text-[13px] text-muted">{copy.INSIGHTS_LEDE}</p>
+      <p className="text-small text-muted">{copy.INSIGHTS_LEDE}</p>
       {stats.data && (
         <>
-          <span className="text-[13px] text-faint">{copy.windowFrom(dayWords(stats.data.from))}</span>
+          <span className="text-small text-faint">{copy.windowFrom(dayWords(stats.data.from))}</span>
           <ReadFreshness
             subject={copy.INSIGHTS_SUBJECT}
             state={{ readAt: stats.dataUpdatedAt ? new Date(stats.dataUpdatedAt).toISOString() : null, current: stats.isError ? false : undefined }}
@@ -169,10 +169,10 @@ export function InsightsUsage() {
                 </div>
                 {/* The backend started a window later than its own: the days it covers are the window's less those before. */}
                 {stats.data && m.window_30d_from > stats.data.from && (
-                  <p className="px-5 pb-1 text-[13px] text-faint">{copy.spreadDays(stats.data.window_days - daysBetween(stats.data.from, m.window_30d_from))}</p>
+                  <p className="px-5 pb-1 text-small text-faint">{copy.spreadDays(stats.data.window_days - daysBetween(stats.data.from, m.window_30d_from))}</p>
                 )}
                 {stats.data && m.window_12m_from > stats.data.from_12m && (
-                  <p className="px-5 pb-1 text-[13px] text-faint">{copy.yearDays(daysBetween(m.window_12m_from, stats.data.from) + stats.data.window_days)}</p>
+                  <p className="px-5 pb-1 text-small text-faint">{copy.yearDays(daysBetween(m.window_12m_from, stats.data.from) + stats.data.window_days)}</p>
                 )}
                 {m.series.map((row) => {
                   const what = [`${capText(m.system, CAP.label)}: ${capText(m.label, CAP.label)}`, dimensionWords(m, row.dimensions)].filter(Boolean).join(", ");
@@ -188,7 +188,7 @@ export function InsightsUsage() {
           </Card>
         ))}
         {/* The page's closing caption, its way on at the end of it: a link in a caption is prose (D-1 §4). */}
-        <p data-prose className="flex flex-wrap items-center gap-x-3 text-[13px] text-muted">
+        <p data-prose className="flex flex-wrap items-center gap-x-3 text-small text-muted">
           <span>{copy.INSIGHTS_NEXT}</span>
           <ArrowLink href="/users">{copy.INSIGHTS_NEXT_LINK}</ArrowLink>
         </p>

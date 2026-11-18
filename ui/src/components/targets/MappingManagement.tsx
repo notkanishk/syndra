@@ -283,13 +283,13 @@ function MappingRow({
         <span className="flex w-[260px] flex-none flex-col gap-0.5">
           <Link
             href={`/projects/${mapping.project_id}`}
-            className="text-[14.5px] font-semibold text-ink link-hover"
+            className="text-body font-semibold text-ink link-hover"
           >
             {label}
           </Link>
         </span>
         <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-[3px]">
-          <span className="text-[14px]">Gives {gives(mapping, schema)}</span>
+          <span className="text-body">Gives {gives(mapping, schema)}</span>
           {opens && (
             <OpensRows
               name={name}
@@ -303,7 +303,7 @@ function MappingRow({
           {/* The count says what it counts. Nobody holding the role is said once, as the row's detail
               line, never as a bare "0" as well. */}
           {(holders.isLoading || cohort.length > 0) && (
-            <span data-holders className="text-[13.5px] text-muted">
+            <span data-holders className="text-small text-muted">
               {holders.isLoading
                 ? "…"
                 : `${cohort.length} ${cohort.length === 1 ? "person holds" : "people hold"} this role`}
@@ -565,7 +565,7 @@ function VersionRow({
         detail={
           <>
             <span className="block">{version.note || <span className="text-faint">No reason recorded.</span>}</span>
-            <span className="mt-1 block text-[13px] text-faint">
+            <span className="mt-1 block text-small text-faint">
               {version.entries.length} mapping{version.entries.length === 1 ? "" : "s"}
               {version.entries.length > 0 && (
                 <>
@@ -581,14 +581,14 @@ function VersionRow({
           </>
         }
       >
-        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-2 text-[14px]">
+        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-2 text-body">
           <span className="font-semibold">Version {version.version}</span>
-          {current && <span className="text-[13px] text-accent-text">current</span>}
+          {current && <span className="text-small text-accent-text">current</span>}
           <span className="text-faint">
             <UserName id={version.published_by} /> · <Relative iso={version.published_at} />
           </span>
           {current && (
-            <span className="text-[13px] text-faint">
+            <span className="text-small text-faint">
               {unpublished ? "Restores this set, discarding unpublished changes" : "Already live"}
             </span>
           )}

@@ -31,7 +31,7 @@ export function StandingLine({
         tone={w.tone}
         word={w.state}
         note={w.note}
-        next={step ? <span className="block text-[13px] leading-[1.5] text-muted [text-wrap:pretty]">{w.next}</span> : undefined}
+        next={step ? <span className="block text-small leading-[1.5] text-muted [text-wrap:pretty]">{w.next}</span> : undefined}
       />
     </span>
   );

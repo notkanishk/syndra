@@ -45,7 +45,7 @@ export function WelcomeClaimsCard() {
       <CardHeader title="First sign-in" />
       <p
         id={LEDE_ID}
-        className="row-divider max-w-[86ch] px-5 py-4 text-[14.5px] leading-[1.55] text-muted [text-wrap:pretty]"
+        className="row-divider measure px-5 py-4 text-body leading-[1.55] text-muted [text-wrap:pretty]"
       >
         For a new member&apos;s first sign-in only, apps are told the roles the welcome bundle is about to give, so
         they see the right things straight away. Roles that wait for you are never sent early.

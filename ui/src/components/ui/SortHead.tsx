@@ -190,7 +190,7 @@ export function RunLabel({ label, size }: { label: string; size: number }) {
     <div className="row-divider flex items-baseline gap-2.5 bg-surface-0 px-5 pb-2 pt-3">
       <span data-testid="run-label" className="type-label text-ink">
         {label}
-        <span className="ml-2.5 text-[12.5px] font-semibold normal-case tracking-normal text-muted">
+        <span className="ml-2.5 text-fine font-semibold normal-case tracking-normal text-muted">
           {size}
         </span>
       </span>

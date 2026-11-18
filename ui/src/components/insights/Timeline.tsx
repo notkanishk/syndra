@@ -75,7 +75,7 @@ export function Timeline({
         />
         <span
           aria-hidden
-          className="pointer-events-none absolute top-[24px] -translate-x-1/2 whitespace-nowrap text-[12.5px] font-semibold text-accent-text"
+          className="pointer-events-none absolute top-[24px] -translate-x-1/2 whitespace-nowrap text-fine font-semibold text-accent-text"
           style={{ left: at(here / last) }}
         >
           {value ? dayLabel(value) : ""}
@@ -84,13 +84,13 @@ export function Timeline({
           <span
             key={day}
             aria-hidden
-            className="pointer-events-none absolute top-[24px] text-[12.5px] text-faint"
+            className="pointer-events-none absolute top-[24px] text-fine text-faint"
             style={{ left: at(f(day)) }}
           >
             {monthLabel(day)}
           </span>
         ))}
-        <span aria-hidden className="pointer-events-none absolute right-0 top-[24px] text-[12.5px] text-faint">
+        <span aria-hidden className="pointer-events-none absolute right-0 top-[24px] text-fine text-faint">
           Today
         </span>
       </div>

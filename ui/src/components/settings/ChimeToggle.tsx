@@ -64,7 +64,7 @@ export function ChimeToggle() {
       />
       <Unfold open={enabled}>
         <div className="flex flex-col items-start gap-2">
-          <span className="inline-flex items-start gap-2 text-[13px] text-muted">
+          <span className="inline-flex items-start gap-2 text-small text-muted">
             <StatusDot
               tone={quieted ? "neutral" : suspended ? "warn" : "healthy"}
               className="mt-[7px]"

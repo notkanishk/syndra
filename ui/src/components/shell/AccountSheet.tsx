@@ -58,14 +58,14 @@ export function AccountSheet({ session }: { session: SessionUser }) {
       >
         <span
           aria-hidden
-          className="avatar-fill flex h-[34px] w-[34px] flex-none items-center justify-center rounded-pill text-[12.5px] font-semibold text-muted"
+          className="avatar-fill flex h-[34px] w-[34px] flex-none items-center justify-center rounded-pill text-fine font-semibold text-muted"
         >
           {session.avatar}
         </span>
         {/* Who you are, by the name RULES uses for you: the first one (A-20
             P15). It goes when the room is narrow, where the avatar and the
             mark are the seat. The sheet keeps the full name and the address. */}
-        <span className="hidden max-w-[180px] truncate text-[13.5px] text-muted tablet:block">
+        <span className="hidden max-w-[180px] truncate text-small text-muted tablet:block">
           {firstName(session)}
         </span>
         <span className="sr-only">Account</span>
@@ -78,16 +78,16 @@ export function AccountSheet({ session }: { session: SessionUser }) {
           <div className="flex items-center gap-3">
             <span
               aria-hidden
-              className="avatar-fill flex size-[var(--tap)] flex-none items-center justify-center rounded-pill text-[15px] font-semibold text-muted"
+              className="avatar-fill flex size-[var(--tap)] flex-none items-center justify-center rounded-pill text-body font-semibold text-muted"
             >
               {session.avatar}
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-[15px] font-semibold">
+              <span className="block truncate text-body font-semibold">
                 {session.name || session.email}
               </span>
               {session.name && (
-                <span className="block truncate text-[13px] text-muted">{session.email}</span>
+                <span className="block truncate text-small text-muted">{session.email}</span>
               )}
             </span>
           </div>
@@ -103,10 +103,10 @@ export function AccountSheet({ session }: { session: SessionUser }) {
                   onClick={() => setOpen(false)}
                   className="-mx-2 flex min-h-[var(--tap)] flex-col justify-center gap-0.5 rounded-inner px-2 py-1.5 hover-tint"
                 >
-                  <span className="text-[14.5px] font-semibold text-accent-text">
+                  <span className="text-body font-semibold text-accent-text">
                     {item.label} <span aria-hidden>→</span>
                   </span>
-                  <span className="text-[13px] text-muted">{OWN_NOTES[item.href] ?? SYSTEM_NOTE}</span>
+                  <span className="text-small text-muted">{OWN_NOTES[item.href] ?? SYSTEM_NOTE}</span>
                 </Link>
               ))}
             </div>
@@ -114,7 +114,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
 
           {/* A setting about this device, in a sheet about this device. The
               header keeps its own toggle where there is room for one. */}
-          <div className="flex items-center justify-between gap-3 rounded-inner border border-line py-1.5 pl-4 pr-2 text-[14.5px]">
+          <div className="flex items-center justify-between gap-3 rounded-inner border border-line py-1.5 pl-4 pr-2 text-body">
             <span>Appearance</span>
             <Segmented
               label="Appearance"
@@ -134,10 +134,10 @@ export function AccountSheet({ session }: { session: SessionUser }) {
               org-wide automation policy it used to share a box with. */}
           {/* Drift is an operator's page, so a member is never offered its sound (A-20 P15). */}
           {session.role !== "user" && (
-            <div className="flex flex-col gap-2.5 rounded-inner border border-line px-4 py-3 text-[14.5px]">
+            <div className="flex flex-col gap-2.5 rounded-inner border border-line px-4 py-3 text-body">
               <span className="flex flex-col gap-0.5">
                 <span>Sound when drift is found</span>
-                <span className="text-[13px] text-muted">In this browser only</span>
+                <span className="text-small text-muted">In this browser only</span>
               </span>
               <ChimeToggle />
             </div>
@@ -150,7 +150,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
               type="button"
               aria-expanded={about}
               onClick={() => setAbout((on) => !on)}
-              className="flex min-h-[var(--tap)] w-full items-center gap-2.5 rounded-inner py-1.5 pl-4 pr-2 text-left text-[14.5px] hover-tint"
+              className="flex min-h-[var(--tap)] w-full items-center gap-2.5 rounded-inner py-1.5 pl-4 pr-2 text-left text-body hover-tint"
             >
               <SyndraMark size={16} />
               <span className="flex-1">About Syndra</span>
@@ -158,16 +158,16 @@ export function AccountSheet({ session }: { session: SessionUser }) {
             </button>
             <Unfold open={about}>
               <div className="flex flex-col gap-2.5 pb-4 pl-[42px] pr-4 pt-1">
-                <p className="text-[14.5px] leading-[1.55]">
+                <p className="text-body leading-[1.55]">
                   Syndra is named for Syn. In the Norse stories she keeps the door of the hall, and
                   shuts it on those who should not enter. When a case is argued, she speaks for the
                   one who refuses it.
                 </p>
-                <p className="text-[14.5px] leading-[1.55] text-muted">
+                <p className="text-body leading-[1.55] text-muted">
                   In the makerspace, Zitadel is the door. It checks that you are who you say you are.
                   Syndra keeps the list of what that lets you use, and the reason for every name on it.
                 </p>
-                <p className="text-[12.5px] text-faint">Built in the lab it runs. Powered by Zitadel.</p>
+                <p className="text-fine text-faint">Built in the lab it runs. Powered by Zitadel.</p>
               </div>
             </Unfold>
           </div>
@@ -201,7 +201,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
               Sign out
             </Button>
           </form>
-          <p className="mt-2.5 text-[12.5px] leading-[1.5] text-faint">
+          <p className="mt-2.5 text-fine leading-[1.5] text-faint">
             Signing out signs you out in every open tab.
           </p>
         </div>

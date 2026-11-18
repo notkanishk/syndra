@@ -38,7 +38,7 @@ export function Badge({
 }: React.HTMLAttributes<HTMLSpanElement> & { tone?: Tone; hollow?: boolean }) {
   return (
     <span
-      className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-[12.5px] font-semibold ${
+      className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-fine font-semibold ${
         hollow ? "border border-line-strong text-label" : TONES[tone]
       } ${className}`}
       {...props}
@@ -82,7 +82,7 @@ export function ChosenChip({
   disabled?: boolean;
 }) {
   return (
-    <span className="chip-in inline-flex h-9 items-center gap-1 rounded-pill border border-accent-line bg-accent-soft pl-3 pr-1 text-[13px] font-semibold">
+    <span className="chip-in inline-flex h-9 items-center gap-1 rounded-pill border border-accent-line bg-accent-soft pl-3 pr-1 text-small font-semibold">
       {children}
       <button
         type="button"

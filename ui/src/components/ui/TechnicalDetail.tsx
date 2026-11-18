@@ -55,8 +55,8 @@ function Fold({
         className="inline-flex min-h-[var(--tap)] items-center gap-2.5 self-start rounded-pill text-left control press-scale tablet:min-h-0"
       >
         <FoldChevron open={shown} />
-        <span className="text-[14px] font-semibold text-ink">Technical detail</span>
-        <span className="text-[12.5px] text-faint">for whoever runs the Syndra server</span>
+        <span className="text-body font-semibold text-ink">Technical detail</span>
+        <span className="text-fine text-faint">for whoever runs the Syndra server</span>
       </button>
       <Unfold open={shown}>
         <div className="flex flex-col gap-2 [overflow-wrap:anywhere]">{children}</div>
@@ -68,7 +68,7 @@ function Fold({
 /** A payload kept exact: mono on surface-2, wrapping rather than scrolling sideways. */
 export function TechnicalPayload({ children }: { children: ReactNode }) {
   return (
-    <pre className="m-0 whitespace-pre-wrap rounded-inner border border-line bg-surface-2 px-3.5 py-3 font-mono text-[12.5px] leading-[1.55] text-muted [overflow-wrap:anywhere]">
+    <pre className="m-0 whitespace-pre-wrap rounded-inner border border-line bg-surface-2 px-3.5 py-3 font-mono text-fine leading-[1.55] text-muted [overflow-wrap:anywhere]">
       {children}
     </pre>
   );

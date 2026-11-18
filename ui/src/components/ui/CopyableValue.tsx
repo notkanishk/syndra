@@ -175,7 +175,7 @@ export function CopyableValue({
       {/* Wraps rather than truncates, at any width. An operator reading a path
           aloud to somebody standing at a machine needs all of it, and half a
           share path is worse than none because it looks complete. */}
-      <code ref={valueRef} className="min-w-0 flex-1 break-all font-mono text-[14px] text-ink">
+      <code ref={valueRef} className="min-w-0 flex-1 break-all font-mono text-body text-ink">
         {value}
       </code>
 
@@ -187,7 +187,7 @@ export function CopyableValue({
         // `data-inline`: the control belongs to the value it copies, not to a row's seat (D-1 §4).
         data-inline
         aria-label={`${canCopy ? (copied ? "Copied" : "Copy") : selected ? "Selected" : "Select"} ${object}`}
-        className={`inline-flex min-h-[var(--tap)] shrink-0 items-center gap-2 rounded-pill px-2.5 text-[12.5px] font-semibold control ${
+        className={`inline-flex min-h-[var(--tap)] shrink-0 items-center gap-2 rounded-pill px-2.5 text-fine font-semibold control ${
           copied || selected ? "text-healthy" : "text-muted hover:bg-[var(--hover)] hover:text-ink"
         }`}
       >
@@ -229,7 +229,7 @@ export function ClipboardUnavailableNote({ className = "" }: { className?: strin
 
   if (canCopy) return null;
   return (
-    <p className={`text-[12.5px] leading-[1.5] text-faint ${className}`}>
+    <p className={`text-fine leading-[1.5] text-faint ${className}`}>
       Your browser can&apos;t copy on this connection. Tap a value to select it, then hold to
       copy.
     </p>

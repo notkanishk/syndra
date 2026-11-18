@@ -110,7 +110,7 @@ function Keys({ keys }: { keys: string[] }) {
       {keys.map((k) => (
         <kbd
           key={k}
-          className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[6px] border border-b-2 border-line-strong bg-surface-1 px-1.5 font-mono text-[12.5px] text-ink"
+          className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[6px] border border-b-2 border-line-strong bg-surface-1 px-1.5 font-mono text-fine text-ink"
         >
           {k}
         </kbd>
@@ -194,12 +194,12 @@ export function ConnectionGuide({
             <li key={i} className="flex items-start gap-3.5">
               <span
                 aria-hidden
-                className="inline-flex h-[26px] w-[26px] flex-none items-center justify-center rounded-pill border border-line-strong text-[13px] font-semibold text-muted"
+                className="inline-flex h-[26px] w-[26px] flex-none items-center justify-center rounded-pill border border-line-strong text-small font-semibold text-muted"
               >
                 {i + 1}
               </span>
               <div className="flex min-w-0 flex-1 flex-col gap-2 pt-0.5">
-                <span className="text-[15px] leading-[1.6] text-ink [text-wrap:pretty]">
+                <span className="text-body leading-[1.6] text-ink [text-wrap:pretty]">
                   {s.lead}
                   {s.keys && (
                     <>
@@ -216,13 +216,13 @@ export function ConnectionGuide({
                 )}
                 {s.creds && (
                   <div className="grid max-w-[520px] grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1.5 rounded-inner border border-line bg-surface-0 px-3.5 py-3">
-                    <span className="text-[13px] text-muted">Name</span>
-                    <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-[14px]">{username}</span>
-                    <span className="text-[13px] text-muted">Password</span>
-                    <span className="text-[14px]">Your storage password, not your Syndra or Google one</span>
+                    <span className="text-small text-muted">Name</span>
+                    <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-body">{username}</span>
+                    <span className="text-small text-muted">Password</span>
+                    <span className="text-body">Your storage password, not your Syndra or Google one</span>
                   </div>
                 )}
-                {s.note && <span className="text-[13.5px] leading-[1.5] text-muted [text-wrap:pretty]">{s.note}</span>}
+                {s.note && <span className="text-small leading-[1.5] text-muted [text-wrap:pretty]">{s.note}</span>}
               </div>
             </li>
           ))}
@@ -230,7 +230,7 @@ export function ConnectionGuide({
 
         <div className="flex flex-col gap-2 border-t border-line pt-4">
           <span className="type-label text-label">If it doesn&apos;t connect</span>
-          <ul className="m-0 flex flex-col gap-1 pl-[18px] text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
+          <ul className="m-0 flex flex-col gap-1 pl-[18px] text-body leading-[1.55] text-muted [text-wrap:pretty]">
             <li>Look at the status beside {system} on this page. If it says offline, wait for it to come back.</li>
             <li>If your sign-in is refused, check you used your storage password. You can change it at the end of this page.</li>
             <li>

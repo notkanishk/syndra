@@ -96,14 +96,14 @@ export function AccessSource({
   return (
     <span className={`inline-flex items-center gap-[7px] whitespace-nowrap ${className}`}>
       <SourceChip kind={kind} />
-      {detail && <span className="text-[12.5px] text-muted">{detail}</span>}
+      {detail && <span className="text-fine text-muted">{detail}</span>}
     </span>
   );
 }
 
 export function SourceChip({ kind }: { kind: SourceKind }) {
   const base =
-    "inline-flex items-center gap-1.5 rounded-pill py-[5px] pl-[9px] pr-[11px] text-[12.5px] font-semibold leading-none whitespace-nowrap";
+    "inline-flex items-center gap-1.5 rounded-pill py-[5px] pl-[9px] pr-[11px] text-fine font-semibold leading-none whitespace-nowrap";
 
   if (kind === "direct") {
     return (
@@ -171,7 +171,7 @@ export function AccessSourceList({
 }) {
   const ordered = orderedSources(reasons);
   if (ordered.length === 0) {
-    return <span className="text-[13.5px] text-faint">No recorded source</span>;
+    return <span className="text-small text-faint">No recorded source</span>;
   }
 
   const [strongest, ...rest] = ordered;
@@ -185,7 +185,7 @@ export function AccessSourceList({
   return (
     <span className="flex flex-wrap items-center gap-[9px]">
       <SourcePopover reason={strongest} />
-      {qualifier && <span className="text-[13.5px] text-muted">{qualifier}</span>}
+      {qualifier && <span className="text-small text-muted">{qualifier}</span>}
       {rest.length > 0 && <MoreSources rest={rest} />}
     </span>
   );
@@ -324,10 +324,10 @@ export function SourcePopover({
       >
           <span className="flex items-center gap-2.5 border-b border-line px-[18px] py-4">
             <SourceChip kind={kind} />
-            <span className="font-display text-[19px] font-semibold">{expandedTitle(kind)}</span>
+            <span className="font-display text-title">{expandedTitle(kind)}</span>
           </span>
           {rows.length > 0 && (
-            <span className="grid grid-cols-[80px_1fr] gap-x-3.5 gap-y-2 px-[18px] py-4 text-[14px]">
+            <span className="grid grid-cols-[80px_1fr] gap-x-3.5 gap-y-2 px-[18px] py-4 text-body">
               {rows.map(([label, value]) => (
                 <span key={label} className="contents">
                   <span className="text-faint">{label}</span>
