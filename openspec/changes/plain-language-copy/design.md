@@ -1000,3 +1000,12 @@ The foundation changes how things move and where a figure leads, and adds four p
 | Home's all-clear, closed by the reader's own act, once a day (§4.1 vivid) | No new words: Nothing here needs you. takes the heading size. No celebration, no joke, no count (Q17). |
 | Revoke direct access, when nothing waits (A-24 §13: nothing says what doesn't happen) | Revoked. Direct access to {role} revoked. Zitadel took it (this role's own row applied): Nothing else was supplying it, and Zitadel took the revocation. It has not been read back yet. Not taken: Nothing else was supplying it. The revocation is not in Zitadel yet. Never the access is gone: the trail under it says when it is read back. |
 | Revoke on a connected system's page, the result (A-24 §13) | The password is replaced at once and the lock is queued, so the word is On its way (a revocation that sends itself), never Revoked while anything of it is queued; its sentence and its disclosure are the backend's (`revokeCopy`). Revoked only when nothing of it is still on its way. Partly done when the password could not be replaced. |
+
+### Wave 3 (A-24 §3.1, Q5, §9, Q18)
+
+| Where | Words |
+|---|---|
+| Home's term line, beside the date line (§3.1, Q3) | {Name} term, day {n} of {total} · Ends {day}. For a screen reader, the whole line: {Name} term, day {n} of {total}. Access ends for {count} people on {days}. (the count in words, the days as the date line writes them). No line between terms. |
+| A person's page, the line under the name, in the lede's seat (§9, Q10) | Holds {n} roles across {m} projects. / Holds {n} role(s) in {project}. / Holds no roles. Then, no more than one: {Role} in {Project} ends today / tomorrow / in {n} days. · {Role} in {Project} isn't in Zitadel yet. ({n} roles they were given aren't in Zitadel yet.) · {Role} in {Project} is on its way to Zitadel. ({n} roles are on their way to Zitadel.) Says less, never a count, when the read is missing or failed: Zitadel couldn't be read just now, so what they hold isn't counted.; cut short: Zitadel's answer was cut short, so what they hold isn't counted.; loading: Checking what they hold. |
+| Network storage, the sentence under the meter (Q18) | Plenty of room. (under half) · {left} left. · Getting full: {left} left. (from the meter's nearly full) · nothing at the limit, where the card's Full. line says it. |
+| Home's light and the rail's mark (§3.1, Q5) | No words: both are hidden from assistive technology; the date line, the headline and the rail's own counts say what they show. |

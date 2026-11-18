@@ -249,3 +249,51 @@ describe("the rail's active row", () => {
     expect(screen.getByRole("link", { name: "Projects" })).not.toHaveAttribute("aria-current");
   });
 });
+
+// A-24 Q5: the mark says the room's state from this rail's own reading, and never more than it can prove.
+describe("the mark in the rail", () => {
+  const quiet: Indicators = {
+    pending_requests: 0,
+    expiring_grants: 0,
+    holds_due: 0,
+    pending_propagation: 0,
+    drift: 0,
+    unconfirmed_revocations: 0,
+    revocations_escalated: false,
+    zitadel_reachable: true,
+  };
+  const room = () => document.querySelector(".syndra-mark")?.getAttribute("data-room");
+
+  it("is violet when anything the reading counts waits, whichever view shows", () => {
+    indicators.data = { ...quiet, drift: 3 };
+    view.audience = "basic";
+    renderRail();
+    expect(room()).toBe("needs");
+  });
+
+  it("is amber and breathing while Zitadel isn't answering, whatever the counts", () => {
+    indicators.data = { ...quiet, pending_requests: 2, zitadel_reachable: false };
+    renderRail();
+    expect(room()).toBe("waiting");
+    expect(document.querySelector(".syndra-mark-dot")).toHaveClass("breathe");
+  });
+
+  it("never says nothing waits: the reading does not carry all of Home's blocks, so the mark is as built", () => {
+    indicators.data = quiet;
+    renderRail();
+    expect(room()).toBeNull();
+  });
+
+  it("is as built with no real reading, and for a member", () => {
+    indicators.data = { ...quiet, drift: 1 };
+    indicators.isPlaceholderData = true;
+    const { unmount } = renderRail();
+    expect(room()).toBeNull();
+    unmount();
+    indicators.isPlaceholderData = false;
+    view.isOperator = false;
+    view.audience = "member";
+    renderRail();
+    expect(room()).toBeNull();
+  });
+});

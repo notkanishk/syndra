@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   advanced: true,
   // Whether a write of the reader's own landed in the last 30s (lib/query-client).
   own: false,
+  terms: [] as Array<{ name: string; start: string; end: string }>,
   governance: {} as Record<string, unknown>,
 }));
 
@@ -67,6 +68,7 @@ vi.mock("@/lib/ui-view", () => ({
   useIsAdvanced: () => state.advanced,
   useUiView: () => ({ view: "basic", setView: () => {} }),
 }));
+vi.mock("@/lib/queries/useTerms", () => ({ useTerms: () => ({ data: state.terms }) }));
 vi.mock("@/lib/query-client", async (original) => ({
   ...(await original<typeof import("@/lib/query-client")>()),
   ownActWithin: () => state.own,
@@ -103,6 +105,7 @@ const drifting = () => ({ ...quiet(), drift: { count: 3, top: [] } });
 beforeEach(() => {
   state.advanced = true;
   state.own = false;
+  state.terms = [];
   // The day's close is kept on this device: every test starts with none.
   window.localStorage.clear();
   state.governance = drifting();
@@ -311,5 +314,40 @@ describe("Home's all-clear, as an ending", () => {
     watch.disconnect();
     expect(screen.getByText("Nothing here needs you.")).toHaveClass("type-section-title");
     expect(changed).toEqual([]);
+  });
+});
+
+// A-24 §3.1, Q2: the hour's light, behind Home's head and nowhere else, on the greeting's clock.
+describe("the room knows the hour", () => {
+  it("lights the head for the part of the day the greeting names, hidden from assistive technology", () => {
+    vi.setSystemTime(new Date(2026, 10, 18, 8, 10));
+    mount();
+    const light = document.querySelector(".hour-light")!;
+    expect(light).toHaveAttribute("data-hour", "morning");
+    expect(light).toHaveAttribute("aria-hidden");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Morning/);
+    // Behind the head: inside it, and the only light on the page.
+    expect(light.parentElement).toHaveClass("page-head", "isolate");
+    expect(document.querySelectorAll(".hour-light")).toHaveLength(1);
+  });
+
+  it("draws the term line from the terms setting and Ending soon's own read, and none between terms", () => {
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    state.terms = [{ name: "Monsoon", start: "2026-08-01", end: "2026-12-31" }];
+    state.governance = { ...drifting(), expiring_grants: [{ id: "g1", user_id: "u1", project_id: "p", role_key: "r", expires_at: "2026-11-24T10:00:00Z" }] };
+    const home = mount();
+    const line = screen.getByRole("img", { name: /^Monsoon term, day 110 of 153\. Ends 31 Dec\. Access ends for one person on 24 Nov\.$/ });
+    // There from the first paint, not opened into it: nothing below it is pushed down on arrival.
+    expect(line.closest(".unfold")).toHaveAttribute("data-phase", "open");
+    state.terms = [{ name: "Spring", start: "2027-01-10", end: "2027-05-20" }];
+    home.reread();
+    later(TINT_MS * 4);
+    expect(screen.queryByRole("img", { name: /term, day/ })).toBeNull();
+  });
+
+  it("is a lamp in the quiet hours", () => {
+    vi.setSystemTime(new Date(2026, 10, 18, 23, 40));
+    mount();
+    expect(document.querySelector(".hour-light")).toHaveAttribute("data-hour", "quiet");
   });
 });

@@ -14,7 +14,8 @@ import { RetryPill } from "@/components/shell/RetryPill";
 import { useUiView } from "@/lib/ui-view";
 import { useFlashOnChange } from "@/lib/motion";
 import { Unfold } from "@/lib/motion";
-import { SyndraMark } from "./SyndraMark";
+import { needsYou, roomOf, SyndraMark } from "./SyndraMark";
+import { useDayPhase } from "@/lib/useDayPhase";
 
 /**
  * The navigation rail. 252px, its own background, one border on the right.
@@ -27,6 +28,9 @@ import { SyndraMark } from "./SyndraMark";
  *   2. A section with nothing in it keeps its seat and shows a hollow zero.
  *      Disappearing rows teach people not to trust the rail.
  */
+/** Whether `/governance/indicators` carries every count Home's blocks use. Not yet: see NEXT 0l. */
+const HOME_COUNTS_IN_INDICATORS = false;
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { audience, isOperator } = useUiView();
@@ -50,6 +54,20 @@ export default function Sidebar() {
   // switching moves only the parts that come and go (A-08 §3).
   const advanced = audience === "advanced";
   const entries = member ? memberNav(mine ?? []) : operatorNav(targets ?? []);
+  // The room's state for the mark (A-24 Q5), from what this rail already reads: every count of its
+  // reading, whether Zitadel answers (`zitadel_reachable`), and the part of the day. An operator's
+  // only; unknown until a real reading lands, and then the mark is as built.
+  const phase = useDayPhase();
+  const room = isOperator
+    ? roomOf({
+        needs: indicators && needsYou(indicators),
+        degraded: indicators?.zitadel_reachable === false,
+        quiet: phase === "quiet",
+        // ponytail: the reading lacks some of Home's blocks (onboarding gaps, owner-less service
+        // accounts, merge findings and the like), so lime and dim wait for a read that carries them (NEXT 0l).
+        complete: HOME_COUNTS_IN_INDICATORS,
+      })
+    : undefined;
   const followsView = (advancedOnly: boolean | undefined, key: string, part: React.ReactNode) =>
     advancedOnly ? (
       <Unfold key={key} open={advanced}>
@@ -66,7 +84,7 @@ export default function Sidebar() {
     // `settled` guard that stops every badge flashing on arrival.
     <div className="hidden w-[252px] flex-none flex-col gap-5 overflow-y-auto border-r border-line bg-rail px-3 pb-[22px] pt-5 tablet:flex">
       <div className="flex items-center gap-2.5 px-2">
-        <SyndraMark welcome />
+        <SyndraMark welcome room={room} />
         {/* type-scale-exempt: the wordmark is the brand's, not a step of the type scale. */}
         <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
       </div>

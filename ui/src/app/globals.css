@@ -7,7 +7,9 @@
  * components — and now the same hue. Violet carries both rooms; only its
  * weight changes with the ground.
  *
- * Colour is semantic, never decorative. Five roles:
+ * Colour is semantic, never decorative, with ONE written exception: the hour's
+ * light behind Home's head (`hour-light`, A-24 Q2, bounded where it is drawn).
+ * Five roles:
  *
  *   accent      the primary action and the current selection, one per screen
  *               region. Never means "good" or "safe".
@@ -660,6 +662,8 @@
     --mark-arc-opacity: 0.62;
     --mark-dot: var(--violet-400);
     --mark-glow: rgba(155, 123, 255, 0.6);
+    /* The hour's light at full weight on the dark ground (A-24 Q2). */
+    --hour-weight: 1;
 
     color-scheme: dark;
   }
@@ -732,6 +736,9 @@
     --mark-arc-opacity: 0.9;
     --mark-dot: var(--accent-text);
     --mark-glow: rgba(91, 63, 214, 0.3);
+    /* On paper the pool is a pale wash: three quarters of its dark weight, so no line in the head
+       goes under 4.5:1 and the greeting keeps its contrast (A-24 frame 3, "under a quarter strength"). */
+    --hour-weight: 0.75;
 
     color-scheme: light;
   }
@@ -1077,6 +1084,57 @@
    appears in place on tint and stays steady. */
 @utility lift-in {
   animation: lift var(--duration-settle) var(--ease-settle) both;
+}
+
+/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind
+   Home's head, its place set by the part of the day (`dayPhase`, the greeting's
+   own clock). The ONE written exception to "colour is never decorative" above,
+   with its bounds: Home's head only; still (no animation, no loop); the accent,
+   never a status colour; the same rule in both rooms; gone under forced colours;
+   and never strong enough to take a line of text in the head under 4.5:1 (the
+   contrast test holds it, at the pool's strongest point, in both themes).
+   `--hour-shape` is where the pool sits, `--hour-reach` how much accent it holds. */
+@utility hour-light {
+  position: absolute;
+  inset: -24px -26px -28px;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    var(--hour-shape),
+    color-mix(in srgb, var(--accent) calc(var(--hour-reach) * var(--hour-weight)), transparent),
+    transparent 70%
+  );
+
+  /* Morning: low, from the left. */
+  &[data-hour="morning"] {
+    --hour-shape: ellipse 60% 150% at 4% -20%;
+    --hour-reach: 26%;
+  }
+  /* Afternoon: overhead, wide and thin. */
+  &[data-hour="afternoon"] {
+    --hour-shape: ellipse 80% 120% at 50% -60%;
+    --hour-reach: 20%;
+  }
+  /* Evening: from the right, going down. */
+  &[data-hour="evening"] {
+    --hour-shape: ellipse 58% 135% at 86% -30%;
+    --hour-reach: 24%;
+  }
+  /* Quiet hours (22:00 to 05:00): a lamp beside the words. */
+  &[data-hour="quiet"] {
+    --hour-shape: ellipse 26% 90% at 2% 40%;
+    --hour-reach: 22%;
+  }
+
+  /* A phone's gutter is 16px, not the page's 26: the pool reaches to the edge and no further, so
+     the scroller never gains a sideways scroll. */
+  @media (width < theme(--breakpoint-tablet)) {
+    inset-inline: -16px;
+  }
+
+  @media (forced-colors: active) {
+    display: none;
+  }
 }
 
 /* The list closes (A-24 §4.1 vivid; Home's all-clear only, once a day, by the
@@ -1657,6 +1715,24 @@ html.theme-fading *::after {
     border-radius: var(--radius-pill);
     background: var(--mark-dot);
     box-shadow: 0 0 14px 2px var(--mark-glow);
+  }
+
+  /* The room's state in the rail (A-24 Q5). Needs you keeps the dot as built;
+     the others say themselves in the tokens their meaning already has: lime is
+     "nothing needed here" as a dot, which is exactly what --healthy allows;
+     amber is a broken assumption, and breathes because it is still going on;
+     faint is the quiet hours, when it will keep. Both rooms, from the tokens. */
+  .syndra-mark[data-room="clear"] {
+    --mark-dot: var(--healthy);
+    --mark-glow: color-mix(in srgb, var(--healthy) 45%, transparent);
+  }
+  .syndra-mark[data-room="waiting"] {
+    --mark-dot: var(--warn);
+    --mark-glow: color-mix(in srgb, var(--warn) 45%, transparent);
+  }
+  .syndra-mark[data-room="quiet"] {
+    --mark-dot: var(--faint);
+    --mark-glow: transparent;
   }
 }
 

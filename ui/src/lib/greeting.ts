@@ -20,11 +20,22 @@ export function isQuietHour(now: Date): boolean {
  * function (A-18 §4 idea 2).
  */
 export function greeting(now: Date): string {
+  return { morning: "Morning", afternoon: "Afternoon", evening: "Evening", quiet: "Evening" }[dayPhase(now)];
+}
+
+export type DayPhase = "morning" | "afternoon" | "evening" | "quiet";
+
+/**
+ * The part of the day, on the same clock as the greeting, so the words and
+ * Home's light (A-24 §3.1) can never disagree: quiet hours first, then
+ * morning before 12, afternoon before 17, evening after.
+ */
+export function dayPhase(now: Date): DayPhase {
   const hour = now.getHours();
-  if (isQuietHour(now)) return "Evening";
-  if (hour < 12) return "Morning";
-  if (hour < 17) return "Afternoon";
-  return "Evening";
+  if (isQuietHour(now)) return "quiet";
+  if (hour < 12) return "morning";
+  if (hour < 17) return "afternoon";
+  return "evening";
 }
 
 /** The one-time welcome (A-18 §4 idea 8), said on the first visit only. */

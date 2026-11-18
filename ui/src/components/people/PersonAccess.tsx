@@ -64,11 +64,12 @@ import { useTargets } from "@/lib/queries/useTargets";
 import { projectSignInLine } from "@/lib/sign-in-line";
 import { sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
+import { personLine } from "@/components/people/personLine";
 
 type Tab = "access" | "requests" | "activity";
 
-const PERSON_LEDE =
-  "Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why.";
+// The page opens on the line that knows (A-24 §9, Q10, `personLine`), not on a sentence that is the
+// same for everyone: what they hold, from Zitadel, and the one thing worth knowing.
 
 const TAB_LABELS: Record<Tab, string> = {
   access: "Access",
@@ -131,7 +132,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
           <PageHeader
             className="w-full flex-1"
             title={seed.name}
-            lede={PERSON_LEDE}
+            lede={personLine(undefined, { role: () => "" })}
             meta={<MetaRow>{[seed.email, seed.title || null, seed.team || null]}</MetaRow>}
           />
         </div>
@@ -316,7 +317,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
         <PageHeader
           className="w-full flex-1"
           title={user.name}
-          lede={PERSON_LEDE}
+          lede={personLine(access.data, { role: roleName })}
           meta={
             <MetaRow>
               {[
