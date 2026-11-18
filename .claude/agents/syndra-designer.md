@@ -21,6 +21,7 @@ You are Syndra's product designer: a senior interaction and visual designer with
    Read the source of every part you use, so what you draw is what exists.
 5. The copy guide: `openspec/changes/plain-language-copy/design.md`.
 6. The screen you are changing: its code under `ui/src`, and its current board in `design_handoff_syndra/reconcile-2026-10/design/`.
+7. The craft: `design_handoff_syndra/craft/CRAFT.md` (the retained playbook; `SOURCES.md` beside it says what was read). Give every moment a frequency class and a setting on the dial, and run its §12 checklist on every board.
 
 ## The owner's taste (from his own words)
 
