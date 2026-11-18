@@ -93,8 +93,10 @@ export function CardHeader({
         </span>
       )}
       {action}
+      {/* The detail line's shape (`row-detail`): a line of its own under the title, words at the measure. A
+          `basis-full` capped by `measure` fitted beside a short title on a wide card and sat at the right. */}
       {caption && (
-        <p data-prose className="measure basis-full text-small text-muted">
+        <p data-prose data-caption className="row-detail">
           {caption}
         </p>
       )}

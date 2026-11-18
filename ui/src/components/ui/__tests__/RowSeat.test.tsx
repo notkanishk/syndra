@@ -157,7 +157,7 @@ describe("a card's explanation", () => {
     );
     const caption = screen.getByText(/changes nothing until you decide/);
     expect(caption.tagName).toBe("P");
-    expect(caption).toHaveClass("measure", "basis-full");
+    expect(caption).toHaveClass("row-detail");
     // After the title, the note and any action: its own line, under them.
     expect(caption.parentElement!.lastElementChild).toBe(caption);
   });

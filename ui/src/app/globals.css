@@ -1559,11 +1559,18 @@ html.theme-fading *::after {
   }
 }
 
-/* The sentence that explains a row, under its first line, so a long one can
-   never push the seat down or squeeze it. */
+/* The sentence that explains a row (or a card: CardHeader's caption), on a line of
+   its own under the first, so a long one can never push the seat down or squeeze
+   the title beside it.
+
+   The line is the row's full width, and the measure is padding, never a
+   max-width: flex wraps an item by its basis clamped to its max-width, so a
+   detail capped at 60ch fitted beside a short first line on a wide card and sat
+   there, squeezing the title to a word a line (staging, 18 Nov). Full width, it
+   always takes a line of its own; its words still stop at the measure. */
 @utility row-detail {
   flex-basis: 100%;
-  max-width: var(--measure);
+  padding-inline-end: max(0px, calc(100% - var(--measure)));
   font-size: var(--text-small);
   line-height: var(--text-small--line-height);
   color: var(--muted);

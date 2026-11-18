@@ -2979,6 +2979,21 @@ end to end) found no missing function; three regressions with one root cause
       - MergeFindings has no empty padded div;
       - Holds' retry is right-aligned;
       - fold toggles are exempt only from the seat guard, not from the prose guard.
+    - **Staging round** (18 Nov 2026; lead in Chrome, 1481px, dark):
+      - **(1) The reports card's titles went a word a line, and (2) long captions sat at the right of their titles.** One cause:
+        - The detail line (and the caption) was `flex-basis: 100%` capped by `max-width: 60ch`. Flex wraps an item by its basis clamped to its max-width, so on a wide card a 60ch line fitted beside a short first line and sat there.
+        - On a reading it squeezed the title's `flex-1` part to a word a line ("A / disk / reports / errors…"). On a CardHeader, the `flex-1` spacer pushed the caption to the right.
+        - The 48-character note guard was right: both were already captions, not notes. The guard reads a note's rendered text, string or node alike.
+      - **Fix (2):** `row-detail` is full width, with the measure as padding (`padding-inline-end: max(0px, calc(100% - var(--measure)))`), never a max-width. CardHeader's caption takes `row-detail`'s shape.
+      - **Fix (1):** the connected systems' reading sentence, the one hand-made copy of the trap (`order-last w-full max-w-[80ch]`), is now the row's `detail`.
+      - **No label seat was involved.** The narrow "label column" was the title squeezed by the detail beside it. The label seats (`--seat-label`) hold only short labels.
+      - **(3)** The accounts table's Status column holds the state and its note only (`StandingLine step={false}`). The next step (`StandingStep`, the same words) is the row's detail line, with the home folder line, full width under the row.
+      - **Guards:**
+        - `design-system.test.ts`: the detail line is full width with the measure as padding and no max-width; the caption is `row-detail`; no class string anywhere builds a full line (`basis-full`, or `order-last` with `w-full`) capped by a `max-w-*` or `measure`.
+        - `SystemHealth.test.tsx`: the reports card with a CRITICAL SMART alert and a degraded `raid-z1-slow` pool, the title in the row's flexing first part and never a fixed-width column, the sentence in `[data-row-detail]`.
+        - `AccountsTable.test.tsx`: the step is in the detail line, not the status cell.
+        - jsdom draws no layout, so the CSS rule is the guard that fails locally on this class of defect.
+      - **Mutation-checked** (each red): the detail line back to a max-width; the caption back to `measure basis-full`; the systems reading's hand-made line; the step back in the status cell.
     - **Left, low:**
       - while Check now waits, the check's own row says nothing beside the disabled button, because the wait line is RetryWait's row under it;
       - ServiceAccountPage's sources keep their pre-existing `order-last` on a phone.

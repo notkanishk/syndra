@@ -197,6 +197,8 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
       first={first}
       seat="wide"
       top
+      // The one reading that is no fault and so has no Notice: its sentence is the row's detail line.
+      detail={reading.detail}
       action={
         // What needs you is the row's way on (D-1 §4): its seat, under the "Needs you" heading. A link per
         // thing, or the one line saying nothing does.
@@ -276,13 +278,6 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
         )}
       </span>
 
-      {/* The one reading that is no fault and so has no Notice: its sentence
-          stays under its row. */}
-      {reading.detail && (
-        <span className="order-last w-full max-w-[80ch] text-[13.5px] leading-[1.5] text-muted">
-          {reading.detail}
-        </span>
-      )}
     </CardRow>
   );
 }

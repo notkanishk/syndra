@@ -1145,6 +1145,30 @@ describe("density and alignment (D-1)", () => {
     }
   });
 
+  // Staging, 18 Nov, 1481px: a detail line and a caption were `flex-basis: 100%` capped by a
+  // max-width of 60ch. Flex wraps an item by its basis clamped to its max-width, so on a wide card
+  // the 60ch line fitted beside a short first line and sat there: the reports card's titles went a
+  // word a line, and long captions sat at the right of their title. A line of its own is full width;
+  // the measure is padding.
+  it("gives a detail line and a caption a line of their own, the measure as padding, never a max-width", () => {
+    const detail = namedAtRuleBody(css, "@utility", "row-detail");
+    expect(detail).toContain("flex-basis: 100%;");
+    expect(detail).toContain("padding-inline-end: max(0px, calc(100% - var(--measure)));");
+    expect(detail).not.toMatch(/max-width/);
+    expect(readFileSync(resolve(SRC_ROOT, "components/ui/Card.tsx"), "utf8")).toMatch(/<p data-prose data-caption className="row-detail">/);
+    // And no screen builds the trap by hand: a full-line part capped by a measure.
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      if (!file.endsWith(".tsx")) continue;
+      for (const m of Array.from(readFileSync(file, "utf8").matchAll(/(?:"|`)([^"`]*)(?:"|`)/g))) {
+        const cls = ` ${m[1]} `;
+        const fullLine = /\sbasis-full\s/.test(cls) || (/\sorder-last\s/.test(cls) && /\sw-full\s/.test(cls));
+        if (fullLine && /\s(?:[a-z]+:)?(?:max-w-\S+|measure)\s/.test(cls)) found.push(`${file.replace(`${SRC_ROOT}/`, "")}: ${m[1]}`);
+      }
+    }
+    expect(found, `A line of its own capped by a max-width can sit beside the line above; use CardRow's detail:\n  ${found.join("\n  ")}`).toEqual([]);
+  });
+
   it("takes no line for an empty detail", () => {
     expect(namedAtRuleBody(css, "@utility", "row-detail")).toMatch(/&:empty \{\s*display: none;\s*\}/);
   });

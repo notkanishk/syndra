@@ -11,7 +11,7 @@ import { Card, CardColumns, CardHeader, CardRow, type Seat } from "@/components/
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UNKNOWN_ACCOUNT, UserAvatar, UserName } from "@/components/names";
-import { StandingLine } from "@/components/ui/StandingLine";
+import { StandingLine, StandingStep } from "@/components/ui/StandingLine";
 import { accountField } from "@/lib/fields";
 import { schemaReason } from "@/components/states/SchemaState";
 import { useFieldSchemaState, useMappingFields, useSystemNames } from "@/lib/queries/useFieldSchema";
@@ -177,7 +177,20 @@ function PersonRow({
         className="scroll-mt-4"
         top
         seat={seat}
-        detail={home && <HomeLine home={home} />}
+        // The standing's next step and the home folder line are sentences: the row's detail line, full width
+        // under it, never inside the 240px Status column (D-1 §5 #39).
+        detail={
+          (account.standing || home) && (
+            <>
+              {account.standing && (
+                <span className="block">
+                  <StandingStep standing={account.standing} system={nameOf(target)} audience="operator" />
+                </span>
+              )}
+              {home && <HomeLine home={home} />}
+            </>
+          )
+        }
         action={
           <>
             {/* Its home folder limit first, the one write place for it (A-03 §3);
@@ -207,7 +220,7 @@ function PersonRow({
           {account.username}
         </span>
         <span className={STATUS_SEAT}>
-          {account.standing && <StandingLine standing={account.standing} system={nameOf(target)} audience="operator" />}
+          {account.standing && <StandingLine standing={account.standing} system={nameOf(target)} audience="operator" step={false} />}
         </span>
         <span className="w-(--seat-number) flex-none text-right text-[13.5px] text-muted">{formatShortDate(account.bound_at)}</span>
       </CardRow>

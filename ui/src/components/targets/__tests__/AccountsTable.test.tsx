@@ -180,7 +180,9 @@ describe("accounts table seats", () => {
     const row = screen.getByText("Charlotte Flair").closest("[data-account]") as HTMLElement;
     const standing = row.querySelector("[data-standing]") as HTMLElement;
     expect(standing).toHaveTextContent("Ready to use");
-    expect(standing).toHaveTextContent("Nothing for you to do.");
+    // The next step is a sentence: the row's detail line, full width under the row, never in the status column.
+    expect(standing).not.toHaveTextContent("Nothing for you to do.");
+    expect(row.querySelector("[data-row-detail] [data-standing-step]")).toHaveTextContent("Nothing for you to do.");
     expect(standing.parentElement).not.toBe(within(row).getByText("charlotte.l"));
     // Heading and cells share one fixed seat; a row with no standing keeps the cell.
     const cell = standing.parentElement as HTMLElement;
