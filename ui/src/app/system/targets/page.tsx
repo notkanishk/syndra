@@ -70,13 +70,12 @@ export default function ConnectedSystemsPage() {
       <Card>
         <ListStates
           head={
-            <CardColumns>
+            <CardColumns seat="wide" seatLabel="Needs you">
               <span className="min-w-0 flex-1">
                 System <span aria-hidden>↑</span>
               </span>
               <span className="w-[180px] shrink-0">Status</span>
-              <span className="hidden w-[250px] shrink-0 desktop:block">Needs you</span>
-              <span className="w-[110px] shrink-0 text-right">People</span>
+              <span className="w-(--seat-number) shrink-0 text-right">People</span>
             </CardColumns>
           }
           isLoading={targets.isLoading}
@@ -194,7 +193,26 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
   const unread = Boolean(ask) && (health.isError || inventory.isError || findings.isError);
 
   return (
-    <CardRow first={first}>
+    <CardRow
+      first={first}
+      seat="wide"
+      top
+      action={
+        // What needs you is the row's way on (D-1 §4): its seat, under the "Needs you" heading. A link per
+        // thing, or the one line saying nothing does.
+        <span className="flex flex-col items-end gap-1 text-right text-[13.5px] leading-[1.45]">
+          {row.project === null && <ArrowLink href={href}>Choose its Zitadel project</ArrowLink>}
+          {needs.map((need) => (
+            <ArrowLink key={need.text} href={need.href}>
+              {need.text}
+            </ArrowLink>
+          ))}
+          {needs.length === 0 && row.project !== null && (
+            <NeedsNote answering={answering} callable={row.callable} loading={loading} unread={unread} />
+          )}
+        </span>
+      }
+    >
       <span className="flex min-w-[min(220px,100%)] flex-1 flex-col gap-0.5">
         <Link href={href} className="text-[15.5px] font-semibold link-hover">
           {name}
@@ -238,24 +256,11 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
         )}
       </span>
 
-      {/* Under the row until there is room for a column. */}
-      <span className="order-last flex w-full flex-col items-start gap-1 text-[13.5px] leading-[1.45] desktop:order-none desktop:w-[250px] desktop:shrink-0 desktop:pt-px">
-        {row.project === null && <ArrowLink href={href}>Choose its Zitadel project</ArrowLink>}
-        {needs.map((need) => (
-          <ArrowLink key={need.text} href={need.href}>
-            {need.text}
-          </ArrowLink>
-        ))}
-        {needs.length === 0 && row.project !== null && (
-          <NeedsNote answering={answering} callable={row.callable} loading={loading} unread={unread} />
-        )}
-      </span>
-
       {/* A count, and only when Syndra has one. A system that has never
           answered shows a dash, never 0: that would be a claim about the
           system rather than about Syndra's ignorance of it. Once it stops
           answering, the last count stays and says so. */}
-      <span className="flex flex-col gap-0.5 pt-px tablet:w-[110px] tablet:shrink-0 tablet:text-right">
+      <span className="flex flex-col gap-0.5 pt-px tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
         {bound === undefined ? (
           <span className="text-[15px] text-faint">Not yet</span>
         ) : (

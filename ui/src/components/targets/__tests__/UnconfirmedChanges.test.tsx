@@ -63,6 +63,15 @@ beforeEach(() => {
 });
 
 describe("Waiting on you: changes nobody confirmed", () => {
+  // D-1 §5 #21: Say what happened is in each row's seat, one width for every row.
+  it("seats Say what happened in the row's action seat", () => {
+    renderIt([PURGE, { ...PURGE, id: "op2" }]);
+    const seats = screen.getAllByRole("button", { name: /^Say what happened/ }).map((b) => b.closest("[data-action-seat]"));
+    expect(seats).toHaveLength(2);
+    for (const s of seats) expect(s).not.toBeNull();
+    expect(new Set(seats.map((s) => s?.getAttribute("data-seat"))).size).toBe(1);
+  });
+
   // An answer records the answer only: it writes no binding, and Syndra's lists
   // read the binding. So no answer may claim the lists moved, and how to tell
   // is to do it again (addon-contract 6.3r).

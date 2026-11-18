@@ -51,6 +51,24 @@ function renderPage() {
 }
 
 describe("role members — holding is observed", () => {
+  // D-1 #23: three labels of three widths, one seat.
+  it("puts each member's action in the same wide seat", () => {
+    const user = (id: string) => ({ id, name: id, email: `${id}@example.edu`, title: "", team: "" });
+    state.data = view({
+      members: [
+        { user: user("a"), reasons: [{ kind: "direct" }], standing: "held" },
+        { user: user("b"), reasons: [{ kind: "bundle" }], standing: "held" },
+      ] as RoleMember[],
+    });
+    renderPage();
+
+    for (const name of [/Revoke direct access/, /Remove bundle assignment/]) {
+      const seat = screen.getByRole("button", { name }).closest("[data-action-seat]");
+      expect(seat).not.toBeNull();
+      expect(seat).toHaveAttribute("data-seat", "wide");
+    }
+  });
+
   it("counts people Zitadel shows holding it even with no Syndra record", () => {
     state.data = view({
       members: [

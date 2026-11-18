@@ -184,6 +184,8 @@ export function CopyableValue({
         onClick={canCopy ? copy : select}
         // Six rows on one page are six buttons, and "Copy" six times is one
         // name for six things. The name says what it copies.
+        // `data-inline`: the control belongs to the value it copies, not to a row's seat (D-1 §4).
+        data-inline
         aria-label={`${canCopy ? (copied ? "Copied" : "Copy") : selected ? "Selected" : "Select"} ${object}`}
         className={`inline-flex min-h-[var(--tap)] shrink-0 items-center gap-2 rounded-pill px-2.5 text-[12.5px] font-semibold control ${
           copied || selected ? "text-healthy" : "text-muted hover:bg-[var(--hover)] hover:text-ink"

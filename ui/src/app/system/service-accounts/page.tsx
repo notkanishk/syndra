@@ -50,7 +50,7 @@ export default function ServiceAccountsPage() {
               </span>
               <span className="min-w-0 flex-1">Purpose</span>
               <span className="w-[170px] shrink-0">Owner</span>
-              <span className="w-[110px] shrink-0 text-right">Roles</span>
+              <span className="w-(--seat-number) shrink-0 text-right">Roles</span>
             </CardColumns>
           }
           isLoading={accounts.isLoading}
@@ -87,7 +87,7 @@ export default function ServiceAccountsPage() {
               <span className="order-4 w-full text-[14px] tablet:order-3 tablet:w-[170px] tablet:shrink-0">
                 <Owner id={account.owner_id} />
               </span>
-              <span className="order-2 w-[64px] shrink-0 text-right text-[14px] tabular-nums tablet:order-4 tablet:w-[110px]">
+              <span className="order-2 w-[64px] shrink-0 text-right text-[14px] tabular-nums tablet:order-4 tablet:w-(--seat-number)">
                 {account.role_count}
               </span>
             </CardRow>

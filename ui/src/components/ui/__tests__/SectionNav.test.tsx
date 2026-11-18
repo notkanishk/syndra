@@ -112,6 +112,15 @@ describe("the floating pill", () => {
     // The one you are in points nowhere; the other points down to where it is.
     expect(links[1]).toHaveTextContent("↓");
     expect(links[0]).not.toHaveTextContent(/[↑↓]/);
+    // D-1 §5 #35: every section keeps its arrow's seat, so the pill holds its width as you scroll;
+    // the current one's is empty and hidden from assistive tech, like every arrow.
+    for (const link of links) {
+      const seat = link.querySelector("[data-arrow-seat]");
+      expect(seat).not.toBeNull();
+      expect(seat).toHaveAttribute("aria-hidden");
+      expect(seat).toHaveClass("w-3");
+    }
+    expect(links[0].querySelector("[data-arrow-seat]")).toBeEmptyDOMElement();
   });
 
   it("moves the fill, and turns the arrows, as the reader passes into the next section", () => {

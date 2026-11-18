@@ -87,7 +87,11 @@ export function CardHeader({
         </span>
       )}
       <span className="flex-1" />
-      {note && <span className="text-[13.5px] text-faint">{note}</span>}
+      {note && (
+        <span data-card-note className="text-[13.5px] text-faint">
+          {note}
+        </span>
+      )}
       {action}
       {caption && (
         <p data-prose className="measure basis-full text-small text-muted">
@@ -182,7 +186,7 @@ export function CardRow({
 
   if (!disclosure) {
     return (
-      <div className={`${line} ${first ? "" : "row-divider"}`} {...props}>
+      <div data-card-row className={`${line} ${first ? "" : "row-divider"}`} {...props}>
         {parts}
       </div>
     );
@@ -203,7 +207,7 @@ export function CardRow({
   if (!onToggle) {
     return (
       <div className={first ? "" : "row-divider"}>
-        <div className={line} {...props}>
+        <div data-card-row className={line} {...props}>
           {parts}
         </div>
         {panel}
@@ -219,7 +223,9 @@ export function CardRow({
         aria-expanded={expanded}
         className="w-full text-left hover-tint"
       >
-        <div className={line}>{parts}</div>
+        <div data-card-row className={line}>
+          {parts}
+        </div>
       </button>
       {panel}
     </div>
@@ -249,22 +255,29 @@ export function CardHeaderLink({ href, children }: { href: string; children: Rea
  * phone they do not — the row's fields stack, and each one carries its own
  * label inside the disclosure instead.
  *
- * `seat` draws the action column's heading cell, empty and at the rows' seat
- * width, so the headings over the other columns line up with their cells.
+ * `seat` draws the action column's heading cell at the rows' seat width, so the
+ * headings over the other columns line up with their cells. It is empty (a
+ * column of verbs needs no name) unless `seatLabel` names what the seat holds
+ * ("Decision"), set at the seat's right edge, over its contents.
  */
 export function CardColumns({
   className = "",
   seat,
+  seatLabel,
   children,
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & { seat?: Seat }) {
+}: React.HTMLAttributes<HTMLDivElement> & { seat?: Seat; seatLabel?: React.ReactNode }) {
   return (
     <div
       className={`row-cols hidden px-(--card-x) py-2 text-[12.5px] font-semibold uppercase tracking-[0.09em] text-label tablet:flex ${className}`}
       {...props}
     >
       {children}
-      {seat && <span aria-hidden className="row-seat" data-seat={seatWidth(seat)} />}
+      {seat && (
+        <span aria-hidden={seatLabel ? undefined : true} className="row-seat" data-seat={seatWidth(seat)}>
+          {seatLabel}
+        </span>
+      )}
     </div>
   );
 }

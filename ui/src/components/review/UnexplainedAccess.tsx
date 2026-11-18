@@ -15,7 +15,7 @@ import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { Badge, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -379,18 +379,17 @@ export function UnexplainedAccess() {
   }, [items, selection]);
 
   const head = (
-    <CardColumns>
+    <CardColumns seat="wide">
       {selecting && <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]" />}
       <span className="w-[180px] shrink-0">
         <SortHead label="Who" name="who" sort={sort} onSort={flipSort} />
       </span>
-      <span className="w-[200px] shrink-0">
+      {/* The reason is each row's detail line, so its sort sits with the column it runs under. */}
+      <span className="flex min-w-[160px] flex-1 flex-wrap gap-x-4">
         <SortHead label="What they can get into" name="what" by="what" sort={sort} onSort={flipSort} />
-      </span>
-      <span className="flex-1">
         <SortHead label="Why Syndra can’t explain it" name="why" by="why" sort={sort} onSort={flipSort} />
       </span>
-      <span className="w-[110px] shrink-0 text-right">
+      <span className="w-(--seat-number) shrink-0 text-right">
         <SortHead label="Found" name="found" sort={sort} onSort={flipSort} />
       </span>
     </CardColumns>
@@ -831,7 +830,7 @@ function DriftSection({
           <CardHeader
             tone={section.tone}
             count={section.count}
-            note={section.hint}
+            caption={section.hint}
             title={
               <button
                 type="button"
@@ -902,7 +901,7 @@ function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) 
           <p className="text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">{text}</p>
           {!inZitadel && <ArrowLink href="/governance/pending">Check Pending changes</ArrowLink>}
         </div>
-        <div className="text-[13px] text-faint tablet:ml-auto tablet:w-[110px] tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
+        <div className="text-[13px] text-faint tablet:ml-auto tablet:w-(--seat-number) tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
           <span className="tablet:hidden">Compared </span>
           <Relative iso={comparedAt} />
         </div>
@@ -954,56 +953,17 @@ function TriageRow({
       {...(isSafety(item) ? { "data-danger-edge": "" } : {})}
       className={isSafety(item) ? "border-l-[3px] border-danger" : "border-l-[3px] border-transparent"}
     >
-      <div
-        className={`row-divider row-cols flex flex-wrap items-start gap-y-3 px-5 py-4 ${
-          selection.isSelected(item.id) ? "bg-accent-soft" : ""
-        }`}
+      {/* The answers sit in the wide seat on the first line, in the same order on every row:
+          Adopt · Revoke · Owned elsewhere. Revoke is a red OUTLINE here: the solid fill exists only on
+          the confirming button inside its dialog. The reason is the row's detail line; the evidence has
+          its own fold control under it (G3). */}
+      <CardRow
+        top
+        seat="wide"
+        className={selection.isSelected(item.id) ? "bg-accent-soft" : ""}
         {...selection.rowProps(item.id)}
-      >
-        {selecting && (
-          <span className="order-1">
-            <RowCheckbox
-              label={`Select the ${role} row`}
-              {...selection.checkboxProps(item.id)}
-            />
-          </span>
-        )}
-
-        {/* Who links to the person; the evidence has its own control. */}
-        <WhoSeat
-          id={item.user_id}
-          href={item.user_is_service_account ? serviceAccountHref(item.user_id) : `/users/${item.user_id}`}
-          sub={describeHolder(item)}
-          className="order-1 tablet:w-[180px] tablet:shrink-0"
-        />
-
-        <WhatSeat projectId={item.project_id} roleKeys={role ? [role] : []} className="order-2 tablet:w-[200px] tablet:shrink-0">
-          {item.target !== "zitadel" && (
-            <span className="text-[12.5px] text-muted">On {systemName(item.target)}</span>
-          )}
-          <RiskPill item={item} />
-        </WhatSeat>
-
-        <div className="order-3 text-[13px] text-faint tablet:ml-auto tablet:w-[110px] tablet:shrink-0 tablet:pt-0.5 tablet:text-right desktop:order-4">
-          <span className="tablet:hidden">Found </span>
-          <Relative iso={item.detected_at} />
-        </div>
-
-        {/* The reason gets the width, and the answers sit beneath it in the
-            same order on every row: Adopt · Revoke · Owned elsewhere. Revoke is
-            a red OUTLINE here: the solid fill exists only on the confirming
-            button inside its dialog. Below the desktop breakpoint this block
-            drops under the line and takes the full width. */}
-        <div className="order-4 flex w-full min-w-0 flex-col gap-2.5 desktop:order-3 desktop:w-auto desktop:flex-1">
-          <div className="flex flex-col gap-1">
-            <p className="text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">{why.text}</p>
-            {/* Two separate facts, said separately (owner's requirement). */}
-            {why.note && (
-              <p className="text-[13.5px] leading-[1.55] text-warn-text [text-wrap:pretty]">{why.note}</p>
-            )}
-            <WhoMadeIt item={item} />
-          </div>
-          <div className="flex flex-wrap items-start gap-3 desktop:gap-2">
+        action={
+          <>
             <Button
               variant="accent"
               size="sm"
@@ -1019,17 +979,56 @@ function TriageRow({
             <Button variant="outline" size="sm" disabled={paused} onClick={() => onResolve("external")}>
               Owned elsewhere
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onExpand}
-              aria-expanded={expanded}
-              data-testid="drift-row-toggle"
-            >
-              {expanded ? "Hide evidence" : "Show evidence"}
-            </Button>
-          </div>
+          </>
+        }
+        detail={
+          <>
+            <span className="block [text-wrap:pretty]">{why.text}</span>
+            {/* Two separate facts, said separately (owner's requirement). */}
+            {why.note && <span className="block text-warn-text [text-wrap:pretty]">{why.note}</span>}
+          </>
+        }
+      >
+        {selecting && (
+          <span>
+            <RowCheckbox
+              label={`Select the ${role} row`}
+              {...selection.checkboxProps(item.id)}
+            />
+          </span>
+        )}
+
+        {/* Who links to the person; the evidence has its own control. */}
+        <WhoSeat
+          id={item.user_id}
+          href={item.user_is_service_account ? serviceAccountHref(item.user_id) : `/users/${item.user_id}`}
+          sub={describeHolder(item)}
+          className="tablet:w-[180px] tablet:shrink-0"
+        />
+
+        <WhatSeat projectId={item.project_id} roleKeys={role ? [role] : []} className="tablet:min-w-[160px] tablet:flex-1">
+          {item.target !== "zitadel" && (
+            <span className="text-[12.5px] text-muted">On {systemName(item.target)}</span>
+          )}
+          <RiskPill item={item} />
+        </WhatSeat>
+
+        <div className="text-[13px] text-faint tablet:w-(--seat-number) tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
+          <span className="tablet:hidden">Found </span>
+          <Relative iso={item.detected_at} />
         </div>
+      </CardRow>
+      <div className="flex flex-wrap items-start gap-2 px-(--card-x) pb-(--row-y)">
+        <WhoMadeIt item={item} />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onExpand}
+          aria-expanded={expanded}
+          data-testid="drift-row-toggle"
+        >
+          {expanded ? "Hide evidence" : "Show evidence"}
+        </Button>
       </div>
 
       <Unfold open={expanded}>

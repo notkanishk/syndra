@@ -10,7 +10,7 @@ import { Crossfade } from "@/lib/motion";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, ROW } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
 import { ApproveButton, HoldingNote, describeAsk } from "@/components/requests/Holding";
 import { OUTCOME_LABEL } from "@/lib/outcome";
@@ -60,11 +60,10 @@ export function PersonRequests({
       {cancelStep}
       <ListStates
         head={
-          <CardColumns>
+          <CardColumns seat="default" seatLabel="Outcome">
             <span className="w-[250px]">What they asked for</span>
             <span className="flex-1">Why</span>
             <span className="w-[66px]">When</span>
-            <span className="w-[196px]">Outcome</span>
           </CardColumns>
         }
         isLoading={requests.isLoading}
@@ -138,10 +137,9 @@ function RequestRow({
       <span className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
         <Relative iso={entry.created_at} />
       </span>
-      {/* What approving also gives, as the queue and Home say it (re-audit C2). */}
-      {open && isOperator && <HoldingNote request={entry} />}
       {/* One seat: the buttons, then the decision in their place (#96). */}
-      <span className="flex w-full flex-col gap-2 tablet:w-[196px] tablet:shrink-0">
+      <ActionSeat>
+        <span className="flex flex-col gap-2">
         <Crossfade id={open && isOperator ? "open" : outcome && optimisticallyResolved ? "outcome" : forecast ? "forecast" : "status"}>
         {open && isOperator ? (
           <span className="flex items-center gap-3 tablet:gap-2">
@@ -168,7 +166,11 @@ function RequestRow({
             outcome={outcome.outcome}
           />
         )}
-      </span>
+        </span>
+      </ActionSeat>
+      {/* What approving also gives, as the queue and Home say it (re-audit C2): under the row's first line, so the
+          seat stays on it. */}
+      {open && isOperator && <HoldingNote request={entry} />}
     </div>
   );
 }

@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/Button";
 import { useUiView } from "@/lib/ui-view";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
-import { Card, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardHeader, CardRow, type Seat } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { ReadLine, SectionPill, type NavSection } from "@/components/ui/SectionNav";
 import { StandingLine } from "@/components/ui/StandingLine";
@@ -557,11 +557,35 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
     <Card>
       <CardHeader
         title="Check for differences"
-        note={`Compares ${name} with what Syndra expects and records any fixes as changes waiting for you to send. Nothing is applied until somebody sends them from Pending changes.`}
+        caption={`Compares ${name} with what Syndra expects and records any fixes as changes waiting for you to send. Nothing is applied until somebody sends them from Pending changes.`}
       />
-      <CardRow>
+      <CardRow
+        top
+        seat="narrow"
+        action={
+          /* It reads the system first, so it waits while that can't answer
+              (A-13 §1.5). The card's one control, so its reason rides on it. */
+          <Button
+            variant="outline"
+            size="sm"
+            isPending={run.isPending}
+            disabled={lastKnown || waiting || left > 0}
+            reason={
+              waiting
+                ? retryingLine(name, retry.left)
+                : left > 0
+                  ? cooldownLine(name, left)
+                  : lastKnown
+                    ? `Check now waits too: it reads ${name} first.`
+                    : undefined
+            }
+            onClick={() => retry.press(check)}
+          >
+            Check now
+          </Button>
+        }
+      >
         <div className="flex-1 text-[14.5px] text-muted">
-          <RetryWait name={name} retry={retry} onStop={retry.stop} />
           {waiting ? null : skipped ? (
             <span className="text-warn-text">
               {left > 0 ? `${cooldownLine(name, left)}. ` : ""}
@@ -596,27 +620,8 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
             reconcileLine(result.bound, result.queued, result.stale?.length ?? 0, name)
           )}
         </div>
-        {/* It reads the system first, so it waits while that can't answer
-            (A-13 §1.5). The card's one control, so its reason rides on it. */}
-        <Button
-          variant="outline"
-          size="sm"
-          isPending={run.isPending}
-          disabled={lastKnown || waiting || left > 0}
-          reason={
-            waiting
-              ? retryingLine(name, retry.left)
-              : left > 0
-                ? cooldownLine(name, left)
-                : lastKnown
-                ? `Check now waits too: it reads ${name} first.`
-                : undefined
-          }
-          onClick={() => retry.press(check)}
-        >
-          Check now
-        </Button>
       </CardRow>
+      <RetryWait name={name} retry={retry} onStop={retry.stop} />
 
       {run.error && (
         <CardRow>
@@ -646,76 +651,74 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
             </span>
           </CardRow>
           {sortByName(result!.stale!, (b) => b.username, (b) => b.subject_id).map((b) => (
-            <CardRow key={b.subject_id} className="flex-wrap">
-              <Mono className="min-w-0 [overflow-wrap:anywhere]">{b.username}</Mono>
-              <span className="flex-1" />
-              {released.includes(b.subject_id) ? (
-                <span className="text-[13px] text-faint">
-                  Stopped tracking it. Nothing on {name} was changed.
-                </span>
-              ) : confirming === b.subject_id ? (
-                <>
-                  {/* What it does, in the sentence next to the button that does
-                      it. The word "forget" is doing real work here: an operator
-                      reading it as "delete" is the one misreading this row can
-                      afford least, given the account it names is already gone. */}
-                  <span className="text-[13px] text-muted">
-                    Syndra stops managing <Mono>{b.username}</Mono>. Nothing is deleted, and
-                    it can be tracked again by assigning the account to a person if it comes
-                    back.
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
-                    Keep tracking it
-                  </Button>
-                  <Button
-                    variant="accent"
-                    size="sm"
-                    isPending={release.isPending}
-                    onClick={() =>
-                      release.mutate({ subjectId: b.subject_id, version: b.version }, {
-                        onSuccess: (res) => {
-                          // Released, and nothing left over. Anything else keeps
-                          // the row and its control, and says what the backend
-                          // said — including the sentence naming the repair.
-                          if (res.status === "released" && !res.warning) {
-                            setReleased((prev) => [...prev, b.subject_id]);
-                            setConfirming(null);
-                            return;
-                          }
-                          setUnfinished((prev) => ({
-                            ...prev,
-                            [b.subject_id]:
-                              res.warning ||
-                              res.detail ||
-                              `${name} did not confirm. Some of this may have gone through. Check this list again before trying again.`,
-                          }));
-                        },
-                      })
-                    }
-                  >
-                    Stop tracking {b.username}
-                  </Button>
-                  {unfinished[b.subject_id] && (
-                    <span className="w-full text-[13px] text-warn-text">
-                      {unfinished[b.subject_id]}
-                    </span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <span className="text-[13px] text-faint">
-                    Not fixed by itself: recreating it would bring back an account somebody
-                    deleted, so this is yours to decide.
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setConfirming(b.subject_id)}
-                  >
+            <CardRow
+              key={b.subject_id}
+              seat="default"
+              action={
+                released.includes(b.subject_id) ? undefined : confirming === b.subject_id ? (
+                  <>
+                    <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
+                      Keep tracking it
+                    </Button>
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      isPending={release.isPending}
+                      onClick={() =>
+                        release.mutate({ subjectId: b.subject_id, version: b.version }, {
+                          onSuccess: (res) => {
+                            // Released, and nothing left over. Anything else keeps
+                            // the row and its control, and says what the backend
+                            // said — including the sentence naming the repair.
+                            if (res.status === "released" && !res.warning) {
+                              setReleased((prev) => [...prev, b.subject_id]);
+                              setConfirming(null);
+                              return;
+                            }
+                            setUnfinished((prev) => ({
+                              ...prev,
+                              [b.subject_id]:
+                                res.warning ||
+                                res.detail ||
+                                `${name} did not confirm. Some of this may have gone through. Check this list again before trying again.`,
+                            }));
+                          },
+                        })
+                      }
+                    >
+                      Stop tracking {b.username}
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => setConfirming(b.subject_id)}>
                     Stop tracking this account
                   </Button>
-                </>
-              )}
+                )
+              }
+              detail={
+                released.includes(b.subject_id) ? (
+                  <>Stopped tracking it. Nothing on {name} was changed.</>
+                ) : confirming === b.subject_id ? (
+                  <>
+                    {/* What it does, in the sentence under the button that does
+                        it. The word "forget" is doing real work here: an operator
+                        reading it as "delete" is the one misreading this row can
+                        afford least, given the account it names is already gone. */}
+                    Syndra stops managing <Mono>{b.username}</Mono>. Nothing is deleted, and it can
+                    be tracked again by assigning the account to a person if it comes back.
+                    {unfinished[b.subject_id] && (
+                      <span className="mt-1 block text-warn-text">{unfinished[b.subject_id]}</span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    Not fixed by itself: recreating it would bring back an account somebody deleted,
+                    so this is yours to decide.
+                  </>
+                )
+              }
+            >
+              <Mono className="min-w-0 [overflow-wrap:anywhere]">{b.username}</Mono>
             </CardRow>
           ))}
           {release.error && (
@@ -838,18 +841,11 @@ function ReachCard({
         ? holdingOff
           ? `The add-on on the Syndra server is waiting before it calls ${name} again, after repeated failures, and tries again by itself. Changes for ${name} wait, and nothing is lost.`
           : paused
-            ? <>{`Syndra can reach ${name}, but it is ${stateLabel(lifecycle)}. ${lifecycleWhy(health.lifecycle_note)} ${
+            ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)}. ${lifecycleWhy(health.lifecycle_note)} ${
                 lifecycle === "draining"
                   ? "New changes are refused and the ones already sent are being allowed to finish."
                   : "Every change is refused at once. Reads keep working."
-              }`}
-              {/* The next step. Maintenance is Advanced only and structure does not move with data,
-                  so in Basic this is how to reach it: it switches the view and glides there. */}
-              {" "}
-              <Button size="sm" onClick={() => revealInAdvanced("maintenance")}>
-                {view === "advanced" ? "Open Maintenance" : "Open Maintenance in Advanced"}
-              </Button>
-              </>
+              }`
             : (reading.sentence ??
               // A failed live read is not "accepting changes": the copy below the card
               // (LastKnown) is all there is, and it cannot say what is in flight now.
@@ -867,6 +863,16 @@ function ReachCard({
       <CardHeader title="Syndra's reach" />
       <Reading
         tone={reading.tone}
+        seat="narrow"
+        // The next step. Maintenance is Advanced only and structure does not move with data,
+        // so in Basic this is how to reach it: it switches the view and glides there.
+        action={
+          !fault && health && status !== "checking" && !holdingOff && paused ? (
+            <Button size="sm" onClick={() => revealInAdvanced("maintenance")}>
+              {view === "advanced" ? "Open Maintenance" : "Open Maintenance in Advanced"}
+            </Button>
+          ) : undefined
+        }
         label={
           <>
             {reading.word}
@@ -1291,22 +1297,27 @@ function ResolveFindingDialog({
 function Reading({
   tone,
   label,
+  seat,
+  action,
   children,
 }: {
   tone: StatusTone;
   label: React.ReactNode;
+  /** The seat's width, when the card has one: the same on every row of it, whether or not this one has an action. */
+  seat?: Seat;
+  /** A button, in the seat on the line that says the word. */
+  action?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
-    <CardRow>
-      <div className="flex min-w-0 flex-1 gap-3">
+    <CardRow
+      seat={seat}
+      action={action}
+      detail={children && <span className="block pl-(--dot-indent)">{children}</span>}
+    >
+      <div className="flex min-w-0 flex-1 gap-2">
         <StatusDot tone={tone} className="mt-[7px]" />
-        <span className="flex min-w-0 flex-col gap-[3px]">
-          <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[14.5px] font-semibold">{label}</span>
-          {children && (
-            <span className="text-[13.5px] leading-[1.5] text-muted [text-wrap:pretty]">{children}</span>
-          )}
-        </span>
+        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[14.5px] font-semibold">{label}</span>
       </div>
     </CardRow>
   );
@@ -1356,7 +1367,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
       <CardHeader
         title="Not created by Syndra"
         count={inventory.data?.unmanaged?.length}
-        note={`Accounts on ${name} that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.`}
+        caption={`Accounts on ${name} that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.`}
       />
       <div className="px-5 pb-2">
         <ReadFreshness
@@ -1395,6 +1406,32 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
             <CardRow
               key={account.username}
               first={i === 0}
+              seat="default"
+              action={
+                account.self ? undefined : (
+                  // Off while the read is too old, with its reason said once for
+                  // the card below, never under every button (A-13 §1.5).
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={tooOldToAdopt}
+                    onClick={() => setAdopting(account.username)}
+                  >
+                    Assign to a person
+                  </Button>
+                )
+              }
+              // Syndra's own credential. Listed, because it IS on the target
+              // and hiding it would leave an operator wondering where it
+              // went — but never offered: adopting it hands Syndra's own
+              // access to a member, and purging it deletes the credential
+              // Syndra reaches this target with. The add-on refuses both; this
+              // says so before anybody meets the refusal.
+              detail={
+                account.self
+                  ? `Syndra\u2019s own account on ${name}, which cannot be assigned to anyone`
+                  : undefined
+              }
               // Under the row it is about, never at the foot of the list.
               expanded={result?.username === account.username}
               disclosure={
@@ -1414,28 +1451,6 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
               <span className="min-w-0 flex-1 basis-[200px]" data-standing-seat>
                 {account.standing && <StandingLine standing={account.standing} system={name} audience="operator" />}
               </span>
-              {account.self ? (
-                // Syndra's own credential. Listed, because it IS on the target
-                // and hiding it would leave an operator wondering where it
-                // went — but never offered: adopting it hands Syndra's own
-                // access to a member, and purging it deletes the credential
-                // Syndra reaches this target with. The add-on refuses both; this
-                // says so before anybody meets the refusal.
-                <span className="text-[13px] text-faint">
-                  Syndra&rsquo;s own account on {name}, which cannot be assigned to anyone
-                </span>
-              ) : (
-                // Off while the read is too old, with its reason said once for
-                // the card below, never under every button (A-13 §1.5).
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={tooOldToAdopt}
-                  onClick={() => setAdopting(account.username)}
-                >
-                  Assign to a person
-                </Button>
-              )}
             </CardRow>
           ))}
           {tooOldToAdopt && unmanaged.some((a) => !a.self) && (
@@ -1749,7 +1764,7 @@ function LifecycleControl({
   return (
     <Card id="maintenance">
       <CardHeader title="Maintenance" />
-      <CardRow first>
+      <CardRow first seat="narrow">
         <span className="inline-flex items-center gap-2 text-[15px] font-semibold">
           <StatusDot tone={current === "active" ? "healthy" : "accent"} />
           {current === "active" ? "Active" : stateLabel(current).replace(/^./, (c) => c.toUpperCase())}
@@ -1768,40 +1783,22 @@ function LifecycleControl({
       {ACTIONS.map((action) => {
         const open = asking === action.id;
         return (
-          <CardRow key={action.id}>
-            <span className="w-[150px] flex-none">
-              <Button
-                variant="outline"
-                size="sm"
-                aria-expanded={open}
-                onClick={() => {
-                  setAsking(open ? null : action.id);
-                  setReason("");
-                }}
-              >
-                {open ? "Cancel" : action.verb}
-              </Button>
-            </span>
-            <span className="min-w-0 flex-[1_1_320px] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
-              <span className="font-semibold text-ink">{action.head}</span> {action.more}
-            </span>
-            {open && (
-              <div className="grid w-full gap-2 pt-1">
-                <FieldLabel htmlFor="lifecycle-reason">Reason</FieldLabel>
-                <Textarea id="lifecycle-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
-                {/* The reason blocks the button for one cause, said once: a
-                    state change needs a reason before it will go. */}
-                <FieldHint>
-                  {reason
-                    ? "Recorded against the change, and shown to the next person who opens this page."
-                    : "Say why first. A state change needs a reason before it will go."}
-                </FieldHint>
-                <div>
-                  <Button
-                    variant="accent"
-                    size="sm"
-                    disabled={!reason || set.isPending}
-                    onClick={() => {
+          <CardRow
+            key={action.id}
+            top
+            seat="narrow"
+            // The reason form opens under the row (its panel), so the verb, now Cancel, stays where it was pressed. The
+            // panel is always passed (a fragment), so opening it never changes the row's shape and remounts the button
+            // that has focus; only the open row holds the form, so its field's id is never on the page twice.
+            expanded={open}
+            disclosure={
+              <>
+                {open && (
+                  <form
+                    className="grid w-full gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!reason || set.isPending) return;
                       set.reset();
                       set.mutate(
                         { state: action.id, reason },
@@ -1814,11 +1811,41 @@ function LifecycleControl({
                       );
                     }}
                   >
-                    {action.verb}
-                  </Button>
-                </div>
-              </div>
-            )}
+                    <FieldLabel htmlFor="lifecycle-reason">Reason</FieldLabel>
+                    <Textarea id="lifecycle-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+                    {/* The reason blocks the button for one cause, said once: a
+                        state change needs a reason before it will go. */}
+                    <FieldHint>
+                      {reason
+                        ? "Recorded against the change, and shown to the next person who opens this page."
+                        : "Say why first. A state change needs a reason before it will go."}
+                    </FieldHint>
+                    <div>
+                      <Button type="submit" variant="accent" size="sm" disabled={!reason || set.isPending}>
+                        {action.verb}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </>
+            }
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                aria-expanded={open}
+                onClick={() => {
+                  setAsking(open ? null : action.id);
+                  setReason("");
+                }}
+              >
+                {open ? "Cancel" : action.verb}
+              </Button>
+            }
+          >
+            <span className="min-w-0 flex-[1_1_320px] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+              <span className="font-semibold text-ink">{action.head}</span> {action.more}
+            </span>
           </CardRow>
         );
       })}

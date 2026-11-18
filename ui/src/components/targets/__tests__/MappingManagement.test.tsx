@@ -187,16 +187,37 @@ describe("what roles reach a target", () => {
     const count = document.querySelector("[data-holders]") as HTMLElement;
     const gives = screen.getByText("Gives the lab_makers group");
     expect(count.parentElement).toBe(gives.parentElement);
-    const row = count.closest(".row-divider, [class*='flex-wrap']") as HTMLElement;
+    const row = count.closest("[data-card-row]") as HTMLElement;
     const fold = screen.getByRole("button", { name: /Technical detail/ }).closest(".unfold") as HTMLElement;
-    expect(row.lastElementChild).toBe(fold);
-    expect(fold).toHaveClass("basis-full");
+    // The fold is under the row, on a line of its own after it: never inside the row, where the seat comes last.
+    expect(row.contains(fold)).toBe(false);
+    expect(row.nextElementSibling).toBe(fold);
     advanced.unmount();
 
     renderMappings("basic");
-    const basicRow = (document.querySelector("[data-holders]") as HTMLElement).closest("[class*='flex-wrap']") as HTMLElement;
+    const basicRow = (document.querySelector("[data-holders]") as HTMLElement).closest("[data-card-row]") as HTMLElement;
     expect(basicRow.querySelector(".unfold")).toBeNull();
-    expect(basicRow.lastElementChild).toHaveTextContent("Remove");
+    expect(basicRow.querySelector("[data-action-seat]")).toHaveTextContent("Remove");
+  });
+
+  // D-1 §5 #20: three verbs in one wide seat, the same on every row, held or not.
+  it("keeps Check for differences, Change and Remove in the wide seat, and the sentence is the detail line", () => {
+    state.holders = ["u1"];
+    const held = renderMappings();
+    const heldSeat = document.querySelector("[data-card-row] [data-action-seat]") as HTMLElement;
+    expect(heldSeat).toHaveAttribute("data-seat", "wide");
+    for (const name of ["Check for differences", "Change", "Remove"]) {
+      expect(heldSeat).toContainElement(screen.getByRole("button", { name }));
+    }
+    held.unmount();
+
+    state.holders = [];
+    renderMappings();
+    const emptySeat = document.querySelector("[data-card-row] [data-action-seat]") as HTMLElement;
+    expect(emptySeat).toHaveAttribute("data-seat", "wide");
+    expect(screen.queryByRole("button", { name: "Check for differences" })).toBeNull();
+    expect(emptySeat).toContainElement(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.getByText("Nobody holds this role").closest("[data-row-detail]")).not.toBeNull();
   });
 
   // The cohort is the reason this row can offer a convergence at all: the

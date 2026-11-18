@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
@@ -167,5 +167,52 @@ describe("Home blocks hold five rows, then say how many more", () => {
     expect(screen.getByRole("link", { name: "and 5 more" })).toHaveAttribute("href", "/requests");
     expect(shown("new")).toHaveLength(3);
     expect(screen.getByRole("link", { name: "and 6 more" })).toHaveAttribute("href", "/users?bundle=none");
+  });
+});
+
+/** The rows of the table (the nearest ancestor holding six of them) that a row's "and N more" link ends. */
+function tableOf(more: HTMLElement) {
+  let node = more.closest("[data-card-row]")!.parentElement!;
+  while (node.querySelectorAll("[data-card-row]").length < 6) node = node.parentElement!;
+  return Array.from(node.querySelectorAll<HTMLElement>("[data-card-row]"));
+}
+
+describe("every action sits in its table's seat (D-1 §4)", () => {
+  // One width per table, with or without an action: Approve and Decline are two verbs (the default
+  // seat), Extend and Give a bundle one (narrow), and "and N more" is in the seat like any action.
+  it.each([
+    ["and 3 more", "Approve", undefined],
+    ["and 2 more", "Extend", "narrow"],
+    ["and 4 more", "Give a bundle", "narrow"],
+  ])("%s and %s share one seat", async (moreName, verb, seat) => {
+    renderHome();
+    await screen.findByText(/last checked/);
+    const more = screen.getByRole("link", { name: moreName });
+    expect(more.closest("[data-action-seat]")).not.toBeNull();
+    const rows = tableOf(more);
+    expect(rows).toHaveLength(6);
+    for (const row of rows) {
+      const seats = row.querySelectorAll("[data-action-seat]");
+      expect(seats).toHaveLength(1);
+      expect(seats[0].getAttribute("data-seat") ?? undefined).toBe(seat);
+    }
+    const button = within(rows[0]).getByRole("button", { name: verb });
+    expect(button.closest("[data-action-seat]")).toBe(rows[0].querySelector("[data-action-seat]"));
+  });
+
+  it("puts each system's Open link in the seat", async () => {
+    state.unvouched = ids("sys", 2).map((target) => ({ target, since: "2026-10-01T00:00:00Z", reason: "" }));
+    renderHome();
+    await screen.findByText(/last checked/);
+    const links = screen.getAllByRole("link", { name: /^Open sys\d$/i });
+    expect(links).toHaveLength(2);
+    for (const link of links) expect(link.closest("[data-action-seat]")).toHaveAttribute("data-seat", "narrow");
+  });
+
+  it("states the expiring card's long note as its caption, not in a row", async () => {
+    renderHome();
+    await screen.findByText(/last checked/);
+    const caption = screen.getByText("Extending is the only action. Doing nothing lets it lapse.");
+    expect(caption.closest("[data-card-row]")).toBeNull();
   });
 });

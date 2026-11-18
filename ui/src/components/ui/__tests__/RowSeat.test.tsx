@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { ActionSeat, Card, CardColumns, CardHeader, CardRow, ROW } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { StandingLine } from "@/components/ui/StandingLine";
-import { ACTIONS, actionsInProse, dotLinesOffIndent } from "@/test-utils/layout";
+import { ACTIONS, actionsInProse, actionsOutsideSeats, dotLinesOffIndent, longNotes, NOTE_MAX } from "@/test-utils/layout";
 
 /**
  * D-1 §4: every action sits in its row's right seat on the first line, never in
@@ -295,5 +295,68 @@ describe("ActionSeat", () => {
     );
     expect(container.firstElementChild).toHaveAttribute("data-action-seat");
     expect(container.firstElementChild).toHaveAttribute("data-seat", "narrow");
+  });
+});
+
+describe("a seat's heading", () => {
+  it("names what the seat holds, at the seat's width, read by assistive tech, when the table says so", () => {
+    const { container } = render(
+      <CardColumns seat="wide" seatLabel="Needs you">
+        <span className="flex-1">System</span>
+      </CardColumns>,
+    );
+    const cell = container.querySelector(".row-seat")!;
+    expect(cell).toHaveAttribute("data-seat", "wide");
+    expect(cell).toHaveTextContent("Needs you");
+    expect(cell).not.toHaveAttribute("aria-hidden");
+  });
+});
+
+describe("the seat guard", () => {
+  it("catches an action in a CardRow that is not in its seat, and passes one that is", () => {
+    const { container, rerender } = render(
+      <CardRow first>
+        <span>Check for differences</span>
+        <Button size="sm">Check now</Button>
+      </CardRow>,
+    );
+    expect(actionsOutsideSeats(container)).toEqual([
+      'button "Check now" in a row, outside its seat: "Check for differencesCheck now"',
+    ]);
+    rerender(
+      <CardRow first action={<Button size="sm">Check now</Button>}>
+        <span>Check for differences</span>
+      </CardRow>,
+    );
+    expect(actionsOutsideSeats(container)).toEqual([]);
+  });
+
+  it("lets a form be its own row, and leaves a value's copy control and a fold's toggle to their own", () => {
+    const { container } = render(
+      <CardRow first>
+        <form>
+          <Button size="sm">Save name</Button>
+        </form>
+        <button type="button" className="rounded-pill" data-inline>
+          Copy id
+        </button>
+        <button type="button" className="rounded-pill" aria-expanded={false}>
+          Show evidence
+        </button>
+      </CardRow>,
+    );
+    expect(container.querySelectorAll(ACTIONS)).toHaveLength(2); // the fold toggle is an action, judged in prose, not by the seat
+    expect(actionsOutsideSeats(container)).toEqual([]);
+  });
+});
+
+describe("the note guard", () => {
+  it("fails a CardHeader note over 48 characters, pointing at caption, and passes a short fact", () => {
+    const sentence = "Compares TrueNAS with what Syndra expects and records any fixes.";
+    const { container, rerender } = render(<CardHeader title="Check for differences" note={sentence} />);
+    expect(sentence.length).toBeGreaterThan(NOTE_MAX);
+    expect(longNotes(container)).toEqual([`a CardHeader note of ${sentence.length} characters (use caption): "${sentence}"`]);
+    rerender(<CardHeader title="Check for differences" note="All read" caption={sentence} />);
+    expect(longNotes(container)).toEqual([]);
   });
 });

@@ -72,29 +72,34 @@ export function TargetName({ registered }: { registered: TargetSummary }) {
           if (!unchanged) submit(trimmed);
         }}
       >
-        <div className="flex flex-col">
+        {/* A form row (D-1 §4 rule 6): the field at its width and its button on one line, the hint
+            under the field, the reason under the button. */}
+        <div className="flex flex-col gap-1.5">
           <FieldLabel htmlFor={`name-${registered.target}`}>Name</FieldLabel>
-          <Input
-            id={`name-${registered.target}`}
-            value={draft}
-            maxLength={NAME_MAX}
-            placeholder={named ? undefined : registered.name}
-            onChange={(event) => {
-              setDraft(event.target.value);
-              setDone(null);
-            }}
-          />
-          <FieldHint>{nameHint(registered)}</FieldHint>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="accent" isPending={save.isPending} disabled={unchanged} reason={unchanged ? "Type a new name first." : undefined}>
-            Save name
-          </Button>
-          {named && (
-            <Button isPending={save.isPending} onClick={() => submit("")}>
-              Use the default name
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="w-full max-w-(--field-max)">
+              <Input
+                dense
+                id={`name-${registered.target}`}
+                value={draft}
+                maxLength={NAME_MAX}
+                placeholder={named ? undefined : registered.name}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  setDone(null);
+                }}
+              />
+            </div>
+            <Button type="submit" variant="accent" size="sm" isPending={save.isPending} disabled={unchanged} reason={unchanged ? "Type a new name first." : undefined}>
+              Save name
             </Button>
-          )}
+            {named && (
+              <Button size="sm" isPending={save.isPending} onClick={() => submit("")}>
+                Use the default name
+              </Button>
+            )}
+          </div>
+          <FieldHint>{nameHint(registered)}</FieldHint>
         </div>
         {done && (
           <ActionOutcome

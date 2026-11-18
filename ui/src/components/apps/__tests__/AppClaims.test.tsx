@@ -694,7 +694,11 @@ describe("an app with no shape of its own", () => {
     renderScreen("gl");
     expect(await screen.findByText("The roles each person holds in Code, as a list")).toBeInTheDocument();
     expect(screen.getByText("All 3 roles, in Syndra's words.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Code’s default/ })).toHaveAttribute("href", "/projects/pCode#claims-default");
+    const projectLink = screen.getByRole("link", { name: /Code’s default/ });
+    expect(projectLink).toHaveAttribute("href", "/projects/pCode#claims-default");
+    // D-1: the link is in the row's seat, and "In {where}." stays the row's words, not a sentence around it.
+    expect(projectLink.closest("[data-action-seat]")).not.toBeNull();
+    expect(projectLink.closest("[data-card-row]")?.textContent).toMatch(/^In .*\./);
     expect(await screen.findByText("Suggested: this app is called GitLab")).toBeInTheDocument();
     await waitFor(() => expect(api.calls.find((c) => c.path.endsWith("draft-from"))?.body).toEqual({ template_id: "gitlab" }));
     // The preview runs the draft before anything is committed.

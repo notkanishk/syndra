@@ -146,6 +146,8 @@ describe("Home says what Syndra is sending again, and what it gave up on", () =>
     expect(see.getAttribute("href")).toBe("/governance/pending?gave_up=1");
     expect(screen.queryByRole("link", { name: /^Audit/ })).toBeNull();
     expect(screen.queryByText(/Nothing here needs you/)).toBeNull();
+    expect(see.closest("[data-action-seat]")).toBe(screen.getByRole("button", { name: "Mark seen" }).closest("[data-action-seat]"));
+    expect(see.closest("[data-action-seat]")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Mark seen" }));
     await waitFor(() => expect(state.seen).toHaveBeenCalled());
   });

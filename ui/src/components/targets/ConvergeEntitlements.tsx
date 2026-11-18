@@ -236,22 +236,12 @@ export function ConvergeButton({
   target,
   subjectIds,
   label,
-  disabled,
-  disabledReason,
 }: {
   target: string;
   subjectIds: string[];
   label: string;
-  disabled?: boolean;
-  disabledReason?: string;
 }) {
   const [open, setOpen] = useState(false);
-
-  if (disabled) {
-    // The reason as text, never a tooltip — the same rule the inventory's
-    // blocked adoption follows.
-    return <span className="text-[13px] text-faint">{disabledReason}</span>;
-  }
 
   return (
     <>

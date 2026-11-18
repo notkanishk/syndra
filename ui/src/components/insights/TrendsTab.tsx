@@ -178,7 +178,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
             </Card>
 
             <Card>
-              <CardHeader title="Ending soon" note="People whose direct access ends within 14 and 30 days. Each number opens Expiring access in the same window." />
+              <CardHeader title="Ending soon" caption="People whose direct access ends within 14 and 30 days. Each number opens Expiring access in the same window." />
               {t.ending_soon.length === 0 ? (
                 <Quiet ok>No direct access ends in the next 30 days.</Quiet>
               ) : (

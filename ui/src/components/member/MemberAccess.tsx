@@ -11,7 +11,7 @@ import { ReadGate } from "@/components/states/ReadGate";
 import { Button } from "@/components/ui/Button";
 import { ARROW_LINK, ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
 import {
   givenAt,
@@ -453,9 +453,28 @@ function RoleRow({
   const [strongest] = orderedSources(reasons);
   const ends = Boolean(expiresAt) && strongest?.kind === "direct" && !waiting;
   return (
-    <div
-      className="row-divider flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3"
+    <CardRow
+      top
+      seat="default"
       data-ends={ends || undefined}
+      // It opens a dialog, so it is a button with no arrow (A-04 §7.5). The answer takes the
+      // button's place in the seat, so the row does not change shape.
+      action={
+        ends ? (
+          <Crossfade id={askedToKeep ? "asked" : "open"}>
+            {askedToKeep ? (
+              <span className="inline-flex min-h-[32px] items-center gap-2 text-[13.5px] font-semibold text-muted">
+                <StatusDot tone="neutral" />
+                Asked to keep it
+              </span>
+            ) : (
+              <Button variant="outline" size="sm" onClick={onAskToKeep}>
+                Ask to keep it
+              </Button>
+            )}
+          </Crossfade>
+        ) : undefined
+      }
     >
       <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-0.5">
         <span className="text-[15px] font-semibold">{name}</span>
@@ -471,23 +490,7 @@ function RoleRow({
           )}
         </span>
       </span>
-      {/* It opens a dialog, so it is a button with no arrow (A-04 §7.5). The answer takes the
-          button's seat, so the row does not change shape. */}
-      {ends && (
-        <Crossfade id={askedToKeep ? "asked" : "open"}>
-          {askedToKeep ? (
-            <span className="inline-flex min-h-[32px] items-center gap-2 text-[13.5px] font-semibold text-muted">
-              <StatusDot tone="neutral" />
-              Asked to keep it
-            </span>
-          ) : (
-            <Button variant="outline" size="sm" onClick={onAskToKeep}>
-              Ask to keep it
-            </Button>
-          )}
-        </Crossfade>
-      )}
-    </div>
+    </CardRow>
   );
 }
 

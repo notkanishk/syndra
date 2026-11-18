@@ -123,19 +123,23 @@ function End({ metrics, windows, target, step: insights }: { metrics: StatsMetri
   const link = target !== undefined && !waiting && metrics.some((metric) => metric.per_subject) ? insightsUsageHref(target) : null;
   const step = waiting ? copy.NOT_COUNTED_NEXT : link ? (insights ?? copy.OVERVIEW_NEXT) : copy.NOTHING_TO_DO;
   return (
-    <div data-end className="row-divider flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1.5 px-5 py-3.5 text-[13px] text-muted">
-      <span className="inline-flex flex-wrap items-baseline gap-x-3">
-        <span>{step}</span>
-        {link && <ArrowLink href={link}>{copy.OVERVIEW_NEXT_LINK}</ArrowLink>}
-      </span>
+    // The link is the card's one action, in the row's seat; the seat is there with or without it, so the
+    // faint facts never move with the data.
+    <CardRow
+      data-end
+      seat="narrow"
+      action={link ? <ArrowLink href={link}>{copy.OVERVIEW_NEXT_LINK}</ArrowLink> : undefined}
+      className="text-[13px] text-muted"
+    >
+      <span className="min-w-0 flex-1">{step}</span>
       {right && (
-        <span className="ml-auto text-faint">
+        <span className="text-faint">
           <Crossfade id={right} inline>
             {right}
           </Crossfade>
         </span>
       )}
-    </div>
+    </CardRow>
   );
 }
 

@@ -6,7 +6,7 @@ import { UserName } from "@/components/names";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { CardColumns } from "@/components/ui/Card";
+import { ActionSeat, CardColumns } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Choice";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { StatusSeat } from "@/components/ui/StatusSeat";
@@ -102,11 +102,10 @@ export function ClaimHistory({
       </ToolRow>
       <Unfold open={all && list.length > 1}>
         <>
-          <CardColumns>
+          <CardColumns seat="default">
             <span className="w-[130px] flex-none">Version</span>
             <span className="min-w-[220px] flex-1">What changed</span>
             <span className="w-[150px] flex-none text-right">Saved</span>
-            <span className="w-[210px] flex-none" />
           </CardColumns>
           {list.map((v, i) => (
             <div key={v.version} className="row-divider row-cols flex flex-wrap items-start gap-y-1.5 px-5 py-3.5">
@@ -124,7 +123,7 @@ export function ClaimHistory({
                   <UserName id={v.saved_by} fallback="Syndra" />
                 </span>
               </span>
-              <span className="flex w-[210px] flex-none justify-end whitespace-nowrap">
+              <ActionSeat>
                 {i === 0 ? (
                   <StatusSeat tone="healthy" word="In use" />
                 ) : (
@@ -132,7 +131,7 @@ export function ClaimHistory({
                     Go back to this version
                   </Button>
                 )}
-              </span>
+              </ActionSeat>
             </div>
           ))}
         </>

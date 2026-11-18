@@ -143,3 +143,22 @@ describe("the retention control", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
 });
+
+describe("the retention form row (D-1 #14)", () => {
+  it("holds the field at its width and its buttons on one line, the hint under the field", async () => {
+    mount({ subject_days: 90, set: true });
+    const input = await field();
+    const line = input.closest("div")!.parentElement as HTMLElement;
+    // The field's box is capped at the page field width, and the buttons are its siblings on the line.
+    expect(input.parentElement).toHaveClass("max-w-(--field-max)");
+    const save = screen.getByRole("button", { name: copy.RETENTION_SAVE });
+    const full = screen.getByRole("button", { name: copy.RETENTION_FULL });
+    // Each button is wrapped, to carry its reason under it; the wrapper is what sits on the line.
+    expect(save.parentElement!.parentElement).toBe(line);
+    expect(full.parentElement!.parentElement).toBe(line);
+    expect(save).toHaveClass("desktop:min-h-(--control-sm)");
+    expect(screen.getByText(copy.retentionHint(90, true)).previousElementSibling).toBe(line);
+    // The reason a disabled save gives rides under that button, not on a row of its own.
+    expect(within(line).getByText(copy.RETENTION_UNCHANGED)).toBeInTheDocument();
+  });
+});

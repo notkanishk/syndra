@@ -98,6 +98,12 @@ describe("Change history: sent vs. confirmed", () => {
     expect(screen.queryByText(/c_[0-9a-f]{4}/)).not.toBeInTheDocument();
     expect(screen.getAllByText("A bundle edit reached one person")).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: /Pending changes/ })).toHaveLength(1);
+    const link = screen.getByRole("link", { name: /Pending changes/ });
+    expect(link.closest("[data-action-seat]")).toHaveAttribute("data-seat", "narrow");
+    // The row without the link keeps the same seat, empty.
+    const rows = screen.getAllByText(/./, { selector: "[data-card-row] p" });
+    expect(rows.length).toBeGreaterThan(1);
+    for (const p of rows) expect(p.closest("[data-card-row]")!.querySelector("[data-action-seat]")).toHaveAttribute("data-seat", "narrow");
   });
 
   // The bulk dialog asks for a reason; for a bundle change it shows here.

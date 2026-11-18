@@ -35,7 +35,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Crossfade } from "@/lib/motion";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Card } from "@/components/ui/Card";
+import { Card, CardRow } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
@@ -707,30 +707,37 @@ function UnexplainedRoles({
   const roleName = useRoleName();
   if (roleKeys.length === 0) return null;
   return (
-    <div className="row-divider px-5 py-3.5">
-      {/* A member is told nothing more: an unknown source is not theirs to read about (G17). */}
-      {isOperator && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <StatusSeat tone="warn" word="Not given by Syndra" />
-          <span className="text-[13.5px] text-muted">In Zitadel, with no bundle, rule or grant behind it.</span>
-        </div>
-      )}
-      <div className={`${isOperator ? "mt-2.5 " : ""}flex flex-wrap items-center gap-2`}>
-        {sortByName(roleKeys, (key) => roleName(projectId, key), (key) => key).map((key) => (
-          <span
-            key={key}
-            className="rounded-pill border border-line-strong px-2.5 py-1 text-[13.5px] font-semibold"
-          >
-            {roleName(projectId, key)}
-          </span>
-        ))}
-        {isOperator && (
+    <CardRow
+      top
+      seat={isOperator ? "narrow" : undefined}
+      action={
+        isOperator ? (
           <ArrowLink href={driftHref({ project: projectId, user: userId, role: roleKeys.length === 1 ? roleKeys[0] : "" })}>
             Decide on Drift
           </ArrowLink>
+        ) : undefined
+      }
+    >
+      <div className="min-w-0 flex-1">
+        {/* A member is told nothing more: an unknown source is not theirs to read about (G17). */}
+        {isOperator && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <StatusSeat tone="warn" word="Not given by Syndra" />
+            <span className="text-[13.5px] text-muted">In Zitadel, with no bundle, rule or grant behind it.</span>
+          </div>
         )}
+        <div className={`${isOperator ? "mt-2.5 " : ""}flex flex-wrap items-center gap-2`}>
+          {sortByName(roleKeys, (key) => roleName(projectId, key), (key) => key).map((key) => (
+            <span
+              key={key}
+              className="rounded-pill border border-line-strong px-2.5 py-1 text-[13.5px] font-semibold"
+            >
+              {roleName(projectId, key)}
+            </span>
+          ))}
+        </div>
       </div>
-    </div>
+    </CardRow>
   );
 }
 
@@ -900,9 +907,54 @@ function RoleGroup({
         const standing = standings?.[role.role_key] ?? null;
         const verb = strongest?.queued ? "Cancel" : strongest?.kind === "direct" ? "Revoke" : "Remove";
 
+        // Both verbs live in the table's one action seat (D-1 §5 #22): Extend, then the removal.
+        const actions = (
+          <>
+          {isOperator && grant && remaining !== null && remaining >= 0 && remaining <= EXTEND_WITHIN_DAYS && (
+            <ExtendSeat
+              userId={userId}
+              projectId={projectId}
+              projectName={projectName}
+              roleKey={role.role_key}
+            />
+          )}
+
+          {isOperator && strongest && (
+            // The verb is the label (RULES): Revoke when a person loses access
+            // they hold, Cancel while the change is still waiting for you to
+            // send (the queue's own verb, A-21 §3.2), Remove when a part comes
+            // out of a whole. It opens the
+            // removal that belongs to this source; the dialog still decides
+            // what is left and names it.
+            <Button
+              size="sm"
+              variant={verb === "Cancel" ? "outline" : "danger"}
+              aria-label={`${verb} ${roleName(projectId, role.role_key)} in ${projectName}`}
+              onClick={() =>
+                onRemove({
+                  projectId,
+                  projectName,
+                  roleKey: role.role_key,
+                  sources,
+                  grantId: grant?.id,
+                  // The grant list is a SECOND query, and this screen gates
+                  // its render on the access query only. So `grant` is
+                  // undefined on every early render and for ever if that
+                  // fetch fails — and without this the dialog explained its
+                  // own missing read as a fact about the operator's data.
+                  grantsResolved,
+                })
+              }
+            >
+              {verb}
+            </Button>
+          )}
+          </>
+        );
+
         return (
           <div key={role.role_key} id={`role-${projectId}-${role.role_key}`}>
-          <div className="flex flex-wrap items-center gap-[18px] px-5 py-3">
+          <CardRow first seat={isOperator ? "default" : undefined} action={isOperator ? actions : undefined}>
             <div className="w-[230px] shrink-0 text-[15px] font-semibold">
               {roleName(projectId, role.role_key)}
               {waitsFor(role.role_key) && <WaitsMark className="ml-2" />}
@@ -921,7 +973,7 @@ function RoleGroup({
               <AccessSourceList reasons={role.reasons} />
             </div>
 
-            <span className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]">
+            <span className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px] tablet:w-(--seat-status)">
               {standing === "waiting" ? (
                 <>
                   {givenAt(role.reasons) && (
@@ -968,48 +1020,7 @@ function RoleGroup({
                 </>
               )}
             </span>
-
-            {isOperator && grant && remaining !== null && remaining >= 0 && remaining <= EXTEND_WITHIN_DAYS && (
-              <ExtendSeat
-                userId={userId}
-                projectId={projectId}
-                projectName={projectName}
-                roleKey={role.role_key}
-              />
-            )}
-
-            {isOperator && strongest && (
-              // The verb is the label (RULES): Revoke when a person loses access
-              // they hold, Cancel while the change is still waiting for you to
-              // send (the queue's own verb, A-21 §3.2), Remove when a part comes
-              // out of a whole. It opens the
-              // removal that belongs to this source; the dialog still decides
-              // what is left and names it.
-              <Button
-                size="sm"
-                variant={verb === "Cancel" ? "outline" : "danger"}
-                aria-label={`${verb} ${roleName(projectId, role.role_key)} in ${projectName}`}
-                onClick={() =>
-                  onRemove({
-                    projectId,
-                    projectName,
-                    roleKey: role.role_key,
-                    sources,
-                    grantId: grant?.id,
-                    // The grant list is a SECOND query, and this screen gates
-                    // its render on the access query only. So `grant` is
-                    // undefined on every early render and for ever if that
-                    // fetch fails — and without this the dialog explained its
-                    // own missing read as a fact about the operator's data.
-                    grantsResolved,
-                  })
-                }
-              >
-                {verb}
-              </Button>
-            )}
-
-          </div>
+          </CardRow>
           {/* Advanced reveals lineage in place, on the same URL, by Unfold (A-08
               §3). Beside the row rather than inside its wrapping line, whose
               18px row gap is outside anything that could fold: here the space
@@ -1054,12 +1065,17 @@ function RoleGroup({
           {/* No dead ends: Basic names the cause and offers one scoped jump. It
               leaves the way the lineage arrives, when Advanced opens. */}
           <Unfold open={!advanced && strongest?.kind === "mapping"}>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 pb-3 pt-2.5">
-              <span className="text-[13px] text-muted">This came from an automatic rule.</span>
-              <Button size="sm" onClick={() => onReveal(`role-${projectId}-${role.role_key}`)}>
-                Show the rule
-              </Button>
-            </div>
+            <CardRow
+              first
+              seat="default"
+              action={
+                <Button size="sm" onClick={() => onReveal(`role-${projectId}-${role.role_key}`)}>
+                  Show the rule
+                </Button>
+              }
+            >
+              <span className="min-w-0 flex-1 text-[13px] text-muted">This came from an automatic rule.</span>
+            </CardRow>
           </Unfold>
           </div>
         );

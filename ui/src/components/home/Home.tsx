@@ -16,7 +16,7 @@ import { Owner } from "@/components/system/ServiceAccountOwner";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardHeader, CardRow, type Seat } from "@/components/ui/Card";
 import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
@@ -587,11 +587,14 @@ const HOME_ROWS_PHONE = 3;
 function Capped<T>({
   items,
   href,
+  seat,
   children,
 }: {
   items: readonly T[];
   /** The full list, already narrowed to what these rows are. */
   href: string;
+  /** The table's seat: "and N more" is an action, so it sits in it like every other. */
+  seat: Seat;
   children: (item: T) => React.ReactNode;
 }) {
   const cap = useIsPhone() ? HOME_ROWS_PHONE : HOME_ROWS;
@@ -600,9 +603,7 @@ function Capped<T>({
     <>
       <ArriveList>{items.slice(0, cap).map((item) => children(item))}</ArriveList>
       {more > 0 && (
-        <CardRow>
-          <ArrowLink href={href}>{`and ${more} more`}</ArrowLink>
-        </CardRow>
+        <CardRow seat={seat} action={<ArrowLink href={href}>{`and ${more} more`}</ArrowLink>} />
       )}
     </>
   );
@@ -630,10 +631,44 @@ function OpenRequests({
       {/* `arrive`, the same stagger every list in the product gets from
           `ListStates`. These two lists compose their own rows and so had none:
           the dashboard was the one screen whose rows appeared all at once. */}
-      <Capped items={newestFirst} href="/requests">
+      <Capped items={newestFirst} href="/requests" seat="default">
         {(entry) => (
           <LeavingRow key={entry.id} {...queue.props(entry.id)}>
-            <CardRow>
+            {/* Approve and Decline: two verbs, so the default seat. What approving does is the row's detail line. */}
+            <CardRow
+              seat="default"
+              detail={!resolved.has(entry.id) && <HoldingNote request={entry} />}
+              action={
+                <div className="flex flex-col items-end gap-2">
+                  <Crossfade id={resolved.has(entry.id) ? (outcomes[entry.id] ? "outcome" : "forecast") : "open"}>
+                    {resolved.has(entry.id) ? (
+                      !outcomes[entry.id] ? (
+                        forecasts[entry.id] && <ActionForecast word={forecasts[entry.id]} />
+                      ) : (
+                        <ActionOutcome
+                          placement="seat"
+                          word={outcomes[entry.id].word ?? "Decided"}
+                          outcome={outcomes[entry.id].outcome}
+                        />
+                      )
+                    ) : (
+                      <>
+                        <div className="flex gap-2">
+                          <ApproveButton request={entry} onClick={() => act(entry, "approved")} />
+                          <Button size="sm" onClick={() => act(entry, "rejected")}>
+                            Decline
+                          </Button>
+                        </div>
+                        {/* A failed write puts the buttons back and says why under them. */}
+                        {outcomes[entry.id] && (
+                          <ActionOutcome placement="seat" className="tint-in" word="Not done" outcome={outcomes[entry.id].outcome} />
+                        )}
+                      </>
+                    )}
+                  </Crossfade>
+                </div>
+              }
+            >
               <UserAvatar id={entry.requester_id} size="list" />
               <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={entry.requester_id} />
             <div className="w-full tablet:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
@@ -645,36 +680,6 @@ function OpenRequests({
             <div className="w-[66px] shrink-0 text-[13px] text-faint">
               <Relative iso={entry.created_at} />
             </div>
-            <div className="flex w-full flex-col gap-2 tablet:w-[196px] tablet:shrink-0">
-              <Crossfade id={resolved.has(entry.id) ? (outcomes[entry.id] ? "outcome" : "forecast") : "open"}>
-              {resolved.has(entry.id) ? (
-                !outcomes[entry.id] ? (
-                  forecasts[entry.id] && <ActionForecast word={forecasts[entry.id]} />
-                ) : (
-                  <ActionOutcome
-                    placement="seat"
-                    word={outcomes[entry.id].word ?? "Decided"}
-                    outcome={outcomes[entry.id].outcome}
-                  />
-                )
-              ) : (
-                <>
-                  <div className="flex gap-2">
-                    <ApproveButton request={entry} onClick={() => act(entry, "approved")} />
-                    <Button size="sm" onClick={() => act(entry, "rejected")}>
-                      Decline
-                    </Button>
-                  </div>
-                  {/* A failed write puts the buttons back and says why under them. */}
-                  {outcomes[entry.id] && (
-                    <ActionOutcome placement="seat" className="tint-in" word="Not done" outcome={outcomes[entry.id].outcome} />
-                  )}
-                </>
-              )}
-              </Crossfade>
-            </div>
-
-            {!resolved.has(entry.id) && <HoldingNote request={entry} />}
           </CardRow>
           </LeavingRow>
         )}
@@ -702,9 +707,9 @@ function ExpiringSoon({
         title="Direct access ending soon"
         count={grants.length}
         tone="warn"
-        note="Extending is the only action. Doing nothing lets it lapse."
+        caption="Extending is the only action. Doing nothing lets it lapse."
       />
-      <Capped items={soonestFirst} href="/review/expiring-access">
+      <Capped items={soonestFirst} href="/review/expiring-access" seat="narrow">
         {(grant) => <ExpiringRow key={grant.id} grant={grant} />}
       </Capped>
     </Card>
@@ -725,7 +730,34 @@ function ExpiringRow({
   const [extended, setExtended] = useState(false);
 
   return (
-    <CardRow>
+    <CardRow
+      seat="narrow"
+      // The result is not an action: it opens under the row, in its panel (always passed, so the row's shape
+      // never changes and the button keeps its focus).
+      expanded={outcome !== null}
+      disclosure={
+        <>
+          {outcome && (
+            <ActionOutcome outcome={outcome} placement="inline" word={outcomeWord(outcome, "Extended", "Not extended")} />
+          )}
+        </>
+      }
+      action={
+        <Button
+          size="sm"
+          isPending={extend.busy}
+          disabled={extended}
+          onClick={async () => {
+            const made = await extend.press();
+            if (!made) return;
+            if (made.kind === "applied") setExtended(true);
+            setOutcome(made);
+          }}
+        >
+          Extend
+        </Button>
+      }
+    >
       <UserAvatar id={grant.user_id} size="list" />
       <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={grant.user_id} />
       <div className="w-full tablet:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
@@ -740,28 +772,6 @@ function ExpiringRow({
       <div className="w-[66px] shrink-0 text-[13.5px] font-semibold text-warn-text">
         {expiryLabel(grant.expires_at, "short") ?? "—"}
       </div>
-      <Button
-        size="sm"
-        isPending={extend.busy}
-        disabled={extended}
-        onClick={async () => {
-          const made = await extend.press();
-          if (!made) return;
-          if (made.kind === "applied") setExtended(true);
-          setOutcome(made);
-        }}
-      >
-        Extend
-      </Button>
-
-      {outcome && (
-        <ActionOutcome
-          outcome={outcome}
-          placement="inline"
-          className="w-full"
-          word={outcomeWord(outcome, "Extended", "Not extended")}
-        />
-      )}
       {extend.step.element}
     </CardRow>
   );
@@ -798,20 +808,26 @@ function OnboardingGaps({
     <Card {...gaps.listProps}>
       <CardHeader title="New people without a bundle" count={report.missed.length} />
       {!report.welcome_bundle_configured && (
-        <CardRow>
+        <CardRow seat="narrow" action={<ArrowLink href="/bundles">Open bundles</ArrowLink>}>
           <div className="flex-1 text-[14.5px]">
             No default <Term name="bundle">bundle</Term> is set for new members
             <span className="text-faint">. Anybody who joins gets nothing until one is set.</span>
           </div>
-          <ArrowLink href="/bundles">Open bundles</ArrowLink>
         </CardRow>
       )}
       {/* Newest joined first; the line opens People where the same people are
           sorted by Joined (A-07 §33). */}
-      <Capped items={gaps.rows} href={peopleHref({ bundle: NO_BUNDLE })}>
+      <Capped items={gaps.rows} href={peopleHref({ bundle: NO_BUNDLE })} seat="narrow">
         {(person) => (
           <LeavingRow key={person.user_id} {...gaps.props(person.user_id)}>
-            <CardRow>
+            <CardRow
+              seat="narrow"
+              action={
+                <Button size="sm" onClick={() => setGiving(person.user_id)}>
+                  Give a bundle
+                </Button>
+              }
+            >
               <UserAvatar id={person.user_id} size="list" />
               <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={person.user_id} />
               <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
@@ -822,9 +838,6 @@ function OnboardingGaps({
                   <Relative iso={person.joined} />
                 </div>
               )}
-              <Button size="sm" onClick={() => setGiving(person.user_id)}>
-                Give a bundle
-              </Button>
             </CardRow>
           </LeavingRow>
         )}
@@ -846,9 +859,9 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
   return (
     <Card>
       <CardHeader title="Service accounts to look at" count={accounts.length} tone="warn" />
-      <Capped items={accounts} href="/system/service-accounts">
+      <Capped items={accounts} href="/system/service-accounts" seat="narrow">
         {(account) => (
-          <CardRow key={account.id}>
+          <CardRow key={account.id} seat="narrow">
             <AdvancedLink
               href={serviceAccountHref(account.id)}
               className="min-w-0 flex-1 text-[15px] font-semibold [overflow-wrap:anywhere] link-hover"
@@ -914,7 +927,14 @@ export function Retries({
     <Card>
       <CardHeader title={auto ? "Sent again on its own" : "Not taken when sent"} count={retrying + gaveUp} />
       {retrying > 0 && (
-        <CardRow>
+        <CardRow
+          seat="default"
+          action={
+            <AdvancedLink href="/governance/pending" className={ARROW_LINK}>
+              {auto ? "See when" : "Pending changes"} <span aria-hidden>→</span>
+            </AdvancedLink>
+          }
+        >
           <span className="inline-flex flex-1 items-center gap-2 text-[14px]">
             <StatusDot tone="warn" />
             <span className="text-warn-text">
@@ -926,13 +946,34 @@ export function Retries({
                 : `This Syndra server doesn't send changes again on its own, so ${retrying === 1 ? "it waits" : "they wait"} for you. Press Send on Pending changes to try again.`}
             </span>
           </span>
-          <AdvancedLink href="/governance/pending" className={ARROW_LINK}>
-            {auto ? "See when" : "Pending changes"} <span aria-hidden>→</span>
-          </AdvancedLink>
         </CardRow>
       )}
       {gaveUp > 0 && (
-        <CardRow>
+        <CardRow
+          seat="default"
+          action={
+            <>
+              <AdvancedLink href="/governance/pending?gave_up=1" className={ARROW_LINK}>
+                See {gaveUp === 1 ? "it" : "them"} <span aria-hidden>→</span>
+              </AdvancedLink>
+              <Button
+                variant="outline"
+                size="sm"
+                isPending={seen.isPending}
+                onClick={async () => {
+                  setFailure(null);
+                  try {
+                    await seen.mutateAsync();
+                  } catch (error) {
+                    setFailure(outcomeFromError(error));
+                  }
+                }}
+              >
+                Mark seen
+              </Button>
+            </>
+          }
+        >
           <span className="inline-flex flex-1 items-center gap-2 text-[14px]">
             <StatusDot tone="danger" />
             <span className="text-danger-text">
@@ -947,24 +988,6 @@ export function Retries({
               ))}
             </span>
           </span>
-          <AdvancedLink href="/governance/pending?gave_up=1" className={ARROW_LINK}>
-            See {gaveUp === 1 ? "it" : "them"} <span aria-hidden>→</span>
-          </AdvancedLink>
-          <Button
-            variant="outline"
-            size="sm"
-            isPending={seen.isPending}
-            onClick={async () => {
-              setFailure(null);
-              try {
-                await seen.mutateAsync();
-              } catch (error) {
-                setFailure(outcomeFromError(error));
-              }
-            }}
-          >
-            Mark seen
-          </Button>
         </CardRow>
       )}
       {failure && (
@@ -986,7 +1009,27 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
     <Card>
       <CardHeader title="Pending changes" count={count} />
       {count > 0 && (
-      <CardRow>
+      <CardRow
+        seat="narrow"
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!reachable}
+            isPending={drain.isPending}
+            onClick={async () => {
+              setOutcome(null);
+              try {
+                setOutcome(outcomeFromDrain(await drain.mutateAsync(), nameOf, auto, count));
+              } catch (error) {
+                setOutcome(outcomeFromError(error));
+              }
+            }}
+          >
+            Send {count === 1 ? "it" : "them"} now
+          </Button>
+        }
+      >
         <div className="flex-1 text-[14.5px]">
           {count} {count === 1 ? "change is" : "changes are"} waiting for you to send to Zitadel
           {/* Not "nothing has changed" — that flatly denies the count above it.
@@ -994,22 +1037,6 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
               received any of this yet, so there is nothing to undo. */}
           <span className="text-faint">. None of it has reached Zitadel yet.</span>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!reachable}
-          isPending={drain.isPending}
-          onClick={async () => {
-            setOutcome(null);
-            try {
-              setOutcome(outcomeFromDrain(await drain.mutateAsync(), nameOf, auto, count));
-            } catch (error) {
-              setOutcome(outcomeFromError(error));
-            }
-          }}
-        >
-          Send {count === 1 ? "it" : "them"} now
-        </Button>
       </CardRow>
       )}
 
@@ -1063,9 +1090,9 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
           </span>
         </div>
       </CardRow>
-      <Capped items={rows} href="/users?attention=unseen">
+      <Capped items={rows} href="/users?attention=unseen" seat="narrow">
         {(row) => (
-          <CardRow key={row.id}>
+          <CardRow key={row.id} seat="narrow">
             <UserAvatar id={row.user_id} size="list" />
             <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={row.user_id} />
             {row.role_keys && row.role_keys.length > 0 && (
@@ -1117,9 +1144,13 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
   return (
     <Card>
       <CardHeader title="Systems Syndra could not check" count={targets.length} tone="danger" />
-      <Capped items={sortByName(targets, (t) => nameOf(t.target), (t) => t.target)} href="/system/targets">
+      <Capped items={sortByName(targets, (t) => nameOf(t.target), (t) => t.target)} href="/system/targets" seat="narrow">
         {(t) => (
-          <CardRow key={t.target} className="flex-wrap">
+          <CardRow
+            key={t.target}
+            seat="narrow"
+            action={<ArrowLink href={`/system/targets/${t.target}`}>{`Open ${nameOf(t.target)}`}</ArrowLink>}
+          >
             <div className="flex-1 text-[14.5px]">
               <strong className="font-semibold">{nameOf(t.target)}</strong> hasn&rsquo;t been
               read since <Relative iso={t.since} />.
@@ -1131,7 +1162,6 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
                 <div className="mt-1 text-[13px] text-faint">{whyNotChecked(t.reason)}</div>
               )}
             </div>
-            <ArrowLink href={`/system/targets/${t.target}`}>{`Open ${nameOf(t.target)}`}</ArrowLink>
           </CardRow>
         )}
       </Capped>
@@ -1160,7 +1190,14 @@ function MergeFindingsWaiting({ count }: { count: number }) {
   return (
     <Card>
       <CardHeader title="Waiting on a decision" count={count} tone="warn" />
-      <CardRow className="flex-wrap">
+      <CardRow
+        seat="default"
+        action={rows.map((row) => (
+          <ArrowLink key={row.target} href={`/system/targets/${row.target}`}>
+            {`Open ${nameOf(row.target)}`}
+          </ArrowLink>
+        ))}
+      >
         <div className="flex-1 text-[14.5px]">
           {count} {count === 1 ? "difference" : "differences"} Syndra found and can&rsquo;t
           resolve on its own
@@ -1168,11 +1205,6 @@ function MergeFindingsWaiting({ count }: { count: number }) {
             . Each one is somebody&rsquo;s access sitting disputed until a person decides.
           </span>
         </div>
-        {rows.map((row) => (
-          <ArrowLink key={row.target} href={`/system/targets/${row.target}`}>
-            {`Open ${nameOf(row.target)}`}
-          </ArrowLink>
-        ))}
       </CardRow>
     </Card>
   );
@@ -1195,14 +1227,17 @@ function NotConfirmed({ count, bySystem }: { count: number; bySystem: Record<str
         title="Not confirmed"
         count={count}
         tone="warn"
-        note="Changes sent to a connected system that never answered. They are kept with each system."
+        caption="Changes sent to a connected system that never answered. They are kept with each system."
       />
       {systems.map(([target, n]) => (
-        <CardRow key={target} className="flex-wrap">
+        <CardRow
+          key={target}
+          seat="narrow"
+          action={<ArrowLink href={`/system/targets/${target}#waiting`}>{`Open ${nameOf(target)}`}</ArrowLink>}
+        >
           <span className="flex-1 text-[14.5px]">
             {nameOf(target)} <span className="text-faint">· {n === 1 ? "1 change" : `${n} changes`}</span>
           </span>
-          <ArrowLink href={`/system/targets/${target}#waiting`}>{`Open ${nameOf(target)}`}</ArrowLink>
         </CardRow>
       ))}
     </Card>
@@ -1213,11 +1248,10 @@ function UnexplainedAccess({ count }: { count: number }) {
   return (
     <Card>
       <CardHeader title="Drift" count={count} tone="danger" />
-      <CardRow>
+      <CardRow seat="narrow" action={<ArrowLink href="/governance/drift">Review on Drift</ArrowLink>}>
         <div className="flex-1 text-[14.5px]">
           {count} {count === 1 ? "grant" : "grants"} Syndra can&rsquo;t explain
         </div>
-        <ArrowLink href="/governance/drift">Review on Drift</ArrowLink>
       </CardRow>
     </Card>
   );

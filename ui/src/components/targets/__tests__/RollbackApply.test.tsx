@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MappingManagement } from "@/components/targets/MappingManagement";
@@ -112,6 +112,19 @@ describe("rolling back, through the dialog", () => {
     fireEvent.click(apply);
     await waitFor(() => expect(state.applied.length).toBe(1));
     expect(state.applied[0]).toEqual({ version: 1, planId: "plan_61a8" });
+  });
+
+  // D-1 §5 #21: Roll back to this is in the row's seat; the live version keeps the same, empty, seat.
+  it("seats the rollback on each version's first line, one width, empty on the live one", () => {
+    render(<MappingManagement target="truenas" />);
+
+    const rows = screen.getAllByText(/^Version \d/).map((v) => v.closest("[data-card-row]") as HTMLElement);
+    expect(rows).toHaveLength(2);
+    const seats = rows.map((r) => r.querySelector("[data-action-seat]") as HTMLElement);
+    expect(seats.map((s) => s.getAttribute("data-seat"))).toEqual(["narrow", "narrow"]);
+    expect(seats[0].querySelector("button")).toBeNull();
+    expect(within(seats[1]).getByRole("button", { name: "Roll back to this" })).toBeInTheDocument();
+    for (const r of rows) expect(r.querySelector("[data-row-detail]")).not.toBeNull();
   });
 
   // The dead end this test exists to prevent from returning.

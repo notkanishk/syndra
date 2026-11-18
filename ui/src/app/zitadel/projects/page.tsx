@@ -12,7 +12,7 @@ import { Mono } from "@/components/ui/Badge";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { ApiError } from "@/lib/api-client";
 import { outcomeFromError, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -134,10 +134,9 @@ export default function UpstreamProjectsPage() {
 
           <ListStates
             head={
-              <CardColumns>
+              <CardColumns seat="default">
                 <span className="flex-1">Role</span>
                 <span className="w-[160px]">Group</span>
-                <span className="w-[160px]" />
               </CardColumns>
             }
             isLoading={roles.isLoading}
@@ -203,7 +202,7 @@ function RoleRow({
           {role.displayName || role.key} <Mono className="text-faint">{role.key}</Mono>
         </span>
         <span className="text-[13.5px] text-muted [overflow-wrap:anywhere] tablet:w-[160px]">{role.group || "—"}</span>
-        <span className="flex justify-end gap-2 tablet:w-[160px]">
+        <ActionSeat>
           <Button size="sm" onClick={onEdit} aria-label={`Edit ${role.displayName || role.key}`}>
             Edit
           </Button>
@@ -215,7 +214,7 @@ function RoleRow({
           >
             Delete
           </Button>
-        </span>
+        </ActionSeat>
       </div>
 
       {confirming && (

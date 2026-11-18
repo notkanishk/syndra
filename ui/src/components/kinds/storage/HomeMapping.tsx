@@ -1,6 +1,7 @@
 "use client";
 
 import { Segmented } from "@/components/ui/Select";
+import { ActionSeat } from "@/components/ui/Card";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { FieldHint, Input } from "@/components/ui/Input";
 
@@ -42,11 +43,15 @@ export function HomeChoice({
       </span>
       {!homeRoot && !hadHome ? (
         // One control that can't act now: a sentence and the step.
-        <span className="text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">
-          No mapping can give one until you choose where home folders go on {name}. This one works without
-          it; give it a home folder later by changing it.{" "}
-          <ArrowLink href={`/system/targets/${target}`}>Choose where home folders go</ArrowLink>
-        </span>
+        <div className="flex flex-wrap items-start gap-x-(--row-gap) gap-y-2">
+          <span className="min-w-0 flex-1 basis-[240px] text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">
+            No mapping can give one until you choose where home folders go on {name}. This one works without
+            it; give it a home folder later by changing it.
+          </span>
+          <ActionSeat seat="narrow">
+            <ArrowLink href={`/system/targets/${target}`}>Choose where home folders go</ArrowLink>
+          </ActionSeat>
+        </div>
       ) : (
         <>
           <span aria-labelledby="m-home">

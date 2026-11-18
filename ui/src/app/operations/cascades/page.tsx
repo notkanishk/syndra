@@ -7,7 +7,7 @@ import Link from "next/link";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusSeat } from "@/components/ui/StatusSeat";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { BundleName, RoleInPlace, RoleRef, UserName } from "@/components/names";
 import { humanizeKey } from "@/lib/format";
@@ -120,10 +120,12 @@ function CascadeCard({ group, rules, one }: { group: CascadeGroupRow; rules?: Ma
         action={<StatePill group={group} />}
       />
 
-      <div className="row-divider flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3.5">
-        <p className="text-[14px] leading-[1.55] text-muted">{consequenceFor(group)}</p>
-        {group.waiting + group.failed > 0 && <ArrowLink href="/governance/pending">Pending changes</ArrowLink>}
-      </div>
+      <CardRow
+        seat="narrow"
+        action={group.waiting + group.failed > 0 ? <ArrowLink href="/governance/pending">Pending changes</ArrowLink> : undefined}
+      >
+        <p className="min-w-0 flex-1 text-[14px] leading-[1.55] text-muted">{consequenceFor(group)}</p>
+      </CardRow>
 
       {group.said && <p className="row-divider px-5 py-3 text-[14px] leading-[1.55] text-ink">“{group.said}”</p>}
 

@@ -12,7 +12,7 @@ import { Crossfade } from "@/lib/motion";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import {
@@ -288,7 +288,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
         <ListStates
           head={
             <>
-            <CardColumns>
+            <CardColumns seat="default" seatLabel="Decision">
               {selecting && anyPending && <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]" />}
               <span className="w-[170px]">
                 <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
@@ -298,7 +298,6 @@ function OperatorQueue({ userId }: { userId?: string }) {
               <span className="w-[66px]">
                 <SortHead label="When" name="when" sort={sort} onSort={setSort} />
               </span>
-              <span className="w-[196px]">Decision</span>
             </CardColumns>
             {/* Only open requests can be selected; a decided one is not part of the
                 working set, so the first number here is the open count and the
@@ -398,7 +397,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
               {/* The Decision seat (#96): the buttons, then the decision in
                   their place — one seat, so no column moves on the tap. The
                   row keeps it until the next read; no toast. */}
-              <div className="w-full tablet:ml-auto tablet:w-[196px] tablet:shrink-0">
+              <ActionSeat>
                 <Crossfade id={entry.status === "pending" && !resolved.has(entry.id) ? "open" : outcomes[entry.id] ? "outcome" : forecasts[entry.id] ? "forecast" : "status"}>
                 {entry.status === "pending" && !resolved.has(entry.id) ? (
                   <div className="flex flex-col gap-2">
@@ -435,7 +434,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                   />
                 )}
                 </Crossfade>
-              </div>
+              </ActionSeat>
               {/* Allowed, and said before it happens (owner, 15 Oct): an
                   operator can approve their own request, and it is recorded
                   as exactly that. */}
@@ -668,7 +667,7 @@ function YourRequests({
                 {entry.justification || "No reason given"}
               </div>
             </div>
-            <div className="w-[110px] shrink-0 text-[13px] text-faint tablet:text-right">
+            <div className="w-(--seat-number) shrink-0 text-[13px] text-faint tablet:text-right">
               <Relative iso={entry.created_at} />
             </div>
             {/* One status seat: dot, word, note. A withdrawal reports here,
@@ -703,7 +702,7 @@ function YourRequests({
               of somebody's queue, which is the one thing here a member is entitled to do
               without being asked twice.
             */}
-            <div className="flex shrink-0 tablet:min-w-[96px] tablet:justify-end">
+            <ActionSeat seat="narrow">
               {entry.status === "pending" && !resolved.has(entry.id) && (
                 <Button
                   size="sm"
@@ -714,7 +713,7 @@ function YourRequests({
                   Withdraw
                 </Button>
               )}
-            </div>
+            </ActionSeat>
           </div>
         ))}
       </ListStates>

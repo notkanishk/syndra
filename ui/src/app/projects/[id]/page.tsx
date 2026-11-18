@@ -176,7 +176,7 @@ export default function ProjectDetailPage({
               <span className="min-w-[200px] flex-1">Role</span>
               <span className="hidden w-[130px] shrink-0 desktop:block">Group</span>
               <span className="hidden w-[140px] shrink-0 tablet:block">When given</span>
-              <span className="w-[110px] shrink-0 text-right">People</span>
+              <span className="w-(--seat-number) shrink-0 text-right">People</span>
             </CardColumns>
           }
           isLoading={roles.isLoading}

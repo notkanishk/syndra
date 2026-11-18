@@ -203,6 +203,11 @@ describe("Extend on Home says what the grant endpoint answered", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Extend" }));
     expect(await screen.findByText("Extended by 90 days.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Extend" })).toBeDisabled();
+    const row = screen.getByRole("button", { name: "Extend" }).closest("[data-card-row]")!;
+    expect(row.querySelector("[data-action-seat]")).toContainElement(screen.getByRole("button", { name: "Extend" }));
+    expect(row.querySelector("[data-action-seat]")).toHaveAttribute("data-seat", "narrow");
+    // The result is not an action: it stays out of the seat, on the line under it.
+    expect(row.querySelector("[data-action-seat]")).not.toHaveTextContent("Extended by 90 days.");
     expect(document.body.textContent).not.toMatch(/once sent|Waiting for you to send/);
   });
 

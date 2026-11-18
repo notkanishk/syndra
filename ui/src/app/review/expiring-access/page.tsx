@@ -12,7 +12,7 @@ import { Crossfade } from "@/lib/motion";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { BulkDialog } from "@/components/people/BulkDialog";
-import { Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { StatusDot } from "@/components/ui/Badge";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
@@ -512,7 +512,7 @@ function ExpiringSection({
         </div>
         <Unfold open={open}>
           <div id={`${id}-body`}>
-            <CardColumns>
+            <CardColumns seat="wide">
               {selecting && <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]" />}
               <span className="w-[180px]">
                 <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
@@ -526,7 +526,6 @@ function ExpiringSection({
               <span className="w-[110px]">
                 <SortHead label="Ends in" name="ends" sort={sort} onSort={onSort} />
               </span>
-              <span className="min-w-[300px]" />
             </CardColumns>
             {selectAll}
             <div className={view.className}>
@@ -648,7 +647,8 @@ function ExpiringRow({
         <span className="text-[12.5px] text-faint">{formatShortDate(grant.expires_at)}</span>
       </div>
 
-      <div className="flex w-full min-w-0 flex-col items-start gap-2 desktop:w-auto desktop:min-w-[300px] desktop:items-end">
+      <ActionSeat seat="wide">
+      <div className="flex min-w-0 flex-col items-end gap-2">
         <Crossfade id={reported ? "outcome" : extend.writing ? "forecast" : "open"} className="w-full tablet:w-auto">
         {extend.writing && !reported ? (
           <ActionForecast word={`${FORECAST.extend} by ${EXTEND_DAYS} days`} />
@@ -702,6 +702,7 @@ function ExpiringRow({
           <ActionOutcome placement="seat" className="tint-in" word="Not extended" outcome={outcome} />
         )}
       </div>
+      </ActionSeat>
     </div>
   );
 }

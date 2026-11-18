@@ -56,6 +56,19 @@ describe("PersonRequests · approving names what the rules give", () => {
     );
     expect(await screen.findByText(/If you approve: Also gives Bench in Workshop/)).toBeInTheDocument();
   });
+
+  it("holds Approve and Decline in the row's action seat, under the Outcome heading's width (D-1)", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PersonRequests userId="u9" name="Charlotte" isOperator />
+      </QueryClientProvider>,
+    );
+    const approve = await screen.findByRole("button", { name: /^Approve/ });
+    const seat = approve.closest("[data-action-seat]");
+    expect(seat).not.toBeNull();
+    expect(seat!.contains(screen.getByRole("button", { name: "Decline" }))).toBe(true);
+    expect(seat!.getAttribute("data-seat")).toBeNull();
+  });
 });
 
 describe("PersonRequests · a request to keep a role", () => {

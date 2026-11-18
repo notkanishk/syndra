@@ -1246,4 +1246,133 @@ describe("what has been used here (A-23 R2)", () => {
   });
 });
 
+/**
+ * D-1 pass 2: every action sits in its row's seat, the seat is the table's width, and a sentence
+ * about a row is its detail line.
+ */
+describe("every action in its seat (D-1)", () => {
+  const seatOf = (el: HTMLElement) => el.closest("[data-action-seat]") as HTMLElement | null;
+  const cardOf = (title: string) => screen.getByText(title).closest(".card") as HTMLElement;
+  const seatsIn = (card: HTMLElement) => Array.from(card.querySelectorAll("[data-card-row] > [data-action-seat]"));
+
+  it("Syndra's reach: Open Maintenance is in the narrow seat, the sentence is the detail under the dot", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "read_only", lifecycle_note: "startup" };
+    renderTarget("basic");
+    const card = cardOf("Syndra's reach");
+    const open = within(card).getByRole("button", { name: "Open Maintenance in Advanced" });
+    expect(seatOf(open)).toHaveAttribute("data-seat", "narrow");
+    const detail = card.querySelector("[data-row-detail]") as HTMLElement;
+    expect(detail).toHaveTextContent(/Syndra can reach TrueNAS, but it is/);
+    expect(detail.firstElementChild).toHaveClass("pl-(--dot-indent)");
+    expect(open.closest("p")).toBeNull();
+  });
+
+  it("Syndra's reach: an active system keeps the empty narrow seat", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    renderTarget();
+    const seats = seatsIn(cardOf("Syndra's reach"));
+    expect(seats).toHaveLength(1);
+    expect(seats[0]).toHaveAttribute("data-seat", "narrow");
+    expect(seats[0]).toBeEmptyDOMElement();
+  });
+
+  it("Check for differences: Check now is in the narrow seat of a top-aligned row", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    renderTarget();
+    const check = within(cardOf("Check for differences")).getByRole("button", { name: "Check now" });
+    expect(seatOf(check)).toHaveAttribute("data-seat", "narrow");
+    expect(check.closest("[data-card-row]")).toHaveClass("row-top");
+  });
+
+  it("accounts no longer there: the default seat holds the buttons, the sentence is the detail", () => {
+    state.released = [];
+    state.releaseResult = { status: "released" };
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.reconcile = {
+      target: "truenas", bound: 4, queued: 1, current: true,
+      stale: [
+        { subject_id: "s1", username: "becky", account_id: "3999", version: "v1" },
+        { subject_id: "s2", username: "dana", account_id: "3998", version: "v2" },
+      ],
+    };
+    renderTarget();
+    const rowOf = (n: string) => screen.getByText(n).closest("[data-card-row]") as HTMLElement;
+    // Asked: the sentence says what happens, under the first line, and both buttons are in the seat.
+    expect(within(rowOf("becky")).getByText(/yours to decide/)).toHaveAttribute("data-row-detail");
+    fireEvent.click(within(rowOf("becky")).getByRole("button", { name: "Stop tracking this account" }));
+    const confirm = screen.getByRole("button", { name: "Stop tracking becky" });
+    expect(seatOf(confirm)).not.toHaveAttribute("data-seat");
+    expect(seatOf(screen.getByRole("button", { name: "Keep tracking it" }))).toBe(seatOf(confirm));
+    expect(screen.getByText(/Nothing is deleted/).closest("[data-row-detail]")).not.toBeNull();
+    // Done: the seat stays, empty, so the other row's button does not move.
+    fireEvent.click(confirm);
+    const done = rowOf("becky").querySelector("[data-action-seat]") as HTMLElement;
+    expect(done).toBeEmptyDOMElement();
+    expect(screen.getByText(/Stopped tracking it/)).toHaveAttribute("data-row-detail");
+    const other = seatOf(within(rowOf("dana")).getByRole("button", { name: "Stop tracking this account" }))!;
+    expect(other.dataset.seat).toBe(done.dataset.seat);
+  });
+
+  it("Not created by Syndra: Assign to a person and Syndra's own account share one seat", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = {
+      target: "truenas",
+      bound: 0,
+      current: true,
+      read_at: new Date().toISOString(),
+      unmanaged: [
+        { username: "iyo", account_id: "3000" },
+        { username: "syndra", account_id: "3001", self: true },
+      ],
+    };
+    renderTarget();
+    const assign = screen.getByRole("button", { name: "Assign to a person" });
+    expect(seatOf(assign)).not.toHaveAttribute("data-seat");
+    const own = screen.getByText(/cannot be assigned to anyone/);
+    expect(own).toHaveAttribute("data-row-detail");
+    const ownSeat = own.closest("[data-card-row]")!.querySelector("[data-action-seat]");
+    expect(ownSeat).toBeEmptyDOMElement();
+    expect(ownSeat).not.toHaveAttribute("data-seat");
+  });
+
+  it("Maintenance: the sentence first, the verb in one narrow seat on every row", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    renderTarget();
+    const card = cardOf("Maintenance");
+    const seats = seatsIn(card);
+    // The state row, then Start draining and Set read-only.
+    expect(seats).toHaveLength(3);
+    for (const seat of seats) expect(seat).toHaveAttribute("data-seat", "narrow");
+    const drain = within(card).getByRole("button", { name: "Start draining" });
+    expect(seatOf(drain)).toBe(seats[1]);
+    const row = drain.closest("[data-card-row]")!;
+    expect(row.firstElementChild).toHaveTextContent(/Lets calls already sent finish/);
+    // Asking why: the reason is a form, whose one button is the verb.
+    fireEvent.click(drain);
+    expect(seatOf(within(card).getByRole("button", { name: "Cancel" }))).toBe(seats[1]);
+    const confirm = within(card).getByRole("button", { name: "Start draining" });
+    expect(confirm.closest("form")).not.toBeNull();
+    expect(seatOf(confirm)).toBeNull();
+  });
+
+  it("the long explanations are captions, not notes", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+    for (const title of ["Check for differences", "Not created by Syndra"]) {
+      const card = cardOf(title);
+      expect(card.querySelector("[data-card-note]")).toBeNull();
+      expect(card.querySelector("p[data-prose]")).toHaveTextContent(/Syndra/);
+    }
+  });
+});
+
 vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

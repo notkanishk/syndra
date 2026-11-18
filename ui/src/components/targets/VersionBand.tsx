@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Relative } from "@/components/ui/Time";
 import { STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Card, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { RoleRef, UserName } from "@/components/names";
 import type { EntitlementField } from "@/lib/fields";
@@ -70,7 +70,36 @@ export function VersionBand({ target, history }: { target: string; history?: Map
 
   return (
     <Card>
-      <div className="flex flex-wrap items-start gap-4 px-5 py-4">
+      <CardRow
+        first
+        top
+        seat="default"
+        // Inert, never absent. The seat is what keeps the band one shape across all three readings.
+        // The band says a note is required and then published without one.
+        // The note is the whole audit record a rollback operator reads
+        // before deciding whether to come back; an empty one makes the
+        // version a date with no argument, which is the state the sentence
+        // beneath this field exists to prevent. The backend refuses it too;
+        // this is where somebody is told, not what enforces it.
+        action={
+          <Button
+            size="sm"
+            variant={pending ? "accent" : "outline"}
+            disabled={!pending || !note.trim() || publish.isPending}
+            isPending={publish.isPending}
+            // Nothing to publish is said once, in the detail line.
+            reason={
+              pending && !note.trim()
+                ? "Say why this set is the one to keep. It is what the next person to roll back reads."
+                : undefined
+            }
+            onClick={() => publish.mutate(note, { onSuccess: () => setNote("") })}
+          >
+            {pending ? `Publish as version ${current + 1}` : "Publish"}
+          </Button>
+        }
+        detail={!pending ? "Nothing to publish" : undefined}
+      >
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <span className="flex items-center gap-2">
             <StatusDot tone={reading.tone} />
@@ -103,36 +132,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
           </p>
         </div>
 
-        {/* Not `whitespace-nowrap` on the column: the disabled Publish button's
-            reason is a whole sentence under it, and a column that refused to
-            wrap it grew past the card's right edge. Only the button keeps one line. */}
-        <span className="flex max-w-full shrink-0 flex-col items-end gap-1.5 [&_button]:whitespace-nowrap">
-          {/* Inert, never absent. The seat is what keeps the band one shape
-              across all three readings. */}
-          {/* The band says a note is required and then published without one.
-              The note is the whole audit record a rollback operator reads
-              before deciding whether to come back; an empty one makes the
-              version a date with no argument, which is the state the sentence
-              beneath this field exists to prevent. The backend refuses it too;
-              this is where somebody is told, not what enforces it. */}
-          <Button
-            size="sm"
-            variant={pending ? "accent" : "outline"}
-            disabled={!pending || !note.trim() || publish.isPending}
-            isPending={publish.isPending}
-            // Nothing to publish is said once, in the line under the button.
-            reason={
-              pending && !note.trim()
-                ? "Say why this set is the one to keep. It is what the next person to roll back reads."
-                : undefined
-            }
-            onClick={() => publish.mutate(note, { onSuccess: () => setNote("") })}
-          >
-            {pending ? `Publish as version ${current + 1}` : "Publish"}
-          </Button>
-          {!pending && <span className="text-[12.5px] text-faint">Nothing to publish</span>}
-        </span>
-      </div>
+      </CardRow>
 
       {pending && (
         <div className="row-divider px-5 py-4">

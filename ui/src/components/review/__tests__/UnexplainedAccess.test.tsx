@@ -250,6 +250,22 @@ describe("Unexplained access — triage", () => {
     expect(labels.slice(0, 3)).toEqual(["Adopt", "Revoke", "Owned elsewhere"]);
   });
 
+  it("holds the three resolutions in one wide seat per row, with the reason as its detail line (D-1)", () => {
+    drift.data = [item({ id: "a" }), item({ id: "b", user_id: "u2" })];
+    renderTriage();
+    const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-card-row]"));
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      const seat = row.querySelector<HTMLElement>("[data-action-seat]")!;
+      expect(seat.getAttribute("data-seat")).toBe("wide");
+      expect(Array.from(seat.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["Adopt", "Revoke", "Owned elsewhere"]);
+      expect(row.querySelector("[data-row-detail]")?.textContent ?? "").not.toBe("");
+      // The evidence is the row's own fold control, not one of the answers.
+      expect(seat.querySelector("[aria-expanded]")).toBeNull();
+    }
+    expect(screen.getAllByTestId("drift-row-toggle")).toHaveLength(2);
+  });
+
   // The board retires the red box under the list: it reports no failure, and
   // the bar says it where somebody selecting rows would look for Revoke.
   it("states that bulk revoke is deliberately absent, in the bar, rather than leaving a hole", () => {

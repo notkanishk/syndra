@@ -140,6 +140,14 @@ describe("a bundle that includes another", () => {
     await waitFor(() => expect(state.setInclude).toHaveBeenCalledWith("nm", { child: "sb", version: 4 }));
   });
 
+  it("puts the newer version's button in the row's seat, not beside its sentence (D-1)", () => {
+    render(<BundlePage bundleId="nm" />);
+    const button = screen.getByRole("button", { name: "Add to next version" });
+    const seat = button.closest("[data-action-seat]");
+    expect(seat).not.toBeNull();
+    expect(seat!.closest("[data-card-row]")?.textContent).toContain("Safety basics v4 is out.");
+  });
+
   it("offers nothing when it already includes the latest", () => {
     (state.draft as { includes: Array<{ child_latest_version: number }> }).includes[0].child_latest_version = 3;
     render(<BundlePage bundleId="nm" />);
@@ -230,6 +238,11 @@ describe("a bundle that others include", () => {
     expect(within(card).getByText("Includes v4")).toBeInTheDocument();
     expect(within(card).getByText("Everyone in their first term")).toBeInTheDocument();
     expect(within(card).getAllByRole("button", { name: /Update to/ })).toHaveLength(1);
+
+    // D-1: one default seat on every row (its words, "v{n} in its next version", need more than the narrow one), the button in the one that is behind, the words in the other.
+    const seats = Array.from(card.querySelectorAll("[data-action-seat]"));
+    expect(seats.map((seat) => seat.getAttribute("data-seat"))).toEqual([null, null]);
+    expect(seats.filter((seat) => seat.querySelector("button"))).toHaveLength(1);
 
     fireEvent.click(within(card).getByRole("button", { name: "Update to v4" }));
     await waitFor(() => expect(state.setInclude).toHaveBeenCalledWith("nm", { child: "sb", version: 4 }));

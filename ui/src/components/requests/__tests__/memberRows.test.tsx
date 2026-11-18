@@ -108,6 +108,12 @@ describe("a member's request rows", () => {
     expect(withdraw).toHaveLength(1);
     const row = screen.getByText("Waiting").closest(".row-divider")!;
     expect(row.lastElementChild!.contains(withdraw[0])).toBe(true);
+    // D-1: Withdraw is in the table's one seat, and the settled row keeps its empty seat at the same width.
+    const seats = Array.from(document.querySelectorAll("[data-action-seat]"));
+    expect(seats).toHaveLength(2);
+    expect(seats.map((seat) => seat.getAttribute("data-seat"))).toEqual(["narrow", "narrow"]);
+    expect(seats[0].contains(withdraw[0])).toBe(true);
+    expect(seats[1].querySelector("button")).toBeNull();
   });
 
   // #51: a withdrawal is never Declined, and never "Applied".

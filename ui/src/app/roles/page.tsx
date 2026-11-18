@@ -237,7 +237,7 @@ export default function RolesPage() {
                 <SortHead label="Group" name="group" sort={sort} onSort={setSort} />
               </span>
               <span className="hidden w-[150px] shrink-0 desktop:block">Used by</span>
-              <span className="w-[110px] shrink-0 text-right">
+              <span className="w-(--seat-number) shrink-0 text-right">
                 <SortHead label="People" name="people" sort={sort} onSort={setSort} />
               </span>
             </CardColumns>
@@ -329,7 +329,7 @@ export default function RolesPage() {
                   usedBy(role) || <span className="text-faint">—</span>
                 )}
               </span>
-              <span className="w-full text-[15px] tablet:w-[110px] tablet:shrink-0 tablet:text-right">
+              <span className="w-full text-[15px] tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
                 {holders.headline}
                 <span className="text-[13px] text-faint tablet:hidden">
                   {peopleSuffix(holders.headline)}

@@ -120,8 +120,8 @@ export default function ProjectsPage() {
                 <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
               </span>
               <span className="min-w-[180px] flex-1">Apps served</span>
-              <span className="hidden w-[110px] shrink-0 text-right desktop:block">Roles</span>
-              <span className="w-[110px] shrink-0 text-right">
+              <span className="hidden w-(--seat-number) shrink-0 text-right desktop:block">Roles</span>
+              <span className="w-(--seat-number) shrink-0 text-right">
                 <SortHead label="People" name="people" sort={sort} onSort={setSort} />
               </span>
             </CardColumns>
@@ -194,10 +194,10 @@ export default function ProjectsPage() {
                   different fact: nothing in it can be granted to anybody. The
                   count stays a count so the column reads as one, and the fact
                   is said beside the name, where there is width to say it. */}
-              <span className="hidden text-right text-[15px] desktop:block desktop:w-[110px] desktop:shrink-0">
+              <span className="hidden text-right text-[15px] desktop:block desktop:w-(--seat-number) desktop:shrink-0">
                 {roleCount}
               </span>
-              <span className="shrink-0 text-[15px] tablet:w-[110px] tablet:text-right">
+              <span className="shrink-0 text-[15px] tablet:w-(--seat-number) tablet:text-right">
                 {people.headline}
                 <span className="text-[13px] text-faint tablet:hidden">
                   {peopleSuffix(people.headline)}

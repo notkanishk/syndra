@@ -117,7 +117,7 @@ export function MappingManagement({ target }: { target: string }) {
           count={mappings.data ? shown.length : undefined}
           // One freshness line, from one source: the read line below owns it whenever it is shown (stale
           // or cooling down, with the way to read again); the header says it only when that one is not.
-          note={reach.data && reachCopy ? undefined : <OpensNote name={name} reach={reach.data} />}
+          caption={reach.data && reachCopy ? undefined : <OpensNote name={name} reach={reach.data} />}
           action={<AddMappingButton target={target} first={(mappings.data ?? []).length === 0} />}
         />
         {reach.data && reachCopy && (
@@ -258,59 +258,67 @@ function MappingRow({
   const name = nameOf(mapping.target);
 
   return (
-    <CardRow first={first} className="flex-wrap items-start">
-      <span className="flex w-[260px] flex-none flex-col gap-0.5">
-        <Link
-          href={`/projects/${mapping.project_id}`}
-          className="text-[14.5px] font-semibold text-ink link-hover"
-        >
-          {label}
-        </Link>
-      </span>
-      <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-[3px]">
-        <span className="text-[14px]">Gives {gives(mapping, schema)}</span>
-        {opens && (
-          <OpensRows
-            name={name}
-            group={mapping.value}
-            places={opens}
-            lastKnown={lastKnown}
-            holders={holders.isLoading ? undefined : cohort.length}
-          />
-        )}
-        {home?.home && <MappingHomeLine quota={home.quota?.value} homeRoot={homeRoot} />}
-        {/* The count says what it counts. Nobody holding the role is said once, as the reason on the
-            convergence button beside it, never as a bare "0" as well. */}
-        {(holders.isLoading || cohort.length > 0) && (
-          <span data-holders className="text-[13.5px] text-muted">
-            {holders.isLoading
-              ? "…"
-              : `${cohort.length} ${cohort.length === 1 ? "person holds" : "people hold"} this role`}
-          </span>
-        )}
-      </span>
-      <span className="flex-1" />
-      <ConvergeButton
-        target={mapping.target}
-        subjectIds={cohort}
-        label={`everybody holding ${roleName}`}
-        disabled={cohort.length === 0}
-        disabledReason="Nobody holds this role"
-      />
-      <Button variant="outline" size="sm" onClick={onEdit}>
-        Change
-      </Button>
-      <Button variant="danger" size="sm" onClick={onDelete}>
-        Remove
-      </Button>
-      {/* Last, and a region of its own that Basic does not render, so Basic leaves no empty line. */}
-      <AdvancedOnly className="basis-full">
+    <>
+      <CardRow
+        first={first}
+        top
+        seat="wide"
+        // Nobody holding the role is said once, as the detail line: the seat keeps its three places. Not while
+        // the holders are still being read: that is not nobody.
+        detail={!holders.isLoading && cohort.length === 0 ? "Nobody holds this role" : undefined}
+        action={
+          <>
+            {cohort.length > 0 && (
+              <ConvergeButton target={mapping.target} subjectIds={cohort} label={`everybody holding ${roleName}`} />
+            )}
+            <Button variant="outline" size="sm" onClick={onEdit}>
+              Change
+            </Button>
+            <Button variant="danger" size="sm" onClick={onDelete}>
+              Remove
+            </Button>
+          </>
+        }
+      >
+        <span className="flex w-[260px] flex-none flex-col gap-0.5">
+          <Link
+            href={`/projects/${mapping.project_id}`}
+            className="text-[14.5px] font-semibold text-ink link-hover"
+          >
+            {label}
+          </Link>
+        </span>
+        <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-[3px]">
+          <span className="text-[14px]">Gives {gives(mapping, schema)}</span>
+          {opens && (
+            <OpensRows
+              name={name}
+              group={mapping.value}
+              places={opens}
+              lastKnown={lastKnown}
+              holders={holders.isLoading ? undefined : cohort.length}
+            />
+          )}
+          {home?.home && <MappingHomeLine quota={home.quota?.value} homeRoot={homeRoot} />}
+          {/* The count says what it counts. Nobody holding the role is said once, as the row's detail
+              line, never as a bare "0" as well. */}
+          {(holders.isLoading || cohort.length > 0) && (
+            <span data-holders className="text-[13.5px] text-muted">
+              {holders.isLoading
+                ? "…"
+                : `${cohort.length} ${cohort.length === 1 ? "person holds" : "people hold"} this role`}
+            </span>
+          )}
+        </span>
+      </CardRow>
+      {/* Under the row, a region of its own that Basic does not render, so Basic leaves no empty line. */}
+      <AdvancedOnly className="px-(--card-x) pb-(--row-y)">
         <TechnicalDetail placeKey={`mapping:${mapping.id}`}>
           <CopyableValue value={mapping.role_key} label="Role key" />
           <CopyableValue value={`${mapping.field} → ${mapping.value}`} label="Field and value" />
         </TechnicalDetail>
       </AdvancedOnly>
-    </CardRow>
+    </>
   );
 }
 
@@ -541,45 +549,51 @@ function VersionRow({
   const names = useShownNames();
 
   return (
-    <div className={`row-divider px-5 py-3.5 ${current ? "bg-accent-soft" : ""}`}>
-      <div className="flex flex-wrap items-baseline gap-2 text-[14px]">
-        <span className="font-semibold">Version {version.version}</span>
-        {current && <span className="text-[13px] text-accent-text">current</span>}
-        <span className="text-faint">
-          <UserName id={version.published_by} /> · <Relative iso={version.published_at} />
-        </span>
-        <span className="flex-1" />
-        {current ? (
-          // Rolling back to what is already live does nothing, and offering it
-          // would be offering a no-op ceremony. The reason is text, not a
-          // disabled control with a tooltip.
-          <span className="text-[13px] text-faint">
-            {unpublished ? "Restores this set, discarding unpublished changes" : "Already live"}
-          </span>
-        ) : null}
-        {(!current || unpublished) && (
-          <Button variant="outline" size="sm" onClick={() => setRehearsing(true)}>
-            Roll back to this
-          </Button>
-        )}
-      </div>
-
-      <p className="mt-1 text-[13.5px] text-muted">
-        {version.note || <span className="text-faint">No reason recorded.</span>}
-      </p>
-      <p className="mt-1 text-[13px] text-faint">
-        {version.entries.length} mapping{version.entries.length === 1 ? "" : "s"}
-        {version.entries.length > 0 && (
+    <>
+      <CardRow
+        seat="narrow"
+        className={current ? "bg-accent-soft" : ""}
+        // Rolling back to what is already live does nothing, and offering it would be offering a
+        // no-op ceremony: the seat stays, empty, and the reason is text beside the version.
+        action={
+          (!current || unpublished) && (
+            <Button variant="outline" size="sm" onClick={() => setRehearsing(true)}>
+              Roll back to this
+            </Button>
+          )
+        }
+        detail={
           <>
-            {" · "}
-            {version.entries
-              .slice(0, 3)
-              .map((e) => `${names.role(e.project_id, e.role_key)}: ${e.value}`)
-              .join(", ")}
-            {version.entries.length > 3 && `, and ${version.entries.length - 3} more`}
+            <span className="block">{version.note || <span className="text-faint">No reason recorded.</span>}</span>
+            <span className="mt-1 block text-[13px] text-faint">
+              {version.entries.length} mapping{version.entries.length === 1 ? "" : "s"}
+              {version.entries.length > 0 && (
+                <>
+                  {" · "}
+                  {version.entries
+                    .slice(0, 3)
+                    .map((e) => `${names.role(e.project_id, e.role_key)}: ${e.value}`)
+                    .join(", ")}
+                  {version.entries.length > 3 && `, and ${version.entries.length - 3} more`}
+                </>
+              )}
+            </span>
           </>
-        )}
-      </p>
+        }
+      >
+        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-2 text-[14px]">
+          <span className="font-semibold">Version {version.version}</span>
+          {current && <span className="text-[13px] text-accent-text">current</span>}
+          <span className="text-faint">
+            <UserName id={version.published_by} /> · <Relative iso={version.published_at} />
+          </span>
+          {current && (
+            <span className="text-[13px] text-faint">
+              {unpublished ? "Restores this set, discarding unpublished changes" : "Already live"}
+            </span>
+          )}
+        </span>
+      </CardRow>
 
       {/* The dialog is the one place a rollback reports: its result step names the
           people and the system, so the row says nothing (one slot, G23). */}
@@ -621,6 +635,6 @@ function VersionRow({
           onClose={() => setRehearsing(false)}
         />
       )}
-    </div>
+    </>
   );
 }

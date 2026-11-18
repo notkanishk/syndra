@@ -68,7 +68,7 @@ beforeEach(() => {
 
 /** The Roles seat: the board's 110px right-aligned cell, desktop only. */
 function rolesSeat(row: HTMLElement) {
-  return Array.from(row.children).find((child) => child.className.includes("desktop:w-[110px]"));
+  return Array.from(row.children).find((child) => child.className.includes("desktop:w-(--seat-number)"));
 }
 
 describe("the projects table", () => {

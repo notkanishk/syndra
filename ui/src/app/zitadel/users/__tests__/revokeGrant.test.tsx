@@ -56,6 +56,15 @@ function openRevoke() {
   fireEvent.click(screen.getByRole("button", { name: "Revoke roles" }));
 }
 
+// D-1: the pointer to Syndra's explanation is the row's action, the sentence is its body.
+it("keeps the link to Syndra's explanation in the row's seat, apart from its sentence", () => {
+  render(<UpstreamUsersPage />);
+  const link = screen.getByRole("link", { name: /Syndra.s explanation of the same access/ });
+  expect(link.closest("[data-action-seat]")).toHaveAttribute("data-seat", "wide");
+  const sentence = screen.getByText("Everything below is what Zitadel holds for this person.");
+  expect(sentence.closest("[data-action-seat]")).toBeNull();
+});
+
 // Revoking in Zitadel used to be one click with no sentence beside it — the
 // only direct-to-Zitadel change with no consequence and no tick.
 describe("revoking a person's roles in Zitadel", () => {

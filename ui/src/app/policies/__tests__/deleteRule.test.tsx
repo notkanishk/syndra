@@ -76,6 +76,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("deleting an automatic rule", () => {
+  // D-1 #24: the verb has a seat, and the heading cell over it is drawn.
+  it("keeps Retire rule in the table's seat on every row", () => {
+    state.rules = [rule(), rule({ id: "bbbbcccc-1111-2222-3333-444455556666" })];
+    openTheRule();
+
+    const seats = screen.getAllByRole("button", { name: "Retire rule" }).map((b) => b.closest("[data-action-seat]"));
+    expect(seats).toHaveLength(2);
+    for (const seat of seats) expect(seat).not.toBeNull();
+    expect(new Set(seats.map((x) => x!.getAttribute("data-seat"))).size).toBe(1);
+    expect(document.querySelector(".row-seat[aria-hidden]:not([data-action-seat])")).not.toBeNull();
+  });
+
   // Two clicks and a stated consequence in between, from the rule's own row.
   it("asks before it deletes, from the row", () => {
     openTheRule();

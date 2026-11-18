@@ -179,7 +179,7 @@ describe("connected systems", () => {
       state.health = { log_anchor: { violation_reason: "edited" } };
       render(<ConnectedSystemsPage />);
 
-      expect(screen.getByRole("link", { name: "1 thing needs a decision" })).toBeTruthy();
+      expect(screen.getByRole("link", { name: "1 thing needs a decision" }).closest("[data-action-seat]")).toHaveAttribute("data-seat", "wide");
     });
 
     it("says nothing is waiting, so an empty cell never reads as unknown", () => {
@@ -328,6 +328,7 @@ describe("connected systems", () => {
     render(<ConnectedSystemsPage />);
     expect(screen.getByText("No Zitadel project yet")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Choose its Zitadel project" }).getAttribute("href")).toBe("/system/targets/truenas");
+    expect(screen.getByRole("link", { name: "Choose its Zitadel project" }).closest("[data-action-seat]")).toHaveAttribute("data-seat", "wide");
   });
 
   // Q-01 (14 Oct): a fault is one Notice above the page, said once; the row

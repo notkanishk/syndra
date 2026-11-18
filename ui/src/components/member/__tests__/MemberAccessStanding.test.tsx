@@ -268,7 +268,22 @@ describe("MemberAccess asks to keep a role without leaving (A-19 P10.4)", () => 
     mine.requests = [{ status: "pending", kind: "extend", project_id: "p1", role_key: "mill" }];
     render(<MemberAccess session={session} />);
     expect(screen.queryByRole("button", { name: "Ask to keep it" })).toBeNull();
-    expect(screen.getByText("Asked to keep it")).toBeTruthy();
+    // The answer takes the button's place in the seat, so the row keeps its shape; every row has a seat.
+    expect(screen.getByText("Asked to keep it").closest("[data-action-seat]")).not.toBeNull();
+    expect(document.querySelector("[data-row-detail]")).toBeNull();
+    const seats = [...document.querySelectorAll("[data-card-row]")].map((row) => row.querySelector("[data-action-seat]"));
+    expect(seats.every((seat) => seat !== null && seat.getAttribute("data-seat") === seats[0]!.getAttribute("data-seat"))).toBe(true);
+    expect(document.querySelectorAll("[data-action-seat] button")).toHaveLength(0);
+  });
+
+  it("the ask button is in the row's seat, and rows with nothing to ask keep an empty one", () => {
+    endingRole();
+    render(<MemberAccess session={session} />);
+    const seat = screen.getByRole("button", { name: "Ask to keep it" }).closest("[data-action-seat]");
+    expect(seat).not.toBeNull();
+    const seats = [...document.querySelectorAll("[data-card-row]")].map((row) => row.querySelector("[data-action-seat]"));
+    expect(seats).toHaveLength(2);
+    expect(seats.every((s) => s !== null)).toBe(true);
   });
 
   it("a request for something else does not take the seat", () => {

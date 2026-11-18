@@ -187,7 +187,8 @@ export function InsightsUsage() {
             ))}
           </Card>
         ))}
-        <p className="flex flex-wrap items-center gap-x-3 text-[13px] text-muted">
+        {/* The page's closing caption, its way on at the end of it: a link in a caption is prose (D-1 §4). */}
+        <p data-prose className="flex flex-wrap items-center gap-x-3 text-[13px] text-muted">
           <span>{copy.INSIGHTS_NEXT}</span>
           <ArrowLink href="/users">{copy.INSIGHTS_NEXT_LINK}</ArrowLink>
         </p>

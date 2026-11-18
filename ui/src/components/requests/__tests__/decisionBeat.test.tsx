@@ -138,6 +138,19 @@ describe("a decided request keeps its seat for a beat", () => {
     expect(screen.getByText(/why r2/)).toBeInTheDocument();
   });
 
+  it("keeps the buttons, then the decision, in one action seat of one width on every row (D-1)", async () => {
+    const { rerender } = render(<Screen />);
+    const seatOf = (text: RegExp) => rowOf(text).querySelector("[data-action-seat]")!;
+    expect(seatOf(/why r1/).contains(screen.getAllByRole("button", { name: "Approve" })[0])).toBe(true);
+    expect(seatOf(/why r1/).contains(screen.getAllByRole("button", { name: "Decline" })[0])).toBe(true);
+    fireEvent.click(screen.getAllByRole("button", { name: "Approve" })[0]);
+    await flush();
+    data = [ask("r2", "u2")];
+    rerender(<Screen />);
+    expect(seatOf(/why r1/).querySelector("[role=status]")).not.toBeNull();
+    expect(seatOf(/why r1/).getAttribute("data-seat")).toBe(seatOf(/why r2/).getAttribute("data-seat"));
+  });
+
   it("says Declined the same way", async () => {
     const { rerender } = render(<Screen />);
     fireEvent.click(screen.getAllByRole("button", { name: "Decline" })[0]);
