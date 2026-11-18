@@ -17,6 +17,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
+      // Next resolves the `server-only` marker itself (no package installed);
+      // tests run as server code, so they get Next's own server-side no-op.
+      "server-only": "next/dist/compiled/server-only/empty.js",
     },
   },
   test: {
