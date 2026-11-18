@@ -1273,13 +1273,20 @@ describe("density and alignment (D-1)", () => {
     const literal: string[] = [];
     for (const file of readdirSync(resolve(UI, ".design-sync/previews"))) {
       const source = readFileSync(resolve(UI, ".design-sync/previews", file), "utf8");
-      for (const m of Array.from(source.matchAll(/fontSize:\s*\d/g))) literal.push(`${file}:${source.slice(0, m.index).split("\n").length}`);
+      // A numeric inline size, or an arbitrary pixel text class, either way a size of its own.
+      for (const m of Array.from(source.matchAll(/fontSize:\s*\d|text-\[\d+(?:\.\d+)?px\]/g))) {
+        literal.push(`${file}:${source.slice(0, m.index).split("\n").length} ${m[0]}`);
+      }
     }
-    expect(literal, `A preview's glue reads a step (fontSize: "var(--text-body)"):\n  ${literal.join("\n  ")}`).toEqual([]);
-    // The previews of the row show the seat, the detail line and the caption.
+    expect(literal, `A preview's glue reads a step (fontSize: "var(--text-body)", or text-body):\n  ${literal.join("\n  ")}`).toEqual([]);
+    // The ActionSeats story itself shows the seat holding actions and the detail line: read within its
+    // own block, so another story's `action=` cannot stand in for it.
     const row = readFileSync(resolve(UI, ".design-sync/previews/CardRow.tsx"), "utf8");
-    expect(row).toMatch(/seat="default"[\s\S]*action=/);
-    expect(row).toMatch(/detail=/);
+    const start = row.indexOf("export const ActionSeats");
+    const story = row.slice(start, row.indexOf("export const", start + 1));
+    expect(start, "CardRow's preview has its ActionSeats story").toBeGreaterThan(-1);
+    expect(story).toMatch(/seat="default"\s+action=\{/);
+    expect(story).toMatch(/detail=/);
     expect(readFileSync(resolve(UI, ".design-sync/previews/CardHeader.tsx"), "utf8")).toMatch(/caption=/);
     expect(readFileSync(resolve(UI, ".design-sync/previews/CardColumns.tsx"), "utf8")).toMatch(/seatLabel=/);
   });

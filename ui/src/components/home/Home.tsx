@@ -16,7 +16,7 @@ import { Owner } from "@/components/system/ServiceAccountOwner";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { Button } from "@/components/ui/Button";
-import { Card, CardGrid, CardHeader, CardRow, type Seat } from "@/components/ui/Card";
+import { Card, CardGrid, CardHeader, CardRow, type SeatWidth } from "@/components/ui/Card";
 import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
@@ -603,7 +603,7 @@ function Capped<T>({
   /** The full list, already narrowed to what these rows are. */
   href: string;
   /** The table's seat: "and N more" is an action, so it sits in it like every other. */
-  seat: Seat;
+  seat: SeatWidth;
   children: (item: T) => React.ReactNode;
 }) {
   const cap = useIsPhone() ? HOME_ROWS_PHONE : HOME_ROWS;

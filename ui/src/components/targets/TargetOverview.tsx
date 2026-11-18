@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/Button";
 import { useUiView } from "@/lib/ui-view";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
-import { Card, CardGrid, CardHeader, CardRow, type Seat } from "@/components/ui/Card";
+import { Card, CardGrid, CardHeader, CardRow, type SeatWidth } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { ReadLine, SectionPill, type NavSection } from "@/components/ui/SectionNav";
 import { StandingLine, StandingStep } from "@/components/ui/StandingLine";
@@ -1304,7 +1304,7 @@ function Reading({
   tone: StatusTone;
   label: React.ReactNode;
   /** The seat's width, when the card has one: the same on every row of it, whether or not this one has an action. */
-  seat?: Seat;
+  seat?: SeatWidth;
   /** A button, in the seat on the line that says the word. */
   action?: React.ReactNode;
   children?: React.ReactNode;

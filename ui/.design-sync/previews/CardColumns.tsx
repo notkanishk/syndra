@@ -6,7 +6,7 @@ import { Button, Card, CardColumns, CardRow } from "ui";
 
 const flex = { flex: 1, minWidth: 0, fontSize: "var(--text-body)", fontWeight: 600 } as const;
 const num = { width: "var(--seat-number)", flexShrink: 0, textAlign: "right" as const, fontSize: "var(--text-body)" };
-const apps = { width: 200, fontSize: "var(--text-body)", color: "var(--muted)" } as const;
+const apps = { width: "var(--seat-action)", fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
 /** Column headings over table-shaped rows (projects list). Hidden below tablet width. */
 export const ProjectsTable = () => (
@@ -15,7 +15,7 @@ export const ProjectsTable = () => (
       <span style={{ flex: 1, minWidth: 0 }}>Project</span>
       <span style={{ width: "var(--seat-number)", flexShrink: 0, textAlign: "right" }}>People</span>
       <span style={{ width: "var(--seat-number)", flexShrink: 0, textAlign: "right" }}>Roles</span>
-      <span style={{ width: 200 }}>Apps served</span>
+      <span style={{ width: "var(--seat-action)" }}>Apps served</span>
     </CardColumns>
     <CardRow>
       <span style={flex}>Fabrication Lab</span><span style={num}>48</span><span style={num}>6</span>

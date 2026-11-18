@@ -38,7 +38,7 @@ function Host() {
             role_keys: ["supervisor"],
             source: "direct",
             initiated_by: "284019337710554187",
-            reason: "Covering Saturday open hours.",
+            said: "Covering Saturday open hours.",
             queued_at: ago(40),
           }],
           "DELETE",

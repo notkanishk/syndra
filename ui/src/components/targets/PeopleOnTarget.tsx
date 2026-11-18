@@ -7,7 +7,7 @@ import { HoldDialog } from "@/components/review/HoldDialog";
 import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
 import { RevokeDialog } from "@/components/targets/RevokeDialog";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, CardRow, type Seat } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, type SeatWidth } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UNKNOWN_ACCOUNT, UserAvatar, UserName } from "@/components/names";
@@ -62,7 +62,7 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
   // setup is known (or if it can't be read): a seat that narrowed or widened when a read landed would move.
   const setupKnown = Boolean(useFieldSchemaState(target).schema);
   const hasLimit = Boolean(useMappingFields(target).limit);
-  const seat: Seat = setupKnown && !hasLimit ? "default" : "wide";
+  const seat: SeatWidth = setupKnown && !hasLimit ? "default" : "wide";
 
   // `?person=<id>#accounts` from a person's page (A-10 §3): the list opens far
   // enough to hold their row, the page glides there and the row flashes once
@@ -151,7 +151,7 @@ function PersonRow({
   target: string;
   account: BoundAccount;
   /** The actions seat's width, shared with the column heads. */
-  seat: Seat;
+  seat: SeatWidth;
   /** Their home folder limit and where it comes from; absent until read. */
   home?: AccountHome;
 }) {

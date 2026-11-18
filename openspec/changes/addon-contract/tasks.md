@@ -3114,4 +3114,20 @@ end to end) found no missing function; three regressions with one root cause
       - no preview's glue sets a numeric `fontSize`;
       - CardRow's preview shows a seat with an action and a detail line; CardHeader's shows a caption; CardColumns' shows a `seatLabel`.
     - **Mutation-checked** (each red): `CardGrid` left out of `componentSrcMap`; a preview's `fontSize: 14.5`; CardRow's preview without its detail lines.
+    - **Review round** (18 Nov 2026, lead on #204):
+      - **(1)** The guard reads CardRow's preview within the ActionSeats story's own block. Before, `action=` in TopAligned or DisclosureWithControl could stand in for it.
+      - **(2)** The guard also catches an arbitrary pixel text class (`text-[13px]`) in a preview. GoToPanel's idle line is now `text-small`.
+      - **(3)** CardColumns' "Apps served" column is at `--seat-action`; it was 200.
+      - **(4) Type errors that predate this pass, all fixed:**
+        - `entry.tsx`'s `export *` met two `Seat`s: Card.tsx's width type (D-1 pass 1) and Choice.tsx's component. Card's type is now `SeatWidth` (Card, Home, PeopleOnTarget, TargetOverview).
+        - ActionOutcome's previews now pass the required `word`.
+        - The Notice and Unfold previews now pass their step (`next` or `nothingToDo`, NoticeNextStep).
+        - PushedStep's change reads `said` (the field was renamed).
+        - RoleWordsTable's rows have one row type.
+        - **The previews now type-check in CI.** `.design-sync/tsconfig.previews.json` maps `ui` to `entry.tsx` and `@/*` to `src`, covering `entry.tsx` and every preview. `bun run typecheck`, which CI runs, now runs it after the app's (about 1.5s). Named `tsconfig.previews.json` so the resync's `tsconfig` setting cannot pick it up by accident.
+      - **(5)** `NEXT.md`'s stray space.
+      - **Mutation-checked** (each red):
+        - ActionSeats with its actions removed, while the other stories keep theirs;
+        - GoToPanel back at `text-[13px]`;
+        - PushedStep back at `reason` (`bun run typecheck`).
 - [ ] 7v Flaky conformance test (add-on track; noted 18 Nov 2026, not fixed). `addons/conformance` `TestAnUnansweredWithdrawThatBoundAnAccountIsOwnedUpTo` (`kit_test.go:1312`) failed once on PR #200's CI run, with no Go change in the PR (reported by the PR's review). Find the race or ordering it depends on (`go test -race -count=200 -run TestAnUnansweredWithdrawThatBoundAnAccountIsOwnedUpTo ./...` in `addons/conformance`), fix it at the root, and leave a guard that fails without the fix. `needs-triage`

@@ -65,7 +65,7 @@ export const InTheSheet = () => (
     <UiViewProvider isOperator>
       <View view="basic">
         <div style={sheet}>
-          <GoToPanel nav={nav} onGo={noop} embedded idle={<p className="text-[13px] text-muted">Home, People, Projects, Requests</p>} />
+          <GoToPanel nav={nav} onGo={noop} embedded idle={<p className="text-small text-muted">Home, People, Projects, Requests</p>} />
         </div>
       </View>
     </UiViewProvider>
