@@ -352,6 +352,14 @@
     "ActionSeat": {
       "moves": "Nothing on it moves. Still: the same.",
       "phone": "Below tablet it wraps under its row and stays right-aligned."
+    },
+    "StandingLine": {
+      "moves": "The word and its note crossfade in their seat on tint (it is a StatusSeat). Still: they swap at once.",
+      "phone": "The same at every width."
+    },
+    "Meter": {
+      "moves": "Nothing on it moves: the bar is drawn at its width, never filled in front of you (a number is read, not watched). Still: the same.",
+      "phone": "The same at every width; the bar is at most 360px wide."
     }
   }
 }

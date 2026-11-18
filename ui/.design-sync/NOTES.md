@@ -20,7 +20,7 @@ Package shape, run from `ui/`. Scope: `src/components/{ui,shell,names,states}` (
 - Shell is `hidden` below the tablet breakpoint (720px): wide parts need `overrides.<Name>: {cardMode: "column", viewport: "1200x1000"}`.
 - Data hooks (indicators, targets, name catalog) fetch relative `/api` URLs that 404 in previews. Seed them (next bullet) rather than relying on fallbacks.
 - Content: makerspace realism (laser cutter, CNC router, wood shop; Indian student names). Copy follows `openspec/changes/plain-language-copy/design.md`.
-- Data-backed parts: pass `data` to a nested `<SyndraRoot data={[{ key: ["name-catalog"], value: catalog }]}>` (fresh client per seeded root). Keys: `["name-catalog"]`, `["name-bundles"]`, `["system","mode"]`, `["governance","indicators"]`, `["targets"]`. Without seeding, UserName/ProjectName/RoleRef stay on skeletons for real ids (the miss-resolver never settles) and DegradedBanner renders nothing.
+- Data-backed parts: pass `data` to a nested `<SyndraRoot data={[{ key: ["name-catalog"], value: catalog }]}>` (fresh client per seeded root). Keys: `["name-catalog"]`, `["name-bundles"]`, `["system","mode"]`, `["governance","indicators"]`, `["targets"]`, `["me","systems"]` (the member rail, TouchNav and TopBar read it since the add-on contract; unseeded it 404s and the member rail lists no systems). Without seeding, UserName/ProjectName/RoleRef stay on skeletons for real ids (the miss-resolver never settles) and DegradedBanner renders nothing.
 - `ApiError` is exported from "ui" for request-id states (ErrorState, RehearsalDialog scope step).
 
 ## Capture quirks (from preview waves)
@@ -45,7 +45,7 @@ Package shape, run from `ui/`. Scope: `src/components/{ui,shell,names,states}` (
 - Term's popover needs hover/click (portalled); cards show the dotted-underline trigger only.
 - Withheld member copy says "this one part" for several items - component wording.
 - RehearsalDialog's scope step (needs a thrown `ApiError`) and result step (needs a click) are not previewed.
-- `[RENDER_BLANK]` on Modal, ModalHeader, ModalFooter, RehearsalDialog and PushedStep: the fixed overlay collapses the measured PNG; the capture sheets show them drawn. `[GRID_OVERFLOW]` on FilterPanel/FilterField (the open panel escapes its cell). `[RENDER_THIN]` on CopiedSeat (floor card).
+- `[RENDER_BLANK]` on Modal, ModalHeader, ModalFooter, RehearsalDialog, PushedStep, GoTo, KeysSheet and TouchNav: the fixed overlay (or TouchNav's 900px page) collapses the measured PNG; the capture sheets show them drawn. `[GRID_OVERFLOW]` on FilterPanel/FilterField (the open panel escapes its cell). `[RENDER_THIN]` on CopiedSeat (floor card) when it shows. These ten were the whole list on 10 and 18 Nov 2026.
 - PushedStep's preview refuses one write with `WouldCancelQueued` on mount (exported from "ui" for this); it needs the seeded name catalog.
 
 ## Findings for the app (not changed by the sync)
@@ -89,3 +89,11 @@ The canvas shows a board's frames inline (`<dc-import … frame=…>` inside a `
 - TouchNav is `cardMode: single` at 390px (it is `tablet:hidden`); the render check still reports `[RENDER_BLANK]` because its own page is 900px wide. Benign.
 - RoleWordsTable and SignInRow are `cardMode: column` (a table needs the width). SectionPill needs `#app-scroll` and a scrolled container, so its story scrolls its own box.
 - `--font-sans` stays (body uses it; published boards read it). `--radius-shell` is gone.
+
+## Re-sync 18 Nov 2026 (feat/addon-contract, D-1 passes 1-5, motion pass)
+- 118 -> 122 components: + CardGrid, ActionSeat (D-1), Meter (A-23's one meter), StandingLine (an add-on account's standing). Left out on purpose: AdvancedOnly (a view-only wrapper over Unfold, which is on the system) and SchemaNotReady (a page state composed of RowSkeleton, ErrorState and Notice).
+- `dtsPropsFor` was stale against src: AppShell `initialView`; SessionUser `firstVisit`, `previousSignIn`; ActionOutcome `word`, `person`, placement `seat` and the outcome's newer fields; PlanReview `auto`, `system` and BulkOutcome's delivery fields; ReadFreshness `reader`, `refresh`; Withheld/WithheldInline `schemaOf`; Segmented `title`, `disabled`, `describedBy`, `fill`; PushedStep's `confirm` and `asking`. `nav` (NavEntry) stays a subset: the optional indicator/tone/pattern/advancedOnly fields are left out.
+- tokens.json and `ds_merge.py`: every token tokens.json names is stripped from `components/bundle.css`, wherever it is declared, so tokens.css must declare it, phone step included. Regenerate the whole tokens.css with `python3 -I .design-sync/ds-artifact/tokens_css.py <tokens.json> <tokens.css>` (the live generator's format; from the 10 Nov tokens.json it reproduces the live file plus the two phone blocks). Never list a name a rule sets locally (`--ring-fade: 0s` under `:focus-visible`). Motion is not a tokens.json family (the Design System type takes none): its values are in conventions.md's Motion row and stay in bundle.css. `--text-*` is described in the type family, which is not stripped.
+- `token_check.py` only checks the names tokens.json lists and skips the type family: a new token in globals.css or a type change reads `differences: 0`. Diff the names by hand.
+- `tsc -p .design-sync/tsconfig.types.json` exits 2 locally on AdvancedLink (two copies of @types/react: ui's 19.2 and `.ds-sync`'s 19.3, through the `.design-sync/node_modules` link). The declarations are still emitted; `buildCmd`'s `&&` only skips nothing after it.
+
