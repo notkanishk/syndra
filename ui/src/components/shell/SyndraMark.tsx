@@ -19,14 +19,26 @@ import { useEffect, useRef, useState } from "react";
  */
 export const WELCOMED = "syndra:mark-welcomed";
 
+/**
+ * What the room is like, said by the dot in the rail at rest (A-24 Q5). Only what
+ * the rail's reading can prove: "waiting", amber and breathing, while Zitadel
+ * isn't answering. The lime of nothing waiting and the dim of quiet hours wait
+ * for a reading that carries every block Home counts (NEXT 0l); until then the
+ * mark is otherwise as built. A dot, not words: the rail's own counts say what.
+ */
+export type Room = "waiting";
+
 export function SyndraMark({
   size = 22,
   className = "",
   welcome = false,
+  room,
 }: {
   size?: number;
   className?: string;
   welcome?: boolean;
+  /** Unknown (undefined) draws the mark as built. */
+  room?: Room;
 }) {
   const [bloom, setBloom] = useState(false);
   const seat = useRef<HTMLSpanElement>(null);
@@ -48,12 +60,14 @@ export function SyndraMark({
     <span
       ref={seat}
       aria-hidden
+      data-room={room}
       className={`syndra-mark ${className}`}
       style={{ "--mark-size": `${size}px` } as React.CSSProperties}
     >
       <span className="syndra-mark-base" />
       <span className="syndra-mark-arc" />
-      <span className={`syndra-mark-dot${bloom ? " bloom" : ""}`} />
+      {/* Breathe is the one loop, and it means still happening: Zitadel not answering is. */}
+      <span className={`syndra-mark-dot${bloom ? " bloom" : ""}${room === "waiting" ? " breathe" : ""}`} />
     </span>
   );
 }

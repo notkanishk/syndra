@@ -3,13 +3,14 @@
 import { compareInstants } from "@/lib/time";
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ApproveButton, HoldingNote } from "@/components/requests/Holding";
 
 import { AdvancedLink } from "@/components/ui/AdvancedLink";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { ClaimsLine } from "@/components/home/ClaimsLine";
+import { TermLine } from "@/components/home/TermLine";
 import { Makerspace } from "@/components/home/Makerspace";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Owner } from "@/components/system/ServiceAccountOwner";
@@ -54,9 +55,10 @@ import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
 import { ShellNotices } from "@/components/shell/ShellNotices";
-import { firstName, greeting, isQuietHour, lastHere, WELCOME } from "@/lib/greeting";
+import { firstName, lastHere, PHASE_WORD, WELCOME } from "@/lib/greeting";
+import { useDayPhase } from "@/lib/useDayPhase";
 import { useTerms } from "@/lib/queries/useTerms";
-import { termDayLine } from "@/lib/term-dates";
+import { termDayLine, termHolding } from "@/lib/term-dates";
 import { compareNames, sortByName, sortNames } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 
@@ -222,9 +224,13 @@ export function Home({ session }: { session: SessionUser }) {
   // UTC and hydration failed (React #418). They appear on mount, in a seat held
   // by an invisible stand-in so nothing below moves (same rule as Relative).
   const [now, setNow] = useState<Date | null>(null);
-  useEffect(() => setNow(new Date()), []);
+  // Before paint, so a page reached by a link is drawn with its greeting and term line in place.
+  useLayoutEffect(() => setNow(new Date()), []);
+  // The part of the day for the light, on the greeting's clock, turning with the rail's mark at 22:00.
+  const phase = useDayPhase();
   const terms = useTerms();
   const termDay = now && terms.data ? termDayLine(terms.data, now) : null;
+  const term = now && terms.data ? termHolding(terms.data, now) : undefined;
   const loading = summary.isLoading || requests.isLoading || onboarding.isLoading;
   const error = summary.error ?? requests.error ?? onboarding.error ?? accounts.error;
   // While the load is failing the count is unknown, and "nothing needs you" is
@@ -366,7 +372,11 @@ export function Home({ session }: { session: SessionUser }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div {...head} style={BELOW_HEADER}>
+      <div {...head} className={`${head.className} relative isolate`} style={BELOW_HEADER}>
+        {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
+            place set by the part of the day on the greeting's own clock. The one written exception to
+            "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
+        {phase && <div aria-hidden data-hour={phase} className="hour-light" />}
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and
@@ -374,7 +384,7 @@ export function Home({ session }: { session: SessionUser }) {
             leaving one word stranded. */}
         {/* measure-exempt: the greeting's balance widths (D-1 §6), a display line, not a sentence. */}
         <h1 className="type-greeting max-w-[22ch] text-balance tablet:max-w-[34ch]">
-          {now ? greeting(now) : <span className="invisible">Afternoon</span>}
+          {phase ? PHASE_WORD[phase] : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}.{" "}
           <span className="text-faint">
             <Crossfade id={welcome ? WELCOME : headline} inline>
@@ -392,6 +402,13 @@ export function Home({ session }: { session: SessionUser }) {
             </>
           )}
         </div>
+        {/* The term line (A-24 §3.1, Q3): from the terms setting and Ending soon's own read. It opens
+            when its reads land, so nothing below jumps. */}
+        {now && (
+          <Unfold open={Boolean(term)}>
+            {term && <TermLine term={term} ending={summary.data?.expiring_grants ?? []} now={now} />}
+          </Unfold>
+        )}
         {/* Claims delivery's one line: fixed here, ahead of anything that folds,
             so it holds its seat whether it says all is well or not (§4g). */}
         <ClaimsLine />
@@ -459,7 +476,7 @@ export function Home({ session }: { session: SessionUser }) {
               (nothingCameIn && here ? `Since ${here.since}, nothing came in. ` : "") +
               "No open requests, and no access ending in the next 14 days." +
               // Late at night, on a calm day only: permission to stop (A-18 idea 9).
-              (now && isQuietHour(now) ? " It will keep until morning." : "")
+              (phase === "quiet" ? " It will keep until morning." : "")
             }
           />
         </div>

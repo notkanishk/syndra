@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
 import { TINT_MS } from "@/lib/motion";
+import { inZone } from "@/test-utils/zone";
 import type { SessionUser } from "@/lib/session";
 import { setMediaQuery } from "@/test-utils/media";
 import { motionInTests } from "@/test-utils/motion";
@@ -17,6 +18,7 @@ const state = vi.hoisted(() => ({
   advanced: true,
   // Whether a write of the reader's own landed in the last 30s (lib/query-client).
   own: false,
+  terms: [] as Array<{ name: string; start: string; end: string }> | undefined,
   governance: {} as Record<string, unknown>,
 }));
 
@@ -67,6 +69,7 @@ vi.mock("@/lib/ui-view", () => ({
   useIsAdvanced: () => state.advanced,
   useUiView: () => ({ view: "basic", setView: () => {} }),
 }));
+vi.mock("@/lib/queries/useTerms", () => ({ useTerms: () => ({ data: state.terms }) }));
 vi.mock("@/lib/query-client", async (original) => ({
   ...(await original<typeof import("@/lib/query-client")>()),
   ownActWithin: () => state.own,
@@ -103,6 +106,7 @@ const drifting = () => ({ ...quiet(), drift: { count: 3, top: [] } });
 beforeEach(() => {
   state.advanced = true;
   state.own = false;
+  state.terms = [];
   // The day's close is kept on this device: every test starts with none.
   window.localStorage.clear();
   state.governance = drifting();
@@ -311,5 +315,80 @@ describe("Home's all-clear, as an ending", () => {
     watch.disconnect();
     expect(screen.getByText("Nothing here needs you.")).toHaveClass("type-section-title");
     expect(changed).toEqual([]);
+  });
+});
+
+// A-24 §3.1, Q2: the hour's light, behind Home's head and nowhere else, on the makerspace's clock.
+describe("the room knows the hour", () => {
+  // The setup holds the zone from TZ for the whole file: each test that picks its own puts it back.
+  afterEach(() => inZone(process.env.TZ));
+
+  it("lights the head for the part of the day the greeting names, hidden from assistive technology", () => {
+    inZone("UTC");
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    mount();
+    const light = document.querySelector(".hour-light")!;
+    expect(light).toHaveAttribute("data-hour", "morning");
+    expect(light).toHaveAttribute("aria-hidden");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Morning/);
+    // Behind the head: inside it, and the only light on the page.
+    expect(light.parentElement).toHaveClass("page-head", "isolate");
+    expect(document.querySelectorAll(".hour-light")).toHaveLength(1);
+  });
+
+  it("is a lamp in the quiet hours, with the greeting and the calm line's sentence from the same part of the day", () => {
+    inZone("UTC");
+    vi.setSystemTime(new Date("2026-11-18T23:40:00Z"));
+    state.governance = quiet();
+    mount();
+    expect(document.querySelector(".hour-light")).toHaveAttribute("data-hour", "quiet");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Evening/);
+    expect(screen.getByText(/It will keep until morning\./)).toBeInTheDocument();
+  });
+
+  it("turns the greeting and the light together on a Home left open across a boundary", () => {
+    inZone("UTC");
+    vi.setSystemTime(new Date("2026-11-18T11:59:30Z"));
+    mount();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Morning/);
+    later(60_000);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Afternoon/);
+    expect(document.querySelector(".hour-light")).toHaveAttribute("data-hour", "afternoon");
+  });
+
+  it("follows the makerspace's zone, not the browser's: 20:00Z is quiet hours in Kolkata", () => {
+    inZone("Asia/Kolkata");
+    vi.setSystemTime(new Date("2026-11-18T20:00:00Z"));
+    mount();
+    expect(document.querySelector(".hour-light")).toHaveAttribute("data-hour", "quiet");
+  });
+});
+
+// A-24 §3.1, Q3: the term line, from the terms setting and Ending soon's own read.
+describe("the term line on Home", () => {
+  const term = () => screen.queryByText(/^Monsoon term, day 110 of 153$/)?.closest("[data-term-line]");
+
+  it("is there from the first paint when its reads are in, with Ending soon's days on its track", () => {
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    state.terms = [{ name: "Monsoon", start: "2026-08-01", end: "2026-12-31" }];
+    state.governance = { ...drifting(), expiring_grants: [{ id: "g1", user_id: "u1", project_id: "p", role_key: "r", expires_at: "2026-11-24T10:00:00Z" }] };
+    mount();
+    expect(screen.getByRole("img", { name: "Access ends for one person on 24 Nov." })).toBeInTheDocument();
+    // Not opened into: nothing below it is pushed down on arrival.
+    expect(term()?.closest(".unfold")).toHaveAttribute("data-phase", "open");
+  });
+
+  it("unfolds when the terms land late, rather than popping in, and is gone between terms", () => {
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    state.terms = undefined;
+    const home = mount();
+    expect(term()).toBeFalsy();
+    state.terms = [{ name: "Monsoon", start: "2026-08-01", end: "2026-12-31" }];
+    home.reread();
+    expect(term()?.closest(".unfold")).toHaveAttribute("data-phase", "opening");
+    state.terms = [{ name: "Spring", start: "2027-01-10", end: "2027-05-20" }];
+    home.reread();
+    later(TINT_MS * 4);
+    expect(screen.queryByText(/term, day/)).toBeNull();
   });
 });

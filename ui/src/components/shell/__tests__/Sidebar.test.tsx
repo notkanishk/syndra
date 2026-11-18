@@ -249,3 +249,42 @@ describe("the rail's active row", () => {
     expect(screen.getByRole("link", { name: "Projects" })).not.toHaveAttribute("aria-current");
   });
 });
+
+// A-24 Q5: the mark says the room only where this rail's own reading proves it.
+describe("the mark in the rail", () => {
+  const quiet: Indicators = {
+    pending_requests: 0,
+    expiring_grants: 0,
+    holds_due: 0,
+    pending_propagation: 0,
+    drift: 0,
+    unconfirmed_revocations: 0,
+    revocations_escalated: false,
+    zitadel_reachable: true,
+  };
+  const room = () => document.querySelector(".syndra-mark")?.getAttribute("data-room");
+
+  it("is amber and breathing while Zitadel isn't answering", () => {
+    indicators.data = { ...quiet, zitadel_reachable: false };
+    renderRail();
+    expect(room()).toBe("waiting");
+    expect(document.querySelector(".syndra-mark-dot")).toHaveClass("breathe");
+  });
+
+  it("is otherwise as built: with Zitadel answering, without a real reading, and for a member", () => {
+    indicators.data = { ...quiet, pending_requests: 2 };
+    const answering = renderRail();
+    expect(room()).toBeNull();
+    answering.unmount();
+    indicators.data = { ...quiet, zitadel_reachable: false };
+    indicators.isPlaceholderData = true;
+    const placeholder = renderRail();
+    expect(room()).toBeNull();
+    placeholder.unmount();
+    indicators.isPlaceholderData = false;
+    view.isOperator = false;
+    view.audience = "member";
+    renderRail();
+    expect(room()).toBeNull();
+  });
+});

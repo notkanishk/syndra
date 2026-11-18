@@ -50,6 +50,8 @@ export default function Sidebar() {
   // switching moves only the parts that come and go (A-08 §3).
   const advanced = audience === "advanced";
   const entries = member ? memberNav(mine ?? []) : operatorNav(targets ?? []);
+  // The mark says the room (A-24 Q5) only where the rail's reading proves it: Zitadel not answering.
+  const room = isOperator && indicators?.zitadel_reachable === false ? "waiting" : undefined;
   const followsView = (advancedOnly: boolean | undefined, key: string, part: React.ReactNode) =>
     advancedOnly ? (
       <Unfold key={key} open={advanced}>
@@ -66,7 +68,7 @@ export default function Sidebar() {
     // `settled` guard that stops every badge flashing on arrival.
     <div className="hidden w-[252px] flex-none flex-col gap-5 overflow-y-auto border-r border-line bg-rail px-3 pb-[22px] pt-5 tablet:flex">
       <div className="flex items-center gap-2.5 px-2">
-        <SyndraMark welcome />
+        <SyndraMark welcome room={room} />
         {/* type-scale-exempt: the wordmark is the brand's, not a step of the type scale. */}
         <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
       </div>

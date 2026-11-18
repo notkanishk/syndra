@@ -83,6 +83,15 @@ export function termStanding(terms: Term[], now: Date = new Date()): (string | n
   );
 }
 
+/** The term holding today, in the makerspace's days, or undefined between terms. */
+export function termHolding(terms: Term[], now: Date = new Date()): Term | undefined {
+  const today = civilDay(now);
+  return terms.find((term) => term.start <= today && today <= term.end);
+}
+
+/** "Monsoon term", or the name as given when it already says term. */
+export const termName = (term: Term): string => (/\bterm$/i.test(term.name.trim()) ? term.name.trim() : `${term.name.trim()} term`);
+
 /**
  * "First day of Spring term" / "Last day of Monsoon term" on the one day each
  * is true, else null (A-18 §4 idea 1). Six days a year, read from the terms
@@ -90,9 +99,8 @@ export function termStanding(terms: Term[], now: Date = new Date()): (string | n
  */
 export function termDayLine(terms: Term[], now: Date = new Date()): string | null {
   const today = civilDay(now);
-  const named = (term: Term) => (/\bterm$/i.test(term.name.trim()) ? term.name.trim() : `${term.name.trim()} term`);
   const first = terms.find((term) => term.start === today);
-  if (first) return `First day of ${named(first)}`;
+  if (first) return `First day of ${termName(first)}`;
   const last = terms.find((term) => term.end === today);
-  return last ? `Last day of ${named(last)}` : null;
+  return last ? `Last day of ${termName(last)}` : null;
 }

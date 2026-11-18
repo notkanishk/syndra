@@ -24,6 +24,32 @@ describe("PageHeader title block sizing", () => {
     expect(titleBlock?.className).toMatch(/\bflex-auto\b/);
     expect(titleBlock?.className).not.toMatch(/\bflex-1\b/);
   });
+
+  /**
+   * D-1's seat: the actions sit at the right end of the header's own width,
+   * never just after the text. On `/users/<id>` (staging, 1481px) the
+   * caller's `w-full flex-1` landed on the inner row, so the root beside the
+   * avatar was only as wide as "Holds no roles." and the buttons sat at x≈686.
+   */
+  it("sizes its root with the caller's className and ends the row with the actions, after a growing text block", () => {
+    const { container } = render(
+      <div className="flex">
+        <PageHeader className="w-full flex-1" title="Rey Mysterio" lede="Holds no roles." actions={<button>Give a role</button>} />
+      </div>,
+    );
+    const root = container.firstElementChild!.firstElementChild!;
+    expect(root.className).toMatch(/\bflex-1\b/);
+    expect(root.className).toMatch(/\bw-full\b/);
+
+    const row = screen.getByRole("heading", { level: 1 }).parentElement!.parentElement!;
+    expect(row.parentElement).toBe(root);
+    // The row is the root's own width (a block child, nothing narrowing it).
+    expect(row.className).not.toMatch(/\b(w-|max-w-|inline-flex|flex-none|self-start)/);
+    expect(row.className).toMatch(/^flex\b/);
+    // Text grows into the line, so the actions' seat is its end, whatever the text's length.
+    expect(row.firstElementChild!.className).toMatch(/\bflex-auto\b/);
+    expect(row.lastElementChild!.contains(screen.getByRole("button", { name: "Give a role" }))).toBe(true);
+  });
 });
 
 /** S11: the header tints in, then what follows arrives; once, and only on navigation. */

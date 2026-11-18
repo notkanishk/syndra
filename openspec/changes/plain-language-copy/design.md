@@ -88,7 +88,7 @@ The character is in *when* she speaks and *how exactly*, not in extra words. Str
 | Where | Words |
 |---|---|
 | My access, calm | "Nothing needs you right now." (the same words as Home) |
-| My access, greeting | "Morning, Cody. Here's what you can use." (Morning before 12, Afternoon before 17, Evening after) |
+| My access, greeting | "Morning, Cody. Here's what you can use." (Morning before 12, Afternoon before 17, Evening after, and Evening through the quiet hours, 22:00 to 05:00, so nobody is told Morning at 2 a.m.; the hours are the makerspace's configured zone, never the browser's: `dayPhase`, the same part of the day as Home's light, A-24 §3.1) |
 | My access, quiet month | "Nothing has changed in the last 30 days." |
 | My access, access starts | "From today, you can use Laser cutting." |
 | Drift, all clear | "Everyone inside is on the list, and everyone on the list is inside." |
@@ -1000,3 +1000,12 @@ The foundation changes how things move and where a figure leads, and adds four p
 | Home's all-clear, closed by the reader's own act, once a day (§4.1 vivid) | No new words: Nothing here needs you. takes the heading size. No celebration, no joke, no count (Q17). |
 | Revoke direct access, when nothing waits (A-24 §13: nothing says what doesn't happen) | Revoked. Direct access to {role} revoked. Zitadel took it (this role's own row applied): Nothing else was supplying it, and Zitadel took the revocation. It has not been read back yet. Not taken: Nothing else was supplying it. The revocation is not in Zitadel yet. Never the access is gone: the trail under it says when it is read back. |
 | Revoke on a connected system's page, the result (A-24 §13) | The password is replaced at once and the lock is queued, so the word is On its way (a revocation that sends itself), never Revoked while anything of it is queued; its sentence and its disclosure are the backend's (`revokeCopy`). Revoked only when nothing of it is still on its way. Partly done when the password could not be replaced. |
+
+### Wave 3 (A-24 §3.1, Q5, §9, Q18)
+
+| Where | Words |
+|---|---|
+| Home's term line, one of the head's lines (§3.1, Q3) | Plain text: {Name} term, day {n} of {total} · Ends {day}. Its track alone is named, and only when something ends on it: Access ends for {count} people on {days}. (the count in words, the days as the date line writes them). No line between terms. |
+| A person's page, the line under the name, in the lede's seat (§9, Q10) | Holds {n} roles across {m} projects. / Holds {n} role(s) in {project}. / Holds no roles. (counted as the People row counts). Then, no more than one: {Role} in {Project} ends today / tomorrow / in {n} days. (never for a role a second source also gives) · Not in Zitadel: {Role} in {Project}. (Not in Zitadel: {n} roles they were given.) · {Role} in {Project} is on its way to Zitadel. ({n} roles are on their way to Zitadel.) With no count to say (loading, or Zitadel's read missing, failed or cut short): Checking what Zitadel shows. The page's own read warning says which. |
+| Network storage, the sentence under the meter (Q18) | Plenty of room. (under half) · {left} left. (the meter itself says nearly full past 90%) · nothing at the limit, where the card's Full. line says it. |
+| Home's light and the rail's mark (§3.1, Q5) | No words: both are hidden from assistive technology; the greeting, the date line and the rail's own counts say what they show. The mark changes only while Zitadel isn't answering (amber, breathing). |

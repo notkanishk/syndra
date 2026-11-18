@@ -34,6 +34,7 @@ import {
   type StoragePlace,
 } from "@/lib/queries/useMyStorage";
 import { Meter } from "@/components/ui/Meter";
+import { roomLine } from "@/components/kinds/storage/captions";
 import { HomeMonth } from "@/components/usage/UsageCard";
 import { oneShot } from "@/lib/secret";
 import dynamic from "next/dynamic";
@@ -533,6 +534,9 @@ function PlaceBlock({
           : `${formatBytes(usage.used_bytes)} used · no limit set`;
     }
   }
+  // The meter draws when there is a limit to read against; how much is left is said under it (A-24 Q18).
+  const metered = can && usage && quota > 0 && !offline ? usage : null;
+  const room = metered ? roomLine(metered.used_bytes, quota) : null;
 
   return (
     <div className="row-divider flex flex-col gap-2.5 py-3.5 first:border-t-0 first:pt-0 last:pb-0">
@@ -559,9 +563,10 @@ function PlaceBlock({
           open it. Syndra never moves or deletes a home folder.
         </span>
       )}
-      {can && usage && quota > 0 && !offline && (
-        <Meter value={usage.used_bytes} limit={quota} label={`${placeName(place)} usage`} valueText={use ?? undefined} />
+      {metered && (
+        <Meter value={metered.used_bytes} limit={quota} label={`${placeName(place)} usage`} valueText={use ?? undefined} />
       )}
+      {room && <span className="text-small text-muted">{room}</span>}
       {month}
       {showAddresses && place.smb_address && place.unc_address && (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-x-3.5 gap-y-2.5">

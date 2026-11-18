@@ -69,13 +69,13 @@ export interface HeaderFacts {
 export const ENDING_WITHIN_DAYS = 14;
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-const countWord = (count: number) => WORDS[count] ?? String(count);
+export const countWord = (count: number) => WORDS[count] ?? String(count);
 const capitalise = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
 const jump = (role: NamedRole): HeaderLink | undefined =>
   role.project ? { label: role.project, projectId: role.projectId } : undefined;
 
-function inDays(days: number): string {
+export function inDays(days: number): string {
   if (days <= 0) return "today";
   if (days === 1) return "tomorrow";
   return `in ${days} days`;
