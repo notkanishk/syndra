@@ -3017,6 +3017,17 @@ end to end) found no missing function; three regressions with one root cause
       - `HomeColumns.test.tsx`: an empty group leaves and the other stands at full width; each group's heading is `type-section-title`; its blocks use the 600px auto-fit grid.
       - `TargetOverview.test.tsx`: Not created's status seat is `--seat-status`, with the next step in the detail line and not in the seat; Syndra's own sentence is in the detail line beside an empty seat.
     - **Mutation-checked** (each red): the stack back to two columns; the heading back to a card title; the blocks' minimum at 420; Not created's step back in the status seat.
+    - **Staging round** (18 Nov 2026; lead, 1481px): Home's "Gaps" stretched to the height of "Roles most people hold" (about 370px, one row), in the makerspace's hand-built grid with no start alignment. When you're ready's short block sat beside a long one.
+      - **One rule, one primitive.** `CardGrid` (`Card.tsx`): `grid items-start gap-4`, as many across as can each be `min` wide (`pair` 420, `wide` 600).
+      - **Why top-aligned, rows first:** a card is as tall as what it says, never stretched, and the space under a short card is the page's.
+      - **Why not a column flow:** it would fill that space, but it moves a card from one column to the other whenever a count changes (structure moving with data), reads down before across, and breaks a block's fold animation at a column break. Stacking would waste the 1800 frame.
+      - **Applied** to Home's blocks (`wide`), the makerspace's Gaps and Roles (`pair`), the system page's reach and reports cards and its "What it can do" and "Check for differences" cards (`pair`), and Insights' trends (`pair`; the full-width chart is `col-span-full`).
+      - **Left as they are:** a band of stat tiles (`StatCard`, now `data-stat-tile`) is equal tiles, not cards, and keeps its own grid.
+      - **Guards:**
+        - `test-utils/layout.ts`, after every test: a grid that splits into columns and holds two or more cards (directly, or each in one wrapper) outside `CardGrid` fails.
+        - `design-system.test.ts`: `CardGrid` is `items-start`, and no hand-built column grid holds a `Card` or `…Card` part in source.
+        - `RowSeat.test.tsx`: `CardGrid`'s classes, and the guard catching a hand grid while leaving stat tiles alone.
+      - **Mutation-checked** (each red): the makerspace back to its hand grid (caught by the suite-wide guard over the Home tests); the system page's "What runs here" as a hand grid; `CardGrid` without `items-start`.
   - [ ] 7u-4 Pass 4, three text sizes (Q3), with §5 #40's remaining raw display sizes and #41 `/storage`; then no `text-[NNpx]` in components.
   - [ ] 7u-5 Motion (§7: the five tokens, M1–M14, the eight motion tests).
   - [ ] 7u-6 Pass 5, resync the design system (`ui/.design-sync`, BRIDGE steps 1 to 3), after the owner's OK.

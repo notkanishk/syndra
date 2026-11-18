@@ -319,6 +319,37 @@ export function ActionSeat({ seat, children }: { seat?: Seat; children?: React.R
 export const ROW = "row-cols min-h-[60px] px-(--card-x) py-(--row-y) tablet:min-h-0";
 
 /**
+ * Cards side by side: as many across as can each be `min` wide (`pair` 420, two
+ * on a 1440 page; `wide` 600, two only from the 1800 frame), one under the other
+ * where they cannot, 16 apart.
+ *
+ * Top-aligned, always (`items-start`): a card is as tall as what it says, never
+ * stretched to the tallest beside it, so a one-line card stays one line high and
+ * the space under it is the page's, not an empty card's (staging, 18 Nov: Home's
+ * "Gaps" stood 370px tall beside a long list). Rows first, in the order given: a
+ * CSS column flow would fill the short card's gap, but it moves a card from one
+ * column to the other whenever a count changes (structure moving with data),
+ * reads down before across, and cuts a card's fold animation at a column break.
+ */
+export function CardGrid({
+  min = "pair",
+  className = "",
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { min?: "pair" | "wide" }) {
+  return (
+    <div data-card-grid className={`grid items-start gap-4 ${CARD_GRID_COLUMNS[min]} ${className}`} {...props}>
+      {children}
+    </div>
+  );
+}
+
+const CARD_GRID_COLUMNS = {
+  pair: "grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))]",
+  wide: "grid-cols-[repeat(auto-fit,minmax(min(100%,600px),1fr))]",
+} as const;
+
+/**
  * The label/value pair a disclosed row is built from.
  *
  * A field that was a column on a wide screen becomes one of these, and the

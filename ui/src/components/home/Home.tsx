@@ -16,7 +16,7 @@ import { Owner } from "@/components/system/ServiceAccountOwner";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardRow, type Seat } from "@/components/ui/Card";
+import { Card, CardGrid, CardHeader, CardRow, type Seat } from "@/components/ui/Card";
 import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
@@ -487,9 +487,9 @@ function QueueColumn({
         </h2>
         <span className="text-small text-muted">{note}</span>
       </div>
-      <div data-home-blocks className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,600px),1fr))] items-start gap-4">
+      <CardGrid min="wide" data-home-blocks>
         {children}
-      </div>
+      </CardGrid>
     </section>
   );
 }

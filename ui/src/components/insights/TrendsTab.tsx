@@ -9,7 +9,7 @@ import { projectLabel } from "@/components/names/Unresolved";
 import type { InsightsUrl } from "@/components/insights/useInsightsUrl";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
+import { Card, CardGrid, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { FilterPills } from "@/components/ui/Select";
 import { useInsightsTrends, useInsightsUsage, type InsightsTrends, type TrendPeriod } from "@/lib/queries/useInsights";
@@ -126,8 +126,8 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
         empty={null}
       >
         {t && (
-          <div className="grid gap-4 tablet:grid-cols-2">
-            <Card className="tablet:col-span-2">
+          <CardGrid>
+            <Card className="col-span-full">
               <CardHeader title="Access given and revoked, by week" note={`${t.totals.given} given, ${t.totals.taken_away} revoked`} />
               <Weeks weekly={t.weekly} />
               <Fact label="Through a bundle" value={t.weekly.reduce((n, w) => n + w.through_bundle, 0)} />
@@ -242,7 +242,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
               <Fact label="Bundles with nothing new to give" value={t.upkeep.bundles_nothing_new} />
               <Fact label="Overlapping bundles" value={t.upkeep.overlaps} />
             </Card>
-          </div>
+          </CardGrid>
         )}
       </ListStates>
     </>

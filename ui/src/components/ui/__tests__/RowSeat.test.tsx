@@ -6,10 +6,10 @@ import { EmptyState } from "@/components/states";
 import { SettingRow } from "@/components/targets/SettingRow";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
-import { ActionSeat, Card, CardColumns, CardHeader, CardRow, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardGrid, CardHeader, CardRow, ROW } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { StandingLine } from "@/components/ui/StandingLine";
-import { ACTIONS, actionsInProse, actionsOutsideSeats, dotLinesOffIndent, longNotes, NOTE_MAX } from "@/test-utils/layout";
+import { ACTIONS, actionsInProse, actionsOutsideSeats, cardGridsByHand, dotLinesOffIndent, longNotes, NOTE_MAX } from "@/test-utils/layout";
 
 /**
  * D-1 §4: every action sits in its row's right seat on the first line, never in
@@ -295,6 +295,44 @@ describe("ActionSeat", () => {
     );
     expect(container.firstElementChild).toHaveAttribute("data-action-seat");
     expect(container.firstElementChild).toHaveAttribute("data-seat", "narrow");
+  });
+});
+
+describe("cards side by side", () => {
+  it("are top-aligned, never stretched to the tallest beside them, and as wide as their `min` allows", () => {
+    const { container, rerender } = render(
+      <CardGrid>
+        <Card>
+          <CardHeader title="Gaps" />
+        </Card>
+        <Card>
+          <CardHeader title="Roles most people hold" />
+        </Card>
+      </CardGrid>,
+    );
+    const grid = container.querySelector("[data-card-grid]")!;
+    expect(grid).toHaveClass("grid", "items-start", "gap-4", "grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))]");
+    rerender(<CardGrid min="wide" />);
+    expect(container.querySelector("[data-card-grid]")).toHaveClass("items-start", "grid-cols-[repeat(auto-fit,minmax(min(100%,600px),1fr))]");
+  });
+
+  it("are caught in a grid built by hand, and a band of stat tiles is left alone", () => {
+    const { container, rerender } = render(
+      <div className="grid gap-6 desktop:grid-cols-2">
+        <Card>Gaps</Card>
+        <div>
+          <Card>Roles most people hold</Card>
+        </div>
+      </div>,
+    );
+    expect(cardGridsByHand(container)).toHaveLength(1);
+    rerender(
+      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] grid-cols-2">
+        <div data-stat-tile className="card">12</div>
+        <div data-stat-tile className="card">3</div>
+      </div>,
+    );
+    expect(cardGridsByHand(container)).toEqual([]);
   });
 });
 

@@ -11,7 +11,7 @@ import { EmptyState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { AdvancedLink } from "@/components/ui/AdvancedLink";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
+import { Card, CardGrid, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { machineName } from "@/lib/audit-vocabulary";
@@ -50,10 +50,10 @@ export function Makerspace() {
       </div>
 
       <Tiles />
-      <div className="grid gap-6 desktop:grid-cols-2">
+      <CardGrid>
         <Gaps />
         <AccessShape />
-      </div>
+      </CardGrid>
       <RecentActivity />
     </div>
   );

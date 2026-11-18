@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/Button";
 import { useUiView } from "@/lib/ui-view";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
-import { Card, CardHeader, CardRow, type Seat } from "@/components/ui/Card";
+import { Card, CardGrid, CardHeader, CardRow, type Seat } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { ReadLine, SectionPill, type NavSection } from "@/components/ui/SectionNav";
 import { StandingLine, StandingStep } from "@/components/ui/StandingLine";
@@ -208,7 +208,7 @@ export function TargetOverview({ target }: { target: string }) {
                 </Notice>
               )}
 
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-4">
+              <CardGrid>
                 <ReachCard
                   target={target}
                   health={health.data}
@@ -218,7 +218,7 @@ export function TargetOverview({ target }: { target: string }) {
                   }
                 />
                 <SystemHealth target={target} stale={lastKnown} />
-              </div>
+              </CardGrid>
               {/* Advanced only: lifecycle controls are for whoever looks after the add-on. */}
               <AdvancedOnly gap={16}>
                 <LifecycleControl target={target} health={health.data} isLoading={health.isLoading} />
@@ -313,10 +313,10 @@ export function TargetOverview({ target }: { target: string }) {
           lede={`What Syndra is able to do on ${name}, and the scheduled check that keeps accounts in step.`}
         >
           {/* Side by side where there is room, as the board draws them. */}
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-4">
+          <CardGrid>
             {registered && <Capabilities registered={registered} />}
             <ReconcileControl target={target} lastKnown={lastKnown} />
-          </div>
+          </CardGrid>
         </Region>
 
         {/* Region 4 · what has been used here. Every region keeps its seat:
