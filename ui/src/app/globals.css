@@ -986,9 +986,11 @@
 
 /* A control's own indicator (Segmented's fill, Tabs' underline) gliding to
    the choice on settle. Outside the travel cap: it goes where you sent it.
-   Absent under reduced motion, where it jumps. */
+   Transform only, so it never lays the group out again (`GlideIndicator`
+   draws the pill in three parts so its ends stay round). Absent under reduced
+   motion, where it jumps. */
 @utility indicator-glide {
-  transition-property: left, top, width, height;
+  transition-property: transform;
   transition-duration: var(--duration-settle);
   transition-timing-function: var(--ease-settle);
 }

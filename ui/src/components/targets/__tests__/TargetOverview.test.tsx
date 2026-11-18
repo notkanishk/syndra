@@ -49,6 +49,7 @@ const state = {
   adoptResult: { status: "adopted", detail: "The account is now bound to that person." } as unknown,
   projectSet: [] as string[],
   settings: { read: true, settings: [] as TargetSetting[] } as { read: boolean; settings?: TargetSetting[] },
+  settingsLoading: false,
   settingPut: [] as Array<{ name: string; value: string }>,
   homes: { read: true, usage_read: true, accounts: [] as AccountHome[] },
 };
@@ -120,7 +121,7 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
     }),
     useSetLifecycle: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false }),
-    useTargetSettings: () => ({ data: state.settings, isLoading: false, error: null, refetch: vi.fn() }),
+    useTargetSettings: () => ({ data: state.settingsLoading ? undefined : state.settings, isLoading: state.settingsLoading, error: null, refetch: vi.fn() }),
     useTargetHomes: () => ({ data: state.homes, isLoading: false, error: null }),
     useSetTargetSetting: () => ({
       mutate: (input: { name: string; value: string }, opts?: { onSuccess?: () => void }) => {
@@ -184,6 +185,7 @@ function renderTarget(view: "basic" | "advanced" = "advanced") {
 beforeEach(() => {
   state.healthLoading = false;
   state.findingsError = null;
+  state.settingsLoading = false;
 });
 
 describe("one target's page", () => {
@@ -1100,6 +1102,25 @@ describe("the system's Zitadel project", () => {
     expect(fence()).toBeNull();
   });
 
+  // D-1 Q4 (owner, 18 Nov 2026): the name is the settings card's first row, in every state, and the Name
+  // region is gone, with nothing left pointing at it.
+  it("opens its settings card with the name, before and after the project, and has no Name region", () => {
+    for (const project of [null, { id: "p1", name: "Network storage" }]) {
+      state.roster = [{ ...summary([]), project }];
+      state.health = { reachable: true, lifecycle: "active" };
+      state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+      const { unmount } = renderTarget();
+      const change = screen.getByRole("button", { name: "Change name" });
+      const card = change.closest("[data-card-row]")!.parentElement as HTMLElement;
+      expect(card.querySelector("[data-card-row]")).toBe(change.closest("[data-card-row]"));
+      expect(within(card).queryByText("Zitadel project") === null).toBe(project === null);
+      expect(screen.queryByText("What members see it called")).toBeNull();
+      expect(document.getElementById("name")).toBeNull();
+      expect(document.querySelector('a[href$="#name"]')).toBeNull();
+      unmount();
+    }
+  });
+
   it("is a thin strip once set, and the only link to the mappings", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
@@ -1174,6 +1195,29 @@ describe("where home folders go", () => {
     expect(within(dialog).getByText(/Nothing is moved, and nobody's access changes/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Make new homes in main › homes" }));
     expect(state.settingPut).toEqual([{ name: "home_root", value: "/mnt/p/main/homes" }]);
+  });
+
+  // The row used to be absent until the settings were read, so everything under it jumped when they
+  // landed. It holds its place, with its button's seat filled, before they resolve.
+  it("holds its row while a storage system's settings are read", () => {
+    state.roster = [{ ...summary([]), kind: "storage" }];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.settingsLoading = true;
+    renderTarget();
+    const row = screen.getByText("Home folders").closest("[data-card-row]") as HTMLElement;
+    expect(row.querySelector("[aria-busy]")).not.toBeNull();
+    expect(row.querySelector("[data-action-seat] .skeleton-bar")).not.toBeNull();
+    expect(within(row).queryByRole("button")).toBeNull();
+  });
+
+  it("holds no row for a system that does not keep home folders", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.settingsLoading = true;
+    renderTarget();
+    expect(screen.queryByText("Home folders")).toBeNull();
   });
 
   it("says when main has no folder to make homes in", () => {

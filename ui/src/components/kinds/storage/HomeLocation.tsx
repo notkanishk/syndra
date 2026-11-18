@@ -8,6 +8,7 @@ import { FieldHint, FieldLabel } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { Select } from "@/components/ui/Select";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { SettingRow } from "@/components/targets/SettingRow";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
@@ -17,16 +18,39 @@ import { sortByName } from "@/lib/sort";
 /**
  * Where home folders go, on the system's setup card (A-03 §1): the row, and
  * the dialog it opens. Storage words, so they live in the storage kind; the
- * card renders this and knows nothing of what it says. Nothing is drawn until
- * the system's settings have been read and it offers this one.
+ * card renders this and knows nothing of what it says. While the settings of a
+ * storage system are read, the row holds its place, quietly, its button's seat
+ * filled, so nothing under it moves when they land; once read, it is drawn only
+ * if the system offers this setting.
  */
-export function HomeLocationRow({ target, lastKnown }: { target: string; lastKnown: boolean }) {
+export function HomeLocationRow({
+  target,
+  lastKnown,
+  expected,
+}: {
+  target: string;
+  lastKnown: boolean;
+  /** A storage system, which offers this setting: its row is held while the settings are read. */
+  expected: boolean;
+}) {
   const nameOf = useSystemNames();
   const name = nameOf(target);
   const settings = useTargetSettings(target);
   const [choosing, setChoosing] = useState(false);
   const home = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
   const verb = home?.value ? "Change folder" : "Choose folder";
+  if (settings.isLoading && expected) {
+    return (
+      <SettingRow
+        label="Home folders"
+        action={<Skeleton className="min-h-(--tap) w-28 desktop:min-h-(--control-sm)" />}
+      >
+        <span aria-busy="true" className="text-body text-faint">
+          …
+        </span>
+      </SettingRow>
+    );
+  }
   if (!settings.data?.read || !home) return null;
 
   return (

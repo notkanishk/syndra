@@ -13,6 +13,8 @@ import {
   type OutcomeKind,
 } from "@/lib/outcome";
 import { retireOutcome, retryingOutcome, retryNextStep, type RetryState, type RetryStateName } from "@/lib/retry";
+import { rowStep, standingWords } from "@/lib/account-standing";
+import type { Standing } from "@/lib/queries/useTargets";
 
 /**
  * Owner, 5 Nov 2026: "along with clear communication, there should be clear
@@ -65,6 +67,48 @@ describe("every retry state maps to a next step", () => {
       });
     }
   }
+});
+
+/**
+ * The one exception, for table rows only (owner, 18 Nov 2026, D-1 Q5; G17):
+ * a healthy row with nothing to do is silent, and a step is written only
+ * where there is one. No other row is silent: a row that is not healthy says
+ * its step, or "Nothing for you to do." when that is its step.
+ */
+describe("a table row's step: silence for a healthy row, and only there", () => {
+  // Nobody said is what an add-on that names no one sends: "Not usable yet".
+  const waits = [undefined, "member", "operator", "target", "none"] as Standing["waiting_on"][];
+  for (const waiting_on of waits) {
+    for (const usable of [true, false]) {
+      for (const next of [undefined, "Sign in once to finish."]) {
+        for (const audience of ["member", "operator"] as const) {
+          const standing = { usable, waiting_on, next } as Standing;
+          it(`${usable ? "usable" : "not usable"}, waiting on ${waiting_on ?? "nobody said"}, ${next ? "with" : "no"} step, to ${audience}`, () => {
+            const words = standingWords(standing, "TrueNAS", audience);
+            const step = rowStep(standing, "TrueNAS", audience);
+            if (step === undefined) {
+              expect(words.tone).toBe("healthy");
+              expect(words.next).toBe(NOTHING_TO_DO);
+            } else {
+              expect(step).toBe(words.next);
+              expect(step).toMatch(/[.!?]$/);
+            }
+            if (words.tone !== "healthy") expect(step?.trim()).toBeTruthy();
+          });
+        }
+      }
+    }
+  }
+
+  it("still says Nothing for you to do. on a row that is not healthy and has no step of its own", () => {
+    expect(rowStep({ usable: false } as Standing, "TrueNAS", "operator")).toBe(NOTHING_TO_DO);
+    expect(rowStep({ usable: false, waiting_on: "target" }, "TrueNAS", "operator")).toMatch(/^Nothing for you to do\./);
+  });
+
+  it("is silent for a healthy row with nothing to do, and keeps a healthy row's own step", () => {
+    expect(rowStep({ usable: true, waiting_on: "none" }, "TrueNAS", "operator")).toBeUndefined();
+    expect(rowStep({ usable: true, next: "Sign in once to finish." } as Standing, "TrueNAS", "operator")).toBe("Sign in once to finish.");
+  });
 });
 
 describe("the shared parts draw it", () => {

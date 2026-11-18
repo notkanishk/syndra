@@ -615,6 +615,18 @@ describe("design system", () => {
     );
   });
 
+  // A transition on left, top, width or height lays the group out on every
+  // frame of the glide (D-1, owner 18 Nov 2026). Transform only, on settle.
+  it("glides a control's indicator by transform alone", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const glide = atRuleBody(css, "@utility indicator-glide");
+    expect(glide, "globals.css must declare an indicator-glide utility").not.toBe("");
+    expect(/transition-property:\s*([^;]+);/.exec(glide)?.[1].trim()).toBe("transform");
+    expect(glide).not.toMatch(/transition:\s/);
+    expect(glide).toContain("var(--duration-settle)");
+    expect(glide).toContain("var(--ease-settle)");
+  });
+
   // The class only decides when the wash comes OFF; the animation itself is
   // authored in CSS. If the two drift, the row either loses its flash early or
   // sits in a finished animation doing nothing.

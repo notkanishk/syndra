@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
+import type { Standing } from "@/lib/queries/useTargets";
 
 const people = [
   ["u1", "charlotte.l", "Charlotte Flair"],
@@ -17,11 +18,11 @@ function account(i: number) {
     account_id: String(200000 + i),
     bound_at: "2026-10-15T10:00:00Z",
     // Only the first has a standing: the others still keep the Status column's place.
-    standing: i === 0 ? { usable: true, waiting_on: "none" as const } : undefined,
+    standing: i === 0 ? state.standing : undefined,
   };
 }
 
-const state = { count: 2 };
+const state: { count: number; standing: Standing } = { count: 2, standing: { usable: true, waiting_on: "none" } };
 
 // Who is a service account comes from one cached list; these rows are all people.
 vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
@@ -180,9 +181,10 @@ describe("accounts table seats", () => {
     const row = screen.getByText("Charlotte Flair").closest("[data-account]") as HTMLElement;
     const standing = row.querySelector("[data-standing]") as HTMLElement;
     expect(standing).toHaveTextContent("Ready to use");
-    // The next step is a sentence: the row's detail line, full width under the row, never in the status column.
+    // A healthy row with nothing to do is silent (D-1 Q5): no step, in the status column or under the row.
     expect(standing).not.toHaveTextContent("Nothing for you to do.");
-    expect(row.querySelector("[data-row-detail] [data-standing-step]")).toHaveTextContent("Nothing for you to do.");
+    expect(row).not.toHaveTextContent("Nothing for you to do.");
+    expect(row.querySelector("[data-row-detail]")).toBeNull();
     expect(standing.parentElement).not.toBe(within(row).getByText("charlotte.l"));
     // Heading and cells share one fixed seat; a row with no standing keeps the cell.
     const cell = standing.parentElement as HTMLElement;
@@ -190,6 +192,25 @@ describe("accounts table seats", () => {
     const other = screen.getByText("Sami Zayn").closest("[data-account]") as HTMLElement;
     expect(other.querySelector("[data-standing]")).toBeNull();
     expect([...other.children].some((c) => c.className === heading.className)).toBe(true);
+  });
+
+  // Silence is for a healthy row only (D-1 Q5): a row that is not healthy still writes its step, and says
+  // "Nothing for you to do." when that is the step, on the row's detail line.
+  it.each([
+    [{ usable: false, waiting_on: "member" }, "Ask them to do what it says above."],
+    [{ usable: false }, "Nothing for you to do."],
+    [{ usable: true, waiting_on: "none", next: "Sign in once to finish." }, "Sign in once to finish."],
+  ] as Array<[Standing, string]>)("writes the step where there is one (%#)", (standing, step) => {
+    state.standing = standing;
+    read.count = -1;
+    try {
+      render(<PeopleOnTarget target="truenas" />);
+      const row = screen.getByText("Charlotte Flair").closest("[data-account]") as HTMLElement;
+      expect(row.querySelector("[data-row-detail] [data-standing-step]")).toHaveTextContent(step);
+    } finally {
+      state.standing = { usable: true, waiting_on: "none" };
+      read.count = -1;
+    }
   });
 });
 

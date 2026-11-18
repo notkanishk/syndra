@@ -10,8 +10,9 @@ import type { Standing } from "@/lib/queries/useTargets";
  *
  * `step={false}` draws the state and its note only, for a table whose status is
  * a narrow column (D-1 §5 #39): the step is a sentence, and a sentence in a
- * 240px seat is five lines. That table says it with `StandingStep`, on the
- * row's detail line.
+ * 240px seat is five lines. That table says it on the row's detail line, in
+ * `rowStep`'s words (`lib/account-standing.ts`), which are silent for a healthy
+ * row with nothing to do (D-1 Q5).
  */
 export function StandingLine({
   standing,
@@ -35,9 +36,4 @@ export function StandingLine({
       />
     </span>
   );
-}
-
-/** The standing's next step alone, in the same words, for a row's detail line. */
-export function StandingStep({ standing, system, audience }: { standing: Standing; system: string; audience: "member" | "operator" }) {
-  return <span data-standing-step>{standingWords(standing, system, audience).next}</span>;
 }

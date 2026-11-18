@@ -208,12 +208,24 @@ lack thereof"). Every outcome, state and notice ends on one of two things: what
 to do and where, as a link or button when there is one ("Press Send on Pending
 changes", "Check TrueNAS under System", "Ask Cody to sign in once"), or an
 explicit *Nothing for you to do.* ("Nothing for you to do. Syndra sends it
-again at 14:05 and says on Home if it stops sending it."). Silence is never the "none".
+again at 14:05 and says on Home if it stops sending it."). Silence is never the "none",
+with one exception, for table rows only (below).
 It holds by construction: `nextStepOf` (`lib/outcome.ts`) gives every outcome
 kind its step and `ActionOutcome` draws it in every placement; `retryNextStep`
 (`lib/retry.ts`) gives every retry state its step and `RetryStatus` draws it;
 `ErrorState` ends on `nextStep`. A caller who knows better sets `next`. Guard:
 `lib/__tests__/next-step.test.tsx` fails on any kind or state with no step.
+
+**A healthy table row is silent** (owner, 18 Nov 2026, D-1 Q5; G17): in a table,
+a row whose state is healthy and whose step would be "Nothing for you to do."
+says only its state ("Ready to use"), and a step is written only where there is
+one. `rowStep` (`lib/account-standing.ts`) is the one place that decides it,
+for the account tables on a system's page. The exception is that narrow and no
+wider: a row that is not healthy still ends on its step, or on "Nothing for you
+to do." when that is its step ("Not usable yet", "Waiting on TrueNAS"), and every
+outcome, notice, empty state and card (a member's own account card among them)
+still ends on one. The same guard fails on any row that is not healthy and has
+no step, and on a healthy row that drops a step of its own.
 
 | State | Word | Next step, or none |
 |---|---|---|
@@ -955,9 +967,12 @@ Basic hides the machine's words (ids, Maintenance, What the add-on also says, a 
 
 ## 17. Density and alignment (D-1, pass 2: every action in its seat)
 
-A row's action sits in its right seat, so its label is the verb, not the row (D-1 §4 rule 8): the row already says the name. One label changes and one column heading is added; nothing else D-1 moves changes a word.
+A row's action sits in its right seat, so its label is the verb, not the row (D-1 §4 rule 8): the row already says the name. One label changes and one column heading is added; nothing else the five passes move changes a word. The owner's answers (18 Nov 2026) add the last three rows.
 
 | Where | Words |
 |---|---|
 | Holds due, the button on each row (§5 #25: one width for every row's button) | Lift the hold. Its accessible name keeps the row: Lift the hold on {label}. While it retries: Try again. |
 | Accounts on a system's page, the column heading over each account's standing (§5 #39) | Status |
+| A system's settings card, its first row (owner, 18 Nov 2026, Q4; the Name region is gone) | Label: Name. Value: the name, then what members see, the first half of the name hint ("Members see it as TrueNAS, the product's own name."). Its button: Change name, which opens the one rename dialog, titled What members see it called, whose field keeps the whole hint, Save name, Use the default name and the result (Named. Members see it as {name}. Nobody's access changed.). |
+| Accounts on a system's page, a healthy row with nothing to do (owner, 18 Nov 2026, Q5; the next-step rule above) | Its state only (Ready to use); no step. Every other row keeps its step. |
+| A system's settings card, Home folders while the settings are read | … (quiet), its button's seat held. |

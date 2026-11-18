@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonSystems } from "@/components/people/PersonSystems";
 import { MemberSystemPage } from "@/components/member/MemberSystemPage";
-import { TargetName } from "@/components/targets/TargetName";
+import { TargetNameDialog } from "@/components/targets/TargetName";
 import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
 import type { PersonTargetView } from "@/lib/queries/useMyStorage";
 import type { TargetSummary } from "@/lib/queries/useTargets";
@@ -158,12 +158,12 @@ describe("the Name setting, the one write place", () => {
     [{ ...laserRow, name: "Door", name_from: "id", kind: undefined }, "Members don't see this system until Syndra has read it. Until you name it, it is Door, from its id."],
     [{ ...laserRow, name: "Big door", name_from: "operator", kind: undefined }, "Members don't see this system until Syndra has read it. Then they see this name."],
   ] as Array<[TargetSummary, string]>)("says the case it is in (%#)", (row, said) => {
-    render(<TargetName registered={row} />);
+    render(<TargetNameDialog registered={row} onClose={() => {}} />);
     expect(screen.getByText((text) => text.includes(said))).toBeInTheDocument();
   });
 
   it("saves the trimmed name and says what members now see", () => {
-    render(<TargetName registered={laserRow} />);
+    render(<TargetNameDialog registered={laserRow} onClose={() => {}} />);
     const save = screen.getByRole("button", { name: /Save name/ });
     expect(save).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "  Big laser  " } });
@@ -173,7 +173,7 @@ describe("the Name setting, the one write place", () => {
   });
 
   it("goes back to the default name", () => {
-    render(<TargetName registered={{ ...laserRow, name: "Big laser", name_from: "operator" }} />);
+    render(<TargetNameDialog registered={{ ...laserRow, name: "Big laser", name_from: "operator" }} onClose={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Use the default name" }));
     expect(state.saved).toEqual([""]);
     expect(screen.getByText("Members see it as Ruby.")).toBeInTheDocument();
