@@ -42,6 +42,16 @@ describe("sorting by a heading", () => {
     expect(arrow("Sort by who")).toHaveClass("opacity-0");
   });
 
+  it("hangs the arrow past the label, taking no room, so a right-aligned heading ends where its figures end", () => {
+    // Drift's Found (staging, 19 Nov): an unpressed arrow held its room and the word sat 16px short.
+    render(<Heads />);
+    for (const name of ["Sort by who", "Sort by the clock"]) {
+      expect(screen.getByRole("button", { name })).toHaveClass("relative");
+      expect(screen.getByRole("button", { name })).not.toHaveClass("gap-[5px]");
+      expect(arrow(name)).toHaveClass("absolute", "left-full");
+    }
+  });
+
   it("reverses on a second press and turns the arrow over", () => {
     render(<Heads />);
     fireEvent.click(screen.getByRole("button", { name: "Sort by the clock" }));

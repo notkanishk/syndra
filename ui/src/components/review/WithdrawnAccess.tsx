@@ -8,7 +8,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArriveList } from "@/lib/motion";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
-import { ActionSeat, Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, Cells, ROW, type Columns } from "@/components/ui/Card";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
@@ -22,7 +22,7 @@ import { LeavingRow, useLeavingRows, type LeaveProps } from "@/lib/motion";
 import { RunLabel, SortHead, orderBy, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
 import { Relative } from "@/components/ui/Time";
 import { Unfold } from "@/lib/motion";
-import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
+import { FIGURE_COL, WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { request } from "@/lib/api-client";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
@@ -30,6 +30,9 @@ import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { sortByName } from "@/lib/sort";
 import { BINDING_CONFLICT, DECIDE_IT, LOOKING_UP_NEXT, decideAt, lookingUp, stoppedLine } from "@/lib/wait-reason";
 import { useStandingBindingConflicts, type StandingBindingConflicts } from "@/lib/queries/useTargets";
+
+/** The queue's columns, its headings' and every row's: who, what, where (from desktop), when, then the wide seat. */
+const COLS: Columns = [WHO_COL, WHAT_COL, "hidden desktop:block desktop:w-[130px] desktop:flex-none", FIGURE_COL];
 
 /**
  * Review › Unfinished revocations (9.9, 9.10).
@@ -368,19 +371,11 @@ function RevocationSection({
               <EmptyState title={empty} resolved={resolved} />
             ) : (
               <>
-                <CardColumns seat="wide" seatLabel={<span className="sr-only">What happens next</span>}>
-                  <span className="w-[180px] flex-none">
-                    <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <SortHead label="What was revoked" name="what" sort={sort} onSort={onSort} />
-                  </span>
-                  <span className="hidden w-[130px] flex-none desktop:block">
-                    <SortHead label="Where" name="where" sort={sort} onSort={onSort} />
-                  </span>
-                  <span className="w-(--seat-number) flex-none text-right">
-                    <SortHead label="Revoked" name="when" sort={sort} onSort={onSort} />
-                  </span>
+                <CardColumns cols={COLS} seat="wide" seatLabel={<span className="sr-only">What happens next</span>}>
+                  <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
+                  <SortHead label="What was revoked" name="what" sort={sort} onSort={onSort} />
+                  <SortHead label="Where" name="where" sort={sort} onSort={onSort} />
+                  <SortHead label="Revoked" name="when" sort={sort} onSort={onSort} />
                 </CardColumns>
                 <div className={view.className}>
                   {shown.map((row, index) => {
@@ -418,38 +413,39 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
   const decide = decideAt(row, conflicts.stands);
   return (
     <div className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-start`}>
-      <WhoSeat id={row.user_id} />
+      <Cells cols={COLS}>
+        <WhoSeat id={row.user_id} />
 
-      <WhatSeat
-        projectId={row.project_id || undefined}
-        roleKeys={row.role_keys}
-        fallback={row.reason ?? `Access on ${where}`}
-        className="tablet:flex-1"
-      >
-        <span className="text-fine text-faint desktop:hidden">{where}</span>
-        {row.cascade_id && (
-          // The join key, as a link, exactly as it appears in the audit log and on a person's
-          // activity. A finding an operator cannot trace back to the change that caused it is a
-          // mystery.
-          <ArrowLink href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}>
-            See it in Change history
-          </ArrowLink>
-        )}
-        <LastError row={row} system={where} />
-      </WhatSeat>
-
-      <span className="hidden w-[130px] flex-none pt-0.5 text-body text-muted desktop:block">{where}</span>
-
-      <span data-figure className="flex flex-col gap-0.5 pt-0.5 tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
-        <span
-          className={`text-small font-semibold ${
-            row.spent ? "text-danger-text" : row.age_seconds >= AMBER_AFTER_SECONDS ? "text-warn-text" : "text-muted"
-          }`}
+        <WhatSeat
+          projectId={row.project_id || undefined}
+          roleKeys={row.role_keys}
+          fallback={row.reason ?? `Access on ${where}`}
         >
-          <Relative iso={row.created_at} />
+          <span className="text-fine text-faint desktop:hidden">{where}</span>
+          {row.cascade_id && (
+            // The join key, as a link, exactly as it appears in the audit log and on a person's
+            // activity. A finding an operator cannot trace back to the change that caused it is a
+            // mystery.
+            <ArrowLink href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}>
+              See it in Change history
+            </ArrowLink>
+          )}
+          <LastError row={row} system={where} />
+        </WhatSeat>
+
+        <span className="block pt-0.5 text-body text-muted">{where}</span>
+
+        <span data-figure className="flex flex-col gap-0.5 pt-0.5">
+          <span
+            className={`text-small font-semibold ${
+              row.spent ? "text-danger-text" : row.age_seconds >= AMBER_AFTER_SECONDS ? "text-warn-text" : "text-muted"
+            }`}
+          >
+            <Relative iso={row.created_at} />
+          </span>
+          <span className="text-fine text-faint">{formatShortDate(row.created_at)}</span>
         </span>
-        <span className="text-fine text-faint">{formatShortDate(row.created_at)}</span>
-      </span>
+      </Cells>
 
       <ActionSeat seat="wide">
         {row.spent ? (

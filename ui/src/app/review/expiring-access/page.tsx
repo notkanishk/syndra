@@ -10,9 +10,9 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { Crossfade } from "@/lib/motion";
 import { FoldChevron } from "@/components/ui/FoldChevron";
-import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
+import { EDGE, FIGURE_COL, WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { BulkDialog } from "@/components/people/BulkDialog";
-import { ActionSeat, Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, Cells, ROW, type Columns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { StatusDot } from "@/components/ui/Badge";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
@@ -23,6 +23,7 @@ import { LeavingRow, useLeavingRows, type LeaveProps } from "@/lib/motion";
 import { RunLabel, SortHead, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
 import { Unfold } from "@/lib/motion";
 import {
+  CHECK_COL,
   RowCheckbox,
   SelectAllRow,
   SelectModeToggle,
@@ -88,6 +89,13 @@ type Window = (typeof WINDOWS)[number];
 function windowDays(raw: string | null): Window {
   return WINDOWS.find((d) => String(d) === raw) ?? WINDOWS[0];
 }
+
+/**
+ * The list's columns, its headings' and every row's: who, what, given by (from desktop), ends,
+ * then the wide seat; a checkbox column first while rows are chosen.
+ */
+const EXPIRING_COLS: Columns = [WHO_COL, WHAT_COL, "hidden desktop:block desktop:w-[160px] desktop:flex-none", FIGURE_COL];
+const expiringCols = (selecting: boolean): Columns => (selecting ? [CHECK_COL, ...EXPIRING_COLS] : EXPIRING_COLS);
 
 const isString = (value: unknown): value is string => typeof value === "string";
 const isOpenMap = (value: unknown): value is Record<SectionKey, boolean> =>
@@ -513,20 +521,12 @@ function ExpiringSection({
         </div>
         <Unfold open={open}>
           <div id={`${id}-body`}>
-            <CardColumns seat="wide">
-              {selecting && <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]" />}
-              <span className="w-[180px]">
-                <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
-              </span>
-              <span className="flex-1">
-                <SortHead label="What they can get into" name="what" sort={sort} onSort={onSort} />
-              </span>
-              <span className="hidden w-[160px] desktop:block">
-                <SortHead label="Given by" name="given" sort={sort} onSort={onSort} />
-              </span>
-              <span className="w-[110px]">
-                <SortHead label="Ends in" name="ends" sort={sort} onSort={onSort} />
-              </span>
+            <CardColumns cols={expiringCols(selecting)} seat="wide" className={EDGE}>
+              {selecting && <span />}
+              <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
+              <SortHead label="What they can get into" name="what" sort={sort} onSort={onSort} />
+              <SortHead label="Given by" name="given" sort={sort} onSort={onSort} />
+              <SortHead label="Ends in" name="ends" sort={sort} onSort={onSort} />
             </CardColumns>
             {selectAll}
             <div className={view.className}>
@@ -598,55 +598,57 @@ function ExpiringRow({
               // than as a checkbox that failed to draw. Outside the mode there
               // is nothing to be ineligible for, and the edge would be noise.
               "border-l-[3px] border-dashed border-line-strong"
-            : "border-l-[3px] border-transparent"
+            : EDGE
       } ${selection.isSelected(grant.id) ? "bg-accent-soft" : ""}`}
       {...(ack ? {} : selection.rowProps(grant.id))}
     >
-      {selecting && (
-        <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]">
-          {/* No checkbox on a row somebody has dealt with — it is not part of the working set, and
-              offering it back into a bulk extend would undo a decision by accident. The reason is
-              already on the row: who acknowledged it, and when. */}
-          {!ack && (
-            <RowCheckbox
-              label={`Select ${grant.role_key}, ending ${formatShortDate(grant.expires_at)}`}
-              {...selection.checkboxProps(grant.id)}
-            />
-          )}
-        </span>
-      )}
-      <WhoSeat id={grant.user_id} />
-
-      <WhatSeat projectId={grant.project_id} roleKeys={[grant.role_key]} className="tablet:flex-1">
-        {/* Laptop width only: the Given by column needs a desktop, and a phone has none (#54). */}
-        <span className="hidden text-fine text-faint tablet:block desktop:hidden">
-          Given by <UserName id={grant.granted_by} fallback="somebody no longer listed" />,{" "}
-          {formatShortDate(grant.created_at)}
-        </span>
-        {ack && (
-          // Who and when, always. The point of a shared acknowledgement is that the next person
-          // can see whose judgement they would be overriding.
-          <span className="mt-[3px] text-small leading-[1.5] text-muted">
-            <span className="font-semibold text-ink">
-              <UserName id={ack.by} fallback="somebody no longer listed" />
-            </span>{" "}
-            let it lapse on {formatShortDate(ack.at)}
-            {ack.note ? `: ${ack.note}` : ""}
+      <Cells cols={expiringCols(selecting)}>
+        {selecting && (
+          <span>
+            {/* No checkbox on a row somebody has dealt with — it is not part of the working set, and
+                offering it back into a bulk extend would undo a decision by accident. The reason is
+                already on the row: who acknowledged it, and when. Its cell stays, empty. */}
+            {!ack && (
+              <RowCheckbox
+                label={`Select ${grant.role_key}, ending ${formatShortDate(grant.expires_at)}`}
+                {...selection.checkboxProps(grant.id)}
+              />
+            )}
           </span>
         )}
-      </WhatSeat>
+        <WhoSeat id={grant.user_id} />
 
-      <div className="hidden w-[160px] shrink-0 text-small leading-[1.45] text-muted desktop:block">
-        <UserName id={grant.granted_by} fallback="somebody no longer listed" />
-        <span className="block text-fine text-faint">{formatShortDate(grant.created_at)}</span>
-      </div>
+        <WhatSeat projectId={grant.project_id} roleKeys={[grant.role_key]}>
+          {/* Laptop width only: the Given by column needs a desktop, and a phone has none (#54). */}
+          <span className="hidden text-fine text-faint tablet:block desktop:hidden">
+            Given by <UserName id={grant.granted_by} fallback="somebody no longer listed" />,{" "}
+            {formatShortDate(grant.created_at)}
+          </span>
+          {ack && (
+            // Who and when, always. The point of a shared acknowledgement is that the next person
+            // can see whose judgement they would be overriding.
+            <span className="mt-[3px] text-small leading-[1.5] text-muted">
+              <span className="font-semibold text-ink">
+                <UserName id={ack.by} fallback="somebody no longer listed" />
+              </span>{" "}
+              let it lapse on {formatShortDate(ack.at)}
+              {ack.note ? `: ${ack.note}` : ""}
+            </span>
+          )}
+        </WhatSeat>
 
-      <div className="flex flex-col gap-0.5 tablet:w-[110px] tablet:shrink-0">
-        <span className={`text-small font-semibold ${soonest ? "text-warn-text" : "text-muted"}`}>
-          {expiryLabel(grant.expires_at, "left") ?? "—"}
-        </span>
-        <span className="text-fine text-faint">{formatShortDate(grant.expires_at)}</span>
-      </div>
+        <div className="text-small leading-[1.45] text-muted">
+          <UserName id={grant.granted_by} fallback="somebody no longer listed" />
+          <span className="block text-fine text-faint">{formatShortDate(grant.created_at)}</span>
+        </div>
+
+        <div className="flex flex-col gap-0.5">
+          <span className={`text-small font-semibold ${soonest ? "text-warn-text" : "text-muted"}`}>
+            {expiryLabel(grant.expires_at, "left") ?? "—"}
+          </span>
+          <span className="text-fine text-faint">{formatShortDate(grant.expires_at)}</span>
+        </div>
+      </Cells>
 
       <ActionSeat seat="wide">
       <div className="flex min-w-0 flex-col items-end gap-2">

@@ -353,6 +353,10 @@
       "moves": "Nothing on it moves. Still: the same.",
       "phone": "Below tablet it wraps under its row and stays right-aligned."
     },
+    "Cells": {
+      "moves": "Nothing on it moves. Still: the same.",
+      "phone": "Each column's own classes say how it stacks; the headings are hidden."
+    },
     "StandingLine": {
       "moves": "The word and its note crossfade in their seat on tint (it is a StatusSeat). Still: they swap at once.",
       "phone": "The same at every width."
