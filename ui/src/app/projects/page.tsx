@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/Badge";
-import { Card, CardColumns, ROW } from "@/components/ui/Card";
+import { Card, CardColumns, Cells, NUMBER_COL, ROW, type Columns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { Input } from "@/components/ui/Input";
@@ -34,6 +34,17 @@ const PROJECT_SORT: Record<ProjectSort, (row: ProjectSummaryRow) => string | num
   // What Zitadel holds; not checked sorts last, never by the recorded number.
   people: (row) => heldSortKey(row.observed_member_count),
 };
+
+/**
+ * The columns, the headings' and every row's. Shares held to a minimum, the apps taking more: a
+ * fixed 250 and a 180 minimum came to 612px, and at 768 the card cut People off (staging, 19 Nov).
+ */
+const PROJECT_COLS: Columns = [
+  "w-full min-w-0 tablet:min-w-[140px] tablet:flex-1",
+  "w-full min-w-0 tablet:min-w-[140px] tablet:flex-[1.5_1_0%]",
+  `hidden desktop:block ${NUMBER_COL}`,
+  NUMBER_COL,
+];
 
 export default function ProjectsPage() {
   const projects = useProjects();
@@ -116,15 +127,11 @@ export default function ProjectsPage() {
         <div className={view.className}>
         <ListStates
           head={
-            <CardColumns>
-              <span className="w-[250px] min-w-[170px]">
-                <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
-              </span>
-              <span className="min-w-[180px] flex-1">Apps served</span>
-              <span className="hidden w-(--seat-number) shrink-0 text-right desktop:block">Roles</span>
-              <span className="w-(--seat-number) shrink-0 text-right">
-                <SortHead label="People" name="people" sort={sort} onSort={setSort} />
-              </span>
+            <CardColumns cols={PROJECT_COLS}>
+              <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
+              <span>Apps served</span>
+              <span>Roles</span>
+              <SortHead label="People" name="people" sort={sort} onSort={setSort} />
             </CardColumns>
           }
           isLoading={projects.isLoading}
@@ -160,8 +167,9 @@ export default function ProjectsPage() {
             <Link
               data-row
               href={`/projects/${entry.project.id}`}
-              className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center`}
+              className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} hover-tint tablet:flex-row tablet:flex-wrap tablet:items-center`}
             >
+              <Cells cols={PROJECT_COLS}>
               {/* The project's name, and — when there are no roles — the fact
                   that nothing in it can be granted. The sentence lives HERE and
                   not in the Roles column, which is a narrow right-aligned seat:
@@ -169,7 +177,7 @@ export default function ProjectsPage() {
                   the row four times the height of its neighbours. This column
                   is the one with room. Below desktop the Roles count folds in
                   as a line under the name. */}
-              <span className="flex w-full min-w-0 flex-col gap-0.5 tablet:w-[250px] tablet:min-w-[170px] tablet:shrink-0">
+              <span className="flex flex-col gap-0.5">
                 <span className="truncate text-body font-semibold">
                   {entry.project.name}
                 </span>
@@ -183,7 +191,7 @@ export default function ProjectsPage() {
                   </span>
                 )}
               </span>
-              <span className="flex w-full flex-wrap gap-1.5 tablet:min-w-[180px] tablet:flex-1">
+              <span className="flex flex-wrap gap-1.5">
                 {(appsByProject.get(entry.project.id) ?? []).map((name) => (
                   <Badge key={name}>{name}</Badge>
                 ))}
@@ -195,10 +203,10 @@ export default function ProjectsPage() {
                   different fact: nothing in it can be granted to anybody. The
                   count stays a count so the column reads as one, and the fact
                   is said beside the name, where there is width to say it. */}
-              <span data-figure className="hidden text-right text-body desktop:block desktop:w-(--seat-number) desktop:shrink-0">
+              <span data-figure className="text-body">
                 {roleCount}
               </span>
-              <span data-figure className="shrink-0 text-body tablet:w-(--seat-number) tablet:text-right">
+              <span data-figure className="text-body">
                 {people.headline}
                 <span className="text-small text-faint tablet:hidden">
                   {peopleSuffix(people.headline)}
@@ -211,6 +219,7 @@ export default function ProjectsPage() {
                   </span>
                 )}
               </span>
+              </Cells>
             </Link>
             </LeavingRow>
             );

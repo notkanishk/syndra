@@ -480,8 +480,9 @@ describe("the term line on Home", () => {
     const checked = screen.getByText("Checked, nothing waiting:").parentElement!;
     expect(seat.checked).toEqual(sizeClasses(checked));
     expect(seat.link).toEqual(sizeClasses(checked.querySelector("a")!));
-    // The tap's reach without its height on a phone, none on a desktop: 24px either way, as the line.
-    expect(seat.link).toEqual(expect.arrayContaining(["-my-2.5", "min-h-[var(--tap)]", "desktop:my-0", "desktop:min-h-0"]));
+    // A 44px line of its own on a phone (D-1 §9, PR 219), its text's height on a desktop, as the line.
+    expect(seat.link).toEqual(expect.arrayContaining(["min-h-[var(--tap)]", "desktop:min-h-0"]));
+    expect(seat.link).not.toContain("-my-2.5");
   });
 
   it("holds the Checked line's seat while the queue is read, so the head never grows when it lands", () => {

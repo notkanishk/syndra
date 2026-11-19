@@ -8,7 +8,7 @@ import { BundleName, ProjectName, UserName } from "@/components/names";
 import { useAccountHref } from "@/components/system/ServiceAccountTag";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { Card, CardColumns, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
@@ -312,32 +312,26 @@ export default function EventActivityPage() {
           }
         >
           {/* Headings only over rows: an empty list is a bare card (route-events, empty). */}
-          <CardColumns>
-            <span className="w-[200px] shrink-0">
-              <SortHead
-                label="Event"
-                name="event"
-                sort={sort}
-                onSort={flipOrSet}
-              />
-            </span>
-            <span className="min-w-0 flex-1">What happened</span>
-            <span className="hidden w-[150px] shrink-0 desktop:block">
-              <SortHead
-                label="Outcome"
-                name="outcome"
-                sort={sort}
-                onSort={flipOrSet}
-              />
-            </span>
-            <span className="w-(--seat-number) shrink-0 text-right">
-              <SortHead
-                label="Time"
-                name="time"
-                sort={sort}
-                onSort={flipOrSet}
-              />
-            </span>
+          <CardColumns cols={COLS}>
+            <SortHead
+              label="Event"
+              name="event"
+              sort={sort}
+              onSort={flipOrSet}
+            />
+            <span>What happened</span>
+            <SortHead
+              label="Outcome"
+              name="outcome"
+              sort={sort}
+              onSort={flipOrSet}
+            />
+            <SortHead
+              label="Time"
+              name="time"
+              sort={sort}
+              onSort={flipOrSet}
+            />
           </CardColumns>
           {visible.map((row, index) => {
             const run = runAt(index);
@@ -368,6 +362,14 @@ export default function EventActivityPage() {
   );
 }
 
+/** Event, what happened, outcome (desktop), time (tablet up): rows stack on a phone. */
+const COLS: Columns = [
+  "min-w-0 tablet:min-w-[140px] tablet:flex-[1_1_0%]",
+  "w-full min-w-0 tablet:min-w-[200px] tablet:flex-[2_1_0%]",
+  "hidden w-[150px] flex-none desktop:block",
+  `hidden tablet:block ${NUMBER_COL}`,
+];
+
 function EventRow({
   row,
   sortKey,
@@ -390,16 +392,17 @@ function EventRow({
       <div
         // Only the failed row is tinted, and only because it is the row somebody is
         // scrolling to find. A log where half the lines are coloured is a log nobody reads.
-        className={`row-divider row-cols flex flex-col items-start gap-y-2 px-5 py-4 tablet:flex-row ${
+        className={`row-divider row-cols flex flex-col items-start gap-y-2 px-5 py-4 tablet:flex-row tablet:flex-wrap ${
           row.failed ? "bg-danger-soft" : ""
         }`}
       >
-        <span className="flex min-w-0 flex-col gap-[3px] tablet:w-[200px] tablet:shrink-0">
+        <Cells cols={COLS}>
+        <span className="flex flex-col gap-[3px]">
           <span className="text-body font-semibold leading-[1.4] [text-wrap:pretty]">
             {row.title}
           </span>
         </span>
-        <span className="flex w-full min-w-0 flex-1 flex-col items-start gap-1.5">
+        <span className="flex flex-col items-start gap-1.5">
           <span
             className={`text-small leading-[1.55] [text-wrap:pretty] ${
               row.failed ? "text-danger-text" : "text-muted"
@@ -424,12 +427,13 @@ function EventRow({
             {open ? "Hide details" : "Show details"}
           </Button>
         </span>
-        <span className="hidden w-[150px] shrink-0 pt-px text-small desktop:block">
+        <span className="block pt-px text-small">
           {outcomeWord}
         </span>
-        <span data-figure className="type-mono hidden w-(--seat-number) shrink-0 pt-0.5 text-right text-fine text-muted tablet:block">
+        <span data-figure className="type-mono block pt-0.5 text-fine text-muted">
           {when}
         </span>
+        </Cells>
       </div>
       {open && (
         <div className="row-divider flex flex-col gap-3 bg-surface-0 px-5 py-3.5">

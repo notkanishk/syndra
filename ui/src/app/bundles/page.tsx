@@ -9,7 +9,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { Card, CardColumns, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { Segmented, Select } from "@/components/ui/Select";
 import { FieldLabel, Input } from "@/components/ui/Input";
@@ -69,11 +69,11 @@ export default function BundlesPage() {
       <Card {...leaving.listProps}>
         <ListStates
           head={
-            <CardColumns>
-              <span className="w-[min(260px,40%)]">Bundle</span>
-              <span className="hidden flex-1 tablet:block">What it&rsquo;s for</span>
-              <span className="w-(--seat-number) text-right">Roles</span>
-              <span className="w-(--seat-number) text-right">People</span>
+            <CardColumns cols={COLS}>
+              <span>Bundle</span>
+              <span>What it&rsquo;s for</span>
+              <span>Roles</span>
+              <span>People</span>
             </CardColumns>
           }
           isLoading={bundles.isLoading}
@@ -104,6 +104,14 @@ export default function BundlesPage() {
   );
 }
 
+/** Name, purpose, then two numbers: the heading and every row draw these. */
+const COLS: Columns = [
+  "w-[min(260px,40%)] min-w-0",
+  "hidden min-w-[140px] flex-1 tablet:block",
+  NUMBER_COL,
+  NUMBER_COL,
+];
+
 /** One bundle: its name links to its page, and what needs attention says so in words. */
 function BundleListRow({ bundle }: { bundle: BundleRow }) {
   const notes: { text: string; tone: string }[] = [];
@@ -117,7 +125,8 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
   const people = holdersLine(bundle.holder_count ?? 0, observed, observed);
   return (
     <div className="row-divider row-cols flex flex-wrap items-start gap-y-1 px-5 py-3.5">
-      <div className="w-[min(260px,40%)] min-w-0">
+      <Cells cols={COLS}>
+      <div>
         <Link
           href={`/bundles/${encodeURIComponent(bundle.id)}`}
           className="text-body font-semibold text-ink link-hover"
@@ -130,21 +139,22 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
           </span>
         ))}
       </div>
-      <span className="hidden min-w-0 flex-1 text-body text-muted [text-wrap:pretty] tablet:block">
+      <span className="text-body text-muted [text-wrap:pretty]">
         {bundle.description}
       </span>
-      <span data-figure className="text-body font-semibold tablet:w-(--seat-number) tablet:text-right">
+      <span data-figure className="text-body font-semibold">
         {bundle.role_count ?? "None"}
         <span className="text-small font-normal text-faint tablet:hidden">{bundle.role_count === 1 ? " role" : " roles"}</span>
       </span>
       {/* People is who Zitadel shows holding it; the assignments only explain it. */}
-      <span data-figure className="text-body font-semibold tablet:w-(--seat-number) tablet:text-right">
+      <span data-figure className="text-body font-semibold">
         {people.headline}
         <span className="text-small font-normal text-faint tablet:hidden">{peopleSuffix(people.headline)}</span>
         {people.note && (
           <span className={`block text-fine font-normal ${holdersToneClass[people.tone]}`}>{people.note}</span>
         )}
       </span>
+      </Cells>
     </div>
   );
 }

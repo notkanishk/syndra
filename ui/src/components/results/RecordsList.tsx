@@ -1,7 +1,7 @@
 "use client";
 
 import { dueDate, emptyRecords, RECORD_HEADS, RECORD_SORT_BY, sinceDate, type Reader } from "@/components/results/copy";
-import { CardColumns } from "@/components/ui/Card";
+import { CardColumns, Cells, NUMBER_COL, STATUS_COL, type Columns } from "@/components/ui/Card";
 import { observed, ReadFreshness, useReadAgainPress, useReadAgainSince } from "@/components/ui/ReadFreshness";
 import { orderBy, SortHead, useSort } from "@/components/ui/SortHead";
 import { StandingLine } from "@/components/ui/StandingLine";
@@ -30,6 +30,9 @@ const when = (iso: string | undefined) => (iso ? Date.parse(iso) : null);
  * due soon, then records with no due date, then by name. A heading re-sorts by
  * its column; ties keep name order.
  */
+/** Record, since, due, standing: dates and the standing are seats from tablet up, stacked on a phone. */
+const COLS: Columns = ["min-w-[200px] flex-1", NUMBER_COL, NUMBER_COL, `min-w-0 ${STATUS_COL}`];
+
 export function RecordsList({ result, name, reader }: { result: RecordsResult; name: string; reader: Reader }) {
   const again = useReadAgainPress();
   const since = useReadAgainSince();
@@ -47,30 +50,26 @@ export function RecordsList({ result, name, reader }: { result: RecordsResult; n
         <p className="m-0 text-body text-muted">{emptyRecords(name, reader)}</p>
       ) : (
         <div>
-          <CardColumns className="!px-0">
-            <span className="min-w-[200px] flex-1">
-              <SortHead label={RECORD_HEADS.record} by={RECORD_SORT_BY.record} name="record" sort={sort} onSort={setSort} />
-            </span>
-            <span className="w-[110px] shrink-0">
-              <SortHead label={RECORD_HEADS.since} by={RECORD_SORT_BY.since} name="since" sort={sort} onSort={setSort} />
-            </span>
-            <span className="w-[110px] shrink-0">
-              <SortHead label={RECORD_HEADS.due} by={RECORD_SORT_BY.due} name="due" sort={sort} onSort={setSort} />
-            </span>
-            <span aria-hidden className="w-[240px] shrink-0" />
+          <CardColumns cols={COLS} className="!px-0">
+            <SortHead label={RECORD_HEADS.record} by={RECORD_SORT_BY.record} name="record" sort={sort} onSort={setSort} />
+            <SortHead label={RECORD_HEADS.since} by={RECORD_SORT_BY.since} name="since" sort={sort} onSort={setSort} />
+            <SortHead label={RECORD_HEADS.due} by={RECORD_SORT_BY.due} name="due" sort={sort} onSort={setSort} />
+            <span aria-hidden />
           </CardColumns>
           <ul className={`m-0 flex list-none flex-col p-0 ${view.className}`}>
             {rows.map((r) => (
-              <li key={r.id} className="row-divider row-cols flex flex-wrap items-start gap-y-2 py-3 first:border-t-0 first:pt-0 tablet:flex-nowrap">
-                <span className="flex min-w-[200px] flex-1 flex-col gap-0.5">
+              <li key={r.id} className="row-divider row-cols flex flex-wrap items-start gap-y-2 py-3 first:border-t-0 first:pt-0">
+                <Cells cols={COLS}>
+                <span className="flex flex-col gap-0.5">
                   <span className="text-body font-semibold [overflow-wrap:anywhere]">{r.label}</span>
                   {r.category && <span className="text-small text-faint">{r.category}</span>}
                 </span>
-                <span className="text-small text-faint tablet:w-[110px] tablet:shrink-0">{r.since && sinceDate(formatShortDate(r.since))}</span>
-                <span className="text-small text-faint tablet:w-[110px] tablet:shrink-0">{r.due && dueDate(formatShortDate(r.due))}</span>
-                <span className="min-w-0 tablet:w-[240px] tablet:shrink-0">
+                <span className="text-small text-faint">{r.since && sinceDate(formatShortDate(r.since))}</span>
+                <span className="text-small text-faint">{r.due && dueDate(formatShortDate(r.due))}</span>
+                <span>
                   {r.standing && <StandingLine standing={r.standing} system={name} audience={reader.audience} />}
                 </span>
+                </Cells>
               </li>
             ))}
           </ul>

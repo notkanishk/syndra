@@ -27,6 +27,26 @@ cd ui && bun run test && bun run lint && bun run build
 cd addons/truenas && go test ./... && go vet ./...
 ```
 
+jsdom can't lay out, so the layout check is the only check that sees overlaps, clipped text, headings off their cells and seats off the first line. It runs a real browser. It is manual, not in CI, because CI can't reach the LAN. See `ui/scripts/layout-check/README.md`. Staging's URL is configuration, `SYNDRA_STAGING_URL` in your shell: the repo is public, so no host is ever written in it.
+
+**The pre-merge gate for a UI PR** is your local build replaying staging's data. Record a tape once. It goes to the system temp directory, and a tape in any git work tree, or behind a symlink, is refused. Then run:
+
+```bash
+cd ui && bun run layout:check -- --base "$SYNDRA_STAGING_URL" --record   # once: reads staging
+cd ui && ZITADEL_DOMAIN= SESSION_SECRET=local bun next dev -p 3010 &
+cd ui && bun run layout:check -- --base http://localhost:3010 --replay
+```
+
+Exit 1 means the layout is wrong. Exit 4 means the tape is incomplete: a page made a read the tape lacks. Record again.
+
+A branch that adds a new read can't be recorded from staging, because staging doesn't serve that read yet. For the pages that read it, the gate is the staging run after deploying. Say so in the PR.
+
+**After deploying**, run the same check against staging itself:
+
+```bash
+cd ui && bun run layout:check -- --base "$SYNDRA_STAGING_URL"
+```
+
 ## Key Conventions
 
 - **UI:** design tokens live only in `ui/src/app/globals.css`; navigation structure only in `ui/src/lib/nav.ts`. Both themes are authored in full — never a hardcoded hex in a component. Structure never moves in response to data (see `basic-advanced-ia`)

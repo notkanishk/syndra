@@ -12,7 +12,7 @@ import { Crossfade } from "@/lib/motion";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { ActionSeat, Card, CardColumns, CardHeader, Cells, ROW, type Columns } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, Cells, NUMBER_COL, ROW, type Columns } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import {
@@ -82,12 +82,15 @@ const STATUSES: readonly StatusFilter[] = ["pending", "approved", "rejected", "w
 /**
  * The queue's columns, its headings' and every row's: who (the avatar is part of it, never a column
  * of its own that pushed every cell after it out from under its heading), what, why, when, then the
- * Decision seat; a checkbox column first while rows are chosen.
+ * Decision seat; a checkbox column first while rows are chosen. Shares held to a minimum, and the
+ * line wraps: a fixed 210, a 160 minimum and a 180 minimum with the seat came to 880px on a line
+ * that did not wrap from desktop, past the 734px row at 1080 (the layout audit, 19 Nov). Now 130 +
+ * 130 + 130 + 66 + 200 and the gaps is 720.
  */
 const REQUEST_COLS: Columns = [
-  "w-full tablet:w-[210px] tablet:flex-none",
-  "w-full tablet:w-[250px] tablet:min-w-[160px] tablet:shrink",
-  "w-full min-w-0 tablet:min-w-[180px] tablet:flex-1",
+  "w-full min-w-0 tablet:min-w-[130px] tablet:flex-[1.2_1_0%]",
+  "w-full min-w-0 tablet:min-w-[130px] tablet:flex-[1.2_1_0%]",
+  "w-full min-w-0 tablet:min-w-[130px] tablet:flex-[1.5_1_0%]",
   "tablet:w-[66px] tablet:flex-none",
 ];
 
@@ -303,7 +306,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
         <ListStates
           head={
             <>
-            <CardColumns cols={cols} seat="default" seatLabel="Decision" className="desktop:flex-nowrap">
+            <CardColumns cols={cols} seat="default" seatLabel="Decision">
               {selecting && anyPending && <span />}
               <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
               <span>What they asked for</span>
@@ -358,7 +361,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
           {visible.map((entry) => (
             <LeavingRow key={entry.id} {...leaving.props(entry.id)}>
             <div
-              className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center desktop:flex-nowrap ${
+              className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center ${
                 selection.isSelected(entry.id) ? "bg-accent-soft" : ""
               }`}
               {...selection.rowProps(entry.id)}
@@ -682,7 +685,7 @@ function YourRequests({
                 {entry.justification || "No reason given"}
               </div>
             </div>
-            <div data-figure className="w-(--seat-number) shrink-0 text-small text-faint tablet:text-right">
+            <div data-figure className={`${NUMBER_COL} text-small text-faint`}>
               <Relative iso={entry.created_at} />
             </div>
             {/* One status seat: dot, word, note. A withdrawal reports here,

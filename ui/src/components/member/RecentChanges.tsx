@@ -6,7 +6,7 @@ import { BundleName, UserName } from "@/components/names";
 import { EmptyState } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
-import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
+import { Card, CardHeader, CardHeaderLink, NUMBER_COL } from "@/components/ui/Card";
 import { formatShortDate } from "@/lib/format";
 import { keptEnds, stillEnds } from "@/lib/keep-ends";
 import type { MyChange } from "@/lib/queries/useMyChanges";
@@ -116,7 +116,7 @@ function ChangeRow({
           </ArrowLink>
         )}
       </span>
-      <span data-figure className="w-full text-small text-faint tablet:w-(--seat-number) tablet:flex-none tablet:text-right">{dayLabel(change.at)}</span>
+      <span data-figure className={`w-full text-small text-faint ${NUMBER_COL}`}>{dayLabel(change.at)}</span>
     </div>
   );
 }

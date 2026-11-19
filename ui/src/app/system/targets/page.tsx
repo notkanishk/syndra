@@ -6,7 +6,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { StatusDot } from "@/components/ui/Badge";
 import { ReadingWord, targetReading, type Reading } from "@/components/targets/TargetReading";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Card, CardColumns, CardRow } from "@/components/ui/Card";
+import { Card, CardColumns, CardRow, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
@@ -36,6 +36,21 @@ import { sortByName } from "@/lib/sort";
  * fact and is reported per row, because "registered" and "answering" fail
  * independently and an operator's next move differs completely between them.
  */
+/**
+ * The columns, the headings' and every row's: the system and its status, shares held to 130 each,
+ * then its people (`NUMBER_COL`) and the wide seat (Needs you): 130 + 130 + 110 + 300 and the gaps
+ * is 718, one line from a 1080 window. The heading's System had no size and the row's held 220, so
+ * the row's seat dropped while the heading's did not and STATUS sat 330px off its cell (staging,
+ * 19 Nov); D-1's 240 status seat then came to 858 and dropped the seat from 1114 to 1203. The board
+ * (route-systems) draws Status 180 and a 250 seat, which D-1's seats (140, 200, 300) do not have:
+ * at 1280 each share is 238, past the board's 180.
+ */
+const SYSTEM_COLS: Columns = [
+  "min-w-[min(130px,100%)] flex-1",
+  "min-w-[min(130px,100%)] flex-1",
+  NUMBER_COL,
+];
+
 export default function ConnectedSystemsPage() {
   const targets = useTargets();
   // A to Z, as the board draws it: the roster arrives in registration order.
@@ -70,12 +85,12 @@ export default function ConnectedSystemsPage() {
       <Card>
         <ListStates
           head={
-            <CardColumns seat="wide" seatLabel="Needs you">
-              <span className="min-w-0 flex-1">
+            <CardColumns cols={SYSTEM_COLS} seat="wide" seatLabel="Needs you">
+              <span>
                 System <span aria-hidden>↑</span>
               </span>
-              <span className="w-[180px] shrink-0">Status</span>
-              <span className="w-(--seat-number) shrink-0 text-right">People</span>
+              <span>Status</span>
+              <span>People</span>
             </CardColumns>
           }
           isLoading={targets.isLoading}
@@ -195,6 +210,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
   return (
     <CardRow
       first={first}
+      cols={SYSTEM_COLS}
       seat="wide"
       top
       // The one reading that is no fault and so has no Notice: its sentence is the row's detail line.
@@ -215,7 +231,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
         </span>
       }
     >
-      <span className="flex min-w-[min(220px,100%)] flex-1 flex-col gap-0.5">
+      <span className="flex flex-col gap-0.5">
         <Link href={href} className="text-body font-semibold link-hover">
           {name}
         </Link>
@@ -239,7 +255,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
       {/* A dot and a word, the same idiom the target's own page uses — never
           colour alone — with the check pips when a check was missed, and the
           time it began faint under it. */}
-      <span className="flex flex-col gap-[3px] text-small tablet:w-[180px] tablet:shrink-0">
+      <span className="flex flex-col gap-[3px] text-small">
         <ReadingWord reading={reading} recent={row.health?.recent ?? []} />
         {reading.line && <span className="pl-(--dot-indent) text-fine text-faint">{reading.line}</span>}
         {row.health?.last_answered_at ? (
@@ -262,7 +278,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           answered shows a dash, never 0: that would be a claim about the
           system rather than about Syndra's ignorance of it. Once it stops
           answering, the last count stays and says so. */}
-      <span data-figure className="flex flex-col gap-0.5 pt-px tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+      <span data-figure className="flex flex-col gap-0.5 pt-px">
         {bound === undefined ? (
           <span className="text-body text-faint">Not yet</span>
         ) : (

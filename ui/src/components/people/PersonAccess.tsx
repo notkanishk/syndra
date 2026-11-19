@@ -38,7 +38,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Crossfade } from "@/lib/motion";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Card, CardRow } from "@/components/ui/Card";
+import { Card, CardRow, type Columns } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
@@ -535,14 +535,23 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                     <FoldChevron open={open} />
                   </button>
                   <ResolvedProjectName className="type-card-title" name={project.project_name} resolved={project.project_name_resolved} id={project.project_id} />
-                  <ProjectRoleTally
-                    recorded={project.effective_role_keys.length}
-                    unexplained={unexplainedIn(project).length}
-                  />
-                  {/* Use beside the access it uses, where Revoke is decided (A-10 §6). */}
-                  {signInLine && (
-                    <span className="tint-in text-small text-faint [text-wrap:pretty]">· {signInLine}</span>
-                  )}
+                  {/* Use beside the access it uses, where Revoke is decided (A-10 §6). MetaRow's dot,
+                      never a typed "·": a typed one began the line the sign-in line wrapped to
+                      (staging, 19 Nov). */}
+                  <MetaRow>
+                    {[
+                      <ProjectRoleTally
+                        key="tally"
+                        recorded={project.effective_role_keys.length}
+                        unexplained={unexplainedIn(project).length}
+                      />,
+                      signInLine && (
+                        <span key="sign-in" className="tint-in text-small text-faint [text-wrap:pretty]">
+                          {signInLine}
+                        </span>
+                      ),
+                    ]}
+                  </MetaRow>
                   {/* When Zitadel was read is the read line's job now; what stays
                       here is what is specific to THIS project's grant. */}
                   <ZitadelGrantId
@@ -862,6 +871,32 @@ function ExtendSeat({
   );
 }
 
+/**
+ * A role row's columns: the role's name, where it comes from, and its status (D-1 §5 #22), with
+ * the default seat after them. Four across where the row holds them (name 230, source at least
+ * 160, status 240, seat 200 and the gaps: 878px); below that the row stacks as D-1 draws it: the
+ * name, then the source and the status sharing a line (each half of it, less a gap, so the seat
+ * cannot squeeze in beside them), then the seat, right-aligned. A container query (the row,
+ * `@container`), so it is the row's width that decides, wherever the page puts the card.
+ * The source had no basis and got what was left: 36px at 1100, and its "Via bundle" chip ran into
+ * the status (staging, 19 Nov).
+ *
+ * A member reading their own page has no seat (they revoke nothing), so their row holds its three
+ * columns from 662px (230 + 160 + 240 and two gaps) and stacks only below that. Two literal lists,
+ * not one built from a number: a container query's width is in the class, which Tailwind reads
+ * from the source.
+ */
+const ROLE_COLS: Columns = [
+  "w-full @min-[878px]:w-[230px] @min-[878px]:flex-none",
+  "min-w-0 flex-[1_1_calc(50%_-_var(--row-gap))] @min-[878px]:min-w-[160px] @min-[878px]:flex-[1_1_0%]",
+  "min-w-0 flex-[1_1_calc(50%_-_var(--row-gap))] @min-[878px]:w-(--seat-status) @min-[878px]:flex-none",
+];
+const ROLE_COLS_NO_SEAT: Columns = [
+  "w-full @min-[662px]:w-[230px] @min-[662px]:flex-none",
+  "min-w-0 flex-[1_1_calc(50%_-_var(--row-gap))] @min-[662px]:min-w-[160px] @min-[662px]:flex-[1_1_0%]",
+  "min-w-0 flex-[1_1_calc(50%_-_var(--row-gap))] @min-[662px]:w-(--seat-status) @min-[662px]:flex-none",
+];
+
 function RoleGroup({
   userId,
   label,
@@ -972,8 +1007,14 @@ function RoleGroup({
 
         return (
           <div key={role.role_key} id={`role-${projectId}-${role.role_key}`}>
-          <CardRow first seat={isOperator ? "default" : undefined} action={isOperator ? actions : undefined}>
-            <div className="w-[230px] shrink-0 text-body font-semibold">
+          <CardRow
+            first
+            className="@container"
+            cols={isOperator ? ROLE_COLS : ROLE_COLS_NO_SEAT}
+            seat={isOperator ? "default" : undefined}
+            action={isOperator ? actions : undefined}
+          >
+            <div className="text-body font-semibold">
               {roleName(projectId, role.role_key)}
               {waitsFor(role.role_key) && <WaitsMark className="ml-2" />}
               {/* The raw key is an operator's handle for this role — a member
@@ -987,11 +1028,9 @@ function RoleGroup({
               )}
             </div>
 
-            <div className="min-w-0 flex-1">
-              <AccessSourceList reasons={role.reasons} />
-            </div>
+            <AccessSourceList reasons={role.reasons} />
 
-            <span className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-small tablet:w-(--seat-status)">
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-small">
               {standing === "waiting" ? (
                 <>
                   {givenAt(role.reasons) && (

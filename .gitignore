@@ -2,6 +2,9 @@
 .DS_Store
 .cache/
 
+# The layout check's API tapes hold real names (`--record` refuses the repo as well)
+*.tape.json
+
 # Go
 bin/
 /backend/bin/

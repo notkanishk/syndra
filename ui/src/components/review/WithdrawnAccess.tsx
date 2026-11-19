@@ -8,7 +8,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArriveList } from "@/lib/motion";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
-import { ActionSeat, Card, CardColumns, CardHeader, Cells, ROW, type Columns } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, Cells, NUMBER_COL, ROW, type Columns } from "@/components/ui/Card";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
@@ -22,7 +22,7 @@ import { LeavingRow, useLeavingRows, type LeaveProps } from "@/lib/motion";
 import { RunLabel, SortHead, orderBy, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
 import { Relative } from "@/components/ui/Time";
 import { Unfold } from "@/lib/motion";
-import { FIGURE_COL, WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
+import { WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { request } from "@/lib/api-client";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
@@ -32,7 +32,7 @@ import { BINDING_CONFLICT, DECIDE_IT, LOOKING_UP_NEXT, decideAt, lookingUp, stop
 import { useStandingBindingConflicts, type StandingBindingConflicts } from "@/lib/queries/useTargets";
 
 /** The queue's columns, its headings' and every row's: who, what, where (from desktop), when, then the wide seat. */
-const COLS: Columns = [WHO_COL, WHAT_COL, "hidden desktop:block desktop:w-[130px] desktop:flex-none", FIGURE_COL];
+const COLS: Columns = [WHO_COL, WHAT_COL, "hidden desktop:block desktop:w-[130px] desktop:flex-none", NUMBER_COL];
 
 /**
  * Review › Unfinished revocations (9.9, 9.10).

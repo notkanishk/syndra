@@ -13,7 +13,7 @@ import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Card, CardColumns, Cells, ROW, type Columns } from "@/components/ui/Card";
+import { Card, CardColumns, Cells, NUMBER_COL, ROW, type Columns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
@@ -58,14 +58,16 @@ import { sortByName, sortNames } from "@/lib/sort";
 
 /**
  * The list's columns, its headings' and every row's: person, bundles (from desktop), access,
- * attention; a checkbox column first in bulk mode. The person column gives way to 180 for Access,
- * the same for the heading and the rows, so neither shrinks away from the other.
+ * attention; a checkbox column first in bulk mode. Shares held to a minimum, the same for the
+ * heading and the rows, and the line wraps where they do not fit: at 768 a 250 / 180 / 170 / 110
+ * row could not be narrower than 602px, and the card cut Attention off (staging, 19 Nov). Person
+ * and Access at 150 and 130 with the number seat fill the 422px row at 768 exactly.
  */
 const PEOPLE_COLS: Columns = [
-  "w-full min-w-0 tablet:w-[250px] tablet:min-w-[180px]",
-  "hidden desktop:block desktop:w-[180px] desktop:flex-none",
-  "min-w-0 tablet:min-w-[170px] tablet:flex-1",
-  "tablet:w-(--seat-number) tablet:flex-none tablet:text-right",
+  "w-full min-w-0 tablet:min-w-[150px] tablet:flex-[1.3_1_0%]",
+  "hidden desktop:block desktop:min-w-[140px] desktop:flex-1",
+  "min-w-0 tablet:min-w-[130px] tablet:flex-[1.3_1_0%]",
+  NUMBER_COL,
 ];
 const peopleCols = (bulkMode: boolean): Columns => (bulkMode ? [CHECK_COL, ...PEOPLE_COLS] : PEOPLE_COLS);
 
@@ -418,7 +420,7 @@ export default function PeoplePage() {
         <ListStates
           head={
             <>
-            <CardColumns cols={peopleCols(bulkMode)} className="tablet:flex-nowrap">
+            <CardColumns cols={peopleCols(bulkMode)}>
               {bulkMode && <span />}
               <SortHead label="Person" name="person" sort={sort} onSort={setSort} />
               <SortHead label="Bundles" name="bundles" sort={sort} onSort={setSort} />
@@ -637,7 +639,7 @@ function PersonRow({
   // anything about them needs doing — plus the sentence explaining why they
   // are in the list. Team and bundles fold away: both are one tap deeper, on
   // the person's own page, and neither is what this screen is scanned for.
-  const shared = `row-divider flex flex-col items-start gap-y-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center`;
+  const shared = `row-divider flex flex-col items-start gap-y-1.5 ${ROW} hover-tint tablet:flex-row tablet:flex-wrap tablet:items-center`;
 
   if (!bulkMode) {
     return (

@@ -2,7 +2,10 @@
 // Moves: Nothing on it moves. Still: the same.
 // Phone: The same at every width.
 // moves:end
-import { Button, Card, CardColumns, CardRow } from "ui";
+import { Button, Card, CardColumns, CardRow, type Columns } from "ui";
+
+const PROJECT_COLS: Columns = ["min-w-[200px] flex-1", "w-(--seat-number) flex-none text-right", "w-(--seat-number) flex-none text-right", "w-(--seat-action) flex-none"];
+const REQUEST_COLS: Columns = ["min-w-[200px] flex-1", "w-(--seat-number) flex-none text-right"];
 
 const flex = { flex: 1, minWidth: 0, fontSize: "var(--text-body)", fontWeight: 600 } as const;
 const num = { width: "var(--seat-number)", flexShrink: 0, textAlign: "right" as const, fontSize: "var(--text-body)" };
@@ -11,21 +14,21 @@ const apps = { width: "var(--seat-action)", fontSize: "var(--text-body)", color:
 /** Column headings over table-shaped rows (projects list). Hidden below tablet width. */
 export const ProjectsTable = () => (
   <Card>
-    <CardColumns>
-      <span style={{ flex: 1, minWidth: 0 }}>Project</span>
-      <span style={{ width: "var(--seat-number)", flexShrink: 0, textAlign: "right" }}>People</span>
-      <span style={{ width: "var(--seat-number)", flexShrink: 0, textAlign: "right" }}>Roles</span>
-      <span style={{ width: "var(--seat-action)" }}>Apps served</span>
+    <CardColumns cols={PROJECT_COLS}>
+      <span>Project</span>
+      <span>People</span>
+      <span>Roles</span>
+      <span>Apps served</span>
     </CardColumns>
-    <CardRow>
+    <CardRow cols={PROJECT_COLS}>
       <span style={flex}>Fabrication Lab</span><span style={num}>48</span><span style={num}>6</span>
       <span style={apps}>Door access, Booking</span>
     </CardRow>
-    <CardRow>
+    <CardRow cols={PROJECT_COLS}>
       <span style={flex}>Electronics Bench</span><span style={num}>21</span><span style={num}>3</span>
       <span style={apps}>TrueNAS</span>
     </CardRow>
-    <CardRow>
+    <CardRow cols={PROJECT_COLS}>
       <span style={flex}>Wood Shop</span><span style={num}>12</span><span style={num}>4</span>
       <span style={apps}>Door access</span>
     </CardRow>
@@ -38,11 +41,12 @@ export const ProjectsTable = () => (
  */
 export const WithSeat = () => (
   <Card>
-    <CardColumns seat="default" seatLabel="Decision">
-      <span style={{ flex: 1, minWidth: 0 }}>Who</span>
-      <span style={{ width: "var(--seat-number)", flexShrink: 0, textAlign: "right" }}>When</span>
+    <CardColumns cols={REQUEST_COLS} seat="default" seatLabel="Decision">
+      <span>Who</span>
+      <span>When</span>
     </CardColumns>
     <CardRow
+      cols={REQUEST_COLS}
       seat="default"
       action={
         <>
@@ -54,7 +58,7 @@ export const WithSeat = () => (
       <span style={flex}>Bayley asked for Laser cutter · Operator</span>
       <span style={num}>2 days ago</span>
     </CardRow>
-    <CardRow seat="default">
+    <CardRow cols={REQUEST_COLS} seat="default">
       <span style={flex}>Iyo Sky asked for Wood shop · Member</span>
       <span style={num}>5 days ago</span>
     </CardRow>

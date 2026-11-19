@@ -6,7 +6,7 @@ import { UserName } from "@/components/names";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { ActionSeat, CardColumns } from "@/components/ui/Card";
+import { ActionSeat, CardColumns, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Choice";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { StatusSeat } from "@/components/ui/StatusSeat";
@@ -34,6 +34,9 @@ const SEED = "As Actions v1 sent it";
  * the version in use in one line, and with two or more, Show all N unfolds
  * the table. With one there is nothing to go back to, so no button.
  */
+/** Version, what changed, when it was saved. */
+const COLS: Columns = ["w-[130px] flex-none", "min-w-[220px] flex-1", NUMBER_COL];
+
 export function ClaimHistory({
   appId,
   ctx,
@@ -102,27 +105,29 @@ export function ClaimHistory({
       </ToolRow>
       <Unfold open={all && list.length > 1}>
         <>
-          <CardColumns seat="default">
-            <span className="w-[130px] flex-none">Version</span>
-            <span className="min-w-[220px] flex-1">What changed</span>
-            <span className="w-[150px] flex-none text-right">Saved</span>
+          <CardColumns cols={COLS} seat="default">
+            <span>Version</span>
+            <span>What changed</span>
+            <span>Saved</span>
           </CardColumns>
           {list.map((v, i) => (
             <div key={v.version} className="row-divider row-cols flex flex-wrap items-start gap-y-1.5 px-5 py-3.5">
-              <span className="w-[130px] flex-none text-body font-semibold">Version {v.version}</span>
-              <span className="flex min-w-[220px] flex-1 flex-col gap-0.5">
+              <Cells cols={COLS}>
+              <span className="text-body font-semibold">Version {v.version}</span>
+              <span className="flex flex-col gap-0.5">
                 <span className="text-body leading-[1.5] [text-wrap:pretty]">
                   <Ticks text={what(v)} />
                 </span>
                 {v.note && !v.note.startsWith(SEED) && <span className="text-small text-faint">&ldquo;{v.note}&rdquo;</span>}
                 {v.note.startsWith(SEED) && <span className="text-small text-faint">&ldquo;Carried over when Syndra took over from Actions v1.&rdquo;</span>}
               </span>
-              <span className="flex w-[150px] flex-none flex-col text-body tablet:items-end">
+              <span className="flex flex-col text-body">
                 {formatShortDate(v.saved_at)}
                 <span className="text-small text-muted">
                   <UserName id={v.saved_by} fallback="Syndra" />
                 </span>
               </span>
+              </Cells>
               <ActionSeat>
                 {i === 0 ? (
                   <StatusSeat tone="healthy" word="In use" />

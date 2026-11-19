@@ -1401,9 +1401,25 @@ describe("density and alignment (D-1)", () => {
     const seat = namedAtRuleBody(css, "@utility", "row-seat");
     expect(seat).toContain("flex-wrap: wrap;");
     expect(seat).toContain("max-width: 100%;");
+    expect(seat).toContain("min-width: min(var(--seat-w), 100%);");
     for (const width of ["--seat-action", "--seat-action-narrow", "--seat-action-wide"]) {
-      expect(seat).toContain(`min-width: min(var(${width}), 100%);`);
+      expect(seat).toContain(`--seat-w: var(${width});`);
     }
+  });
+
+  // Staging, 19 Nov: a disabled Adopt's reason, at its own 60ch measure, made Drift's seat 522px,
+  // so it dropped off the row's first line and the row's columns slid out from under their headings.
+  it("keeps a seat with a button's reason at the table's width, the reason wrapping inside it", () => {
+    const seat = namedAtRuleBody(css, "@utility", "row-seat");
+    expect(seat).toMatch(/&:has\(\[data-reason\]\)\s*\{\s*width: min\(var\(--seat-w\), 100%\);/);
+    expect(seat).toMatch(/& \[data-reason\]\s*\{\s*max-width: var\(--seat-w\);/);
+    expect(readFileSync(resolve(SRC_ROOT, "components/ui/Button.tsx"), "utf8")).toMatch(/<span id=\{reasonId\} data-reason /);
+  });
+
+  // Staging, 19 Nov: a grid item's automatic minimum is its min-content, so a LeavingRow could never
+  // be narrower than the sum of its columns, and the card clipped People's Attention column at 768.
+  it("lets a leaving row be narrower than its columns, so it is the card's width and they wrap", () => {
+    expect(namedAtRuleBody(css, "@utility", "leave-row")).toMatch(/> \* \{\s*min-height: 0;\s*min-width: 0;/);
   });
 
   // Staging, 18 Nov, 1481px: a detail line and a caption were `flex-basis: 100%` capped by a

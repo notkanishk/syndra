@@ -15,7 +15,7 @@ import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { Badge, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, CardRow, type Columns } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -24,7 +24,7 @@ import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FoldChevron } from "@/components/ui/FoldChevron";
-import { EDGE, FIGURE_COL, WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
+import { EDGE, WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness, useRefreshPress } from "@/components/ui/ReadFreshness";
 import { FilterPills, Select } from "@/components/ui/Select";
@@ -108,7 +108,7 @@ type Resolution = "attribute" | "revoke" | "external";
  * then the wide seat. The reason is the row's detail line (D-1 §5 #15), not a column: its heading
  * shares What's cell, never a column of its own over nothing (staging, 19 Nov).
  */
-const DRIFT_COLS: Columns = [WHO_COL, WHAT_COL, FIGURE_COL];
+const DRIFT_COLS: Columns = [WHO_COL, WHAT_COL, NUMBER_COL];
 const driftCols = (selecting: boolean): Columns => (selecting ? [CHECK_COL, ...DRIFT_COLS] : DRIFT_COLS);
 
 /**
@@ -388,15 +388,18 @@ export function UnexplainedAccess() {
   }, [items, selection]);
 
   const head = (
-    <CardColumns cols={driftCols(selecting)} seat="wide" className={EDGE}>
+    <CardColumns
+      cols={driftCols(selecting)}
+      seat="wide"
+      className={EDGE}
+      // The reason is each row's detail line, so its heading is the headings' detail line: under them,
+      // from the text's edge, over the reasons. It gathers equal reasons (route-drift, "Sorted by why";
+      // RULES: a reason is a gathering column).
+      detail={<SortHead label="Why Syndra can’t explain it" name="why" by="why" sort={sort} onSort={flipSort} />}
+    >
       {selecting && <span />}
       <SortHead label="Who" name="who" sort={sort} onSort={flipSort} />
-      {/* One cell: the reason is each row's detail line under What, so its sort sits with What's. It
-          gathers equal reasons (route-drift, "Sorted by why"; RULES: a reason is a gathering column). */}
-      <span className="flex flex-wrap gap-x-4">
-        <SortHead label="What they can get into" name="what" by="what" sort={sort} onSort={flipSort} />
-        <SortHead label="Why Syndra can’t explain it" name="why" by="why" sort={sort} onSort={flipSort} />
-      </span>
+      <SortHead label="What they can get into" name="what" by="what" sort={sort} onSort={flipSort} />
       <SortHead label="Found" name="found" sort={sort} onSort={flipSort} />
     </CardColumns>
   );

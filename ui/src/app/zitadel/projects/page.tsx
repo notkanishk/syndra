@@ -12,7 +12,7 @@ import { Mono } from "@/components/ui/Badge";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Button } from "@/components/ui/Button";
-import { ActionSeat, Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, Cells, ROW, type Columns } from "@/components/ui/Card";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { ApiError } from "@/lib/api-client";
 import { outcomeFromError, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -134,9 +134,9 @@ export default function UpstreamProjectsPage() {
 
           <ListStates
             head={
-              <CardColumns seat="default">
-                <span className="flex-1">Role</span>
-                <span className="w-[160px]">Group</span>
+              <CardColumns cols={COLS} seat="default">
+                <span>Role</span>
+                <span>Group</span>
               </CardColumns>
             }
             isLoading={roles.isLoading}
@@ -176,6 +176,9 @@ export default function UpstreamProjectsPage() {
   );
 }
 
+/** Role, group. */
+const COLS: Columns = ["min-w-[200px] flex-1", "tablet:min-w-[120px] tablet:flex-[1_1_0%]"];
+
 function RoleRow({
   projectId,
   role,
@@ -198,10 +201,12 @@ function RoleRow({
   return (
     <>
       <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center`}>
-        <span className="min-w-[200px] flex-1 text-body [overflow-wrap:anywhere]">
+        <Cells cols={COLS}>
+        <span className="text-body [overflow-wrap:anywhere]">
           {role.displayName || role.key} <Mono className="text-faint">{role.key}</Mono>
         </span>
-        <span className="text-small text-muted [overflow-wrap:anywhere] tablet:w-[160px]">{role.group || "—"}</span>
+        <span className="text-small text-muted [overflow-wrap:anywhere]">{role.group || "—"}</span>
+        </Cells>
         <ActionSeat>
           <Button size="sm" onClick={onEdit} aria-label={`Edit ${role.displayName || role.key}`}>
             Edit
