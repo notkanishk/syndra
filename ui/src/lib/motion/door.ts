@@ -43,3 +43,10 @@ export function takeFirstArrival(signedInAt: string | undefined): boolean {
 export function resetDoorForTests() {
   claim = null;
 }
+
+/**
+ * When the blocks begin to arrive after the door opens on Home (A-24 §3.2,
+ * frame 7): `--door-blocks` in globals.css, mirrored here for the head's
+ * settle timer, and a test holds the two equal.
+ */
+export const DOOR_BLOCKS_MS = 1160;

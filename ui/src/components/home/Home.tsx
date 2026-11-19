@@ -50,7 +50,7 @@ import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
 import { Unfold } from "@/lib/motion";
-import { takeFirstArrival } from "@/lib/motion/door";
+import { DOOR_BLOCKS_MS, takeFirstArrival } from "@/lib/motion/door";
 import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
@@ -105,8 +105,12 @@ import { useShownNames } from "@/components/names/shownNames";
  * in Advanced.
  */
 export function Home({ session }: { session: SessionUser }) {
-  // Home is the most-visited first paint (S11): the greeting tints in, then the blocks arrive.
-  const head = usePageHead();
+  // The first arrival of a sign-in (A-24 §3.2) is asked once, as Home mounts (below): only a yes is
+  // kept, so a second run of the effect (React's Strict Mode) can't take it back.
+  const [door, setDoor] = useState(false);
+  // Home is the most-visited first paint (S11): the greeting tints in, then the blocks arrive; through
+  // the door, the blocks arrive after it (`DOOR_BLOCKS_MS`), so the head settles that much later.
+  const head = usePageHead(door ? DOOR_BLOCKS_MS : 0);
   const advanced = useIsAdvanced();
   const summary = useGovernanceSummary();
   const requests = useRequestsAdmin("pending");
@@ -226,9 +230,6 @@ export function Home({ session }: { session: SessionUser }) {
   // by an invisible stand-in so nothing below moves (same rule as Relative).
   const [now, setNow] = useState<Date | null>(null);
   // Before paint, so a page reached by a link is drawn with its greeting and term line in place.
-  // The first arrival of a sign-in (A-24 §3.2) is asked once, as Home mounts: only a yes is kept,
-  // so a second run of the effect (React's Strict Mode) can't take it back.
-  const [door, setDoor] = useState(false);
   useLayoutEffect(() => {
     setNow(new Date());
     if (takeFirstArrival(session.signedInAt)) setDoor(true);
@@ -379,23 +380,28 @@ export function Home({ session }: { session: SessionUser }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div {...head} className={`${head.className} relative isolate`} style={BELOW_HEADER}>
+      {/* The first arrival of a sign-in (A-24 §3.2, frames 5 to 7): `data-door` stages the head. Only the
+          light at first, the doorway's arch where the greeting will stand; it opens into the hour's pool
+          as the greeting tints in over it, the date line a beat behind, then the lines; the blocks arrive
+          after (`page-head`, globals.css). Nothing waits on it: what is shown takes clicks at once. */}
+      <div
+        {...head}
+        data-door={door ? "" : undefined}
+        className={`${head.className} relative isolate`}
+        style={BELOW_HEADER}
+      >
         {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
             place set by the part of the day on the greeting's own clock. The one written exception to
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
-        {/* On the first arrival of a sign-in (A-24 §3.2) the pool comes up as the greeting's light settles into it. */}
+        {/* On the first arrival of a sign-in it is the doorway's arch, opening into the pool (`door-open`). */}
         {phase && <div aria-hidden data-hour={phase} data-door={door ? "" : undefined} className="hour-light" />}
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and
             `text-balance` keeps the two lines close in length instead of
             leaving one word stranded. */}
-        {/* `relative w-fit`: the greeting's own box is the words' length, so the door's light travels them. */}
         {/* measure-exempt: the greeting's balance widths (D-1 §6), a display line, not a sentence. */}
-        <h1 className="type-greeting relative w-fit max-w-[22ch] text-balance tablet:max-w-[34ch]">
-          {/* The first arrival of a sign-in (A-24 §3.2): the door's light travels the greeting, start to end,
-              behind the words, once. Nothing waits for it; reduced motion shows the pool at rest. */}
-          {door && <span aria-hidden data-door-light className="greeting-light" />}
+        <h1 className="type-greeting max-w-[22ch] text-balance tablet:max-w-[34ch]">
           {phase ? PHASE_WORD[phase] : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}.{" "}
           <span className="text-faint">
@@ -404,6 +410,8 @@ export function Home({ session }: { session: SessionUser }) {
             </Crossfade>
           </span>
         </h1>
+        {/* The date line and the term line: one beat of the door's arrival (`data-door-step`), a plain box. */}
+        <div data-door-step="date">
         <div className="mt-2 text-body text-faint">
           {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>}
           {termDay && ` · ${termDay}`}
@@ -421,6 +429,9 @@ export function Home({ session }: { session: SessionUser }) {
             {term && <TermLine term={term} ending={summary.data?.expiring_grants ?? []} now={now} />}
           </Unfold>
         )}
+        </div>
+        {/* The head's lines and the Notices: the door's last beat in the head. */}
+        <div data-door-step="lines">
         {/* Claims delivery's one line: fixed here, ahead of anything that folds,
             so it holds its seat whether it says all is well or not (§4g). */}
         <ClaimsLine />
@@ -446,6 +457,7 @@ export function Home({ session }: { session: SessionUser }) {
         )}
         {/* The shell's Notices, under the whole head (A-20 P3, G7). */}
         <ShellNotices />
+        </div>
       </div>
 
       {error ? (

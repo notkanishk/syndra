@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { firstTime, idHash } from "@/lib/memory";
+import { DOOR_BLOCKS_MS } from "@/lib/motion/door";
 
 import { block, colour, css, over, ratio, SRC } from "./cssTokens";
 
@@ -33,9 +34,6 @@ const braced = (prelude: string) => {
   return "";
 };
 const keyframes = (name: string) => braced(`@keyframes ${name} {`);
-/** The opacity a keyframe set holds at `stop` (a stop list like "41%,\n  100%" counts). */
-const opacityAt = (frames: string, stop: string) =>
-  Number(new RegExp(`${stop}[^{]*\\{[^}]*opacity: ([\\d.]+);`).exec(frames)?.[1]);
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -67,76 +65,104 @@ describe("once, on this device", () => {
   });
 });
 
-describe("the door's light travels the greeting (§3.2): once, behind the words, nothing moves", () => {
-  const band = braced("@utility greeting-light {");
-  const light = keyframes("greeting-light");
-  const travel = keyframes("greeting-travel");
-  const pool = keyframes("door-pool");
+describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice the board's time)", () => {
+  const open = keyframes("door-open");
+  const head = braced("@utility page-head {");
+  const light = braced("@utility hour-light {");
   const ms = (token: string) => Number(new RegExp(`${token}: (\\d+)ms;`).exec(css)?.[1]);
+  const stop = (at: string) => new RegExp(`${at} \\{([^}]*)\\}`).exec(open)?.[1] ?? "";
 
-  it("is never a full-window layer: it lives in the greeting's box, and no door covers the page", () => {
-    expect(css).not.toMatch(/\.door-through|--door-through|#app-root\[data-door\]/);
+  // `--ease-settle` as a function of time: cubic-bezier(x1, y1, x2, y2), solved for x by bisection.
+  const settle = (x: number) => {
+    const [x1, y1, x2, y2] = (/--ease-settle: cubic-bezier\(([^)]+)\);/.exec(css)?.[1] ?? "").split(",").map(Number);
+    const at = (p1: number, p2: number, t: number) => 3 * p1 * t * (1 - t) ** 2 + 3 * p2 * t ** 2 * (1 - t) + t ** 3;
+    let [lo, hi] = [0, 1];
+    for (let i = 0; i < 60; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (at(x1, x2, mid) < x) lo = mid;
+      else hi = mid;
+    }
+    return at(y1, y2, (lo + hi) / 2);
+  };
+
+  it("is the head itself, never a layer of its own: no band, no full-window door", () => {
+    expect(css).not.toMatch(/\.door-through|--door-through|greeting-light|greeting-travel|--door-light\b/);
     expect(existsSync(resolve(SRC, "components/shell/DoorThrough.tsx"))).toBe(false);
-    expect(band).toMatch(/position: absolute;/);
-    expect(band).not.toMatch(/position: fixed|inset: 0;/);
     // The shell only notes the sign-in's first page; Home opens the door if it was that page.
     expect(readFileSync(resolve(SRC, "components/shell/AppShell.tsx"), "utf8")).toMatch(/noteSignIn\(session\.signedInAt\)/);
   });
 
-  it("travels in reading direction, start of the words to their end, in one even, unhurried crossing", () => {
-    // A position only at the first and last frames: one segment, so it never stops on the way.
-    expect(travel.match(/background-position:/g)).toHaveLength(2);
-    expect(travel).toMatch(/from \{[^}]*background-position: 0% 50%;/);
-    expect(travel).toMatch(/to \{[^}]*background-position: 100% 50%;/);
-    // Its own animation: a symmetric ease-in-out over the first three quarters, then it rests. The light's
-    // keyframes carry no position, so the settle curve never front-loads the crossing into a flick.
-    expect(band).toContain("greeting-travel calc(var(--door-light) * 0.75) var(--ease-tint) both;");
-    expect(css).toMatch(/--ease-tint: cubic-bezier\(0\.4, 0, 0\.6, 1\);/);
-    expect(light).not.toContain("background-position");
+  it("draws the board's arch, its opened pool and the hour's pool, in that order", () => {
+    // Frame 5: the doorway's arch where the greeting will stand (the board's lights[0]).
+    // Sizes are lengths in the light box's own units (cqw, cqh), so the board's px arch and % pool interpolate.
+    expect(stop("0%")).toMatch(/--door-w: 90px;\s*--door-h: 260px;\s*--door-x: 70px;\s*--door-y: 100cqh;\s*--door-reach: 44%;/);
+    // Frame 6: opened into a pool (lights[1]).
+    expect(stop("37%")).toMatch(/--door-w: 34cqw;\s*--door-h: 150cqh;\s*--door-x: 22cqw;\s*--door-y: -10cqh;\s*--door-reach: 32%;/);
+    // Frame 7: resting where the hour puts it.
+    expect(stop("100%")).toMatch(/--door-w: var\(--hour-w\);\s*--door-h: var\(--hour-h\);\s*--door-x: var\(--hour-x\);\s*--door-y: var\(--hour-y\);\s*--door-reach: var\(--hour-reach\);/);
+    for (const name of ["--door-w", "--door-h", "--door-x", "--door-y"]) expect(css).toMatch(new RegExp(`@property ${name} \\{\\s*syntax: "<length>";`));
+    expect(css).toMatch(/@property --door-reach \{\s*syntax: "<percentage>";/);
+    expect(light).toContain("container-type: size;");
   });
 
-  it("changes only opacity and its gradient's position: nothing in the page moves", () => {
-    for (const frames of [light, travel, pool]) {
-      expect(frames).not.toBe("");
-      expect(frames).not.toMatch(/transform|translate|scale|top:|left:|inset|margin|width|height/);
-    }
+  it("changes only light: no opacity, size or place of anything in the page", () => {
+    expect(open).not.toMatch(/transform|translate|scale|opacity|top:|left:|margin|width:|height:/);
   });
 
-  it("is unhurried, on the settle curve, and hands over to the pool on the same stops", () => {
-    const length = ms("--door-light");
-    expect(length).toBeGreaterThanOrEqual(1100);
-    expect(length).toBeLessThanOrEqual(1300);
-    expect(band).toContain("greeting-light var(--door-light) var(--ease-settle) both,");
-    expect(css).toMatch(/&\[data-door\] \{\s*animation: door-pool var\(--door-light\) var\(--ease-settle\) both;/);
-    // The band is whole until the stop where the pool starts, then each falls as the other rises.
-    expect(opacityAt(light, "65%")).toBe(1);
-    expect(opacityAt(pool, "65%")).toBe(0);
-    expect(opacityAt(light, "100%")).toBe(0);
-    expect(opacityAt(pool, "100%")).toBe(1);
+  it("runs at twice the board's time, frame 6 at its stop, on the settle curve", () => {
+    expect(ms("--door-open")).toBe(2 * 700);
+    expect(ms("--door-opened")).toBe(2 * 260);
+    expect(Math.round((ms("--door-opened") / ms("--door-open")) * 100)).toBe(37);
+    expect(light).toMatch(/&\[data-door\]::before \{[^}]*animation: door-open var\(--door-open\) var\(--ease-settle\) both;/);
+    // The blocks arrive as on every page, after the door; the settle timer waits for them (one number, two places).
+    expect(ms("--door-blocks")).toBe(DOOR_BLOCKS_MS);
+    expect(head).toMatch(/&\[data-door\] ~ \* \{\s*--arrive-after: var\(--door-blocks\);/);
+    for (const [, delay] of head.matchAll(/animation-delay: ([^;]+);/g)) expect(delay).toContain("var(--arrive-after, 0ms)");
   });
 
-  it("is no band, and the pool at rest, under reduced motion or forced colours", () => {
-    expect(band).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*display: none;/);
-    expect(braced("@utility hour-light {")).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*&\[data-door\] \{\s*animation: none;/);
+  it("holds only the light at first, then the greeting over it, the date line a beat behind, then the lines", () => {
+    expect(head).toMatch(/&\[data-door\] \{\s*animation: none;/);
+    expect(head).toMatch(/&\[data-door\] > h1 \{\s*animation: fade calc\(2 \* var\(--duration-tint\)\) var\(--ease-tint\)\s*calc\(var\(--door-opened\) - 2 \* var\(--duration-tint\)\) both;/);
+    expect(head).toMatch(/&\[data-door\] > \[data-door-step="date"\] \{\s*animation: fade calc\(2 \* var\(--duration-tint\)\) var\(--ease-tint\)\s*calc\(var\(--door-opened\) - 2 \* var\(--duration-tint\) \+ 2 \* var\(--light-lead\)\) both;/);
+    expect(head).toMatch(/&\[data-door\] > \[data-door-step="lines"\] \{\s*animation: fade calc\(2 \* var\(--duration-tint\)\) var\(--ease-tint\) var\(--door-lines\) both;/);
   });
 
-  it("never takes a word under 4.5:1 at its brightest, in either room, and stays under a quarter on paper", () => {
-    // Its brightest composite: the band alone at its heart (the crossfade keeps band and pool under the stronger
-    // of the two, and the pool is held by craft-places).
-    const reach = Number(/--door-light-reach: (\d+)%;/.exec(css)?.[1]);
-    expect(reach).toBeGreaterThanOrEqual(25);
-    expect(band).toContain("calc(var(--door-light-reach) * var(--hour-weight))");
+  it("skips to frame 7 under reduced motion or forced colours", () => {
+    // The door's light exists only where motion is welcome: otherwise the pool at rest, never the arch held still.
+    expect(light).toMatch(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{\s*&\[data-door\]::before \{/);
+    expect(light.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{[\s\S]*?\n  \}\n/, "")).not.toContain("door-open");
+    expect(head).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*&\[data-door\] > h1,\s*&\[data-door\] > \[data-door-step\] \{\s*animation: none;/);
+  });
+
+  it("never takes a word under 4.5:1: each beat tints in only where the light under it lets it", () => {
+    const tint = ms("--duration-tint");
+    const lead = ms("--light-lead");
+    const [whole, opened] = [ms("--door-open"), ms("--door-opened")];
+    const reaches = Array.from(light.matchAll(/--hour-reach:\s*(\d+)%/g)).map((m) => Number(m[1]));
+    const pool = Math.max(...reaches);
+    const number = (text: string, name: string) => Number(new RegExp(`${name}: ([\\d.]+)%`).exec(text)?.[1]);
+    const [arch, frame6] = [number(stop("0%"), "--door-reach"), number(stop("37%"), "--door-reach")];
+    // The light's strength at a moment: arch to frame 6, then frame 6 to the hour's pool, each on settle.
+    const reachAt = (t: number) =>
+      t <= opened ? arch + (frame6 - arch) * settle(t / opened) : frame6 + (pool - frame6) * settle((t - opened) / (whole - opened));
+    const beats: Array<[string, number, string[]]> = [
+      ["the greeting", opened - 2 * tint, ["--ink", "--faint"]],
+      ["the date line", opened - 2 * tint + 2 * lead, ["--muted", "--faint"]],
+      ["the lines", ms("--door-lines"), ["--ink", "--muted", "--faint", "--accent-text"]],
+    ];
     const ramp = block(":root {\n    --violet-600");
     const themes = { dark: { ...ramp, ...block(':root,\n  [data-theme="dark"] {') }, light: { ...ramp, ...block('[data-theme="light"] {') } };
     const failures: string[] = [];
-    for (const [theme, vars] of Object.entries(themes)) {
-      const accent = colour(vars, "--accent");
-      const weight = Number(vars["--hour-weight"]);
-      if (theme === "light") expect(reach * weight).toBeLessThan(25);
-      const lit = over([accent[0], accent[1], accent[2], (accent[3] ?? 1) * ((reach * weight) / 100)], colour(vars, "--canvas"));
-      for (const token of ["--ink", "--muted", "--faint", "--accent-text"]) {
-        const r = ratio(colour(vars, token), lit);
-        if (r < 4.5) failures.push(`${theme} ${token}: ${r.toFixed(2)}`);
+    for (const [beat, at, tokens] of beats) {
+      const reach = reachAt(at);
+      for (const [theme, vars] of Object.entries(themes)) {
+        const accent = colour(vars, "--accent");
+        const weight = Number(vars["--hour-weight"]);
+        const lit = over([accent[0], accent[1], accent[2], (accent[3] ?? 1) * ((reach * weight) / 100)], colour(vars, "--canvas"));
+        for (const token of tokens) {
+          const r = ratio(colour(vars, token), lit);
+          if (r < 4.5) failures.push(`${beat} at ${at}ms (${reach.toFixed(1)}%), ${theme} ${token}: ${r.toFixed(2)}`);
+        }
       }
     }
     expect(failures).toEqual([]);

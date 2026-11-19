@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
 import { TINT_MS } from "@/lib/motion";
-import { noteSignIn, resetDoorForTests } from "@/lib/motion/door";
+import { DOOR_BLOCKS_MS, noteSignIn, resetDoorForTests } from "@/lib/motion/door";
 import { inZone } from "@/test-utils/zone";
 import type { SessionUser } from "@/lib/session";
 import { setMediaQuery } from "@/test-utils/media";
@@ -368,7 +368,8 @@ describe("the room knows the hour", () => {
 // A-24 §3.2, Q4: the door's light travels the greeting once, straight after signing in.
 describe("the first arrival of a sign-in", () => {
   const signedIn = { ...session, signedInAt: "2026-11-19T08:00:00.000Z" } as SessionUser;
-  const arch = () => document.querySelector("[data-door-light]");
+  // The door is the head itself, staged (board part 1, frames 5 to 7): no extra layer, no band.
+  const arch = () => document.querySelector('.page-head[data-door] > .hour-light[data-door]');
   const pool = () => document.querySelector(".hour-light");
   beforeEach(() => {
     resetDoorForTests();
@@ -376,25 +377,34 @@ describe("the first arrival of a sign-in", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it("travels the greeting behind its words, then settles into the pool, with nothing waiting for it", () => {
+  it("stages the head: the light first, then the greeting, the date line and the lines, each in its own beat", () => {
     mount(signedIn);
-    const greeting = screen.getByRole("heading", { level: 1 });
-    // Inside the greeting's own box, so it travels the words' length; hidden from assistive technology.
+    const head = screen.getByRole("heading", { level: 1 }).parentElement!;
+    expect(head).toHaveClass("page-head");
+    expect(head).toHaveAttribute("data-door");
     expect(arch()).toHaveAttribute("aria-hidden");
-    expect(arch()).toHaveClass("greeting-light");
-    expect(arch()!.parentElement).toBe(greeting);
-    expect(greeting).toHaveClass("relative", "w-fit");
-    // Not a word of the greeting: the heading reads as before.
-    expect(greeting).toHaveTextContent(/^\w+, Kanishk\./);
-    // The pool comes up as it settles; the words are there in the same paint.
-    expect(pool()).toHaveAttribute("data-door");
+    // The beats are plain boxes, the head's own children, in reading order.
+    const steps = Array.from(head.children).map((child) => child.getAttribute("data-door-step") ?? child.tagName.toLowerCase());
+    expect(steps.filter((step) => step === "h1" || step === "date" || step === "lines")).toEqual(["h1", "date", "lines"]);
+    // Nothing waits on it: every word is in the page from the first paint, the greeting reading as ever.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^\w+, Kanishk\./);
+    expect(screen.getByText(/^Claims/, { exact: false })).toBeInTheDocument();
+  });
+
+  it("is never a layer of its own: no band, no full-window door, one light", () => {
+    mount(signedIn);
+    expect(document.querySelector(".door-through, [data-door-through], [data-door-light], .greeting-light")).toBeNull();
     expect(document.querySelectorAll(".hour-light")).toHaveLength(1);
   });
 
-  it("is never a full-window layer", () => {
+  it("settles the head only after the blocks have arrived through the door", () => {
     mount(signedIn);
-    expect(document.querySelector(".door-through, [data-door-through]")).toBeNull();
-    expect(arch()!.closest(".page-head")).not.toBeNull();
+    const head = screen.getByRole("heading", { level: 1 }).parentElement!;
+    // An ordinary visit is settled by a tint and an arrival; through the door the blocks come later.
+    later(TINT_MS + 1000);
+    expect(head).not.toHaveAttribute("data-settled");
+    later(DOOR_BLOCKS_MS);
+    expect(head).toHaveAttribute("data-settled");
   });
 
   it("is once: not when Home is shown again, not on a reload, not for the same sign-in", () => {
@@ -406,7 +416,7 @@ describe("the first arrival of a sign-in", () => {
     expect(pool()).not.toHaveAttribute("data-door");
     resetDoorForTests(); // a reload: this device remembers the sign-in it opened for
     mount(signedIn);
-    expect(document.querySelectorAll("[data-door-light]")).toHaveLength(0);
+    expect(document.querySelectorAll(".page-head[data-door]")).toHaveLength(0);
   });
 
   it("is spent by whichever page the sign-in lands on, so Home later is quiet", () => {

@@ -58,16 +58,19 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
   it("has a place for every part of the day, is still, is the accent, fades inside its box, and goes under forced colours", () => {
     for (const phase of ["morning", "afternoon", "evening", "quiet"]) expect(light).toContain(`&[data-hour="${phase}"]`);
     expect(reaches).toHaveLength(4);
-    // Still, but for the pool coming up once a sign-in as the door's light settles into it (`[data-door]`).
-    const still = light.replace(/&\[data-door\] \{[^}]*\}/g, "");
+    // Still, but for the door opening into it once a sign-in (`[data-door]::before`, `door-open`).
+    const still = light.replace(/&\[data-door\]::before \{[^}]*\}/g, "");
     expect(still).not.toMatch(/animation|transition/);
     expect(light).toContain("var(--accent)");
     expect(light).not.toMatch(/--(healthy|warn|danger)\b|#[0-9a-f]{3,6}\b/i);
     expect(light).toMatch(/@media \(forced-colors: active\)\s*\{\s*display: none;/);
     // A phone's gutter is 16px: the pool reaches it and no further, so nothing scrolls sideways.
     expect(light).toMatch(/@media \(width < theme\(--breakpoint-tablet\)\)\s*\{\s*inset-inline: -16px;/);
-    // No edge of its box is ever seen: a mask takes it to nothing on all four sides.
-    expect(light).toMatch(/mask-image:\s*linear-gradient\(to right, transparent,[^)]*transparent\),\s*linear-gradient\(to bottom, transparent,[^)]*transparent\);/);
+    // No edge of its box is ever seen: a mask takes it to nothing on all four sides, over the box's own
+    // overhang past the head, so the light is whole behind the words.
+    expect(light).toContain("linear-gradient(to right, transparent, black 26px, black calc(100% - 26px), transparent)");
+    expect(light).toContain("linear-gradient(to bottom, transparent, black 24px, black calc(100% - 28px), transparent)");
+    expect(light).toMatch(/inset: -24px -26px -28px;/);
     expect(light).toContain("mask-composite: intersect;");
   });
 

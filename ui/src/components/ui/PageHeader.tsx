@@ -14,7 +14,7 @@ import { TINT_MS } from "@/lib/motion";
  * went (the owner reversed A-24 Q14, 19 Nov 2026); coming Back, or once it has
  * run, the page is simply there.
  */
-export function usePageHead(): {
+export function usePageHead(after = 0): {
   className: string;
   "data-settled": string | undefined;
 } {
@@ -26,9 +26,10 @@ export function usePageHead(): {
   }, []);
   useEffect(() => {
     if (settled) return;
-    const timer = setTimeout(() => setSettled(true), TINT_MS + ARRIVE_SETTLED_MS);
+    // `after`: what the page's arrival waits on first (Home's door, A-24 §3.2), so it settles that much later.
+    const timer = setTimeout(() => setSettled(true), after + TINT_MS + ARRIVE_SETTLED_MS);
     return () => clearTimeout(timer);
-  }, [settled]);
+  }, [settled, after]);
   return { className: "page-head", "data-settled": settled ? "" : undefined };
 }
 
