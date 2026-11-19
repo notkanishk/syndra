@@ -3226,7 +3226,7 @@ end to end) found no missing function; three regressions with one root cause
   - [x] 7u-8 A table's headings on its rows' columns (the owner, 19 Nov 2026: "the drift page has issues with the column alignment").
     *Done (19 Nov 2026, branch `fix/table-column-alignment`):*
     - **Root cause:** every table typed its CardColumns widths beside its rows', twice, and the copies drifted. On Drift a heading ("Why Syndra can't explain it") stood over a column the rows never filled (the reason is the row's detail line, D-1 §5 #15), and the rows' 3px edge put every cell 3px right of its heading. Requests drew the avatar as a part of its own, so every cell after it sat ~46px right of its heading. And `SortHead` reserved its invisible arrow's room after the label, so a right-aligned heading (Found, Revoked, Waiting, Attention) ended 16px short of the figures under it.
-    - **One column list** (`Columns`, `Card.tsx`): each column's classes (width, alignment, the breakpoint it shows from), given to `CardColumns cols` and to every row (`CardRow cols`, or `Cells` for a row that is a link or a label). Each heading and each cell is drawn in its column's box (`data-col`), so a heading cannot sit anywhere but over its cells. Flex, not CSS grid: a row still wraps its seat under itself where it cannot fit, which a grid track cannot do. `CHECK_COL` (`SelectionBar.tsx`) is the checkbox's column; `WHO_COL`, `WHAT_COL`, `FIGURE_COL` (`RowSeats.tsx`) the review queues' shared columns, and WhoSeat / WhatSeat no longer size themselves.
+    - **One column list** (`Columns`, `Card.tsx`): each column's classes (width, alignment, the breakpoint it shows from), given to `CardColumns cols` and to every row (`CardRow cols`, or `Cells` for a row that is a link or a label). Each heading and each cell is drawn in its column's box (`data-col`), so a heading cannot sit anywhere but over its cells. Flex, not CSS grid: a row still wraps its seat under itself where it cannot fit, which a grid track cannot do. `CHECK_COL` (`SelectionBar.tsx`) is the checkbox's column; `WHO_COL`, `WHAT_COL` (`RowSeats.tsx`) and `NUMBER_COL` (`Card.tsx`; it was `FIGURE_COL` in `RowSeats.tsx` until 7y) the review queues' shared columns, and WhoSeat / WhatSeat no longer size themselves.
     - **Drift:** Why is no column of its own: its sort shares What's heading cell (one `Cells` child holding both buttons), because the reason is the row's detail line under What (D-1 §5 #15), and it still gathers equal reasons A to Z with their counts (`route-drift` "Sorted by why"; RULES: a reason is a gathering column). Found is right-aligned over right-aligned dates; the headings take the rows' 3px edge, unpainted; both sections ("In Zitadel, not given by Syndra" and "Given by Syndra, gone from Zitadel") share the one heading, and their compared rows (a role the comparison shows on one side only) are CardRows on the same columns, their sentence the detail line and "Check Pending changes" in the seat.
     - **Audited:** Unfinished revocations, Expiring access (also Ends right-aligned, the edge), Requests (the avatar in Who), a person's Requests, Pending changes, the TrueNAS accounts table, People (the Person column gives way to 180 for heading and rows alike) and Audit are on one list each. Holds due and Change history have no column headings. The other CardColumns tables (Projects, Roles, Apps, Bundles, Systems, Service accounts, Zitadel grants and projects, Roles that wait, Policies, Incoming events, Insights usage, claim and debug histories, records) still type their headings by hand: the guard holds their seats, and moving each onto `cols` is a follow-up.
     - **Guard** (`headsOffRows`, `test-utils/layout.ts`, in `layoutFindings`, so it reads every table the suite renders): every row after a CardColumns in its card has the same column boxes, class for class, and the same seat width (or none). `RowSeat.test.tsx` holds it to Drift's two faults and Requests' extra part; `SortHead.test.tsx` the hung arrow; `UnexplainedAccessSections.test.tsx` the three headings and the reason under none.
@@ -3238,6 +3238,7 @@ end to end) found no missing function; three regressions with one root cause
       - **The TrueNAS accounts table fits its line at 1440** (part 2, frame 10). Fixed widths and the wide seat summed to 1134px in a 1094px row, so Put on hold / Revoke dropped under every row and STATUS sat 300px off its cells. Account and Status now flex from a basis, 1 to 1.3 as the board draws them; the board's bases (180, 240) less 40 each, because a system with a home folder limit has three verbs, the wide seat: 1034px at 1440. "Not created by Syndra" has no column headings and a default seat (672px), so its seat already sits on the first line; unchanged.
       - **Mutation-checked** (each red): CardColumns without `flex-wrap` (280 failures); Requests' headings without `desktop:flex-nowrap` (51); the guard's wrap comparison removed; `Cells` keyed by position; the accounts table's Status back at a fixed 240 (the 1094px sum); the "why" runs removed.
 - [ ] 7v Flaky conformance test (add-on track; noted 18 Nov 2026, not fixed). `addons/conformance` `TestAnUnansweredWithdrawThatBoundAnAccountIsOwnedUpTo` (`kit_test.go:1312`) failed once on PR #200's CI run, with no Go change in the PR (reported by the PR's review). Find the race or ordering it depends on (`go test -race -count=200 -run TestAnUnansweredWithdrawThatBoundAnAccountIsOwnedUpTo ./...` in `addons/conformance`), fix it at the root, and leave a guard that fails without the fix. `needs-triage`
+  - A second one, 19 Nov 2026 (PR #219, run 44599163490, no Go change in the PR): `addons/truenas` `TestTheKitSkipsALimitThisAddOnDoesNotReport` failed in the conformance kit with "MUST freshness.cooldown: a fresh read inside the cooldown answered current true". It is timing under CI load. Same item: fix it at the root with the first, with a guard that fails without the fix. Not fixed here.
 - [ ] 7w The craft (A-24, the owner 18 Nov 2026: "yes to all A-24 recommendations, get building. be careful and elegant"). Built from `design_handoff_syndra/reconcile-2026-10/from-design/A-24-the-craft.md` and its boards `design/a24-the-craft-1..3.dc.html`, one PR per wave to `feat/addon-contract`. Every §12 answer is as recommended; Q12 (a year of days), Q16 (the name carries you) and Q19 (the term in review) are not now and wait in `NEXT.md`.
   - [x] 7w-1 The foundation (§11's twelve, §2 quiet and warm, §8 quiet and warm, Q14, Q15).
     *Done (18 Nov 2026, branch `feat/addon-contract-a24-w1`):*
@@ -3352,3 +3353,114 @@ end to end) found no missing function; three regressions with one root cause
   - **Guards:** `session.test.ts` (the `SessionUser` type has no `accessToken`; an OIDC session's JSON never contains the token; `getAccessToken` is null with no, expired or demo session); `route.test.ts` "proxy route bearer" (an OIDC session sends `Bearer <its token>`, one without a token is refused before the backend, a demo session never sends a session token); `session-token-boundary.test.ts` (under `app/` and `components/`, only the proxy and callback routes name the token; under `app/`, `components/` and `lib/`, only the proxy calls `getAccessToken` and only `lib/session.ts` defines it); the demo case also checks the bearer is the shared key and `getAccessToken` is never called.
   - **Mutation-checked** (each red): the token back on `SessionUser` (type and runtime); the proxy sending the shared key for OIDC; the refusal dropped; a page importing `getAccessToken`; a `lib/` helper wrapping it; the proxy calling it for a demo session; the demo bearer not the shared key; a client component (`AppShell`) importing a value from `lib/session` fails `bun run build` on `server-only`.
   - Main has the same code: NEXT 0m.
+- [x] 7y The layout plague (the owner, 19 Nov 2026: "the alignment issue with ui elements is present like a plague. fix it"). From a measured audit of staging: 648 page runs at 390, 768, 1024, 1100, 1280 and 1440, in both themes and both views. Its 15 worst defects come from 8 root causes. Fixed at the shared root, not page by page (branch `fix/layout-plague`).
+  *Done (19 Nov 2026):*
+  - **RC2, a leaving row could not be narrower than its columns.** `.leave-row > *` now has `min-width: 0` (`globals.css`). Before, a grid item's automatic minimum was its min-content, so People at 768 was a 602px row in a 462px card. Projects and Roles had the same fault.
+  - **RC3, headings typed beside their rows.** `CardColumns` now requires `cols`, so a heading can no longer be typed without its column list. Every table is on one `Columns` list: Apps, Roles, Projects, Connected systems, Bundles, Roles that wait, Policies, a project's page, the event list, Service accounts, Zitadel grants and projects, ClaimHistory, DebugMode and SignInRow, BundleVersions, RecordsList, RoleWordsTable, Insights usage and ClaimsDelivery.
+  - **RC4, the column budgets.** Each column is now a fixed D-1 seat (`NUMBER_COL`, `STATUS_COL` in `Card.tsx`), or a share with a minimum and no basis. Lines break on those sizes, so headings and rows break at the same widths. A row whose words fit keeps its seat on line 1, and a row that cannot fit wraps instead of clipping. Every link row is `tablet:flex-wrap`, and the `flex-nowrap` on People, Pending and Requests is gone.
+    - Drift's Who and What (`RowSeats.tsx`, minimums 130 and 90) sum to 678px with the wide seat, and to 720px with Select's checkbox column. Both fit Drift's narrowest desktop row (728px at 1080).
+    - TrueNAS accounts sum to 874px, one line from a 1220px window.
+    - Pending's Change and Requests' columns had no minimum, or had one that could not fit.
+    - Home's "New people": the name is the share and the words keep their width.
+    - The wide seat stays 300: Drift's three verbs measure 291px.
+  - **A seat that holds a button's reason** is exactly the table's seat width (`.row-seat:has([data-reason])`), and the reason wraps inside it. On Drift, the disabled Adopt's reason widened the seat to 522px and pushed the row's columns out from under their headings.
+  - **RC1, a person's role row** (`PersonAccess.tsx`, `ROLE_COLS`) is a container query on the row (`@container`):
+    - from 878px: name 230, source at least 160, status 240, then the seat;
+    - below 878px: the name on its own line, then source and status on half a line each, then the seat.
+  - **RC5, Drift's heading.** Why heads the headings' detail line (`CardColumns detail`), under the column headings and starting at the text's edge, where every row's reason is. A right-aligned heading's sort arrow hangs before the word (`SortHead`).
+  - **RC6, Home's "Checked, nothing waiting".** Each link's 44px reach is now its own line until desktop, with no negative margin, and the separators are MetaRow's dots.
+  - **RC7, a project card's header.** The tally and the sign-in line are in `MetaRow`, so a wrapped line never starts with "·".
+  - **RC8, a heading over an avatar, a dot or a chip.** D-1 part 2 frame 10 draws Person over the avatar and Status over the dot, so a heading sits over its column's box. The browser check compares a left-aligned heading with the column's box, and a right-aligned one text to text. This is written into D-1 §4 rule 10.
+  - **The layout check** (`ui/scripts/layout-check/`, `bun run layout:check -- --base …`): the audit's detector in Chrome through `playwright-core` 1.64.1, run against system Chrome. It exits 1 on any of these:
+    - an overlap over 2px;
+    - text clipped outside a truncate;
+    - a heading more than 4px off its cells;
+    - a seat off its first line when the row fits;
+    - a page that scrolls sideways.
+
+    `--record` and `--replay` check a local build against staging's data. It is the pre-merge check for UI PRs (CLAUDE.md, and the README beside it), and it is not in CI.
+  - **Guards (jsdom):**
+    - `unsizedColumns` (`test-utils/layout.ts`, run after every test): every heading column has a width or a minimum.
+    - `headsOffRows` now stops at a `role="table"`.
+    - `@ts-expect-error` on a `CardColumns` without `cols` (`RowSeat.test.tsx`).
+    - `design-system.test.ts`: the seat's `--seat-w`, the reason cap, and `leave-row`'s `min-width`.
+    - `PersonAccessLayout.test.tsx`: the role row's columns, and the header's MetaRow.
+    - `HomeColumns.test.tsx`: no negative margin, no typed dot.
+    - `UnexplainedAccessSections.test.tsx`: Why is the detail line.
+    - `AccountsTable.test.tsx`: the minimums plus the wide seat fit in 934.
+    - `SortHead.test.tsx`: the arrow sits before the word in a right-aligned column.
+  - **Mutation-checked** (each one went red):
+    - `cols` made optional (`tsc`);
+    - Apps' Project back to `min-w-0 flex-1` (8 failures);
+    - the role row's source back to `min-w-0 flex-1`;
+    - a typed "·" back in the project header.
+  - **Measured:** the layout check against this branch, run locally with staging's data replayed, gives 0 findings at all six widths in both views (see the PR for the page list). On staging's current build it gives 378. Still to do: the lead deploys the branch and re-runs the check against staging. `ready-for-human`
+  - *Fix round (PR #219: Opus review, and the lead's staging run of 420 page runs with 0 findings):*
+    - **(1) The pre-merge gate is the local replay.** CLAUDE.md names `layout:check --replay` against `bun next dev` as the gate, and the staging `--base` run as the check after deploying.
+    - **(2) A tape never lands in the repo.** `--record`, `--replay` and `--tape` share one file, which defaults to `os.tmpdir()/syndra-layout.tape.json`. Recording to a path under the git root is refused with exit 3, and `*.tape.json` is in `.gitignore`.
+    - **(3) A replay miss fails.** Every request the tape doesn't hold is listed as `tape missing …` and fails the run, because a 404 draws an error state that would otherwise pass.
+    - **(4) SortHead's arrow selector** is one form: `in-[[data-col][class*=text-right]]`.
+    - **(5) The class-echo SortHead assertions are deleted.** The browser check measures the arrow instead.
+    - **(6) `NUMBER_COL`/`STATUS_COL` replace the hand-typed copies:**
+      - roles that wait;
+      - a project's page;
+      - Projects' Roles;
+      - Service accounts;
+      - TrueNAS accounts;
+      - ClaimHistory;
+      - BundleVersions (both);
+      - Requests' history date;
+      - RecentChanges;
+      - Systems' Status, now D-1's 240 seat: 858px, one line from a 1204px window.
+
+      Kept on purpose: `TargetOverview`'s unmanaged standing seat stays fixed on a phone too (`w-(--seat-status) flex-none`, tested). The role row's `@container` widths can't take a tablet-prefixed constant.
+    - **(7)** CardColumns' wrap comment now says what the code does. 7u-8's column list names `NUMBER_COL`.
+    - **(8) A member's role row** (no seat) holds its three columns from 662px (`ROLE_COLS_NO_SEAT`).
+    - **(9) Drift in Select mode, measured at 1080–1111:**
+      - Before: the line was 760px in a 728px row, so the seat dropped under every row.
+      - Now: Who and What are 130 and 90. That is 720px with the checkbox, and the seat is on line 1 at 1080 and at 1100.
+    - **(10) Roles on a phone:** under a project's label the project cell is `""` (`:empty`) and `empty:hidden tablet:empty:block`, so it takes no line on a phone and keeps the column from tablet.
+    - **(11) Home's 44px "Checked" line** is recorded in D-1 §9. Its comments cite the real criteria: the product follows 44px (`--tap`, WCAG 2.5.5 AAA and Apple's HIG), above 2.5.8's 24px minimum.
+    - **Mutation-checked** (each red):
+      - a member's row back on the operator columns;
+      - the Roles placeholder back to an element;
+      - the in-repo refusal off: a tape written in `ui/` (git shows it ignored);
+      - a tape missing `GET /roles`: `tape missing …`, exit 1.
+    - **Replay:** 420 page runs and 0 findings, against a fresh staging tape of 96 answers, with no request missing.
+  - *Fix round 2 (Opus review of 3913392c):*
+    - **(1) The in-repo refusal can't be talked round.** It refuses when:
+      - the tape's folder resolves (`realpathSync.native`, which settles case and symlinked folders) inside any git work tree (`git -C <dir> rev-parse --is-inside-work-tree`), whichever checkout or worktree it is;
+      - the folder doesn't exist (refused before the sweep);
+      - the tape itself is a symlink (`lstat`).
+
+      Each refusal exits 3. A tape is written 0600. Checked by hand:
+      - refused: `./x.tape.json`, a case-changed path through `../../<worktree>`, the main checkout's root, a missing folder, a symlink;
+      - accepted: a `/tmp/lc/..x/` folder.
+    - **(2) A replay miss is its own exit, 4 ("tape incomplete").** Exit 1 stays for layout findings. CLAUDE.md and the README say that a branch adding a new read can't be recorded from staging. For those pages the gate is the staging run after deploying, and the PR says so.
+    - **(3) The sort arrow is guarded directly** (`detect.js`): every `[role=columnheader] button > [aria-hidden]` must sit inside its `[data-col]`, pressed or not.
+      - It found Drift's What at 1100: a label wrapping to fill a 121px column pushed the arrow 14px outside.
+      - Fix: the label leaves the arrow its 16px (`max-w-[calc(100%-16px)]` on SortHead's button).
+      - Mutation-checked: without the `in-[[data-col][class*=text-right]]` classes, Found and Attention were 14px outside, exit 1.
+    - **(4) Systems: one line from 1080.** The system and its status are shares held to 130 each, with `NUMBER_COL` and the wide seat: 718px. D-1's fixed 240 status seat had made it 858px, so the seat dropped under every row from 1114 to 1203.
+      - Measured: the seat is on the first line at 1080, 1100 and 1200.
+      - The board (route-systems) draws Status 180 and a 250 seat; D-1's seats have no 250. At 1280 each share is 238px.
+    - **(4, cont.) `NUMBER_COL`'s docstring** says what it is below tablet: no width of its own, a line of its own in a stacking row, and as wide as its words in a CardRow.
+    - **Phone change, recorded.** Six cells that were fixed at every width are now fixed from tablet only, so on a phone they are as wide as their words:
+      - a project's page's People;
+      - TrueNAS accounts' Since;
+      - ClaimHistory's date;
+      - BundleVersions' holders' People and an includer's count;
+      - Requests' history date.
+
+      A number is the row's last part, so on a phone it now sits after its row's words, not in a 110px box. `TargetOverview`'s unmanaged standing seat keeps its fixed width on a phone, because its username column is laid out against it and a test holds that.
+    - **(5) The review queues' budget** (`RowSeatsBudget.test.ts`, tokens read from `globals.css`):
+      - Drift with the checkbox: 720px against the measured 728 at 1080; without it, 678.
+      - Expiring access and Unfinished revocations at tablet, What at 90: 362px against 374 at 720, and with the checkbox 422 against 422 at 768.
+      - Mutation-checked: What back at 120, both tests red.
+    - **(6) Recording awaits every body** (`Promise.allSettled`) before its context closes.
+    - **(7) README: `/healthz` isn't on the tape.** The server's zone and locale read never passes through the browser, so locally dates show "UTC", labelled.
+    - **(8) Nits:**
+      - HomeColumns' comment no longer describes the old 24px lines;
+      - SortHead's comment is wrapped to 100 characters;
+      - projects-columns' helper finds the Roles cell by `hidden desktop:block`;
+      - CLAUDE.md's dev command clears `ZITADEL_DOMAIN=`.

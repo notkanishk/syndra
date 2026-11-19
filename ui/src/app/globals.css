@@ -1465,8 +1465,13 @@ html.theme-fading *::after {
   grid-template-rows: 1fr;
   transition: grid-template-rows var(--duration-settle) var(--ease-settle);
 
+  /* `min-width: 0` too: a grid item's automatic minimum is its min-content, the sum of a
+     row's column widths, so a row could never be narrower than its columns and the card
+     clipped the rest (People at 768: a 602px row in a 462px card, the Attention column cut
+     off; staging, 19 Nov). The row is the card's width and its columns shrink or wrap. */
   > * {
     min-height: 0;
+    min-width: 0;
     transition: opacity var(--duration-tint) var(--ease-tint);
   }
   &[data-leaving] > * {
@@ -1828,13 +1833,25 @@ html.theme-fading *::after {
   /* Never wider than its row: on a phone the seat wraps under the row, and its verbs and a
      button's reason wrap inside it, right-aligned, instead of running off the card. */
   max-width: 100%;
-  min-width: min(var(--seat-action), 100%);
+  --seat-w: var(--seat-action);
+  min-width: min(var(--seat-w), 100%);
 
   &[data-seat="narrow"] {
-    min-width: min(var(--seat-action-narrow), 100%);
+    --seat-w: var(--seat-action-narrow);
   }
   &[data-seat="wide"] {
-    min-width: min(var(--seat-action-wide), 100%);
+    --seat-w: var(--seat-action-wide);
+  }
+  /* A disabled button's reason wraps at the seat's width, under its button (D-1 §4 rule 6), and
+     the seat holding one is the table's width exactly, its other verbs wrapping inside it: at its
+     own measure the reason widened the seat to 522px, pushed it off the row's first line and the
+     row's columns out from under their headings (Drift, "Zitadel doesn't have this, so there's
+     nothing to adopt"; staging, 19 Nov). */
+  &:has([data-reason]) {
+    width: min(var(--seat-w), 100%);
+  }
+  & [data-reason] {
+    max-width: var(--seat-w);
   }
 }
 

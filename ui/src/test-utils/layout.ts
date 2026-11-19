@@ -132,7 +132,9 @@ export function cardGridsByHand(root: Element): string[] {
 export function headsOffRows(root: Element): string[] {
   const found: string[] = [];
   for (const head of Array.from(root.querySelectorAll("[data-card-columns]"))) {
-    const card = head.closest(".card") ?? head.parentElement!;
+    // A table that says where it ends (`role="table"`) is read to there: a card can hold other rows
+    // after it (Insights' usage card, its spread under the people).
+    const card = head.closest('[role="table"]') ?? head.closest(".card") ?? head.parentElement!;
     const rows = new Set([
       ...Array.from(card.querySelectorAll("[data-card-row]")),
       ...Array.from(card.querySelectorAll("[data-col]"), (cell) => cell.parentElement!),
@@ -174,6 +176,24 @@ function shape(line: Element): { cols: string; seat: string; wrap: string } {
   };
 }
 
+/**
+ * Every column of a table states its size (`Columns`, Card.tsx): a fixed width (`w-*`), or a share
+ * held to a minimum (`min-w-[N]` with N above 0). Flex breaks a line on each part's basis held to its
+ * min-width, so a share with neither reported 0 and starved (a person's role row gave its source 36px
+ * at 1100, under a 94px chip), and a column sized by its content wrapped its rows where its headings
+ * did not (layout audit, 19 Nov 2026). Read from the headings, whose columns every row shares.
+ */
+export function unsizedColumns(root: Element): string[] {
+  const found: string[] = [];
+  for (const cell of Array.from(root.querySelectorAll("[data-card-columns] > [data-col]"))) {
+    const classes = (cell.getAttribute("class") ?? "").split(/\s+/).map((c) => c.replace(/^[a-z]+:/, ""));
+    if (classes.length === 1 && classes[0] === "hidden") continue;
+    const sized = classes.some((c) => /^w-(\[|\()/.test(c) || /^min-w-\[(?!0)/.test(c) || /^min-w-\(/.test(c));
+    if (!sized) found.push(`a column with no size (a width, or a min-width for one that flexes): [${cell.getAttribute("class")}] "${words(cell)}"`);
+  }
+  return found;
+}
+
 /** The guards' findings in `root`. */
 export function layoutFindings(root: Element): string[] {
   return [
@@ -183,6 +203,7 @@ export function layoutFindings(root: Element): string[] {
     ...longNotes(root),
     ...cardGridsByHand(root),
     ...headsOffRows(root),
+    ...unsizedColumns(root),
   ];
 }
 

@@ -70,11 +70,11 @@ describe("column headings", () => {
   // centrally, rather than in forty callers.
   it("are hidden below the tablet breakpoint, from the primitive", () => {
     render(
-      <CardColumns>
+      <CardColumns cols={["min-w-[120px] flex-1"]}>
         <span>Project</span>
       </CardColumns>,
     );
-    const columns = screen.getByText("Project").parentElement!;
+    const columns = screen.getByText("Project").closest("[data-card-columns]")!;
     expect(columns.className).toContain("hidden");
     expect(columns.className).toContain("tablet:flex");
   });

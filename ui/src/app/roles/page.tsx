@@ -11,7 +11,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Badge, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, ROW } from "@/components/ui/Card";
+import { Card, CardColumns, Cells, NUMBER_COL, ROW, type Columns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -45,6 +45,20 @@ const ROLE_SORT: Record<RoleSort, (role: CatalogRole) => string | number> = {
  * Sorted by it, a project's roles gather under one quiet label instead of
  * repeating its name row after row.
  */
+/**
+ * The columns, the headings' and every row's: project, role, group and what uses it (from desktop;
+ * below it they fold into a line under the role), and People in the number seat. Shares held to a
+ * minimum: fixed 180 + 130 + 150 and a 200 minimum came to 834px, past the 754px row at 1100, so
+ * the headings wrapped while the rows ran on and the card cut the count to "2 u" (staging, 19 Nov).
+ */
+const ROLE_COLS: Columns = [
+  "w-full min-w-0 empty:hidden tablet:min-w-[120px] tablet:flex-1 tablet:empty:block",
+  "w-full min-w-0 tablet:min-w-[160px] tablet:flex-[2_1_0%]",
+  "hidden desktop:block desktop:min-w-[100px] desktop:flex-1",
+  "hidden desktop:block desktop:min-w-[120px] desktop:flex-1",
+  NUMBER_COL,
+];
+
 export default function RolesPage() {
   const roles = useGlobalRoleCatalog();
   const router = useRouter();
@@ -227,20 +241,12 @@ export default function RolesPage() {
         <div className={view.className}>
         <ListStates
           head={
-            <CardColumns>
-              <span className="w-[180px] shrink-0">
-                <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
-              </span>
-              <span className="min-w-[200px] flex-1">
-                <SortHead label="Role" name="role" sort={sort} onSort={setSort} />
-              </span>
-              <span className="hidden w-[130px] shrink-0 desktop:block">
-                <SortHead label="Group" name="group" sort={sort} onSort={setSort} />
-              </span>
-              <span className="hidden w-[150px] shrink-0 desktop:block">Used by</span>
-              <span className="w-(--seat-number) shrink-0 text-right">
-                <SortHead label="People" name="people" sort={sort} onSort={setSort} />
-              </span>
+            <CardColumns cols={ROLE_COLS}>
+              <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
+              <SortHead label="Role" name="role" sort={sort} onSort={setSort} />
+              <SortHead label="Group" name="group" sort={sort} onSort={setSort} />
+              <span>Used by</span>
+              <SortHead label="People" name="people" sort={sort} onSort={setSort} />
             </CardColumns>
           }
           isLoading={roles.isLoading}
@@ -285,18 +291,20 @@ export default function RolesPage() {
             <Link
               data-row
               href={`/projects/${role.project_id}/roles/${encodeURIComponent(role.role_key)}`}
-              className={`row-divider flex flex-col items-start gap-y-1 ${ROW} hover-tint tablet:flex-row tablet:items-center`}
+              className={`row-divider flex flex-col items-start gap-y-1 ${ROW} hover-tint tablet:flex-row tablet:flex-wrap tablet:items-center`}
             >
+              <Cells cols={ROLE_COLS}>
               {/* Under the project's own label the name is not said again, unless Syndra could not
-                  name it: then the id beside "Unknown project" is all there is to tell two apart. */}
+                  name it: then the id beside "Unknown project" is all there is to tell two apart. The
+                  cell stays, empty (`""`, so `:empty`), and takes no line on a phone. */}
               {underRun ? (
-                <span aria-hidden className="hidden tablet:block tablet:w-[180px] tablet:shrink-0" />
+                ""
               ) : (
-                <span className="w-full text-fine text-muted [text-wrap:pretty] tablet:w-[180px] tablet:shrink-0 tablet:text-body">
+                <span className="block text-fine text-muted [text-wrap:pretty] tablet:text-body">
                   <ProjectName id={role.project_id} name={role.project_name} link={false} />
                 </span>
               )}
-              <span className="w-full min-w-0 tablet:min-w-[200px] tablet:flex-1">
+              <span>
                 <span className="block text-body font-semibold [text-wrap:pretty]">
                   {roleName(role.display_name, role.role_key)}
                   {role.waits_for_send && <WaitsMark className="ml-2" />}{" "}
@@ -315,7 +323,7 @@ export default function RolesPage() {
                     .join(" · ")}
                 </span>
               </span>
-              <span className="hidden w-[130px] shrink-0 text-small text-muted [text-wrap:pretty] desktop:block">
+              <span className="text-small text-muted [text-wrap:pretty]">
                 {role.group || "—"}
               </span>
               {/*
@@ -323,14 +331,14 @@ export default function RolesPage() {
                 still be the input to a mapping rule or a member of a bundle,
                 and "0 people" alone reads as safe to delete when it isn't.
               */}
-              <span className="hidden w-[150px] shrink-0 text-small text-muted [text-wrap:pretty] desktop:block">
+              <span className="text-small text-muted [text-wrap:pretty]">
                 {role.is_unused ? (
                   <Badge tone="neutral">Unused</Badge>
                 ) : (
                   usedBy(role) || <span className="text-faint">—</span>
                 )}
               </span>
-              <span data-figure className="w-full text-body tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+              <span data-figure className="text-body">
                 {holders.headline}
                 <span className="text-small text-faint tablet:hidden">
                   {peopleSuffix(holders.headline)}
@@ -343,6 +351,7 @@ export default function RolesPage() {
                   </span>
                 )}
               </span>
+              </Cells>
             </Link>
             </LeavingRow>
             );

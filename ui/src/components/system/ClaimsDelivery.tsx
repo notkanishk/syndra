@@ -9,7 +9,7 @@ import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { UNCONFIRMED_HOLD } from "@/components/system/SigningKeyGuide";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
@@ -345,12 +345,12 @@ function Live({ d, open }: { d: Delivery; open: ClaimFinding[] }) {
       />
       {d.apps.length > 0 && (
         <Unfold open={unfolded}>
-          <CardColumns className="row-divider">
-            <span className="tablet:w-[220px] tablet:shrink-0">App</span>
-            <span className="tablet:w-[130px] tablet:shrink-0">Last sign-in</span>
-            <span className="tablet:w-[130px] tablet:shrink-0">Last delivered</span>
-            <span className="min-w-0 flex-1">Answers in the last day</span>
-            <span className="w-(--seat-number) shrink-0 text-right">Answer time</span>
+          <CardColumns cols={APP_COLS} className="row-divider">
+            <span>App</span>
+            <span>Last sign-in</span>
+            <span>Last delivered</span>
+            <span>Answers in the last day</span>
+            <span>Answer time</span>
           </CardColumns>
           {sortByName(d.apps, (a) => a.name ?? a.client_id, (a) => a.client_id).map((app) => (
             <AppRow key={app.client_id} app={app} />
@@ -361,12 +361,22 @@ function Live({ d, open }: { d: Delivery; open: ClaimFinding[] }) {
   );
 }
 
+/** App, its last sign-in and delivery (dates), what it was answered, how fast: stacked on a phone. */
+const APP_COLS: Columns = [
+  "tablet:min-w-[140px] tablet:flex-[1_1_0%]",
+  NUMBER_COL,
+  NUMBER_COL,
+  "tablet:min-w-[140px] tablet:flex-[2_1_0%]",
+  NUMBER_COL,
+];
+
 function AppRow({ app }: { app: ClaimApp }) {
   const served = SERVED.reduce((n, o) => n + (app.outcomes[o] ?? 0), 0);
   const others = Object.entries(app.outcomes).filter(([o, n]) => n > 0 && !SERVED.includes(o));
   return (
-    <div className="row-divider row-cols flex flex-col gap-y-1.5 px-5 py-3 text-body tablet:flex-row tablet:items-baseline">
-      <span className="flex min-w-0 flex-col gap-0.5 tablet:w-[220px] tablet:shrink-0">
+    <div className="row-divider row-cols flex flex-col gap-y-1.5 px-5 py-3 text-body tablet:flex-row tablet:flex-wrap tablet:items-baseline">
+      <Cells cols={APP_COLS}>
+      <span className="flex flex-col gap-0.5">
         {app.name && app.app_id ? (
           <Link href={`/applications/${app.app_id}`} className="font-semibold text-ink link-hover">
             {app.name}
@@ -385,9 +395,9 @@ function AppRow({ app }: { app: ClaimApp }) {
           </>
         )}
       </span>
-      <span className="text-small text-faint tablet:w-[130px] tablet:shrink-0">{when(app.last_sign_in_at, "No sign-in")}</span>
-      <span className="text-small text-faint tablet:w-[130px] tablet:shrink-0">{when(app.last_served_at, "Not delivered")}</span>
-      <span className="min-w-0 flex-1 text-small text-muted [text-wrap:pretty]">
+      <span className="text-small text-faint">{when(app.last_sign_in_at, "No sign-in")}</span>
+      <span className="text-small text-faint">{when(app.last_served_at, "Not delivered")}</span>
+      <span className="text-small text-muted [text-wrap:pretty]">
         {app.calls === 0 ? (
           <span className="text-faint">No calls</span>
         ) : (
@@ -402,7 +412,8 @@ function AppRow({ app }: { app: ClaimApp }) {
           </>
         )}
       </span>
-      <span data-figure className="text-small text-muted tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">{answerTime(app)}</span>
+      <span data-figure className="text-small text-muted">{answerTime(app)}</span>
+      </Cells>
     </div>
   );
 }

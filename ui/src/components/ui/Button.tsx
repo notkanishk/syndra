@@ -139,7 +139,7 @@ export function Button({
     <span className="inline-flex flex-col items-start gap-1.5">
       {button}
       {reason && (
-        <span id={reasonId} className="measure text-fine leading-[1.5] text-faint">
+        <span id={reasonId} data-reason className="measure text-fine leading-[1.5] text-faint">
           {reason}
         </span>
       )}

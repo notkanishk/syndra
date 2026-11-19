@@ -3,7 +3,7 @@
 // Phone: Stacks: time and verdict on one line, then the person, then what was asked.
 // moves:end
 import { useState } from "react";
-import { Card, CardColumns, SignInRow } from "ui";
+import { Card, CardColumns, SIGN_IN_COLS, SignInRow } from "ui";
 
 const at = (minutesAgo: number) => {
   const d = new Date(Date.now() - minutesAgo * 60_000);
@@ -27,11 +27,13 @@ export const Live = () => {
   const [open, setOpen] = useState<string | null>("a");
   return (
     <Card>
-      <CardColumns>
-        <span style={{ width: 124 }}>Time</span>
-        <span style={{ width: 210 }}>Person</span>
-        <span style={{ width: 120 }}>Asked for</span>
-        <span style={{ flex: 1 }}>Syndra answered</span>
+      <CardColumns cols={SIGN_IN_COLS}>
+        <span />
+        <span>Time</span>
+        <span>Person</span>
+        <span>Asked for</span>
+        <span>Syndra answered</span>
+        <span>Checks</span>
       </CardColumns>
       {rows.map((r) => (
         <SignInRow

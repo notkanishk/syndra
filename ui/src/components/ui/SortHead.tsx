@@ -149,17 +149,21 @@ export function SortHead<K extends string>({
         aria-label={`Sort by ${by}`}
         data-sort={on ? (sort.dir > 0 ? "asc" : "desc") : "none"}
         onClick={() => onSort(name)}
-        className={`relative inline-flex items-center text-left uppercase tracking-[inherit] motion-tint hover:text-ink ${
+        className={`relative inline-flex max-w-[calc(100%-16px)] items-center text-left uppercase tracking-[inherit] motion-tint hover:text-ink ${
           on ? "text-ink" : ""
         }`}
       >
         {label}
-        {/* Hung past the label, into the column gap, so it takes no room in the heading: a reserved
-            arrow, invisible until pressed, held a right-aligned heading 16px short of the figures
-            under it (Drift's Found, staging 19 Nov). */}
+        {/* Hung beside the label, so it takes no room in the heading: a reserved arrow, invisible
+            until pressed, held a right-aligned heading 16px short of the figures under it (Drift's
+            Found, staging 19 Nov). Past the label's end in a left-aligned column; before its start
+            in a right-aligned one (a `data-col` box with `text-right` at any breakpoint), so it
+            stays inside the column and never hangs past the figures into the seat. The label
+            leaves the arrow its 16px (`max-w`), so a label that wraps to fill a narrow column still
+            has room for it there (Drift's What at 1100). */}
         <span
           aria-hidden
-          className={`absolute left-full ml-[5px] inline-block text-[11px] motion-turn ${on ? "opacity-100" : "opacity-0"} ${
+          className={`absolute left-full ml-[5px] inline-block text-[11px] motion-turn in-[[data-col][class*=text-right]]:left-auto in-[[data-col][class*=text-right]]:right-full in-[[data-col][class*=text-right]]:ml-0 in-[[data-col][class*=text-right]]:mr-[5px] ${on ? "opacity-100" : "opacity-0"} ${
             on && sort.dir < 0 ? "rotate-180" : ""
           }`}
         >

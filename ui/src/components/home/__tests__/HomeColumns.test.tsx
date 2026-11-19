@@ -308,15 +308,21 @@ describe("the line under the headline", () => {
     expect(within(line).queryByRole("link", { name: "Requests" })).toBeNull();
   });
 
-  // A-24 frame 2p: on a phone the head's lines sit a row (24px) apart. Each link keeps the 44px tap reach
-  // and gives 10px back either side below desktop, so the line is Claims' row, not 44px tall.
-  it("keeps its links' 44px reach without growing the line on a phone", () => {
+  // A-24 frame 2p drew the lines 24px apart on a phone. Staging, 19 Nov: lifted by -10px either side to keep the lines 24px apart, each link's 44px reach
+  // covered the link on the line above and the Claims line. The floor is 44px (`--tap`: WCAG 2.5.5 AAA
+  // and Apple's HIG, above 2.5.8's 24px), and two targets must not overlap. The reach is the line's own
+  // until desktop, and a wrapped link never starts its line with a typed separator.
+  it("keeps its links' 44px reach as their own line on a phone, never over the line above", () => {
     everyBlock();
     renderHome();
     const line = screen.getByText(/Checked, nothing waiting/).parentElement!;
     const links = within(line).getAllByRole("link");
     expect(links.length).toBeGreaterThan(0);
-    for (const link of links) expect(link).toHaveClass("min-h-[var(--tap)]", "-my-2.5", "desktop:my-0", "desktop:min-h-0");
+    for (const link of links) {
+      expect(link).toHaveClass("min-h-[var(--tap)]", "desktop:min-h-0");
+      expect(link.className).not.toMatch(/(^|\s)-m[ty]?-/);
+    }
+    expect(line.textContent).not.toContain("·");
   });
 
   it("a block that left because it is clear is named instead", () => {

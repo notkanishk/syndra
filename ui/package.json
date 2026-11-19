@@ -10,7 +10,8 @@
     "lint": "bun next lint",
     "typecheck": "tsc --noEmit -p . && tsc -p .design-sync/tsconfig.previews.json",
     "test": "vitest run",
-    "sweep:touch": "bun scripts/touch-sweep.mjs"
+    "sweep:touch": "bun scripts/touch-sweep.mjs",
+    "layout:check": "bun scripts/layout-check/check.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "5.107.1",
@@ -32,6 +33,7 @@
     "eslint": "9.39.5",
     "eslint-config-next": "15.5.29",
     "jsdom": "29.1.1",
+    "playwright-core": "1.64.1",
     "postcss": "8.5.33",
     "tailwindcss": "4.3.5",
     "typescript": "5.9.3",

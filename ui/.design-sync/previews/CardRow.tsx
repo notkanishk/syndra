@@ -3,12 +3,14 @@
 // Phone: Below tablet its action seat wraps under the row and stays right-aligned; a row with more than two facts discloses the rest rather than wrapping.
 // moves:end
 import { useState } from "react";
-import { Card, CardColumns, CardHeader, CardRow, RowField, Badge, Button, ArrowLink, StatusSeat } from "ui";
+import { Card, CardColumns, CardHeader, CardRow, RowField, Badge, Button, ArrowLink, StatusSeat, type Columns } from "ui";
 
 // Layout glue only; sizes and widths are the density tokens (D-1 §3), never numbers of their own.
 const name = { width: "var(--seat-label)", fontSize: "var(--text-body)", fontWeight: 600 } as const;
 const muted = { flex: 1, minWidth: 0, fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 const status = { width: "var(--seat-status)", flexShrink: 0 } as const;
+
+const SEAT_COLS: Columns = ["w-(--seat-label) flex-none", "min-w-[140px] flex-1", "w-(--seat-status) flex-none"];
 
 export const PlainRows = () => (
   <Card>
@@ -39,12 +41,13 @@ export const PlainRows = () => (
 export const ActionSeats = () => (
   <Card>
     <CardHeader title="Accounts Syndra manages" count={3} caption="Who has an account on TrueNAS because of a role, and since when." />
-    <CardColumns seat="default">
+    <CardColumns cols={SEAT_COLS} seat="default">
       <span style={name}>Person</span>
       <span style={muted}>Account on TrueNAS</span>
       <span style={status}>Status</span>
     </CardColumns>
     <CardRow
+      cols={SEAT_COLS}
       first
       seat="default"
       action={
@@ -62,6 +65,7 @@ export const ActionSeats = () => (
       </span>
     </CardRow>
     <CardRow
+      cols={SEAT_COLS}
       seat="default"
       action={<ArrowLink href="/governance/drift">Decide on Drift</ArrowLink>}
       detail="If no one in Syndra asked for this, use Check for differences on the system's Mappings page."
@@ -72,7 +76,7 @@ export const ActionSeats = () => (
         <StatusSeat tone="warn" word="Switched off" note="On TrueNAS, outside Syndra" />
       </span>
     </CardRow>
-    <CardRow seat="default" detail="Syndra's own account on TrueNAS, which cannot be assigned to anyone">
+    <CardRow cols={SEAT_COLS} seat="default" detail="Syndra's own account on TrueNAS, which cannot be assigned to anyone">
       <div style={name}>syndra</div>
       <div style={muted}>syndra</div>
       <span style={status} />

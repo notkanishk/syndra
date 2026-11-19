@@ -1,7 +1,7 @@
 "use client";
 
 import { Checkbox } from "@/components/ui/Choice";
-import { CardColumns } from "@/components/ui/Card";
+import { CardColumns, Cells, type Columns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { Ticks } from "@/components/ui/TokenBlock";
@@ -37,6 +37,18 @@ export interface RoleWordRow {
  * the claim line that opened it. A changed row grows only by its notes. On a
  * phone the name and key sit above the field.
  */
+/** Role, what the app calls it, whether it is included; the dense table is narrower in its seats. */
+const COLS: Columns = [
+  "min-w-[140px] flex-[1_1_0%]",
+  "min-w-[120px] flex-[2_1_0%]",
+  "w-[90px] flex-none text-right",
+];
+const DENSE_COLS: Columns = [
+  "w-full tablet:w-auto tablet:min-w-[140px] tablet:flex-[1_1_0%]",
+  "min-w-[120px] flex-[2_1_0%]",
+  "w-[70px] flex-none text-right",
+];
+
 export function RoleWordsTable({
   app,
   rows,
@@ -54,36 +66,35 @@ export function RoleWordsTable({
 }) {
   const [sort, setSort, view] = useSort<"role">("role");
   const ordered = orderBy(rows, view.sort, { role: (r) => r.name });
-  const seat = dense ? "w-[70px]" : "w-[90px]";
+  const cols = dense ? DENSE_COLS : COLS;
   return (
     <div>
       <div className={dense ? "tablet:pl-[47px]" : ""}>
-        <CardColumns>
-          <span className={`${dense ? "w-[190px]" : "w-[170px]"} flex-none`}>
-            <SortHead label="Role" name="role" sort={sort} onSort={setSort} />
-          </span>
-          <span className="min-w-0 flex-1">{app} calls it</span>
-          <span className={`${seat} flex-none text-right`}>Included</span>
+        <CardColumns cols={cols}>
+          <SortHead label="Role" name="role" sort={sort} onSort={setSort} />
+          <span>{app} calls it</span>
+          <span>Included</span>
         </CardColumns>
       </div>
       <div className={view.className}>
         {ordered.map((r) => (
           <div
             key={r.key}
-            className={`row-divider flex flex-wrap ${
+            className={`row-divider row-cols flex flex-wrap ${
               dense
-                ? "items-center gap-x-[18px] gap-y-0.5 py-[5px] pl-5 pr-[22px] tablet:pl-[67px]"
-                : "items-start gap-x-3.5 gap-y-1.5 px-5 py-2"
+                ? "items-center gap-y-0.5 py-[5px] pl-5 pr-[22px] tablet:pl-[67px]"
+                : "items-start gap-y-1.5 px-5 py-2"
             }`}
           >
+            <Cells cols={cols}>
             {dense ? (
-              <span className="inline-flex w-full min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 tablet:w-[190px] tablet:flex-none">
+              <span className="inline-flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <span className={`text-body font-semibold ${r.included ? "text-ink" : "text-muted"}`}>{r.name}</span>
                 {r.waits && <WaitsMark />}
                 <span className="type-mono text-fine text-faint">{r.key}</span>
               </span>
             ) : (
-              <span className="flex w-[170px] flex-none flex-col gap-px pt-0.5">
+              <span className="flex flex-col gap-px pt-0.5">
                 <span className="inline-flex items-center gap-[7px] text-body font-semibold">
                   {r.name}
                   {r.waits && <WaitsMark />}
@@ -91,7 +102,7 @@ export function RoleWordsTable({
                 <span className="type-mono text-fine text-faint">{r.key}</span>
               </span>
             )}
-            <span className={`flex min-w-0 flex-col ${dense ? "flex-[1_1_150px] gap-0.5" : "flex-[1_1_170px] gap-1"}`}>
+            <span className={`flex flex-col ${dense ? "gap-0.5" : "gap-1"}`}>
               <Input
                 dense={dense}
                 value={r.word}
@@ -109,7 +120,7 @@ export function RoleWordsTable({
                 </span>
               ))}
             </span>
-            <span className={`flex ${seat} flex-none justify-end ${dense ? "" : "pt-[11px]"}`}>
+            <span className={`flex justify-end ${dense ? "" : "pt-[11px]"}`}>
               <Checkbox
                 checked={r.included}
                 disabled={readOnly}
@@ -117,6 +128,7 @@ export function RoleWordsTable({
                 onChange={(e) => onIncluded(r.key, e.target.checked)}
               />
             </span>
+            </Cells>
           </div>
         ))}
       </div>

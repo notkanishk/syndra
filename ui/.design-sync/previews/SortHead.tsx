@@ -2,7 +2,7 @@
 // Moves: The arrow turns on settle; a re-sort fades the rows out and in on tint, and nothing travels. Still: the arrow jumps and the rows swap at once.
 // Phone: The same at every width.
 // moves:end
-import { Card, CardColumns, CardRow, SortHead, orderBy, useSort } from "ui";
+import { Card, CardColumns, CardRow, SortHead, orderBy, useSort, type Columns } from "ui";
 
 const rows = [
   { project: "Laser Cutter", people: 23 },
@@ -10,6 +10,7 @@ const rows = [
   { project: "Wood Shop", people: 41 },
   { project: "Electronics Bench", people: 17 },
 ];
+const COLS: Columns = ["w-[250px] flex-none", "min-w-[40px] flex-1", "w-[110px] flex-none text-right"];
 const name = { width: 250, fontSize: "var(--text-body)", fontWeight: 600 } as const;
 const num = { width: 110, textAlign: "right", fontSize: "var(--text-body)", color: "var(--muted)" } as const;
 
@@ -19,18 +20,14 @@ export function ProjectList() {
   const sorted = orderBy(rows, view.sort, { project: (r) => r.project, people: (r) => r.people });
   return (
     <Card>
-      <CardColumns>
-        <span style={{ width: 250 }}>
-          <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
-        </span>
-        <span style={{ flex: 1 }} />
-        <span style={{ width: 110, textAlign: "right" }}>
-          <SortHead label="People" name="people" sort={sort} onSort={setSort} />
-        </span>
+      <CardColumns cols={COLS}>
+        <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
+        <span />
+        <SortHead label="People" name="people" sort={sort} onSort={setSort} />
       </CardColumns>
       <div className={view.className}>
         {sorted.map((r, i) => (
-          <CardRow key={r.project} first={i === 0}>
+          <CardRow key={r.project} cols={COLS} first={i === 0}>
             <div style={name}>{r.project}</div>
             <div style={{ flex: 1 }} />
             <div style={num}>{r.people}</div>

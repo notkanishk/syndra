@@ -12,7 +12,7 @@ import { Mono } from "@/components/ui/Badge";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { Card, CardColumns, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
@@ -36,6 +36,14 @@ import { roleName } from "@/lib/names";
  * unsupervised" versus "may enter and watch" is the entire decision an operator
  * is making, and a role key alone never conveys it.
  */
+/** Role, its group (desktop), when it is given (tablet up), how many people hold it. */
+const COLS: Columns = [
+  "min-w-[min(220px,100%)] flex-1",
+  "hidden w-[130px] flex-none desktop:block",
+  "hidden w-[140px] flex-none tablet:block",
+  NUMBER_COL,
+];
+
 export default function ProjectDetailPage({
   params,
 }: {
@@ -172,11 +180,11 @@ export default function ProjectDetailPage({
       <Card stale={readState.current === false}>
         <ListStates
           head={
-            <CardColumns>
-              <span className="min-w-[200px] flex-1">Role</span>
-              <span className="hidden w-[130px] shrink-0 desktop:block">Group</span>
-              <span className="hidden w-[140px] shrink-0 tablet:block">When given</span>
-              <span className="w-(--seat-number) shrink-0 text-right">People</span>
+            <CardColumns cols={COLS}>
+              <span>Role</span>
+              <span>Group</span>
+              <span>When given</span>
+              <span>People</span>
             </CardColumns>
           }
           isLoading={roles.isLoading}
@@ -205,7 +213,8 @@ export default function ProjectDetailPage({
                 key={role.role_key}
                 className="row-divider row-cols flex flex-wrap items-start gap-y-[18px] px-5 py-3.5"
               >
-                <div className="min-w-[min(220px,100%)] flex-1">
+                <Cells cols={COLS}>
+                <div>
                   <div className="text-body font-semibold">
                     <Link
                       href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
@@ -237,12 +246,12 @@ export default function ProjectDetailPage({
                   )}
                 </div>
 
-                <span className="hidden w-[130px] shrink-0 text-small text-muted [text-wrap:pretty] desktop:block">
+                <span className="text-small text-muted [text-wrap:pretty]">
                   {role.group || "—"}
                 </span>
 
                 {/* Read-only (N16): set only in Roles that wait. */}
-                <span className="hidden w-[140px] shrink-0 text-small tablet:block">
+                <span className="text-small">
                   {role.waits_for_send ? (
                     <WaitsMark
                       withLabel
@@ -253,7 +262,7 @@ export default function ProjectDetailPage({
                   )}
                 </span>
 
-                <span className="flex w-[110px] shrink-0 flex-col items-end gap-0.5 text-body">
+                <span className="flex flex-col items-end gap-0.5 text-body">
                   <span>{members.headline}</span>
                   {members.note && (
                     <span
@@ -263,6 +272,7 @@ export default function ProjectDetailPage({
                     </span>
                   )}
                 </span>
+                </Cells>
               </div>
             );
           })}

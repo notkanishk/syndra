@@ -7,7 +7,7 @@ import { UpstreamShell } from "@/components/upstream/UpstreamShell";
 import { Mono } from "@/components/ui/Badge";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
-import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, Cells, type Columns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
@@ -26,6 +26,13 @@ import { useShownNames } from "@/components/names/shownNames";
  * the whole inventory, in one place, with an honest note when the fetch had to
  * stop short of the end.
  */
+/** Person, project, roles: each a full line on a phone. */
+const COLS: Columns = [
+  "w-full tablet:w-auto tablet:min-w-[160px] tablet:flex-[1_1_0%]",
+  "w-full tablet:w-auto tablet:min-w-[160px] tablet:flex-[1_1_0%]",
+  "w-full tablet:w-auto tablet:min-w-[140px] tablet:flex-[2_1_0%]",
+];
+
 export default function UpstreamGrantsPage() {
   const grants = useUpstreamGrants();
   const [query, setQuery] = useState("");
@@ -92,11 +99,11 @@ export default function UpstreamGrantsPage() {
 
         <ListStates
           head={
-            <CardColumns>
-              <span className="w-[230px]">Person</span>
-              <span className="w-[200px]">Project</span>
-              <span className="flex-1">Roles</span>
-              <span className="w-[190px] text-right">ID in Zitadel</span>
+            // The id is the fold on each row's own line beneath, so it heads that line (`detail`).
+            <CardColumns cols={COLS} detail="ID in Zitadel">
+              <span>Person</span>
+              <span>Project</span>
+              <span>Roles</span>
             </CardColumns>
           }
           isLoading={grants.isLoading}
@@ -121,19 +128,21 @@ export default function UpstreamGrantsPage() {
         >
           {visible.map((grant) => (
             <div key={grant.id} className="row-divider row-cols flex flex-wrap items-center gap-y-1 px-5 py-2.5">
-              <span className="w-full text-body font-semibold [overflow-wrap:anywhere] tablet:w-[230px] tablet:shrink-0">
+              <Cells cols={COLS}>
+              <span className="text-body font-semibold [overflow-wrap:anywhere]">
                 <UserName id={grant.userId} />
               </span>
-              <span className="w-full text-body text-muted [overflow-wrap:anywhere] tablet:w-[200px] tablet:shrink-0">
+              <span className="text-body text-muted [overflow-wrap:anywhere]">
                 <ProjectName id={grant.projectId} />
               </span>
-              <span className="min-w-0 flex-1 basis-full tablet:basis-0">
+              <span>
                 {sortNames(grant.roleKeys).map((key) => (
                   <Mono key={key} className="mr-2 text-muted [overflow-wrap:anywhere]">
                     {key}
                   </Mono>
                 ))}
               </span>
+              </Cells>
               <span className="basis-full">
                 <TechnicalDetail placeKey={`grant:${grant.id}`}>
                   <CopyableValue value={grant.id} label="Grant id" />
