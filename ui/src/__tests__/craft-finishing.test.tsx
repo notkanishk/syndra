@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
-import { ChangeTrail, trailSteps } from "@/components/people/ChangeTrail";
+import { ChangeTrail, PendingTrail, trailSteps } from "@/components/people/ChangeTrail";
 import { EmptyState, PLATES_SHOWN, Plate } from "@/components/states";
 import { CheckTrail } from "@/components/ui/CheckTrail";
 import { usersQueryKeys } from "@/lib/queries/useUsers";
@@ -62,6 +62,19 @@ describe("the change's trail settles only on what was observed (§5)", () => {
     const [, , last] = trailSteps("give", true, "held", Z);
     expect(last.faint?.[0]).toMatch(/^Read back at \d\d:\d\d\.$/);
     expect(trailSteps("give", false, undefined).filter((s) => s.ring)).toHaveLength(2);
+  });
+
+  // A-24 frame 14, "Pressing": the route by name, every step an open ring, nothing a sentence that says
+  // it happened. Drawn under the forecast while the act is out: GrantForecast and RemovalForecast.
+  it("PendingTrail is the route's names beside open rings, with no full stop", () => {
+    render(<PendingTrail act="revoke" />);
+    const list = screen.getByRole("list", { name: "On its way to Zitadel" });
+    expect(within(list).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Step 1: Recorded in Syndra",
+      "Step 2: Sent to Zitadel",
+      "Step 3: No longer in Zitadel",
+    ]);
+    expect(list.querySelectorAll("[data-dot][data-ring]")).toHaveLength(3);
   });
 });
 

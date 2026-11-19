@@ -278,6 +278,37 @@ describe("the end row", () => {
     expect(screen.queryByText(/Last counted/)).toBeNull();
     expect(screen.getByText(copy.keptLine(10))).toBeInTheDocument();
   });
+
+  // A-23 part 5 frame 23: a person's card never has the link, so it keeps no empty seat, and its faint
+  // facts end at the card's edge rather than 140px short of it.
+  it("keeps no empty seat on a person's card; a system's card keeps its seat with or without the link", () => {
+    const m = sessions({ began: ago(2) });
+    const { container, unmount } = render(<UsageCard title={copy.MEMBER_TITLE} windows={windows()} metrics={[m]} />);
+    expect(container.querySelector("[data-end] [data-action-seat]")).toBeNull();
+    unmount();
+    const system = render(<UsageCard label={copy.OVERVIEW_TITLE} windows={windows()} metrics={[sessions({ watermark: null })]} target="gym" />);
+    expect(system.container.querySelector("[data-end] [data-action-seat]")).not.toBeNull();
+  });
+});
+
+describe("a person with no account on the system", () => {
+  it("has no usage card when nothing of theirs is counted, not a card of empty sections (A-23 part 5 frame 23)", () => {
+    const usage = { reported: true as const, metrics: [sessions({ series: [] }), homeBytes({ against: undefined, series: [] })], ...windows() };
+    const { container } = render(<ViewUsage view={view(usage, { account: undefined })} person="Rey Mysterio" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("still has it where something of theirs was counted, so it is never nowhere", () => {
+    const usage = { reported: true as const, metrics: [sessions(), homeBytes({ against: undefined, series: [] })], ...windows() };
+    render(<ViewUsage view={view(usage, { account: undefined })} person="Rey Mysterio" />);
+    expect(screen.getByRole("group", { name: copy.operatorTitle("Rey Mysterio") })).toBeInTheDocument();
+  });
+
+  it("with an account, the card stays even with nothing counted", () => {
+    const usage = { reported: true as const, metrics: [sessions({ series: [] })], ...windows() };
+    render(<ViewUsage view={view(usage)} person="Rey Mysterio" />);
+    expect(screen.getByText(copy.NOTHING_COUNTED)).toBeInTheDocument();
+  });
 });
 
 describe("add-on text is quoted, capped and escaped", () => {

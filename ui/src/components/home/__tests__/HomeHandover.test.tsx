@@ -520,6 +520,34 @@ describe("the term line on Home", () => {
     expect(unfold.getAttribute("data-phase")).not.toBe("open");
   });
 
+  // A seat is the line's own size at every width: the same box classes (the phone's and the desktop's, the
+  // tap reach and its negative margin), only unseen. Colour and the link's hover are not size.
+  const sizeClasses = (el: Element) =>
+    (el.getAttribute("class") ?? "").split(/\s+/).filter((c) => c && !/^(invisible|text-(muted|faint|ink)|link-hover)$/.test(c)).sort();
+
+  it("holds each late line's seat at the line's own size, on a desktop and on a phone", () => {
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    state.terms = undefined;
+    state.loading = true;
+    const home = mount();
+    const termSeat = document.querySelector('[data-line-seat="term"]')!;
+    const checkedSeat = document.querySelector('[data-line-seat="checked"]')!;
+    const seat = { term: sizeClasses(termSeat), track: sizeClasses(termSeat.children[1]), checked: sizeClasses(checkedSeat), link: sizeClasses(checkedSeat.lastElementChild!) };
+    state.terms = [{ name: "Monsoon", start: "2026-08-01", end: "2026-12-31" }];
+    state.loading = false;
+    home.reread();
+    const line = document.querySelector("[data-term-line]")!;
+    expect(seat.term).toEqual(sizeClasses(line));
+    expect(seat.track).toEqual(sizeClasses(line.querySelector("[data-term-track]")!));
+    // The phone's two rows and the desktop's one are both in those classes: the track's own row below `tablet`.
+    expect(seat.track).toEqual(expect.arrayContaining(["row-start-2", "col-span-2", "tablet:row-start-1"]));
+    const checked = screen.getByText("Checked, nothing waiting:").parentElement!;
+    expect(seat.checked).toEqual(sizeClasses(checked));
+    expect(seat.link).toEqual(sizeClasses(checked.querySelector("a")!));
+    // The tap's reach without its height on a phone, none on a desktop: 24px either way, as the line.
+    expect(seat.link).toEqual(expect.arrayContaining(["-my-2.5", "min-h-[var(--tap)]", "desktop:my-0", "desktop:min-h-0"]));
+  });
+
   it("holds the Checked line's seat while the queue is read, so the head never grows when it lands", () => {
     vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
     state.loading = true;

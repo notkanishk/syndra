@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { TermLine } from "@/components/home/TermLine";
@@ -127,13 +127,42 @@ describe("the term line (§3.1, Q3)", () => {
     expect(track.querySelector("[data-today]")).not.toBeNull();
   });
 
-  it("sits its dot in the same seat as the head's other lines", () => {
+  it("is drawn as the board draws it: no dot of its own, and on a phone one full-width track under its words (A-24 frames 2, 2p)", () => {
     render(<TermLine term={terms[0]} ending={[]} now={now} />);
     const line = document.querySelector("[data-term-line]")!;
-    // Claims and Checked: a StatusDot first, in a gap-x-2 row (the dot and its gap are --dot-indent).
-    expect(line).toHaveClass("flex", "items-center", "gap-x-2");
-    expect(line.firstElementChild).toHaveAttribute("data-dot");
-    expect(line.firstElementChild).toHaveClass("size-1.5");
+    expect(line.querySelector("[data-dot]")).toBeNull();
+    // A grid, never a wrapping row: "Ends" can't fall onto a line of its own under a short track.
+    expect(line).toHaveClass("grid", "grid-cols-[minmax(0,1fr)_auto]", "tablet:grid-cols-[auto_minmax(0,1fr)_auto]", "max-w-[760px]");
+    expect(line).not.toHaveClass("flex-wrap");
+    const track = line.querySelector("[data-term-track]")!;
+    // Phone: its own row, both columns wide. From tablet: the middle column, between the words.
+    expect(track).toHaveClass("col-span-2", "row-start-2", "tablet:col-span-1", "tablet:col-start-2", "tablet:row-start-1");
+    expect(track).not.toHaveClass("max-w-80");
+  });
+
+  // A-24 frame 2: "Hover or focus on a mark reads its day, as the usage band does." The track is one
+  // focusable image; the words go to the line's readout, the term's day's seat, and back when it is left.
+  it("reads a marked day on hover, and on focus with the arrows, in the line's readout", () => {
+    const ending = [
+      { user_id: "u1", expires_at: "2026-11-24T10:00:00Z" },
+      { user_id: "u2", expires_at: "2026-11-24T11:00:00Z" },
+      { user_id: "u3", expires_at: "2026-11-27T10:00:00Z" },
+    ];
+    render(<TermLine term={terms[0]} ending={ending} now={now} />);
+    const readout = () => document.querySelector("[data-term-readout] [aria-live]")!.textContent;
+    const track = screen.getByRole("img");
+    expect(readout()).toBe("Monsoon term, day 110 of 153");
+    fireEvent.pointerEnter(document.querySelector('[data-ending="2026-11-27"]')!);
+    expect(readout()).toBe("Access ends for one person on 27 Nov.");
+    fireEvent.pointerLeave(track);
+    expect(readout()).toBe("Monsoon term, day 110 of 153");
+    expect(track).toHaveAttribute("tabindex", "0");
+    fireEvent.focus(track);
+    expect(readout()).toBe("Access ends for two people on 24 Nov.");
+    fireEvent.keyDown(track, { key: "ArrowRight" });
+    expect(readout()).toBe("Access ends for one person on 27 Nov.");
+    fireEvent.blur(track);
+    expect(readout()).toBe("Monsoon term, day 110 of 153");
   });
 
   it("counts a one-day term as one day", () => {
@@ -158,12 +187,12 @@ describe("the line that knows on a person's page (§9, Q10)", () => {
 
   it("says only that it is checking while there is no count: loading, or a read missing, failed or cut short", () => {
     const one = [laser({ standings: { op: "held" } })];
-    expect(personLine(undefined, names)).toBe(CHECKING);
-    expect(personLine(view(one, undefined), names, now)).toBe(CHECKING);
+    expect(personLine(undefined, names).text).toBe(CHECKING);
+    expect(personLine(view(one, undefined), names, now).text).toBe(CHECKING);
     // A zero is an absence claim, and waits for a read that succeeded and saw everything.
-    expect(personLine(view([], 0, { read_at: "", current: true, truncated: false }), names, now)).toBe(CHECKING);
-    expect(personLine(view([], 0, { ...read, current: false }), names, now)).toBe(CHECKING);
-    expect(personLine(view([], 0, { ...read, truncated: true }), names, now)).toBe(CHECKING);
+    expect(personLine(view([], 0, { read_at: "", current: true, truncated: false }), names, now).text).toBe(CHECKING);
+    expect(personLine(view([], 0, { ...read, current: false }), names, now).text).toBe(CHECKING);
+    expect(personLine(view([], 0, { ...read, truncated: true }), names, now).text).toBe(CHECKING);
   });
 
   it("counts as the People row counts (observedHolding), with its projects from Zitadel's standings", () => {
@@ -171,9 +200,9 @@ describe("the line that knows on a person's page (§9, Q10)", () => {
       laser({ standings: { op: "held", tr: "waiting" }, source_roles: [{ role_key: "tr", reasons: [] }] }),
       wood({ standings: { mb: "held" } }),
     ];
-    expect(personLine(view(projects, 2), names, now)).toMatch(/^Holds 2 roles across 2 projects\./);
-    expect(personLine(view([laser({ standings: { op: "held" } })], 1), names, now)).toBe("Holds 1 role in Laser cutting.");
-    expect(personLine(view([laser({ standings: { op: "sent" } })], 0), names, now)).toMatch(/^Holds no roles\./);
+    expect(personLine(view(projects, 2), names, now).text).toMatch(/^Holds 2 roles across 2 projects\./);
+    expect(personLine(view([laser({ standings: { op: "held" } })], 1), names, now).text).toBe("Holds 1 role in Laser cutting.");
+    expect(personLine(view([laser({ standings: { op: "sent" } })], 0), names, now).text).toMatch(/^Holds no roles\./);
   });
 
   it("adds the one thing worth knowing: the soonest end of a held role, then Not in Zitadel, then what is on its way", () => {
@@ -181,13 +210,22 @@ describe("the line that knows on a person's page (§9, Q10)", () => {
       standings: { op: "held", tr: "held" },
       holdings: { op: { kind: "until", until: "2026-11-30T12:00:00Z" }, tr: { kind: "until", until: "2026-11-21T12:00:00Z" } },
     });
-    expect(personLine(view([soon], 2), names, now)).toBe("Holds 2 roles in Laser cutting. Trained in Laser cutting ends in 3 days.");
+    expect(personLine(view([soon], 2), names, now).text).toBe("Holds 2 roles in Laser cutting. Trained in Laser cutting ends in 3 days.");
     // An end past the window, or on a role Zitadel does not show, is not worth the line.
     const later = laser({ standings: { op: "held", tr: "sent" }, holdings: { op: { kind: "until", until: "2027-01-30T12:00:00Z" }, tr: { kind: "until", until: "2026-11-20T12:00:00Z" } } });
-    expect(personLine(view([later], 1), names, now)).toBe("Holds 1 role in Laser cutting. Trained in Laser cutting is on its way to Zitadel.");
-    expect(personLine(view([laser({ standings: { op: "held", tr: "not_held" } })], 1), names, now)).toBe(
+    expect(personLine(view([later], 1), names, now).text).toBe("Holds 1 role in Laser cutting. Trained in Laser cutting is on its way to Zitadel.");
+    expect(personLine(view([laser({ standings: { op: "held", tr: "not_held" } })], 1), names, now).text).toBe(
       "Holds 1 role in Laser cutting. Not in Zitadel: Trained in Laser cutting.",
     );
+  });
+
+  it("wears its ladder's dot, as A-24 frame 18 draws it: amber when it names an end or a role not in Zitadel", () => {
+    const ends = laser({ standings: { op: "held" }, holdings: { op: { kind: "until", until: "2026-11-21T12:00:00Z" } } });
+    expect(personLine(view([ends], 1), names, now).tone).toBe("warn");
+    expect(personLine(view([laser({ standings: { op: "held", tr: "not_held" } })], 1), names, now).tone).toBe("warn");
+    expect(personLine(view([laser({ standings: { op: "held", tr: "sent" } })], 1), names, now).tone).toBe("neutral");
+    expect(personLine(view([laser({ standings: { op: "held" } })], 1), names, now).tone).toBe("neutral");
+    expect(personLine(undefined, names).tone).toBe("none");
   });
 
   it("never says a role held twice ends: a direct grant's end is not the bundle's", () => {
@@ -196,7 +234,7 @@ describe("the line that knows on a person's page (§9, Q10)", () => {
       holdings: { tr: { kind: "until", until: "2026-11-21T12:00:00Z" } },
       source_roles: [{ role_key: "tr", reasons: [{ kind: "direct" }, { kind: "bundle", bundle_id: "b1", bundle_name: "Lab Tech" }] }],
     });
-    expect(personLine(view([twice], 1), names, now)).toBe("Holds 1 role in Laser cutting.");
+    expect(personLine(view([twice], 1), names, now).text).toBe("Holds 1 role in Laser cutting.");
   });
 });
 

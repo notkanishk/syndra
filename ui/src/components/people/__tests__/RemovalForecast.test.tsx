@@ -95,6 +95,14 @@ describe("Remove, direct: the first 100ms", () => {
     await planRead("Revoke this role");
     fireEvent.click(screen.getByRole("button", { name: "Revoke this role" }));
     expect(await screen.findByText(FORECAST.revoke)).toBeInTheDocument();
+    // A-24 frame 14: the route is there while the act is out, each step its name beside an open ring.
+    const route = screen.getByRole("list", { name: "On its way to Zitadel" });
+    expect(Array.from(route.querySelectorAll("li")).map((li) => li.textContent?.replace(/^Step \d: /, ""))).toEqual([
+      "Recorded in Syndra",
+      "Sent to Zitadel",
+      "No longer in Zitadel",
+    ]);
+    expect(route.querySelectorAll("[data-dot][data-ring]")).toHaveLength(3);
     wire.release!();
     await screen.findByText(/Direct access to .* revoked/);
     expect(screen.getByText("Revoked")).toBeInTheDocument();
@@ -117,6 +125,8 @@ describe("Remove, direct: the first 100ms", () => {
     await planRead("Cancel giving it");
     fireEvent.click(screen.getByRole("button", { name: "Cancel giving it" }));
     expect(await screen.findByText(FORECAST.cancel)).toBeInTheDocument();
+    // Cancelling a give that never went sends nothing toward Zitadel: no route.
+    expect(screen.queryByRole("list", { name: "On its way to Zitadel" })).toBeNull();
     // Ahead of the answer, nothing on the rail has moved.
     expect(railNow().pending_propagation).toBe(4);
     wire.release!();

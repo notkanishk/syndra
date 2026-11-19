@@ -308,6 +308,17 @@ describe("the line under the headline", () => {
     expect(within(line).queryByRole("link", { name: "Requests" })).toBeNull();
   });
 
+  // A-24 frame 2p: on a phone the head's lines sit a row (24px) apart. Each link keeps the 44px tap reach
+  // and gives 10px back either side below desktop, so the line is Claims' row, not 44px tall.
+  it("keeps its links' 44px reach without growing the line on a phone", () => {
+    everyBlock();
+    renderHome();
+    const line = screen.getByText(/Checked, nothing waiting/).parentElement!;
+    const links = within(line).getAllByRole("link");
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) expect(link).toHaveClass("min-h-[var(--tap)]", "-my-2.5", "desktop:my-0", "desktop:min-h-0");
+  });
+
   it("a block that left because it is clear is named instead", () => {
     state.requests = [request];
     renderHome();

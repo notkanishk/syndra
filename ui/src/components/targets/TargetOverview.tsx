@@ -183,7 +183,7 @@ export function TargetOverview({ target }: { target: string }) {
         </ReadLine>
       )}
 
-      <div data-arrive-through className="grid gap-(--region-gap)">
+      <div data-arrive-through className="flex flex-col gap-(--region-gap)">
         <SectionPill sections={sections} label="Regions of this page" gap="var(--region-gap)" />
         {/* Region 0 · whether changes can land.
 

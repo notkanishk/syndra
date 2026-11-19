@@ -10,7 +10,7 @@ import { AdvancedLink } from "@/components/ui/AdvancedLink";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { ClaimsLine } from "@/components/home/ClaimsLine";
-import { TermLine } from "@/components/home/TermLine";
+import { TermLine, TermLineSeat } from "@/components/home/TermLine";
 import { Makerspace } from "@/components/home/Makerspace";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Owner } from "@/components/system/ServiceAccountOwner";
@@ -62,6 +62,11 @@ import { useTerms } from "@/lib/queries/useTerms";
 import { termDayLine, termHolding } from "@/lib/term-dates";
 import { compareNames, sortByName, sortNames } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
+
+/** The Checked line's box and its links' shape, shared with its seat so the two are one height. */
+const CHECKED_LINE = "flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-small";
+// The tap's 44px reach, without its height: -10px either side leaves the line the 24px row Claims has.
+const CHECKED_LINK = "-my-2.5 inline-flex min-h-[var(--tap)] items-center desktop:my-0 desktop:min-h-0";
 
 /**
  * Home — the operator landing. Two zones, in a fixed order.
@@ -450,7 +455,7 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
             {term ? (
               <TermLine term={term} ending={summary.data?.expiring_grants ?? []} now={now} />
             ) : (
-              termPending && <div aria-hidden data-line-seat="term" className="min-h-6 pt-1" />
+              termPending && <TermLineSeat />
             )}
           </Unfold>
         )}
@@ -468,18 +473,22 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
             first frame; once they land it stays or folds away like any line. */}
         <Unfold open={!error && (loading || (swap.gridOpen && clear.length > 0))}>
           {loading ? (
-            <div aria-hidden data-line-seat="checked" className="invisible flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-small">
+            // The line's own box and one link of its shape: the seat is the line's height at every width.
+            <div aria-hidden data-line-seat="checked" className={`invisible ${CHECKED_LINE}`}>
               <StatusDot tone="healthy" />
-              <span className="inline-flex min-h-[var(--tap)] items-center desktop:min-h-0">Checked, nothing waiting:</span>
+              <span>Checked, nothing waiting:</span>
+              <span className={CHECKED_LINK}>Holds due</span>
             </div>
           ) : (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-small text-muted">
+          <div className={`${CHECKED_LINE} text-muted`}>
             <StatusDot tone="healthy" />
             <span>Checked, nothing waiting:</span>
             {clear.map(([name, href], index) => (
               <span key={href} className="inline-flex items-center gap-2">
                 {index > 0 && <span aria-hidden>·</span>}
-                <AdvancedLink href={href} className="inline-flex min-h-[var(--tap)] items-center text-ink link-hover desktop:min-h-0">
+                {/* The tap's 44px reach, without its height: -10px either side leaves the line the
+                    24px row Claims has, so the phone's lines sit 24px apart as drawn (A-24 frame 2p). */}
+                <AdvancedLink href={href} className={`${CHECKED_LINK} text-ink link-hover`}>
                   {name}
                 </AdvancedLink>
               </span>

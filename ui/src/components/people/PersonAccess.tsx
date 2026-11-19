@@ -30,6 +30,7 @@ import { EmptyState, ErrorState, RowSkeleton, SkeletonAfterDelay } from "@/compo
 import { ReadGate } from "@/components/states/ReadGate";
 import { Avatar } from "@/components/ui/Avatar";
 import { Chip, Mono } from "@/components/ui/Badge";
+import { DotLine } from "@/components/ui/StatusSeat";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Notice } from "@/components/ui/Notice";
 import { StatusSeat } from "@/components/ui/StatusSeat";
@@ -67,11 +68,14 @@ import { projectSignInLine } from "@/lib/sign-in-line";
 import { sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 import { CHECKING, personLine } from "@/components/people/personLine";
+import type { HeaderLine } from "@/components/member/headerLine";
 
 type Tab = "access" | "requests" | "activity";
 
 // The page opens on the line that knows (A-24 §9, Q10, `personLine`), not on a sentence that is the
-// same for everyone: what they hold, from Zitadel, and the one thing worth knowing.
+// same for everyone: what they hold, from Zitadel, and the one thing worth knowing. Drawn as A-24 frame
+// 18 draws it, a head line led by its ladder's dot (`DotLine`, as My access draws its own line).
+const KnowsLine = ({ line }: { line: HeaderLine }) => <DotLine tone={line.tone} text={line.text} className="text-small" />;
 
 const TAB_LABELS: Record<Tab, string> = {
   access: "Access",
@@ -134,7 +138,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
           <PageHeader
             className="w-full flex-1"
             title={seed.name}
-            lede={CHECKING}
+            lede={<KnowsLine line={{ tone: "none", text: CHECKING }} />}
             meta={<MetaRow>{[seed.email, seed.title || null, seed.team || null]}</MetaRow>}
           />
         </div>
@@ -319,7 +323,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
         <PageHeader
           className="w-full flex-1"
           title={user.name}
-          lede={personLine(access.data, { role: roleName })}
+          lede={<KnowsLine line={personLine(access.data, { role: roleName })} />}
           meta={
             <MetaRow>
               {[

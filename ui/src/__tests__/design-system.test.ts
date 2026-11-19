@@ -1302,8 +1302,11 @@ describe("density and alignment (D-1)", () => {
 
   it("gives SectionPill the regions' own gap, as the token, so the two agree at every width", () => {
     const overview = readFileSync(resolve(SRC_ROOT, "components/targets/TargetOverview.tsx"), "utf8");
-    expect(overview).toContain('<div data-arrive-through className="grid gap-(--region-gap)">');
-    expect(overview).toMatch(/<SectionPill[^>]*gap="var\(--region-gap\)"/);
+    // A flex column, never a grid: a grid track never goes below 0, so the pill's negative margin
+    // can't give the gap back and the first region sits 40px low (D-1 part 1 frame 2: 79px, drawn 41).
+    expect(overview).toMatch(
+      /<div data-arrive-through className="flex flex-col gap-\(--region-gap\)">\s*<SectionPill[^>]*gap="var\(--region-gap\)"/,
+    );
   });
 
   // §8: "every phone layout is kept". The density is a window's; a phone reads

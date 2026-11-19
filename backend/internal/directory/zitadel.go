@@ -247,11 +247,14 @@ func (z *zitadelSource) FindUser(ctx context.Context, userID string) (models.Use
 		return models.UserProfile{}, false, fmt.Errorf("%w: user %s isn't in the last good read", ErrUnreachable, userID)
 	}
 	zu, err := z.client.GetUser(ctx, userID)
+	// Zitadel answers a missing user with 404 (GetUser never returns nil, nil):
+	// that is "no such user", not a failed read.
+	var se *zitadel.StatusError
+	if errors.As(err, &se) && se.Code == http.StatusNotFound {
+		return models.UserProfile{}, false, nil
+	}
 	if err != nil {
 		return models.UserProfile{}, false, fmt.Errorf("directory: get user %s: %w", userID, err)
-	}
-	if zu == nil {
-		return models.UserProfile{}, false, nil
 	}
 	profile := toUserProfile(*zu)
 	if md, ok := z.fetchUserMetadata(ctx, profile.ID); ok {
