@@ -370,25 +370,6 @@
     }
   }
 
-  /* The door opens (A-24 §3.2): the arch of light behind Home's head widens
-     into the hour's pool, ending at the pool's own size and height, and fades,
-     once a sign-in. Its shape and its opacity change; nothing moves, so it is
-     outside the travel cap by having none. */
-  @keyframes door-open {
-    from {
-      --door-w: 90px;
-      --door-h: 260px;
-      --door-y: 80%;
-      opacity: 1;
-    }
-    to {
-      --door-w: var(--hour-w);
-      --door-h: var(--hour-h);
-      --door-y: var(--hour-y);
-      opacity: 0;
-    }
-  }
-
   /* A phone sheet rises from the bottom edge of the screen and nothing else:
      the scrim carries the fade. Its own travel, so not held to --travel-cap. */
   @keyframes sheet-rise {
@@ -1108,31 +1089,14 @@
 /* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind
    Home's head, its place set by the part of the day (`dayPhase`, the greeting's
    own clock). The ONE written exception to "colour is never decorative" above,
-   with its bounds: Home's head, and a member's card on its first day (`lit-card`,
-   A-24 §3.3); still (no loop, and no animation but the door's, once a sign-in); the accent,
+   with its bounds: Home's head, a member's card on its first day (`lit-card`,
+   A-24 §3.3), and the door walked through (`door-through`, A-24 §3.2); still
+   (no loop, and no animation but the door's, once a sign-in); the accent,
    never a status colour; the same rule in both rooms; gone under forced colours;
    and never strong enough to take a line of text in the head under 4.5:1 (the
    contrast test holds it, at the pool's strongest point, in both themes).
    `--hour-x`/`--hour-y` is where the pool sits, `--hour-w`/`--hour-h` its size,
    `--hour-reach` how much accent it holds. */
-/* The door's arch, as a size and a height `door-open` can carry into the pool's:
-   a registered length interpolates, a bare custom property would only jump. */
-@property --door-w {
-  syntax: "<length-percentage>";
-  inherits: false;
-  initial-value: 90px;
-}
-@property --door-h {
-  syntax: "<length-percentage>";
-  inherits: false;
-  initial-value: 260px;
-}
-@property --door-y {
-  syntax: "<length-percentage>";
-  inherits: false;
-  initial-value: 80%;
-}
-
 @utility hour-light {
   position: absolute;
   inset: -24px -26px -28px;
@@ -1183,32 +1147,6 @@
     --hour-x: 2%;
     --hour-y: 40%;
     --hour-reach: 22%;
-  }
-
-  /* The first arrival of a sign-in (A-24 §3.2, Q4): once, a doorway's arch of light stands
-     under the hour's pool, at its own place (`--hour-x`), and widens into it (`door-open` carries
-     the arch's size and height to the pool's own), fading as the pool comes up behind it. The
-     light's extent grows; nothing in the page travels, and nothing waits for it. It keeps the
-     pool's mask, so it has no edge either. Reduced motion: the pool at rest, and no arch. */
-  &[data-arch] {
-    --hour-reach: 30%;
-    background: radial-gradient(
-      ellipse var(--door-w) var(--door-h) at var(--hour-x) var(--door-y),
-      var(--hour-light),
-      transparent 70%
-    );
-    animation: door-open var(--duration-arrive) var(--ease-settle) both;
-  }
-  &[data-door] {
-    animation: fade var(--duration-arrive) var(--ease-settle) both;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    &[data-arch] {
-      display: none;
-    }
-    &[data-door] {
-      animation: none;
-    }
   }
 
   /* A phone's gutter is 16px, not the page's 26: the pool reaches to the edge and no further, so
@@ -1672,12 +1610,6 @@ html.theme-fading *::after {
   &:not([data-settled]) {
     animation: fade var(--duration-tint) var(--ease-tint) both;
   }
-  /* A quiet visit (A-24 Q14: seen before this session, or reached by key): the
-     header tints in and nothing after it arrives; the content is simply there. */
-  &[data-quiet] {
-    animation: fade var(--duration-tint) var(--ease-tint) both;
-  }
-
   &:not([data-settled]) ~ * {
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
     animation-delay: calc(var(--duration-tint) + (var(--arrive-cap) - 1) * var(--arrive-step));
@@ -2167,6 +2099,17 @@ html.theme-fading *::after {
   --door-link-fade: 0.15s;
   --door-breath: 10s;
   --door-grain: 0.75s;
+
+  /* Walking through it (A-24 §3.2): the first page of a sign-in opens on this
+     room, and the door opens around you over --door-through. The page under it
+     tints in at --door-through-reveal; the keyframes' stops are fractions of
+     those times (14% and 28%: a tint before the reveal, and the reveal), and a
+     test holds them together. --door-through-light is the light's
+     strength at its heart; the contrast test holds what is left of it once the
+     page is in. */
+  --door-through: 900ms;
+  --door-through-reveal: 250ms;
+  --door-through-light: 60%;
 }
 
 /* The arch group is the one fixed-width thing here. Below ~480px it scales on
@@ -2598,6 +2541,124 @@ body:has(.login-stage) {
     .login-grain {
       animation: doorGrain var(--door-grain) steps(1, end) infinite;
     }
+  }
+}
+
+/* ══ The door, walked through (A-24 §3.2, Q4) ══════════════════════════════
+ * The first page of a sign-in, once (DoorThrough, AppShell): the door's own
+ * room fills the window, the arch stands in it with its light inside, and the
+ * door opens around you. The arch widens past you and is gone; its light
+ * floods the window and dissolves into the page's own light. Always the dark
+ * room, as the door is, in both themes. Nothing travels: the light's opacity
+ * and size change, and the arch's. The page is under it from the first frame
+ * and tints in at the reveal (`#app-root[data-door]`), so nothing is read
+ * through the room. Hidden from assistive technology, never takes a click,
+ * gone under reduced motion and forced colours.
+ * ═══════════════════════════════════════════════════════════════════════ */
+.door-through {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-popover);
+  overflow: hidden;
+  pointer-events: none;
+}
+.door-through-room {
+  position: absolute;
+  inset: 0;
+  background: var(--door-page);
+  animation: door-through-room var(--door-through) linear both;
+}
+/* The light that was behind the arch on the sign-in screen, now coming through it. */
+.door-through-light {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 90vmin;
+  height: 90vmin;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--door-fill) var(--door-through-light), transparent),
+    color-mix(in srgb, var(--door-fill) calc(var(--door-through-light) * 0.3), transparent) 46%,
+    transparent
+  );
+  animation: door-through-light var(--door-through) var(--door-ease-exit) both;
+}
+/* The door's own arch: its size, its stroke, the uprights dissolving into the floor, the wash inside. */
+.door-through-arch {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--door-arch-w);
+  height: var(--door-arch-h);
+  border: 1.5px solid var(--door-stroke);
+  border-bottom: none;
+  border-radius: var(--door-arch-r) var(--door-arch-r) 0 0;
+  background: linear-gradient(to top, color-mix(in srgb, var(--door-fill) 30%, transparent), transparent 62%);
+  mask-image: var(--door-arch-mask);
+  -webkit-mask-image: var(--door-arch-mask);
+  animation: door-through-arch var(--door-through) var(--door-ease-exit) both;
+}
+#app-root[data-door] {
+  animation: fade var(--duration-tint) var(--ease-tint) var(--door-through-reveal) both;
+}
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .door-through {
+    display: none;
+  }
+  #app-root[data-door] {
+    animation: none;
+  }
+}
+
+/* One keyframe set, on --door-through (900ms). 0 to 14%: the room whole, the
+   arch and its light opening. 14% to 28% (one tint, up to the reveal at
+   250ms): the room and the arch dissolve and the light falls to what may sit
+   over text. From 28%, as the page tints in, only that is left: 0.15 of
+   --door-through-light, 9% violet at its heart, the most that keeps every
+   text token at 4.5:1 in both rooms (RULES), widening and dissolving into the
+   page's own light by 900ms. A test holds 14% and 28% to the tokens. */
+@keyframes door-through-room {
+  0%,
+  14% {
+    opacity: 1;
+  }
+  28%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes door-through-arch {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  14% {
+    opacity: 0.9;
+    transform: scale(1.7);
+  }
+  28%,
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+@keyframes door-through-light {
+  0% {
+    opacity: 1;
+    transform: scale(0.5);
+  }
+  14% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  28% {
+    opacity: 0.15;
+    transform: scale(1.5);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
   }
 }
 

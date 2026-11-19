@@ -3,61 +3,27 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { ROW_STOP, moveBetweenRows, rowFocused, useRovingRows } from "@/lib/keys";
-import { recallPaths, remember } from "@/lib/memory";
-import { keepPlace, recallPlace, returnedTo, returnedToThisPage } from "@/lib/place";
+import { keepPlace, recallPlace, returnedToThisPage } from "@/lib/place";
 
 import { flashOnce } from "./flash";
 import { ARRIVE_MEMORY_MS, ARRIVE_SETTLED_MS } from "./still";
 
-// A screen arrives when you navigate to it (S11), and only then. Back, Forward
-// and a reload return you to somewhere you have been, and it is simply there:
-// that is place's to know (`returnedToThisPage`, lib/place.ts), said here too.
+// A screen arrives every time you go to it (S11; the owner reversed A-24 Q14,
+// 19 Nov 2026: "arrive on every visit"): a link, Go to and Enter alike, the
+// header tinting in and what follows rising 40ms apart, capped at five. Back,
+// Forward and a reload return you to somewhere you have been, and it is simply
+// there: that is place's to know (`returnedToThisPage`, lib/place.ts), said
+// here too. So are a filter, a sort and the Basic/Advanced switch.
 export { returnedToThisPage };
 
-// A place arrives once a session, and never by key (S11, A-24 §2 and Q14).
-// The first visit to a path in this tab's session arrives as built. A later
-// visit, or one made by key (Enter on a link, a row opened from Go to), is
-// quiet: the header tints in and the content is simply there, because an
-// arrival that informed the first time is only latency the thirtieth. A Back,
-// a Forward and a reload are quiet too, and stiller still (`returnedToThisPage`).
-// The paths that have arrived live in sessionStorage; a new tab starts afresh.
-// ponytail: every path is kept for the tab's life; a day of a hundred people
-// pages is a few kilobytes. Trim it if a session ever grows past that.
-const ARRIVED = "syndra:arrived";
-let byKey: { path: string; at: number } | null = null;
-
-/** The next visit to `href` was asked for by key, so it does not arrive (Go to, Enter on a link). */
-export function visitByKey(href: string) {
-  if (typeof window !== "undefined") byKey = { path: new URL(href, window.location.href).pathname, at: Date.now() };
-}
-if (typeof document !== "undefined") {
-  // A link pressed with Enter is a click with no pointer: `detail` counts pointer clicks and is 0 here
-  // (UI Events, `detail` for click). Captured, so it is noted before the router moves.
-  document.addEventListener(
-    "click",
-    (event) => {
-      const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
-      if (link && event.detail === 0) visitByKey(link.getAttribute("href") ?? "");
-    },
-    true,
-  );
-}
-
-// The page on screen, when it was shown, and whether this visit is quiet. The
-// top bar notes it as it renders, which is before the page's own parts render
-// in the same pass, so a part can ask whether it is part of the page's first
-// paint or came after it.
-let page: { path: string; at: number; quiet: boolean } | null = null;
+// The page on screen and when it was shown. The top bar notes it as it renders,
+// which is before the page's own parts render in the same pass, so a part can
+// ask whether it is part of the page's first paint or came after it.
+let page: { path: string; at: number } | null = null;
 export function notePage(path: string) {
   if (page?.path === path) return;
-  const arrived = recallPaths("session", ARRIVED);
-  const keyed = byKey !== null && byKey.path === path && Date.now() - byKey.at < ARRIVE_MEMORY_MS;
-  page = { path, at: Date.now(), quiet: arrived.includes(path) || keyed || returnedTo(path) };
-  if (!arrived.includes(path)) remember("session", ARRIVED, [...arrived, path]);
+  page = { path, at: Date.now() };
 }
-/** True when the visit on screen does not arrive: a place already seen this session, reached by key, or by Back. */
-export const quietVisit = () =>
-  page !== null && page.quiet && typeof window !== "undefined" && page.path === window.location.pathname;
 /** True once this page's first paint is over (or no page was noted): what mounts now is late. */
 export const pageSettled = () => page === null || Date.now() - page.at > ARRIVE_SETTLED_MS;
 
@@ -125,7 +91,7 @@ export function ArriveList({
   // After mount, not in the initial state: the server cannot know about a Back,
   // and a different first render is a hydration mismatch.
   useLayoutEffect(() => {
-    if (returnedToThisPage() || switchedViewHere() || quietVisit()) setSettled(true);
+    if (returnedToThisPage() || switchedViewHere()) setSettled(true);
     // A visit that is not a Back has no row to give back, so an older visit's row never flashes.
     if (!returnedToThisPage()) keepPlace("row", null);
   }, []);

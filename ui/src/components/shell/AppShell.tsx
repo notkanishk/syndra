@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useState } from "react";
 
 import { GoToHost } from "@/components/shell/GoToHost";
 import { KeysHost } from "@/components/shell/KeysHost";
@@ -9,7 +9,9 @@ import { PlaceHost } from "@/components/shell/PlaceHost";
 import Sidebar from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { TouchNav } from "@/components/shell/TouchNav";
-import { noteSignIn } from "@/lib/motion/door";
+import { DoorThrough } from "@/components/shell/DoorThrough";
+import { stillMotion } from "@/lib/motion";
+import { firstArrival } from "@/lib/motion/door";
 import { ShellNoticesProvider } from "@/components/shell/ShellNotices";
 import { PageCrumbProvider } from "@/lib/page-crumb";
 import type { SessionUser } from "@/lib/session";
@@ -57,14 +59,24 @@ export function AppShell({
   initialView?: UiView;
   children: React.ReactNode;
 }) {
-  // The sign-in's first page is this one, whichever it is (A-24 §3.2): Home opens the door only if it was.
-  useLayoutEffect(() => noteSignIn(session.signedInAt), [session.signedInAt]);
+  // The first page of a sign-in, whichever it is (A-24 §3.2): you walk through the door, once.
+  // Asked before the first paint, so the room is there from the first frame. Reduced motion
+  // spends the arrival and shows nothing: the page simply appears.
+  const [door, setDoor] = useState(false);
+  useLayoutEffect(() => {
+    if (firstArrival(session.signedInAt) && !stillMotion()) setDoor(true);
+  }, [session.signedInAt]);
   return (
     <UiViewProvider isOperator={session.role === "admin"} selfId={session.id} initialView={initialView}>
       <PageCrumbProvider>
         {/* `app-root` is what a dialog makes inert (Modal): overlays portal to <body>, outside it.
             `relative` so `overflow-clip` also clips absolutely positioned descendants. */}
-        <div id="app-root" className="relative flex h-dvh flex-col overflow-clip bg-canvas tablet:flex-row">
+        {/* While the door opens the page waits under it and tints in at the reveal (`data-door`). */}
+        <div
+          id="app-root"
+          data-door={door ? "" : undefined}
+          className="relative flex h-dvh flex-col overflow-clip bg-canvas tablet:flex-row"
+        >
           {/* First in the tab order, off-screen until focused: a keyboard user
               reaches the page without tabbing through the whole rail first. */}
           <a
@@ -115,6 +127,7 @@ export function AppShell({
           <PlaceHost />
           <IntentPrefetchHost />
         </div>
+        {door && <DoorThrough onDone={() => setDoor(false)} />}
       </PageCrumbProvider>
     </UiViewProvider>
   );

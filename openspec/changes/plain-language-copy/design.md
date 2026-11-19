@@ -1015,5 +1015,5 @@ The foundation changes how things move and where a figure leads, and adds four p
 | Where | Words |
 |---|---|
 | My access, the card of a project whose access began today, on the first visit after it starts (§3.3, Q6) | Its note: From today. (The line under the greeting already says "From today, you can use {projects}."; the card's light has no words and is hidden from assistive technology.) On the next visit the card has no note. |
-| Home, the first arrival of a sign-in (§3.2, Q4) | No words: the door's light opens behind the greeting and says nothing a reader needs. |
+| The first page of a sign-in, any page (§3.2, Q4) | No words: you walk through the door, hidden from assistive technology; it says nothing a reader needs. |
 | Empty states, plates (§7, Q9) | No words: a plate is hidden from assistive technology; the sentence beside it says everything. |

@@ -1,12 +1,9 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { firstTime, idHash } from "@/lib/memory";
 
-import { block, colour, css, over, ratio } from "./cssTokens";
+import { block, colour, css, over, ratio, type RGBA } from "./cssTokens";
 
 /**
  * A-24 wave 4, ceremony (§3.2, §3.3, Q9): moments meant once are kept to once
@@ -22,10 +19,20 @@ const utility = (name: string) => {
   }
   return "";
 };
-const keyframes = (name: string) => {
-  const start = css.indexOf(`@keyframes ${name} {`);
-  return start < 0 ? "" : css.slice(start, css.indexOf("\n  }\n", start) + 4);
+const braced = (prelude: string) => {
+  const start = css.indexOf(prelude);
+  if (start < 0) return "";
+  let depth = 0;
+  for (let i = css.indexOf("{", start); i < css.length; i += 1) {
+    if (css[i] === "{") depth += 1;
+    else if (css[i] === "}" && --depth === 0) return css.slice(start, i + 1);
+  }
+  return "";
 };
+const keyframes = (name: string) => braced(`@keyframes ${name} {`);
+/** The opacity a keyframe set holds at `stop` (a stop list like "41%,\n  100%" counts). */
+const opacityAt = (frames: string, stop: string) =>
+  Number(new RegExp(`${stop}[^{]*\\{[^}]*opacity: ([\\d.]+);`).exec(frames)?.[1]);
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -57,43 +64,75 @@ describe("once, on this device", () => {
   });
 });
 
-describe("the door opens (§3.2): one keyframe, once, nothing travels", () => {
-  const light = utility("hour-light");
+describe("walking through the door (§3.2): the door's own room, one keyframe set, nothing travels", () => {
+  const sets = ["door-through-room", "door-through-arch", "door-through-light"].map(keyframes);
+  const ms = (token: string) => Number(new RegExp(`${token}: (\\d+)ms;`).exec(css)?.[1]);
 
-  it("widens the arch and fades it, with no transform and no travel", () => {
-    const open = keyframes("door-open");
-    expect(open).toMatch(/from \{[^}]*--door-w: 90px;[^}]*--door-h: 260px;[^}]*--door-y: 80%;[^}]*opacity: 1;/);
-    // It ends as the pool: the hour's own size and height, so the light widens INTO the pool.
-    expect(open).toMatch(/to \{[^}]*--door-w: var\(--hour-w\);[^}]*--door-h: var\(--hour-h\);[^}]*--door-y: var\(--hour-y\);[^}]*opacity: 0;/);
-    expect(open).not.toMatch(/transform|translate|scale|top:|left:|inset/);
-    // The sizes are registered, so the arch widens rather than jumping halfway.
-    for (const name of ["--door-w", "--door-h", "--door-y"]) {
-      expect(css).toMatch(new RegExp(`@property ${name} \\{\\s*syntax: "<length-percentage>";`));
+  it("changes only opacity and the light's size: no element travels", () => {
+    for (const frames of sets) {
+      expect(frames).not.toBe("");
+      expect(frames).not.toMatch(/translate|top:|left:|inset|margin/);
+      for (const [, transform] of frames.matchAll(/transform: ([^;]+);/g)) expect(transform).toMatch(/^scale\([\d.]+\)$/);
     }
   });
 
-  it("plays the arch once on settle's curve and brings the pool up behind it", () => {
-    const arch = /&\[data-arch\] \{[\s\S]*?\n  \}/.exec(light)?.[0] ?? "";
-    // At the pool's own place, from the same tokens: never a fixed spot that crossfades.
-    expect(arch).toMatch(/radial-gradient\(\s*ellipse var\(--door-w\) var\(--door-h\) at var\(--hour-x\) var\(--door-y\),/);
-    expect(arch).toMatch(/animation: door-open var\(--duration-arrive\) var\(--ease-settle\) both;/);
-    expect(light).toMatch(/radial-gradient\(\s*ellipse var\(--hour-w\) var\(--hour-h\) at var\(--hour-x\) var\(--hour-y\),/);
-    expect(light).toMatch(/&\[data-door\] \{\s*animation: fade var\(--duration-arrive\) var\(--ease-settle\) both;/);
-    expect(light).not.toMatch(/infinite/);
-    // The doorway keeps the pool's mask, so it has no edge either: it never brings its own.
-    expect(arch).not.toMatch(/mask|inset/);
+  it("keeps its stops on the tokens: the room dissolving over the tint before the reveal, 14% to 28%", () => {
+    const through = ms("--door-through");
+    const reveal = ms("--door-through-reveal");
+    expect(Math.round((reveal / through) * 100)).toBe(28);
+    expect(Math.round(((reveal - ms("--duration-tint")) / through) * 100)).toBe(14);
+    // The page under it tints in at the reveal, and only then.
+    expect(css).toMatch(/#app-root\[data-door\] \{\s*animation: fade var\(--duration-tint\) var\(--ease-tint\) var\(--door-through-reveal\) both;/);
   });
 
-  it("is spent by the sign-in's first page, whichever it is: the shell notes every page", () => {
-    // Home's own tests hold what happens after a note; this holds that the shell makes one.
-    const shell = readFileSync(join(process.cwd(), "src/components/shell/AppShell.tsx"), "utf8");
-    expect(shell).toMatch(/noteSignIn\(session\.signedInAt\)/);
+  it("is a moment, not a haze: the room whole and the arch and its light full until the reveal", () => {
+    const [room, arch, light] = sets;
+    expect(opacityAt(room, "0%")).toBe(1);
+    expect(opacityAt(room, "14%")).toBe(1);
+    expect(opacityAt(arch, "0%")).toBe(1);
+    expect(opacityAt(light, "0%")).toBe(1);
+    expect(opacityAt(light, "14%")).toBe(1);
+    expect(Number(/--door-through-light: (\d+)%;/.exec(css)?.[1])).toBeGreaterThanOrEqual(50);
+    // The room and the arch are gone at the reveal, before the page tints in: nothing is read through them.
+    expect(opacityAt(room, "28%")).toBe(0);
+    expect(opacityAt(arch, "28%")).toBe(0);
   });
 
-  it("is the pool at rest under reduced motion: no arch, and the pool not fading in", () => {
-    const still = light.slice(light.indexOf("@media (prefers-reduced-motion: reduce)"));
-    expect(still).toMatch(/&\[data-arch\] \{\s*display: none;/);
-    expect(still).toMatch(/&\[data-door\] \{\s*animation: none;/);
+  it("is drawn from the door's own tokens, over the whole window, and never takes a click", () => {
+    const layer = braced(".door-through {");
+    expect(layer).toMatch(/position: fixed;\s*inset: 0;/);
+    expect(layer).toContain("pointer-events: none;");
+    expect(layer).toContain("overflow: hidden;");
+    const drawn = [".door-through-room {", ".door-through-light {", ".door-through-arch {"].map(braced).join("\n");
+    expect(drawn).not.toMatch(/#[0-9a-f]{3,6}\b|rgba?\(/i);
+    for (const token of ["--door-page", "--door-fill", "--door-stroke", "--door-arch-w", "--door-arch-mask"]) expect(drawn).toContain(`var(${token})`);
+  });
+
+  it("is no layer, and no wait, under reduced motion or forced colours", () => {
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*\.door-through \{\s*display: none;\s*\}\s*#app-root\[data-door\] \{\s*animation: none;/);
+  });
+
+  it("never takes the page's text under 4.5:1 from the reveal on, in either room", () => {
+    const light = sets[2];
+    const heart = Number(/--door-through-light: (\d+)%;/.exec(css)?.[1]) / 100;
+    // The strongest it is from the reveal on: the light's opacity only falls after that stop.
+    const after = Math.max(opacityAt(light, "28%"), opacityAt(light, "100%"));
+    const ramp = block(":root {\n    --violet-600");
+    const door = block(":root {\n  /* Always-dark surface tokens.");
+    const themes = { dark: { ...ramp, ...door, ...block(':root,\n  [data-theme="dark"] {') }, light: { ...ramp, ...door, ...block('[data-theme="light"] {') } };
+    const failures: string[] = [];
+    for (const [theme, vars] of Object.entries(themes)) {
+      const fill = colour(vars, "--door-fill");
+      const veil: RGBA = [fill[0], fill[1], fill[2], heart * after];
+      for (const ground of ["--canvas", "--surface-1", "--rail"]) {
+        const under = colour(vars, ground);
+        for (const token of ["--ink", "--muted", "--faint", "--accent-text"]) {
+          const r = ratio(over(veil, over(colour(vars, token), under)), over(veil, under));
+          if (r < 4.5) failures.push(`${theme} ${token} on ${ground}: ${r.toFixed(2)}`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
   });
 });
 

@@ -260,6 +260,7 @@ Each has my recommended answer. The first thirteen are drawn on the boards.
 12. **A year of days** on Insights. **Recommended: yes, once counting has run a term.**
 13. **Go to remembers your last five places**, on this device. **Recommended: yes.**
 14. **A place arrives once per session, and never by key.** This tightens S11 in FINAL §4. **Recommended: yes.**
+    **Reversed by the owner, 19 Nov: arrive on every visit.** Every forward navigation arrives (link, Go to, Enter); Back, Forward, a reload, a filter, a sort and the Basic/Advanced switch stay still. FINAL §4 S11 says so.
 15. **Reduced motion keeps tint.** **Recommended: yes.**
 16. **The name carries you** from a row to its page's title: one exception to the 10px cap. **Recommended: spike it inside the Next 16 slice, and keep it only if it is still welcome on the hundredth open.**
 17. **Humour, a "celebrate" action, a pool of rotating lines.** The research offers them; the copy guide's keeper never jokes. **Recommended: no. Warmth stays exactness at the right moment.**
