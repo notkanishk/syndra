@@ -64,30 +64,36 @@ describe("once, on this device", () => {
   });
 });
 
-describe("the door's light glides into place on Home (§3.2): the hour's pool, once, and nothing else", () => {
-  const glide = keyframes("door-open");
+describe("the door's light crosses the greeting on Home (§3.2): a pool left to right, the hour's pool settling, once", () => {
+  const cross = keyframes("door-cross");
+  const settle = keyframes("door-settle");
   const light = braced("@utility hour-light {");
-  const stop = (at: string) => new RegExp(`(?:^|\\s)${at} \\{([^}]*)\\}`).exec(glide)?.[1] ?? "";
+  const stop = (at: string) => new RegExp(`(?:^|\\s)${at} \\{([^}]*)\\}`).exec(cross)?.[1] ?? "";
 
-  it("travels from the head's left edge, a little smaller, to where the hour rests the pool", () => {
-    expect(stop("from")).toMatch(/--door-x: -8cqw;\s*--door-s: 0\.8;\s*opacity: 0;/);
-    expect(stop("25%")).toMatch(/^\s*opacity: 1;\s*$/);
-    expect(stop("to")).toMatch(/--door-x: var\(--hour-x\);\s*--door-s: 1;/);
-    // Registered, so the gradient glides rather than jumps; the pool's own size and height, scaled.
+  it("crosses from past the head's left edge to beyond its middle, at every hour (no hour's place in it)", () => {
+    expect(stop("from")).toMatch(/^\s*--door-x: -10cqw; opacity: 0;\s*$/);
+    expect(stop("20%, 65%")).toMatch(/^\s*opacity: 1;\s*$/);
+    expect(stop("to")).toMatch(/^\s*--door-x: 62cqw; opacity: 0;\s*$/);
+    expect(cross).not.toContain("--hour-");
+    // Registered, so the gradient glides rather than jumps.
     expect(css).toMatch(/@property --door-x \{ syntax: "<length>";/);
-    expect(css).toMatch(/@property --door-s \{ syntax: "<number>";/);
-    expect(light).toMatch(/ellipse calc\(var\(--hour-w\) \* var\(--door-s\)\) calc\(var\(--hour-h\) \* var\(--door-s\)\) at var\(--door-x\) var\(--hour-y\),/);
+    expect(light).toMatch(/&\[data-door\]::after \{[^}]*content: "";[^}]*radial-gradient\(ellipse \d+cqw \d+cqh at var\(--door-x\) \d+cqh, var\(--hour-light\), transparent 70%\)/);
   });
 
-  it("is gentle and once: about 1.8s on the symmetric ease-in-out, light only, and never stronger than at rest", () => {
+  it("never sums above the pool at rest: the hour's pool rises over exactly the window the crossing fades", () => {
+    // Same window, same curve: the two opacities are p and 1 - p, so their light never adds past one pool.
+    expect(settle).toMatch(/door-settle \{\s*from, 65% \{ opacity: 0; \}\s*\}$/);
+    expect(cross).toMatch(/20%, 65% \{ opacity: 1; \}/);
+    expect(light).toMatch(/&\[data-door\]::before \{\s*animation: door-settle var\(--door-open\) var\(--ease-tint\) both;\s*\}/);
+    expect(light).toMatch(/&\[data-door\]::after \{[^}]*animation: door-cross var\(--door-open\) var\(--ease-tint\) both;/);
     expect(Number(/--door-open: (\d+)ms;/.exec(css)?.[1])).toBeGreaterThanOrEqual(1600);
-    expect(light).toMatch(/&\[data-door\]::before \{[^}]*var\(--hour-light\)[^}]*animation: door-open var\(--door-open\) var\(--ease-tint\) both;/);
-    expect(glide).not.toMatch(/transform|translate|scale|top:|left:|margin|inset|reach/);
+    expect(cross + settle).not.toMatch(/transform|translate|scale|top:|left:|margin|inset|reach/);
   });
 
   it("is the pool at rest under reduced motion or forced colours", () => {
     expect(light).toMatch(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{\s*&\[data-door\]::before \{/);
-    expect(light.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{[\s\S]*?\n  \}\n/, "")).not.toContain("door-open");
+    const outside = light.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{[\s\S]*?\n  \}\n/, "");
+    expect(outside).not.toMatch(/door-cross|door-settle|::after/);
   });
 
   it("touches nothing else: no staging of the head, no held blocks, no full-window layer", () => {

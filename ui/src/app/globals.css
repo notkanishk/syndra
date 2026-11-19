@@ -370,18 +370,15 @@
     }
   }
 
-  /* The door's light (A-24 §3.2): the hour's pool glides in once from the head's left edge. */
-  @keyframes door-open {
-    from {
-      --door-x: -8cqw;
-      --door-s: 0.8;
-      opacity: 0;
-    }
-    25% { opacity: 1; }
-    to {
-      --door-x: var(--hour-x);
-      --door-s: 1;
-    }
+  /* The door's light (A-24 §3.2): a pool crosses the greeting left to right and dissolves while the
+     hour's own pool settles in where it lives, over the same last 35%, so the two sum to one. */
+  @keyframes door-cross {
+    from { --door-x: -10cqw; opacity: 0; }
+    20%, 65% { opacity: 1; }
+    to { --door-x: 62cqw; opacity: 0; }
+  }
+  @keyframes door-settle {
+    from, 65% { opacity: 0; }
   }
 
   /* A phone sheet rises from the bottom edge of the screen and nothing else:
@@ -1103,7 +1100,7 @@
 /* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind
    Home's head, its place set by the part of the day (`dayPhase`, the greeting's
    own clock). The ONE written exception to "colour is never decorative" above,
-   with its bounds: Home's head (and the door opening into it, `door-open`, once a
+   with its bounds: Home's head (and the door's light crossing into it, `door-cross`, once a
    sign-in, A-24 §3.2), and a member's card on its first day (`lit-card`, A-24
    §3.3); still (no loop, and no animation but the door's, once a sign-in); the accent,
    never a status colour; the same rule in both rooms; gone under forced colours;
@@ -1111,9 +1108,8 @@
    contrast test holds it, at the pool's strongest point, in both themes).
    `--hour-x`/`--hour-y` is where the pool sits, `--hour-w`/`--hour-h` its size,
    `--hour-reach` how much accent it holds. */
-/* The pool's place and size as `door-open` carries them: registered, so they glide. */
+/* The crossing pool's place as `door-cross` carries it: registered, so it glides. */
 @property --door-x { syntax: "<length>"; inherits: false; initial-value: 0px; }
-@property --door-s { syntax: "<number>"; inherits: false; initial-value: 1; }
 
 @utility hour-light {
   position: absolute;
@@ -1177,15 +1173,18 @@
     --hour-reach: 22%;
   }
 
-  /* A sign-in's first Home (A-24 §3.2): the pool glides in, never stronger than at rest. */
+  /* A sign-in's first Home (A-24 §3.2): the hour's own light, crossing then settling, never
+     stronger than at rest. */
   @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
     &[data-door]::before {
-      background: radial-gradient(
-        ellipse calc(var(--hour-w) * var(--door-s)) calc(var(--hour-h) * var(--door-s)) at var(--door-x) var(--hour-y),
-        var(--hour-light),
-        transparent 70%
-      );
-      animation: door-open var(--door-open) var(--ease-tint) both;
+      animation: door-settle var(--door-open) var(--ease-tint) both;
+    }
+    &[data-door]::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 48cqw 150cqh at var(--door-x) 30cqh, var(--hour-light), transparent 70%);
+      animation: door-cross var(--door-open) var(--ease-tint) both;
     }
   }
 

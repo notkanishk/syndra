@@ -390,7 +390,7 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
         {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
             place set by the part of the day on the greeting's own clock. The one written exception to
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
-        {/* On the first arrival of a sign-in it glides in once from the head's left edge (`door-open`). */}
+        {/* On the first arrival of a sign-in a pool crosses the greeting once and this one settles in (`door-cross`). */}
         {phase && <div aria-hidden data-hour={phase} data-door={door ? "" : undefined} className="hour-light" />}
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
