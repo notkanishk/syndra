@@ -1,14 +1,11 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "@/components/shell/AppShell";
-import { resetDoorForTests } from "@/lib/motion/door";
 import type { SessionUser } from "@/lib/session";
-import { setMediaQuery } from "@/test-utils/media";
-import { motionInTests } from "@/test-utils/motion";
 
 vi.mock("@/components/shell/Sidebar", () => ({ default: () => <a href="#rail">rail</a> }));
 vi.mock("@/components/shell/TopBar", () => ({ TopBar: () => <header>top</header> }));
@@ -72,85 +69,3 @@ describe("AppShell scrolling", () => {
   });
 });
 
-
-// A-24 §3.2, Q4: the first page of a sign-in opens on the door, and you walk through it, once.
-describe("walking through the door", () => {
-  const signedIn = (role: "admin" | "user" = "admin", signedInAt = "2026-11-19T08:00:00.000Z") =>
-    ({ id: "u1", role, signedInAt }) as SessionUser;
-  const shell = (session: SessionUser) =>
-    render(
-      <AppShell session={session}>
-        <p>page</p>
-      </AppShell>,
-    );
-  const door = () => document.querySelector(".door-through");
-  // jsdom has no AnimationEvent, so React listens for the prefixed name.
-  const animationEnd = (el: Element) => act(() => void fireEvent(el, new Event("webkitAnimationEnd", { bubbles: true })));
-  beforeEach(() => {
-    window.localStorage.clear();
-    resetDoorForTests();
-    motionInTests();
-  });
-  afterEach(() => vi.restoreAllMocks());
-
-  it("opens on the sign-in's first page, whatever page it is, over a page that is there and tints in under it", () => {
-    const { container } = shell(signedIn("user"));
-    expect(door()).toHaveAttribute("aria-hidden");
-    expect(door()!.querySelectorAll(".door-through-room, .door-through-light, .door-through-arch")).toHaveLength(3);
-    // The page is under it from the first frame, waiting for the reveal; nothing of it is held back.
-    expect(container.querySelector("#app-root")).toHaveAttribute("data-door");
-    expect(screen.getByText("page")).toBeInTheDocument();
-    // Outside the page, so a dialog's inert never reaches it and its fade never hides it.
-    expect(container.querySelector("#app-root .door-through")).toBeNull();
-  });
-
-  it("is gone when its light has dissolved, and the page is the page again", () => {
-    const { container } = shell(signedIn());
-    animationEnd(door()!.querySelector(".door-through-arch")!);
-    expect(door()).not.toBeNull();
-    animationEnd(door()!.querySelector(".door-through-light")!);
-    expect(door()).toBeNull();
-    expect(container.querySelector("#app-root")).not.toHaveAttribute("data-door");
-  });
-
-  it("is once a sign-in: not on a reload, and again for the next sign-in", () => {
-    shell(signedIn()).unmount();
-    resetDoorForTests(); // a reload
-    shell(signedIn()).unmount();
-    expect(door()).toBeNull();
-    resetDoorForTests();
-    shell(signedIn("admin", "2026-11-20T08:00:00.000Z"));
-    expect(door()).not.toBeNull();
-  });
-
-  it("asks once a page load, so a second run of the effect can't open it twice", () => {
-    shell(signedIn()).unmount();
-    window.localStorage.clear(); // even if the device forgot
-    shell(signedIn());
-    expect(door()).toBeNull();
-  });
-
-  it("shows nothing extra when this device can't remember, rather than opening every time", () => {
-    vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
-      throw new Error("blocked");
-    });
-    shell(signedIn());
-    expect(door()).toBeNull();
-  });
-
-  it("is no layer under reduced motion: the page simply appears, and the arrival is spent", () => {
-    setMediaQuery("(prefers-reduced-motion: reduce)", true);
-    const { container } = shell(signedIn());
-    expect(door()).toBeNull();
-    expect(container.querySelector("#app-root")).not.toHaveAttribute("data-door");
-    setMediaQuery("(prefers-reduced-motion: reduce)", false);
-    resetDoorForTests();
-    shell(signedIn());
-    expect(door()).toBeNull();
-  });
-
-  it("has no door without a sign-in instant to keep it to", () => {
-    shell({ id: "u1", role: "admin" } as SessionUser);
-    expect(door()).toBeNull();
-  });
-});

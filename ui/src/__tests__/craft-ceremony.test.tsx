@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { firstTime, idHash } from "@/lib/memory";
 
-import { block, colour, css, over, ratio, type RGBA } from "./cssTokens";
+import { block, colour, css, over, ratio, SRC } from "./cssTokens";
 
 /**
  * A-24 wave 4, ceremony (§3.2, §3.3, Q9): moments meant once are kept to once
@@ -64,87 +67,70 @@ describe("once, on this device", () => {
   });
 });
 
-describe("walking through the door (§3.2): the door's own room, one keyframe set, nothing travels", () => {
-  const sets = ["door-through-room", "door-through-arch", "door-through-light"].map(keyframes);
+describe("the door's light travels the greeting (§3.2): once, behind the words, nothing moves", () => {
+  const band = braced("@utility greeting-light {");
+  const travel = keyframes("greeting-light");
+  const pool = keyframes("door-pool");
   const ms = (token: string) => Number(new RegExp(`${token}: (\\d+)ms;`).exec(css)?.[1]);
 
-  it("changes only opacity and the light's size: no element travels", () => {
-    for (const frames of sets) {
+  it("is never a full-window layer: it lives in the greeting's box, and no door covers the page", () => {
+    expect(css).not.toMatch(/\.door-through|--door-through|#app-root\[data-door\]/);
+    expect(existsSync(resolve(SRC, "components/shell/DoorThrough.tsx"))).toBe(false);
+    expect(band).toMatch(/position: absolute;/);
+    expect(band).not.toMatch(/position: fixed|inset: 0;/);
+    // The shell only notes the sign-in's first page; Home opens the door if it was that page.
+    expect(readFileSync(resolve(SRC, "components/shell/AppShell.tsx"), "utf8")).toMatch(/noteSignIn\(session\.signedInAt\)/);
+  });
+
+  it("travels in reading direction, start of the words to their end, in one stroke", () => {
+    // A position only at the first and last frames: one segment, so it never stops on the way.
+    expect(travel.match(/background-position:/g)).toHaveLength(2);
+    expect(travel).toMatch(/0% \{[^}]*background-position: 0% 50%;/);
+    expect(travel).toMatch(/100% \{[^}]*background-position: 100% 50%;/);
+  });
+
+  it("changes only opacity and its gradient's position: nothing in the page moves", () => {
+    for (const frames of [travel, pool]) {
       expect(frames).not.toBe("");
-      expect(frames).not.toMatch(/translate|top:|left:|inset|margin/);
-      for (const [, transform] of frames.matchAll(/transform: ([^;]+);/g)) expect(transform).toMatch(/^scale\([\d.]+\)$/);
+      expect(frames).not.toMatch(/transform|translate|scale|top:|left:|inset|margin|width|height/);
     }
   });
 
-  it("keeps its stops on the tokens: the room dissolving over the tint before the reveal, 33% to 42%", () => {
-    const through = ms("--door-through");
-    const reveal = ms("--door-through-reveal");
-    // Long enough to be registered as a door, not a flash (owner on staging, 19 Nov 2026).
-    expect(reveal).toBeGreaterThanOrEqual(500);
-    expect(Math.round((reveal / through) * 100)).toBe(42);
-    expect(Math.round(((reveal - ms("--duration-tint")) / through) * 100)).toBe(33);
-    // The page under it tints in at the reveal, and only then.
-    expect(css).toMatch(/#app-root\[data-door\] \{\s*animation: fade var\(--duration-tint\) var\(--ease-tint\) var\(--door-through-reveal\) both;/);
+  it("is unhurried, on the settle curve, and hands over to the pool on the same stops", () => {
+    const length = ms("--door-light");
+    expect(length).toBeGreaterThanOrEqual(1100);
+    expect(length).toBeLessThanOrEqual(1300);
+    expect(band).toContain("animation: greeting-light var(--door-light) var(--ease-settle) both;");
+    expect(css).toMatch(/&\[data-door\] \{\s*animation: door-pool var\(--door-light\) var\(--ease-settle\) both;/);
+    // The band is whole until the stop where the pool starts, then each falls as the other rises.
+    expect(opacityAt(travel, "65%")).toBe(1);
+    expect(opacityAt(pool, "65%")).toBe(0);
+    expect(opacityAt(travel, "100%")).toBe(0);
+    expect(opacityAt(pool, "100%")).toBe(1);
   });
 
-  it("is a moment, not a haze: the room whole and the arch and its light full until the reveal", () => {
-    const [room, arch, light] = sets;
-    expect(opacityAt(room, "0%")).toBe(1);
-    expect(opacityAt(room, "33%")).toBe(1);
-    expect(opacityAt(arch, "0%")).toBe(1);
-    expect(opacityAt(light, "0%")).toBe(1);
-    expect(opacityAt(light, "33%")).toBe(1);
-    expect(Number(/--door-through-light: (\d+)%;/.exec(css)?.[1])).toBeGreaterThanOrEqual(50);
-    // The room and the arch are gone at the reveal, before the page tints in: nothing is read through them.
-    expect(opacityAt(room, "42%")).toBe(0);
-    expect(opacityAt(arch, "42%")).toBe(0);
+  it("is no band, and the pool at rest, under reduced motion or forced colours", () => {
+    expect(band).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*display: none;/);
+    expect(braced("@utility hour-light {")).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*&\[data-door\] \{\s*animation: none;/);
   });
 
-  it("grows the arch and its light in one stroke on the settle curve: no hold, no pause at the reveal", () => {
-    const [, arch, light] = sets;
-    for (const frames of [arch, light]) {
-      // A size only at the first and last frames: one segment, so the growth never stops on a stop.
-      expect(frames.match(/transform:/g)).toHaveLength(2);
-      expect(frames).toMatch(/0% \{[^}]*transform: scale/);
-      expect(frames).toMatch(/100% \{[^}]*transform: scale/);
-    }
-    for (const part of ["room", "arch", "light"]) {
-      expect(braced(`.door-through-${part} {`)).toContain(`animation: door-through-${part} var(--door-through) var(--ease-settle) both;`);
-    }
-  });
-
-  it("is drawn from the door's own tokens, over the whole window, and never takes a click", () => {
-    const layer = braced(".door-through {");
-    expect(layer).toMatch(/position: fixed;\s*inset: 0;/);
-    expect(layer).toContain("pointer-events: none;");
-    expect(layer).toContain("overflow: hidden;");
-    const drawn = [".door-through-room {", ".door-through-light {", ".door-through-arch {"].map(braced).join("\n");
-    expect(drawn).not.toMatch(/#[0-9a-f]{3,6}\b|rgba?\(/i);
-    for (const token of ["--door-page", "--door-fill", "--door-stroke", "--door-arch-w", "--door-arch-mask"]) expect(drawn).toContain(`var(${token})`);
-  });
-
-  it("is no layer, and no wait, under reduced motion or forced colours", () => {
-    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*\.door-through \{\s*display: none;\s*\}\s*#app-root\[data-door\] \{\s*animation: none;/);
-  });
-
-  it("never takes the page's text under 4.5:1 from the reveal on, in either room", () => {
-    const light = sets[2];
-    const heart = Number(/--door-through-light: (\d+)%;/.exec(css)?.[1]) / 100;
-    // The strongest it is from the reveal on: the light's opacity only falls after that stop.
-    const after = Math.max(opacityAt(light, "42%"), opacityAt(light, "100%"));
+  it("never takes a word under 4.5:1 at its brightest, in either room, and stays under a quarter on paper", () => {
+    // Its brightest composite: the band alone at its heart (the crossfade keeps band and pool under the stronger
+    // of the two, and the pool is held by craft-places).
+    const reach = Number(/--door-light-reach: (\d+)%;/.exec(css)?.[1]);
+    expect(reach).toBeGreaterThanOrEqual(25);
+    expect(band).toContain("calc(var(--door-light-reach) * var(--hour-weight))");
     const ramp = block(":root {\n    --violet-600");
-    const door = block(":root {\n  /* Always-dark surface tokens.");
-    const themes = { dark: { ...ramp, ...door, ...block(':root,\n  [data-theme="dark"] {') }, light: { ...ramp, ...door, ...block('[data-theme="light"] {') } };
+    const themes = { dark: { ...ramp, ...block(':root,\n  [data-theme="dark"] {') }, light: { ...ramp, ...block('[data-theme="light"] {') } };
     const failures: string[] = [];
     for (const [theme, vars] of Object.entries(themes)) {
-      const fill = colour(vars, "--door-fill");
-      const veil: RGBA = [fill[0], fill[1], fill[2], heart * after];
-      for (const ground of ["--canvas", "--surface-1", "--rail"]) {
-        const under = colour(vars, ground);
-        for (const token of ["--ink", "--muted", "--faint", "--accent-text"]) {
-          const r = ratio(over(veil, over(colour(vars, token), under)), over(veil, under));
-          if (r < 4.5) failures.push(`${theme} ${token} on ${ground}: ${r.toFixed(2)}`);
-        }
+      const accent = colour(vars, "--accent");
+      const weight = Number(vars["--hour-weight"]);
+      if (theme === "light") expect(reach * weight).toBeLessThan(25);
+      const lit = over([accent[0], accent[1], accent[2], (accent[3] ?? 1) * ((reach * weight) / 100)], colour(vars, "--canvas"));
+      for (const token of ["--ink", "--muted", "--faint", "--accent-text"]) {
+        const r = ratio(colour(vars, token), lit);
+        if (r < 4.5) failures.push(`${theme} ${token}: ${r.toFixed(2)}`);
       }
     }
     expect(failures).toEqual([]);

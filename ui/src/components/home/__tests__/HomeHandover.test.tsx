@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
 import { TINT_MS } from "@/lib/motion";
+import { noteSignIn, resetDoorForTests } from "@/lib/motion/door";
 import { inZone } from "@/test-utils/zone";
 import type { SessionUser } from "@/lib/session";
 import { setMediaQuery } from "@/test-utils/media";
@@ -361,6 +362,81 @@ describe("the room knows the hour", () => {
     vi.setSystemTime(new Date("2026-11-18T20:00:00Z"));
     mount();
     expect(document.querySelector(".hour-light")).toHaveAttribute("data-hour", "quiet");
+  });
+});
+
+// A-24 §3.2, Q4: the door's light travels the greeting once, straight after signing in.
+describe("the first arrival of a sign-in", () => {
+  const signedIn = { ...session, signedInAt: "2026-11-19T08:00:00.000Z" } as SessionUser;
+  const arch = () => document.querySelector("[data-door-light]");
+  const pool = () => document.querySelector(".hour-light");
+  beforeEach(() => {
+    resetDoorForTests();
+    window.history.replaceState({}, "", "/");
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("travels the greeting behind its words, then settles into the pool, with nothing waiting for it", () => {
+    mount(signedIn);
+    const greeting = screen.getByRole("heading", { level: 1 });
+    // Inside the greeting's own box, so it travels the words' length; hidden from assistive technology.
+    expect(arch()).toHaveAttribute("aria-hidden");
+    expect(arch()).toHaveClass("greeting-light");
+    expect(arch()!.parentElement).toBe(greeting);
+    expect(greeting).toHaveClass("relative", "w-fit");
+    // Not a word of the greeting: the heading reads as before.
+    expect(greeting).toHaveTextContent(/^\w+, Kanishk\./);
+    // The pool comes up as it settles; the words are there in the same paint.
+    expect(pool()).toHaveAttribute("data-door");
+    expect(document.querySelectorAll(".hour-light")).toHaveLength(1);
+  });
+
+  it("is never a full-window layer", () => {
+    mount(signedIn);
+    expect(document.querySelector(".door-through, [data-door-through]")).toBeNull();
+    expect(arch()!.closest(".page-head")).not.toBeNull();
+  });
+
+  it("is once: not when Home is shown again, not on a reload, not for the same sign-in", () => {
+    const first = mount(signedIn);
+    expect(arch()).not.toBeNull();
+    first.unmount();
+    mount(signedIn); // back to Home in the same visit
+    expect(arch()).toBeNull();
+    expect(pool()).not.toHaveAttribute("data-door");
+    resetDoorForTests(); // a reload: this device remembers the sign-in it opened for
+    mount(signedIn);
+    expect(document.querySelectorAll("[data-door-light]")).toHaveLength(0);
+  });
+
+  it("is spent by whichever page the sign-in lands on, so Home later is quiet", () => {
+    window.history.replaceState({}, "", "/users/u7");
+    noteSignIn(signedIn.signedInAt);
+    window.history.replaceState({}, "", "/");
+    mount(signedIn);
+    expect(arch()).toBeNull();
+  });
+
+  it("opens again for the next sign-in", () => {
+    mount(signedIn).unmount();
+    resetDoorForTests();
+    mount({ ...signedIn, signedInAt: "2026-11-20T08:00:00.000Z" } as SessionUser);
+    expect(arch()).not.toBeNull();
+  });
+
+  it("shows nothing extra when this device can't remember, rather than opening every time", () => {
+    // A private window or blocked site data: the store itself can't be reached.
+    vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    mount(signedIn);
+    expect(arch()).toBeNull();
+    expect(pool()).not.toHaveAttribute("data-door");
+  });
+
+  it("has no door without a sign-in instant to keep it to", () => {
+    mount(session);
+    expect(arch()).toBeNull();
   });
 });
 

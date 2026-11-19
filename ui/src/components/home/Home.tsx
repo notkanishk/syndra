@@ -50,6 +50,7 @@ import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
 import { Unfold } from "@/lib/motion";
+import { takeFirstArrival } from "@/lib/motion/door";
 import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
@@ -225,7 +226,13 @@ export function Home({ session }: { session: SessionUser }) {
   // by an invisible stand-in so nothing below moves (same rule as Relative).
   const [now, setNow] = useState<Date | null>(null);
   // Before paint, so a page reached by a link is drawn with its greeting and term line in place.
-  useLayoutEffect(() => setNow(new Date()), []);
+  // The first arrival of a sign-in (A-24 §3.2) is asked once, as Home mounts: only a yes is kept,
+  // so a second run of the effect (React's Strict Mode) can't take it back.
+  const [door, setDoor] = useState(false);
+  useLayoutEffect(() => {
+    setNow(new Date());
+    if (takeFirstArrival(session.signedInAt)) setDoor(true);
+  }, [session.signedInAt]);
   // The part of the day for the light, on the greeting's clock, turning with the rail's mark at 22:00.
   const phase = useDayPhase();
   const terms = useTerms();
@@ -376,14 +383,19 @@ export function Home({ session }: { session: SessionUser }) {
         {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
             place set by the part of the day on the greeting's own clock. The one written exception to
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
-        {phase && <div aria-hidden data-hour={phase} className="hour-light" />}
+        {/* On the first arrival of a sign-in (A-24 §3.2) the pool comes up as the greeting's light settles into it. */}
+        {phase && <div aria-hidden data-hour={phase} data-door={door ? "" : undefined} className="hour-light" />}
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and
             `text-balance` keeps the two lines close in length instead of
             leaving one word stranded. */}
+        {/* `relative w-fit`: the greeting's own box is the words' length, so the door's light travels them. */}
         {/* measure-exempt: the greeting's balance widths (D-1 §6), a display line, not a sentence. */}
-        <h1 className="type-greeting max-w-[22ch] text-balance tablet:max-w-[34ch]">
+        <h1 className="type-greeting relative w-fit max-w-[22ch] text-balance tablet:max-w-[34ch]">
+          {/* The first arrival of a sign-in (A-24 §3.2): the door's light travels the greeting, start to end,
+              behind the words, once. Nothing waits for it; reduced motion shows the pool at rest. */}
+          {door && <span aria-hidden data-door-light className="greeting-light" />}
           {phase ? PHASE_WORD[phase] : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}.{" "}
           <span className="text-faint">

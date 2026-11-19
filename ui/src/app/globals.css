@@ -370,6 +370,37 @@
     }
   }
 
+  /* The door's light on the greeting (A-24 §3.2): one keyframe set on
+     --door-light. The band fades in at the start of the words, travels to
+     their end (its gradient's position, 0% to 100% of the greeting's box,
+     one stroke from the first frame to the last), and from 65% hands over to
+     the pool, which comes up on the same stops. Nothing moves but light. */
+  @keyframes greeting-light {
+    0% {
+      background-position: 0% 50%;
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    65% {
+      opacity: 1;
+    }
+    100% {
+      background-position: 100% 50%;
+      opacity: 0;
+    }
+  }
+  @keyframes door-pool {
+    0%,
+    65% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
   /* A phone sheet rises from the bottom edge of the screen and nothing else:
      the scrim carries the fade. Its own travel, so not held to --travel-cap. */
   @keyframes sheet-rise {
@@ -1089,9 +1120,10 @@
 /* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind
    Home's head, its place set by the part of the day (`dayPhase`, the greeting's
    own clock). The ONE written exception to "colour is never decorative" above,
-   with its bounds: Home's head, a member's card on its first day (`lit-card`,
-   A-24 §3.3), and the door walked through (`door-through`, A-24 §3.2); still
-   (no loop, and no animation but the door's, once a sign-in); the accent,
+   with its bounds: Home's head (and the door's light travelling its greeting,
+   `greeting-light`, once a sign-in, A-24 §3.2), and a member's card on its first
+   day (`lit-card`, A-24 §3.3); still (no loop, and no animation but the door's
+   light, once a sign-in); the accent,
    never a status colour; the same rule in both rooms; gone under forced colours;
    and never strong enough to take a line of text in the head under 4.5:1 (the
    contrast test holds it, at the pool's strongest point, in both themes).
@@ -1149,6 +1181,17 @@
     --hour-reach: 22%;
   }
 
+  /* The first arrival of a sign-in (A-24 §3.2): the pool comes up as the greeting's light settles
+     into it (`greeting-light`), on the same stops and curve. Reduced motion: the pool at rest. */
+  &[data-door] {
+    animation: door-pool var(--door-light) var(--ease-settle) both;
+  }
+  @media (prefers-reduced-motion: reduce), (forced-colors: active) {
+    &[data-door] {
+      animation: none;
+    }
+  }
+
   /* A phone's gutter is 16px, not the page's 26: the pool reaches to the edge and no further, so
      the scroller never gains a sideways scroll. */
   @media (width < theme(--breakpoint-tablet)) {
@@ -1200,6 +1243,37 @@
   }
 }
 
+/* The first arrival of a sign-in (A-24 §3.2, Q4): the door's light comes in
+   with you. Once, on Home, a soft band of the accent travels along the
+   greeting from the start of its words to their end, in reading direction,
+   and settles into the hour's pool, which comes up as the band goes (one
+   crossfade: the same stops on the same curve, so the light behind a word is
+   never more than the stronger of the two). Behind the words, inside the
+   greeting's own box (`w-fit`), so the travel is the words' length. Only its
+   opacity and its gradient's position change; nothing in the page moves. As
+   strong as the pool's strongest at the most (`--door-light-reach`, at the
+   room's weight), so its brightest composite keeps every text token at 4.5:1
+   (RULES), and wide and soft rather than faint. Gone under reduced motion and
+   forced colours: the pool at rest. */
+@utility greeting-light {
+  position: absolute;
+  inset: -0.6em -1.5em;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--accent) calc(var(--door-light-reach) * var(--hour-weight)), transparent),
+      transparent
+    )
+    no-repeat;
+  background-size: 60% 100%;
+  animation: greeting-light var(--door-light) var(--ease-settle) both;
+
+  @media (prefers-reduced-motion: reduce), (forced-colors: active) {
+    display: none;
+  }
+}
+
 /* The list closes (A-24 §4.1 vivid; Home's all-clear only, once a day, by the
    reader's own hand): a lime hairline along the top edge, drawn over one flash
    and then at rest. Under reduced motion it is simply there, drawn. */
@@ -1213,39 +1287,49 @@
   animation: hairline-draw var(--duration-flash) var(--ease-flash) both;
 }
 
-/* A plate (A-24 §7, Q9): the door, in hairlines with one lit point. Shut, with
-   lime, for a queue that is clear: the doorway closed, standing on an unbroken
-   floor. Open, with violet light, for a list that is beginning: the floor is
-   broken where the doorway meets it and the light inside spills through, onto
-   the ground in front. Drawn in both rooms from the tokens, 1px lines on whole
-   pixels; gone under forced colours with the other lights. Shown for the owner
-   to judge at true size on staging (PLATES_SHOWN), at the three places the
-   board draws. */
+/* A plate (A-24 §7, Q9): the sign-in door, drawn small (owner, 19 Nov 2026:
+   "make the drawings closer to how the login arch is"). The login arch's own
+   proportion (430 by 392, the top's radius 190: here 48 by 44, radius 21),
+   its violet hairline (`--door-stroke`), its uprights dissolving into the
+   floor (`--door-arch-mask`), and its light inside fading into the room. Shut,
+   for a queue that is clear: the arch closed and dim (`--door-ring-base`), its
+   light low, a lime point at its foot on an unbroken floor. Open, for a list
+   that is beginning: the login's own pool inside (`--door-pool`), the floor
+   broken at the doorway and the light spilling through onto the ground in
+   front, a violet point. 1px lines on whole pixels and an 8px point; both
+   rooms from the tokens; gone under forced colours with the other lights.
+   Shown for the owner to judge at true size on staging (PLATES_SHOWN), at the
+   three places the board draws. */
 @utility plate {
   position: relative;
   width: 64px;
-  height: 76px;
+  height: 60px;
   flex: none;
 
   & > .plate-arch {
     position: absolute;
-    inset: 0 10px;
-    border: 1px solid var(--line-strong);
+    top: 4px;
+    left: 8px;
+    width: 48px;
+    height: 44px;
+    border: 1px solid var(--door-ring-base);
     border-bottom: 0;
-    border-radius: 999px 999px 0 0;
-    background: var(--tint-1);
+    border-radius: 21px 21px 0 0;
+    background: radial-gradient(50% 50% at 50% 70%, var(--door-pool-edge), transparent 72%);
+    mask-image: var(--door-arch-mask);
+    -webkit-mask-image: var(--door-arch-mask);
   }
   & > .plate-floor {
     position: absolute;
+    top: 48px;
     inset-inline: 0;
-    bottom: 0;
     height: 1px;
-    background: var(--line-strong);
+    background: linear-gradient(to right, transparent, var(--line-strong) 20%, var(--line-strong) 80%, transparent);
   }
   & > .plate-point {
     position: absolute;
+    top: 44px;
     left: 50%;
-    bottom: -4px;
     width: 8px;
     height: 8px;
     margin-left: -4px;
@@ -1254,25 +1338,29 @@
     box-shadow: 0 0 0 5px color-mix(in srgb, var(--healthy) 16%, transparent);
   }
   &[data-plate="open"] > .plate-arch {
-    border-color: var(--accent-line);
-    background: linear-gradient(to top, color-mix(in srgb, var(--accent) 40%, transparent), transparent 88%);
+    border-color: var(--door-stroke);
+    background:
+      radial-gradient(50% 50% at 50% 70%, var(--door-pool), var(--door-pool-edge) 46%, transparent 72%),
+      linear-gradient(to top, var(--door-pool-edge), transparent 62%);
   }
-  /* The doorway's foot is open: the floor stops at each jamb, and the light falls through. */
+  /* The doorway's foot is open: the floor stops at each jamb, and the light falls through onto the ground. */
   &[data-plate="open"] > .plate-floor {
     background: linear-gradient(
       to right,
-      var(--line-strong) 10px,
-      transparent 10px calc(100% - 10px),
-      var(--line-strong) calc(100% - 10px)
+      transparent,
+      var(--line-strong) 8px,
+      transparent 8px calc(100% - 8px),
+      var(--line-strong) calc(100% - 8px),
+      transparent
     );
   }
   &[data-plate="open"] > .plate-floor::after {
     content: "";
     position: absolute;
-    inset-inline: 10px;
+    inset-inline: 8px;
     top: 0;
     height: 12px;
-    background: radial-gradient(ellipse 50% 100% at 50% 0, color-mix(in srgb, var(--accent) 40%, transparent), transparent);
+    background: radial-gradient(50% 100% at 50% 0, var(--door-pool), var(--door-pool-edge) 46%, transparent 72%);
   }
   &[data-plate="open"] > .plate-point {
     background: var(--accent);
@@ -2059,6 +2147,10 @@ html.theme-fading *::after {
 
   --door-stroke: rgba(155, 123, 255, 0.5);
   --door-ring-base: rgba(155, 123, 255, 0.22);
+  /* The door's pool of light, its heart and its edge: the sign-in screen's pool
+     and the plates' doorway light (A-24 §7) are one light. */
+  --door-pool: rgba(127, 90, 240, 0.3);
+  --door-pool-edge: rgba(127, 90, 240, 0.08);
   --door-ring-lit: rgba(206, 188, 255, 0.92);
   --door-amber: #f5a524;
   --door-amber-stroke: rgba(245, 165, 36, 0.5);
@@ -2100,16 +2192,12 @@ html.theme-fading *::after {
   --door-breath: 10s;
   --door-grain: 0.75s;
 
-  /* Walking through it (A-24 §3.2): the first page of a sign-in opens on this
-     room, and the door opens around you over --door-through. The page under it
-     tints in at --door-through-reveal; the keyframes' stops are fractions of
-     those times (33% and 42%: a tint before the reveal, and the reveal), and a
-     test holds them together. --door-through-light is the light's
-     strength at its heart; the contrast test holds what is left of it once the
-     page is in. */
-  --door-through: 1300ms;
-  --door-through-reveal: 550ms;
-  --door-through-light: 60%;
+  /* The door's light on the greeting (A-24 §3.2): how long it travels and
+     settles, and how strong it is at its heart (times the room's
+     --hour-weight). The contrast test holds the strength. */
+  --door-light: 1200ms;
+  --door-light-reach: 30%;
+
 }
 
 /* The arch group is the one fixed-width thing here. Below ~480px it scales on
@@ -2178,12 +2266,7 @@ body:has(.login-stage) {
   }
 
   .login-pool {
-    background: radial-gradient(
-      50% 50% at 50% 50%,
-      rgba(127, 90, 240, 0.3),
-      rgba(127, 90, 240, 0.08) 46%,
-      transparent 72%
-    );
+    background: radial-gradient(50% 50% at 50% 50%, var(--door-pool), var(--door-pool-edge) 46%, transparent 72%);
   }
 
   /* Amber only ever means a broken assumption. It is at zero until one. */
@@ -2541,126 +2624,6 @@ body:has(.login-stage) {
     .login-grain {
       animation: doorGrain var(--door-grain) steps(1, end) infinite;
     }
-  }
-}
-
-/* ══ The door, walked through (A-24 §3.2, Q4) ══════════════════════════════
- * The first page of a sign-in, once (DoorThrough, AppShell): the door's own
- * room fills the window, the arch stands in it with its light inside, and the
- * door opens around you. The arch widens past you and is gone; its light
- * floods the window and dissolves into the page's own light. Always the dark
- * room, as the door is, in both themes. Nothing travels: the light's opacity
- * and size change, and the arch's. The page is under it from the first frame
- * and tints in at the reveal (`#app-root[data-door]`), so nothing is read
- * through the room. Hidden from assistive technology, never takes a click,
- * gone under reduced motion and forced colours.
- * ═══════════════════════════════════════════════════════════════════════ */
-.door-through {
-  position: fixed;
-  inset: 0;
-  z-index: var(--layer-popover);
-  overflow: hidden;
-  pointer-events: none;
-}
-.door-through-room {
-  position: absolute;
-  inset: 0;
-  background: var(--door-page);
-  animation: door-through-room var(--door-through) var(--ease-settle) both;
-}
-/* The light that was behind the arch on the sign-in screen, now coming through it. */
-.door-through-light {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 90vmin;
-  height: 90vmin;
-  border-radius: 50%;
-  background: radial-gradient(
-    closest-side,
-    color-mix(in srgb, var(--door-fill) var(--door-through-light), transparent),
-    color-mix(in srgb, var(--door-fill) calc(var(--door-through-light) * 0.3), transparent) 46%,
-    transparent
-  );
-  animation: door-through-light var(--door-through) var(--ease-settle) both;
-}
-/* The door's own arch: its size, its stroke, the uprights dissolving into the floor, the wash inside. */
-.door-through-arch {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: var(--door-arch-w);
-  height: var(--door-arch-h);
-  border: 1.5px solid var(--door-stroke);
-  border-bottom: none;
-  border-radius: var(--door-arch-r) var(--door-arch-r) 0 0;
-  background: linear-gradient(to top, color-mix(in srgb, var(--door-fill) 30%, transparent), transparent 62%);
-  mask-image: var(--door-arch-mask);
-  -webkit-mask-image: var(--door-arch-mask);
-  animation: door-through-arch var(--door-through) var(--ease-settle) both;
-}
-#app-root[data-door] {
-  animation: fade var(--duration-tint) var(--ease-tint) var(--door-through-reveal) both;
-}
-@media (prefers-reduced-motion: reduce), (forced-colors: active) {
-  .door-through {
-    display: none;
-  }
-  #app-root[data-door] {
-    animation: none;
-  }
-}
-
-/* One keyframe set, on --door-through (1300ms), every part on the settle
-   curve. The arch and the light each grow in one stroke, first frame to last
-   (a size is given only at 0% and 100%), so nothing holds or pauses at the
-   reveal. 0 to 33%: the room whole, the arch and its light inside. 33% to 42%
-   (the tint before the reveal at 550ms): the room and the arch dissolve and
-   the light falls to what may sit over text. From 42%, as the page tints in,
-   only that is left: 0.15 of --door-through-light, 9% violet at its heart,
-   the most that keeps every text token at 4.5:1 in both rooms (RULES),
-   dissolving into the page's own light by 1300ms. A test holds 33% and 42%
-   to the tokens. */
-@keyframes door-through-room {
-  0%,
-  33% {
-    opacity: 1;
-  }
-  42%,
-  100% {
-    opacity: 0;
-  }
-}
-@keyframes door-through-arch {
-  0% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  33% {
-    opacity: 0.9;
-  }
-  42% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 0;
-    transform: scale(3.2);
-  }
-}
-@keyframes door-through-light {
-  0% {
-    opacity: 1;
-    transform: scale(0.5);
-  }
-  33% {
-    opacity: 1;
-  }
-  42% {
-    opacity: 0.15;
-  }
-  100% {
-    opacity: 0;
-    transform: scale(2.8);
   }
 }
 
