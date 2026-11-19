@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { firstTime, idHash } from "@/lib/memory";
+import { DOOR_BLOCKS_MS } from "@/lib/motion/door";
 
 import { block, colour, css, over, ratio, SRC } from "./cssTokens";
 
@@ -143,21 +144,23 @@ describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice th
   it("holds the blocks until the head has opened, on the door alone, never the head's settle clock", () => {
     // Frame 5 shows only the shell and the light: every block waits for --door-blocks, then arrives as on
     // every page (40ms apart, capped at five). Not gated on the head settling, a timer that runs at wall speed.
-    expect(head).toMatch(/&\[data-door\] ~ :not\(\.contents\) \{\s*animation: arrive var\(--duration-arrive\) var\(--ease-arrive\) both;\s*animation-delay: calc\(var\(--door-blocks\) \+ \(var\(--arrive-cap\) - 1\) \* var\(--arrive-step\)\);/);
-    expect(head).toMatch(/&\[data-door\] \+ :not\(\.contents\) \{\s*animation-delay: var\(--door-blocks\);/);
+    expect(head).toMatch(/&\[data-door\] ~ :not\(\.contents\) \{\s*animation: arrive var\(--duration-arrive\) var\(--ease-arrive\) both;\s*animation-delay: calc\(var\(--door-wait, var\(--door-blocks\)\) \+ \(var\(--arrive-cap\) - 1\) \* var\(--arrive-step\)\);/);
+    expect(head).toMatch(/&\[data-door\] \+ :not\(\.contents\) \{\s*animation-delay: var\(--door-wait, var\(--door-blocks\)\);/);
     for (let k = 1; k <= 3; k += 1) {
-      const sel = `&\\[data-door\\]${" \\+ \\*".repeat(k)} \\+ :not\\(\\.contents\\) \\{\\s*animation-delay: calc\\(var\\(--door-blocks\\) \\+ ${k} \\* var\\(--arrive-step\\)\\);`;
+      const sel = `&\\[data-door\\]${" \\+ \\*".repeat(k)} \\+ :not\\(\\.contents\\) \\{\\s*animation-delay: calc\\(var\\(--door-wait, var\\(--door-blocks\\)\\) \\+ ${k} \\* var\\(--arrive-step\\)\\);`;
       expect(head).toMatch(new RegExp(sel));
     }
     expect(head).not.toMatch(/&\[data-door\]:not\(\[data-settled\]\)|:not\(\[data-settled\]\)\[data-door\]/);
     expect(ms("--door-blocks")).toBeGreaterThanOrEqual(ms("--door-lines"));
+    // A late block waits only what is left: the mirror Home measures it against is the token.
+    expect(ms("--door-blocks")).toBe(DOOR_BLOCKS_MS);
   });
 
   it("is held, 0 until --door-blocks, whatever the parts' own rules say: it outranks them, never by its place in the file", () => {
     // The first block: invisible through its whole delay (arrive starts at opacity 0 and fills backwards),
     // and that delay is --door-blocks. Then the usual fade and rise.
     expect(keyframes("arrive")).toMatch(/from \{\s*opacity: 0;/);
-    expect(head).toMatch(/&\[data-door\] ~ \.contents > :nth-child\(1\):not\(\.close-gap\) \{\s*animation-delay: var\(--door-blocks\);/);
+    expect(head).toMatch(/&\[data-door\] ~ \.contents > :nth-child\(1\):not\(\.close-gap\) \{\s*animation-delay: var\(--door-wait, var\(--door-blocks\)\);/);
     // A list that settles mid-door (`animation: none` on its rows) or an Unfold that opens must never take the
     // hold off: the build orders utilities as it likes, so the door's rules must bind more strongly, not later.
     // The door's two holds, as written: whatever sets `animation: arrive` on what follows the head.
@@ -180,9 +183,9 @@ describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice th
     const arrive = readFileSync(resolve(SRC, "lib/motion/arrive.tsx"), "utf8");
     expect(arrive).toMatch(/className = "contents"/);
     expect(head).toMatch(/&\[data-door\] ~ \.contents \{\s*animation: none;/);
-    expect(head).toMatch(/&\[data-door\] ~ \.contents > :not\(\.close-gap\) \{\s*animation: arrive var\(--duration-arrive\) var\(--ease-arrive\) both;\s*animation-delay: calc\(var\(--door-blocks\) \+ \(var\(--arrive-cap\) - 1\) \* var\(--arrive-step\)\);/);
+    expect(head).toMatch(/&\[data-door\] ~ \.contents > :not\(\.close-gap\) \{\s*animation: arrive var\(--duration-arrive\) var\(--ease-arrive\) both;\s*animation-delay: calc\(var\(--door-wait, var\(--door-blocks\)\) \+ \(var\(--arrive-cap\) - 1\) \* var\(--arrive-step\)\);/);
     for (let k = 2; k <= 4; k += 1) {
-      expect(head).toMatch(new RegExp(`&\\[data-door\\] ~ \\.contents > :nth-child\\(${k}\\):not\\(\\.close-gap\\) \\{\\s*animation-delay: calc\\(var\\(--door-blocks\\) \\+ ${k - 1} \\* var\\(--arrive-step\\)\\);`));
+      expect(head).toMatch(new RegExp(`&\\[data-door\\] ~ \\.contents > :nth-child\\(${k}\\):not\\(\\.close-gap\\) \\{\\s*animation-delay: calc\\(var\\(--door-wait, var\\(--door-blocks\\)\\) \\+ ${k - 1} \\* var\\(--arrive-step\\)\\);`));
     }
   });
 

@@ -47,6 +47,24 @@ export function spendDoor(signedInAt: string | undefined) {
 }
 
 /**
+ * When the blocks begin to arrive after the door opens (A-24 §3.2, frame 7):
+ * `--door-blocks` in globals.css, mirrored for what is left of it when a block
+ * mounts late (Home sets `--door-wait`), and a test holds the two equal.
+ */
+export const DOOR_BLOCKS_MS = 1160;
+
+/**
+ * What is left of the blocks' wait, on the door's own clock: its `door-open`
+ * animation's time, so a page slowed to look at it waits as slowly.
+ */
+export function doorWait(): number {
+  if (typeof document === "undefined") return DOOR_BLOCKS_MS;
+  const door = document.getAnimations?.().find((a) => (a as CSSAnimation).animationName === "door-open");
+  const elapsed = Number(door?.currentTime ?? 0);
+  return Math.max(0, DOOR_BLOCKS_MS - elapsed);
+}
+
+/**
  * A backstop for the door on Home: it ends when its last block has arrived
  * (animationend), and this only takes it away if that never comes, so the
  * door's rules never outlive it. Long enough for any playback rate a person

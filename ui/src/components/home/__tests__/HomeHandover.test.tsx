@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
 import { TINT_MS } from "@/lib/motion";
-import { DOOR_BACKSTOP_MS, DOOR_COOKIE, spendDoor } from "@/lib/motion/door";
+import { DOOR_BACKSTOP_MS, DOOR_BLOCKS_MS, DOOR_COOKIE, spendDoor } from "@/lib/motion/door";
 import { inZone } from "@/test-utils/zone";
 import type { SessionUser } from "@/lib/session";
 import { setMediaQuery } from "@/test-utils/media";
@@ -449,6 +449,32 @@ describe("the first arrival of a sign-in", () => {
     expect(opened).toMatch(/class="page-head[^"]*"[^>]*data-door=""|data-door=""[^>]*class="page-head/);
     expect(opened).toMatch(/class="hour-light"[^>]*data-door=""|data-door=""[^>]*class="hour-light"/);
     expect(html(false)).not.toContain('data-door=""');
+  });
+
+  it("lets a block that mounts late wait only what is left of 1160ms, on the door's own clock", () => {
+    let elapsed = 0;
+    Object.defineProperty(document, "getAnimations", {
+      configurable: true,
+      value: () => [{ animationName: "door-open", currentTime: elapsed }],
+    });
+    try {
+      state.loading = true;
+      const home = mount(signedIn, true);
+      const page = screen.getByRole("heading", { level: 1 }).parentElement!.parentElement!;
+      expect(page.style.getPropertyValue("--door-wait")).toBe(`${DOOR_BLOCKS_MS}ms`);
+      // The queue's read lands 700ms into the door: its blocks wait 460ms, so they still arrive at 1160.
+      elapsed = 700;
+      state.loading = false;
+      home.reread();
+      expect(page.style.getPropertyValue("--door-wait")).toBe(`${DOOR_BLOCKS_MS - 700}ms`);
+      // After 1160ms a block arrives at once, never later than it should.
+      elapsed = 1500;
+      state.loading = true;
+      home.reread();
+      expect(page.style.getPropertyValue("--door-wait")).toBe("0ms");
+    } finally {
+      delete (document as { getAnimations?: unknown }).getAnimations;
+    }
   });
 
   it("is the server's to decide: without its answer Home has no door, whatever the session says", () => {

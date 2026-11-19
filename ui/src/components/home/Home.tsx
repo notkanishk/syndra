@@ -50,7 +50,7 @@ import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
 import { Unfold } from "@/lib/motion";
-import { DOOR_BACKSTOP_MS, openedAlready } from "@/lib/motion/door";
+import { DOOR_BACKSTOP_MS, doorWait, openedAlready } from "@/lib/motion/door";
 import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
@@ -253,6 +253,12 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
   const termPending = terms.data === undefined && !terms.error;
   const loading = summary.isLoading || requests.isLoading || onboarding.isLoading;
   const error = summary.error ?? requests.error ?? onboarding.error ?? accounts.error;
+  // Blocks that mount late (their reads land after the door began) wait only what is left of the door's
+  // 1160ms, on its own clock, so every block arrives from frame 7 and none later.
+  const page = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (door) page.current?.style.setProperty("--door-wait", `${doorWait()}ms`);
+  }, [door, loading, error]);
   // While the load is failing the count is unknown, and "nothing needs you" is
   // exactly the wrong thing to say to somebody whose queue might be full.
   const calm = blocks === 0 && queue.rows.length === 0 && gaps.rows.length === 0;
@@ -392,6 +398,7 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
 
   return (
     <div
+      ref={page}
       className="flex flex-col gap-4"
       // Through the door (A-24 §3.2) the blocks are held until the head has opened; when the last of them
       // has arrived the door is over, and its rules come off with `data-door`.

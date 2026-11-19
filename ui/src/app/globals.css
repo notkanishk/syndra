@@ -1857,41 +1857,43 @@ html.theme-fading *::after {
      `animation: none`) or an Unfold that opens would otherwise take the hold off mid-door and the
      block would appear at once, already arrived, unseen. A list's wrapper (`ArriveList`,
      `display: contents`) has no box, so an opacity on it paints nothing: the wrapper holds still
-     and the boxes inside it are held, on the same stagger. */
+     and the boxes inside it are held, on the same stagger. A block that mounts late (its read
+     lands after the door began) waits only what is left of --door-blocks on the door's own clock
+     (`--door-wait`, set by Home as the blocks change), so every block arrives from 1160ms. */
   &[data-door] ~ :not(.contents) {
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
-    animation-delay: calc(var(--door-blocks) + (var(--arrive-cap) - 1) * var(--arrive-step));
+    animation-delay: calc(var(--door-wait, var(--door-blocks)) + (var(--arrive-cap) - 1) * var(--arrive-step));
   }
   &[data-door] + :not(.contents) {
-    animation-delay: var(--door-blocks);
+    animation-delay: var(--door-wait, var(--door-blocks));
   }
   &[data-door] + * + :not(.contents) {
-    animation-delay: calc(var(--door-blocks) + 1 * var(--arrive-step));
+    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 1 * var(--arrive-step));
   }
   &[data-door] + * + * + :not(.contents) {
-    animation-delay: calc(var(--door-blocks) + 2 * var(--arrive-step));
+    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 2 * var(--arrive-step));
   }
   &[data-door] + * + * + * + :not(.contents) {
-    animation-delay: calc(var(--door-blocks) + 3 * var(--arrive-step));
+    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 3 * var(--arrive-step));
   }
   &[data-door] ~ .contents {
     animation: none;
   }
   &[data-door] ~ .contents > :not(.close-gap) {
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
-    animation-delay: calc(var(--door-blocks) + (var(--arrive-cap) - 1) * var(--arrive-step));
+    animation-delay: calc(var(--door-wait, var(--door-blocks)) + (var(--arrive-cap) - 1) * var(--arrive-step));
   }
   &[data-door] ~ .contents > :nth-child(1):not(.close-gap) {
-    animation-delay: var(--door-blocks);
+    animation-delay: var(--door-wait, var(--door-blocks));
   }
   &[data-door] ~ .contents > :nth-child(2):not(.close-gap) {
-    animation-delay: calc(var(--door-blocks) + 1 * var(--arrive-step));
+    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 1 * var(--arrive-step));
   }
   &[data-door] ~ .contents > :nth-child(3):not(.close-gap) {
-    animation-delay: calc(var(--door-blocks) + 2 * var(--arrive-step));
+    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 2 * var(--arrive-step));
   }
   &[data-door] ~ .contents > :nth-child(4):not(.close-gap) {
-    animation-delay: calc(var(--door-blocks) + 3 * var(--arrive-step));
+    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 3 * var(--arrive-step));
   }
   @media (prefers-reduced-motion: reduce), (forced-colors: active) {
     &[data-door] > h1,
