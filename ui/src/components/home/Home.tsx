@@ -50,7 +50,7 @@ import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
 import { Unfold } from "@/lib/motion";
-import { DOOR_BACKSTOP_MS, takeFirstArrival } from "@/lib/motion/door";
+import { DOOR_BACKSTOP_MS, openedAlready } from "@/lib/motion/door";
 import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
@@ -104,7 +104,7 @@ import { useShownNames } from "@/components/names/shownNames";
  * changes and Unexplained access belong to the machine, and the machine lives
  * in Advanced.
  */
-export function Home({ session }: { session: SessionUser }) {
+export function Home({ session, door: opening = false }: { session: SessionUser; door?: boolean }) {
   // Home is the most-visited first paint (S11): the greeting tints in, then the blocks arrive.
   const head = usePageHead();
   const advanced = useIsAdvanced();
@@ -225,14 +225,13 @@ export function Home({ session }: { session: SessionUser }) {
   // UTC and hydration failed (React #418). They appear on mount, in a seat held
   // by an invisible stand-in so nothing below moves (same rule as Relative).
   const [now, setNow] = useState<Date | null>(null);
-  // The first arrival of a sign-in (A-24 §3.2) is asked once, as Home mounts: only a yes is kept,
-  // so a second run of the effect (React's Strict Mode) can't take it back.
-  const [door, setDoor] = useState(false);
+  // The first arrival of a sign-in (A-24 §3.2): decided by the server from the sign-in's cookie, so the
+  // door is in the first HTML and the page never shows itself and then hides for it.
+  const [door, setDoor] = useState(() => opening && !openedAlready(session.signedInAt));
   // Before paint, so a page reached by a link is drawn with its greeting and term line in place.
   useLayoutEffect(() => {
     setNow(new Date());
-    if (takeFirstArrival(session.signedInAt)) setDoor(true);
-  }, [session.signedInAt]);
+  }, []);
   // The door ends when its last block has arrived (below); this only takes it away if that never comes.
   useEffect(() => {
     if (!door) return;
@@ -412,7 +411,11 @@ export function Home({ session }: { session: SessionUser }) {
             place set by the part of the day on the greeting's own clock. The one written exception to
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
         {/* On the first arrival of a sign-in it is the doorway's arch, opening into the pool (`door-open`). */}
-        {phase && <div aria-hidden data-hour={phase} data-door={door ? "" : undefined} className="hour-light" />}
+        {/* Through the door it is in the server's HTML too, so the arch is the first thing painted and its
+            beat starts with the head's; the hour (`data-hour`) joins it as the page mounts, for frame 7. */}
+        {(phase || door) && (
+          <div aria-hidden data-hour={phase ?? undefined} data-door={door ? "" : undefined} className="hour-light" />
+        )}
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
 import { TINT_MS } from "@/lib/motion";
-import { DOOR_BACKSTOP_MS, noteSignIn, resetDoorForTests } from "@/lib/motion/door";
+import { DOOR_BACKSTOP_MS, DOOR_COOKIE, spendDoor } from "@/lib/motion/door";
 import { inZone } from "@/test-utils/zone";
 import type { SessionUser } from "@/lib/session";
 import { setMediaQuery } from "@/test-utils/media";
@@ -83,11 +84,11 @@ vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alrea
 const session = { id: "op", name: "Kanishk", email: "k@example.org" } as unknown as SessionUser;
 const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-function mount(who: SessionUser = session) {
+function mount(who: SessionUser = session, door = false) {
   const queries = client();
   const home = () => (
     <QueryClientProvider client={queries}>
-      <Home session={who} />
+      <Home session={who} door={door} />
     </QueryClientProvider>
   );
   const view = render(home());
@@ -373,15 +374,13 @@ describe("the first arrival of a sign-in", () => {
   const signedIn = { ...session, signedInAt: "2026-11-19T08:00:00.000Z" } as SessionUser;
   // The door is the head itself, staged (board part 1, frames 5 to 7): no extra layer, no band.
   const arch = () => document.querySelector('.page-head[data-door] > .hour-light[data-door]');
-  const pool = () => document.querySelector(".hour-light");
   beforeEach(() => {
-    resetDoorForTests();
     window.history.replaceState({}, "", "/");
   });
   afterEach(() => vi.restoreAllMocks());
 
   it("stages the head: the light first, then the greeting, the date line and the lines, each in its own beat", () => {
-    mount(signedIn);
+    mount(signedIn, true);
     const head = screen.getByRole("heading", { level: 1 }).parentElement!;
     expect(head).toHaveClass("page-head");
     expect(head).toHaveAttribute("data-door");
@@ -395,13 +394,13 @@ describe("the first arrival of a sign-in", () => {
   });
 
   it("is never a layer of its own: no band, no full-window door, one light", () => {
-    mount(signedIn);
+    mount(signedIn, true);
     expect(document.querySelector(".door-through, [data-door-through], [data-door-light], .greeting-light")).toBeNull();
     expect(document.querySelectorAll(".hour-light")).toHaveLength(1);
   });
 
   it("ends when its last block has arrived, and not on any other arrival, whatever the head's clock says", () => {
-    mount(signedIn);
+    mount(signedIn, true);
     const head = screen.getByRole("heading", { level: 1 }).parentElement!;
     const page = head.parentElement!;
     // jsdom has no AnimationEvent, so React listens for the prefixed name; the name is the native event's.
@@ -431,7 +430,7 @@ describe("the first arrival of a sign-in", () => {
   });
 
   it("is taken away by its backstop if its last block never arrives", () => {
-    mount(signedIn);
+    mount(signedIn, true);
     const head = screen.getByRole("heading", { level: 1 }).parentElement!;
     later(DOOR_BACKSTOP_MS - 1);
     expect(head).toHaveAttribute("data-door");
@@ -439,46 +438,41 @@ describe("the first arrival of a sign-in", () => {
     expect(head).not.toHaveAttribute("data-door");
   });
 
-  it("is once: not when Home is shown again, not on a reload, not for the same sign-in", () => {
-    const first = mount(signedIn);
-    expect(arch()).not.toBeNull();
-    first.unmount();
-    mount(signedIn); // back to Home in the same visit
-    expect(arch()).toBeNull();
-    expect(pool()).not.toHaveAttribute("data-door");
-    resetDoorForTests(); // a reload: this device remembers the sign-in it opened for
+  it("is in the first HTML: the server's render of Home with the door already carries it, and without it does not", () => {
+    const html = (door: boolean) =>
+      renderToString(
+        <QueryClientProvider client={client()}>
+          <Home session={signedIn} door={door} />
+        </QueryClientProvider>,
+      );
+    const opened = html(true);
+    expect(opened).toMatch(/class="page-head[^"]*"[^>]*data-door=""|data-door=""[^>]*class="page-head/);
+    expect(opened).toMatch(/class="hour-light"[^>]*data-door=""|data-door=""[^>]*class="hour-light"/);
+    expect(html(false)).not.toContain('data-door=""');
+  });
+
+  it("is the server's to decide: without its answer Home has no door, whatever the session says", () => {
     mount(signedIn);
     expect(document.querySelectorAll(".page-head[data-door]")).toHaveLength(0);
   });
 
-  it("is spent by whichever page the sign-in lands on, so Home later is quiet", () => {
-    window.history.replaceState({}, "", "/users/u7");
-    noteSignIn(signedIn.signedInAt);
-    window.history.replaceState({}, "", "/");
-    mount(signedIn);
-    expect(arch()).toBeNull();
+  it("is once: spent by the first page, so Home again (Back to a cached page, a reload) keeps it shut", () => {
+    const first = mount(signedIn, true);
+    expect(arch()).not.toBeNull();
+    // The shell spends the door on the sign-in's first page: the cookie goes, and this device remembers.
+    document.cookie = `${DOOR_COOKIE}=${signedIn.signedInAt}; Path=/`;
+    spendDoor(signedIn.signedInAt);
+    expect(document.cookie).not.toContain(DOOR_COOKIE);
+    first.unmount();
+    // A cached render that still says "door" (Back) finds it already opened here.
+    mount(signedIn, true);
+    expect(document.querySelectorAll(".page-head[data-door]")).toHaveLength(0);
   });
 
   it("opens again for the next sign-in", () => {
-    mount(signedIn).unmount();
-    resetDoorForTests();
-    mount({ ...signedIn, signedInAt: "2026-11-20T08:00:00.000Z" } as SessionUser);
+    spendDoor(signedIn.signedInAt);
+    mount({ ...signedIn, signedInAt: "2026-11-20T08:00:00.000Z" } as SessionUser, true);
     expect(arch()).not.toBeNull();
-  });
-
-  it("shows nothing extra when this device can't remember, rather than opening every time", () => {
-    // A private window or blocked site data: the store itself can't be reached.
-    vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
-      throw new Error("blocked");
-    });
-    mount(signedIn);
-    expect(arch()).toBeNull();
-    expect(pool()).not.toHaveAttribute("data-door");
-  });
-
-  it("has no door without a sign-in instant to keep it to", () => {
-    mount(session);
-    expect(arch()).toBeNull();
   });
 });
 

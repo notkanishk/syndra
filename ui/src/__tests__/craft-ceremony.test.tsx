@@ -87,8 +87,8 @@ describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice th
   it("is the head itself, never a layer of its own: no band, no full-window door", () => {
     expect(css).not.toMatch(/\.door-through|--door-through|greeting-light|greeting-travel|--door-light\b/);
     expect(existsSync(resolve(SRC, "components/shell/DoorThrough.tsx"))).toBe(false);
-    // The shell only notes the sign-in's first page; Home opens the door if it was that page.
-    expect(readFileSync(resolve(SRC, "components/shell/AppShell.tsx"), "utf8")).toMatch(/noteSignIn\(session\.signedInAt\)/);
+    // The shell spends the door on the sign-in's first page, whichever it is; the server decides it.
+    expect(readFileSync(resolve(SRC, "components/shell/AppShell.tsx"), "utf8")).toMatch(/spendDoor\(session\.signedInAt\)/);
   });
 
   it("draws the board's arch, its opened pool and the hour's pool, in that order", () => {

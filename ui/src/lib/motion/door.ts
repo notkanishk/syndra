@@ -1,47 +1,49 @@
-import { firstTime } from "@/lib/memory";
+import { firstTime, recallPaths } from "@/lib/memory";
 
 /**
- * The first arrival of a sign-in (A-24 §3.2, Q4): the door's light opens into
- * Home once, straight after signing in, and never again until the next one.
+ * The first arrival of a sign-in (A-24 §3.2, Q4): the door opens on Home once,
+ * straight after signing in, and never again until the next one.
  *
- * A sign-in is its own instant (`signedInAt`, set when the door hands over).
- * The first page this browser paints after it takes the arrival, whichever
- * page that is: the shell notes it on every page (`noteSignIn`), so a sign-in
- * that lands on a person's page spends it there, and Home later is quiet.
- * This device remembers the sign-in it has opened for (`firstTime`), so a
- * reload, a second tab or a later visit never replays it; a device that can't
- * remember shows nothing extra.
+ * Decided before the first paint, so the page never shows itself and then
+ * hides for the door. The sign-in (the OIDC callback, the dev identity picker)
+ * sets a short-lived, readable cookie naming the sign-in's instant; the
+ * server's render of Home reads it and draws the door into the first HTML.
+ * The first page that mounts after the sign-in, whichever it is, spends it
+ * (the shell deletes it), so a reload, a second tab or a later visit to Home
+ * never replays it, and a sign-in that lands on another page spends its door
+ * there. It names an instant only: no secret, no identity.
+ *
+ * ponytail: if the cookie were ever still there for a sign-in this device has
+ * already opened for (two tabs mounting at once), the door plays once more
+ * rather than flashing away; deleting it on the first mount makes that rare.
  */
+export const DOOR_COOKIE = "syndra_door";
+/** Long enough to cover the redirect and the first page's render, and no longer. */
+export const DOOR_COOKIE_MAX_AGE_S = 60;
 const OPENED = "syndra:door-opened";
-let claim: { at: string; path: string; open: boolean } | null = null;
 
-function claimFor(signedInAt: string) {
-  if (claim?.at !== signedInAt) {
-    claim = { at: signedInAt, path: window.location.pathname, open: firstTime("local", OPENED, signedInAt, 1) };
-  }
-  return claim;
-}
+/** The cookie the sign-in sets: the instant, readable by the page, gone in a minute. */
+export const doorCookie = (signedInAt: string) =>
+  ({ name: DOOR_COOKIE, value: signedInAt, httpOnly: false, sameSite: "lax", path: "/", maxAge: DOOR_COOKIE_MAX_AGE_S }) as const;
 
-/** The shell, on every page's first paint: the sign-in's first page is this one, if none was. */
-export function noteSignIn(signedInAt: string | undefined) {
-  if (signedInAt && typeof window !== "undefined") claimFor(signedInAt);
-}
+/** The server's answer for this render: the sign-in's own door, and only its own. */
+export const doorFor = (cookie: string | undefined, signedInAt: string | undefined): boolean =>
+  Boolean(cookie && signedInAt && cookie === signedInAt);
 
 /**
- * Home asks once, as it mounts: true only when this page is the sign-in's
- * first on this device, and only the first time it is asked.
+ * Whether this device has already opened the door for this sign-in. Read as
+ * Home first renders on the client: on the page the server drew the door into
+ * it is not yet recorded (the shell spends it after), so the hydrated render
+ * matches; on a later mount (Back to a cached Home) it is, and the door stays shut.
  */
-export function takeFirstArrival(signedInAt: string | undefined): boolean {
-  if (!signedInAt || typeof window === "undefined") return false;
-  const sign = claimFor(signedInAt);
-  const yes = sign.open && sign.path === window.location.pathname;
-  sign.open = false;
-  return yes;
-}
+export const openedAlready = (signedInAt: string | undefined): boolean =>
+  typeof window !== "undefined" && Boolean(signedInAt) && recallPaths("local", OPENED).includes(signedInAt!);
 
-/** Test-only: a fresh page load. */
-export function resetDoorForTests() {
-  claim = null;
+/** On the first mount after a sign-in: the door is spent, and this device remembers it was opened. */
+export function spendDoor(signedInAt: string | undefined) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${DOOR_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax`;
+  if (signedInAt) firstTime("local", OPENED, signedInAt, 1);
 }
 
 /**

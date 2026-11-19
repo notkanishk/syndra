@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 
 import { buildRedirectUrl, isForeignOrigin, isSecureRequest } from "@/lib/request-url";
 import { safeReturnPath } from "@/lib/return-path";
-import { SESSION_COOKIE_NAME, createSessionValue } from "@/lib/session";
+import { doorCookie } from "@/lib/motion/door";
+import { SESSION_COOKIE_NAME, createSessionValue, signedInNow } from "@/lib/session";
 
 function redirectTo(request: Request, path: string) {
   return NextResponse.redirect(buildRedirectUrl(request, path), { status: 307 });
@@ -26,7 +27,8 @@ export async function POST(request: Request) {
     return redirectTo(request, "/login");
   }
 
-  const sessionValue = createSessionValue(userId);
+  const signedInAt = signedInNow();
+  const sessionValue = createSessionValue(userId, signedInAt);
   if (!sessionValue) {
     return redirectTo(request, "/login");
   }
@@ -39,6 +41,8 @@ export async function POST(request: Request) {
     path: "/",
     maxAge: 60 * 60 * 12,
   });
+  // The door is decided before the first paint (A-24 §3.2): the first page's server render reads this.
+  cookieStore.set({ ...doorCookie(signedInAt), secure: isSecureRequest(request) });
 
   return redirectTo(request, next);
 }

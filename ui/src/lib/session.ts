@@ -250,12 +250,12 @@ function decodeSessionPayload(value: string): SessionCookiePayload | null {
 
 // Every sign-in is stamped here, the one place each kind becomes a session: the
 // instant the first arrival is kept to (A-24 §3.2). Not a secret, and not identity.
-const signedInNow = () => new Date().toISOString();
+export const signedInNow = () => new Date().toISOString();
 
-export function createSessionValue(userId: string): string | null {
+export function createSessionValue(userId: string, signedInAt: string = signedInNow()): string | null {
   const user = getDemoUser(userId);
   if (!user) return null;
-  return encodeSession({ type: "demo", userId: user.id, role: user.role, signedInAt: signedInNow() });
+  return encodeSession({ type: "demo", userId: user.id, role: user.role, signedInAt });
 }
 
 export function createOidcSessionValue(payload: OidcSessionCookie): string {
