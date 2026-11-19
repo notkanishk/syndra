@@ -1831,50 +1831,53 @@ html.theme-fading *::after {
   /* The blocks are held until the head has opened, then arrive as on every page, 40ms apart and
      capped at five. Keyed on the door alone, not on the head settling: the head's settle timer is a
      clock, the door is light, and the blocks wait for the light. Home ends the door when the last
-     block has arrived (`data-door` comes off), so nothing here outlives it. */
-  &[data-door] ~ * {
+     block has arrived (`data-door` comes off), so nothing here outlives it.
+     Every hold outranks the parts' own arrival rules by specificity, never by its place in the file
+     (the build orders utilities as it likes): a list that settles (`.arrive-list[data-settled] > *`,
+     `animation: none`) or an Unfold that opens would otherwise take the hold off mid-door and the
+     block would appear at once, already arrived, unseen. A list's wrapper (`ArriveList`,
+     `display: contents`) has no box, so an opacity on it paints nothing: the wrapper holds still
+     and the boxes inside it are held, on the same stagger. */
+  &[data-door] ~ :not(.contents) {
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
     animation-delay: calc(var(--door-blocks) + (var(--arrive-cap) - 1) * var(--arrive-step));
   }
-  &[data-door] + * {
+  &[data-door] + :not(.contents) {
     animation-delay: var(--door-blocks);
   }
-  &[data-door] + * + * {
+  &[data-door] + * + :not(.contents) {
     animation-delay: calc(var(--door-blocks) + 1 * var(--arrive-step));
   }
-  &[data-door] + * + * + * {
+  &[data-door] + * + * + :not(.contents) {
     animation-delay: calc(var(--door-blocks) + 2 * var(--arrive-step));
   }
-  &[data-door] + * + * + * + * {
+  &[data-door] + * + * + * + :not(.contents) {
     animation-delay: calc(var(--door-blocks) + 3 * var(--arrive-step));
   }
-  /* A list's wrapper (`ArriveList`, `display: contents`) has no box, so an opacity on it paints
-     nothing and its children show through: the hold goes on the boxes inside it instead, on the
-     same stagger, and the wrapper itself holds still. */
   &[data-door] ~ .contents {
     animation: none;
   }
-  &[data-door] ~ .contents > * {
+  &[data-door] ~ .contents > :not(.close-gap) {
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
     animation-delay: calc(var(--door-blocks) + (var(--arrive-cap) - 1) * var(--arrive-step));
   }
-  &[data-door] ~ .contents > :nth-child(1) {
+  &[data-door] ~ .contents > :nth-child(1):not(.close-gap) {
     animation-delay: var(--door-blocks);
   }
-  &[data-door] ~ .contents > :nth-child(2) {
+  &[data-door] ~ .contents > :nth-child(2):not(.close-gap) {
     animation-delay: calc(var(--door-blocks) + 1 * var(--arrive-step));
   }
-  &[data-door] ~ .contents > :nth-child(3) {
+  &[data-door] ~ .contents > :nth-child(3):not(.close-gap) {
     animation-delay: calc(var(--door-blocks) + 2 * var(--arrive-step));
   }
-  &[data-door] ~ .contents > :nth-child(4) {
+  &[data-door] ~ .contents > :nth-child(4):not(.close-gap) {
     animation-delay: calc(var(--door-blocks) + 3 * var(--arrive-step));
   }
   @media (prefers-reduced-motion: reduce), (forced-colors: active) {
     &[data-door] > h1,
     &[data-door] > [data-door-step],
-    &[data-door] ~ *,
-    &[data-door] ~ .contents > * {
+    &[data-door] ~ :not(.contents),
+    &[data-door] ~ .contents > :not(.close-gap) {
       animation: none;
     }
   }
