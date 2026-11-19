@@ -88,6 +88,8 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/users/{id}/bundles/{bundleId}", withCORS(withOperatorAuth(handleRemoveBundleFromUser)))
 	mux.HandleFunc("DELETE /api/v1/bundles/{id}/roles/{projectId}/{roleKey}", withCORS(withOperatorAuth(withLiveBundle(handleRemoveRoleFromBundle))))
 	mux.HandleFunc("GET /api/v1/users/{id}/access", withCORS(withSelfOrOperatorAuth(handleGetUserAccess)))
+	// Access over time (A-24 §9): operators only, never a member, not even for themselves.
+	mux.HandleFunc("GET /api/v1/users/{id}/access-history", withCORS(withOperatorAuth(handleGetUserAccessHistory)))
 
 	// Application Views
 	mux.HandleFunc("GET /api/v1/applications", withCORS(withUserAuth(handleGetApplications)))

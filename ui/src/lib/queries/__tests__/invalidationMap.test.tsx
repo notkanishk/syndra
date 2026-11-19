@@ -50,9 +50,12 @@ describe("the write-to-keys map", () => {
     }
   });
 
-  it("a look-again reaches that person's access view, nobody else's", () => {
+  it("a look-again reaches that person's access view and access over time, nobody else's", () => {
     const keys = keysFor("observed", { user: "u1" }) as unknown[][];
-    expect(keys).toEqual([["users", "access", "u1"]]);
+    expect(keys).toEqual([
+      ["users", "access", "u1"],
+      ["users", "history", "u1"],
+    ]);
   });
 
   it("a Zitadel-screen write reaches the readers of Zitadel's records and the rail", () => {

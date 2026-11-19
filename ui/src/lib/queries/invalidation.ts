@@ -127,7 +127,8 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
       case "observed":
         // That person's access view (standings, holdings); every person's when
         // no one is named. A holder list refetches when it is next opened.
-        return [user ? ["users", "access", user] : ["users"]];
+        // Their access over time too: its "held today" is the same standing.
+        return user ? [["users", "access", user], ["users", "history", user]] : [["users"]];
       case "upstream":
         return [
           ["upstream"],
