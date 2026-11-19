@@ -256,7 +256,7 @@ Each has my recommended answer. The first thirteen are drawn on the boards.
 8. **The change's trail** in every result. **Recommended: yes.**
 9. **Plates** in empty states, against the part's own "no illustration". **Recommended: the shut door and the open door only, and only after you have seen them at true size.**
 10. **The line that knows** on a person's page, replacing its lede. **Recommended: yes.**
-11. **Access over time** on a person's page. **Recommended: yes, in Advanced first.**
+11. **Access over time** on a person's page. **Recommended: yes, in Advanced first.** **Built** (owner, 19 Nov 2026: "i dont see the access over time chart anywhere", which settles it as yes; addon-contract 7w-5): `GET /users/{id}/access-history`, operators, and the card on the person page in Advanced (`components/people/AccessOverTime.tsx`).
 12. **A year of days** on Insights. **Recommended: yes, once counting has run a term.**
 13. **Go to remembers your last five places**, on this device. **Recommended: yes.**
 14. **A place arrives once per session, and never by key.** This tightens S11 in FINAL §4. **Recommended: yes.**
