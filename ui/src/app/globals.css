@@ -102,9 +102,10 @@
   --radius-pill: 999px;
 
   /* ── Layers (A-19 P12) ───────────────────────────────────────────────────
-   * The four steps that exist, named for what sits on them. A popover opened
+   * The steps that exist, named for what sits on them. A popover opened
    * inside a dialog shows over it, so popover is the highest. Components say
    * `z-(--layer-dialog)`, never a number. */
+  --layer-under: -1; /* under its siblings, in an isolated parent: Home's head, so its light lies behind the cards */
   --layer-bar: 20; /* sticky bars: the selection bar, the section pill */
   --layer-pill: 30; /* a floating pill over the page, below any dialog */
   --layer-dialog: 50; /* dialogs, sheets and their scrim */
@@ -1112,8 +1113,15 @@
 @property --door-x { syntax: "<length>"; inherits: false; initial-value: 0px; }
 
 @utility hour-light {
+  /* Boundless (owner, 19 Nov 2026: "the bounding box is breaking the immersion"): this box is the
+     head out to the content column's own edges (the rail's border, the window's) and up to the top
+     of the scroller, edges the page already draws, so the light meets them and no line of its own.
+     Below, where there is no such edge, the light's layer runs on (`-80cqh`) past where any pool
+     or the door's crossing reaches (135cqh at most), so it fades to nothing well inside it. It
+     falls under the head onto the canvas, behind the cards (Home's column is the stacking
+     context, the head sits under its siblings). */
   position: absolute;
-  inset: -24px -26px -28px;
+  inset: -24px calc(-1 * var(--page-x)) -28px;
   z-index: -1;
   pointer-events: none;
   /* The light is drawn on ::before, sized in this box's own units (cqw, cqh: a percentage of it,
@@ -1124,21 +1132,13 @@
   &::before {
     content: "";
     position: absolute;
-    inset: 0;
+    inset: 0 0 -80cqh;
     background: radial-gradient(
       ellipse var(--hour-w) var(--hour-h) at var(--hour-x) var(--hour-y),
       var(--hour-light),
       transparent 70%
     );
   }
-  /* The pool fades to nothing inside its own box on every side (a mask is alpha only, so its
-     colour words are no colour on screen): where a place puts the light past the box's edge,
-     that edge is never seen as a line, in either room. The fade is the box's own overhang past
-     the head (24, 26 and 28px), so the light is whole behind the words. */
-  mask-image:
-    linear-gradient(to right, transparent, black 26px, black calc(100% - 26px), transparent),
-    linear-gradient(to bottom, transparent, black 24px, black calc(100% - 28px), transparent);
-  mask-composite: intersect;
 
   /* Morning: low, from the left. */
   &[data-hour="morning"] {
@@ -1182,7 +1182,7 @@
     &[data-door]::after {
       content: "";
       position: absolute;
-      inset: 0;
+      inset: 0 0 -80cqh;
       background: radial-gradient(ellipse 48cqw 150cqh at var(--door-x) 30cqh, var(--hour-light), transparent 70%);
       animation: door-cross var(--door-open) var(--ease-tint) both;
     }

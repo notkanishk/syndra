@@ -385,8 +385,10 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
   if (!calm) held.current = { grid, blocks };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div {...head} className={`${head.className} relative isolate`} style={BELOW_HEADER}>
+    // `isolate`: the hour's light falls past the head onto the canvas, under the head (`--layer-under`) and
+    // so under every block after it, whose cards are opaque.
+    <div className="isolate flex flex-col gap-4">
+      <div {...head} className={`${head.className} relative z-(--layer-under)`} style={BELOW_HEADER}>
         {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
             place set by the part of the day on the greeting's own clock. The one written exception to
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}

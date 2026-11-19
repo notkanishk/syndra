@@ -66,12 +66,19 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
     expect(light).toMatch(/@media \(forced-colors: active\)\s*\{\s*display: none;/);
     // A phone's gutter is 16px: the pool reaches it and no further, so nothing scrolls sideways.
     expect(light).toMatch(/@media \(width < theme\(--breakpoint-tablet\)\)\s*\{\s*inset-inline: -16px;/);
-    // No edge of its box is ever seen: a mask takes it to nothing on all four sides, over the box's own
-    // overhang past the head, so the light is whole behind the words.
-    expect(light).toContain("linear-gradient(to right, transparent, black 26px, black calc(100% - 26px), transparent)");
-    expect(light).toContain("linear-gradient(to bottom, transparent, black 24px, black calc(100% - 28px), transparent)");
-    expect(light).toMatch(/inset: -24px -26px -28px;/);
-    expect(light).toContain("mask-composite: intersect;");
+    // No edge of its box is ever seen, and no mask draws one: the box meets the column's own edges and
+    // the scroller's top, and below, its layers run on past where any pool or the crossing reaches.
+    expect(light).not.toMatch(/mask/);
+    expect(light).toMatch(/inset: -24px calc\(-1 \* var\(--page-x\)\) -28px;/);
+    const below = Number(/&::before \{[^}]*inset: 0 0 -(\d+)cqh;/.exec(light)?.[1]);
+    expect(light).toMatch(new RegExp(`&\\[data-door\\]::after \\{[^}]*inset: 0 0 -${below}cqh;`));
+    // Each ellipse fades out at 70% of its radius: its lowest reach is y + 0.7h, inside 100 + below.
+    const css = (k: string) => [...light.matchAll(new RegExp(`${k}: (-?\\d+)cqh;`, "g"))].map((m) => Number(m[1]));
+    const [ys, hs] = [css("--hour-y"), css("--hour-h")];
+    expect(ys).toHaveLength(4);
+    for (const [i, y] of ys.entries()) expect(y + 0.7 * hs[i], `pool ${i}`).toBeLessThan(100 + below - 10);
+    const blob = /ellipse \d+cqw (\d+)cqh at var\(--door-x\) (\d+)cqh/.exec(light)!;
+    expect(Number(blob[2]) + 0.7 * Number(blob[1])).toBeLessThan(100 + below - 10);
   });
 
   it("never takes the head's text under 4.5:1, at the pool's strongest, in both themes", () => {

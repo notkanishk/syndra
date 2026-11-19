@@ -336,7 +336,9 @@ describe("the room knows the hour", () => {
     expect(light).toHaveAttribute("aria-hidden");
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Morning/);
     // Behind the head: inside it, and the only light on the page.
-    expect(light.parentElement).toHaveClass("page-head", "isolate");
+    // Under the head's words and under every block after it: Home's column is the stacking context.
+    expect(light.parentElement).toHaveClass("page-head", "relative", "z-(--layer-under)");
+    expect(light.parentElement!.parentElement).toHaveClass("isolate");
     expect(document.querySelectorAll(".hour-light")).toHaveLength(1);
   });
 
