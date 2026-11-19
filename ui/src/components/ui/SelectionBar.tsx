@@ -349,6 +349,9 @@ export function SelectionAction({
 const GLYPH_BOX =
   "flex size-[var(--tap)] shrink-0 items-center justify-center desktop:h-auto desktop:w-auto";
 
+/** The checkbox's column in a table's `Columns`, first, while its rows are being chosen. */
+export const CHECK_COL = "w-[var(--tap)] flex-none desktop:w-[26px]";
+
 /** A row checkbox. Spread `selection.checkboxProps(id)` onto it. */
 export function RowCheckbox({
   label,
