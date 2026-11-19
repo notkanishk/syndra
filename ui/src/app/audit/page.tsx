@@ -9,7 +9,7 @@ import { FilterBar } from "@/components/ui/FilterBar";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Button } from "@/components/ui/Button";
 import { FilterChip } from "@/components/ui/FilterChip";
-import { Card, CardColumns, ROW } from "@/components/ui/Card";
+import { Card, CardColumns, Cells, ROW, type Columns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -28,6 +28,13 @@ import { formatShortDate, formatWhen, humanizeKey } from "@/lib/format";
 import { civilDay } from "@/lib/time";
 
 type Window = "7" | "30" | "all";
+
+/** The log's columns, its headings' and every entry's: when, who, what they did. */
+const COLS: Columns = [
+  "tablet:w-[124px] tablet:flex-none",
+  "w-full tablet:w-[150px] tablet:flex-none",
+  "w-full tablet:w-auto tablet:min-w-[240px] tablet:flex-1",
+];
 
 /**
  * S8 · Review › Audit. Who did what, when.
@@ -157,10 +164,10 @@ export default function AuditPage() {
       <Card>
         <ListStates
           head={
-            <CardColumns>
-              <span className="w-[124px]">When</span>
-              <span className="w-[150px]">Who</span>
-              <span className="flex-1">What they did</span>
+            <CardColumns cols={COLS}>
+              <span>When</span>
+              <span>Who</span>
+              <span>What they did</span>
             </CardColumns>
           }
           isLoading={entries.isLoading}
@@ -196,16 +203,16 @@ export default function AuditPage() {
             <div
               className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-baseline`}
             >
-              <Mono className="text-faint tablet:w-[124px] tablet:shrink-0">
-                {formatWhen(entry.created_at)}
-              </Mono>
-              <span className="w-full text-body font-semibold tablet:w-[150px] tablet:shrink-0">
-                <Actor id={entry.actor_id} />
-              </span>
-              <span className="flex w-full flex-col items-start text-body text-muted tablet:min-w-[240px] tablet:flex-1">
-                <EventSentence entry={entry} />
-                <TraceCell entry={entry} />
-              </span>
+              <Cells cols={COLS}>
+                <Mono className="text-faint">{formatWhen(entry.created_at)}</Mono>
+                <span className="text-body font-semibold">
+                  <Actor id={entry.actor_id} />
+                </span>
+                <span className="flex flex-col items-start text-body text-muted">
+                  <EventSentence entry={entry} />
+                  <TraceCell entry={entry} />
+                </span>
+              </Cells>
             </div>
             </LeavingRow>
           ))}

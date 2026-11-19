@@ -118,9 +118,72 @@ export function cardGridsByHand(root: Element): string[] {
   return found;
 }
 
+/**
+ * D-1 §4 rule 2, and the column template: a table's headings and every row under
+ * them are drawn on one column list (`Columns`, each part in its `data-col` box)
+ * and one seat width, so a heading sits over its cells. A heading typed beside
+ * its rows drifted on Drift (staging, 19 Nov): a column named over nothing, a
+ * date out from under its label, no heading cell over the seat.
+ *
+ * For each CardColumns, every row after it in its card (a CardRow, or a row
+ * drawing its parts through `Cells`) has the same boxes, class for class, and
+ * the same seat, or none where the headings have none.
+ */
+export function headsOffRows(root: Element): string[] {
+  const found: string[] = [];
+  for (const head of Array.from(root.querySelectorAll("[data-card-columns]"))) {
+    const card = head.closest(".card") ?? head.parentElement!;
+    const rows = new Set([
+      ...Array.from(card.querySelectorAll("[data-card-row]")),
+      ...Array.from(card.querySelectorAll("[data-col]"), (cell) => cell.parentElement!),
+    ]);
+    const want = shape(head);
+    for (const row of rows) {
+      if (row === head || row.closest(".card") !== head.closest(".card")) continue;
+      if (!(head.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+      const got = shape(row);
+      if (got.cols !== want.cols) found.push(`a row off its headings' columns: [${got.cols}] under [${want.cols}]: "${words(row).slice(0, 60)}"`);
+      if (got.seat !== want.seat) found.push(`a row's seat (${got.seat}) under a heading seat of ${want.seat}: "${words(row).slice(0, 60)}"`);
+      if (got.wrap !== want.wrap) found.push(`a row that wraps ${got.wrap} under headings that wrap ${want.wrap}: "${words(row).slice(0, 60)}"`);
+    }
+  }
+  return found;
+}
+
+/**
+ * A header's or a row's column boxes, its seat's width ("none" without one), and
+ * whether its line wraps at tablet and at desktop (the header is hidden below
+ * tablet). A header that never wraps over rows that do ran past its edge where
+ * the rows dropped their seat to a second line (Requests at 1024 and 1280).
+ */
+function shape(line: Element): { cols: string; seat: string; wrap: string } {
+  const parts = Array.from(line.children);
+  const seat = parts.find((part) => part.matches(".row-seat"));
+  const classes = (line.getAttribute("class") ?? "").split(/\s+/);
+  const wrapAt = (...prefixes: string[]) => {
+    for (const prefix of prefixes) {
+      if (classes.includes(`${prefix}flex-nowrap`)) return "no";
+      if (classes.includes(`${prefix}flex-wrap`)) return "yes";
+    }
+    return "no";
+  };
+  return {
+    cols: parts.filter((part) => part.matches("[data-col]")).map((cell) => cell.getAttribute("class") ?? "").join(" | "),
+    seat: seat ? (seat.getAttribute("data-seat") ?? "default") : "none",
+    wrap: `${wrapAt("tablet:", "")} at tablet, ${wrapAt("desktop:", "tablet:", "")} at desktop`,
+  };
+}
+
 /** The guards' findings in `root`. */
 export function layoutFindings(root: Element): string[] {
-  return [...actionsInProse(root), ...dotLinesOffIndent(root), ...actionsOutsideSeats(root), ...longNotes(root), ...cardGridsByHand(root)];
+  return [
+    ...actionsInProse(root),
+    ...dotLinesOffIndent(root),
+    ...actionsOutsideSeats(root),
+    ...longNotes(root),
+    ...cardGridsByHand(root),
+    ...headsOffRows(root),
+  ];
 }
 
 function describe(action: Element): string {

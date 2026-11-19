@@ -141,6 +141,8 @@ type RowProps = React.HTMLAttributes<HTMLDivElement> & {
   seat?: SeatWidth;
   /** More than one line: top-aligned from tablet, each part's first line on the seat's. */
   top?: boolean;
+  /** The table's columns, the list its CardColumns reads: each child is drawn in its column's box. */
+  cols?: Columns;
 };
 
 export type CardRowProps = RowProps &
@@ -165,6 +167,7 @@ export function CardRow({
   seat,
   detail,
   top = false,
+  cols,
   children,
   ...props
 }: CardRowProps) {
@@ -177,7 +180,7 @@ export function CardRow({
   const line = `flex flex-wrap gap-y-(--row-gap) tablet:gap-y-1 ${ROW} items-center ${top ? "row-top tablet:items-start" : ""} ${className}`;
   const parts = (
     <>
-      {children}
+      {cols ? <Cells cols={cols}>{children}</Cells> : children}
       {(action !== undefined || seat !== undefined) && <ActionSeat seat={seat}>{action}</ActionSeat>}
       {detail && (
         <p data-row-detail className="row-detail">
@@ -258,24 +261,33 @@ export function CardHeaderLink({ href, children }: { href: string; children: Rea
  * phone they do not — the row's fields stack, and each one carries its own
  * label inside the disclosure instead.
  *
+ * `cols` is the table's column list, the same one every row is given: each
+ * heading is drawn in its column's box, so it sits exactly over its cells.
+ *
  * `seat` draws the action column's heading cell at the rows' seat width, so the
  * headings over the other columns line up with their cells. It is empty (a
  * column of verbs needs no name) unless `seatLabel` names what the seat holds
  * ("Decision"), set at the seat's right edge, over its contents.
+ *
+ * It wraps as a CardRow wraps: where a row's seat drops to a second line, the
+ * seat's heading cell does too, so the columns above stay over theirs. A table
+ * whose rows never wrap says so with `flex-nowrap` (the guard compares them).
  */
 export function CardColumns({
   className = "",
   seat,
   seatLabel,
+  cols,
   children,
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & { seat?: SeatWidth; seatLabel?: React.ReactNode }) {
+}: React.HTMLAttributes<HTMLDivElement> & { seat?: SeatWidth; seatLabel?: React.ReactNode; cols?: Columns }) {
   return (
     <div
-      className={`row-cols hidden px-(--card-x) py-2 text-fine font-semibold uppercase tracking-[0.09em] text-label tablet:flex ${className}`}
+      data-card-columns
+      className={`row-cols hidden flex-wrap gap-y-1 px-(--card-x) py-2 text-fine font-semibold uppercase tracking-[0.09em] text-label tablet:flex ${className}`}
       {...props}
     >
-      {children}
+      {cols ? <Cells cols={cols}>{children}</Cells> : children}
       {seat && (
         <span aria-hidden={seatLabel ? undefined : true} className="row-seat" data-seat={seatWidth(seat)}>
           {seatLabel}
@@ -283,6 +295,32 @@ export function CardColumns({
       )}
     </div>
   );
+}
+
+/**
+ * A table's columns, left to right before the action seat: each column's
+ * classes (its width, its alignment, from which breakpoint it shows). One list
+ * per table, given to its CardColumns and to every row, so a heading and the
+ * cells under it are drawn in the same box and cannot drift apart. A heading
+ * typed beside its rows, in widths of its own, drifted on Drift (staging,
+ * 19 Nov): a heading over an empty column, a date out from under its label.
+ */
+export type Columns = readonly string[];
+
+/**
+ * The parts of a header or a row, each in its column's box (`data-col`). A row
+ * on `ROW` that is not a CardRow (a link, a label) draws its parts through it
+ * too. A part that is sometimes absent keeps its place with an empty cell,
+ * never by being left out: the guard counts the boxes against the list.
+ */
+export function Cells({ cols, children }: { cols: Columns; children: React.ReactNode }) {
+  // Keyed by the part's own key (its place in what was written), so a checkbox column arriving
+  // in select mode adds a cell rather than remounting every one after it.
+  return React.Children.toArray(children).map((child, i) => (
+    <span key={React.isValidElement(child) ? child.key : i} data-col className={cols[i]}>
+      {child}
+    </span>
+  ));
 }
 
 /**

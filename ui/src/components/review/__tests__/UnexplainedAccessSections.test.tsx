@@ -329,6 +329,21 @@ describe("Drift — sort", () => {
     expect(labels).toEqual(["Made in Zitadel by a person2", "Maker not known1"]);
     expect(peopleIn(zitadel)).toEqual(["Finn Balor", "Jimmy Uso", "Chad Gable"]);
   });
+
+  it("heads only the columns it fills: Why shares What's cell, its reason each row's detail line", () => {
+    // Staging, 19 Nov: "Why Syndra can't explain it" headed a column of its own that no row filled.
+    renderPage();
+    const zitadel = screen.getByRole("region", { name: IN_ZITADEL });
+    const head = zitadel.querySelector("[data-card-columns]")!;
+    expect(Array.from(head.querySelectorAll(":scope > [data-col]"), (cell) => cell.textContent)).toEqual([
+      "Who↑",
+      "What they can get into↑Why Syndra can’t explain it↑",
+      "Found↑",
+    ]);
+    const row = zitadel.querySelector("[data-card-row]")!;
+    expect(row.querySelectorAll(":scope > [data-col]")).toHaveLength(3);
+    expect(row.querySelector("[data-row-detail]")!.textContent).not.toBe("");
+  });
 });
 
 describe("Drift — states", () => {
