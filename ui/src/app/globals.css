@@ -1202,16 +1202,22 @@
 /* The current place under forced colours (A-25 moment 4, repair 1): the rail's row, the tab bar's
    tab and the phone sheet's row take the system's own selected colours, a filled box with its words
    in HighlightText. Forced, the place's 15% fill keeps its alpha and vanishes, its dot with it, and
-   only the weight is left. Inside, the pill's dot and any badge give way to the box. */
+   only the weight is left. Inside, the pill's dot and any badge give way to the box. With the
+   system's correction off, nothing of the app's own may reach it: no `flash` taking the box away,
+   and a focus ring in the system's text colour, not `--focus-ring`. */
 @utility nav-place {
   @media (forced-colors: active) {
     &[aria-current="page"] {
       forced-color-adjust: none;
       background-color: Highlight;
       color: HighlightText;
+      animation: none;
       & * {
         background-color: transparent;
-        color: HighlightText;
+        color: inherit;
+      }
+      &:focus-visible {
+        outline-color: CanvasText;
       }
     }
   }

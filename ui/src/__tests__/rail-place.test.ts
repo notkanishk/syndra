@@ -38,7 +38,8 @@ describe("your place in the rail (A-25 moment 4)", () => {
     expect(start).toBeGreaterThan(-1);
     const rule = css.slice(start, css.indexOf("\n}\n", start));
     expect(rule).toMatch(
-      /@media \(forced-colors: active\) \{\s*&\[aria-current="page"\] \{\s*forced-color-adjust: none;\s*background-color: Highlight;\s*color: HighlightText;/,
+      // The box, its words, no app animation over it, its children inheriting it, and a system focus ring.
+      /@media \(forced-colors: active\) \{\s*&\[aria-current="page"\] \{\s*forced-color-adjust: none;\s*background-color: Highlight;\s*color: HighlightText;\s*animation: none;\s*& \* \{\s*background-color: transparent;\s*color: inherit;\s*\}\s*&:focus-visible \{\s*outline-color: CanvasText;\s*\}/,
     );
     // Each current place carries the hook, and is marked the way the rule reads it.
     const places = [
@@ -48,7 +49,7 @@ describe("your place in the rail (A-25 moment 4)", () => {
     for (const [name, source, count] of places) {
       const links = [...source.matchAll(/aria-current=\{active \? "page" : undefined\}\s*(?:\/\/[^\n]*\n\s*)*className=\{`([^`$]*)/g)];
       expect(links, name).toHaveLength(count);
-      for (const link of links) expect(link[1], name).toMatch(/^nav-place /);
+      for (const link of links) expect(link[1], name).toMatch(/\bnav-place\b/);
     }
   });
 });

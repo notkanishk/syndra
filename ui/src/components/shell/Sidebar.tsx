@@ -167,8 +167,8 @@ function NavRow({
         <span
           aria-hidden
           className={`h-1.5 w-1.5 flex-none rounded-pill motion-tint ${
-            // The tab bar's token (A-25 moment 4, repair 2): 4.92:1 on the pill in the dark room, 5.75:1 on
-            // paper, where `bg-accent` was 3.41 and 3.87 (WCAG 1.4.11 asks 3:1 of what shows a state).
+            // The tab bar's token (A-25 moment 4, repair 2): 4.93:1 on the pill in the dark room, 5.76:1 on
+            // paper, where `bg-accent` was 3.42 and 3.88 (WCAG 1.4.11 asks 3:1 of what shows a state).
             active ? "bg-accent-text" : "bg-ink/20"
           }`}
         />
