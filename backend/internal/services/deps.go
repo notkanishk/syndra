@@ -236,6 +236,8 @@ var (
 	// standing up an observation fixture, and vice versa.
 	svcLatestOrgObservation = db.LatestOrgObservation
 	svcObservedGrantsFor    = db.ObservedGrantsFor
+	// One person's dated spans for access over time (A-24 §9).
+	svcAccessHistorySpans = db.AccessHistory
 	// A person's own latest read, beside the org sweep: their basis.
 	svcLatestUserObservations = db.LatestUserObservations
 	svcRoleHolderFacts        = RoleHolderFacts

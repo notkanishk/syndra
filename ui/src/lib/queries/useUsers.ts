@@ -244,6 +244,41 @@ export function useUserGrants(userId: string) {
   });
 }
 
+/** One unbroken hold on a role. `from` null: no record says when it began; `to` null: given today. */
+export interface RoleRun {
+  from: string | null;
+  to: string | null;
+}
+
+/** One role's runs in the window, oldest first (GET /users/{id}/access-history). */
+export interface RoleHistory {
+  project_id: string;
+  project_name: string;
+  project_name_resolved: boolean;
+  role_key: string;
+  /** Held today is this, from the same read as the page's rows, never the runs. */
+  standing: RoleStanding | null;
+  /** When a role still given ends; absent: never, or no longer given. */
+  ends?: string | null;
+  runs: RoleRun[];
+}
+
+export interface AccessHistory {
+  since: string;
+  /** The oldest endings were cut off by the read's cap. */
+  truncated: boolean;
+  roles: RoleHistory[];
+}
+
+/** A person's roles since a makerspace day (A-24 §9, access over time). Operators, in Advanced. */
+export function useAccessHistory(userId: string, since: string, enabled = true) {
+  return useQuery({
+    queryKey: ["users", "history", userId, since],
+    enabled: enabled && !!userId,
+    queryFn: () => request<AccessHistory>(`/users/${encodeURIComponent(userId)}/access-history?since=${since}`),
+  });
+}
+
 /**
  * Assigns a bundle to a user. Invalidates the affected user's access view and
  * the global user list (bundle_count is a denormalized field rendered there).

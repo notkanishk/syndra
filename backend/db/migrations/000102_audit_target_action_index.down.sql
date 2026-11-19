@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_audit_logs_target_action_created;
