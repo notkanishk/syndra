@@ -69,7 +69,8 @@ describe("once, on this device", () => {
 
 describe("the door's light travels the greeting (§3.2): once, behind the words, nothing moves", () => {
   const band = braced("@utility greeting-light {");
-  const travel = keyframes("greeting-light");
+  const light = keyframes("greeting-light");
+  const travel = keyframes("greeting-travel");
   const pool = keyframes("door-pool");
   const ms = (token: string) => Number(new RegExp(`${token}: (\\d+)ms;`).exec(css)?.[1]);
 
@@ -82,15 +83,20 @@ describe("the door's light travels the greeting (§3.2): once, behind the words,
     expect(readFileSync(resolve(SRC, "components/shell/AppShell.tsx"), "utf8")).toMatch(/noteSignIn\(session\.signedInAt\)/);
   });
 
-  it("travels in reading direction, start of the words to their end, in one stroke", () => {
+  it("travels in reading direction, start of the words to their end, in one even, unhurried crossing", () => {
     // A position only at the first and last frames: one segment, so it never stops on the way.
     expect(travel.match(/background-position:/g)).toHaveLength(2);
-    expect(travel).toMatch(/0% \{[^}]*background-position: 0% 50%;/);
-    expect(travel).toMatch(/100% \{[^}]*background-position: 100% 50%;/);
+    expect(travel).toMatch(/from \{[^}]*background-position: 0% 50%;/);
+    expect(travel).toMatch(/to \{[^}]*background-position: 100% 50%;/);
+    // Its own animation: a symmetric ease-in-out over the first three quarters, then it rests. The light's
+    // keyframes carry no position, so the settle curve never front-loads the crossing into a flick.
+    expect(band).toContain("greeting-travel calc(var(--door-light) * 0.75) var(--ease-tint) both;");
+    expect(css).toMatch(/--ease-tint: cubic-bezier\(0\.4, 0, 0\.6, 1\);/);
+    expect(light).not.toContain("background-position");
   });
 
   it("changes only opacity and its gradient's position: nothing in the page moves", () => {
-    for (const frames of [travel, pool]) {
+    for (const frames of [light, travel, pool]) {
       expect(frames).not.toBe("");
       expect(frames).not.toMatch(/transform|translate|scale|top:|left:|inset|margin|width|height/);
     }
@@ -100,12 +106,12 @@ describe("the door's light travels the greeting (§3.2): once, behind the words,
     const length = ms("--door-light");
     expect(length).toBeGreaterThanOrEqual(1100);
     expect(length).toBeLessThanOrEqual(1300);
-    expect(band).toContain("animation: greeting-light var(--door-light) var(--ease-settle) both;");
+    expect(band).toContain("greeting-light var(--door-light) var(--ease-settle) both,");
     expect(css).toMatch(/&\[data-door\] \{\s*animation: door-pool var\(--door-light\) var\(--ease-settle\) both;/);
     // The band is whole until the stop where the pool starts, then each falls as the other rises.
-    expect(opacityAt(travel, "65%")).toBe(1);
+    expect(opacityAt(light, "65%")).toBe(1);
     expect(opacityAt(pool, "65%")).toBe(0);
-    expect(opacityAt(travel, "100%")).toBe(0);
+    expect(opacityAt(light, "100%")).toBe(0);
     expect(opacityAt(pool, "100%")).toBe(1);
   });
 

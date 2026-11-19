@@ -370,14 +370,22 @@
     }
   }
 
-  /* The door's light on the greeting (A-24 §3.2): one keyframe set on
-     --door-light. The band fades in at the start of the words, travels to
-     their end (its gradient's position, 0% to 100% of the greeting's box,
-     one stroke from the first frame to the last), and from 65% hands over to
-     the pool, which comes up on the same stops. Nothing moves but light. */
+  /* The door's light on the greeting (A-24 §3.2), on --door-light. Its
+     light (opacity, on settle) fades in at the start of the words and from
+     65% hands over to the pool, which comes up on the same stops. Its travel
+     (`greeting-travel`, the gradient's position, 0% to 100% of the greeting's
+     box) is an even crossing on a symmetric ease-in-out over the first three
+     quarters, then rests at the end of the words. Nothing moves but light. */
+  @keyframes greeting-travel {
+    from {
+      background-position: 0% 50%;
+    }
+    to {
+      background-position: 100% 50%;
+    }
+  }
   @keyframes greeting-light {
     0% {
-      background-position: 0% 50%;
       opacity: 0;
     }
     10% {
@@ -387,7 +395,6 @@
       opacity: 1;
     }
     100% {
-      background-position: 100% 50%;
       opacity: 0;
     }
   }
@@ -1267,7 +1274,9 @@
     )
     no-repeat;
   background-size: 60% 100%;
-  animation: greeting-light var(--door-light) var(--ease-settle) both;
+  animation:
+    greeting-light var(--door-light) var(--ease-settle) both,
+    greeting-travel calc(var(--door-light) * 0.75) var(--ease-tint) both;
 
   @media (prefers-reduced-motion: reduce), (forced-colors: active) {
     display: none;
