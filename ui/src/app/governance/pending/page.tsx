@@ -255,7 +255,7 @@ export default function PendingChangesPage() {
 
       <Card className={onlyStopped ? "hidden" : undefined}>
         {(cleared ? !folded : known && shown.length > 0) && (
-          <CardColumns cols={COLS}>
+          <CardColumns cols={COLS} className="tablet:flex-nowrap">
             <span>Who</span>
             <span>Change</span>
             <span>Caused by</span>

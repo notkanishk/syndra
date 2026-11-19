@@ -404,7 +404,7 @@ describe("the column guard", () => {
           <span>Laser cutter</span>
           <span>3 Nov</span>
         </CardRow>
-        <div className={ROW}>
+        <div className={`flex flex-wrap ${ROW}`}>
           <Cells cols={cols}>
             <span>Kofi Kingston</span>
             <span>Wood shop</span>
@@ -448,7 +448,7 @@ describe("the column guard", () => {
           <span>Who</span>
           <span>What</span>
         </CardColumns>
-        <div className={ROW}>
+        <div className={`flex flex-wrap ${ROW}`}>
           <Cells cols={cols.slice(0, 2)}>
             <span>B</span>
             <span>Bianca Belair</span>
@@ -459,6 +459,52 @@ describe("the column guard", () => {
     );
     expect(headsOffRows(container)).toHaveLength(1);
     cleanup(); // the offenders were drawn on purpose
+  });
+
+  it("adds the checkbox's cell in select mode without remounting the cells after it", () => {
+    const row = (selecting: boolean) => (
+      <CardRow first cols={selecting ? ["w-[26px]", ...cols] : cols}>
+        {selecting && <input type="checkbox" aria-label="Select" />}
+        <span>Bianca Belair</span>
+        <span>Laser cutter</span>
+        <span>3 Nov</span>
+      </CardRow>
+    );
+    const { rerender } = render(row(false));
+    const who = screen.getByText("Bianca Belair").parentElement;
+    rerender(row(true));
+    expect(screen.getByText("Bianca Belair").parentElement).toBe(who);
+    expect(who).toHaveClass(cols[0]);
+  });
+
+  it("wraps the headings as the rows wrap, the seat's cell to a second line with theirs", () => {
+    // jsdom draws no lines, so the guard reads each line's wrap at tablet and at desktop.
+    const table = (head: string, row: string) => (
+      <Card>
+        <CardColumns cols={cols.slice(0, 1)} className={head}>
+          <span>Who</span>
+        </CardColumns>
+        <div className={`${row} ${ROW}`}>
+          <Cells cols={cols.slice(0, 1)}>
+            <span>Bianca Belair</span>
+          </Cells>
+        </div>
+      </Card>
+    );
+    const { container, rerender } = render(table("", "flex flex-wrap"));
+    expect(container.querySelector("[data-card-columns]")).toHaveClass("flex-wrap");
+    expect(headsOffRows(container)).toEqual([]);
+    // Requests at 1024 and 1280: rows that wrap under headings that never did.
+    rerender(table("tablet:flex-nowrap", "flex flex-wrap"));
+    expect(headsOffRows(container)).toEqual([
+      'a row that wraps yes at tablet, yes at desktop under headings that wrap no at tablet, no at desktop: "Bianca Belair"',
+    ]);
+    // A table whose rows wrap below desktop and shrink from it says the same of its headings.
+    rerender(table("", "flex tablet:flex-wrap desktop:flex-nowrap"));
+    expect(headsOffRows(container)).toHaveLength(1);
+    rerender(table("desktop:flex-nowrap", "flex tablet:flex-wrap desktop:flex-nowrap"));
+    expect(headsOffRows(container)).toEqual([]);
+    cleanup();
   });
 });
 

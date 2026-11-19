@@ -159,6 +159,24 @@ describe("accounts table seats", () => {
     }
   });
 
+  it("fits one line with the wide seat at 1440 (a 1094px row), so the verbs sit on the first line", () => {
+    // Staging, 19 Nov: four fixed widths and the wide seat summed to 1134px, and Put on hold / Revoke
+    // dropped under every row. jsdom draws no lines, so this sums what a line wraps on: each part's
+    // width or flex basis, the seat's min-width, and the gaps (the tokens' values, globals.css).
+    const token: Record<string, number> = { "--seat-number": 110, "--seat-action-wide": 300 };
+    const px = (cls: string) => {
+      const m = cls.match(/(?:^|\s)(?:w-\[(\d+)px\]|w-\((--[\w-]+)\)|flex-\[[\d.]+_[\d.]+_(\d+)px\])(?:\s|$)/);
+      expect(m, `a width or a basis on "${cls}"`).not.toBeNull();
+      return Number(m![1] ?? m![3] ?? token[m![2]]);
+    };
+    state.count = 2;
+    const { container } = render(<PeopleOnTarget target="truenas" />);
+    const cells = [...container.querySelectorAll("[data-card-row] > [data-col]")].slice(0, 4);
+    expect(container.querySelector("[data-card-row] [data-action-seat]")).toHaveAttribute("data-seat", "wide");
+    const line = cells.reduce((sum, cell) => sum + px(cell.className), 0) + token["--seat-action-wide"] + 4 * 16;
+    expect(line).toBeLessThanOrEqual(1094);
+  });
+
   it("holds the wide seat until the system's setup is read, so the seat never moves when it lands", () => {
     state.count = 2;
     fields.noLimit = true;

@@ -418,7 +418,7 @@ export default function PeoplePage() {
         <ListStates
           head={
             <>
-            <CardColumns cols={peopleCols(bulkMode)}>
+            <CardColumns cols={peopleCols(bulkMode)} className="tablet:flex-nowrap">
               {bulkMode && <span />}
               <SortHead label="Person" name="person" sort={sort} onSort={setSort} />
               <SortHead label="Bundles" name="bundles" sort={sort} onSort={setSort} />

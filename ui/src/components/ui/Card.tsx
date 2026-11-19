@@ -268,6 +268,10 @@ export function CardHeaderLink({ href, children }: { href: string; children: Rea
  * headings over the other columns line up with their cells. It is empty (a
  * column of verbs needs no name) unless `seatLabel` names what the seat holds
  * ("Decision"), set at the seat's right edge, over its contents.
+ *
+ * It wraps as a CardRow wraps: where a row's seat drops to a second line, the
+ * seat's heading cell does too, so the columns above stay over theirs. A table
+ * whose rows never wrap says so with `flex-nowrap` (the guard compares them).
  */
 export function CardColumns({
   className = "",
@@ -280,7 +284,7 @@ export function CardColumns({
   return (
     <div
       data-card-columns
-      className={`row-cols hidden px-(--card-x) py-2 text-fine font-semibold uppercase tracking-[0.09em] text-label tablet:flex ${className}`}
+      className={`row-cols hidden flex-wrap gap-y-1 px-(--card-x) py-2 text-fine font-semibold uppercase tracking-[0.09em] text-label tablet:flex ${className}`}
       {...props}
     >
       {cols ? <Cells cols={cols}>{children}</Cells> : children}
@@ -310,8 +314,10 @@ export type Columns = readonly string[];
  * never by being left out: the guard counts the boxes against the list.
  */
 export function Cells({ cols, children }: { cols: Columns; children: React.ReactNode }) {
+  // Keyed by the part's own key (its place in what was written), so a checkbox column arriving
+  // in select mode adds a cell rather than remounting every one after it.
   return React.Children.toArray(children).map((child, i) => (
-    <span key={i} data-col className={cols[i]}>
+    <span key={React.isValidElement(child) ? child.key : i} data-col className={cols[i]}>
       {child}
     </span>
   ));

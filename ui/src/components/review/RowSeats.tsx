@@ -22,6 +22,12 @@ export const WHAT_COL = "w-full min-w-0 tablet:w-auto tablet:min-w-[160px] table
 /** When it was found, revoked, or ends: a figure, right-aligned under a right-aligned heading (G16). */
 export const FIGURE_COL = "tablet:w-(--seat-number) tablet:flex-none tablet:text-right";
 
+/**
+ * A queue row's left edge, 3px, unpainted: a row paints it when it says something (a safety-gated
+ * finding, the soonest to end), and the headings take it too, so every cell stays under its heading.
+ */
+export const EDGE = "border-l-[3px] border-transparent";
+
 export function WhoSeat({
   id,
   href,

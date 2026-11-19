@@ -144,18 +144,33 @@ export function headsOffRows(root: Element): string[] {
       const got = shape(row);
       if (got.cols !== want.cols) found.push(`a row off its headings' columns: [${got.cols}] under [${want.cols}]: "${words(row).slice(0, 60)}"`);
       if (got.seat !== want.seat) found.push(`a row's seat (${got.seat}) under a heading seat of ${want.seat}: "${words(row).slice(0, 60)}"`);
+      if (got.wrap !== want.wrap) found.push(`a row that wraps ${got.wrap} under headings that wrap ${want.wrap}: "${words(row).slice(0, 60)}"`);
     }
   }
   return found;
 }
 
-/** A header's or a row's column boxes, and its seat's width ("none" without one). */
-function shape(line: Element): { cols: string; seat: string } {
+/**
+ * A header's or a row's column boxes, its seat's width ("none" without one), and
+ * whether its line wraps at tablet and at desktop (the header is hidden below
+ * tablet). A header that never wraps over rows that do ran past its edge where
+ * the rows dropped their seat to a second line (Requests at 1024 and 1280).
+ */
+function shape(line: Element): { cols: string; seat: string; wrap: string } {
   const parts = Array.from(line.children);
   const seat = parts.find((part) => part.matches(".row-seat"));
+  const classes = (line.getAttribute("class") ?? "").split(/\s+/);
+  const wrapAt = (...prefixes: string[]) => {
+    for (const prefix of prefixes) {
+      if (classes.includes(`${prefix}flex-nowrap`)) return "no";
+      if (classes.includes(`${prefix}flex-wrap`)) return "yes";
+    }
+    return "no";
+  };
   return {
     cols: parts.filter((part) => part.matches("[data-col]")).map((cell) => cell.getAttribute("class") ?? "").join(" | "),
     seat: seat ? (seat.getAttribute("data-seat") ?? "default") : "none",
+    wrap: `${wrapAt("tablet:", "")} at tablet, ${wrapAt("desktop:", "tablet:", "")} at desktop`,
   };
 }
 

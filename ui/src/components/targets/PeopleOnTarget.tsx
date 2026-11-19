@@ -39,14 +39,17 @@ import { useShownNames } from "@/components/names/shownNames";
  * only one an operator remembers.
  */
 /**
- * The table's columns, its headings' and every row's: the person, their account, its status (the
- * Status seat, `--seat-status`, as wide as the longest status the table can say: "Waiting on
- * makerspace staff"), and since when.
+ * The table's columns, its headings' and every row's: the person (220), their account and its
+ * status sharing what is left 1 to 1.3, as D-1's board draws them (part 2, frame 10), and since
+ * when. Both flex from a basis, never a fixed width: four fixed widths and the wide seat summed to
+ * 1134px in a 1094px row at 1440, so the seat dropped under every row. The bases are the board's
+ * less 40 each, because the board drew two verbs and a system with a home folder limit has three
+ * (the wide seat): 220 + 140 + 200 + 110 + 300 and the gaps is 1034, on one line at 1440.
  */
 const COLS: Columns = [
   "w-[220px] flex-none",
-  "min-w-0 flex-1 basis-[200px]",
-  "w-(--seat-status) flex-none",
+  "min-w-0 flex-[1_1_140px]",
+  "min-w-0 flex-[1.3_1_200px]",
   "w-(--seat-number) flex-none text-right",
 ];
 

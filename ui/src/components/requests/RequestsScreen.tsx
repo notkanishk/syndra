@@ -303,7 +303,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
         <ListStates
           head={
             <>
-            <CardColumns cols={cols} seat="default" seatLabel="Decision">
+            <CardColumns cols={cols} seat="default" seatLabel="Decision" className="desktop:flex-nowrap">
               {selecting && anyPending && <span />}
               <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
               <span>What they asked for</span>

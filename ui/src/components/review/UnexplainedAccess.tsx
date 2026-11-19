@@ -24,7 +24,7 @@ import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FoldChevron } from "@/components/ui/FoldChevron";
-import { FIGURE_COL, WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
+import { EDGE, FIGURE_COL, WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness, useRefreshPress } from "@/components/ui/ReadFreshness";
 import { FilterPills, Select } from "@/components/ui/Select";
@@ -65,7 +65,9 @@ import {
   AGE_LABELS,
   EMPTY_DRIFT_FILTERS,
   ORIGIN_LABELS,
+  REASON_LABELS,
   applyDriftFilters,
+  driftReason,
   driftRequest,
   hasAnyDriftFilter,
   matchesDriftSearch,
@@ -103,14 +105,11 @@ type Resolution = "attribute" | "revoke" | "external";
 
 /**
  * Drift's columns, its headings' and every row's (a finding, a compared role): who, what, found,
- * then the wide seat. The reason is the row's detail line (D-1 §5 #15), so it has no column and
- * no heading: one over it named an empty column (staging, 19 Nov).
+ * then the wide seat. The reason is the row's detail line (D-1 §5 #15), not a column: its heading
+ * shares What's cell, never a column of its own over nothing (staging, 19 Nov).
  */
 const DRIFT_COLS: Columns = [WHO_COL, WHAT_COL, FIGURE_COL];
 const driftCols = (selecting: boolean): Columns => (selecting ? [CHECK_COL, ...DRIFT_COLS] : DRIFT_COLS);
-
-/** A row's edge (a safety-gated finding's is red) is 3px, so the headings take the same edge, unpainted. */
-const EDGE = "border-l-[3px] border-transparent";
 
 /**
  * The two directions drift runs in. A grouped list folds (RULES): each is a
@@ -196,7 +195,7 @@ export function UnexplainedAccess() {
   const projects = useProjects();
   // Search is not a filter in the URL: it finds a row, it does not make a view.
   const [query, setQuery] = useState("");
-  const [sort, flipSort, view] = useSort<DriftSortKey>("found", { list: "drift", keys: ["who", "what", "found"] }, ["found"]);
+  const [sort, flipSort, view] = useSort<DriftSortKey>("found", { list: "drift", keys: ["who", "what", "why", "found"] }, ["found"]);
   const [open, setOpen] = useState<Record<SectionKind, boolean>>({
     target_only: true,
     syndra_only: true,
@@ -392,7 +391,12 @@ export function UnexplainedAccess() {
     <CardColumns cols={driftCols(selecting)} seat="wide" className={EDGE}>
       {selecting && <span />}
       <SortHead label="Who" name="who" sort={sort} onSort={flipSort} />
-      <SortHead label="What they can get into" name="what" by="what" sort={sort} onSort={flipSort} />
+      {/* One cell: the reason is each row's detail line under What, so its sort sits with What's. It
+          gathers equal reasons (route-drift, "Sorted by why"; RULES: a reason is a gathering column). */}
+      <span className="flex flex-wrap gap-x-4">
+        <SortHead label="What they can get into" name="what" by="what" sort={sort} onSort={flipSort} />
+        <SortHead label="Why Syndra can’t explain it" name="why" by="why" sort={sort} onSort={flipSort} />
+      </span>
       <SortHead label="Found" name="found" sort={sort} onSort={flipSort} />
     </CardColumns>
   );
@@ -482,7 +486,13 @@ export function UnexplainedAccess() {
               leave={leaving.props}
               fade={view.className}
               selecting={selecting}
-              runOf={view.sort.key === "what" ? names.what : null}
+              runOf={
+                view.sort.key === "what"
+                  ? names.what
+                  : view.sort.key === "why"
+                    ? (item) => REASON_LABELS[driftReason(item)]
+                    : null
+              }
               renderRow={(item) => (
                 <TriageRow
                   key={item.id}

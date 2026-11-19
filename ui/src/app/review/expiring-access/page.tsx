@@ -10,7 +10,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { Crossfade } from "@/lib/motion";
 import { FoldChevron } from "@/components/ui/FoldChevron";
-import { FIGURE_COL, WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
+import { EDGE, FIGURE_COL, WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { ActionSeat, Card, CardColumns, CardHeader, Cells, ROW, type Columns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -521,7 +521,7 @@ function ExpiringSection({
         </div>
         <Unfold open={open}>
           <div id={`${id}-body`}>
-            <CardColumns cols={expiringCols(selecting)} seat="wide" className="border-l-[3px] border-transparent">
+            <CardColumns cols={expiringCols(selecting)} seat="wide" className={EDGE}>
               {selecting && <span />}
               <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
               <SortHead label="What they can get into" name="what" sort={sort} onSort={onSort} />
@@ -598,7 +598,7 @@ function ExpiringRow({
               // than as a checkbox that failed to draw. Outside the mode there
               // is nothing to be ineligible for, and the edge would be noise.
               "border-l-[3px] border-dashed border-line-strong"
-            : "border-l-[3px] border-transparent"
+            : EDGE
       } ${selection.isSelected(grant.id) ? "bg-accent-soft" : ""}`}
       {...(ack ? {} : selection.rowProps(grant.id))}
     >

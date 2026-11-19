@@ -159,9 +159,33 @@ export function serializeDriftFilters(
   return query ? `?${query}` : "";
 }
 
-// No "why": the reason is each row's detail line, not a column, so no heading sorts by it (D-1 §5
-// #15; staging, 19 Nov). Narrowing by it is the "What is known about it" filter.
-export type DriftSortKey = "who" | "what" | "found";
+/**
+ * Why Syndra cannot explain a row, in the board's five words. It is what the
+ * "Why" heading gathers equal values under, so it names a fact the row already
+ * carries rather than a ranking Syndra cannot compute.
+ */
+export const REASON_LABELS = {
+  unknown: "Maker not known",
+  person: "Made in Zitadel by a person",
+  self: "Made by the account itself",
+  removed: "Removed from Zitadel",
+  never: "Never reached Zitadel",
+} as const;
+
+export type DriftReason = keyof typeof REASON_LABELS;
+
+export function driftReason(item: DriftTriageItem): DriftReason {
+  if (item.drift_type === "syndra_only") {
+    // Applied, or seen held, then gone: somebody removed it. Neither: the write
+    // never landed (the same split `explainDrift` tells in prose).
+    const p = item.provenance;
+    return p?.applied_at || p?.last_observed_at ? "removed" : "never";
+  }
+  if (!item.upstream_actor) return "unknown";
+  return item.user_is_service_account && item.upstream_actor === item.user_id ? "self" : "person";
+}
+
+export type DriftSortKey = "who" | "what" | "why" | "found";
 
 /** The sort text of the two columns that need a resolved name. */
 export interface DriftNames {
@@ -170,7 +194,8 @@ export interface DriftNames {
 }
 
 /**
- * Who and What order A to Z, Found puts the most recent on top. Equal keys fall back to newest first, so a run
+ * Who and What order A to Z, Why gathers equal reasons (also A to Z), Found
+ * puts the most recent on top. Equal keys fall back to newest first, so a run
  * keeps its own time order. Returns a copy: the server's order is not ours to
  * change.
  */
@@ -182,7 +207,8 @@ export function sortDrift(
 ): DriftTriageItem[] {
   const newest = (a: DriftTriageItem, b: DriftTriageItem) =>
     compareInstants(a.detected_at, b.detected_at, -1);
-  const text = (item: DriftTriageItem) => (key === "who" ? names.who(item) : names.what(item));
+  const text = (item: DriftTriageItem) =>
+    key === "who" ? names.who(item) : key === "what" ? names.what(item) : REASON_LABELS[driftReason(item)];
   return [...items].sort((a, b) => {
     // Found is a time: ascending is oldest first, and its first order is descending.
     const order = key === "found" ? compareInstants(a.detected_at, b.detected_at) : compareNames(text(a), text(b));
