@@ -19,7 +19,7 @@ import { ReadGate } from "@/components/states/ReadGate";
 import { Button } from "@/components/ui/Button";
 import { Card, CardGrid, CardHeader, CardRow, type SeatWidth } from "@/components/ui/Card";
 import { BELOW_HEADER, MetaRow, usePageHead } from "@/components/ui/PageHeader";
-import { RoomLight } from "@/components/shell/RoomLight";
+import { HourLight } from "@/components/shell/RoomLight";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import {
@@ -51,7 +51,6 @@ import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
 import { Unfold } from "@/lib/motion";
-import { openedAlready } from "@/lib/motion/door";
 import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
@@ -110,7 +109,7 @@ const CHECKED_LINK = "inline-flex min-h-[var(--tap)] items-center text-small des
  * changes and Unexplained access belong to the machine, and the machine lives
  * in Advanced.
  */
-export function Home({ session, door: opening = false }: { session: SessionUser; door?: boolean }) {
+export function Home({ session, door = false }: { session: SessionUser; door?: boolean }) {
   // Home is the most-visited first paint (S11): the greeting tints in, then the blocks arrive.
   const head = usePageHead();
   const advanced = useIsAdvanced();
@@ -231,9 +230,6 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
   // UTC and hydration failed (React #418). They appear on mount, in a seat held
   // by an invisible stand-in so nothing below moves (same rule as Relative).
   const [now, setNow] = useState<Date | null>(null);
-  // The first arrival of a sign-in (A-24 §3.2): the server decides it from the sign-in's cookie; a cached
-  // render (Back) of a door this device has already opened stays still.
-  const [door] = useState(() => opening && !openedAlready(session.signedInAt));
   // Before paint, so a page reached by a link is drawn with its greeting and term line in place.
   useLayoutEffect(() => {
     setNow(new Date());
@@ -393,11 +389,7 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
         {/* On the first arrival of a sign-in a pool crosses the greeting once and this one settles in (`door-cross`).
             Drawn in the shell's column, not here: the room's light, which no box of the page can cut (A-25 §3). */}
-        {phase && (
-          <RoomLight>
-            <div aria-hidden data-hour={phase} data-door={door ? "" : undefined} className="hour-light" />
-          </RoomLight>
-        )}
+        <HourLight phase={phase} door={door} signedInAt={session.signedInAt} />
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and

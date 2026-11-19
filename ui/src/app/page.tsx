@@ -20,10 +20,9 @@ export default async function LandingPage() {
   const session = await getSession();
   if (!session) return null;
 
-  // The door (A-24 §3.2) is decided here, before the first paint: the sign-in's own cookie, read by the server.
-  if (session.role === "admin") {
-    const door = doorFor((await cookies()).get(DOOR_COOKIE)?.value, session.signedInAt);
-    return <Home session={session} door={door} />;
-  }
-  return <MemberAccess session={session} />;
+  // The door (A-24 §3.2, A-25 moment 1) is decided here, before the first paint, for either page: the
+  // sign-in's own cookie, read by the server.
+  const door = doorFor((await cookies()).get(DOOR_COOKIE)?.value, session.signedInAt);
+  if (session.role === "admin") return <Home session={session} door={door} />;
+  return <MemberAccess session={session} door={door} />;
 }

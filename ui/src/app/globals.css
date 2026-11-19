@@ -8,7 +8,8 @@
  * weight changes with the ground.
  *
  * Colour is semantic, never decorative, with ONE written exception: the hour's
- * light behind Home's head (`hour-light`, A-24 Q2, bounded where it is drawn).
+ * light behind Home's and My access's heads (`hour-light`, A-24 Q2, A-25 moment 1,
+ * bounded where it is drawn).
  * Five roles:
  *
  *   accent      the primary action and the current selection, one per screen
@@ -1099,10 +1100,10 @@
 }
 
 /* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind
-   Home's head, its place set by the part of the day (`dayPhase`, the greeting's
-   own clock). The ONE written exception to "colour is never decorative" above,
-   with its bounds: Home's head (and the door's light crossing into it, `door-cross`, once a
-   sign-in, A-24 §3.2), and a member's card on its first day (`lit-card`, A-24
+   Home's head and My access's (A-25 moment 1), its place set by the part of the day
+   (`dayPhase`, the greeting's own clock). The ONE written exception to "colour is never
+   decorative" above, with its bounds: those two heads (and the door's light crossing into
+   them, `door-cross`, once a sign-in, A-24 §3.2), and a member's card on its first day (`lit-card`, A-24
    §3.3); still (no loop, and no animation but the door's, once a sign-in); the accent,
    never a status colour; the same rule in both rooms; gone under forced colours;
    and never strong enough to take a line of text in the head under 4.5:1 (the

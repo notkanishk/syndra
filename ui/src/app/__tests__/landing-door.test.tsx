@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import LandingPage from "@/app/page";
+import { MemberAccess } from "@/components/member/MemberAccess";
 import { DOOR_COOKIE, doorCookie, doorFor } from "@/lib/motion/door";
 import type { SessionUser } from "@/lib/session";
 
@@ -33,6 +34,18 @@ describe("the landing page decides the door before the first paint", () => {
   it("renders Home without it when there is no cookie, or it names another sign-in", async () => {
     expect(((await LandingPage()) as { props: { door?: boolean } }).props.door).toBe(false);
     jar.door = "2026-11-18T08:00:00.000Z";
+    expect(((await LandingPage()) as { props: { door?: boolean } }).props.door).toBe(false);
+  });
+
+  it("hands a member's My access the same door (A-25 moment 1)", async () => {
+    const member = { ...operator, id: "m", role: "user" } as SessionUser;
+    jar.session = member;
+    jar.door = member.signedInAt;
+    const page = (await LandingPage()) as { type: unknown; props: { door?: boolean; session: SessionUser } };
+    expect(page.type).toBe(MemberAccess);
+    expect(page.props.session).toBe(member);
+    expect(page.props.door).toBe(true);
+    jar.door = undefined;
     expect(((await LandingPage()) as { props: { door?: boolean } }).props.door).toBe(false);
   });
 
