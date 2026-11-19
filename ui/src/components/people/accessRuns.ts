@@ -12,7 +12,7 @@ export const TITLE = "Access over time";
 export const NOTE = "This year";
 export const CAPTION =
   "Each line runs from the day a role was given to the day it ended. What they hold today is read from Zitadel; the dates are Syndra's records.";
-export const CUT_SHORT = "Only the most recent changes are drawn, so some earlier starts say not on record.";
+export const CUT_SHORT = "Only the latest changes are drawn, so some earlier starts say not on record.";
 export const NOTHING = "No roles given, ended or held this year.";
 export const READ_FAILED = "Couldn't read access over time.";
 
