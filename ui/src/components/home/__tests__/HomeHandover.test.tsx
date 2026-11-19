@@ -21,6 +21,8 @@ const state = vi.hoisted(() => ({
   own: false,
   terms: [] as Array<{ name: string; start: string; end: string }> | undefined,
   governance: {} as Record<string, unknown>,
+  // Whether the queue's first read is still out.
+  loading: false,
 }));
 
 const quiet = () => ({
@@ -39,7 +41,7 @@ vi.mock("@/lib/queries/useServiceAccounts", () => ({
   serviceAccountHref: (id: string) => `/system/service-accounts/${id}`,
 }));
 vi.mock("@/lib/queries/useGovernance", () => ({
-  useGovernanceSummary: () => ({ data: state.governance, isLoading: false, error: null, refetch: vi.fn() }),
+  useGovernanceSummary: () => ({ data: state.loading ? undefined : state.governance, isLoading: state.loading, error: null, refetch: vi.fn() }),
 }));
 vi.mock("@/lib/queries/useRequests", () => ({
   useRequestsAdmin: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
@@ -108,6 +110,7 @@ beforeEach(() => {
   state.advanced = true;
   state.own = false;
   state.terms = [];
+  state.loading = false;
   // The day's close is kept on this device: every test starts with none.
   window.localStorage.clear();
   state.governance = drifting();
@@ -484,17 +487,47 @@ describe("the term line on Home", () => {
     expect(term()?.closest(".unfold")).toHaveAttribute("data-phase", "open");
   });
 
-  it("unfolds when the terms land late, rather than popping in, and is gone between terms", () => {
+  it("holds its seat while the terms are out, then fills it, and folds only when the read says there is no term", () => {
     vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
     state.terms = undefined;
     const home = mount();
-    expect(term()).toBeFalsy();
+    // The head is its full height from the first frame: the line's seat is held, open, before the read lands.
+    const seat = document.querySelector('[data-line-seat="term"]');
+    expect(seat).not.toBeNull();
+    expect(seat!.closest(".unfold")).toHaveAttribute("data-phase", "open");
+    // The term lands in the seat that was already there: nothing opens, nothing moves.
     state.terms = [{ name: "Monsoon", start: "2026-08-01", end: "2026-12-31" }];
     home.reread();
-    expect(term()?.closest(".unfold")).toHaveAttribute("data-phase", "opening");
+    expect(term()?.closest(".unfold")).toHaveAttribute("data-phase", "open");
+    expect(document.querySelector('[data-line-seat="term"]')).toBeNull();
+    // Between terms the read says there is none: the line folds, smoothly, as any line does.
     state.terms = [{ name: "Spring", start: "2027-01-10", end: "2027-05-20" }];
     home.reread();
     later(TINT_MS * 4);
     expect(screen.queryByText(/term, day/)).toBeNull();
+  });
+
+  it("folds its held seat when the read lands with no term at all", () => {
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    state.terms = undefined;
+    const home = mount();
+    const unfold = document.querySelector('[data-line-seat="term"]')!.closest(".unfold")!;
+    state.terms = [];
+    home.reread();
+    expect(unfold.getAttribute("data-phase")).not.toBe("open");
+  });
+
+  it("holds the Checked line's seat while the queue is read, so the head never grows when it lands", () => {
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    state.loading = true;
+    const home = mount();
+    const seat = document.querySelector('[data-line-seat="checked"]');
+    expect(seat).not.toBeNull();
+    expect(seat).toHaveAttribute("aria-hidden");
+    expect(seat!.closest(".unfold")).toHaveAttribute("data-phase", "open");
+    // The read lands with a queue that has clear blocks: the real line takes the seat.
+    state.loading = false;
+    home.reread();
+    expect(document.querySelector('[data-line-seat="checked"]')).toBeNull();
   });
 });

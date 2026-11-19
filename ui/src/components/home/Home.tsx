@@ -244,6 +244,9 @@ export function Home({ session }: { session: SessionUser }) {
   const terms = useTerms();
   const termDay = now && terms.data ? termDayLine(terms.data, now) : null;
   const term = now && terms.data ? termHolding(terms.data, now) : undefined;
+  // The term line holds its seat while its read is out, so a head drawn before it lands is already its
+  // full height; it folds, smoothly, only once the read has said there is no term.
+  const termPending = terms.data === undefined && !terms.error;
   const loading = summary.isLoading || requests.isLoading || onboarding.isLoading;
   const error = summary.error ?? requests.error ?? onboarding.error ?? accounts.error;
   // While the load is failing the count is unknown, and "nothing needs you" is
@@ -437,8 +440,12 @@ export function Home({ session }: { session: SessionUser }) {
         {/* The term line (A-24 §3.1, Q3): from the terms setting and Ending soon's own read. It opens
             when its reads land, so nothing below jumps. */}
         {now && (
-          <Unfold open={Boolean(term)}>
-            {term && <TermLine term={term} ending={summary.data?.expiring_grants ?? []} now={now} />}
+          <Unfold open={termPending || Boolean(term)}>
+            {term ? (
+              <TermLine term={term} ending={summary.data?.expiring_grants ?? []} now={now} />
+            ) : (
+              termPending && <div aria-hidden data-line-seat="term" className="min-h-6 pt-1" />
+            )}
           </Unfold>
         )}
         </div>
@@ -451,8 +458,15 @@ export function Home({ session }: { session: SessionUser }) {
             where there is a queue to read: the one calm line below says the rest. */}
         {/* It goes and comes with the grid, by the same Unfold, in step with the swap (A-12 §1).
             Mounted with the first read, so it is simply there when the page arrives. */}
-        {!error && !loading && (
-          <Unfold open={swap.gridOpen && clear.length > 0}>
+        {/* It holds its line while the queue's reads are out, so the head is its full height from the
+            first frame; once they land it stays or folds away like any line. */}
+        <Unfold open={!error && (loading || (swap.gridOpen && clear.length > 0))}>
+          {loading ? (
+            <div aria-hidden data-line-seat="checked" className="invisible flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-small">
+              <StatusDot tone="healthy" />
+              <span className="inline-flex min-h-[var(--tap)] items-center desktop:min-h-0">Checked, nothing waiting:</span>
+            </div>
+          ) : (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-small text-muted">
             <StatusDot tone="healthy" />
             <span>Checked, nothing waiting:</span>
@@ -465,8 +479,8 @@ export function Home({ session }: { session: SessionUser }) {
               </span>
             ))}
           </div>
-          </Unfold>
-        )}
+          )}
+        </Unfold>
         {/* The shell's Notices, under the whole head (A-20 P3, G7). */}
         <ShellNotices />
         </div>
