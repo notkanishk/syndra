@@ -10,13 +10,20 @@ import { Crossfade } from "@/lib/motion";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { ActionSeat, Card, CardColumns, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, Cells, ROW, type Columns } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
 import { ApproveButton, HoldingNote, describeAsk } from "@/components/requests/Holding";
 import { OUTCOME_LABEL } from "@/lib/outcome";
 import { useRequestDecisions, type Decided } from "@/lib/request-decisions";
 import { useTerms } from "@/lib/queries/useTerms";
 import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
+
+/** The list's columns, its headings' and every row's: what, why, when, then the Outcome seat. */
+const COLS: Columns = [
+  "w-full tablet:w-[250px] tablet:flex-none",
+  "w-full min-w-0 tablet:min-w-[200px] tablet:flex-1",
+  "tablet:w-[66px] tablet:flex-none",
+];
 
 /**
  * A person's requests, on their record.
@@ -60,10 +67,10 @@ export function PersonRequests({
       {cancelStep}
       <ListStates
         head={
-          <CardColumns seat="default" seatLabel="Outcome">
-            <span className="w-[250px]">What they asked for</span>
-            <span className="flex-1">Why</span>
-            <span className="w-[66px]">When</span>
+          <CardColumns cols={COLS} seat="default" seatLabel="Outcome">
+            <span>What they asked for</span>
+            <span>Why</span>
+            <span>When</span>
           </CardColumns>
         }
         isLoading={requests.isLoading}
@@ -125,18 +132,20 @@ function RequestRow({
 
   return (
     <div className={`row-divider flex flex-col items-start gap-y-2 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center`}>
-      <span className="w-full text-body tablet:w-[250px] tablet:shrink-0">
-        <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
-        <span className="block text-fine text-faint">
-          {describeAsk(entry, terms.data)}
+      <Cells cols={COLS}>
+        <span className="text-body">
+          <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+          <span className="block text-fine text-faint">
+            {describeAsk(entry, terms.data)}
+          </span>
         </span>
-      </span>
-      <span className="w-full text-body text-muted [text-wrap:pretty] tablet:min-w-[200px] tablet:flex-1">
-        {entry.justification ? `“${entry.justification}”` : "No reason given"}
-      </span>
-      <span className="text-small text-faint tablet:w-[66px] tablet:shrink-0">
-        <Relative iso={entry.created_at} />
-      </span>
+        <span className="text-body text-muted [text-wrap:pretty]">
+          {entry.justification ? `“${entry.justification}”` : "No reason given"}
+        </span>
+        <span className="text-small text-faint">
+          <Relative iso={entry.created_at} />
+        </span>
+      </Cells>
       {/* One seat: the buttons, then the decision in their place (#96). */}
       <ActionSeat>
         <span className="flex flex-col gap-2">

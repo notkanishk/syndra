@@ -12,10 +12,11 @@ import { Crossfade } from "@/lib/motion";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { ActionSeat, Card, CardColumns, CardHeader, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, Cells, ROW, type Columns } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import {
+  CHECK_COL,
   RowCheckbox,
   SelectAllRow,
   SelectModeToggle,
@@ -77,6 +78,18 @@ const STATUS_SHOWN: Record<Exclude<StatusFilter, "pending">, string> = {
   all: "Showing every request",
 };
 const STATUSES: readonly StatusFilter[] = ["pending", "approved", "rejected", "withdrawn", "all"];
+
+/**
+ * The queue's columns, its headings' and every row's: who (the avatar is part of it, never a column
+ * of its own that pushed every cell after it out from under its heading), what, why, when, then the
+ * Decision seat; a checkbox column first while rows are chosen.
+ */
+const REQUEST_COLS: Columns = [
+  "w-full tablet:w-[210px] tablet:flex-none",
+  "w-full tablet:w-[250px] tablet:min-w-[160px] tablet:shrink",
+  "w-full min-w-0 tablet:min-w-[180px] tablet:flex-1",
+  "tablet:w-[66px] tablet:flex-none",
+];
 
 /**
  * One reading of a request's status, in both registers.
@@ -225,6 +238,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
   // are the exception, so they arrive behind a named control rather than a
   // column of checkboxes that is always in front of every row.
   const [selecting, setSelecting] = useState(false);
+  const cols = selecting && anyPending ? [CHECK_COL, ...REQUEST_COLS] : REQUEST_COLS;
 
   return (
     <div className="flex flex-col gap-4">
@@ -289,16 +303,12 @@ function OperatorQueue({ userId }: { userId?: string }) {
         <ListStates
           head={
             <>
-            <CardColumns seat="default" seatLabel="Decision">
-              {selecting && anyPending && <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]" />}
-              <span className="w-[170px]">
-                <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
-              </span>
-              <span className="w-[250px]">What they asked for</span>
-              <span className="flex-1">Why</span>
-              <span className="w-[66px]">
-                <SortHead label="When" name="when" sort={sort} onSort={setSort} />
-              </span>
+            <CardColumns cols={cols} seat="default" seatLabel="Decision" className="desktop:flex-nowrap">
+              {selecting && anyPending && <span />}
+              <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
+              <span>What they asked for</span>
+              <span>Why</span>
+              <SortHead label="When" name="when" sort={sort} onSort={setSort} />
             </CardColumns>
             {/* Only open requests can be selected; a decided one is not part of the
                 working set, so the first number here is the open count and the
@@ -353,48 +363,52 @@ function OperatorQueue({ userId }: { userId?: string }) {
               }`}
               {...selection.rowProps(entry.id)}
             >
-              {selecting && anyPending && (
-                <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]">
-                  {entry.status === "pending" && !resolved.has(entry.id) ? (
-                    <RowCheckbox
-                      label="Select this request"
-                      {...selection.checkboxProps(entry.id)}
-                    />
-                  ) : null}
-                </span>
-              )}
-              <UserAvatar id={entry.requester_id} />
-              <div className="w-full text-body font-semibold [text-wrap:pretty] tablet:w-[170px] tablet:shrink-0">
-                <UserName id={entry.requester_id} />
-              </div>
-              <div className="w-full text-body text-ink [text-wrap:pretty] tablet:w-[250px] tablet:min-w-[160px] tablet:shrink">
-                {entry.kind === "extend" && "Keep "}
-                <Link
-                  href={`/projects/${encodeURIComponent(entry.project_id)}/roles/${encodeURIComponent(entry.role_key)}`}
-                  className="link-hover"
-                >
-                  <RoleRef projectId={entry.project_id} roleKey={entry.role_key} link={false} />
-                </Link>
-                {catalog.data?.some(
-                  (r) =>
-                    r.project_id === entry.project_id &&
-                    r.role_key === entry.role_key &&
-                    r.waits_for_send,
-                ) && <WaitsMark className="ml-2" />}
-                {/* Half of the ask. A decision made without it is a decision
-                    about a different request. */}
-                <span className="block text-fine text-faint">
-                  {describeAsk(entry, terms.data)}
-                </span>
-              </div>
-              {/* What someone decides on is never cut off (RULES 9b): the reason wraps, and below
-                  desktop the row wraps first, the decision seat taking the next line. */}
-              <div className="w-full min-w-0 text-body text-muted [text-wrap:pretty] tablet:min-w-[180px] tablet:flex-1">
-                {entry.justification || "No reason given"}
-              </div>
-              <div className="text-small text-faint tablet:w-[66px] tablet:shrink-0">
-                <Relative iso={entry.created_at} />
-              </div>
+              <Cells cols={cols}>
+                {selecting && anyPending && (
+                  <span>
+                    {entry.status === "pending" && !resolved.has(entry.id) ? (
+                      <RowCheckbox
+                        label="Select this request"
+                        {...selection.checkboxProps(entry.id)}
+                      />
+                    ) : null}
+                  </span>
+                )}
+                <div className="flex items-center gap-3">
+                  <UserAvatar id={entry.requester_id} />
+                  <span className="min-w-0 text-body font-semibold [text-wrap:pretty]">
+                    <UserName id={entry.requester_id} />
+                  </span>
+                </div>
+                <div className="text-body text-ink [text-wrap:pretty]">
+                  {entry.kind === "extend" && "Keep "}
+                  <Link
+                    href={`/projects/${encodeURIComponent(entry.project_id)}/roles/${encodeURIComponent(entry.role_key)}`}
+                    className="link-hover"
+                  >
+                    <RoleRef projectId={entry.project_id} roleKey={entry.role_key} link={false} />
+                  </Link>
+                  {catalog.data?.some(
+                    (r) =>
+                      r.project_id === entry.project_id &&
+                      r.role_key === entry.role_key &&
+                      r.waits_for_send,
+                  ) && <WaitsMark className="ml-2" />}
+                  {/* Half of the ask. A decision made without it is a decision
+                      about a different request. */}
+                  <span className="block text-fine text-faint">
+                    {describeAsk(entry, terms.data)}
+                  </span>
+                </div>
+                {/* What someone decides on is never cut off (RULES 9b): the reason wraps, and below
+                    desktop the row wraps first, the decision seat taking the next line. */}
+                <div className="text-body text-muted [text-wrap:pretty]">
+                  {entry.justification || "No reason given"}
+                </div>
+                <div className="text-small text-faint">
+                  <Relative iso={entry.created_at} />
+                </div>
+              </Cells>
               {/* The Decision seat (#96): the buttons, then the decision in
                   their place — one seat, so no column moves on the tap. The
                   row keeps it until the next read; no toast. */}

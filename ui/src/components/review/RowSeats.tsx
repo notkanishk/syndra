@@ -13,23 +13,35 @@ import { humanizeKey } from "@/lib/format";
  * Expiring each drew their own, at 14.5 and 15px, as "Project · Role" and "Project / Role").
  * Who: avatar, a name that opens the person's page, one faint line under it. What: the project and
  * the role's words as one link, the role keys under it.
+ *
+ * Their widths are the table's columns, not theirs: a queue's `Columns` list takes WHO_COL,
+ * WHAT_COL and FIGURE_COL, for its headings and its rows alike.
  */
+export const WHO_COL = "w-full tablet:w-[180px] tablet:flex-none";
+export const WHAT_COL = "w-full min-w-0 tablet:w-auto tablet:min-w-[160px] tablet:flex-1";
+/** When it was found, revoked, or ends: a figure, right-aligned under a right-aligned heading (G16). */
+export const FIGURE_COL = "tablet:w-(--seat-number) tablet:flex-none tablet:text-right";
+
+/**
+ * A queue row's left edge, 3px, unpainted: a row paints it when it says something (a safety-gated
+ * finding, the soonest to end), and the headings take it too, so every cell stays under its heading.
+ */
+export const EDGE = "border-l-[3px] border-transparent";
+
 export function WhoSeat({
   id,
   href,
   sub,
-  className = "tablet:w-[180px] tablet:shrink-0",
 }: {
   id: string;
   /** Only where the row already knows the account is a service account. */
   href?: string;
   /** The faint line under the name; a service account says so when none is given. */
   sub?: ReactNode;
-  className?: string;
 }) {
   const accountHref = useAccountHref();
   return (
-    <div className={`flex w-full min-w-0 items-center gap-3 ${className}`}>
+    <div className="flex w-full min-w-0 items-center gap-3">
       <UserAvatar id={id} size="row" />
       <span className="min-w-0">
         <UserName id={id} href={href ?? accountHref(id)} className="block text-body font-semibold" />
@@ -44,7 +56,6 @@ export function WhatSeat({
   roleKeys,
   fallback,
   children,
-  className = "tablet:w-[200px] tablet:shrink-0",
 }: {
   /** Absent for an add-on's revocation, which has no project: `fallback` says what it is instead. */
   projectId?: string;
@@ -52,10 +63,9 @@ export function WhatSeat({
   fallback?: ReactNode;
   /** Anything else the row says about it: a system, a risk pill. */
   children?: ReactNode;
-  className?: string;
 }) {
   return (
-    <div className={`flex w-full min-w-0 flex-col items-start gap-[3px] ${className}`}>
+    <div className="flex w-full min-w-0 flex-col items-start gap-[3px]">
       {projectId ? (
         <Link href={`/projects/${projectId}`} className="text-body leading-[1.45] link-hover">
           <ProjectName id={projectId} link={false} />

@@ -7,7 +7,7 @@ import { HoldDialog } from "@/components/review/HoldDialog";
 import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
 import { RevokeDialog } from "@/components/targets/RevokeDialog";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, CardRow, type SeatWidth } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, type Columns, type SeatWidth } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UNKNOWN_ACCOUNT, UserAvatar, UserName } from "@/components/names";
@@ -39,10 +39,19 @@ import { useShownNames } from "@/components/names/shownNames";
  * only one an operator remembers.
  */
 /**
- * The Status column's seat, `--seat-status`: as wide as the longest status the table can say
- * ("Waiting on makerspace staff"), for the heading and every row.
+ * The table's columns, its headings' and every row's: the person (220), their account and its
+ * status sharing what is left 1 to 1.3, as D-1's board draws them (part 2, frame 10), and since
+ * when. Both flex from a basis, never a fixed width: four fixed widths and the wide seat summed to
+ * 1134px in a 1094px row at 1440, so the seat dropped under every row. The bases are the board's
+ * less 40 each, because the board drew two verbs and a system with a home folder limit has three
+ * (the wide seat): 220 + 140 + 200 + 110 + 300 and the gaps is 1034, on one line at 1440.
  */
-const STATUS_SEAT = "w-(--seat-status) flex-none";
+const COLS: Columns = [
+  "w-[220px] flex-none",
+  "min-w-0 flex-[1_1_140px]",
+  "min-w-0 flex-[1.3_1_200px]",
+  "w-(--seat-number) flex-none text-right",
+];
 
 /** `stale`: the system isn't answering, so this is its last read and the card recedes (A-13). */
 export function PeopleOnTarget({ target, stale = false }: { target: string; stale?: boolean }) {
@@ -114,11 +123,11 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
         <>
           {/* Name · description · numbers (8b): the person, the account they
               have there, and since when in the last seat. */}
-          <CardColumns seat={seat}>
-            <span className="w-[220px] flex-none">Person</span>
-            <span className="min-w-0 flex-1">Account on {name}</span>
-            <span className={STATUS_SEAT}>Status</span>
-            <span className="w-(--seat-number) flex-none text-right">Since</span>
+          <CardColumns cols={COLS} seat={seat}>
+            <span>Person</span>
+            <span>Account on {name}</span>
+            <span>Status</span>
+            <span>Since</span>
           </CardColumns>
           {drawn.map((account) => (
             <LeavingRow key={account.subject_id} {...leaving.props(account.subject_id)}>
@@ -178,6 +187,7 @@ function PersonRow({
         data-account={account.subject_id}
         className="scroll-mt-4"
         top
+        cols={COLS}
         seat={seat}
         // The standing's next step and the home folder line are sentences: the row's detail line, full width
         // under it, never inside the 240px Status column (D-1 §5 #39).
@@ -212,20 +222,20 @@ function PersonRow({
           </>
         }
       >
-        <span className="flex w-[220px] flex-none items-center gap-2.5">
+        <span className="flex items-center gap-2.5">
           <UserAvatar id={account.subject_id} size="row" />
           <span className="min-w-0">
             <UserName id={account.subject_id} href={accountHref(account.subject_id)} className="[overflow-wrap:anywhere] text-body font-semibold text-ink" />
             <ServiceAccountTag id={account.subject_id} />
           </span>
         </span>
-        <span className="min-w-0 flex-1 basis-[200px] [overflow-wrap:anywhere] font-mono text-small text-ink">
-          {account.username}
-        </span>
-        <span className={STATUS_SEAT}>
-          {account.standing && <StandingLine standing={account.standing} system={nameOf(target)} audience="operator" step={false} />}
-        </span>
-        <span data-figure className="w-(--seat-number) flex-none text-right text-small text-muted">{formatShortDate(account.bound_at)}</span>
+        <span className="block [overflow-wrap:anywhere] font-mono text-small text-ink">{account.username}</span>
+        {account.standing ? (
+          <StandingLine standing={account.standing} system={nameOf(target)} audience="operator" step={false} />
+        ) : (
+          <span />
+        )}
+        <span data-figure className="text-small text-muted">{formatShortDate(account.bound_at)}</span>
       </CardRow>
       {dialog === "limit" && home && (
         <LimitDialog target={target} name={name} home={home} onClose={() => setDialog(null)} />
