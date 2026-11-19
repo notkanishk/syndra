@@ -22,19 +22,20 @@
  *       another: check a local build (`bun next dev`, no ZITADEL_DOMAIN) against
  *       staging's data before it is deployed (the pre-merge gate). The tape holds
  *       real names, so it lives in the system temp directory
- *       (`syndra-layout.tape.json`) unless --tape names another file, and a tape
- *       anywhere in the repo is refused. A request the tape does not hold fails
- *       the replay: answered with a 404, the page would draw an error state and
- *       pass for the wrong reason.
+ *       (`syndra-layout.tape.json`, written 0600) unless --tape names another file;
+ *       a tape in any git work tree, or through a symlink, is refused. A request
+ *       the tape does not hold fails the replay (exit 4): answered with a 404, the
+ *       page would draw an error state and pass for the wrong reason.
  *
  * Read-only: it signs in, reads pages, and never clicks.
  * System Chrome (`channel: "chrome"`); CHROME_PATH overrides it.
- * Exit codes, as `sweep:touch`: 1 found something, 2 signed out (wrong page), 3 could not run.
+ * Exit codes, as `sweep:touch`: 1 found something, 2 signed out (wrong page), 3 could not run;
+ * and 4, a replay whose tape lacked a read the pages made (tape incomplete).
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { lstatSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { chromium } from "playwright-core";
@@ -74,20 +75,30 @@ const widths = list(opt.widths).map(Number);
 
 const tapePath = resolve(opt.tape ?? resolve(tmpdir(), "syndra-layout.tape.json"));
 if (opt.record) {
-  // Never in the repo: a tape is real members' names, and one `git add -A` from public.
-  let root = null;
-  try {
-    root = realpathSync(execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim());
-  } catch {}
-  const dir = existsSync(dirname(tapePath)) ? realpathSync(dirname(tapePath)) : dirname(tapePath);
-  const inside = root !== null && !relative(root, dir).startsWith("..") && !isAbsolute(relative(root, dir));
-  if (inside) {
-    console.error(`Refusing to record a tape inside the repo (${tapePath}): it holds real names. Leave out --tape, or name a file outside ${root}.`);
+  // Never in a git work tree (any repo, any worktree, however the path is spelled) and never
+  // through a symlink: a tape is real members' names, one `git add -A` from public.
+  const refuse = (why) => {
+    console.error(`Refusing to record ${tapePath}: ${why}. It holds real names; leave out --tape, or name a file outside any repo.`);
     process.exit(3);
+  };
+  let dir;
+  try {
+    dir = realpathSync.native(dirname(tapePath));
+  } catch {
+    refuse("its folder does not exist");
   }
+  try {
+    execFileSync("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"], { stdio: "ignore" });
+    refuse("it is inside a git work tree");
+  } catch {}
+  try {
+    if (lstatSync(tapePath).isSymbolicLink()) refuse("it is a symlink");
+  } catch {}
 }
 const tape = opt.replay ? JSON.parse(readFileSync(tapePath, "utf8")) : {};
 const missed = new Set();
+// Every recorded answer's body, read before its context closes (a read left pending is a lost answer).
+const reads = [];
 const keyOf = (req) => `${req.method()} ${new URL(req.url()).pathname}${new URL(req.url()).search} ${req.postData() ?? ""}`;
 
 let browser;
@@ -111,11 +122,13 @@ async function context(view) {
     });
   }
   if (opt.record) {
-    ctx.on("response", async (res) => {
+    ctx.on("response", (res) => {
       if (!res.url().includes("/api/proxy/")) return;
-      try {
-        tape[keyOf(res.request())] = { status: res.status(), type: res.headers()["content-type"] ?? "application/json", body: await res.text() };
-      } catch {}
+      reads.push(
+        res.text().then((body) => {
+          tape[keyOf(res.request())] = { status: res.status(), type: res.headers()["content-type"] ?? "application/json", body };
+        }),
+      );
     });
   }
   const page = await ctx.newPage();
@@ -198,16 +211,20 @@ for (const view of list(opt.views)) {
     );
     console.error(`checked ${path} (${view})`);
   }
+  await Promise.allSettled(reads);
   await ctx.close();
 }
 await browser.close();
 if (opt.record) {
-  writeFileSync(tapePath, JSON.stringify(tape));
+  writeFileSync(tapePath, JSON.stringify(tape), { mode: 0o600 });
   console.error(`tape: ${Object.keys(tape).length} answers in ${tapePath}`);
 }
-for (const key of missed) findings.push(`tape missing ${key.trim()} (record again: it was answered 404)`);
 
 const unique = [...new Set(findings)];
 for (const line of unique) console.log(line);
-console.error(`${runs} page runs, ${unique.length} findings.`);
-process.exit(unique.length ? 1 : 0);
+for (const key of missed) console.log(`tape missing ${key.trim()}`);
+console.error(`${runs} page runs, ${unique.length} findings, ${missed.size} reads not on the tape.`);
+// 1: the layout is wrong. 4: the tape is incomplete (a read answered 404 draws an error state, so the
+// pages it fed prove nothing): record again, or, for a read staging does not have yet, check on
+// staging after deploying.
+process.exit(unique.length ? 1 : missed.size ? 4 : 0);

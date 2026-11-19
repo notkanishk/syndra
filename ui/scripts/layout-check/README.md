@@ -6,20 +6,28 @@ jsdom lays nothing out, so the test suite can't see a column starved to 36px, a 
 
 Run your local build against staging's data. This is the pre-merge gate.
 
-1. Record staging's API answers once. The tape is written to the system temp directory (`syndra-layout.tape.json`), and a tape path inside the repo is refused.
+1. Record staging's API answers once. The tape is written to the system temp directory (`syndra-layout.tape.json`), readable by you only (0600).
 2. Start a local dev server with no `ZITADEL_DOMAIN` and any `SESSION_SECRET`.
 3. Replay the tape into it.
 
 ```bash
 cd ui
 bun run layout:check -- --base http://192.168.5.16:3001 --record
-SESSION_SECRET=local bun next dev -p 3010 &
+ZITADEL_DOMAIN= SESSION_SECRET=local bun next dev -p 3010 &
 bun run layout:check -- --base http://localhost:3010 --replay
 ```
 
-Use `--tape <file>` on both runs to name another tape file. The file must be outside the repo, because it holds real names.
+`--tape <file>` names another tape file; use it on both runs. Because a tape holds real names, recording is refused in three cases, with exit 3:
 
-If the replay meets a request the tape doesn't hold, the check fails with `tape missing …` for that request. Unanswered, the page would draw an error state and pass for the wrong reason. Record again when a page starts reading something new.
+- the file's folder is in any git work tree (the main checkout, a worktree, any other repo);
+- the file is a symlink;
+- the folder doesn't exist.
+
+If the replay meets a request the tape doesn't hold, it lists `tape missing …` and exits 4: the tape is incomplete. Unanswered, the page would draw an error state and pass for the wrong reason. Record again.
+
+A branch that adds a new read can't be recorded from staging, because staging doesn't serve that read yet. For the pages that read it, the gate is the staging run after deploying. Say so in the PR.
+
+The server's own `/healthz` read (`src/lib/zone.ts`, the makerspace's time zone and locale) goes from the Next server to the backend, not through the browser, so it isn't on the tape. Locally the dates show in UTC, labelled as UTC, and staging shows them in the makerspace's zone. A zone label is short, so this doesn't change what the check finds.
 
 ## After deploying
 
@@ -38,9 +46,9 @@ It prints one line per finding (`page width view theme kind …`) and exits 1 if
 | `heading` | A column heading is more than 4px off its cells. A left-aligned heading's text is compared with the column's box, so an avatar, dot or chip padding inside the column belongs to the column (D-1 draws Person over the avatar). A right-aligned heading is compared text to text. |
 | `seat` | From tablet up, an action seat is off its row's first line although the row fits. Fixed seats count at their widths, and shares count at their words, held to their minimums. |
 | `pageScroll` | The page scrolls sideways. |
-| `tape` | In a replay, a request the tape doesn't hold. |
+| `tape missing` | In a replay, a request the tape doesn't hold (exit 4, not 1). |
 
-Exit 2 means it was signed out: the server has no demo sign-in for `--user`. Exit 3 means it couldn't run: Chrome didn't start, or a tape path was inside the repo.
+Exit 2 means it was signed out: the server has no demo sign-in for `--user`. Exit 3 means it couldn't run: Chrome didn't start, or the tape path was refused. Exit 4 means the replay's tape is incomplete.
 
 ## Options
 

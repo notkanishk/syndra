@@ -231,6 +231,18 @@ export function detect({ tablet = 720 } = {}) {
     });
   }
 
+  // A sort arrow stays inside its heading's column, pressed or not (it is hung, so nothing else
+  // keeps it there): past a right-aligned heading it stood 14px beyond the dates under Found.
+  for (const arrow of document.querySelectorAll("[role=columnheader] button > [aria-hidden]")) {
+    const col = arrow.closest("[data-col]");
+    if (!col || !col.closest("[data-card-columns]") || getComputedStyle(col).display === "none") continue;
+    if (!vis(col.closest("[data-card-columns]"))) continue;
+    const a = arrow.getBoundingClientRect();
+    const c = col.getBoundingClientRect();
+    const out = Math.max(c.left - a.left, a.right - c.right);
+    if (out > 1) heading.push(`the sort arrow of "${txt(col)}" ${Math.round(out)}px outside its column (${sel(col)})`);
+  }
+
   // ── seat ──
   const seat = [];
   if (innerWidth >= tablet) {

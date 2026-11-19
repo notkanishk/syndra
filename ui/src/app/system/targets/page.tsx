@@ -6,7 +6,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { StatusDot } from "@/components/ui/Badge";
 import { ReadingWord, targetReading, type Reading } from "@/components/targets/TargetReading";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Card, CardColumns, CardRow, NUMBER_COL, STATUS_COL, type Columns } from "@/components/ui/Card";
+import { Card, CardColumns, CardRow, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
@@ -37,15 +37,17 @@ import { sortByName } from "@/lib/sort";
  * independently and an operator's next move differs completely between them.
  */
 /**
- * The columns, the headings' and every row's: the system, its status, its people, then the wide
- * seat (Needs you). The system is a share held to a minimum, the status and the count D-1's seats
- * (`STATUS_COL`, `NUMBER_COL`): the heading's System had no size and the row's held 220, so the
- * row's seat dropped while the heading's did not, and STATUS sat 330px off its cell (staging,
- * 19 Nov). 160 + 240 + 110 + 300 and the gaps is 858: one line from a 1204px window.
+ * The columns, the headings' and every row's: the system and its status, shares held to 130 each,
+ * then its people (`NUMBER_COL`) and the wide seat (Needs you): 130 + 130 + 110 + 300 and the gaps
+ * is 718, one line from a 1080 window. The heading's System had no size and the row's held 220, so
+ * the row's seat dropped while the heading's did not and STATUS sat 330px off its cell (staging,
+ * 19 Nov); D-1's 240 status seat then came to 858 and dropped the seat from 1114 to 1203. The board
+ * (route-systems) draws Status 180 and a 250 seat, which D-1's seats (140, 200, 300) do not have:
+ * at 1280 each share is 238, past the board's 180.
  */
 const SYSTEM_COLS: Columns = [
-  "min-w-[min(160px,100%)] flex-1",
-  STATUS_COL,
+  "min-w-[min(130px,100%)] flex-1",
+  "min-w-[min(130px,100%)] flex-1",
   NUMBER_COL,
 ];
 

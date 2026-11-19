@@ -342,9 +342,13 @@ export type Columns = readonly string[];
  * (`unsizedColumns`) holds every heading's column to a width or a minimum.
  */
 
-/** A number or a date, right-aligned under a right-aligned heading (G16); stacked on a phone. */
+/**
+ * A number or a date, right-aligned under a right-aligned heading (G16), from tablet. Below tablet it
+ * has no width of its own: in a row that stacks it is a line of its own, and in a CardRow that wraps
+ * it is as wide as its words.
+ */
 export const NUMBER_COL = "tablet:w-(--seat-number) tablet:flex-none tablet:text-right";
-/** A status a table can say, as wide as its longest (D-1 §5 #22); stacked on a phone. */
+/** A status a table can say, as wide as its longest (D-1 §5 #22), from tablet; as wide as its words below. */
 export const STATUS_COL = "tablet:w-(--seat-status) tablet:flex-none";
 
 /**

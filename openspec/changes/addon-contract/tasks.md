@@ -3426,3 +3426,40 @@ end to end) found no missing function; three regressions with one root cause
       - the in-repo refusal off: a tape written in `ui/` (git shows it ignored);
       - a tape missing `GET /roles`: `tape missing …`, exit 1.
     - **Replay:** 420 page runs and 0 findings, against a fresh staging tape of 96 answers, with no request missing.
+  - *Fix round 2 (Opus review of 3913392c):*
+    - **(1) The in-repo refusal can't be talked round.** It refuses when:
+      - the tape's folder resolves (`realpathSync.native`, which settles case and symlinked folders) inside any git work tree (`git -C <dir> rev-parse --is-inside-work-tree`), whichever checkout or worktree it is;
+      - the folder doesn't exist (refused before the sweep);
+      - the tape itself is a symlink (`lstat`).
+
+      Each refusal exits 3. A tape is written 0600. Checked by hand:
+      - refused: `./x.tape.json`, a case-changed path through `../../<worktree>`, the main checkout's root, a missing folder, a symlink;
+      - accepted: a `/tmp/lc/..x/` folder.
+    - **(2) A replay miss is its own exit, 4 ("tape incomplete").** Exit 1 stays for layout findings. CLAUDE.md and the README say that a branch adding a new read can't be recorded from staging. For those pages the gate is the staging run after deploying, and the PR says so.
+    - **(3) The sort arrow is guarded directly** (`detect.js`): every `[role=columnheader] button > [aria-hidden]` must sit inside its `[data-col]`, pressed or not.
+      - It found Drift's What at 1100: a label wrapping to fill a 121px column pushed the arrow 14px outside.
+      - Fix: the label leaves the arrow its 16px (`max-w-[calc(100%-16px)]` on SortHead's button).
+      - Mutation-checked: without the `in-[[data-col][class*=text-right]]` classes, Found and Attention were 14px outside, exit 1.
+    - **(4) Systems: one line from 1080.** The system and its status are shares held to 130 each, with `NUMBER_COL` and the wide seat: 718px. D-1's fixed 240 status seat had made it 858px, so the seat dropped under every row from 1114 to 1203.
+      - Measured: the seat is on the first line at 1080, 1100 and 1200.
+      - The board (route-systems) draws Status 180 and a 250 seat; D-1's seats have no 250. At 1280 each share is 238px.
+    - **(4, cont.) `NUMBER_COL`'s docstring** says what it is below tablet: no width of its own, a line of its own in a stacking row, and as wide as its words in a CardRow.
+    - **Phone change, recorded.** Six cells that were fixed at every width are now fixed from tablet only, so on a phone they are as wide as their words:
+      - a project's page's People;
+      - TrueNAS accounts' Since;
+      - ClaimHistory's date;
+      - BundleVersions' holders' People and an includer's count;
+      - Requests' history date.
+
+      A number is the row's last part, so on a phone it now sits after its row's words, not in a 110px box. `TargetOverview`'s unmanaged standing seat keeps its fixed width on a phone, because its username column is laid out against it and a test holds that.
+    - **(5) The review queues' budget** (`RowSeatsBudget.test.ts`, tokens read from `globals.css`):
+      - Drift with the checkbox: 720px against the measured 728 at 1080; without it, 678.
+      - Expiring access and Unfinished revocations at tablet, What at 90: 362px against 374 at 720, and with the checkbox 422 against 422 at 768.
+      - Mutation-checked: What back at 120, both tests red.
+    - **(6) Recording awaits every body** (`Promise.allSettled`) before its context closes.
+    - **(7) README: `/healthz` isn't on the tape.** The server's zone and locale read never passes through the browser, so locally dates show "UTC", labelled.
+    - **(8) Nits:**
+      - HomeColumns' comment no longer describes the old 24px lines;
+      - SortHead's comment is wrapped to 100 characters;
+      - projects-columns' helper finds the Roles cell by `hidden desktop:block`;
+      - CLAUDE.md's dev command clears `ZITADEL_DOMAIN=`.
