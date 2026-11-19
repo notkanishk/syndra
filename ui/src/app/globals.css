@@ -712,7 +712,8 @@
     --healthy: var(--lime-700);
 
     --warn: #a86a00;
-    --warn-text: #8a5600;
+    /* 4.83:1 under the hour's light at its strongest on paper (was #8a5600: 4.34), 6.14 on the bare canvas. */
+    --warn-text: #805000;
     --warn-ink: #ffffff;
     --warn-soft: rgba(168, 106, 0, 0.1);
     --warn-line: rgba(168, 106, 0, 0.3);

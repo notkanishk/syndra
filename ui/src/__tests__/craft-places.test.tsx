@@ -119,8 +119,9 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
       if (theme === "light") for (const reach of reaches) expect(reach * weight, `light at ${reach}%`).toBeLessThan(25);
       for (const reach of reaches) {
         const lit = over([accent[0], accent[1], accent[2], (accent[3] ?? 1) * ((reach * weight) / 100)], colour(vars, "--canvas"));
-        // The head sits on the app's canvas (`#app-root`), and its links end their hover on --accent-text.
-        for (const token of ["--ink", "--muted", "--faint", "--accent-text"]) {
+        // The head sits on the app's canvas (`#app-root`), and its links end their hover on --accent-text;
+        // status text on the canvas, should it ever scroll under the light, holds too.
+        for (const token of ["--ink", "--muted", "--faint", "--accent-text", "--warn-text", "--danger-text"]) {
           const r = ratio(colour(vars, token), lit);
           if (r < 4.5) failures.push(`${theme} ${token} at ${reach}%: ${r.toFixed(2)}`);
         }

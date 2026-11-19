@@ -105,8 +105,10 @@ export function AppShell({
                   link to an anchor or a focus that scrolls lands below it (WCAG 2.4.11).
                   `scrollbar-gutter: stable` keeps the scrollbar's seat whether or not a page is tall enough to
                   need it, so moving between a short page and a long one never shifts the page sideways
-                  (A-24 §11.3; CSS Overflow 3). */}
-              <div id="app-scroll" className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+                  (A-24 §11.3; CSS Overflow 3). Its track is transparent (`scrollbar-color`, CSS Scrollbars
+                  Styling 1), so a classic scrollbar never cuts the room's light; the thumb is `--faint`,
+                  seen in both rooms (A-25 §7.3). */}
+              <div id="app-scroll" className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] [scrollbar-color:var(--faint)_transparent]">
                 {/* Notices, not a band under the top bar (6a): every dysfunction
                     is said in the content column and pushes the page down
                     rather than covering it. They sit under the page's own

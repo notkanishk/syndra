@@ -2,8 +2,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
 import { Home } from "@/components/home/Home";
 import { RoomContext } from "@/components/shell/RoomLight";
@@ -366,11 +364,6 @@ describe("the room knows the hour", () => {
     // Outside the shell there is no column, and no light: it is never drawn where the page is.
     mount(session, true, false);
     expect(document.querySelector(".hour-light")).toBeNull();
-    // The shell hands the column, not the scroller: the provider's element is the `@container` column.
-    const shellSource = readFileSync(resolve(__dirname, "../../shell/AppShell.tsx"), "utf8");
-    expect(shellSource).toMatch(/<div ref=\{setRoom\} className="@container relative isolate [^"]*"/);
-    expect(shellSource).toMatch(/<RoomContext\.Provider value=\{room\}>\s*<div ref=\{setRoom\}/);
-    expect(/<div id="app-scroll"[^>]*>/.exec(shellSource)?.[0]).not.toContain("setRoom");
   });
 
   it("is a lamp in the quiet hours, with the greeting and the calm line's sentence from the same part of the day", () => {

@@ -387,7 +387,7 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
 
   return (
     <div className="flex flex-col gap-4">
-      <div {...head} className={`${head.className} relative isolate`} style={BELOW_HEADER}>
+      <div {...head} style={BELOW_HEADER}>
         {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
             place set by the part of the day on the greeting's own clock. The one written exception to
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
