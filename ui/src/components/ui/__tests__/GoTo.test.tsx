@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { css } from "@/__tests__/cssTokens";
 import { GoTo, GoToPanel } from "@/components/ui/GoTo";
 import { NAME_CATALOG_KEY } from "@/lib/queries/useNameCatalog";
 import { ADVANCED_NAV, BASIC_NAV, memberNav } from "@/lib/nav";
@@ -57,6 +58,30 @@ describe("Go to", () => {
     // Empty: pages only.
     expect(screen.queryAllByRole("group")).toHaveLength(1);
     expect(screen.getAllByRole("option").length).toBeGreaterThan(5);
+  });
+
+  // A-24 frame 22: the panel is the field row over the list. Centred on its own height it jumped as the
+  // list grew and shrank (title at y 140, 39, 356 on staging); it is pinned at a fixed top instead.
+  it("is the board's panel: pinned at a fixed top, no heading, the bare field row (A-24 frame 22)", () => {
+    renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    const dialog = screen.getByRole("dialog", { name: "Go to" });
+    expect(dialog).toHaveAttribute("aria-label", "Go to");
+    expect(dialog).toHaveClass("tablet:items-start", "tablet:pt-24");
+    expect(dialog).not.toHaveClass("tablet:items-center");
+    expect(within(dialog).queryByRole("heading")).toBeNull();
+    const box = within(dialog).getByRole("combobox");
+    expect(box.parentElement).toHaveClass("field-row");
+    expect(box).not.toHaveClass("border");
+    expect(box).not.toHaveClass("rounded-inner");
+    // The whole row is the target: its inset is the input's own, not the row's.
+    expect(box).toHaveClass("px-6", "py-3.5");
+    expect(box.parentElement).not.toHaveClass("px-6");
+  });
+
+  it("says the bare field's focus on its row at the house ring's 2px, in the ring's colour", () => {
+    const rule = /@utility field-row \{[\s\S]*?&:has\(> input:focus-visible\) \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(rule).toContain("border-bottom-color: var(--focus-ring);");
+    expect(rule).toContain("box-shadow: inset 0 -1px var(--focus-ring);");
   });
 
   it("is closed when not open, and reopens clean", () => {

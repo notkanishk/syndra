@@ -1,5 +1,5 @@
 import { orderedSources } from "@/components/access/AccessSource";
-import { ENDING_WITHIN_DAYS, inDays } from "@/components/member/headerLine";
+import { ENDING_WITHIN_DAYS, inDays, type HeaderLine } from "@/components/member/headerLine";
 import { daysUntil } from "@/lib/format";
 import { observedHolding } from "@/lib/people-filters";
 import type { UserAccessView } from "@/lib/queries/useUsers";
@@ -25,14 +25,17 @@ export const CHECKING = "Checking what Zitadel shows.";
  * role Zitadel shows held and that one source alone gives: a role a bundle or
  * rule also gives does not end when its direct grant does (`orderedSources`,
  * as the page's held-twice note decides it).
+ *
+ * Its dot is the ladder's, as My access's is (A-24 frame 18): amber when it
+ * names an end or a role not in Zitadel, grey otherwise, none while checking.
  */
 export function personLine(
   view: UserAccessView | undefined,
   names: { role: (projectId: string, roleKey: string) => string },
   now: Date = new Date(),
-): string {
+): HeaderLine {
   const count = view ? observedHolding(view) : undefined;
-  if (!view || count === undefined) return CHECKING;
+  if (!view || count === undefined) return { tone: "none", text: CHECKING };
 
   const roles = (view.projects ?? []).flatMap((p) =>
     Object.entries(p.standings ?? {}).map(([key, standing]) => ({
@@ -67,16 +70,16 @@ export function personLine(
     })
     .filter((r): r is typeof r & { days: number } => r.days !== null && r.days >= 0 && r.days <= ENDING_WITHIN_DAYS)
     .sort((a, b) => a.days - b.days);
-  if (ending.length) return `${holding} ${ending[0].label} ends ${inDays(ending[0].days)}.`;
+  if (ending.length) return { tone: "warn", text: `${holding} ${ending[0].label} ends ${inDays(ending[0].days)}.` };
 
   // "Not in Zitadel" is the standing's own word (lib/standing.ts), said as a row says it.
   const missing = roles.filter((r) => r.standing === "not_held");
-  if (missing.length === 1) return `${holding} Not in Zitadel: ${missing[0].label}.`;
-  if (missing.length > 1) return `${holding} Not in Zitadel: ${missing.length} roles they were given.`;
+  if (missing.length === 1) return { tone: "warn", text: `${holding} Not in Zitadel: ${missing[0].label}.` };
+  if (missing.length > 1) return { tone: "warn", text: `${holding} Not in Zitadel: ${missing.length} roles they were given.` };
 
   const coming = roles.filter((r) => onItsWay(r.standing));
-  if (coming.length === 1) return `${holding} ${coming[0].label} is on its way to Zitadel.`;
-  if (coming.length > 1) return `${holding} ${coming.length} roles are on their way to Zitadel.`;
+  if (coming.length === 1) return { tone: "neutral", text: `${holding} ${coming[0].label} is on its way to Zitadel.` };
+  if (coming.length > 1) return { tone: "neutral", text: `${holding} ${coming.length} roles are on their way to Zitadel.` };
 
-  return holding;
+  return { tone: "neutral", text: holding };
 }

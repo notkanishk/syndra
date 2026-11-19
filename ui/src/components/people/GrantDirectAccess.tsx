@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
-import { ChangeTrail, changeTrailFor, type TrailStart } from "@/components/people/ChangeTrail";
+import { ChangeTrail, changeTrailFor, PendingTrail, type TrailStart } from "@/components/people/ChangeTrail";
 import { type PickerPlace, type RoleNote } from "@/components/bundles/RolePickerOne";
 import { givenAt } from "@/components/access/AccessSource";
 import { onItsWay } from "@/lib/standing";
@@ -247,7 +247,10 @@ function GrantDirectAccessOpen({
           and a dialog that closes itself takes that with it. */}
       {/* The first 100ms: a role that waits says so before the server does. */}
       {!result && grant.isPending && (
-        <ActionForecast className="mx-6 mb-1" word={forecastFor("give", selectedRole?.waits_for_send)} />
+        <>
+          <ActionForecast className="mx-6 mb-1" word={forecastFor("give", selectedRole?.waits_for_send)} />
+          <PendingTrail act="give" className="mx-6 mb-1 mt-3" />
+        </>
       )}
       {result && <ActionOutcome outcome={result.outcome} word={result.word} person={userId} className="mx-6 mb-1" />}
       {result?.trail && (

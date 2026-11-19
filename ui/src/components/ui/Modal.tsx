@@ -30,6 +30,15 @@ interface ModalProps {
    * where any motion is latency: Go to.
    */
   still?: boolean;
+  /**
+   * Held at a fixed top from the tablet breakpoint up, never centred: a dialog
+   * whose height changes as you type (Go to's list) would otherwise jump up and
+   * down with every key (A-24 frame 22). A phone's sheet is unchanged: it
+   * already rises from the bottom edge.
+   */
+  pinned?: boolean;
+  /** The dialog's name when it has no visible title (Go to); otherwise its ModalHeader names it. */
+  label?: string;
   children: React.ReactNode;
 }
 
@@ -54,10 +63,20 @@ interface ModalProps {
  *    it goes full height and its footer stays pinned.
  */
 const SIZE_CLASS: Record<NonNullable<ModalProps["size"]>, string> = {
-  sm: "max-w-[420px] max-h-[86dvh] tablet:max-h-[calc(100dvh-32px)]",
-  md: "max-w-[520px] max-h-[calc(100dvh-96px)] tablet:max-h-[calc(100dvh-32px)]",
-  lg: "max-w-[760px] h-[calc(100dvh-24px)] tablet:h-auto tablet:max-h-[calc(100dvh-32px)]",
+  sm: "max-w-[420px] max-h-[86dvh]",
+  md: "max-w-[520px] max-h-[calc(100dvh-96px)]",
+  lg: "max-w-[760px] h-[calc(100dvh-24px)] tablet:h-auto",
 };
+
+/**
+ * From the tablet breakpoint up every size is bounded by the viewport less the
+ * scrim's 16px gutters; a pinned one by its 96px top less the bottom gutter.
+ * One expression, so the two bounds can never both apply.
+ */
+const TABLET_PLACE = {
+  centred: { scrim: "tablet:items-center", panel: "tablet:max-h-[calc(100dvh-32px)]" },
+  pinned: { scrim: "tablet:items-start tablet:pt-24", panel: "tablet:max-h-[calc(100dvh-112px)]" },
+} as const;
 
 /**
  * Whether a dialog is already open above this point in the tree.
@@ -310,8 +329,11 @@ export function Modal({
   busy = false,
   size = "md",
   still = false,
+  pinned = false,
+  label,
   children,
 }: ModalProps) {
+  const place = TABLET_PLACE[pinned ? "pinned" : "centred"];
   const panelRef = useRef<HTMLDivElement | null>(null);
   const scrimRef = useRef<HTMLDivElement | null>(null);
   const nested = useContext(InsideDialog);
@@ -343,9 +365,10 @@ export function Modal({
       ref={scrimRef}
       role="dialog"
       aria-modal="true"
-      aria-labelledby={labelledBy ?? titleId}
+      aria-label={label}
+      aria-labelledby={label ? undefined : (labelledBy ?? titleId)}
       aria-describedby={describedBy}
-      className={`${still ? "" : "settle-scrim"} fixed inset-0 z-(--layer-dialog) flex items-end justify-center bg-scrim tablet:items-center tablet:px-4`}
+      className={`${still ? "" : "settle-scrim"} fixed inset-0 z-(--layer-dialog) flex items-end justify-center bg-scrim tablet:px-4 ${place.scrim}`}
       onClick={(event) => {
         if (event.target === event.currentTarget && !busy) onClose();
       }}
@@ -366,7 +389,7 @@ export function Modal({
           `overscroll-contain`: scrolling past the sheet's end never drags the page behind it (A-24 §11.6). */}
       <div
         ref={panelRef}
-        className={`flex w-full ${SIZE_CLASS[size]} ${still ? "" : "sheet-in"} flex-col overflow-y-auto overscroll-contain [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
+        className={`flex w-full ${SIZE_CLASS[size]} ${place.panel} ${still ? "" : "sheet-in"} flex-col overflow-y-auto overscroll-contain [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
       >
         <SheetGrabber busy={busy} onClose={onClose} drag={grabber} />
         <NameLinksContext.Provider value={false}>{children}</NameLinksContext.Provider>

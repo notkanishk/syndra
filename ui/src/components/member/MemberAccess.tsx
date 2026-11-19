@@ -11,6 +11,7 @@ import { ReadGate } from "@/components/states/ReadGate";
 import { Button } from "@/components/ui/Button";
 import { ARROW_LINK, ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
+import { DotLine } from "@/components/ui/StatusSeat";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
 import {
@@ -35,6 +36,13 @@ import { useMyStorage } from "@/lib/queries/useMyStorage";
 import { useRequestsMine } from "@/lib/queries/useRequests";
 import { sortByName } from "@/lib/sort";
 import { roleName } from "@/lib/names";
+import { ApiError } from "@/lib/api-client";
+
+/** A member Zitadel has no account for (copy guide, My access): what is true, then the step. */
+export const NOT_IN_ZITADEL = {
+  said: "Zitadel has no account for you, so there's no access to show.",
+  next: "Ask makerspace staff to check your account.",
+} as const;
 
 /**
  * Member · My access (route-me, 52b + 52c). The landing route for members, and
@@ -78,7 +86,29 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   const standing = (project: (typeof projects)[number], roleKey: string): Standing =>
     project.standings?.[roleKey] ?? null;
 
+  // The greeting, in every state the page has a head: the reader's clock, so it waits for mount in an unseen seat.
+  const hello = (
+    <>
+      {now ? greeting(now) : <span className="invisible">Afternoon</span>}, {firstName(session.name)}.
+    </>
+  );
+
   if (access.error) {
+    // The read answers 404 only when Zitadel has no account with this sign-in's id
+    // (`ErrUserNotInDirectory`, after a live lookup): not a failure to load, and not "removed".
+    // The greeting stays, and the one line says the true thing and what to do.
+    if (access.error instanceof ApiError && access.error.status === 404) {
+      return (
+        <div {...head} style={BELOW_HEADER}>
+          <h1 className="type-page-title">{hello}</h1>
+          <div className="mt-2 flex flex-col gap-1 text-body text-muted">
+            <DotLine tone="warn" text={NOT_IN_ZITADEL.said} />
+            <span className="pl-(--dot-indent) text-small text-faint">{NOT_IN_ZITADEL.next}</span>
+          </div>
+          <ShellNotices />
+        </div>
+      );
+    }
     return (
       <ErrorState
         title="Couldn't load your access."
@@ -226,7 +256,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
     <div className="flex flex-col gap-4">
       <div {...head} style={BELOW_HEADER}>
         <h1 className="type-page-title">
-          {now ? greeting(now) : <span className="invisible">Afternoon</span>}, {firstName(session.name)}.{" "}
+          {hello}{" "}
           <span className="text-faint">{session.firstVisit ? WELCOME : <>Here&rsquo;s what you can use.</>}</span>
         </h1>
         {/* One line, always there, in the same seat in every state, so nothing below it moves. */}
@@ -236,10 +266,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
               is never hidden on its day. */}
           {line ? (
             <>
-              <span className="flex items-center gap-2.5">
-                {line.tone !== "none" && <StatusDot tone={line.tone} />}
-                <Crossfade id={line.text}>{line.text}</Crossfade>
-              </span>
+              <DotLine tone={line.tone} text={line.text} />
               {line.link?.href && <ArrowLink href={line.link.href}>{line.link.label}</ArrowLink>}
               {line.link?.projectId && (
                 <button

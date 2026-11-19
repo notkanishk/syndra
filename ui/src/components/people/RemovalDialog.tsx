@@ -10,7 +10,7 @@ import {
   type SourceKind,
 } from "@/components/access/AccessSource";
 import { RoleRef } from "@/components/names";
-import { ChangeTrail, changeTrailFor, type TrailStart } from "@/components/people/ChangeTrail";
+import { ChangeTrail, changeTrailFor, PendingTrail, type TrailStart } from "@/components/people/ChangeTrail";
 import { useShownNames } from "@/components/names/shownNames";
 import { sortNames } from "@/lib/sort";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -432,10 +432,14 @@ function DirectDialog({
       {/* The first 100ms. Cancelling a give that is still waiting; a role that
           waits holds its own removal; anything else is simply removed. */}
       {!outcome && remove.isPending && (
-        <ActionForecast
-          className="mx-6 mb-1"
-          word={cancelOnly ? FORECAST.cancel : forecastFor("revoke", roleWaits(removal.projectId, removal.roleKey))}
-        />
+        <>
+          <ActionForecast
+            className="mx-6 mb-1"
+            word={cancelOnly ? FORECAST.cancel : forecastFor("revoke", roleWaits(removal.projectId, removal.roleKey))}
+          />
+          {/* Cancelling a give that never went sends nothing toward Zitadel: no route to draw. */}
+          {!cancelOnly && userId && <PendingTrail act="revoke" className="mx-6 mb-1 mt-3" />}
+        </>
       )}
       {outcome && <ActionOutcome word={word ?? resultWord(outcome, cancelOnly ? "cancel" : "revoke")} outcome={outcome} person={userId} className="mx-6 mb-1" />}
       {trail && userId && (

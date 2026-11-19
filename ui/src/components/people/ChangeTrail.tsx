@@ -138,3 +138,26 @@ export function ChangeTrail({
     </div>
   );
 }
+
+/** The route's three steps by name, as a label: no full stop, so none is a sentence that says it happened. */
+export const ROUTE: Record<ChangeAct, string[]> = {
+  give: ["Recorded in Syndra", "Sent to Zitadel", "In Zitadel"],
+  revoke: ["Recorded in Syndra", "Sent to Zitadel", "No longer in Zitadel"],
+};
+
+/**
+ * The trail while the act is on its way (A-24 frame 14, "Pressing"): there as
+ * soon as the act is sent, so the route is read before it is travelled. Each
+ * step is its name beside an open ring, and the ring says "not yet seen", so no
+ * label claims anything; even "Recorded" is unobserved until the answer. The
+ * answer's own `ChangeTrail` takes its place and settles each step only from
+ * what it observes. An answer with no trail (a refusal; nothing queued) takes
+ * it away.
+ */
+export function PendingTrail({ act, className = "" }: { act: ChangeAct; className?: string }) {
+  return (
+    <div className={className}>
+      <CheckTrail label={TRAIL_LABEL} checks={ROUTE[act].map((sentence) => ({ tone: "neutral", ring: true, sentence }))} />
+    </div>
+  );
+}

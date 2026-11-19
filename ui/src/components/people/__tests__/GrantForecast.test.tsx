@@ -91,6 +91,14 @@ describe("Give: the first 100ms", () => {
   it("says 'Will be given' for an ordinary role, and nothing on the rail moves ahead of the answer", async () => {
     await give("Operator");
     expect(await screen.findByText(FORECAST.give)).toBeInTheDocument();
+    // A-24 frame 14: the route is there while the act is out, each step its name beside an open ring.
+    const route = screen.getByRole("list", { name: "On its way to Zitadel" });
+    expect(Array.from(route.querySelectorAll("li")).map((li) => li.textContent?.replace(/^Step \d: /, ""))).toEqual([
+      "Recorded in Syndra",
+      "Sent to Zitadel",
+      "In Zitadel",
+    ]);
+    expect(route.querySelectorAll("[data-dot][data-ring]")).toHaveLength(3);
     expect(pendingNow()).toBe(2);
     wire.settle!.resolve({ outbox_id: "o1", status: "pending", wait_reason: "manual" });
     await screen.findByRole("button", { name: "Close" });

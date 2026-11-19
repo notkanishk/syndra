@@ -3,6 +3,7 @@ package directory
 import (
 	"context"
 	"errors"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -89,7 +90,8 @@ func (m *mockDirClient) GetUser(ctx context.Context, id string) (*zitadel.Zitade
 	if m.getUserFn != nil {
 		return m.getUserFn(ctx, id)
 	}
-	return nil, nil
+	// As Zitadel answers a user it doesn't have: 404, never nil, nil.
+	return nil, &zitadel.StatusError{Code: http.StatusNotFound, Message: "user not found"}
 }
 
 func (m *mockDirClient) ListUsers(ctx context.Context, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
@@ -715,7 +717,7 @@ func TestZitadelSource_FindUser_FallsBackToGetUser(t *testing.T) {
 		if id == "u2" {
 			return &zitadel.ZitadelUser{ID: "u2", DisplayName: "Newcomer", Email: "n@example.com", State: "USER_STATE_ACTIVE"}, nil
 		}
-		return nil, nil
+		return nil, &zitadel.StatusError{Code: http.StatusNotFound}
 	}
 	src := newZitadelSourceForTest(mc)
 
@@ -725,6 +727,31 @@ func TestZitadelSource_FindUser_FallsBackToGetUser(t *testing.T) {
 	}
 	if !ok || u.Name != "Newcomer" {
 		t.Fatalf("expected Newcomer via GetUser fallback, got ok=%v user=%+v", ok, u)
+	}
+}
+
+// Zitadel answers a user it doesn't have with 404, never nil, nil. That is
+// "no such user" (ok false, no error), so the access read can say a member
+// has no account rather than calling it a failed read.
+func TestZitadelSource_FindUser_A404IsNoSuchUser(t *testing.T) {
+	mc := newMockClient()
+	mc.getUserFn = func(context.Context, string) (*zitadel.ZitadelUser, error) {
+		return nil, &zitadel.StatusError{Code: http.StatusNotFound, Message: "zitadel api 404"}
+	}
+	_, ok, err := newZitadelSourceForTest(mc).FindUser(context.Background(), "ghost")
+	if err != nil || ok {
+		t.Fatalf("a 404 from Zitadel: want ok=false and no error, got ok=%v err=%v", ok, err)
+	}
+}
+
+// Any other failure is a failed read, never "no such user".
+func TestZitadelSource_FindUser_OtherFailuresAreErrors(t *testing.T) {
+	mc := newMockClient()
+	mc.getUserFn = func(context.Context, string) (*zitadel.ZitadelUser, error) {
+		return nil, &zitadel.StatusError{Code: http.StatusInternalServerError}
+	}
+	if _, ok, err := newZitadelSourceForTest(mc).FindUser(context.Background(), "u9"); err == nil || ok {
+		t.Fatalf("a 500 from Zitadel: want an error, got ok=%v err=%v", ok, err)
 	}
 }
 

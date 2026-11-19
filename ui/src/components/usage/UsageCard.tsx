@@ -123,11 +123,12 @@ function End({ metrics, windows, target, step: insights }: { metrics: StatsMetri
   const link = target !== undefined && !waiting && metrics.some((metric) => metric.per_subject) ? insightsUsageHref(target) : null;
   const step = waiting ? copy.NOT_COUNTED_NEXT : link ? (insights ?? copy.OVERVIEW_NEXT) : copy.NOTHING_TO_DO;
   return (
-    // The link is the card's one action, in the row's seat; the seat is there with or without it, so the
-    // faint facts never move with the data.
+    // The link is the card's one action, in the row's seat; on a system's card the seat is there with or
+    // without it, so the faint facts never move with the data. A person's card never has the link, so it
+    // keeps no empty seat and its facts end at the card's edge, as drawn (A-23 part 5 frame 23).
     <CardRow
       data-end
-      seat="narrow"
+      seat={target !== undefined ? "narrow" : undefined}
       action={link ? <ArrowLink href={link}>{copy.OVERVIEW_NEXT_LINK}</ArrowLink> : undefined}
       className="text-small text-muted"
     >
@@ -180,8 +181,8 @@ export function UsageCard({
 
 /**
  * A system's usage card for one person's view, on the member's page (`person` absent) and on the
- * person page (the operator's). Where the add-on reports no statistics, or this person has no
- * per-person metric left to show, there is nothing to say and no card (the target overview says
+ * person page (the operator's). Where the add-on reports no statistics, this person has no per-person
+ * metric left to show, or no account and nothing counted, there is nothing to say and no card (the target overview says
  * "does not report" once, for the whole system). The metric the kind's card draws under its own meter
  * is left out, and only when that card draws it (`meteredMetric`, the kind's one answer): it is said
  * there (R1). A view with a kind whose usage is absent is Syndra's own store failing to answer: said,
@@ -204,7 +205,10 @@ export function ViewUsage({ view, person }: { view: MyTargetView; person?: strin
   if (!usage.reported) return null;
   const metered = meteredMetric(view, person !== undefined);
   const metrics = usage.metrics.filter((m) => m !== metered);
-  if (metrics.length === 0) return null;
+  // No account on the system and nothing of theirs counted: no card, not a card of empty sections
+  // (A-23 part 5 frame 23 draws it under an account, and draws no empty form). The kind's card above
+  // already says there is no account. Anything counted for them is still said, so it is never nowhere.
+  if (metrics.length === 0 || (!view.account && metrics.every((m) => m.series.length === 0))) return null;
   return <UsageCard title={title} metrics={metrics} windows={usage} />;
 }
 
