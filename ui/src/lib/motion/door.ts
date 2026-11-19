@@ -1,13 +1,13 @@
 import { firstTime, recallPaths } from "@/lib/memory";
 
 /**
- * The first arrival of a sign-in (A-24 §3.2, Q4): the door opens on Home once,
- * straight after signing in, and never again until the next one.
+ * The first arrival of a sign-in (A-24 §3.2, Q4): Home's light glides into its
+ * place once, straight after signing in, and never again until the next one.
  *
- * Decided before the first paint, so the page never shows itself and then
- * hides for the door. The sign-in (the OIDC callback, the dev identity picker)
- * sets a short-lived, readable cookie naming the sign-in's instant; the
- * server's render of Home reads it and draws the door into the first HTML.
+ * Decided before the first paint, so the light never rests and then starts
+ * over. The sign-in (the OIDC callback, the dev identity picker) sets a
+ * short-lived, readable cookie naming the sign-in's instant; the server's
+ * render of Home reads it and marks the light in the first HTML.
  * The first page that mounts after the sign-in, whichever it is, spends it
  * (the shell deletes it), so a reload, a second tab or a later visit to Home
  * never replays it, and a sign-in that lands on another page spends its door
@@ -45,29 +45,3 @@ export function spendDoor(signedInAt: string | undefined) {
   document.cookie = `${DOOR_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax`;
   if (signedInAt) firstTime("local", OPENED, signedInAt, 1);
 }
-
-/**
- * When the blocks begin to arrive after the door opens (A-24 §3.2, frame 7):
- * `--door-blocks` in globals.css, mirrored for what is left of it when a block
- * mounts late (Home sets `--door-wait`), and a test holds the two equal.
- */
-export const DOOR_BLOCKS_MS = 1160;
-
-/**
- * What is left of the blocks' wait, on the door's own clock: its `door-open`
- * animation's time, so a page slowed to look at it waits as slowly.
- */
-export function doorWait(): number {
-  if (typeof document === "undefined") return DOOR_BLOCKS_MS;
-  const door = document.getAnimations?.().find((a) => (a as CSSAnimation).animationName === "door-open");
-  const elapsed = Number(door?.currentTime ?? 0);
-  return Math.max(0, DOOR_BLOCKS_MS - elapsed);
-}
-
-/**
- * A backstop for the door on Home: it ends when its last block has arrived
- * (animationend), and this only takes it away if that never comes, so the
- * door's rules never outlive it. Long enough for any playback rate a person
- * would slow it to while looking (1860ms at a twentieth is 37s).
- */
-export const DOOR_BACKSTOP_MS = 60_000;

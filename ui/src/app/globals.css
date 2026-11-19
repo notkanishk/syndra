@@ -370,35 +370,17 @@
     }
   }
 
-  /* The door opens (A-24 §3.2, board part 1 frames 5 to 7): the arch of light
-     (frame 5, the board's 90 by 260px at 70px, brightest at its foot) stands a
-     beat (to 15%, so it is seen), opens into a pool by 37% (--door-opened of
-     --door-open, frame 6) and rests where the hour puts it by 100% (frame 7).
-     Its foot is the head's foot (the light's box ends 28px below it) and its
-     height is kept inside the box (the light shows to 70% of the ellipse), so
-     no edge of the box cuts it. Light only. */
+  /* The door's light (A-24 §3.2): the hour's pool glides in once from the head's left edge. */
   @keyframes door-open {
-    0%,
-    15% {
-      --door-w: 90px;
-      --door-h: min(260px, calc((100cqh - 52px) / 0.7));
-      --door-x: 70px;
-      --door-y: calc(100cqh - 28px);
-      --door-reach: 44%;
+    from {
+      --door-x: -8cqw;
+      --door-s: 0.8;
+      opacity: 0;
     }
-    37% {
-      --door-w: 34cqw;
-      --door-h: 150cqh;
-      --door-x: 22cqw;
-      --door-y: -10cqh;
-      --door-reach: 32%;
-    }
-    100% {
-      --door-w: var(--hour-w);
-      --door-h: var(--hour-h);
+    25% { opacity: 1; }
+    to {
       --door-x: var(--hour-x);
-      --door-y: var(--hour-y);
-      --door-reach: var(--hour-reach);
+      --door-s: 1;
     }
   }
 
@@ -1129,33 +1111,9 @@
    contrast test holds it, at the pool's strongest point, in both themes).
    `--hour-x`/`--hour-y` is where the pool sits, `--hour-w`/`--hour-h` its size,
    `--hour-reach` how much accent it holds. */
-/* The door's light, as values `door-open` carries from the arch to the pool:
-   a registered value interpolates, a bare custom property would only jump. */
-@property --door-w {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 90px;
-}
-@property --door-h {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 260px;
-}
-@property --door-x {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 70px;
-}
-@property --door-y {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-@property --door-reach {
-  syntax: "<percentage>";
-  inherits: false;
-  initial-value: 44%;
-}
+/* The pool's place and size as `door-open` carries them: registered, so they glide. */
+@property --door-x { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --door-s { syntax: "<number>"; inherits: false; initial-value: 1; }
 
 @utility hour-light {
   position: absolute;
@@ -1163,8 +1121,8 @@
   z-index: -1;
   pointer-events: none;
   /* The light is drawn on ::before, sized in this box's own units (cqw, cqh: a percentage of it,
-     as a length), so the door's arch in px and the pool in proportions are one kind of value and
-     interpolate (an ellipse whose size mixes % and px is refused). */
+     as a length), so the door's glide interpolates lengths only (an ellipse whose size mixes % and
+     px is refused). */
   container-type: size;
   --hour-light: color-mix(in srgb, var(--accent) calc(var(--hour-reach) * var(--hour-weight)), transparent);
   &::before {
@@ -1180,8 +1138,7 @@
   /* The pool fades to nothing inside its own box on every side (a mask is alpha only, so its
      colour words are no colour on screen): where a place puts the light past the box's edge,
      that edge is never seen as a line, in either room. The fade is the box's own overhang past
-     the head (24, 26 and 28px), so the light is whole behind the words and the door's arch
-     (frame 5, at the head's foot) stands on a soft floor rather than a cut. */
+     the head (24, 26 and 28px), so the light is whole behind the words. */
   mask-image:
     linear-gradient(to right, transparent, black 26px, black calc(100% - 26px), transparent),
     linear-gradient(to bottom, transparent, black 24px, black calc(100% - 28px), transparent);
@@ -1220,20 +1177,15 @@
     --hour-reach: 22%;
   }
 
-  /* The first arrival of a sign-in (A-24 §3.2, frames 5 to 7): the light starts as the doorway's
-     arch where the greeting will stand (the board's 90 by 260px at 70px along the head's foot, 44%)
-     and opens on settle into a pool (frame 6: 34% by 150% at 22% and -10%, 32%), which comes to
-     rest where the hour puts it (frame 7). One element, one keyframe set (`door-open`): its size,
-     place and strength are registered so they interpolate; nothing in the page moves. Only where
-     motion is welcome: under reduced motion or forced colours the light is the pool at rest, frame 7. */
+  /* A sign-in's first Home (A-24 §3.2): the pool glides in, never stronger than at rest. */
   @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
     &[data-door]::before {
       background: radial-gradient(
-        ellipse var(--door-w) var(--door-h) at var(--door-x) var(--door-y),
-        color-mix(in srgb, var(--accent) calc(var(--door-reach) * var(--hour-weight)), transparent),
+        ellipse calc(var(--hour-w) * var(--door-s)) calc(var(--hour-h) * var(--door-s)) at var(--door-x) var(--hour-y),
+        var(--hour-light),
         transparent 70%
       );
-      animation: door-open var(--door-open) var(--ease-settle) both;
+      animation: door-open var(--door-open) var(--ease-tint) both;
     }
   }
 
@@ -1827,82 +1779,6 @@ html.theme-fading *::after {
   &:not([data-settled]) ~ [data-arrive-through] > :nth-child(4) {
     --arrive-k: 3;
   }
-
-  /* Through the door (A-24 §3.2, frames 5 to 7; Home's head, once a sign-in): the head itself is
-     there at once, holding only its light; the greeting tints in over the light as the arch opens
-     (twice a tint, ending at --door-opened), the date and term lines a beat behind (twice the light
-     lead), then the head's lines (--door-lines); the blocks arrive as on every page, from
-     --door-blocks. Opacity only, each beat on its own box; what is shown takes clicks at once.
-     Reduced motion and forced colours: frame 7, all of it there. */
-  &[data-door] {
-    animation: none;
-  }
-  &[data-door] > h1 {
-    animation: fade calc(2 * var(--duration-tint)) var(--ease-tint)
-      calc(var(--door-opened) - 2 * var(--duration-tint)) both;
-  }
-  &[data-door] > [data-door-step="date"] {
-    animation: fade calc(2 * var(--duration-tint)) var(--ease-tint)
-      calc(var(--door-opened) - 2 * var(--duration-tint) + 2 * var(--light-lead)) both;
-  }
-  &[data-door] > [data-door-step="lines"] {
-    animation: fade calc(2 * var(--duration-tint)) var(--ease-tint) var(--door-lines) both;
-  }
-  /* The blocks are held until the head has opened, then arrive as on every page, 40ms apart and
-     capped at five. Keyed on the door alone, not on the head settling: the head's settle timer is a
-     clock, the door is light, and the blocks wait for the light. Home ends the door when the last
-     block has arrived (`data-door` comes off), so nothing here outlives it.
-     Every hold outranks the parts' own arrival rules by specificity, never by its place in the file
-     (the build orders utilities as it likes): a list that settles (`.arrive-list[data-settled] > *`,
-     `animation: none`) or an Unfold that opens would otherwise take the hold off mid-door and the
-     block would appear at once, already arrived, unseen. A list's wrapper (`ArriveList`,
-     `display: contents`) has no box, so an opacity on it paints nothing: the wrapper holds still
-     and the boxes inside it are held, on the same stagger. A block that mounts late (its read
-     lands after the door began) waits only what is left of --door-blocks on the door's own clock
-     (`--door-wait`, set by Home as the blocks change), so every block arrives from 1160ms. */
-  &[data-door] ~ :not(.contents) {
-    animation: arrive var(--duration-arrive) var(--ease-arrive) both;
-    animation-delay: calc(var(--door-wait, var(--door-blocks)) + (var(--arrive-cap) - 1) * var(--arrive-step));
-  }
-  &[data-door] + :not(.contents) {
-    animation-delay: var(--door-wait, var(--door-blocks));
-  }
-  &[data-door] + * + :not(.contents) {
-    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 1 * var(--arrive-step));
-  }
-  &[data-door] + * + * + :not(.contents) {
-    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 2 * var(--arrive-step));
-  }
-  &[data-door] + * + * + * + :not(.contents) {
-    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 3 * var(--arrive-step));
-  }
-  &[data-door] ~ .contents {
-    animation: none;
-  }
-  &[data-door] ~ .contents > :not(.close-gap) {
-    animation: arrive var(--duration-arrive) var(--ease-arrive) both;
-    animation-delay: calc(var(--door-wait, var(--door-blocks)) + (var(--arrive-cap) - 1) * var(--arrive-step));
-  }
-  &[data-door] ~ .contents > :nth-child(1):not(.close-gap) {
-    animation-delay: var(--door-wait, var(--door-blocks));
-  }
-  &[data-door] ~ .contents > :nth-child(2):not(.close-gap) {
-    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 1 * var(--arrive-step));
-  }
-  &[data-door] ~ .contents > :nth-child(3):not(.close-gap) {
-    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 2 * var(--arrive-step));
-  }
-  &[data-door] ~ .contents > :nth-child(4):not(.close-gap) {
-    animation-delay: calc(var(--door-wait, var(--door-blocks)) + 3 * var(--arrive-step));
-  }
-  @media (prefers-reduced-motion: reduce), (forced-colors: active) {
-    &[data-door] > h1,
-    &[data-door] > [data-door-step],
-    &[data-door] ~ :not(.contents),
-    &[data-door] ~ .contents > :not(.close-gap) {
-      animation: none;
-    }
-  }
 }
 
 /* flash · 900ms, once — a value changed while you were on the page. Never on
@@ -2302,19 +2178,8 @@ html.theme-fading *::after {
   --door-breath: 10s;
   --door-grain: 0.75s;
 
-  /* The first arrival of a sign-in on Home (A-24 §3.2, board part 1 frames 5
-     to 7, at twice the board's timing, owner 19 Nov 2026: "make it like it is
-     on the design board. slower."). --door-open: the whole of it, the pool
-     resting by its end (frame 7, the board's 700ms). --door-opened: the arch
-     opened into the pool, the greeting in over it (frame 6, the board's
-     260ms; `door-open`'s 37% stop). --door-lines: the head's lines tint in.
-     --door-blocks: the blocks begin to arrive, as on every page (lib/motion/
-     door.ts mirrors it for the head's settle timer). */
-  --door-open: 1400ms;
-  --door-opened: 520ms;
-  --door-lines: 880ms;
-  --door-blocks: 1160ms;
-
+  /* The door's light gliding into the hour's pool, once a sign-in (A-24 §3.2). */
+  --door-open: 1800ms;
 }
 
 /* The arch group is the one fixed-width thing here. Below ~480px it scales on

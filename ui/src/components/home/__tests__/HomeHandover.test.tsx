@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
 import { TINT_MS } from "@/lib/motion";
-import { DOOR_BACKSTOP_MS, DOOR_BLOCKS_MS, DOOR_COOKIE, spendDoor } from "@/lib/motion/door";
+import { DOOR_COOKIE, spendDoor } from "@/lib/motion/door";
 import { inZone } from "@/test-utils/zone";
 import type { SessionUser } from "@/lib/session";
 import { setMediaQuery } from "@/test-utils/media";
@@ -372,119 +371,28 @@ describe("the room knows the hour", () => {
 // A-24 §3.2, Q4: the door's light travels the greeting once, straight after signing in.
 describe("the first arrival of a sign-in", () => {
   const signedIn = { ...session, signedInAt: "2026-11-19T08:00:00.000Z" } as SessionUser;
-  // The door is the head itself, staged (board part 1, frames 5 to 7): no extra layer, no band.
-  const arch = () => document.querySelector('.page-head[data-door] > .hour-light[data-door]');
+  // The door is the hour's light gliding into place: nothing else on the page is touched.
+  const light = () => document.querySelector(".hour-light[data-door]");
   beforeEach(() => {
     window.history.replaceState({}, "", "/");
   });
-  afterEach(() => vi.restoreAllMocks());
 
-  it("stages the head: the light first, then the greeting, the date line and the lines, each in its own beat", () => {
+  it("marks the light, and only the light, when the server says so: the page arrives as on any visit", () => {
     mount(signedIn, true);
-    const head = screen.getByRole("heading", { level: 1 }).parentElement!;
-    expect(head).toHaveClass("page-head");
-    expect(head).toHaveAttribute("data-door");
-    expect(arch()).toHaveAttribute("aria-hidden");
-    // The beats are plain boxes, the head's own children, in reading order.
-    const steps = Array.from(head.children).map((child) => child.getAttribute("data-door-step") ?? child.tagName.toLowerCase());
-    expect(steps.filter((step) => step === "h1" || step === "date" || step === "lines")).toEqual(["h1", "date", "lines"]);
-    // Nothing waits on it: every word is in the page from the first paint, the greeting reading as ever.
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^\w+, Kanishk\./);
-    expect(screen.getByText(/^Claims/, { exact: false })).toBeInTheDocument();
+    expect(light()).toHaveAttribute("aria-hidden");
+    expect(document.querySelectorAll("[data-door]")).toHaveLength(1);
+    expect(document.querySelector("[data-door-step], [data-door-light], .door-through")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 }).parentElement).not.toHaveAttribute("data-door");
   });
 
-  it("is never a layer of its own: no band, no full-window door, one light", () => {
-    mount(signedIn, true);
-    expect(document.querySelector(".door-through, [data-door-through], [data-door-light], .greeting-light")).toBeNull();
-    expect(document.querySelectorAll(".hour-light")).toHaveLength(1);
-  });
-
-  it("ends when its last block has arrived, and not on any other arrival, whatever the head's clock says", () => {
-    mount(signedIn, true);
-    const head = screen.getByRole("heading", { level: 1 }).parentElement!;
-    const page = head.parentElement!;
-    // jsdom has no AnimationEvent, so React listens for the prefixed name; the name is the native event's.
-    const ended = (el: Element, name: string) =>
-      act(() => {
-        const event = new Event("webkitAnimationEnd", { bubbles: true });
-        Object.defineProperty(event, "animationName", { value: name });
-        el.dispatchEvent(event);
-      });
-    // The head settling on its own timer does not end the door: the blocks wait for the light, not the clock.
-    later(TINT_MS + 1000);
-    expect(head).toHaveAttribute("data-door");
-    // The last box that paints: through a list's `display: contents` wrapper, its own last child.
-    const wrapper = page.lastElementChild!;
-    // Home's blocks come in a list whose wrapper is `display: contents`: the case the door must see through.
-    expect(wrapper).toHaveClass("contents");
-    const last = wrapper.classList.contains("contents") ? wrapper.lastElementChild! : wrapper;
-    ended(head.querySelector("h1")!, "fade");
-    ended(last, "fade");
-    expect(head).toHaveAttribute("data-door");
-    if (last !== wrapper) {
-      ended(wrapper, "arrive");
-      expect(head).toHaveAttribute("data-door");
-    }
-    ended(last, "arrive");
-    expect(head).not.toHaveAttribute("data-door");
-  });
-
-  it("is taken away by its backstop if its last block never arrives", () => {
-    mount(signedIn, true);
-    const head = screen.getByRole("heading", { level: 1 }).parentElement!;
-    later(DOOR_BACKSTOP_MS - 1);
-    expect(head).toHaveAttribute("data-door");
-    later(1);
-    expect(head).not.toHaveAttribute("data-door");
-  });
-
-  it("is in the first HTML: the server's render of Home with the door already carries it, and without it does not", () => {
-    const html = (door: boolean) =>
-      renderToString(
-        <QueryClientProvider client={client()}>
-          <Home session={signedIn} door={door} />
-        </QueryClientProvider>,
-      );
-    const opened = html(true);
-    expect(opened).toMatch(/class="page-head[^"]*"[^>]*data-door=""|data-door=""[^>]*class="page-head/);
-    expect(opened).toMatch(/class="hour-light"[^>]*data-door=""|data-door=""[^>]*class="hour-light"/);
-    expect(html(false)).not.toContain('data-door=""');
-  });
-
-  it("lets a block that mounts late wait only what is left of 1160ms, on the door's own clock", () => {
-    let elapsed = 0;
-    Object.defineProperty(document, "getAnimations", {
-      configurable: true,
-      value: () => [{ animationName: "door-open", currentTime: elapsed }],
-    });
-    try {
-      state.loading = true;
-      const home = mount(signedIn, true);
-      const page = screen.getByRole("heading", { level: 1 }).parentElement!.parentElement!;
-      expect(page.style.getPropertyValue("--door-wait")).toBe(`${DOOR_BLOCKS_MS}ms`);
-      // The queue's read lands 700ms into the door: its blocks wait 460ms, so they still arrive at 1160.
-      elapsed = 700;
-      state.loading = false;
-      home.reread();
-      expect(page.style.getPropertyValue("--door-wait")).toBe(`${DOOR_BLOCKS_MS - 700}ms`);
-      // After 1160ms a block arrives at once, never later than it should.
-      elapsed = 1500;
-      state.loading = true;
-      home.reread();
-      expect(page.style.getPropertyValue("--door-wait")).toBe("0ms");
-    } finally {
-      delete (document as { getAnimations?: unknown }).getAnimations;
-    }
-  });
-
-  it("is the server's to decide: without its answer Home has no door, whatever the session says", () => {
+  it("is the server's to decide: without its answer the light rests, whatever the session says", () => {
     mount(signedIn);
-    expect(document.querySelectorAll(".page-head[data-door]")).toHaveLength(0);
+    expect(light()).toBeNull();
   });
 
-  it("is once: spent by the first page, so Home again (Back to a cached page, a reload) keeps it shut", () => {
+  it("is once: spent by the first page, so Home again (Back to a cached page, a reload) keeps it still", () => {
     const first = mount(signedIn, true);
-    expect(arch()).not.toBeNull();
+    expect(light()).not.toBeNull();
     // The shell spends the door on the sign-in's first page: the cookie goes, and this device remembers.
     document.cookie = `${DOOR_COOKIE}=${signedIn.signedInAt}; Path=/`;
     spendDoor(signedIn.signedInAt);
@@ -492,13 +400,13 @@ describe("the first arrival of a sign-in", () => {
     first.unmount();
     // A cached render that still says "door" (Back) finds it already opened here.
     mount(signedIn, true);
-    expect(document.querySelectorAll(".page-head[data-door]")).toHaveLength(0);
+    expect(light()).toBeNull();
   });
 
-  it("opens again for the next sign-in", () => {
+  it("glides again for the next sign-in", () => {
     spendDoor(signedIn.signedInAt);
     mount({ ...signedIn, signedInAt: "2026-11-20T08:00:00.000Z" } as SessionUser, true);
-    expect(arch()).not.toBeNull();
+    expect(light()).not.toBeNull();
   });
 });
 

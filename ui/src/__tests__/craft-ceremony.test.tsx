@@ -5,7 +5,6 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { firstTime, idHash } from "@/lib/memory";
-import { DOOR_BLOCKS_MS } from "@/lib/motion/door";
 
 import { block, colour, css, over, ratio, SRC } from "./cssTokens";
 
@@ -65,192 +64,38 @@ describe("once, on this device", () => {
   });
 });
 
-describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice the board's time)", () => {
-  const open = keyframes("door-open");
-  const head = braced("@utility page-head {");
+describe("the door's light glides into place on Home (§3.2): the hour's pool, once, and nothing else", () => {
+  const glide = keyframes("door-open");
   const light = braced("@utility hour-light {");
-  const ms = (token: string) => Number(new RegExp(`${token}: (\\d+)ms;`).exec(css)?.[1]);
-  const stop = (at: string) => new RegExp(`(?:^|\\s)${at}[^{]*\\{([^}]*)\\}`).exec(open)?.[1] ?? "";
+  const stop = (at: string) => new RegExp(`(?:^|\\s)${at} \\{([^}]*)\\}`).exec(glide)?.[1] ?? "";
 
-  // `--ease-settle` as a function of time: cubic-bezier(x1, y1, x2, y2), solved for x by bisection.
-  const settle = (x: number) => {
-    const [x1, y1, x2, y2] = (/--ease-settle: cubic-bezier\(([^)]+)\);/.exec(css)?.[1] ?? "").split(",").map(Number);
-    const at = (p1: number, p2: number, t: number) => 3 * p1 * t * (1 - t) ** 2 + 3 * p2 * t ** 2 * (1 - t) + t ** 3;
-    let [lo, hi] = [0, 1];
-    for (let i = 0; i < 60; i += 1) {
-      const mid = (lo + hi) / 2;
-      if (at(x1, x2, mid) < x) lo = mid;
-      else hi = mid;
-    }
-    return at(y1, y2, (lo + hi) / 2);
-  };
+  it("travels from the head's left edge, a little smaller, to where the hour rests the pool", () => {
+    expect(stop("from")).toMatch(/--door-x: -8cqw;\s*--door-s: 0\.8;\s*opacity: 0;/);
+    expect(stop("25%")).toMatch(/^\s*opacity: 1;\s*$/);
+    expect(stop("to")).toMatch(/--door-x: var\(--hour-x\);\s*--door-s: 1;/);
+    // Registered, so the gradient glides rather than jumps; the pool's own size and height, scaled.
+    expect(css).toMatch(/@property --door-x \{ syntax: "<length>";/);
+    expect(css).toMatch(/@property --door-s \{ syntax: "<number>";/);
+    expect(light).toMatch(/ellipse calc\(var\(--hour-w\) \* var\(--door-s\)\) calc\(var\(--hour-h\) \* var\(--door-s\)\) at var\(--door-x\) var\(--hour-y\),/);
+  });
 
-  it("is the head itself, never a layer of its own: no band, no full-window door", () => {
-    expect(css).not.toMatch(/\.door-through|--door-through|greeting-light|greeting-travel|--door-light\b/);
+  it("is gentle and once: about 1.8s on the symmetric ease-in-out, light only, and never stronger than at rest", () => {
+    expect(Number(/--door-open: (\d+)ms;/.exec(css)?.[1])).toBeGreaterThanOrEqual(1600);
+    expect(light).toMatch(/&\[data-door\]::before \{[^}]*var\(--hour-light\)[^}]*animation: door-open var\(--door-open\) var\(--ease-tint\) both;/);
+    expect(glide).not.toMatch(/transform|translate|scale|top:|left:|margin|inset|reach/);
+  });
+
+  it("is the pool at rest under reduced motion or forced colours", () => {
+    expect(light).toMatch(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{\s*&\[data-door\]::before \{/);
+    expect(light.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{[\s\S]*?\n  \}\n/, "")).not.toContain("door-open");
+  });
+
+  it("touches nothing else: no staging of the head, no held blocks, no full-window layer", () => {
+    expect(braced("@utility page-head {")).not.toContain("data-door");
+    expect(css).not.toMatch(/--door-(blocks|lines|opened|wait|reach|through)\b|greeting-light|\.door-through/);
     expect(existsSync(resolve(SRC, "components/shell/DoorThrough.tsx"))).toBe(false);
     // The shell spends the door on the sign-in's first page, whichever it is; the server decides it.
     expect(readFileSync(resolve(SRC, "components/shell/AppShell.tsx"), "utf8")).toMatch(/spendDoor\(session\.signedInAt\)/);
-  });
-
-  it("draws the board's arch, its opened pool and the hour's pool, in that order", () => {
-    // Frame 5: the doorway's arch where the greeting will stand (the board's lights[0]).
-    // Sizes are lengths in the light box's own units (cqw, cqh), so the board's px arch and % pool interpolate.
-    // Brightest at its foot, which is the head's foot (the box ends 28px below it); never taller than the box
-    // lets it show (to 70% of the ellipse, inside the top's fade), so nothing cuts it. Held to 15%: seen.
-    expect(stop("0%")).toMatch(/--door-w: 90px;\s*--door-h: min\(260px, calc\(\(100cqh - 52px\) \/ 0\.7\)\);\s*--door-x: 70px;\s*--door-y: calc\(100cqh - 28px\);\s*--door-reach: 44%;/);
-    expect(open).toMatch(/0%,\s*15% \{/);
-    // Frame 6: opened into a pool (lights[1]).
-    expect(stop("37%")).toMatch(/--door-w: 34cqw;\s*--door-h: 150cqh;\s*--door-x: 22cqw;\s*--door-y: -10cqh;\s*--door-reach: 32%;/);
-    // Frame 7: resting where the hour puts it.
-    expect(stop("100%")).toMatch(/--door-w: var\(--hour-w\);\s*--door-h: var\(--hour-h\);\s*--door-x: var\(--hour-x\);\s*--door-y: var\(--hour-y\);\s*--door-reach: var\(--hour-reach\);/);
-    for (const name of ["--door-w", "--door-h", "--door-x", "--door-y"]) expect(css).toMatch(new RegExp(`@property ${name} \\{\\s*syntax: "<length>";`));
-    expect(css).toMatch(/@property --door-reach \{\s*syntax: "<percentage>";/);
-    expect(light).toContain("container-type: size;");
-  });
-
-  it("changes only light: no opacity, size or place of anything in the page", () => {
-    expect(open).not.toMatch(/transform|translate|scale|opacity|top:|left:|margin|width:|height:/);
-  });
-
-  it("runs at twice the board's time, frame 6 at its stop, on the settle curve", () => {
-    expect(ms("--door-open")).toBe(2 * 700);
-    expect(ms("--door-opened")).toBe(2 * 260);
-    expect(Math.round((ms("--door-opened") / ms("--door-open")) * 100)).toBe(37);
-    expect(light).toMatch(/&\[data-door\]::before \{[^}]*animation: door-open var\(--door-open\) var\(--ease-settle\) both;/);
-  });
-
-  // How strongly a selector binds (ids, then classes, attributes and pseudo-classes, then types), as the cascade
-  // counts it: `:not(x)` counts its argument, `*` counts nothing.
-  const specificity = (selector: string): [number, number, number] => {
-    let rest = selector;
-    const nots: string[] = [];
-    rest = rest.replace(/:not\(([^)]*)\)/g, (_, inner: string) => {
-      nots.push(inner);
-      return " ";
-    });
-    const ids = (rest.match(/#[\w-]+/g) ?? []).length;
-    const classes = (rest.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+(\([^)]*\))?/g) ?? []).length;
-    const types = (rest.match(/(^|[\s>+~])[a-z][\w-]*/gi) ?? []).length;
-    return nots.map(specificity).reduce<[number, number, number]>((t, n) => [t[0] + n[0], t[1] + n[1], t[2] + n[2]], [ids, classes, types]);
-  };
-  const beats = (a: string, b: string) => {
-    const [x, y] = [specificity(a), specificity(b)];
-    return x[0] !== y[0] ? x[0] > y[0] : x[1] !== y[1] ? x[1] > y[1] : x[2] > y[2];
-  };
-  // The parts' own rules that set an animation on what the door holds, as the build writes them.
-  const own = (utility: string, cls: string) =>
-    Array.from(braced(`@utility ${utility} {`).matchAll(/\n  (&[^{\n]*)\{[^}]*\banimation:/g)).map((m) => m[1].trim().replace(/&/g, `.${cls}`));
-
-  it("holds the blocks until the head has opened, on the door alone, never the head's settle clock", () => {
-    // Frame 5 shows only the shell and the light: every block waits for --door-blocks, then arrives as on
-    // every page (40ms apart, capped at five). Not gated on the head settling, a timer that runs at wall speed.
-    expect(head).toMatch(/&\[data-door\] ~ :not\(\.contents\) \{\s*animation: arrive var\(--duration-arrive\) var\(--ease-arrive\) both;\s*animation-delay: calc\(var\(--door-wait, var\(--door-blocks\)\) \+ \(var\(--arrive-cap\) - 1\) \* var\(--arrive-step\)\);/);
-    expect(head).toMatch(/&\[data-door\] \+ :not\(\.contents\) \{\s*animation-delay: var\(--door-wait, var\(--door-blocks\)\);/);
-    for (let k = 1; k <= 3; k += 1) {
-      const sel = `&\\[data-door\\]${" \\+ \\*".repeat(k)} \\+ :not\\(\\.contents\\) \\{\\s*animation-delay: calc\\(var\\(--door-wait, var\\(--door-blocks\\)\\) \\+ ${k} \\* var\\(--arrive-step\\)\\);`;
-      expect(head).toMatch(new RegExp(sel));
-    }
-    expect(head).not.toMatch(/&\[data-door\]:not\(\[data-settled\]\)|:not\(\[data-settled\]\)\[data-door\]/);
-    expect(ms("--door-blocks")).toBeGreaterThanOrEqual(ms("--door-lines"));
-    // A late block waits only what is left: the mirror Home measures it against is the token.
-    expect(ms("--door-blocks")).toBe(DOOR_BLOCKS_MS);
-  });
-
-  it("is held, 0 until --door-blocks, whatever the parts' own rules say: it outranks them, never by its place in the file", () => {
-    // The first block: invisible through its whole delay (arrive starts at opacity 0 and fills backwards),
-    // and that delay is --door-blocks. Then the usual fade and rise.
-    expect(keyframes("arrive")).toMatch(/from \{\s*opacity: 0;/);
-    expect(head).toMatch(/&\[data-door\] ~ \.contents > :nth-child\(1\):not\(\.close-gap\) \{\s*animation-delay: var\(--door-wait, var\(--door-blocks\)\);/);
-    // A list that settles mid-door (`animation: none` on its rows) or an Unfold that opens must never take the
-    // hold off: the build orders utilities as it likes, so the door's rules must bind more strongly, not later.
-    // The door's two holds, as written: whatever sets `animation: arrive` on what follows the head.
-    const holds = Array.from(head.matchAll(/\n  (&\[data-door\] ~ [^{\n]*)\{[^}]*animation: arrive/g)).map((m) => m[1].trim().replace(/&/g, ".page-head"));
-    const listHold = holds.find((sel) => sel.includes(".contents >"))!;
-    const blockHold = holds.find((sel) => !sel.includes(".contents >"))!;
-    expect(listHold && blockHold).toBeTruthy();
-    expect(own("unfold", "unfold").length).toBeGreaterThan(0);
-    const list = own("arrive-list", "arrive-list").map((sel) => `${sel.includes(" > ") ? sel : `${sel} > *`}`);
-    expect(list.some((sel) => sel.includes("[data-settled]"))).toBe(true);
-    for (const rival of [...list, ".arrive-list > *:nth-child(1):not(.close-gap)"]) expect(beats(listHold, rival), `${listHold} over ${rival}`).toBe(true);
-    for (const rival of [...own("unfold", "unfold"), ".page-head:not([data-settled]) ~ *"]) {
-      expect(beats(blockHold, rival), `${blockHold} over ${rival}`).toBe(true);
-      expect(beats(listHold, rival), `${listHold} over ${rival}`).toBe(true);
-    }
-  });
-
-  it("holds boxes that paint: a list's display-contents wrapper holds still and its children wait", () => {
-    // ArriveList's wrapper is `contents`: an opacity on it paints nothing, so its children would show at frame 5.
-    const arrive = readFileSync(resolve(SRC, "lib/motion/arrive.tsx"), "utf8");
-    expect(arrive).toMatch(/className = "contents"/);
-    expect(head).toMatch(/&\[data-door\] ~ \.contents \{\s*animation: none;/);
-    expect(head).toMatch(/&\[data-door\] ~ \.contents > :not\(\.close-gap\) \{\s*animation: arrive var\(--duration-arrive\) var\(--ease-arrive\) both;\s*animation-delay: calc\(var\(--door-wait, var\(--door-blocks\)\) \+ \(var\(--arrive-cap\) - 1\) \* var\(--arrive-step\)\);/);
-    for (let k = 2; k <= 4; k += 1) {
-      expect(head).toMatch(new RegExp(`&\\[data-door\\] ~ \\.contents > :nth-child\\(${k}\\):not\\(\\.close-gap\\) \\{\\s*animation-delay: calc\\(var\\(--door-wait, var\\(--door-blocks\\)\\) \\+ ${k - 1} \\* var\\(--arrive-step\\)\\);`));
-    }
-  });
-
-  it("keeps the head's full height from the first frame: its beats are opacity only, never removed", () => {
-    for (const rule of head.match(/&\[data-door\] > [^{]+\{[^}]*\}/g) ?? []) {
-      expect(rule).toMatch(/animation: (fade|none)/);
-      expect(rule).not.toMatch(/display|visibility|height|max-height|content-visibility|position/);
-    }
-    // Home renders every beat from its first paint; nothing in the head waits on the door to exist.
-    const home = readFileSync(resolve(SRC, "components/home/Home.tsx"), "utf8");
-    expect(home).not.toMatch(/door\s*&&\s*</);
-    for (const step of ["date", "lines"]) expect(home).toMatch(new RegExp(`^\\s*<div data-door-step="${step}">`, "m"));
-  });
-
-  it("holds only the light at first, then the greeting over it, the date line a beat behind, then the lines", () => {
-    expect(head).toMatch(/&\[data-door\] \{\s*animation: none;/);
-    expect(head).toMatch(/&\[data-door\] > h1 \{\s*animation: fade calc\(2 \* var\(--duration-tint\)\) var\(--ease-tint\)\s*calc\(var\(--door-opened\) - 2 \* var\(--duration-tint\)\) both;/);
-    expect(head).toMatch(/&\[data-door\] > \[data-door-step="date"\] \{\s*animation: fade calc\(2 \* var\(--duration-tint\)\) var\(--ease-tint\)\s*calc\(var\(--door-opened\) - 2 \* var\(--duration-tint\) \+ 2 \* var\(--light-lead\)\) both;/);
-    expect(head).toMatch(/&\[data-door\] > \[data-door-step="lines"\] \{\s*animation: fade calc\(2 \* var\(--duration-tint\)\) var\(--ease-tint\) var\(--door-lines\) both;/);
-  });
-
-  it("skips to frame 7 under reduced motion or forced colours", () => {
-    // The door's light exists only where motion is welcome: otherwise the pool at rest, never the arch held still.
-    expect(light).toMatch(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{\s*&\[data-door\]::before \{/);
-    expect(light.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{[\s\S]*?\n  \}\n/, "")).not.toContain("door-open");
-    expect(head).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*&\[data-door\] > h1,\s*&\[data-door\] > \[data-door-step\],\s*&\[data-door\] ~ :not\(\.contents\),\s*&\[data-door\] ~ \.contents > :not\(\.close-gap\) \{\s*animation: none;/);
-  });
-
-  it("never takes a word under 4.5:1: each beat tints in only where the light under it lets it", () => {
-    const tint = ms("--duration-tint");
-    const lead = ms("--light-lead");
-    const [whole, opened] = [ms("--door-open"), ms("--door-opened")];
-    const reaches = Array.from(light.matchAll(/--hour-reach:\s*(\d+)%/g)).map((m) => Number(m[1]));
-    const pool = Math.max(...reaches);
-    const number = (text: string, name: string) => Number(new RegExp(`${name}: ([\\d.]+)%`).exec(text)?.[1]);
-    const [arch, frame6] = [number(stop("0%"), "--door-reach"), number(stop("37%"), "--door-reach")];
-    // The light's strength at a moment: the arch held to its stop, then to frame 6, then to the hour's pool, each on settle.
-    const held = (Number(/0%,\s*(\d+)% \{/.exec(open)?.[1]) / 100) * whole;
-    const reachAt = (t: number) =>
-      t <= held
-        ? arch
-        : t <= opened
-          ? arch + (frame6 - arch) * settle((t - held) / (opened - held))
-          : frame6 + (pool - frame6) * settle((t - opened) / (whole - opened));
-    const beats: Array<[string, number, string[]]> = [
-      ["the greeting", opened - 2 * tint, ["--ink", "--faint"]],
-      ["the date line", opened - 2 * tint + 2 * lead, ["--muted", "--faint"]],
-      ["the lines", ms("--door-lines"), ["--ink", "--muted", "--faint", "--accent-text"]],
-    ];
-    const ramp = block(":root {\n    --violet-600");
-    const themes = { dark: { ...ramp, ...block(':root,\n  [data-theme="dark"] {') }, light: { ...ramp, ...block('[data-theme="light"] {') } };
-    const failures: string[] = [];
-    for (const [beat, at, tokens] of beats) {
-      const reach = reachAt(at);
-      for (const [theme, vars] of Object.entries(themes)) {
-        const accent = colour(vars, "--accent");
-        const weight = Number(vars["--hour-weight"]);
-        const lit = over([accent[0], accent[1], accent[2], (accent[3] ?? 1) * ((reach * weight) / 100)], colour(vars, "--canvas"));
-        for (const token of tokens) {
-          const r = ratio(colour(vars, token), lit);
-          if (r < 4.5) failures.push(`${beat} at ${at}ms (${reach.toFixed(1)}%), ${theme} ${token}: ${r.toFixed(2)}`);
-        }
-      }
-    }
-    expect(failures).toEqual([]);
   });
 });
 

@@ -50,7 +50,7 @@ import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
 import { Unfold } from "@/lib/motion";
-import { DOOR_BACKSTOP_MS, doorWait, openedAlready } from "@/lib/motion/door";
+import { openedAlready } from "@/lib/motion/door";
 import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
@@ -230,19 +230,13 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
   // UTC and hydration failed (React #418). They appear on mount, in a seat held
   // by an invisible stand-in so nothing below moves (same rule as Relative).
   const [now, setNow] = useState<Date | null>(null);
-  // The first arrival of a sign-in (A-24 §3.2): decided by the server from the sign-in's cookie, so the
-  // door is in the first HTML and the page never shows itself and then hides for it.
-  const [door, setDoor] = useState(() => opening && !openedAlready(session.signedInAt));
+  // The first arrival of a sign-in (A-24 §3.2): the server decides it from the sign-in's cookie; a cached
+  // render (Back) of a door this device has already opened stays still.
+  const [door] = useState(() => opening && !openedAlready(session.signedInAt));
   // Before paint, so a page reached by a link is drawn with its greeting and term line in place.
   useLayoutEffect(() => {
     setNow(new Date());
   }, []);
-  // The door ends when its last block has arrived (below); this only takes it away if that never comes.
-  useEffect(() => {
-    if (!door) return;
-    const backstop = setTimeout(() => setDoor(false), DOOR_BACKSTOP_MS);
-    return () => clearTimeout(backstop);
-  }, [door]);
   // The part of the day for the light, on the greeting's clock, turning with the rail's mark at 22:00.
   const phase = useDayPhase();
   const terms = useTerms();
@@ -253,12 +247,6 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
   const termPending = terms.data === undefined && !terms.error;
   const loading = summary.isLoading || requests.isLoading || onboarding.isLoading;
   const error = summary.error ?? requests.error ?? onboarding.error ?? accounts.error;
-  // Blocks that mount late (their reads land after the door began) wait only what is left of the door's
-  // 1160ms, on its own clock, so every block arrives from frame 7 and none later.
-  const page = useRef<HTMLDivElement | null>(null);
-  useLayoutEffect(() => {
-    if (door) page.current?.style.setProperty("--door-wait", `${doorWait()}ms`);
-  }, [door, loading, error]);
   // While the load is failing the count is unknown, and "nothing needs you" is
   // exactly the wrong thing to say to somebody whose queue might be full.
   const calm = blocks === 0 && queue.rows.length === 0 && gaps.rows.length === 0;
@@ -397,37 +385,13 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
   if (!calm) held.current = { grid, blocks };
 
   return (
-    <div
-      ref={page}
-      className="flex flex-col gap-4"
-      // Through the door (A-24 §3.2) the blocks are held until the head has opened; when the last of them
-      // has arrived the door is over, and its rules come off with `data-door`.
-      onAnimationEnd={(event) => {
-        // The last box: through a list's `display: contents` wrapper, its own last child.
-        const last = event.currentTarget.lastElementChild;
-        const box = last?.classList.contains("contents") ? last.lastElementChild : last;
-        if (door && event.animationName === "arrive" && event.target === box) setDoor(false);
-      }}
-    >
-      {/* The first arrival of a sign-in (A-24 §3.2, frames 5 to 7): `data-door` stages the head. Only the
-          light at first, the doorway's arch where the greeting will stand; it opens into the hour's pool
-          as the greeting tints in over it, the date line a beat behind, then the lines; the blocks arrive
-          after (`page-head`, globals.css). Nothing waits on it: what is shown takes clicks at once. */}
-      <div
-        {...head}
-        data-door={door ? "" : undefined}
-        className={`${head.className} relative isolate`}
-        style={BELOW_HEADER}
-      >
+    <div className="flex flex-col gap-4">
+      <div {...head} className={`${head.className} relative isolate`} style={BELOW_HEADER}>
         {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
             place set by the part of the day on the greeting's own clock. The one written exception to
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
-        {/* On the first arrival of a sign-in it is the doorway's arch, opening into the pool (`door-open`). */}
-        {/* Through the door it is in the server's HTML too, so the arch is the first thing painted and its
-            beat starts with the head's; the hour (`data-hour`) joins it as the page mounts, for frame 7. */}
-        {(phase || door) && (
-          <div aria-hidden data-hour={phase ?? undefined} data-door={door ? "" : undefined} className="hour-light" />
-        )}
+        {/* On the first arrival of a sign-in it glides in once from the head's left edge (`door-open`). */}
+        {phase && <div aria-hidden data-hour={phase} data-door={door ? "" : undefined} className="hour-light" />}
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and
@@ -443,8 +407,6 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
             </Crossfade>
           </span>
         </h1>
-        {/* The date line and the term line: one beat of the door's arrival (`data-door-step`), a plain box. */}
-        <div data-door-step="date">
         <div className="mt-2 text-body text-faint">
           {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>}
           {termDay && ` · ${termDay}`}
@@ -466,9 +428,6 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
             )}
           </Unfold>
         )}
-        </div>
-        {/* The head's lines and the Notices: the door's last beat in the head. */}
-        <div data-door-step="lines">
         {/* Claims delivery's one line: fixed here, ahead of anything that folds,
             so it holds its seat whether it says all is well or not (§4g). */}
         <ClaimsLine />
@@ -505,7 +464,6 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
         </Unfold>
         {/* The shell's Notices, under the whole head (A-20 P3, G7). */}
         <ShellNotices />
-        </div>
       </div>
 
       {error ? (
