@@ -1,13 +1,14 @@
 <!doctype html>
-<html lang="en" data-theme="dark" data-hand="edge" data-rail="built">
+<html lang="en" data-theme="dark" data-btn="near">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>A-25 · Syndra, alive</title>
 <!-- A-25 prototype, 20 Nov 2026. Proposed, nothing here is built. Tokens copied from ui/src/app/globals.css
      (branch feat/addon-contract-a24-w4). One file, no scripts from elsewhere; the fonts are the only request.
-     Revised 20 Nov after the owner's review: moment 2 is redrawn for restraint (three ways, html[data-hand]);
-     moment 4's place is carried by something crisp (three ways, html[data-rail]); and no box cuts a light.
+     Revised 20 Nov after the owner's review, twice. Round 2: moment 2 redrawn for restraint, moment 4 carried by
+     something crisp, and no box cuts a light. Round 3 (his word: the edge; glide with light): the edge's sibling
+     on buttons (three ways, html[data-btn]), and the rail's pill glides with a faint light under it.
      The shell is AppShell's own (a column, a bar, one scroller), with the room's light behind both. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,7 +34,8 @@
   --line: rgba(255,255,255,.06); --line-strong: rgba(255,255,255,.14);
   --ink: #f3f5ef; --muted: rgba(243,245,239,.7); --faint: rgba(243,245,239,.56);
   --accent: var(--violet-500); --accent-text: var(--violet-400); --accent-ink: var(--on-violet);
-  --accent-dense: var(--violet-600); --focus-ring: var(--violet-300); --accent-soft: rgba(155,123,255,.15);
+  --accent-dense: var(--violet-600); --focus-ring: var(--violet-300); --accent-soft: rgba(155,123,255,.15); --accent-line: rgba(155,123,255,.28);
+  --danger-text: #ff8d82; --danger-soft: rgba(255,92,77,.1); --danger-line: rgba(255,92,77,.4);
   --healthy: var(--lime-400); --warn: #f5a524;
   --tint-3: rgba(243,245,239,.09); --hover: rgba(243,245,239,.05); --divider: rgba(255,255,255,.05);
   --shadow-dialog: 0 22px 50px rgba(0,0,0,.55); --scrim: rgba(0,0,0,.55);
@@ -47,7 +49,8 @@
   --ground: #f4f1fb; --canvas: #f4f1fb; --surface-1: #fff; --surface-2: #fff; --rail: #fff;
   --line: rgba(37,28,66,.08); --line-strong: rgba(37,28,66,.16);
   --ink: #1d1830; --muted: rgba(29,24,48,.78); --faint: rgba(29,24,48,.66);
-  --accent: #7a5af8; --accent-text: #5b3fd6; --accent-ink: #fff; --accent-dense: #5b3fd6; --focus-ring: var(--accent-text); --accent-soft: rgba(122,90,248,.12);
+  --accent: #7a5af8; --accent-text: #5b3fd6; --accent-ink: #fff; --accent-dense: #5b3fd6; --focus-ring: var(--accent-text); --accent-soft: rgba(122,90,248,.12); --accent-line: rgba(122,90,248,.32);
+  --danger-text: #b32b20; --danger-soft: rgba(213,56,42,.08); --danger-line: rgba(213,56,42,.35);
   --healthy: var(--lime-700); --warn: #a86a00;
   --tint-3: rgba(37,28,66,.08); --hover: rgba(37,28,66,.04); --divider: rgba(37,28,66,.06);
   --shadow-dialog: 0 22px 50px rgba(60,40,120,.18); --scrim: rgba(60,40,120,.35);
@@ -66,7 +69,7 @@
    come in through the window. Nothing else ends one: no overflow, no
    scroller, no hairline, no layer shorter than the pool. A mask may give a
    light a shape (a hairline); it never gives it an end. */
-.pool, .rim::after, .hand .row::before, .mark::before, .ember::before, .trail-light::before {
+.pool, .rim::after, .mark::before, .ember::before, .trail-light::before {
   --c: var(--accent);
   --pool: radial-gradient(var(--shape, closest-side),
     color-mix(in srgb, var(--c) var(--k), transparent),
@@ -98,6 +101,7 @@ input { caret-color: var(--accent); }
    holds the bar and the one scroller. */
 .app { display: grid; grid-template-columns: 252px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: clip; }
 .rail { position: relative; z-index: 2; min-height: 0; overflow-y: auto; background: var(--rail); border-right: 1px solid var(--line); padding: 18px 14px; display: flex; flex-direction: column; }
+.brand, .who { position: relative; z-index: 1; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 2px 10px 18px; font: 600 17px var(--display); }
 .nav { position: relative; isolation: isolate; }
 .nav a { position: relative; display: flex; align-items: center; gap: 9px; margin-top: 3px; padding: 9px 12px; border-radius: var(--radius-nav); color: var(--muted); transition: color var(--duration-tint) var(--ease-tint), background-color var(--duration-tint) var(--ease-tint); }
@@ -117,7 +121,7 @@ html[data-still] .scroll { scroll-behavior: auto; }
 .page { padding: 24px var(--page-x) 120px; max-width: 1280px; }
 @media (max-width: 719px) {
   .app { grid-template-columns: minmax(0, 1fr); } .rail { display: none; }
-  .bar { height: 66px; } .bar .mark { display: inline-flex; } .bar .stamp, .hand .row .num { display: none; }
+  .bar { height: 66px; } .bar .mark { display: inline-flex; } .bar .stamp, .rim .row .num { display: none; }
   .seg button { padding: 0 10px; }
 }
 
@@ -148,13 +152,14 @@ html:not([data-still]) .light[data-door] .rest { animation: door-settle var(--do
 
 /* ── Parts ───────────────────────────────────────────────────────────── */
 .btn { position: relative; display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-pill); background: none; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
-  transition: background-color var(--duration-tint) var(--ease-tint), border-color var(--duration-tint) var(--ease-tint), filter var(--duration-tint) var(--ease-tint), transform var(--duration-press) var(--ease-press); }
+  transition: background-color var(--duration-tint) var(--ease-tint), border-color var(--duration-tint) var(--ease-tint), box-shadow var(--duration-tint) var(--ease-tint), filter var(--duration-tint) var(--ease-tint), transform var(--duration-press) var(--ease-press); }
 .btn:active { transform: scale(.97); }
 .btn.sm { height: 30px; padding: 0 12px; }
 .btn.accent { background: var(--accent-dense); color: var(--accent-ink); } .btn.accent:hover { filter: brightness(1.1); }
 .btn.outline { border-color: var(--line-strong); }
 .btn.ghost { color: var(--muted); }
-.btn.outline:hover, .btn.ghost:hover { background: var(--hover); }
+.btn.outline:hover, .btn.ghost:hover { background: var(--hover); } .btn.ghost:hover { color: var(--ink); }
+.btn.danger { border-color: var(--danger-line); color: var(--danger-text); } .btn.danger:hover { background: var(--danger-soft); }
 @media (pointer: coarse) { .btn { min-height: 44px; } }
 .seg { display: inline-flex; padding: 3px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface-1); }
 .seg button { height: 28px; padding: 0 12px; border: 0; border-radius: var(--radius-pill); background: none; font-size: 13px; color: var(--muted); cursor: pointer; transition: background-color var(--duration-tint) var(--ease-tint), color var(--duration-tint) var(--ease-tint); }
@@ -171,6 +176,7 @@ html:not([data-still]) .light[data-door] .rest { animation: door-settle var(--do
 .row .num { width: 110px; text-align: right; font-size: 13px; color: var(--faint); }
 .dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--healthy); }
 .field { height: 36px; width: 100%; max-width: 400px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface-1); font-size: 13px; transition: border-color var(--duration-tint) var(--ease-tint); }
+.field:focus { border-color: var(--accent-line); } /* as built: Input.tsx:43 */
 kbd { font: 12.5px ui-monospace, monospace; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--muted); }
 
 .m { padding-top: 72px; scroll-margin-top: -32px; }
@@ -188,36 +194,38 @@ kbd { font: 12.5px ui-monospace, monospace; padding: 1px 6px; border: 1px solid 
 .opts .muted { margin-top: 4px; } .opts .faint { margin-top: 6px; }
 .opts + .faint { margin-top: 18px; max-width: 78ch; }
 
-/* ── 2 · Light under your hand, revised ──────────────────────────────────
+/* ── 2 · Light under your hand: the edge (owner, 20 Nov) ─────────────────
    Found, not shown. No pool sits on a card and nothing glows around the
-   pointer: the light takes the shape of the thing your hand is on. Three
-   ways, behind the switch (html[data-hand]):
-     edge  the card's inner hairline, lit where it is nearest your hand.
-           No light falls behind a word, and there is nothing to clip: the
-           light is the edge. It sits inside the card's own overflow.
-     row   the hovered row's own tint, violet where your hand is.
-     none  as built: the row tints, and there is no light.
-   One listener writes --px and --py, once a frame. Colour only. The press
-   and the focus ring are as built; there is no glow outside a ring. */
+   pointer: the light is the hairline of the thing your hand is on, lit
+   where it is nearest. No light falls behind a word, and there is nothing
+   to clip: the light is the edge. One utility (.rim), one listener writing
+   --px and --py once a frame, for cards and buttons alike. The press and
+   the focus ring are as built.
+   A card wears it on its inner edge, inside its own overflow. */
 .rim { --px: 50%; --py: 50%; }
 .rim::after { content: ""; position: absolute; inset: 0; padding: 1px; border-radius: calc(var(--radius-card) - 1px); opacity: 0;
   --shape: circle var(--pr, 320px) at var(--px) var(--py); --k: 50%;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
   transition: opacity var(--duration-settle) var(--ease-tint); }
-@media (hover: hover) { html[data-hand="edge"] .rim:hover::after { opacity: 1; transition-duration: var(--duration-tint); } }
-html[data-hand="edge"] .rim.kbd::after { opacity: 1; transition-duration: 0s; --pr: 90px; }
+@media (hover: hover) { .card.rim:hover::after { opacity: 1; transition-duration: var(--duration-tint); } }
+.card.rim.kbd::after { opacity: 1; transition-duration: 0s; --pr: 90px; }
 
-.hand .row { isolation: isolate; }
-.hand .row::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: 0;
-  --shape: circle 300px at var(--px) 50%; --k: calc(7% * var(--hour-weight));
-  transition: opacity var(--duration-settle) var(--ease-tint); }
-@media (hover: hover) { html[data-hand="row"] .hand .row:hover::before { opacity: 1; transition-duration: var(--duration-tint); } }
-html[data-hand="row"] .hand .row:active::before { opacity: 1; transition-duration: 0s; --k: calc(11% * var(--hour-weight)); }
-html[data-hand="row"] .hand .row:focus-visible::before { opacity: 1; transition-duration: 0s; --px: 15%; }
-
-/* In both lit ways an outline control's own hairline takes the colour, whole: hover and focus are one state. */
-html:not([data-hand="none"]) :is(.btn.outline:hover, .btn.outline:focus-visible, .field:hover, .field:focus-visible) { border-color: color-mix(in srgb, var(--accent) 60%, var(--line-strong)); }
+/* Buttons, three ways behind the switch (html[data-btn]):
+     near   the button's own outermost pixel, lit where your hand is nearest:
+            the outline's hairline, the ghost's edge (not otherwise drawn),
+            and a hairline just inside the filled button, in its own ink. The built hover stays.
+     whole  the outline's whole hairline takes the colour on hover, and the
+            filled button gets a lit top edge. Nothing follows the hand.
+     built  as built.
+   Never on a danger button. A field is as built: its border tints on focus. */
+.btn.rim::after { inset: -1px; border-radius: inherit; --pr: 84px; --k: 46%; }
+/* A filled button has no hairline, so its light is one pixel inside its edge, in its own ink: its outline against the page is untouched. */
+.btn.accent.rim::after { inset: 0; --c: var(--accent-ink); --k: 34%; }
+@media (hover: hover) { html[data-btn="near"] .btn.rim:hover::after { opacity: 1; transition-duration: var(--duration-tint); } }
+html[data-btn="near"] .btn.rim:focus-visible::after { opacity: 1; transition-duration: 0s; --shape: circle 600px at 50% 50%; }
+html[data-btn="whole"] :is(.btn.outline:hover, .btn.outline:focus-visible) { border-color: color-mix(in srgb, var(--accent) 58%, var(--line-strong)); }
+html[data-btn="whole"] :is(.btn.accent:hover, .btn.accent:focus-visible) { box-shadow: inset 0 1px 0 var(--accent-dense), inset 0 2px 0 color-mix(in srgb, var(--accent-ink) 34%, transparent); }
 
 /* ── 3 · The lamp ──────────────────────────────────────────────────────── */
 .mark { --s: 22px; position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: var(--s); height: var(--s); }
@@ -238,35 +246,36 @@ html:not([data-still]) .mark[data-room="waiting"] .md { animation: breathe var(-
 .mark.xl { --s: 96px; margin: 84px 96px; }
 .lamp-true { display: flex; align-items: center; gap: 10px; padding: 26px 30px; font: 600 17px var(--display); }
 
-/* ── 4 · Your place in the rail, revised ─────────────────────────────────
-   The place is carried by things that are crisp and are not light: a filled
-   pill, a bold violet word, a dot. Three ways, behind the switch
-   (html[data-rail]):
-     built  today's pill, there at once. No light, nothing travels.
-     glide  the same pill, carried by the movement Tabs already use
-            (indicator-glide: transform, settle).
-     light  the glide, and a faint pool under it.
-   --bx, --by, --bw, --bh are the current row's own box, written on its nav. */
-.nav, .tabs { --bx: 0px; --by: 0px; --bw: 0px; --bh: 0px; }
-.nav-pill, .nav-light { position: absolute; left: 0; top: 0; display: none; pointer-events: none; transition: translate var(--duration-settle) var(--ease-settle); }
+/* ── 4 · Your place in the rail: it glides, with a light (owner, 20 Nov) ──
+   The place is carried by three crisp things that are not light: a filled
+   pill, a bold violet word, a dot. The pill is carried to where you go by
+   the built indicator's movement (indicator-glide: transform, settle).
+   Under it rests a faint pool, the rail's own layer, sized by the rail:
+   as wide as the rail, so it is spent at both sides, and never taller than
+   the room it has, so it is spent before the rail's ends. It travels with
+   the pill. By a key, on a first paint and under reduced motion, nothing
+   travels: the place is simply lit.
+   --bx, --by, --bw, --bh are the current row's own box, --lw and --lh the
+   pool's, all written on the nav. */
+.nav, .tabs { --bx: 0px; --by: 0px; --bw: 0px; --bh: 0px; --lw: 0px; --lh: 0px; }
+.nav-pill, .nav-light { position: absolute; left: 0; top: 0; pointer-events: none; transition: translate var(--duration-settle) var(--ease-settle); }
 .nav-pill { z-index: -1; width: var(--bw); height: var(--bh); border-radius: var(--radius-nav); background: var(--accent-soft); translate: var(--bx) var(--by); }
-.nav-light { z-index: -2; width: var(--lw, 252px); height: var(--lh, 72px); --k: calc(8% * var(--hour-weight)); translate: calc(var(--bx) + var(--bw) / 2 - 50%) calc(var(--by) + var(--bh) / 2 - 50%); }
-html[data-rail="built"] :is(.nav, .tabs) a[aria-current] { background: var(--accent-soft); }
-html:not([data-rail="built"]) .nav-pill, html[data-rail="light"] .nav-light { display: block; }
+.nav-light { z-index: -2; width: var(--lw); height: var(--lh); --k: calc(6% * var(--hour-weight)); translate: calc(var(--bx) + var(--bw) / 2 - 50%) calc(var(--by) + var(--bh) / 2 - 50%); }
 .jump, html[data-still] :is(.nav-pill, .nav-light, .trail-light) { transition: none !important; }
 .frag { width: 252px; padding: 14px; background: var(--rail); border: 1px solid var(--line); border-radius: var(--radius-card); }
-.tabs { position: relative; isolation: isolate; --lw: calc(var(--bw) + 12px); --lh: 68px; display: flex; width: min(390px, 100%); padding: 8px 6px; background: var(--rail); border-top: 1px solid var(--line); }
-.tabs a { position: relative; flex: 1; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-radius: 13px; font-size: 12.5px; color: var(--muted); cursor: pointer; transition: color var(--duration-tint) var(--ease-tint), background-color var(--duration-tint) var(--ease-tint); }
+.tabs { position: relative; isolation: isolate; display: flex; width: min(390px, 100%); padding: 8px 6px; background: var(--rail); border-top: 1px solid var(--line); }
+.tabs a { position: relative; flex: 1; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-radius: 13px; font-size: 12.5px; color: var(--muted); cursor: pointer; transition: color var(--duration-tint) var(--ease-tint); }
 .tabs a::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 30%, transparent); }
 .tabs a[aria-current] { color: var(--accent-text); font-weight: 600; }
 .tabs a[aria-current]::before { background: var(--accent-text); }
+.tabs .nav-pill { border-radius: 13px; }
 /* Forced colours: a fill and a dot are both taken away, so the place takes the system's own selected
    colours. `.fc` draws that form for people who will never meet it. */
-html .nav.fc { background: Canvas; border-color: CanvasText; }
-html .nav.fc a { color: CanvasText; }
-html .nav.fc a::before { background: GrayText; }
-html .nav.fc a[aria-current] { background: Highlight; color: HighlightText; }
-html .nav.fc a[aria-current]::before { background: HighlightText; }
+.nav.fc { background: Canvas; border-color: CanvasText; }
+.nav.fc a { color: CanvasText; }
+.nav.fc a::before { background: GrayText; }
+.nav.fc a[aria-current] { background: Highlight; color: HighlightText; }
+.nav.fc a[aria-current]::before { background: HighlightText; }
 
 /* ── 5 · The trail ─────────────────────────────────────────────────────── */
 .outcome { position: relative; isolation: isolate; flex: 0 1 460px; padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface-1); }
@@ -327,10 +336,10 @@ html:not([data-still]) .earned .ember::before { animation: ember var(--duration-
 .dock .seg { border: 0; background: none; }
 html[data-still] *, html[data-still] *::before, html[data-still] *::after { animation: none !important; }
 @media (forced-colors: active) {
-  .pool, .rim::after, .hand .row::before, .mark::before, .ember::before, .trail-light, .nav-pill { display: none; }
-  html[data-rail] :is(.nav, .tabs) a[aria-current] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
-  html[data-rail] :is(.nav, .tabs) a[aria-current]::before { background: HighlightText; }
-  html[data-rail] :is(.nav, .tabs) a[aria-current]:focus-visible { outline-color: CanvasText; }
+  .pool, .rim::after, .mark::before, .ember::before, .trail-light, .nav-pill { display: none; }
+  :is(.nav, .tabs) a[aria-current] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  :is(.nav, .tabs) a[aria-current]::before { background: HighlightText; }
+  :is(.nav, .tabs) a[aria-current]:focus-visible { outline-color: CanvasText; }
 }
 </style>
 </head>
@@ -406,11 +415,11 @@ html[data-still] *, html[data-still] *::before, html[data-still] *::after { anim
       </section>
 
       <section class="m" id="m2">
-        <p class="faint">2 of 7 · Constant · colour only, nothing moves · revised 20 Nov</p>
+        <p class="faint">2 of 7 · Constant · colour only, nothing moves · the edge, chosen 20 Nov</p>
         <h2>Light under your hand</h2>
-        <p class="muted">The light is found, not shown. It takes the shape of the thing your hand is on, and nothing glows around the pointer. Three ways to do it are behind the switch.</p>
+        <p class="muted">The light is found, not shown. It is the hairline of the thing your hand is on, lit where your hand is nearest, and no light falls behind a word. The card is settled. How a button answers in the same language has three ways, behind the switch.</p>
         <div class="stage">
-          <div class="card hand rim grow">
+          <div class="card rim grow">
             <header><h3>People</h3><span class="faint" data-figure>4</span></header>
             <div class="row" tabindex="0"><span class="av">AS</span><span class="name"><b>Asuka</b><small>Operator in Laser cutting</small></span><span class="num" data-figure>Ends 2 Dec</span><button class="btn outline sm">Extend</button></div>
             <div class="row" tabindex="0"><span class="av">BL</span><span class="name"><b>Becky Lynch</b><small>Hand tools in Wood shop</small></span><span class="num" data-figure>Ends 12 Dec</span><button class="btn outline sm">Extend</button></div>
@@ -418,26 +427,27 @@ html[data-still] *, html[data-still] *::before, html[data-still] *::after { anim
             <div class="row" tabindex="0"><span class="av">CR</span><span class="name"><b>Cody Rhodes</b><small>Operator in Laser cutting</small></span><span class="num" data-figure>Ends 30 Apr</span><button class="btn outline sm">Extend</button></div>
           </div>
           <div class="side">
-            <div class="seg" data-set="hand" aria-label="Light under your hand">
-              <button data-v="edge" aria-pressed="true">The edge</button><button data-v="row">The row</button><button data-v="none">Nothing follows</button>
+            <div class="seg" data-set="btn" aria-label="How a button answers your hand">
+              <button data-v="near" aria-pressed="true">Where your hand is</button><button data-v="whole">The whole edge</button><button data-v="built">As built</button>
             </div>
-            <div class="pair"><button class="btn accent">Give a role</button><button class="btn outline">Extend by 90 days</button><button class="btn ghost">Cancel</button></div>
+            <div class="pair"><button class="btn accent">Give a role</button><button class="btn outline">Extend by 90 days</button><button class="btn ghost">Cancel</button><button class="btn danger">Revoke</button></div>
             <input class="field" placeholder="Search people" aria-label="Search people">
-            <p class="faint">Move across the list, and slowly near its sides. Then press <kbd>Tab</kbd>.</p>
+            <p class="faint">Cross each button slowly, end to end. Revoke never takes the light. Then press <kbd>Tab</kbd>.</p>
           </div>
         </div>
         <div class="opts">
-          <div><b>The edge</b><span class="note">Recommended</span>
-            <p class="muted">The card's hairline takes the lamp's colour where it is nearest your hand. An outline button's hairline takes it whole. No light falls behind a word.</p>
-            <p class="faint">What it costs: in the middle of a long table no edge is near, so nothing shows.</p></div>
-          <div><b>The row</b>
-            <p class="muted">The row you are on is a little violet where your hand is, fading along the row. It is the built tint, with a centre.</p>
-            <p class="faint">What it costs: light behind words again, at half the first draft's strength, and a second cue on a row that already tints.</p></div>
-          <div><b>Nothing follows</b>
-            <p class="muted">As built. The row tints, the button answers, and there is no light under your hand at all.</p>
-            <p class="faint">What it costs: nothing to tire of, and nothing of the lamp in the thing you do most.</p></div>
+          <div><b>Where your hand is</b><span class="note">Recommended</span>
+            <p class="muted">A button's own edge is lit where your hand is nearest, as the card's is: the outline's hairline, the ghost's edge that is otherwise not drawn, and the filled button's rim, in its own ink. The built hover stays under it.</p>
+            <p class="faint">What it costs: on a short button every part of the edge is near, so it reads as lit all round.</p></div>
+          <div><b>The whole edge</b>
+            <p class="muted">On hover the outline's hairline turns violet all round, and the filled button gets a lit top edge. Nothing follows your hand. A ghost has no edge, so it stays as built.</p>
+            <p class="faint">What it costs: it is a state and not a light, so a button does not share the card's gesture.</p></div>
+          <div><b>As built</b>
+            <p class="muted">An outline or a ghost tints, and a filled button brightens. No light.</p>
+            <p class="faint">What it costs: the card answers your hand, and the buttons inside it do not.</p></div>
         </div>
-        <p class="faint">Measured, the edge: beside your hand the lit hairline is 1.7:1 against the card in the dark room and 1.8:1 on paper; from the middle of a row, 1.3:1 and 1.4:1. Syndra's own strong hairline is 1.5:1 and 1.4:1. In 120ms, out 260ms. The row's tint, the press and the focus ring are as built, and no glow sits outside a ring. Never on a danger button, a consent, a Notice, a stale card or the rail. A finger gets none: there is no hover to answer.</p>
+        <p class="faint">Measured, where your hand is: an outline's hairline is 1.4:1 against its ground at rest, 2.2:1 under your hand and 1.7:1 at its far end, which is the built hover (2.1:1 and 1.5:1 on paper). A ghost's edge goes from nothing to 1.6:1. The filled button's hairline is 1.6:1 against its own face (1.75:1 on paper), and its outline against the page does not change. Behind every word the light is nothing, so no label's contrast moves.</p>
+        <p class="faint">In 120ms, out 260ms. The built hover, the press and the focus ring are unchanged, and no glow sits outside a ring. Never on a danger button, a consent, a Notice, a stale card or the rail. A field is as built: its border tints on focus. A finger gets none: there is no hover to answer.</p>
       </section>
 
       <section class="m" id="m3">
@@ -459,43 +469,30 @@ html[data-still] *, html[data-still] *::before, html[data-still] *::after { anim
       </section>
 
       <section class="m" id="m4">
-        <p class="faint">4 of 7 · Frequent · revised 20 Nov · the place is never carried by light</p>
+        <p class="faint">4 of 7 · Frequent · one settle · glide with light, chosen 20 Nov</p>
         <h2>Your place in the rail</h2>
-        <p class="muted">Where you are is said by three things that are crisp: a filled pill, a bold violet word and a dot. A soft light cannot say it to someone who cannot see a gradient, so here the light is cut, and the rail stays the quietest thing on the screen.</p>
+        <p class="muted">Where you are is said by three things that are crisp: a filled pill, a bold violet word and a dot. When you go somewhere the pill is carried there, and a faint light rests under it and goes with it. The light says nothing by itself; it is only the lamp falling on your place.</p>
         <div class="stage">
           <nav class="nav frag" aria-label="A piece of the rail">
             <span class="pool nav-light jump"></span><span class="nav-pill jump"></span>
             <a aria-current="page" tabindex="0">Home</a><a tabindex="0">People</a><a tabindex="0">Bundles</a><a tabindex="0">Automatic rules</a><a tabindex="0">Insights</a>
           </nav>
           <div class="side" style="flex-basis:390px">
-            <div class="seg" data-set="rail" aria-label="Your place in the rail">
-              <button data-v="built" aria-pressed="true">Today's pill</button><button data-v="glide">It glides</button><button data-v="light">With a light</button>
-            </div>
             <nav class="tabs" aria-label="The phone's tab bar">
               <span class="pool nav-light jump"></span><span class="nav-pill jump"></span>
               <a aria-current="page" tabindex="0">Home</a><a tabindex="0">People</a><a tabindex="0">Requests</a><a tabindex="0">Account</a>
             </nav>
-            <p class="faint">Click a place, here or in this page's own rail.</p>
+            <p class="faint">Click a place, here or in this page's own rail. With <kbd>Tab</kbd> and <kbd>Enter</kbd> it is simply there: nothing travels by a key, on a first paint or on Back.</p>
           </div>
           <div class="side" style="flex-basis:252px">
             <nav class="nav frag fc" aria-label="The same piece under forced colours">
               <a aria-current="page" tabindex="0">Home</a><a tabindex="0">People</a><a tabindex="0">Bundles</a>
             </nav>
-            <p class="faint">Under forced colours, drawn in your system's own colours. The fill and the dot are both taken away there, so the place takes the system's selected colours.</p>
+            <p class="faint">Under forced colours, drawn in your system's own colours. The fill, the dot and the light are all taken away there, so the place takes the system's selected colours.</p>
           </div>
         </div>
-        <div class="opts">
-          <div><b>Today's pill</b><span class="note">Recommended</span>
-            <p class="muted">The filled pill, the bold word and the dot, there at once, as it is today. No light, and nothing travels.</p>
-            <p class="faint">What it costs: the rail stops being one of the seven. Two repairs come with it: the forced-colours form, and the tab bar's stronger dot in the rail.</p></div>
-          <div><b>It glides</b>
-            <p class="muted">The same pill, carried to where you go by the movement Tabs and the section band already use (260ms).</p>
-            <p class="faint">What it costs: chrome that moves on every page change, in the part of the screen that is meant to recede.</p></div>
-          <div><b>With a light</b>
-            <p class="muted">The glide, and a faint pool resting under the pill.</p>
-            <p class="faint">What it costs: it says nothing the pill has not said, and it makes the rail brighter than the page.</p></div>
-        </div>
-        <p class="faint">Measured: the word on the pill is 4.9:1 in the dark room and 5.8:1 on paper, and so is the dot once the rail takes the tab bar's token (today 3.4:1 and 3.9:1). The fill alone is 1.2:1 against the rail, so it never says it alone. By a key, on a first paint and under reduced motion, nothing travels in any of the three.</p>
+        <p class="faint">Measured: the word at the pool's centre is 4.72:1 in the dark room and 5.51:1 on paper (4.92:1 and 5.75:1 with no pool). The pool is the accent at 6%, as wide as the rail and up to 176px tall, and it is spent at every edge of the rail. The lit rail is 1.02 to 1.04:1 against the rail around it, and in the dark room it stays under a card's own brightness.</p>
+        <p class="faint">The pill and its light travel 260ms on settle's curve, the movement Tabs and the section band already have. Still form: both there at once.</p>
       </section>
 
       <section class="m" id="m5">
@@ -581,8 +578,7 @@ html[data-still] *, html[data-still] *::before, html[data-still] *::after { anim
   const set = {
     theme: (v) => (root.dataset.theme = v),
     still: (v) => (v ? (root.dataset.still = "") : delete root.dataset.still),
-    hand: (v) => (root.dataset.hand = v),
-    rail: (v) => { root.dataset.rail = v; settleNavs(); },
+    btn: (v) => (root.dataset.btn = v),
     hour: (v) => {
       $$(".light").forEach((l) => (l.dataset.hour = v));
       const word = v === "quiet" ? "Evening" : v[0].toUpperCase() + v.slice(1);
@@ -613,38 +609,46 @@ html[data-still] *, html[data-still] *::before, html[data-still] *::after { anim
   }));
 
   // ── 2 · Light under your hand: one listener, two custom properties, once a frame ──
+  // Every button that may take the light wears the same utility as the card. Never a danger button.
+  $$(".btn:not(.danger)").forEach((b) => b.classList.add("rim"));
   let moved = null;
   const place = () => {
     const e = moved; moved = null;
-    const el = e.target.closest?.(".rim"); if (!el) return;
-    const r = el.getBoundingClientRect();
-    el.style.setProperty("--px", e.clientX - r.left + "px");
-    el.style.setProperty("--py", e.clientY - r.top + "px");
+    for (let el = e.target.closest?.(".rim"); el; el = el.parentElement?.closest(".rim")) { // the button, then its card
+      const r = el.getBoundingClientRect();
+      el.style.setProperty("--px", e.clientX - r.left + "px");
+      el.style.setProperty("--py", e.clientY - r.top + "px");
+    }
   };
   addEventListener("pointermove", (e) => {
     if (e.pointerType === "touch") return; // a finger has no hover to answer
     if (!moved) requestAnimationFrame(place);
     moved = e;
   }, { passive: true });
-  // A keyboard's row: the hairline beside it is lit. The ring is the crisp mark, as built.
+  // A keyboard's row: the card's hairline beside it is lit. The ring is the crisp mark, as built.
   addEventListener("focusin", (e) => {
     $$(".rim.kbd").forEach((el) => el.classList.remove("kbd"));
-    const row = e.target.closest(".row"), host = row?.closest(".rim");
+    const row = e.target.closest(".row"), host = row?.closest(".card.rim");
     if (!host || !e.target.matches(":focus-visible")) return;
     host.style.setProperty("--px", "0px");
     host.style.setProperty("--py", row.offsetTop + row.offsetHeight / 2 + "px");
     host.classList.add("kbd");
   });
   addEventListener("focusout", () => $$(".rim.kbd").forEach((el) => el.classList.remove("kbd")));
-
   // ── 4 · Your place in the rail ────────────────────────────────────────
-  // The current row's own box, written on its nav; the pill (and the light, where one is drawn) reads it.
+  // The current row's own box, written on its nav; the pill and the light under it read it.
   // `travel` false is a place reached by a key, a first paint or a resize: it is there at once.
   const placeTo = (nav, item, travel) => {
     $$("a", nav).forEach((a) => (a === item ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
     const marks = $$(".nav-pill, .nav-light", nav);
     marks.forEach((m) => m.classList.toggle("jump", !travel));
     const box = { "--bx": item.offsetLeft, "--by": item.offsetTop, "--bw": item.offsetWidth, "--bh": item.offsetHeight };
+    // The pool is sized by the rail: as wide as the rail (a tab's pool, 160px), 176px tall, and never more
+    // than the room it has to either end, so it is spent before any edge of the rail.
+    const room = (nav.closest(".rail") ?? nav).getBoundingClientRect(), r = item.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2, [w, h] = nav.matches(".tabs") ? [160, 1e4] : [1e4, 176];
+    box["--lw"] = 2 * Math.max(0, Math.min(w / 2, cx - room.left, room.right - cx));
+    box["--lh"] = 2 * Math.max(0, Math.min(h / 2, cy - room.top, room.bottom - cy));
     for (const k in box) nav.style.setProperty(k, box[k] + "px");
     if (!travel) { marks.forEach(reflow); marks.forEach((m) => m.classList.remove("jump")); }
   };
