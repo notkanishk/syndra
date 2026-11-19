@@ -2103,12 +2103,12 @@ html.theme-fading *::after {
   /* Walking through it (A-24 §3.2): the first page of a sign-in opens on this
      room, and the door opens around you over --door-through. The page under it
      tints in at --door-through-reveal; the keyframes' stops are fractions of
-     those times (14% and 28%: a tint before the reveal, and the reveal), and a
+     those times (33% and 42%: a tint before the reveal, and the reveal), and a
      test holds them together. --door-through-light is the light's
      strength at its heart; the contrast test holds what is left of it once the
      page is in. */
-  --door-through: 900ms;
-  --door-through-reveal: 250ms;
+  --door-through: 1300ms;
+  --door-through-reveal: 550ms;
   --door-through-light: 60%;
 }
 
@@ -2566,7 +2566,7 @@ body:has(.login-stage) {
   position: absolute;
   inset: 0;
   background: var(--door-page);
-  animation: door-through-room var(--door-through) linear both;
+  animation: door-through-room var(--door-through) var(--ease-settle) both;
 }
 /* The light that was behind the arch on the sign-in screen, now coming through it. */
 .door-through-light {
@@ -2582,7 +2582,7 @@ body:has(.login-stage) {
     color-mix(in srgb, var(--door-fill) calc(var(--door-through-light) * 0.3), transparent) 46%,
     transparent
   );
-  animation: door-through-light var(--door-through) var(--door-ease-exit) both;
+  animation: door-through-light var(--door-through) var(--ease-settle) both;
 }
 /* The door's own arch: its size, its stroke, the uprights dissolving into the floor, the wash inside. */
 .door-through-arch {
@@ -2597,7 +2597,7 @@ body:has(.login-stage) {
   background: linear-gradient(to top, color-mix(in srgb, var(--door-fill) 30%, transparent), transparent 62%);
   mask-image: var(--door-arch-mask);
   -webkit-mask-image: var(--door-arch-mask);
-  animation: door-through-arch var(--door-through) var(--door-ease-exit) both;
+  animation: door-through-arch var(--door-through) var(--ease-settle) both;
 }
 #app-root[data-door] {
   animation: fade var(--duration-tint) var(--ease-tint) var(--door-through-reveal) both;
@@ -2611,19 +2611,22 @@ body:has(.login-stage) {
   }
 }
 
-/* One keyframe set, on --door-through (900ms). 0 to 14%: the room whole, the
-   arch and its light opening. 14% to 28% (one tint, up to the reveal at
-   250ms): the room and the arch dissolve and the light falls to what may sit
-   over text. From 28%, as the page tints in, only that is left: 0.15 of
-   --door-through-light, 9% violet at its heart, the most that keeps every
-   text token at 4.5:1 in both rooms (RULES), widening and dissolving into the
-   page's own light by 900ms. A test holds 14% and 28% to the tokens. */
+/* One keyframe set, on --door-through (1300ms), every part on the settle
+   curve. The arch and the light each grow in one stroke, first frame to last
+   (a size is given only at 0% and 100%), so nothing holds or pauses at the
+   reveal. 0 to 33%: the room whole, the arch and its light inside. 33% to 42%
+   (the tint before the reveal at 550ms): the room and the arch dissolve and
+   the light falls to what may sit over text. From 42%, as the page tints in,
+   only that is left: 0.15 of --door-through-light, 9% violet at its heart,
+   the most that keeps every text token at 4.5:1 in both rooms (RULES),
+   dissolving into the page's own light by 1300ms. A test holds 33% and 42%
+   to the tokens. */
 @keyframes door-through-room {
   0%,
-  14% {
+  33% {
     opacity: 1;
   }
-  28%,
+  42%,
   100% {
     opacity: 0;
   }
@@ -2633,14 +2636,15 @@ body:has(.login-stage) {
     opacity: 1;
     transform: scale(1);
   }
-  14% {
+  33% {
     opacity: 0.9;
-    transform: scale(1.7);
   }
-  28%,
+  42% {
+    opacity: 0;
+  }
   100% {
     opacity: 0;
-    transform: scale(2.6);
+    transform: scale(3.2);
   }
 }
 @keyframes door-through-light {
@@ -2648,17 +2652,15 @@ body:has(.login-stage) {
     opacity: 1;
     transform: scale(0.5);
   }
-  14% {
+  33% {
     opacity: 1;
-    transform: scale(1.1);
   }
-  28% {
+  42% {
     opacity: 0.15;
-    transform: scale(1.5);
   }
   100% {
     opacity: 0;
-    transform: scale(2.6);
+    transform: scale(2.8);
   }
 }
 

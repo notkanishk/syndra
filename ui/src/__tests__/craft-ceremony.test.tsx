@@ -76,11 +76,13 @@ describe("walking through the door (§3.2): the door's own room, one keyframe se
     }
   });
 
-  it("keeps its stops on the tokens: the room dissolving over the tint before the reveal, 14% to 28%", () => {
+  it("keeps its stops on the tokens: the room dissolving over the tint before the reveal, 33% to 42%", () => {
     const through = ms("--door-through");
     const reveal = ms("--door-through-reveal");
-    expect(Math.round((reveal / through) * 100)).toBe(28);
-    expect(Math.round(((reveal - ms("--duration-tint")) / through) * 100)).toBe(14);
+    // Long enough to be registered as a door, not a flash (owner on staging, 19 Nov 2026).
+    expect(reveal).toBeGreaterThanOrEqual(500);
+    expect(Math.round((reveal / through) * 100)).toBe(42);
+    expect(Math.round(((reveal - ms("--duration-tint")) / through) * 100)).toBe(33);
     // The page under it tints in at the reveal, and only then.
     expect(css).toMatch(/#app-root\[data-door\] \{\s*animation: fade var\(--duration-tint\) var\(--ease-tint\) var\(--door-through-reveal\) both;/);
   });
@@ -88,14 +90,27 @@ describe("walking through the door (§3.2): the door's own room, one keyframe se
   it("is a moment, not a haze: the room whole and the arch and its light full until the reveal", () => {
     const [room, arch, light] = sets;
     expect(opacityAt(room, "0%")).toBe(1);
-    expect(opacityAt(room, "14%")).toBe(1);
+    expect(opacityAt(room, "33%")).toBe(1);
     expect(opacityAt(arch, "0%")).toBe(1);
     expect(opacityAt(light, "0%")).toBe(1);
-    expect(opacityAt(light, "14%")).toBe(1);
+    expect(opacityAt(light, "33%")).toBe(1);
     expect(Number(/--door-through-light: (\d+)%;/.exec(css)?.[1])).toBeGreaterThanOrEqual(50);
     // The room and the arch are gone at the reveal, before the page tints in: nothing is read through them.
-    expect(opacityAt(room, "28%")).toBe(0);
-    expect(opacityAt(arch, "28%")).toBe(0);
+    expect(opacityAt(room, "42%")).toBe(0);
+    expect(opacityAt(arch, "42%")).toBe(0);
+  });
+
+  it("grows the arch and its light in one stroke on the settle curve: no hold, no pause at the reveal", () => {
+    const [, arch, light] = sets;
+    for (const frames of [arch, light]) {
+      // A size only at the first and last frames: one segment, so the growth never stops on a stop.
+      expect(frames.match(/transform:/g)).toHaveLength(2);
+      expect(frames).toMatch(/0% \{[^}]*transform: scale/);
+      expect(frames).toMatch(/100% \{[^}]*transform: scale/);
+    }
+    for (const part of ["room", "arch", "light"]) {
+      expect(braced(`.door-through-${part} {`)).toContain(`animation: door-through-${part} var(--door-through) var(--ease-settle) both;`);
+    }
   });
 
   it("is drawn from the door's own tokens, over the whole window, and never takes a click", () => {
@@ -116,7 +131,7 @@ describe("walking through the door (§3.2): the door's own room, one keyframe se
     const light = sets[2];
     const heart = Number(/--door-through-light: (\d+)%;/.exec(css)?.[1]) / 100;
     // The strongest it is from the reveal on: the light's opacity only falls after that stop.
-    const after = Math.max(opacityAt(light, "28%"), opacityAt(light, "100%"));
+    const after = Math.max(opacityAt(light, "42%"), opacityAt(light, "100%"));
     const ramp = block(":root {\n    --violet-600");
     const door = block(":root {\n  /* Always-dark surface tokens.");
     const themes = { dark: { ...ramp, ...door, ...block(':root,\n  [data-theme="dark"] {') }, light: { ...ramp, ...door, ...block('[data-theme="light"] {') } };
