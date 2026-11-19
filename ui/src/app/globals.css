@@ -371,14 +371,19 @@
   }
 
   /* The door opens (A-24 §3.2, board part 1 frames 5 to 7): the arch of light
-     (frame 5) opens into a pool by 37% (--door-opened of --door-open, frame 6)
-     and rests where the hour puts it by 100% (frame 7). Light only. */
+     (frame 5, the board's 90 by 260px at 70px, brightest at its foot) stands a
+     beat (to 15%, so it is seen), opens into a pool by 37% (--door-opened of
+     --door-open, frame 6) and rests where the hour puts it by 100% (frame 7).
+     Its foot is the head's foot (the light's box ends 28px below it) and its
+     height is kept inside the box (the light shows to 70% of the ellipse), so
+     no edge of the box cuts it. Light only. */
   @keyframes door-open {
-    0% {
+    0%,
+    15% {
       --door-w: 90px;
-      --door-h: 260px;
+      --door-h: min(260px, calc((100cqh - 52px) / 0.7));
       --door-x: 70px;
-      --door-y: 100cqh;
+      --door-y: calc(100cqh - 28px);
       --door-reach: 44%;
     }
     37% {
@@ -1709,19 +1714,19 @@ html.theme-fading *::after {
   }
   &:not([data-settled]) ~ * {
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
-    animation-delay: calc(var(--arrive-after, 0ms) + var(--duration-tint) + (var(--arrive-cap) - 1) * var(--arrive-step));
+    animation-delay: calc(var(--duration-tint) + (var(--arrive-cap) - 1) * var(--arrive-step));
   }
   &:not([data-settled]) + * {
-    animation-delay: calc(var(--arrive-after, 0ms) + var(--duration-tint));
+    animation-delay: var(--duration-tint);
   }
   &:not([data-settled]) + * + * {
-    animation-delay: calc(var(--arrive-after, 0ms) + var(--duration-tint) + 1 * var(--arrive-step));
+    animation-delay: calc(var(--duration-tint) + 1 * var(--arrive-step));
   }
   &:not([data-settled]) + * + * + * {
-    animation-delay: calc(var(--arrive-after, 0ms) + var(--duration-tint) + 2 * var(--arrive-step));
+    animation-delay: calc(var(--duration-tint) + 2 * var(--arrive-step));
   }
   &:not([data-settled]) + * + * + * + * {
-    animation-delay: calc(var(--arrive-after, 0ms) + var(--duration-tint) + 3 * var(--arrive-step));
+    animation-delay: calc(var(--duration-tint) + 3 * var(--arrive-step));
   }
 
   /* A page's regions often sit in one wrapper, which would arrive as a single
@@ -1754,7 +1759,7 @@ html.theme-fading *::after {
     --arrive-k: 4;
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
     animation-delay: calc(
-      var(--arrive-after, 0ms) + var(--duration-tint) +
+      var(--duration-tint) +
         min(var(--arrive-from) + max(var(--arrive-k) - var(--arrive-skip), 0), var(--arrive-cap) - 1) *
         var(--arrive-step)
     );
@@ -1771,7 +1776,7 @@ html.theme-fading *::after {
     --arrive-j: 4;
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
     animation-delay: calc(
-      var(--arrive-after, 0ms) + var(--duration-tint) +
+      var(--duration-tint) +
         min(
           var(--arrive-from) + max(var(--arrive-k) - var(--arrive-skip), 0) + var(--arrive-j),
           var(--arrive-cap) - 1
@@ -1823,12 +1828,30 @@ html.theme-fading *::after {
   &[data-door] > [data-door-step="lines"] {
     animation: fade calc(2 * var(--duration-tint)) var(--ease-tint) var(--door-lines) both;
   }
+  /* The blocks are held until the head has opened, then arrive as on every page, 40ms apart and
+     capped at five. Keyed on the door alone, not on the head settling: the head's settle timer is a
+     clock, the door is light, and the blocks wait for the light. Home ends the door when the last
+     block has arrived (`data-door` comes off), so nothing here outlives it. */
   &[data-door] ~ * {
-    --arrive-after: var(--door-blocks);
+    animation: arrive var(--duration-arrive) var(--ease-arrive) both;
+    animation-delay: calc(var(--door-blocks) + (var(--arrive-cap) - 1) * var(--arrive-step));
+  }
+  &[data-door] + * {
+    animation-delay: var(--door-blocks);
+  }
+  &[data-door] + * + * {
+    animation-delay: calc(var(--door-blocks) + 1 * var(--arrive-step));
+  }
+  &[data-door] + * + * + * {
+    animation-delay: calc(var(--door-blocks) + 2 * var(--arrive-step));
+  }
+  &[data-door] + * + * + * + * {
+    animation-delay: calc(var(--door-blocks) + 3 * var(--arrive-step));
   }
   @media (prefers-reduced-motion: reduce), (forced-colors: active) {
     &[data-door] > h1,
-    &[data-door] > [data-door-step] {
+    &[data-door] > [data-door-step],
+    &[data-door] ~ * {
       animation: none;
     }
   }

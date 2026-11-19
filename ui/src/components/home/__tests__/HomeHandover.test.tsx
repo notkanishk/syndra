@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
 import { TINT_MS } from "@/lib/motion";
-import { DOOR_BLOCKS_MS, noteSignIn, resetDoorForTests } from "@/lib/motion/door";
+import { DOOR_BACKSTOP_MS, noteSignIn, resetDoorForTests } from "@/lib/motion/door";
 import { inZone } from "@/test-utils/zone";
 import type { SessionUser } from "@/lib/session";
 import { setMediaQuery } from "@/test-utils/media";
@@ -397,14 +397,34 @@ describe("the first arrival of a sign-in", () => {
     expect(document.querySelectorAll(".hour-light")).toHaveLength(1);
   });
 
-  it("settles the head only after the blocks have arrived through the door", () => {
+  it("ends when its last block has arrived, and not on any other arrival, whatever the head's clock says", () => {
     mount(signedIn);
     const head = screen.getByRole("heading", { level: 1 }).parentElement!;
-    // An ordinary visit is settled by a tint and an arrival; through the door the blocks come later.
+    const page = head.parentElement!;
+    // jsdom has no AnimationEvent, so React listens for the prefixed name; the name is the native event's.
+    const ended = (el: Element, name: string) =>
+      act(() => {
+        const event = new Event("webkitAnimationEnd", { bubbles: true });
+        Object.defineProperty(event, "animationName", { value: name });
+        el.dispatchEvent(event);
+      });
+    // The head settling on its own timer does not end the door: the blocks wait for the light, not the clock.
     later(TINT_MS + 1000);
-    expect(head).not.toHaveAttribute("data-settled");
-    later(DOOR_BLOCKS_MS);
-    expect(head).toHaveAttribute("data-settled");
+    expect(head).toHaveAttribute("data-door");
+    ended(head.querySelector("h1")!, "fade");
+    ended(page.lastElementChild!, "fade");
+    expect(head).toHaveAttribute("data-door");
+    ended(page.lastElementChild!, "arrive");
+    expect(head).not.toHaveAttribute("data-door");
+  });
+
+  it("is taken away by its backstop if its last block never arrives", () => {
+    mount(signedIn);
+    const head = screen.getByRole("heading", { level: 1 }).parentElement!;
+    later(DOOR_BACKSTOP_MS - 1);
+    expect(head).toHaveAttribute("data-door");
+    later(1);
+    expect(head).not.toHaveAttribute("data-door");
   });
 
   it("is once: not when Home is shown again, not on a reload, not for the same sign-in", () => {

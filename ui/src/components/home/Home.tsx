@@ -50,7 +50,7 @@ import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
 import { Unfold } from "@/lib/motion";
-import { DOOR_BLOCKS_MS, takeFirstArrival } from "@/lib/motion/door";
+import { DOOR_BACKSTOP_MS, takeFirstArrival } from "@/lib/motion/door";
 import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
@@ -105,12 +105,8 @@ import { useShownNames } from "@/components/names/shownNames";
  * in Advanced.
  */
 export function Home({ session }: { session: SessionUser }) {
-  // The first arrival of a sign-in (A-24 §3.2) is asked once, as Home mounts (below): only a yes is
-  // kept, so a second run of the effect (React's Strict Mode) can't take it back.
-  const [door, setDoor] = useState(false);
-  // Home is the most-visited first paint (S11): the greeting tints in, then the blocks arrive; through
-  // the door, the blocks arrive after it (`DOOR_BLOCKS_MS`), so the head settles that much later.
-  const head = usePageHead(door ? DOOR_BLOCKS_MS : 0);
+  // Home is the most-visited first paint (S11): the greeting tints in, then the blocks arrive.
+  const head = usePageHead();
   const advanced = useIsAdvanced();
   const summary = useGovernanceSummary();
   const requests = useRequestsAdmin("pending");
@@ -229,11 +225,20 @@ export function Home({ session }: { session: SessionUser }) {
   // UTC and hydration failed (React #418). They appear on mount, in a seat held
   // by an invisible stand-in so nothing below moves (same rule as Relative).
   const [now, setNow] = useState<Date | null>(null);
+  // The first arrival of a sign-in (A-24 §3.2) is asked once, as Home mounts: only a yes is kept,
+  // so a second run of the effect (React's Strict Mode) can't take it back.
+  const [door, setDoor] = useState(false);
   // Before paint, so a page reached by a link is drawn with its greeting and term line in place.
   useLayoutEffect(() => {
     setNow(new Date());
     if (takeFirstArrival(session.signedInAt)) setDoor(true);
   }, [session.signedInAt]);
+  // The door ends when its last block has arrived (below); this only takes it away if that never comes.
+  useEffect(() => {
+    if (!door) return;
+    const backstop = setTimeout(() => setDoor(false), DOOR_BACKSTOP_MS);
+    return () => clearTimeout(backstop);
+  }, [door]);
   // The part of the day for the light, on the greeting's clock, turning with the rail's mark at 22:00.
   const phase = useDayPhase();
   const terms = useTerms();
@@ -379,7 +384,14 @@ export function Home({ session }: { session: SessionUser }) {
   if (!calm) held.current = { grid, blocks };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      className="flex flex-col gap-4"
+      // Through the door (A-24 §3.2) the blocks are held until the head has opened; when the last of them
+      // has arrived the door is over, and its rules come off with `data-door`.
+      onAnimationEnd={(event) => {
+        if (door && event.animationName === "arrive" && event.target === event.currentTarget.lastElementChild) setDoor(false);
+      }}
+    >
       {/* The first arrival of a sign-in (A-24 §3.2, frames 5 to 7): `data-door` stages the head. Only the
           light at first, the doorway's arch where the greeting will stand; it opens into the hour's pool
           as the greeting tints in over it, the date line a beat behind, then the lines; the blocks arrive

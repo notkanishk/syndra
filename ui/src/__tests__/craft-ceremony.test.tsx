@@ -5,7 +5,6 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { firstTime, idHash } from "@/lib/memory";
-import { DOOR_BLOCKS_MS } from "@/lib/motion/door";
 
 import { block, colour, css, over, ratio, SRC } from "./cssTokens";
 
@@ -70,7 +69,7 @@ describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice th
   const head = braced("@utility page-head {");
   const light = braced("@utility hour-light {");
   const ms = (token: string) => Number(new RegExp(`${token}: (\\d+)ms;`).exec(css)?.[1]);
-  const stop = (at: string) => new RegExp(`${at} \\{([^}]*)\\}`).exec(open)?.[1] ?? "";
+  const stop = (at: string) => new RegExp(`(?:^|\\s)${at}[^{]*\\{([^}]*)\\}`).exec(open)?.[1] ?? "";
 
   // `--ease-settle` as a function of time: cubic-bezier(x1, y1, x2, y2), solved for x by bisection.
   const settle = (x: number) => {
@@ -95,7 +94,10 @@ describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice th
   it("draws the board's arch, its opened pool and the hour's pool, in that order", () => {
     // Frame 5: the doorway's arch where the greeting will stand (the board's lights[0]).
     // Sizes are lengths in the light box's own units (cqw, cqh), so the board's px arch and % pool interpolate.
-    expect(stop("0%")).toMatch(/--door-w: 90px;\s*--door-h: 260px;\s*--door-x: 70px;\s*--door-y: 100cqh;\s*--door-reach: 44%;/);
+    // Brightest at its foot, which is the head's foot (the box ends 28px below it); never taller than the box
+    // lets it show (to 70% of the ellipse, inside the top's fade), so nothing cuts it. Held to 15%: seen.
+    expect(stop("0%")).toMatch(/--door-w: 90px;\s*--door-h: min\(260px, calc\(\(100cqh - 52px\) \/ 0\.7\)\);\s*--door-x: 70px;\s*--door-y: calc\(100cqh - 28px\);\s*--door-reach: 44%;/);
+    expect(open).toMatch(/0%,\s*15% \{/);
     // Frame 6: opened into a pool (lights[1]).
     expect(stop("37%")).toMatch(/--door-w: 34cqw;\s*--door-h: 150cqh;\s*--door-x: 22cqw;\s*--door-y: -10cqh;\s*--door-reach: 32%;/);
     // Frame 7: resting where the hour puts it.
@@ -114,10 +116,32 @@ describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice th
     expect(ms("--door-opened")).toBe(2 * 260);
     expect(Math.round((ms("--door-opened") / ms("--door-open")) * 100)).toBe(37);
     expect(light).toMatch(/&\[data-door\]::before \{[^}]*animation: door-open var\(--door-open\) var\(--ease-settle\) both;/);
-    // The blocks arrive as on every page, after the door; the settle timer waits for them (one number, two places).
-    expect(ms("--door-blocks")).toBe(DOOR_BLOCKS_MS);
-    expect(head).toMatch(/&\[data-door\] ~ \* \{\s*--arrive-after: var\(--door-blocks\);/);
-    for (const [, delay] of head.matchAll(/animation-delay: ([^;]+);/g)) expect(delay).toContain("var(--arrive-after, 0ms)");
+  });
+
+  it("holds the blocks until the head has opened, on the door alone, never the head's settle clock", () => {
+    // Frame 5 shows only the shell and the light: every block waits for --door-blocks, then arrives as on
+    // every page (40ms apart, capped at five). Not gated on the head settling, a timer that runs at wall speed.
+    expect(head).toMatch(/&\[data-door\] ~ \* \{\s*animation: arrive var\(--duration-arrive\) var\(--ease-arrive\) both;\s*animation-delay: calc\(var\(--door-blocks\) \+ \(var\(--arrive-cap\) - 1\) \* var\(--arrive-step\)\);/);
+    expect(head).toMatch(/&\[data-door\] \+ \* \{\s*animation-delay: var\(--door-blocks\);/);
+    for (let k = 1; k <= 3; k += 1) {
+      const sel = `&\\[data-door\\]${" \\+ \\*".repeat(k + 1)} \\{\\s*animation-delay: calc\\(var\\(--door-blocks\\) \\+ ${k} \\* var\\(--arrive-step\\)\\);`;
+      expect(head).toMatch(new RegExp(sel));
+    }
+    expect(head).not.toMatch(/&\[data-door\]:not\(\[data-settled\]\)|:not\(\[data-settled\]\)\[data-door\]/);
+    // The door's rules come after the ordinary arrival's, so they win while it lasts.
+    expect(head.indexOf("&[data-door] ~ *")).toBeGreaterThan(head.indexOf("&:not([data-settled]) ~ *"));
+    expect(ms("--door-blocks")).toBeGreaterThanOrEqual(ms("--door-lines"));
+  });
+
+  it("keeps the head's full height from the first frame: its beats are opacity only, never removed", () => {
+    for (const rule of head.match(/&\[data-door\] > [^{]+\{[^}]*\}/g) ?? []) {
+      expect(rule).toMatch(/animation: (fade|none)/);
+      expect(rule).not.toMatch(/display|visibility|height|max-height|content-visibility|position/);
+    }
+    // Home renders every beat from its first paint; nothing in the head waits on the door to exist.
+    const home = readFileSync(resolve(SRC, "components/home/Home.tsx"), "utf8");
+    expect(home).not.toMatch(/door\s*&&\s*</);
+    for (const step of ["date", "lines"]) expect(home).toMatch(new RegExp(`^\\s*<div data-door-step="${step}">`, "m"));
   });
 
   it("holds only the light at first, then the greeting over it, the date line a beat behind, then the lines", () => {
@@ -131,7 +155,7 @@ describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice th
     // The door's light exists only where motion is welcome: otherwise the pool at rest, never the arch held still.
     expect(light).toMatch(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{\s*&\[data-door\]::before \{/);
     expect(light.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{[\s\S]*?\n  \}\n/, "")).not.toContain("door-open");
-    expect(head).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*&\[data-door\] > h1,\s*&\[data-door\] > \[data-door-step\] \{\s*animation: none;/);
+    expect(head).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*&\[data-door\] > h1,\s*&\[data-door\] > \[data-door-step\],\s*&\[data-door\] ~ \* \{\s*animation: none;/);
   });
 
   it("never takes a word under 4.5:1: each beat tints in only where the light under it lets it", () => {
@@ -142,9 +166,14 @@ describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice th
     const pool = Math.max(...reaches);
     const number = (text: string, name: string) => Number(new RegExp(`${name}: ([\\d.]+)%`).exec(text)?.[1]);
     const [arch, frame6] = [number(stop("0%"), "--door-reach"), number(stop("37%"), "--door-reach")];
-    // The light's strength at a moment: arch to frame 6, then frame 6 to the hour's pool, each on settle.
+    // The light's strength at a moment: the arch held to its stop, then to frame 6, then to the hour's pool, each on settle.
+    const held = (Number(/0%,\s*(\d+)% \{/.exec(open)?.[1]) / 100) * whole;
     const reachAt = (t: number) =>
-      t <= opened ? arch + (frame6 - arch) * settle(t / opened) : frame6 + (pool - frame6) * settle((t - opened) / (whole - opened));
+      t <= held
+        ? arch
+        : t <= opened
+          ? arch + (frame6 - arch) * settle((t - held) / (opened - held))
+          : frame6 + (pool - frame6) * settle((t - opened) / (whole - opened));
     const beats: Array<[string, number, string[]]> = [
       ["the greeting", opened - 2 * tint, ["--ink", "--faint"]],
       ["the date line", opened - 2 * tint + 2 * lead, ["--muted", "--faint"]],

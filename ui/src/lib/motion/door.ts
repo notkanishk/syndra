@@ -45,8 +45,9 @@ export function resetDoorForTests() {
 }
 
 /**
- * When the blocks begin to arrive after the door opens on Home (A-24 §3.2,
- * frame 7): `--door-blocks` in globals.css, mirrored here for the head's
- * settle timer, and a test holds the two equal.
+ * A backstop for the door on Home: it ends when its last block has arrived
+ * (animationend), and this only takes it away if that never comes, so the
+ * door's rules never outlive it. Long enough for any playback rate a person
+ * would slow it to while looking (1860ms at a twentieth is 37s).
  */
-export const DOOR_BLOCKS_MS = 1160;
+export const DOOR_BACKSTOP_MS = 60_000;
