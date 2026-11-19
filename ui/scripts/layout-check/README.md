@@ -12,7 +12,7 @@ Run your local build against staging's data. This is the pre-merge gate.
 
 ```bash
 cd ui
-bun run layout:check -- --base http://192.168.5.16:3001 --record
+bun run layout:check -- --base "$SYNDRA_STAGING_URL" --record
 ZITADEL_DOMAIN= SESSION_SECRET=local bun next dev -p 3010 &
 bun run layout:check -- --base http://localhost:3010 --replay
 ```
@@ -32,7 +32,7 @@ The server's own `/healthz` read (`src/lib/zone.ts`, the makerspace's time zone 
 ## After deploying
 
 ```bash
-bun run layout:check -- --base http://192.168.5.16:3001
+bun run layout:check -- --base "$SYNDRA_STAGING_URL"
 ```
 
 ## What it reports
@@ -48,7 +48,7 @@ It prints one line per finding (`page width view theme kind …`) and exits 1 if
 | `pageScroll` | The page scrolls sideways. |
 | `tape missing` | In a replay, a request the tape doesn't hold (exit 4, not 1). |
 
-Exit 2 means it was signed out: the server has no demo sign-in for `--user`. Exit 3 means it couldn't run: Chrome didn't start, or the tape path was refused. Exit 4 means the replay's tape is incomplete.
+Exit 2 means it was signed out (the server has no demo sign-in for `--user`), or no server was named: pass `--base`, or set `SYNDRA_STAGING_URL` in your shell. The repo is public, so no host is written in it. Exit 3 means it couldn't run: Chrome didn't start, or the tape path was refused. Exit 4 means the replay's tape is incomplete.
 
 ## Options
 

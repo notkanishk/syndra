@@ -8,9 +8,12 @@
  * `truncate`, any column heading more than 4px off its cells, a seat off its
  * row's first line when the row fits, or a page that scrolls sideways.
  *
- *   bun run layout:check -- --base http://192.168.5.16:3001
+ *   bun run layout:check -- --base "$SYNDRA_STAGING_URL"
  *
- * Options (all optional but --base):
+ * The server is configuration, never a default: `--base`, else `SYNDRA_STAGING_URL`
+ * (the repo is public, so no host is written here).
+ *
+ * Options (all optional):
  *   --widths 390,768,1024,1100,1280,1440   1100 is in the band (1080–1240) only it catches
  *   --pages /,/users,...                   default: every list page below, plus detail pages
  *                                          found from the lists (first rows of People, Projects, Bundles)
@@ -29,8 +32,9 @@
  *
  * Read-only: it signs in, reads pages, and never clicks.
  * System Chrome (`channel: "chrome"`); CHROME_PATH overrides it.
- * Exit codes, as `sweep:touch`: 1 found something, 2 signed out (wrong page), 3 could not run;
- * and 4, a replay whose tape lacked a read the pages made (tape incomplete).
+ * Exit codes, as `sweep:touch`: 1 found something, 2 signed out (wrong page) or no
+ * server named, 3 could not run; and 4, a replay whose tape lacked a read the pages
+ * made (tape incomplete).
  */
 import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -65,11 +69,12 @@ const { values: opt } = parseArgs({
     tape: { type: "string" },
   },
 });
-if (!opt.base) {
-  console.error("Usage: bun run layout:check -- --base http://192.168.5.16:3001 [--widths …] [--pages …]");
-  process.exit(3);
+const server = opt.base ?? process.env.SYNDRA_STAGING_URL;
+if (!server) {
+  console.error('No server to check: pass --base <url>, or set SYNDRA_STAGING_URL (bun run layout:check -- --base "$SYNDRA_STAGING_URL").');
+  process.exit(2);
 }
-const base = opt.base.replace(/\/$/, "");
+const base = server.replace(/\/$/, "");
 const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
 const widths = list(opt.widths).map(Number);
 
