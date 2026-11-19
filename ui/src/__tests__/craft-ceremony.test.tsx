@@ -133,6 +133,20 @@ describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice th
     expect(ms("--door-blocks")).toBeGreaterThanOrEqual(ms("--door-lines"));
   });
 
+  it("holds boxes that paint: a list's display-contents wrapper holds still and its children wait", () => {
+    // ArriveList's wrapper is `contents`: an opacity on it paints nothing, so its children would show at frame 5.
+    const arrive = readFileSync(resolve(SRC, "lib/motion/arrive.tsx"), "utf8");
+    expect(arrive).toMatch(/className = "contents"/);
+    expect(head).toMatch(/&\[data-door\] ~ \.contents \{\s*animation: none;/);
+    expect(head).toMatch(/&\[data-door\] ~ \.contents > \* \{\s*animation: arrive var\(--duration-arrive\) var\(--ease-arrive\) both;\s*animation-delay: calc\(var\(--door-blocks\) \+ \(var\(--arrive-cap\) - 1\) \* var\(--arrive-step\)\);/);
+    expect(head).toMatch(/&\[data-door\] ~ \.contents > :nth-child\(1\) \{\s*animation-delay: var\(--door-blocks\);/);
+    for (let k = 2; k <= 4; k += 1) {
+      expect(head).toMatch(new RegExp(`&\\[data-door\\] ~ \\.contents > :nth-child\\(${k}\\) \\{\\s*animation-delay: calc\\(var\\(--door-blocks\\) \\+ ${k - 1} \\* var\\(--arrive-step\\)\\);`));
+    }
+    // After the list's own arrival rules, so the door's hold wins while it lasts.
+    expect(css.indexOf("&[data-door] ~ .contents > *")).toBeGreaterThan(css.indexOf("@utility arrive-list {"));
+  });
+
   it("keeps the head's full height from the first frame: its beats are opacity only, never removed", () => {
     for (const rule of head.match(/&\[data-door\] > [^{]+\{[^}]*\}/g) ?? []) {
       expect(rule).toMatch(/animation: (fade|none)/);
@@ -155,7 +169,7 @@ describe("the door opens on Home (§3.2, board part 1 frames 5 to 7, at twice th
     // The door's light exists only where motion is welcome: otherwise the pool at rest, never the arch held still.
     expect(light).toMatch(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{\s*&\[data-door\]::before \{/);
     expect(light.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{[\s\S]*?\n  \}\n/, "")).not.toContain("door-open");
-    expect(head).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*&\[data-door\] > h1,\s*&\[data-door\] > \[data-door-step\],\s*&\[data-door\] ~ \* \{\s*animation: none;/);
+    expect(head).toMatch(/@media \(prefers-reduced-motion: reduce\), \(forced-colors: active\) \{\s*&\[data-door\] > h1,\s*&\[data-door\] > \[data-door-step\],\s*&\[data-door\] ~ \*,\s*&\[data-door\] ~ \.contents > \* \{\s*animation: none;/);
   });
 
   it("never takes a word under 4.5:1: each beat tints in only where the light under it lets it", () => {

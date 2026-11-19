@@ -414,10 +414,19 @@ describe("the first arrival of a sign-in", () => {
     // The head settling on its own timer does not end the door: the blocks wait for the light, not the clock.
     later(TINT_MS + 1000);
     expect(head).toHaveAttribute("data-door");
+    // The last box that paints: through a list's `display: contents` wrapper, its own last child.
+    const wrapper = page.lastElementChild!;
+    // Home's blocks come in a list whose wrapper is `display: contents`: the case the door must see through.
+    expect(wrapper).toHaveClass("contents");
+    const last = wrapper.classList.contains("contents") ? wrapper.lastElementChild! : wrapper;
     ended(head.querySelector("h1")!, "fade");
-    ended(page.lastElementChild!, "fade");
+    ended(last, "fade");
     expect(head).toHaveAttribute("data-door");
-    ended(page.lastElementChild!, "arrive");
+    if (last !== wrapper) {
+      ended(wrapper, "arrive");
+      expect(head).toHaveAttribute("data-door");
+    }
+    ended(last, "arrive");
     expect(head).not.toHaveAttribute("data-door");
   });
 

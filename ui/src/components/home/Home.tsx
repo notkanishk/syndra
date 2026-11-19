@@ -392,7 +392,10 @@ export function Home({ session }: { session: SessionUser }) {
       // Through the door (A-24 §3.2) the blocks are held until the head has opened; when the last of them
       // has arrived the door is over, and its rules come off with `data-door`.
       onAnimationEnd={(event) => {
-        if (door && event.animationName === "arrive" && event.target === event.currentTarget.lastElementChild) setDoor(false);
+        // The last box: through a list's `display: contents` wrapper, its own last child.
+        const last = event.currentTarget.lastElementChild;
+        const box = last?.classList.contains("contents") ? last.lastElementChild : last;
+        if (door && event.animationName === "arrive" && event.target === box) setDoor(false);
       }}
     >
       {/* The first arrival of a sign-in (A-24 §3.2, frames 5 to 7): `data-door` stages the head. Only the
