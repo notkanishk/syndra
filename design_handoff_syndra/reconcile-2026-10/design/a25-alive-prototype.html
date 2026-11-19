@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-hand="edge" data-rail="built">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A-25 · Syndra, alive</title>
+<!-- A-25 prototype, 20 Nov 2026. Proposed, nothing here is built. Tokens copied from ui/src/app/globals.css
+     (branch feat/addon-contract-a24-w4). One file, no scripts from elsewhere; the fonts are the only request.
+     Revised 20 Nov after the owner's review: moment 2 is redrawn for restraint (three ways, html[data-hand]);
+     moment 4's place is carried by something crisp (three ways, html[data-rail]); and no box cuts a light.
+     The shell is AppShell's own (a column, a bar, one scroller), with the room's light behind both. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..700&family=Figtree:wght@400..700&display=swap">
+<style>
+/* ── Tokens, as globals.css has them ─────────────────────────────────────── */
+:root {
+  --violet-600: #6f4ae0; --violet-500: #7f5af0; --violet-400: #9b7bff; --violet-300: #c9b6ff; --on-violet: #f7f4ff;
+  --lime-400: #a3e635; --lime-700: #4d7c0f;
+  --ease-tint: cubic-bezier(0.4, 0, 0.6, 1); --ease-press: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1); --ease-breathe: cubic-bezier(0.37, 0, 0.63, 1);
+  --ease-flash: cubic-bezier(0.33, 1, 0.68, 1);
+  --duration-tint: 120ms; --duration-press: 180ms; --duration-settle: 260ms; --duration-arrive: 420ms;
+  --duration-flash: 900ms; --duration-breathe: 2400ms; --light-lead: 40ms; --travel-lift: 6px;
+  --door-open: 1800ms; --door-breath: 10s;
+  --radius-card: 20px; --radius-inner: 14px; --radius-nav: 12px; --radius-pill: 999px;
+  --text-display: 34px; --text-page: 28px; --text-heading: 22px; --text-title: 17px;
+  --page-x: 26px; --measure: 60ch;
+  --display: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
+}
+:root, [data-theme="dark"] {
+  --ground: #080906; --canvas: #0b0c0a; --surface-1: #141612; --surface-2: #1b1e19; --rail: #101210;
+  --line: rgba(255,255,255,.06); --line-strong: rgba(255,255,255,.14);
+  --ink: #f3f5ef; --muted: rgba(243,245,239,.7); --faint: rgba(243,245,239,.56);
+  --accent: var(--violet-500); --accent-text: var(--violet-400); --accent-ink: var(--on-violet);
+  --accent-dense: var(--violet-600); --focus-ring: var(--violet-300); --accent-soft: rgba(155,123,255,.15);
+  --healthy: var(--lime-400); --warn: #f5a524;
+  --tint-3: rgba(243,245,239,.09); --hover: rgba(243,245,239,.05); --divider: rgba(255,255,255,.05);
+  --shadow-dialog: 0 22px 50px rgba(0,0,0,.55); --scrim: rgba(0,0,0,.55);
+  --shadow-popover: 0 18px 40px rgba(0,0,0,.5); --shadow-card: none;
+  --avatar-from: #403466; --avatar-to: #211b33;
+  --mark-base: rgba(155,123,255,.22); --mark-arc: rgba(206,188,255,.92); --mark-arc-opacity: .62;
+  --mark-dot: var(--violet-400); --mark-glow: rgba(155,123,255,.6);
+  --hour-weight: 1; color-scheme: dark;
+}
+[data-theme="light"] {
+  --ground: #f4f1fb; --canvas: #f4f1fb; --surface-1: #fff; --surface-2: #fff; --rail: #fff;
+  --line: rgba(37,28,66,.08); --line-strong: rgba(37,28,66,.16);
+  --ink: #1d1830; --muted: rgba(29,24,48,.78); --faint: rgba(29,24,48,.66);
+  --accent: #7a5af8; --accent-text: #5b3fd6; --accent-ink: #fff; --accent-dense: #5b3fd6; --focus-ring: var(--accent-text); --accent-soft: rgba(122,90,248,.12);
+  --healthy: var(--lime-700); --warn: #a86a00;
+  --tint-3: rgba(37,28,66,.08); --hover: rgba(37,28,66,.04); --divider: rgba(37,28,66,.06);
+  --shadow-dialog: 0 22px 50px rgba(60,40,120,.18); --scrim: rgba(60,40,120,.35);
+  --shadow-popover: 0 18px 40px rgba(60,40,120,.14); --shadow-card: 0 2px 10px rgba(60,40,120,.05);
+  --avatar-from: #cdbdfa; --avatar-to: #a58ef0;
+  --mark-base: rgba(91,63,214,.18); --mark-arc: rgba(76,48,196,.85); --mark-arc-opacity: .9;
+  --mark-dot: var(--accent-text); --mark-glow: rgba(91,63,214,.3);
+  --hour-weight: .75; color-scheme: light;
+}
+@media (max-width: 719px) { :root { --text-display: 28px; --text-page: 26px; --page-x: 16px; } }
+
+/* ── The one light ───────────────────────────────────────────────────────
+   Every light on this page is this gradient: the accent (--c) at a strength
+   (--k), falling to nothing on an eased curve. A light may pass behind a
+   thing that has a ground of its own (a card, the rail), and the hour's may
+   come in through the window. Nothing else ends one: no overflow, no
+   scroller, no hairline, no layer shorter than the pool. A mask may give a
+   light a shape (a hairline); it never gives it an end. */
+.pool, .rim::after, .hand .row::before, .mark::before, .ember::before, .trail-light::before {
+  --c: var(--accent);
+  --pool: radial-gradient(var(--shape, closest-side),
+    color-mix(in srgb, var(--c) var(--k), transparent),
+    color-mix(in srgb, var(--c) calc(var(--k) * .74), transparent) 20%,
+    color-mix(in srgb, var(--c) calc(var(--k) * .44), transparent) 42%,
+    color-mix(in srgb, var(--c) calc(var(--k) * .2), transparent) 62%,
+    color-mix(in srgb, var(--c) calc(var(--k) * .06), transparent) 82%,
+    transparent);
+  background: var(--pool); pointer-events: none;
+}
+.pool { position: absolute; }
+
+/* ── Page ────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--ground); }
+body { margin: 0; color: var(--ink); font: 14px/1.5 "Figtree", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+h1, h2, h3, p { margin: 0; }
+a { color: inherit; text-decoration: none; }
+button, input { font: inherit; color: inherit; }
+input { caret-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
+[data-figure] { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .faint { color: var(--faint); font-size: 12.5px; }
+.link { color: var(--accent-text); font-weight: 600; font-size: 13px; }
+.link:hover { text-decoration: underline; }
+
+/* The shell, as AppShell.tsx has it: the window never scrolls, the rail scrolls itself, and the column
+   holds the bar and the one scroller. */
+.app { display: grid; grid-template-columns: 252px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: clip; }
+.rail { position: relative; z-index: 2; min-height: 0; overflow-y: auto; background: var(--rail); border-right: 1px solid var(--line); padding: 18px 14px; display: flex; flex-direction: column; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 2px 10px 18px; font: 600 17px var(--display); }
+.nav { position: relative; isolation: isolate; }
+.nav a { position: relative; display: flex; align-items: center; gap: 9px; margin-top: 3px; padding: 9px 12px; border-radius: var(--radius-nav); color: var(--muted); transition: color var(--duration-tint) var(--ease-tint), background-color var(--duration-tint) var(--ease-tint); }
+.nav a::before { content: ""; width: 6px; height: 6px; flex: none; border-radius: 50%; background: color-mix(in srgb, var(--ink) 20%, transparent); transition: background-color var(--duration-tint) var(--ease-tint); }
+.nav a:not([aria-current]):hover { background: var(--hover); }
+.nav a[aria-current] { color: var(--accent-text); font-weight: 600; }
+.nav a[aria-current]::before { background: var(--accent-text); }
+.who { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px; font-size: 13px; color: var(--muted); }
+.av { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; color: var(--ink); background: linear-gradient(140deg, var(--avatar-from), var(--avatar-to)); }
+
+.col { position: relative; isolation: isolate; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--canvas); }
+.scroll { position: relative; flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; scroll-behavior: smooth; }
+html[data-still] .scroll { scroll-behavior: auto; }
+.bar { flex: none; height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 var(--page-x); border-bottom: 1px solid var(--line); }
+.bar .mark { display: none; }
+.bar b { font-weight: 600; } .bar .stamp { margin-left: auto; }
+.page { padding: 24px var(--page-x) 120px; max-width: 1280px; }
+@media (max-width: 719px) {
+  .app { grid-template-columns: minmax(0, 1fr); } .rail { display: none; }
+  .bar { height: 66px; } .bar .mark { display: inline-flex; } .bar .stamp, .hand .row .num { display: none; }
+  .seg button { padding: 0 10px; }
+}
+
+/* ── 0 · The hour's light, and the door's light crossing it ──────────────
+   The layer is the column's, not the page's. It sits behind the bar and the
+   scroller, so neither the bar's hairline nor the scroller's box can cut
+   it, and it stays where it is while the page scrolls: it is the room's
+   light. Places and sizes are in its own units. A pool is an element moved
+   by transform, so the crossing never repaints. */
+.light { position: absolute; inset: 0 0 auto; height: 480px; container-type: size; pointer-events: none; z-index: -1; }
+.light .pool { --k: calc(var(--reach) * var(--hour-weight)); }
+.light[data-hour="morning"]   { --x: 4cqw;  --y: 4cqh;   --w: 50cqw; --h: 54cqh; --reach: 26%; }
+.light[data-hour="afternoon"] { --x: 50cqw; --y: -12cqh; --w: 66cqw; --h: 46cqh; --reach: 20%; }
+.light[data-hour="evening"]   { --x: 86cqw; --y: 0cqh;   --w: 48cqw; --h: 50cqh; --reach: 24%; }
+.light[data-hour="quiet"]     { --x: 3cqw;  --y: 30cqh;  --w: 22cqw; --h: 34cqh; --reach: 22%; }
+.rest { left: calc(var(--x) - var(--w)); top: calc(var(--y) - var(--h)); width: calc(var(--w) * 2); height: calc(var(--h) * 2); }
+.door { left: -42cqw; top: -31cqh; width: 84cqw; height: 112cqh; opacity: 0; }
+html:not([data-still]) .light[data-door] .door { animation: door-cross var(--door-open) var(--ease-tint) both; }
+html:not([data-still]) .light[data-door] .rest { animation: door-settle var(--door-open) var(--ease-tint) both; }
+@keyframes door-cross { from { translate: -10cqw; opacity: 0; } 20%, 65% { opacity: 1; } to { translate: 62cqw; opacity: 0; } }
+@keyframes door-settle { from, 65% { opacity: 0; } }
+
+.head { padding-bottom: 8px; }
+.head h1 { font: 600 var(--text-display)/1.1 var(--display); letter-spacing: -.01em; }
+.head .muted { margin-top: 10px; max-width: var(--measure); }
+.head .faint { margin-top: 6px; }
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }
+
+/* ── Parts ───────────────────────────────────────────────────────────── */
+.btn { position: relative; display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-pill); background: none; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: background-color var(--duration-tint) var(--ease-tint), border-color var(--duration-tint) var(--ease-tint), filter var(--duration-tint) var(--ease-tint), transform var(--duration-press) var(--ease-press); }
+.btn:active { transform: scale(.97); }
+.btn.sm { height: 30px; padding: 0 12px; }
+.btn.accent { background: var(--accent-dense); color: var(--accent-ink); } .btn.accent:hover { filter: brightness(1.1); }
+.btn.outline { border-color: var(--line-strong); }
+.btn.ghost { color: var(--muted); }
+.btn.outline:hover, .btn.ghost:hover { background: var(--hover); }
+@media (pointer: coarse) { .btn { min-height: 44px; } }
+.seg { display: inline-flex; padding: 3px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface-1); }
+.seg button { height: 28px; padding: 0 12px; border: 0; border-radius: var(--radius-pill); background: none; font-size: 13px; color: var(--muted); cursor: pointer; transition: background-color var(--duration-tint) var(--ease-tint), color var(--duration-tint) var(--ease-tint); }
+.seg button[aria-pressed="true"] { background: var(--tint-3); color: var(--ink); font-weight: 600; }
+.card { position: relative; overflow: hidden; /* as Card.tsx:31 */ background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
+.card > header { display: flex; align-items: baseline; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--divider); }
+.card > header h3 { font-size: var(--text-title); font-weight: 600; }
+.row { position: relative; display: flex; align-items: center; gap: 16px; min-height: 50px; padding: 10px 20px; cursor: default; transition: background-color var(--duration-tint) var(--ease-tint); }
+.row + .row { border-top: 1px solid var(--divider); }
+.row:hover { background: var(--hover); } .row:active { background: var(--tint-3); }
+.row:focus-visible { outline-offset: -2px; border-radius: var(--radius-nav); }
+.row .name { flex: 1; min-width: 0; } .row .name b { display: block; font-weight: 600; }
+.row .name small { font-size: 13px; color: var(--muted); }
+.row .num { width: 110px; text-align: right; font-size: 13px; color: var(--faint); }
+.dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--healthy); }
+.field { height: 36px; width: 100%; max-width: 400px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface-1); font-size: 13px; transition: border-color var(--duration-tint) var(--ease-tint); }
+kbd { font: 12.5px ui-monospace, monospace; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--muted); }
+
+.m { padding-top: 72px; scroll-margin-top: -32px; }
+.m > .faint { letter-spacing: .01em; }
+.m > h2 { font: 600 var(--text-heading)/1.2 var(--display); margin-top: 4px; }
+.m > .muted { margin-top: 8px; max-width: var(--measure); }
+.stage { margin-top: 24px; display: flex; flex-wrap: wrap; gap: 32px 40px; align-items: flex-start; }
+.stage + .faint { margin-top: 18px; max-width: 78ch; }
+.grow { flex: 1 1 420px; min-width: 0; }
+.side { flex: 0 1 340px; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+.pair { display: flex; flex-wrap: wrap; gap: 10px; }
+/* The ways a moment could go, side by side: what it is, then what it costs. */
+.opts { margin-top: 28px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px 40px; max-width: 1040px; }
+.opts b { font-weight: 600; } .opts .note { margin-left: 8px; }
+.opts .muted { margin-top: 4px; } .opts .faint { margin-top: 6px; }
+.opts + .faint { margin-top: 18px; max-width: 78ch; }
+
+/* ── 2 · Light under your hand, revised ──────────────────────────────────
+   Found, not shown. No pool sits on a card and nothing glows around the
+   pointer: the light takes the shape of the thing your hand is on. Three
+   ways, behind the switch (html[data-hand]):
+     edge  the card's inner hairline, lit where it is nearest your hand.
+           No light falls behind a word, and there is nothing to clip: the
+           light is the edge. It sits inside the card's own overflow.
+     row   the hovered row's own tint, violet where your hand is.
+     none  as built: the row tints, and there is no light.
+   One listener writes --px and --py, once a frame. Colour only. The press
+   and the focus ring are as built; there is no glow outside a ring. */
+.rim { --px: 50%; --py: 50%; }
+.rim::after { content: ""; position: absolute; inset: 0; padding: 1px; border-radius: calc(var(--radius-card) - 1px); opacity: 0;
+  --shape: circle var(--pr, 320px) at var(--px) var(--py); --k: 50%;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  transition: opacity var(--duration-settle) var(--ease-tint); }
+@media (hover: hover) { html[data-hand="edge"] .rim:hover::after { opacity: 1; transition-duration: var(--duration-tint); } }
+html[data-hand="edge"] .rim.kbd::after { opacity: 1; transition-duration: 0s; --pr: 90px; }
+
+.hand .row { isolation: isolate; }
+.hand .row::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: 0;
+  --shape: circle 300px at var(--px) 50%; --k: calc(7% * var(--hour-weight));
+  transition: opacity var(--duration-settle) var(--ease-tint); }
+@media (hover: hover) { html[data-hand="row"] .hand .row:hover::before { opacity: 1; transition-duration: var(--duration-tint); } }
+html[data-hand="row"] .hand .row:active::before { opacity: 1; transition-duration: 0s; --k: calc(11% * var(--hour-weight)); }
+html[data-hand="row"] .hand .row:focus-visible::before { opacity: 1; transition-duration: 0s; --px: 15%; }
+
+/* In both lit ways an outline control's own hairline takes the colour, whole: hover and focus are one state. */
+html:not([data-hand="none"]) :is(.btn.outline:hover, .btn.outline:focus-visible, .field:hover, .field:focus-visible) { border-color: color-mix(in srgb, var(--accent) 60%, var(--line-strong)); }
+
+/* ── 3 · The lamp ──────────────────────────────────────────────────────── */
+.mark { --s: 22px; position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: var(--s); height: var(--s); }
+.mark i { display: block; border-radius: 50%; }
+.mark .mb, .mark .ma { position: absolute; inset: 0; border: calc(var(--s) / 15) solid var(--mark-base); }
+.mark .mb { mask-image: radial-gradient(closest-side, #000 88%, rgba(0,0,0,.5) 97%, transparent 100%); }
+.mark .ma { border-color: var(--mark-arc); opacity: var(--mark-arc-opacity);
+  mask-image: conic-gradient(from 0deg, #000 0deg, rgba(0,0,0,.28) 118deg, transparent 158deg, transparent 202deg, rgba(0,0,0,.28) 242deg, #000 360deg); }
+.mark .md { width: 35%; height: 35%; background: var(--mark-dot); box-shadow: 0 0 calc(var(--s) * .64) calc(var(--s) * .09) var(--mark-glow); transition: background-color var(--duration-settle) var(--ease-tint); }
+.mark::before { content: ""; position: absolute; inset: calc(var(--s) * -.85); /* spent before the rail's top */ border-radius: 50%; --c: var(--mark-dot); --k: 36%; opacity: 0; transition: opacity var(--duration-settle) var(--ease-tint); }
+.mark[data-room="watch"]::before, .mark[data-room="waiting"]::before { opacity: .72; }
+.mark[data-room="waiting"] { --mark-dot: var(--warn); --mark-glow: color-mix(in srgb, var(--warn) 45%, transparent); }
+html:not([data-still]) .mark[data-room="watch"]::before { animation: lamp calc(var(--door-breath) / 2) var(--ease-breathe) infinite alternate; }
+html:not([data-still]) .mark[data-room="waiting"]::before { animation: lamp var(--duration-breathe) var(--ease-breathe) infinite alternate; }
+html:not([data-still]) .mark[data-room="waiting"] .md { animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate; }
+@keyframes lamp { from { opacity: .28; scale: .76; } to { opacity: 1; scale: 1; } }
+@keyframes breathe { from { opacity: .5; } to { opacity: 1; } }
+.mark.xl { --s: 96px; margin: 84px 96px; }
+.lamp-true { display: flex; align-items: center; gap: 10px; padding: 26px 30px; font: 600 17px var(--display); }
+
+/* ── 4 · Your place in the rail, revised ─────────────────────────────────
+   The place is carried by things that are crisp and are not light: a filled
+   pill, a bold violet word, a dot. Three ways, behind the switch
+   (html[data-rail]):
+     built  today's pill, there at once. No light, nothing travels.
+     glide  the same pill, carried by the movement Tabs already use
+            (indicator-glide: transform, settle).
+     light  the glide, and a faint pool under it.
+   --bx, --by, --bw, --bh are the current row's own box, written on its nav. */
+.nav, .tabs { --bx: 0px; --by: 0px; --bw: 0px; --bh: 0px; }
+.nav-pill, .nav-light { position: absolute; left: 0; top: 0; display: none; pointer-events: none; transition: translate var(--duration-settle) var(--ease-settle); }
+.nav-pill { z-index: -1; width: var(--bw); height: var(--bh); border-radius: var(--radius-nav); background: var(--accent-soft); translate: var(--bx) var(--by); }
+.nav-light { z-index: -2; width: var(--lw, 252px); height: var(--lh, 72px); --k: calc(8% * var(--hour-weight)); translate: calc(var(--bx) + var(--bw) / 2 - 50%) calc(var(--by) + var(--bh) / 2 - 50%); }
+html[data-rail="built"] :is(.nav, .tabs) a[aria-current] { background: var(--accent-soft); }
+html:not([data-rail="built"]) .nav-pill, html[data-rail="light"] .nav-light { display: block; }
+.jump, html[data-still] :is(.nav-pill, .nav-light, .trail-light) { transition: none !important; }
+.frag { width: 252px; padding: 14px; background: var(--rail); border: 1px solid var(--line); border-radius: var(--radius-card); }
+.tabs { position: relative; isolation: isolate; --lw: calc(var(--bw) + 12px); --lh: 68px; display: flex; width: min(390px, 100%); padding: 8px 6px; background: var(--rail); border-top: 1px solid var(--line); }
+.tabs a { position: relative; flex: 1; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-radius: 13px; font-size: 12.5px; color: var(--muted); cursor: pointer; transition: color var(--duration-tint) var(--ease-tint), background-color var(--duration-tint) var(--ease-tint); }
+.tabs a::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 30%, transparent); }
+.tabs a[aria-current] { color: var(--accent-text); font-weight: 600; }
+.tabs a[aria-current]::before { background: var(--accent-text); }
+/* Forced colours: a fill and a dot are both taken away, so the place takes the system's own selected
+   colours. `.fc` draws that form for people who will never meet it. */
+html .nav.fc { background: Canvas; border-color: CanvasText; }
+html .nav.fc a { color: CanvasText; }
+html .nav.fc a::before { background: GrayText; }
+html .nav.fc a[aria-current] { background: Highlight; color: HighlightText; }
+html .nav.fc a[aria-current]::before { background: HighlightText; }
+
+/* ── 5 · The trail ─────────────────────────────────────────────────────── */
+.outcome { position: relative; isolation: isolate; flex: 0 1 460px; padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface-1); }
+.outcome h3 { display: flex; align-items: center; gap: 8px; font: 600 var(--text-title)/1.3 var(--display); }
+.outcome > p { margin-top: 4px; padding-left: 14px; }
+.trail { position: relative; margin: 16px 0 0 14px; }
+.step { position: relative; display: flex; gap: 10px; min-height: 36px; }
+.step .sd { position: relative; width: 6px; flex: none; }
+.step .sd::before { content: ""; position: absolute; top: 8px; width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--faint); transition: background-color var(--duration-tint) var(--ease-tint) var(--light-lead), border-color var(--duration-tint) var(--ease-tint) var(--light-lead); }
+.step .sd::after { content: ""; position: absolute; left: 2.5px; top: 20px; bottom: -4px; width: 1px; background: var(--line-strong); }
+.step:last-child .sd::after { display: none; }
+.step[data-done] .sd::before { background: var(--healthy); border-color: var(--healthy); }
+.trail-light { position: absolute; left: -20px; top: -37px; width: 280px; height: 96px; z-index: -1; translate: 0 var(--ty, 0px); opacity: 0;
+  transition: translate var(--duration-flash) var(--ease-tint), opacity var(--duration-flash) var(--ease-flash); }
+.trail-light::before { content: ""; position: absolute; inset: 0; --k: calc(26% * var(--hour-weight)); }
+.trail[data-state="going"] .trail-light { opacity: 1; transition-duration: var(--duration-flash), var(--duration-settle); }
+html:not([data-still]) .trail[data-state="going"] .trail-light::before { animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate; }
+.rest-line { margin-top: 10px; padding-left: 14px; transition: opacity var(--duration-settle) var(--ease-tint); }
+.trail[data-state="going"] ~ .rest-line { opacity: 0; }
+
+/* ── 6 · Go to ─────────────────────────────────────────────────────────── */
+.goto { position: fixed; inset: 0; z-index: 50; background: var(--scrim); display: flex; justify-content: center; align-items: flex-start; overflow: hidden; }
+.goto-light { left: 50%; top: calc(18vh + 34px); width: min(1180px, 100vw); height: min(620px, 36vh + 68px); translate: -50% -50%; --k: calc(46% * var(--hour-weight)); opacity: .6; } /* spent at the window's top and sides */
+html:not([data-still]) .goto-light { animation: goto-breath calc(var(--duration-tint) + var(--duration-flash)) var(--ease-tint) both; }
+@keyframes goto-breath { from { opacity: 0; } 12% { opacity: 1; } to { opacity: .6; } }
+.panel { position: relative; width: min(560px, calc(100vw - 32px)); margin-top: 18vh; background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--radius-card); box-shadow: var(--shadow-dialog); overflow: hidden; }
+.panel input { width: 100%; height: 56px; padding: 0 20px; border: 0; border-bottom: 1px solid var(--divider); background: none; font-size: 17px; outline: none; }
+.panel .faint { padding: 12px 20px 4px; }
+.panel .row { min-height: 41px; cursor: pointer; }
+.panel .row + .row { border-top: 0; }
+
+/* ── 7 · The ember ─────────────────────────────────────────────────────── */
+.empty { display: flex; gap: 8px; padding: 20px; }
+.empty .dot { margin-top: 8px; }
+.empty b { font-size: var(--text-title); font-weight: 600; }
+.ember { position: relative; }
+.ember::before { content: ""; position: absolute; inset: -17px; border-radius: 50%; --c: var(--healthy); --k: 44%; opacity: .8; }
+html:not([data-still]) .earned { animation: lift var(--duration-settle) var(--ease-settle) both; }
+html:not([data-still]) .earned .ember::before { animation: ember var(--duration-flash) var(--ease-flash) both; }
+@keyframes lift { from { opacity: 0; translate: 0 var(--travel-lift); } }
+@keyframes ember { from { opacity: 1; scale: .2; } }
+.gone { opacity: 0; transition: opacity var(--duration-tint) var(--ease-tint); }
+
+/* ── 1 · The member's room, on a phone ─────────────────────────────────── */
+.phone { position: relative; width: min(390px, 100%); border: 1px solid var(--line-strong); border-radius: 36px; overflow: hidden; background: var(--canvas); isolation: isolate; }
+.phone .light { height: 320px; }
+.phone > :not(.light) { position: relative; z-index: 1; }
+.phone .bar { height: 66px; padding: 0 16px; } .phone .bar .mark { display: inline-flex; }
+.phone .body { padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+.phone h1 { font: 600 26px/1.15 var(--display); }
+.phone h1 span { color: var(--faint); }
+.knows { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 8px; color: var(--muted); }
+.knows .dot { background: var(--accent); }
+.note { margin-left: auto; font-size: 12.5px; color: var(--accent-text); font-weight: 600; }
+
+/* ── The prototype's own controls ──────────────────────────────────────── */
+.dock { position: fixed; left: 50%; bottom: 18px; translate: -50%; z-index: 40; display: flex; gap: 8px; padding: 6px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface-2); box-shadow: var(--shadow-popover); }
+.dock .seg { border: 0; background: none; }
+html[data-still] *, html[data-still] *::before, html[data-still] *::after { animation: none !important; }
+@media (forced-colors: active) {
+  .pool, .rim::after, .hand .row::before, .mark::before, .ember::before, .trail-light, .nav-pill { display: none; }
+  html[data-rail] :is(.nav, .tabs) a[aria-current] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  html[data-rail] :is(.nav, .tabs) a[aria-current]::before { background: HighlightText; }
+  html[data-rail] :is(.nav, .tabs) a[aria-current]:focus-visible { outline-color: CanvasText; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><span class="mark" data-room="watch"><i class="mb"></i><i class="ma"></i><i class="md"></i></span>Syndra</div>
+    <nav class="nav" id="rail" aria-label="The eight moments">
+      <span class="pool nav-light jump"></span><span class="nav-pill jump"></span>
+      <a href="#m0" aria-current="page">The door's light</a>
+      <a href="#m1">The member's room</a>
+      <a href="#m2">Light under your hand</a>
+      <a href="#m3">The lamp breathes</a>
+      <a href="#m4">Your place in the rail</a>
+      <a href="#m5">The trail lights</a>
+      <a href="#m6">Go to is lit</a>
+      <a href="#m7">The ember</a>
+    </nav>
+    <div class="who"><span class="av">KS</span>Kanishk Singh</div>
+  </aside>
+
+  <main class="col">
+    <div class="light" data-hour="evening" data-door aria-hidden="true"><span class="pool rest"></span><span class="pool door"></span></div>
+    <div class="bar">
+      <span class="mark" data-room="watch" data-lamp style="--s:16px"><i class="mb"></i><i class="ma"></i><i class="md"></i></span>
+      <span><b>Syndra</b> <span class="faint">/</span> <b>Home</b></span>
+      <span class="faint stamp">A-25 prototype · revised 20 Nov 2026 · proposed, nothing here is built</span>
+    </div>
+    <div class="scroll" id="scroll">
+    <div class="page">
+
+      <section class="head" id="m0">
+        <h1><span class="hello">Evening</span>, Kanishk. Seven things need you.</h1>
+        <p class="muted">The light that crossed this greeting as the page opened is the one you chose, with its edges gone. Everything below speaks the same way.</p>
+        <p class="faint">Moment 0 · the first Home after a sign-in · 1800ms, once · the pool is the hour's own, never stronger than at rest · it is the room's light, so it stays while the page scrolls</p>
+        <div class="tools">
+          <button class="btn outline sm" data-replay="main">Play the arrival again</button>
+          <div class="seg" data-set="hour" aria-label="The hour">
+            <button data-v="morning">Morning</button><button data-v="afternoon">Afternoon</button><button data-v="evening">Evening</button><button data-v="quiet">Quiet</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="m" id="m1">
+        <p class="faint">1 of 7 · Rare: once a sign-in · then still</p>
+        <h2>The member's room</h2>
+        <p class="muted">For most people, My access is all of Syndra, and today it has no light at all. It gets the same room: the hour's pool behind the greeting, and the door's light crossing it once after a sign-in.</p>
+        <div class="stage">
+          <div class="phone">
+            <div class="light" data-hour="evening" data-door aria-hidden="true"><span class="pool rest"></span><span class="pool door"></span></div>
+            <div class="bar"><span class="mark" data-room="watch" data-lamp style="--s:16px"><i class="mb"></i><i class="ma"></i><i class="md"></i></span><span><b>Syndra</b> <span class="faint">/</span> <b>My access</b></span></div>
+            <div class="body">
+              <div>
+                <h1><span class="hello">Evening</span>, Cody. <span>Here's what you can use.</span></h1>
+                <p class="knows"><i class="dot"></i>From today, you can use Laser cutting. <a class="link" href="#m1">Laser cutting ↓</a></p>
+              </div>
+              <div class="card">
+                <header><h3>Laser cutting</h3><span class="note">From today</span></header>
+                <div class="row"><span class="name"><b>Operator</b><small>Given by makerspace staff</small></span><span class="num" data-figure>Ends 30 Apr</span></div>
+              </div>
+              <div class="card">
+                <header><h3>Wood shop</h3></header>
+                <div class="row"><span class="name"><b>Hand tools</b><small>Through the Welcome bundle</small></span><span class="num" data-figure>Ends 12 Dec</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="side">
+            <button class="btn outline sm" data-replay="phone">Sign in as Cody again</button>
+            <p class="faint">The same two keyframes as Home, the same once-a-sign-in rule. Nothing waits for the light: the greeting is whole from the first frame.</p>
+          </div>
+        </div>
+        <p class="faint">Still form: the hour's pool, at rest. Never on a failed read of Zitadel, and gone under forced colours.</p>
+      </section>
+
+      <section class="m" id="m2">
+        <p class="faint">2 of 7 · Constant · colour only, nothing moves · revised 20 Nov</p>
+        <h2>Light under your hand</h2>
+        <p class="muted">The light is found, not shown. It takes the shape of the thing your hand is on, and nothing glows around the pointer. Three ways to do it are behind the switch.</p>
+        <div class="stage">
+          <div class="card hand rim grow">
+            <header><h3>People</h3><span class="faint" data-figure>4</span></header>
+            <div class="row" tabindex="0"><span class="av">AS</span><span class="name"><b>Asuka</b><small>Operator in Laser cutting</small></span><span class="num" data-figure>Ends 2 Dec</span><button class="btn outline sm">Extend</button></div>
+            <div class="row" tabindex="0"><span class="av">BL</span><span class="name"><b>Becky Lynch</b><small>Hand tools in Wood shop</small></span><span class="num" data-figure>Ends 12 Dec</span><button class="btn outline sm">Extend</button></div>
+            <div class="row" tabindex="0"><span class="av">BB</span><span class="name"><b>Bianca Belair</b><small>Operator in 3D printing</small></span><span class="num" data-figure>Ends 9 Jan</span><button class="btn outline sm">Extend</button></div>
+            <div class="row" tabindex="0"><span class="av">CR</span><span class="name"><b>Cody Rhodes</b><small>Operator in Laser cutting</small></span><span class="num" data-figure>Ends 30 Apr</span><button class="btn outline sm">Extend</button></div>
+          </div>
+          <div class="side">
+            <div class="seg" data-set="hand" aria-label="Light under your hand">
+              <button data-v="edge" aria-pressed="true">The edge</button><button data-v="row">The row</button><button data-v="none">Nothing follows</button>
+            </div>
+            <div class="pair"><button class="btn accent">Give a role</button><button class="btn outline">Extend by 90 days</button><button class="btn ghost">Cancel</button></div>
+            <input class="field" placeholder="Search people" aria-label="Search people">
+            <p class="faint">Move across the list, and slowly near its sides. Then press <kbd>Tab</kbd>.</p>
+          </div>
+        </div>
+        <div class="opts">
+          <div><b>The edge</b><span class="note">Recommended</span>
+            <p class="muted">The card's hairline takes the lamp's colour where it is nearest your hand. An outline button's hairline takes it whole. No light falls behind a word.</p>
+            <p class="faint">What it costs: in the middle of a long table no edge is near, so nothing shows.</p></div>
+          <div><b>The row</b>
+            <p class="muted">The row you are on is a little violet where your hand is, fading along the row. It is the built tint, with a centre.</p>
+            <p class="faint">What it costs: light behind words again, at half the first draft's strength, and a second cue on a row that already tints.</p></div>
+          <div><b>Nothing follows</b>
+            <p class="muted">As built. The row tints, the button answers, and there is no light under your hand at all.</p>
+            <p class="faint">What it costs: nothing to tire of, and nothing of the lamp in the thing you do most.</p></div>
+        </div>
+        <p class="faint">Measured, the edge: beside your hand the lit hairline is 1.7:1 against the card in the dark room and 1.8:1 on paper; from the middle of a row, 1.3:1 and 1.4:1. Syndra's own strong hairline is 1.5:1 and 1.4:1. In 120ms, out 260ms. The row's tint, the press and the focus ring are as built, and no glow sits outside a ring. Never on a danger button, a consent, a Notice, a stale card or the rail. A finger gets none: there is no hover to answer.</p>
+      </section>
+
+      <section class="m" id="m3">
+        <p class="faint">3 of 7 · Ambient · the one new loop</p>
+        <h2>The lamp breathes</h2>
+        <p class="muted">The mark is a lamp, and a lamp that is kept is alive. While Syndra's reading of the room is live, its glow breathes once every ten seconds. When there is no reading, it holds still.</p>
+        <div class="stage">
+          <div><span class="mark xl" data-room="watch" data-lamp><i class="mb"></i><i class="ma"></i><i class="md"></i></span>
+            <div class="lamp-true"><span class="mark" data-room="watch" data-lamp><i class="mb"></i><i class="ma"></i><i class="md"></i></span>Syndra</div></div>
+          <div class="side">
+            <div class="seg" data-set="room" aria-label="The room">
+              <button data-v="watch" aria-pressed="true">Keeping watch</button><button data-v="waiting">Not answering</button><button data-v="">No reading</button>
+            </div>
+            <p class="muted" id="room-say">The rail's reading is live. The glow goes out and comes back over ten seconds, timed from the sign-in door's breath.</p>
+            <p class="faint">The small one is its true size in the rail. The one in the rail of this page is doing the same.</p>
+          </div>
+        </div>
+        <p class="faint">Opacity and scale of the glow only; the dot and the arc never move. Still form: the glow at rest. It never says a fact alone: the Notice still says Zitadel isn't answering, in words.</p>
+      </section>
+
+      <section class="m" id="m4">
+        <p class="faint">4 of 7 · Frequent · revised 20 Nov · the place is never carried by light</p>
+        <h2>Your place in the rail</h2>
+        <p class="muted">Where you are is said by three things that are crisp: a filled pill, a bold violet word and a dot. A soft light cannot say it to someone who cannot see a gradient, so here the light is cut, and the rail stays the quietest thing on the screen.</p>
+        <div class="stage">
+          <nav class="nav frag" aria-label="A piece of the rail">
+            <span class="pool nav-light jump"></span><span class="nav-pill jump"></span>
+            <a aria-current="page" tabindex="0">Home</a><a tabindex="0">People</a><a tabindex="0">Bundles</a><a tabindex="0">Automatic rules</a><a tabindex="0">Insights</a>
+          </nav>
+          <div class="side" style="flex-basis:390px">
+            <div class="seg" data-set="rail" aria-label="Your place in the rail">
+              <button data-v="built" aria-pressed="true">Today's pill</button><button data-v="glide">It glides</button><button data-v="light">With a light</button>
+            </div>
+            <nav class="tabs" aria-label="The phone's tab bar">
+              <span class="pool nav-light jump"></span><span class="nav-pill jump"></span>
+              <a aria-current="page" tabindex="0">Home</a><a tabindex="0">People</a><a tabindex="0">Requests</a><a tabindex="0">Account</a>
+            </nav>
+            <p class="faint">Click a place, here or in this page's own rail.</p>
+          </div>
+          <div class="side" style="flex-basis:252px">
+            <nav class="nav frag fc" aria-label="The same piece under forced colours">
+              <a aria-current="page" tabindex="0">Home</a><a tabindex="0">People</a><a tabindex="0">Bundles</a>
+            </nav>
+            <p class="faint">Under forced colours, drawn in your system's own colours. The fill and the dot are both taken away there, so the place takes the system's selected colours.</p>
+          </div>
+        </div>
+        <div class="opts">
+          <div><b>Today's pill</b><span class="note">Recommended</span>
+            <p class="muted">The filled pill, the bold word and the dot, there at once, as it is today. No light, and nothing travels.</p>
+            <p class="faint">What it costs: the rail stops being one of the seven. Two repairs come with it: the forced-colours form, and the tab bar's stronger dot in the rail.</p></div>
+          <div><b>It glides</b>
+            <p class="muted">The same pill, carried to where you go by the movement Tabs and the section band already use (260ms).</p>
+            <p class="faint">What it costs: chrome that moves on every page change, in the part of the screen that is meant to recede.</p></div>
+          <div><b>With a light</b>
+            <p class="muted">The glide, and a faint pool resting under the pill.</p>
+            <p class="faint">What it costs: it says nothing the pill has not said, and it makes the rail brighter than the page.</p></div>
+        </div>
+        <p class="faint">Measured: the word on the pill is 4.9:1 in the dark room and 5.8:1 on paper, and so is the dot once the rail takes the tab bar's token (today 3.4:1 and 3.9:1). The fill alone is 1.2:1 against the rail, so it never says it alone. By a key, on a first paint and under reduced motion, nothing travels in any of the three.</p>
+      </section>
+
+      <section class="m" id="m5">
+        <p class="faint">5 of 7 · Occasional · only by your own act</p>
+        <h2>The trail lights</h2>
+        <p class="muted">After you change something, a light rests on the step your change has reached, and moves on only when Syndra has seen the next one happen. When the change is home, the light goes out.</p>
+        <div class="stage">
+          <div class="outcome">
+            <h3><i class="dot"></i>Given</h3>
+            <p class="muted">Operator in Laser cutting, to Becky Lynch.</p>
+            <div class="trail" id="trail" data-state="home">
+              <span class="trail-light jump"></span>
+              <div class="step" data-done><span class="sd"></span><span>Recorded in Syndra.</span></div>
+              <div class="step" data-done><span class="sd"></span><span>Sent to Zitadel.</span></div>
+              <div class="step" data-done><span class="sd"></span><span>In Zitadel. <span class="faint" data-figure>Read back at 14:32.</span></span></div>
+            </div>
+            <p class="faint rest-line">Nothing for you to do.</p>
+          </div>
+          <div class="side">
+            <button class="btn outline sm" id="give">Give the role again</button>
+            <p class="faint">Here the steps settle on a timer. In Syndra each settles only on what was read back, so the light can wait a long while, breathing, and that is the truth.</p>
+          </div>
+        </div>
+        <p class="faint">Travel 900ms on tint's curve, the light leading the dot by 40ms. It breathes while it waits (the licensed loop: still happening). Never on a refusal or a failure (those have no trail), and never on a removal: nothing that takes access away is lit.</p>
+      </section>
+
+      <section class="m" id="m6">
+        <p class="faint">6 of 7 · Constant, opened by a key · opacity only</p>
+        <h2>Go to is lit</h2>
+        <p class="muted">Go to still appears at once, whole, with the caret ready. Behind it, one breath of light comes up and settles to rest, as if she had lifted the lamp to look.</p>
+        <div class="stage">
+          <div class="side"><button class="btn outline" id="open-goto">Open Go to</button><p class="faint">Or press <kbd>/</kbd>. <kbd>Esc</kbd> clears, then closes.</p></div>
+        </div>
+        <p class="faint">Up in 120ms, down to rest over 900ms; the panel and the typing wait for neither. It leaves at once. Still form: the light at rest, from the first frame.</p>
+      </section>
+
+      <section class="m" id="m7">
+        <p class="faint">7 of 7 · At rest · it opens once, when you cleared the queue</p>
+        <h2>The ember</h2>
+        <p class="muted">The lime dot of a clear queue holds a low glow with no edge. When your own act cleared it, the glow opens once from the dot.</p>
+        <div class="stage">
+          <div class="card grow" id="queue">
+            <header><h3>Drift</h3></header>
+            <div class="row" id="last"><span class="av">AS</span><span class="name"><b>Asuka</b><small>Operator in Laser cutting, found 18 Nov</small></span><button class="btn outline sm" id="adopt">Adopt</button></div>
+            <div class="empty" id="clear" hidden><i class="dot ember"></i><div><b>Everyone inside is on the list, and everyone on the list is inside.</b><p class="muted">Nothing for you to do.</p></div></div>
+          </div>
+          <div class="side"><button class="btn outline sm" id="unclear">Put the row back</button><p class="faint">Arriving at a queue that was already clear plays nothing: the ember is simply there.</p></div>
+        </div>
+        <p class="faint">The built lift (6px, 260ms) and one opening of the glow over 900ms. Still form: the ember at rest. Lime stays a dot's own light, never a fill behind words.</p>
+      </section>
+    </div>
+    </div>
+  </main>
+</div>
+
+<div class="goto" id="goto" hidden>
+  <span class="pool goto-light"></span>
+  <div class="panel" role="dialog" aria-label="Go to">
+    <input id="goto-in" placeholder="Go to a page, a person, a project" aria-label="Go to">
+    <p class="faint">Pages</p>
+    <a class="row">Automatic rules</a><a class="row">Bundles</a><a class="row">Change history</a><a class="row">Home</a><a class="row">Insights</a><a class="row">People</a>
+  </div>
+</div>
+
+<div class="dock" role="group" aria-label="Prototype controls">
+  <div class="seg" data-set="theme"><button data-v="dark" aria-pressed="true">Dark</button><button data-v="light">Light</button></div>
+  <div class="seg" data-set="still"><button data-v="" aria-pressed="true">Moving</button><button data-v="1">Still</button></div>
+</div>
+
+<script>
+(() => {
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const root = document.documentElement, scroller = $("#scroll");
+  const reflow = (el) => void el.offsetWidth;
+
+  // ── Segmented controls: theme, still, hour, the room ──────────────────
+  const ROOM_SAY = {
+    watch: "The rail's reading is live. The glow goes out and comes back over ten seconds, timed from the sign-in door's breath.",
+    waiting: "Zitadel isn't answering. Amber, on the breathe every waiting thing uses (2.4s). This state is built today; only the soft glow is new.",
+    "": "No reading, or a member's rail: the mark as it is built today, still. It is never sad.",
+  };
+  const set = {
+    theme: (v) => (root.dataset.theme = v),
+    still: (v) => (v ? (root.dataset.still = "") : delete root.dataset.still),
+    hand: (v) => (root.dataset.hand = v),
+    rail: (v) => { root.dataset.rail = v; settleNavs(); },
+    hour: (v) => {
+      $$(".light").forEach((l) => (l.dataset.hour = v));
+      const word = v === "quiet" ? "Evening" : v[0].toUpperCase() + v.slice(1);
+      $$(".hello").forEach((h) => (h.textContent = word));
+    },
+    room: (v) => {
+      $$(".mark[data-lamp], .rail .mark").forEach((m) => (m.dataset.room = v));
+      $("#room-say").textContent = ROOM_SAY[v];
+    },
+  };
+  const choose = (name, v) => {
+    $$(`.seg[data-set="${name}"] button`).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+    set[name](v);
+  };
+  $$(".seg").forEach((seg) => seg.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (b) choose(seg.dataset.set, b.dataset.v);
+  }));
+  const h = new Date().getHours();
+  choose("hour", h < 5 || h >= 22 ? "quiet" : h < 12 ? "morning" : h < 17 ? "afternoon" : "evening");
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) choose("still", "1");
+
+  // ── 0 and 1 · The arrival, again ──────────────────────────────────────
+  $$("[data-replay]").forEach((b) => b.addEventListener("click", () => {
+    const light = b.dataset.replay === "phone" ? $(".phone .light") : $(".col > .light");
+    light.removeAttribute("data-door"); reflow(light); light.setAttribute("data-door", "");
+    if (b.dataset.replay === "main") scroller.scrollTo({ top: 0 });
+  }));
+
+  // ── 2 · Light under your hand: one listener, two custom properties, once a frame ──
+  let moved = null;
+  const place = () => {
+    const e = moved; moved = null;
+    const el = e.target.closest?.(".rim"); if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--px", e.clientX - r.left + "px");
+    el.style.setProperty("--py", e.clientY - r.top + "px");
+  };
+  addEventListener("pointermove", (e) => {
+    if (e.pointerType === "touch") return; // a finger has no hover to answer
+    if (!moved) requestAnimationFrame(place);
+    moved = e;
+  }, { passive: true });
+  // A keyboard's row: the hairline beside it is lit. The ring is the crisp mark, as built.
+  addEventListener("focusin", (e) => {
+    $$(".rim.kbd").forEach((el) => el.classList.remove("kbd"));
+    const row = e.target.closest(".row"), host = row?.closest(".rim");
+    if (!host || !e.target.matches(":focus-visible")) return;
+    host.style.setProperty("--px", "0px");
+    host.style.setProperty("--py", row.offsetTop + row.offsetHeight / 2 + "px");
+    host.classList.add("kbd");
+  });
+  addEventListener("focusout", () => $$(".rim.kbd").forEach((el) => el.classList.remove("kbd")));
+
+  // ── 4 · Your place in the rail ────────────────────────────────────────
+  // The current row's own box, written on its nav; the pill (and the light, where one is drawn) reads it.
+  // `travel` false is a place reached by a key, a first paint or a resize: it is there at once.
+  const placeTo = (nav, item, travel) => {
+    $$("a", nav).forEach((a) => (a === item ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
+    const marks = $$(".nav-pill, .nav-light", nav);
+    marks.forEach((m) => m.classList.toggle("jump", !travel));
+    const box = { "--bx": item.offsetLeft, "--by": item.offsetTop, "--bw": item.offsetWidth, "--bh": item.offsetHeight };
+    for (const k in box) nav.style.setProperty(k, box[k] + "px");
+    if (!travel) { marks.forEach(reflow); marks.forEach((m) => m.classList.remove("jump")); }
+  };
+  let held = null, release = 0; // the place a rail click is scrolling to: the page's own spy waits for it
+  const navs = $$(".nav, .tabs");
+  function settleNavs() { navs.forEach((nav) => placeTo(nav, $("a[aria-current]", nav), false)); }
+  navs.forEach((nav) => {
+    nav.addEventListener("click", (e) => {
+      const a = e.target.closest("a"); if (!a) return;
+      placeTo(nav, a, e.detail > 0);
+      if (nav.id === "rail") { held = a; clearTimeout(release); release = setTimeout(() => (held = null), 1500); }
+    });
+    nav.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("a:not([href])")) placeTo(nav, e.target, false); });
+  });
+  settleNavs(); addEventListener("resize", settleNavs); document.fonts?.ready.then(settleNavs);
+  // This page's own rail follows the section in view.
+  const rail = $("#rail"), sections = $$("section[id]");
+  let ticking = false;
+  scroller.addEventListener("scroll", () => {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false;
+      const now = (scroller.scrollTop > 8 && sections.filter((s) => s.getBoundingClientRect().top < innerHeight * 0.4).pop()) || sections[0];
+      const link = $(`a[href="#${now.id}"]`, rail);
+      if (held && link !== held) return;
+      held = null;
+      if (!link.hasAttribute("aria-current")) placeTo(rail, link, true);
+    });
+  }, { passive: true });
+
+  // ── 5 · The trail: the light rests on the open step ───────────────────
+  const trail = $("#trail"), beam = $(".trail-light", trail), steps = $$(".step", trail);
+  let timers = [];
+  const say = (i, done, words, faint = "") => {
+    steps[i].toggleAttribute("data-done", done);
+    steps[i].lastElementChild.innerHTML = words + (faint ? ` <span class="faint" data-figure>${faint}</span>` : "");
+  };
+  const beamTo = (i) => beam.style.setProperty("--ty", steps[i].offsetTop + "px");
+  $("#give").addEventListener("click", () => {
+    timers.forEach(clearTimeout);
+    say(1, false, "Not sent to Zitadel yet."); say(2, false, "Not in Zitadel yet.");
+    beam.classList.add("jump"); beamTo(1); reflow(beam); beam.classList.remove("jump");
+    trail.dataset.state = "going";
+    timers = [
+      setTimeout(() => { beamTo(2); say(1, true, "Sent to Zitadel."); say(2, false, "Not read back from Zitadel yet."); }, 1100),
+      setTimeout(() => { say(2, true, "In Zitadel.", "Read back at 14:32."); trail.dataset.state = "home"; }, 4600),
+    ];
+  });
+  beamTo(2);
+
+  // ── 6 · Go to: at once, and one breath of light behind it ─────────────
+  const goto = $("#goto"), field = $("#goto-in");
+  const openGoto = () => { goto.hidden = false; field.value = ""; field.focus(); };
+  const closeGoto = () => { goto.hidden = true; };
+  $("#open-goto").addEventListener("click", openGoto);
+  goto.addEventListener("click", (e) => { if (e.target === goto || e.target.closest(".row")) closeGoto(); });
+  addEventListener("keydown", (e) => {
+    const typing = e.target.matches("input, textarea");
+    if ((e.key === "/" && !typing) || (e.key === "k" && (e.metaKey || e.ctrlKey))) { e.preventDefault(); openGoto(); }
+    else if (e.key === "Escape" && !goto.hidden) field.value ? (field.value = "") : closeGoto();
+  });
+
+  // ── 7 · The ember: it opens only when your own act cleared the queue ──
+  const last = $("#last"), clear = $("#clear");
+  $("#adopt").addEventListener("click", () => {
+    last.classList.add("gone");
+    setTimeout(() => { last.hidden = true; clear.hidden = false; clear.classList.add("earned"); }, 120);
+  });
+  $("#unclear").addEventListener("click", () => {
+    clear.hidden = true; clear.classList.remove("earned"); last.hidden = false; last.classList.remove("gone");
+  });
+})();
+</script>
+</body>
+</html>
