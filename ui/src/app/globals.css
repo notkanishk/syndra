@@ -1199,6 +1199,24 @@
   }
 }
 
+/* The current place under forced colours (A-25 moment 4, repair 1): the rail's row, the tab bar's
+   tab and the phone sheet's row take the system's own selected colours, a filled box with its words
+   in HighlightText. Forced, the place's 15% fill keeps its alpha and vanishes, its dot with it, and
+   only the weight is left. Inside, the pill's dot and any badge give way to the box. */
+@utility nav-place {
+  @media (forced-colors: active) {
+    &[aria-current="page"] {
+      forced-color-adjust: none;
+      background-color: Highlight;
+      color: HighlightText;
+      & * {
+        background-color: transparent;
+        color: HighlightText;
+      }
+    }
+  }
+}
+
 /* A member's card on its first day (A-24 §3.3, Q6): the door's light on its top
    edge and a violet hairline, on the first visit after that access starts and
    never again. The same light as Home's head, under the same bounds: still, the

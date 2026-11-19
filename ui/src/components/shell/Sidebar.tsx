@@ -153,7 +153,7 @@ function NavRow({
       // `min-h-[var(--tap)]` up to desktop: the rail appears at the tablet breakpoint and
       // a tablet is still a thumb, which is the whole argument
       // touch-targets.test.tsx makes. Its own links were 38-43px there.
-      className={`mt-[3px] flex min-h-[var(--tap)] items-center gap-[9px] rounded-nav text-body control desktop:min-h-0 ${
+      className={`nav-place mt-[3px] flex min-h-[var(--tap)] items-center gap-[9px] rounded-nav text-body control desktop:min-h-0 ${
         changed ? "flash " : ""
       }${
         nested ? "py-2 pl-[21px] pr-3" : "px-3 py-[9px]"
@@ -167,7 +167,9 @@ function NavRow({
         <span
           aria-hidden
           className={`h-1.5 w-1.5 flex-none rounded-pill motion-tint ${
-            active ? "bg-accent" : "bg-ink/20"
+            // The tab bar's token (A-25 moment 4, repair 2): 4.92:1 on the pill in the dark room, 5.75:1 on
+            // paper, where `bg-accent` was 3.41 and 3.87 (WCAG 1.4.11 asks 3:1 of what shows a state).
+            active ? "bg-accent-text" : "bg-ink/20"
           }`}
         />
       )}
