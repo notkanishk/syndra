@@ -1144,6 +1144,38 @@ const (
 	StandingNotHeld RoleStanding = "not_held"
 )
 
+// AccessHistory is one person's roles over a window (A-24 §9, access over
+// time; GET /users/{id}/access-history). The runs are Syndra's records; whether
+// a role is held today is its Standing, from the same read as the person page.
+type AccessHistory struct {
+	// Since is the window's first makerspace day, as asked.
+	Since string `json:"since"`
+	// Truncated says the row cap left the oldest endings off: whole spans,
+	// not drawn at all, so the card says earlier ones this year are left off.
+	Truncated bool          `json:"truncated"`
+	Roles     []RoleHistory `json:"roles"`
+}
+
+// RoleHistory is one role's runs in the window, oldest first.
+type RoleHistory struct {
+	ProjectID           string        `json:"project_id"`
+	ProjectName         string        `json:"project_name"`
+	ProjectNameResolved bool          `json:"project_name_resolved"`
+	RoleKey             string        `json:"role_key"`
+	Standing            *RoleStanding `json:"standing"`
+	// Ends is when a role the records still give ends (EffectiveRole.Ends);
+	// nil for one that never ends or is no longer given.
+	Ends *time.Time `json:"ends,omitempty"`
+	Runs []RoleRun  `json:"runs"`
+}
+
+// RoleRun is one unbroken hold on a role. From nil: no record says when it
+// began. To nil: the records give it today (or Zitadel shows it).
+type RoleRun struct {
+	From *time.Time `json:"from"`
+	To   *time.Time `json:"to"`
+}
+
 // CatalogRole is the computed view for the global role inventory.
 //
 // Group and the ClonedFrom pair come from the local roles table when Syndra

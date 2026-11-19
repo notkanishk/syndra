@@ -116,3 +116,38 @@ A grant that exists in Zitadel with no matching Syndra expected record and no `e
 - **THEN** the backend MUST insert an `external_grant_exclusions` row keyed by `(user_id, project_id, role_key)` and mark the drift item `marked_external`
 - **AND** future webhook and sweep detections for that triple MUST be silently filtered
 
+
+### Requirement: A person's access over time MUST draw dates only from Syndra's records and holding only from the observed standing
+
+`GET /api/v1/users/{id}/access-history?since=YYYY-MM-DD` (operators only; A-24 §9, addon-contract 7w-5) answers `{since, truncated, roles: [{project_id, project_name, project_name_resolved, role_key, standing, ends?, runs: [{from, to}]}]}`. It is read-only. `standing` is the person page's own (`Standings.Of`, one snapshot); the runs come from `direct_role_grants`, `user_bundle_assignments` through the pinned version, and the audit rows that name a role or a bundle (`direct_grant.removed`, `direct_grant.revoked_by_expiry`, `bundle.assigned`, `bundle.unassigned`, `bundle.holder_moved`), with approved access requests dating a removed grant's start.
+
+#### Scenario: Only an operator reads it
+
+- **WHEN** a member calls it, for another person or for themselves
+- **THEN** the backend MUST answer 403 and MUST NOT run the read
+
+#### Scenario: The window is bounded
+
+- **WHEN** `since` is not a `YYYY-MM-DD` makerspace day from a year before today to today
+- **THEN** the backend MUST answer 400 `VALIDATION_FAILED` with `details.since`
+- **AND** at most 500 spans are read, held-today rows first and then the newest endings; older spans are left off whole, and `truncated` MUST say so
+
+#### Scenario: A start no record gives is not invented
+
+- **WHEN** a role is held today or ended in the window and no record dates when its run began (a rule's role, a role Syndra never gave, a moved bundle holder, a grant given by hand and since removed)
+- **THEN** that run's `from` MUST be null, and the card MUST draw it from the window's edge and say "start not on record", never a day
+
+#### Scenario: Held today is observed
+
+- **WHEN** Zitadel shows a role that no open record gives
+- **THEN** the role MUST still carry an open run with a null `from`, and its `standing`, not its records, MUST decide whether the card draws it as held
+
+#### Scenario: A span with no start never bridges a gap
+
+- **WHEN** a run with no recorded start ended after an earlier run had ended (a grant Feb to Apr, and one given by hand that expired in Jul)
+- **THEN** they MUST stay two runs, and the card MUST draw the second from where the first ended, never the months between as held
+
+#### Scenario: What no record names is not drawn
+
+- **WHEN** a bundle is retired (`RetireBundleAndEnqueue` deletes every assignment with one `bundle.retired` row, none per holder), a rule stops giving a role, or Syndra revokes a role it never gave (`direct_grant.revoked` names none)
+- **THEN** those runs MUST NOT be drawn, ended or otherwise; NEXT 0l holds the write-side rows that would date them

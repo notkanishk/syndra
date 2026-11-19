@@ -15,7 +15,9 @@ import {
 } from "@/components/access/AccessSource";
 import { ResolvedProjectName } from "@/components/names";
 import { UserName } from "@/components/names/UserName";
+import { AccessOverTime } from "@/components/people/AccessOverTime";
 import { AccountKind } from "@/components/people/AccountKind";
+import { AdvancedOnly } from "@/components/ui/AdvancedOnly";
 import { GIVE_ROLE_LABEL, GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ManageBundles } from "@/components/people/ManageBundles";
 import { PersonActivity } from "@/components/people/PersonActivity";
@@ -473,6 +475,17 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                 />
               </div>
             </Card>
+          )}
+
+          {/* Access over time (A-24 §9, Q11), above the projects as the board has it: an operator's,
+              in Advanced. Its loading lines are as many as the roles held today, so it lands in place. */}
+          {isOperator && (
+            <AdvancedOnly gap={16}>
+              <AccessOverTime
+                userId={userId}
+                lines={access.data.projects.reduce((n, p) => n + new Set([...p.effective_role_keys, ...(p.observed_role_keys ?? [])]).size, 0)}
+              />
+            </AdvancedOnly>
           )}
 
           {access.data.projects.length === 0 && (
