@@ -27,6 +27,12 @@ cd ui && bun run test && bun run lint && bun run build
 cd addons/truenas && go test ./... && go vet ./...
 ```
 
+Before merging a UI PR, run the layout check in a real browser. jsdom can't lay out, so this check is the only one that sees overlaps, clipped text, headings off their cells, and seats off the first line. It is manual and not in CI, because CI can't reach the LAN. See `ui/scripts/layout-check/README.md`, which also covers checking a local build against staging's data.
+
+```bash
+cd ui && bun run layout:check -- --base http://192.168.5.16:3001
+```
+
 ## Key Conventions
 
 - **UI:** design tokens live only in `ui/src/app/globals.css`; navigation structure only in `ui/src/lib/nav.ts`. Both themes are authored in full — never a hardcoded hex in a component. Structure never moves in response to data (see `basic-advanced-ia`)

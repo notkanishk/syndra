@@ -6,7 +6,7 @@ import { Fragment, useMemo } from "react";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono, StatusDot } from "@/components/ui/Badge";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
-import { Card, CardColumns, ROW } from "@/components/ui/Card";
+import { Card, CardColumns, Cells, NUMBER_COL, ROW, type Columns } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName } from "@/components/names";
@@ -32,6 +32,19 @@ const APP_SORT: Record<AppSort, (entry: ApplicationView) => string | number> = {
  * are looking at changes the first thing you check. It is not a column of its
  * own (board, 8b) — Format and People sit last in their 110px seats.
  */
+/**
+ * The columns, the headings' and every row's: the app (its kind and shape under it), the project it
+ * reads, its claims, and People in the number seat. Shares held to a minimum, so the row wraps
+ * (Claims and People to a second line, under their headings) where it cannot hold them: a fixed
+ * 300 + 220 for app and claims came to 858px, and at 768 to 1100 the card cut People off.
+ */
+const APP_COLS: Columns = [
+  "w-full min-w-0 tablet:min-w-[160px] tablet:flex-[3_1_0%]",
+  "w-full min-w-0 tablet:min-w-[120px] tablet:flex-[2_1_0%]",
+  "tablet:min-w-[120px] tablet:flex-[2_1_0%] tablet:text-right",
+  NUMBER_COL,
+];
+
 export default function AppsPage() {
   const apps = useApplications();
   const [sort, setSort, view] = useSort<AppSort>("app", { list: "applications", keys: ["app", "people"] });
@@ -78,15 +91,11 @@ export default function AppsPage() {
         <div className={view.className}>
         <ListStates
           head={
-            <CardColumns>
-              <span className="w-[300px] min-w-[170px]">
-                <SortHead label="App" name="app" sort={sort} onSort={setSort} />
-              </span>
-              <span className="min-w-[140px] flex-1">Reads roles from</span>
-              <span className="w-[220px] shrink-0 text-right">Claims</span>
-              <span className="w-(--seat-number) shrink-0 text-right">
-                <SortHead label="People" name="people" sort={sort} onSort={setSort} />
-              </span>
+            <CardColumns cols={APP_COLS}>
+              <SortHead label="App" name="app" sort={sort} onSort={setSort} />
+              <span>Reads roles from</span>
+              <span>Claims</span>
+              <SortHead label="People" name="people" sort={sort} onSort={setSort} />
             </CardColumns>
           }
           isLoading={apps.isLoading}
@@ -115,9 +124,10 @@ export default function AppsPage() {
               data-row
               key={entry.application.id}
               href={`/applications/${entry.application.id}`}
-              className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} hover-tint tablet:flex-row tablet:items-center`}
+              className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} hover-tint tablet:flex-row tablet:flex-wrap tablet:items-center`}
             >
-              <span className="w-full min-w-0 tablet:w-[300px] tablet:min-w-[170px] tablet:shrink-0">
+              <Cells cols={APP_COLS}>
+              <span>
                 <span className="block text-body font-semibold [text-wrap:pretty]">
                   {entry.application.name}
                 </span>
@@ -131,15 +141,15 @@ export default function AppsPage() {
                 </span>
               </span>
 
-              <span className="w-full text-body text-muted tablet:min-w-[140px] tablet:flex-1">
+              <span className="text-body text-muted">
                 <ProjectName id={entry.application.project_id} link={false} />
               </span>
 
-              <span className="text-small tablet:w-[220px] tablet:shrink-0 tablet:text-right">
+              <span className="text-small">
                 <ClaimsCell entry={entry} />
               </span>
 
-              <span data-figure className="text-body tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
+              <span data-figure className="text-body">
                 {people.headline}
                 <span className="text-small text-faint tablet:hidden">
                   {peopleSuffix(people.headline)}
@@ -150,6 +160,7 @@ export default function AppsPage() {
                   </span>
                 )}
               </span>
+              </Cells>
             </Link>
             );
           })}

@@ -18,7 +18,7 @@ import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { Button } from "@/components/ui/Button";
 import { Card, CardGrid, CardHeader, CardRow, type SeatWidth } from "@/components/ui/Card";
-import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
+import { BELOW_HEADER, MetaRow, usePageHead } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import {
@@ -421,16 +421,21 @@ export function Home({ session }: { session: SessionUser }) {
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-small text-muted">
             <StatusDot tone="healthy" />
             <span>Checked, nothing waiting:</span>
-            {clear.map(([name, href], index) => (
-              <span key={href} className="inline-flex items-center gap-2">
-                {index > 0 && <span aria-hidden>·</span>}
-                {/* The tap's 44px reach, without its height: -10px either side leaves the line the
-                    24px row Claims has, so the phone's lines sit 24px apart as drawn (A-24 frame 2p). */}
-                <AdvancedLink href={href} className="-my-2.5 inline-flex min-h-[var(--tap)] items-center text-ink link-hover desktop:my-0 desktop:min-h-0">
+            {/* The tap's 44px reach, as tall as it reaches until desktop: lifted by -10px either side
+                it kept the lines 24px apart, and each link's reach covered the one above it and the
+                Claims line (WCAG 2.5.8; staging, 19 Nov). MetaRow's dots, so a link that wraps never
+                starts its line with one. */}
+            <MetaRow>
+              {clear.map(([name, href]) => (
+                <AdvancedLink
+                  key={href}
+                  href={href}
+                  className="inline-flex min-h-[var(--tap)] items-center text-small text-ink link-hover desktop:min-h-0"
+                >
                   {name}
                 </AdvancedLink>
-              </span>
-            ))}
+              ))}
+            </MetaRow>
           </div>
           </Unfold>
         )}
@@ -888,10 +893,11 @@ function OnboardingGaps({
               }
             >
               <UserAvatar id={person.user_id} size="list" />
-              <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-body font-semibold" id={person.user_id} />
-              <div className="min-w-0 flex-1 text-body text-muted [text-wrap:pretty]">
-                Holds no bundle
-              </div>
+              {/* The name is the share that gives (truncated, never under 100); the words keep theirs.
+                  A fixed 170 for the name and a body with no width dropped the seat under rows that
+                  fitted (staging, 19 Nov). */}
+              <UserName className="min-w-[100px] flex-1 truncate text-body font-semibold" id={person.user_id} />
+              <div className="min-w-fit text-body text-muted">Holds no bundle</div>
               {person.joined && (
                 <div className="w-[66px] shrink-0 text-small text-faint">
                   <Relative iso={person.joined} />

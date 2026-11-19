@@ -15,7 +15,7 @@ import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
-import { SignInRow } from "@/components/ui/SignInRow";
+import { SIGN_IN_COLS, SignInRow } from "@/components/ui/SignInRow";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { TokenBlock, type TokenBlockLine } from "@/components/ui/TokenBlock";
 import { Unfold } from "@/lib/motion";
@@ -214,13 +214,13 @@ function LiveList({
         />
       ) : (
         <>
-          <CardColumns>
-            <span className="w-7 flex-none" />
-            <span className="w-[96px] flex-none">Time</span>
-            <span className="w-[210px] flex-none">Person</span>
-            <span className="w-[120px] flex-none">Asked for</span>
-            <span className="min-w-[150px] flex-1">Syndra answered</span>
-            <span className="w-[120px] flex-none text-right">Checks</span>
+          <CardColumns cols={SIGN_IN_COLS}>
+            <span />
+            <span>Time</span>
+            <span>Person</span>
+            <span>Asked for</span>
+            <span>Syndra answered</span>
+            <span>Checks</span>
           </CardColumns>
           {shown.slice(0, paging.limit).map((s) => (
             <Arriving key={s.seq} fresh={s.seq > (firstSeen.current ?? 0)}>

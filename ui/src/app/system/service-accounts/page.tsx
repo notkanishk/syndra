@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { Owner } from "@/components/system/ServiceAccountOwner";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Card, CardColumns, CardRow } from "@/components/ui/Card";
+import { Card, CardColumns, CardRow, type Columns } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
@@ -24,6 +24,14 @@ import {
  * here. The API can't read last use yet (A-07 §22: boards change to what can be
  * read). Add the column when `GET /service-accounts` carries `last_used_at`.
  */
+/** Account, purpose, owner, roles. On a phone: name and Roles first, Purpose and Owner beneath. */
+const COLS: Columns = [
+  "order-1 min-w-[120px] flex-1 tablet:min-w-[160px] tablet:flex-[1_1_0%]",
+  "order-3 w-full min-w-0 tablet:order-2 tablet:w-auto tablet:min-w-[160px] tablet:flex-[2_1_0%]",
+  "order-4 w-full tablet:order-3 tablet:w-auto tablet:min-w-[120px] tablet:flex-[1_1_0%]",
+  "order-2 w-[64px] flex-none text-right tablet:order-4 tablet:w-(--seat-number)",
+];
+
 export default function ServiceAccountsPage() {
   const accounts = useServiceAccounts();
   const rows = accounts.data ?? [];
@@ -44,13 +52,13 @@ export default function ServiceAccountsPage() {
       <Card {...leaving.listProps}>
         <ListStates
           head={
-            <CardColumns>
-              <span className="w-[220px] shrink-0">
+            <CardColumns cols={COLS}>
+              <span>
                 Account <span aria-hidden>↑</span>
               </span>
-              <span className="min-w-0 flex-1">Purpose</span>
-              <span className="w-[170px] shrink-0">Owner</span>
-              <span className="w-(--seat-number) shrink-0 text-right">Roles</span>
+              <span>Purpose</span>
+              <span>Owner</span>
+              <span>Roles</span>
             </CardColumns>
           }
           isLoading={accounts.isLoading}
@@ -68,9 +76,9 @@ export default function ServiceAccountsPage() {
         >
           {leaving.rows.map((account, index) => (
             <LeavingRow key={account.id} {...leaving.props(account.id)}>
-            <CardRow first={index === 0} data-account-row>
+            <CardRow cols={COLS} first={index === 0} data-account-row>
               {/* Phone: name and Roles on the first line, Purpose and Owner stacked beneath. */}
-              <span className="order-1 min-w-0 flex-1 tablet:w-[220px] tablet:flex-none">
+              <span>
                 <Link
                   href={serviceAccountHref(account.id)}
                   className="block text-body font-semibold [overflow-wrap:anywhere] link-hover"
@@ -81,13 +89,13 @@ export default function ServiceAccountsPage() {
                   {kindLabel(account.kind)} · {howItSignsIn(account)}
                 </span>
               </span>
-              <span className="order-3 w-full min-w-0 text-body text-muted [text-wrap:pretty] tablet:order-2 tablet:w-auto tablet:flex-1">
+              <span className="text-body text-muted [text-wrap:pretty]">
                 {account.purpose || <span className="text-faint">Nothing written yet</span>}
               </span>
-              <span className="order-4 w-full text-body tablet:order-3 tablet:w-[170px] tablet:shrink-0">
+              <span className="text-body">
                 <Owner id={account.owner_id} />
               </span>
-              <span data-figure className="order-2 w-[64px] shrink-0 text-right text-body tablet:order-4 tablet:w-(--seat-number)">
+              <span data-figure className="text-body">
                 {account.role_count}
               </span>
             </CardRow>

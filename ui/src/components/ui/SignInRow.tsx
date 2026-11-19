@@ -1,8 +1,22 @@
 import type { ReactNode } from "react";
 
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { Cells, type Columns } from "@/components/ui/Card";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Unfold } from "@/lib/motion";
+
+/**
+ * The columns, which debug mode's headings draw too. On a phone the verdict
+ * moves up beside the time (`order`), and the row stacks.
+ */
+export const SIGN_IN_COLS: Columns = [
+  "order-1 w-[28px] flex-none",
+  "order-1 w-[96px] flex-none",
+  "order-3 flex w-full min-w-0 items-center gap-2.5 tablet:w-auto tablet:min-w-[140px] tablet:flex-[1_1_0%]",
+  "order-3 w-full tablet:w-[120px] tablet:flex-none",
+  "order-3 min-w-[140px] flex-[2_1_0%]",
+  "order-2 ml-auto tablet:order-3 tablet:ml-0 tablet:w-[120px] tablet:flex-none tablet:text-right",
+];
 
 /**
  * One captured sign-in in debug mode's live list (A-14 §6): chevron · Time ·
@@ -37,22 +51,23 @@ export function SignInRow({
   );
   return (
     <div className="row-divider motion-tint">
-      <div className="flex flex-wrap items-center gap-x-[18px] gap-y-1 px-5 py-2.5">
+      <div className="row-cols flex flex-wrap items-center gap-y-1 px-5 py-2.5">
+        <Cells cols={SIGN_IN_COLS}>
         <button
           type="button"
           aria-expanded={open}
           aria-label={open ? `Close the sign-in at ${time}` : `Open the sign-in at ${time}`}
           onClick={onToggle}
-          className="flex-none rounded-pill control press-scale"
+          className="rounded-pill control press-scale"
         >
           <FoldChevron open={open} />
         </button>
-        <span className="type-mono w-[96px] flex-none text-small">{time}</span>
-        <span className="ml-auto tablet:hidden">{check}</span>
-        <span className="flex w-full min-w-0 items-center gap-2.5 tablet:w-[210px] tablet:flex-none">{person}</span>
-        <span className="w-full text-body text-muted tablet:w-[120px] tablet:flex-none">{asked}</span>
-        <span className="min-w-[150px] flex-1 text-small [overflow-wrap:anywhere]">{answered}</span>
-        <span className="hidden w-[120px] flex-none text-right tablet:block">{check}</span>
+        <span className="type-mono text-small">{time}</span>
+        {person}
+        <span className="text-body text-muted">{asked}</span>
+        <span className="text-small [overflow-wrap:anywhere]">{answered}</span>
+        {check}
+        </Cells>
       </div>
       <Unfold open={open}>
         <div className="flex flex-col gap-[22px] px-[22px] pb-6 pt-2 tablet:pl-[clamp(22px,4.3vw,62px)]">{children}</div>

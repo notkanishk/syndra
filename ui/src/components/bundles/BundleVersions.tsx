@@ -8,7 +8,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/Badge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, Cells, type Columns } from "@/components/ui/Card";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate } from "@/lib/format";
@@ -233,10 +233,10 @@ function Holders({
   // they got it (B7) and since when.
   return (
     <div className="flex flex-col">
-      <CardColumns>
-        <span className="min-w-[min(220px,100%)] flex-1">Person</span>
-        <span className="min-w-0 flex-1">How they got it</span>
-        <span className="w-(--seat-number) text-right">Since</span>
+      <CardColumns cols={HOLDER_COLS}>
+        <span>Person</span>
+        <span>How they got it</span>
+        <span>Since</span>
       </CardColumns>
       {Array.from(byVersion.entries())
         .sort((a, b) => b[0] - a[0])
@@ -258,14 +258,16 @@ function Holders({
               </div>
               {people.map((holder) => (
                 <div key={holder.user_id} className="row-divider row-cols flex flex-wrap items-center gap-y-1 px-5 py-3">
-                  <span className="flex min-w-[min(220px,100%)] flex-1 items-center gap-3">
+                  <Cells cols={HOLDER_COLS}>
+                  <span className="flex items-center gap-3">
                     <UserAvatar id={holder.user_id} size="row" />
                     <UserName id={holder.user_id} className="text-body font-semibold text-ink" />
                   </span>
-                  <span className="min-w-0 flex-1 text-small text-muted">{howTheyGotIt(holder)}</span>
-                  <span data-figure className="w-(--seat-number) text-right text-small text-muted">
+                  <span className="text-small text-muted">{howTheyGotIt(holder)}</span>
+                  <span data-figure className="text-small text-muted">
                     {formatShortDate(holder.assigned_at)}
                   </span>
+                  </Cells>
                 </div>
               ))}
             </section>
@@ -274,6 +276,9 @@ function Holders({
     </div>
   );
 }
+
+/** Person, how they got it, since when. */
+const HOLDER_COLS: Columns = ["min-w-[min(220px,100%)] flex-1", "min-w-[140px] flex-1", "w-(--seat-number) flex-none text-right"];
 
 /** "Given by Kanishk Singh" · "Approved request" · "Moved from v2" · "Given when they joined". */
 function howTheyGotIt(holder: BundleHolder) {

@@ -7,7 +7,7 @@ import { NameLink, nameHref } from "@/components/names/NameLink";
 import { Unresolved, UNKNOWN_ACCOUNT } from "@/components/names/Unresolved";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { useInsightsStats, type InsightsPerson, type InsightsSeries, type InsightsStatsMetric, type StatsUnit } from "@/lib/queries/useStats";
@@ -54,6 +54,10 @@ function Spread({ metric, row }: { metric: InsightsStatsMetric; row: InsightsSer
   );
 }
 
+/** Person, then two numbers: stacked on a phone. */
+// eslint-disable-next-line no-restricted-syntax -- classes, not a sentence (the rule reads two words as one)
+const PEOPLE_COLS: Columns = ["w-full min-w-0 tablet:w-auto tablet:min-w-[160px] tablet:flex-1", NUMBER_COL, NUMBER_COL];
+
 type PeopleSort = "person" | "last30" | "last12";
 
 /**
@@ -73,35 +77,31 @@ function People({ metric, row, what }: { metric: InsightsStatsMetric; row: Insig
   const value = (v: number | null) => (v === null ? <span className="text-faint">{copy.NO_VALUE}</span> : formatValue(v, metric.unit));
   return (
     <div role="table" aria-label={copy.peopleLabel(what)}>
-      <CardColumns role="row">
-        <span className="min-w-0 flex-1">
-          <SortHead label={copy.PERSON_COLUMN} name="person" sort={sort} onSort={setSort} />
-        </span>
-        <span className="w-[130px] shrink-0 text-right">
-          <SortHead label={copy.LAST_30_COLUMN} name="last30" sort={sort} onSort={setSort} />
-        </span>
-        <span className="w-[130px] shrink-0 text-right">
-          <SortHead label={copy.LAST_12_COLUMN} name="last12" sort={sort} onSort={setSort} />
-        </span>
+      <CardColumns cols={PEOPLE_COLS} role="row">
+        <SortHead label={copy.PERSON_COLUMN} name="person" sort={sort} onSort={setSort} />
+        <SortHead label={copy.LAST_30_COLUMN} name="last30" sort={sort} onSort={setSort} />
+        <SortHead label={copy.LAST_12_COLUMN} name="last12" sort={sort} onSort={setSort} />
       </CardColumns>
       <div role="rowgroup" className={view.className}>
         {rows.map((p) => (
-          <div key={p.user_id} role="row" className="row-divider row-cols flex flex-wrap items-baseline gap-y-1 px-5 py-2 text-body tablet:flex-nowrap">
-            <span role="cell" className="w-full min-w-0 [overflow-wrap:anywhere] tablet:w-auto tablet:flex-1">
+          <div key={p.user_id} role="row" className="row-divider row-cols flex flex-wrap items-baseline gap-y-1 px-5 py-2 text-body">
+            <Cells cols={PEOPLE_COLS}>
+            <span role="cell" className="[overflow-wrap:anywhere]">
               {p.name ? (
                 <NameLink href={nameHref.user(p.user_id)} className="font-semibold">{p.name}</NameLink>
               ) : (
                 <Unresolved label={UNKNOWN_ACCOUNT} id={p.user_id} idLabel={copy.ACCOUNT_ID} href={nameHref.user(p.user_id)} />
               )}
             </span>
-            <span role="cell" data-figure className="flex flex-col tablet:w-[130px] tablet:shrink-0 tablet:text-right">
+            <span role="cell" data-figure className="flex flex-col">
               <span className="text-fine text-faint tablet:hidden">{copy.LAST_30_COLUMN}</span>
               {value(p.last_30d)}
             </span>
-            <span role="cell" data-figure className="flex flex-col tablet:w-[130px] tablet:shrink-0 tablet:text-right">
+            <span role="cell" data-figure className="flex flex-col">
               <span className="text-fine text-faint tablet:hidden">{copy.LAST_12_COLUMN}</span>
               {value(p.last_12m)}
             </span>
+            </Cells>
           </div>
         ))}
       </div>

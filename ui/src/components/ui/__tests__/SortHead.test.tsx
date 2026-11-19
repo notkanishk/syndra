@@ -49,6 +49,14 @@ describe("sorting by a heading", () => {
       expect(screen.getByRole("button", { name })).toHaveClass("relative");
       expect(screen.getByRole("button", { name })).not.toHaveClass("gap-[5px]");
       expect(arrow(name)).toHaveClass("absolute", "left-full");
+      // In a right-aligned column it hangs before the label instead, inside the column: past it, it
+      // stood 14px beyond the dates under Found, over the seat's edge (layout audit, 19 Nov).
+      expect(arrow(name)).toHaveClass(
+        "in-[[class*=text-right]]:left-auto",
+        "in-[[class*=text-right]]:right-full",
+        "in-[[class*=text-right]]:ml-0",
+        "in-[[class*=text-right]]:mr-[5px]",
+      );
     }
   });
 

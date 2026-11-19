@@ -39,17 +39,18 @@ import { useShownNames } from "@/components/names/shownNames";
  * only one an operator remembers.
  */
 /**
- * The table's columns, its headings' and every row's: the person (220), their account and its
- * status sharing what is left 1 to 1.3, as D-1's board draws them (part 2, frame 10), and since
- * when. Both flex from a basis, never a fixed width: four fixed widths and the wide seat summed to
- * 1134px in a 1094px row at 1440, so the seat dropped under every row. The bases are the board's
- * less 40 each, because the board drew two verbs and a system with a home folder limit has three
- * (the wide seat): 220 + 140 + 200 + 110 + 300 and the gaps is 1034, on one line at 1440.
+ * The table's columns, its headings' and every row's: the person, their account and its status
+ * sharing the row 1 to 1 to 1.3 (D-1's board, part 2 frame 10, draws the last two 1 to 1.3), and
+ * since when. Shares held to a minimum, never a fixed width or a basis: with the person at 220 and
+ * bases of 140 and 200 the line came to 1034px, so Put on hold / Revoke dropped under every row up
+ * to a 1400px window although the rows fitted at 1280 (staging, 19 Nov). Now 140 + 120 + 140 + 110,
+ * the wide seat (a system with a home folder limit has three verbs) and the gaps is 874: one line
+ * from a 1220px window, and from 1120 with the default seat.
  */
 const COLS: Columns = [
-  "w-[220px] flex-none",
-  "min-w-0 flex-[1_1_140px]",
-  "min-w-0 flex-[1.3_1_200px]",
+  "min-w-[min(140px,100%)] flex-1",
+  "min-w-[min(120px,100%)] flex-1",
+  "min-w-[min(140px,100%)] flex-[1.3_1_0%]",
   "w-(--seat-number) flex-none text-right",
 ];
 
@@ -225,7 +226,7 @@ function PersonRow({
         <span className="flex items-center gap-2.5">
           <UserAvatar id={account.subject_id} size="row" />
           <span className="min-w-0">
-            <UserName id={account.subject_id} href={accountHref(account.subject_id)} className="[overflow-wrap:anywhere] text-body font-semibold text-ink" />
+            <UserName id={account.subject_id} href={accountHref(account.subject_id)} className="block truncate text-body font-semibold text-ink" />
             <ServiceAccountTag id={account.subject_id} />
           </span>
         </span>

@@ -1,0 +1,274 @@
+/**
+ * The layout detector, run inside the page (Playwright's `page.evaluate`), so it
+ * must stay one self-contained function: no imports, no closure over this module.
+ *
+ * It is the 19 Nov 2026 staging audit's detector (648 page runs), made strict
+ * enough to gate a merge. Four findings, each a defect jsdom cannot see because
+ * it never lays anything out:
+ *
+ *   overlap   two visible pieces of text (or controls) cross by more than 2px on
+ *             both axes. Leaf text is measured by its ink, clipped to every box
+ *             that clips it, so a truncated name does not count.
+ *   clipped   text pokes more than 2px past the content box of an element that
+ *             does not scroll and is not a `truncate`/ellipsis or line clamp.
+ *             A negative margin is a deliberate bleed (a hover wash), not a spill.
+ *   heading   a column heading more than 4px off its cells. Left-aligned: the
+ *             heading's text against the cell's column box (`data-col`), so an
+ *             avatar, a status dot or a chip's padding inside the column is the
+ *             column's own (D-1 part 2 frame 10 draws Person over the avatar,
+ *             Status over the dot). Right-aligned: text against text.
+ *   seat      from tablet up, a row's action seat off its first line although the
+ *             row's parts fit on one line at their natural widths (D-1 §4 rule 1).
+ *
+ * Page-level horizontal scroll is reported too. `tablet` is the breakpoint below
+ * which the seat wraps by design (D-1 §4 rule 9).
+ */
+export function detect({ tablet = 720 } = {}) {
+  const R = (r) => ({ x: Math.round(r.left), y: Math.round(r.top + scrollY), w: Math.round(r.right - r.left), h: Math.round(r.bottom - r.top) });
+  // `drawn`: on screen, read aloud or not. A heading lines up with what is drawn under it, an
+  // ArrowLink's aria-hidden arrow included; the other checks count only what a reader is given.
+  const vis = (el, drawn = false) => {
+    if (!el.isConnected) return false;
+    if (el.closest(drawn ? "[hidden]" : '[aria-hidden="true"],[hidden],[inert]')) return false;
+    const cs = getComputedStyle(el);
+    if (cs.visibility !== "visible" || cs.display === "none") return false;
+    for (let a = el; a && a !== document.documentElement; a = a.parentElement) {
+      const s = getComputedStyle(a);
+      if (parseFloat(s.opacity) === 0) return false;
+      if (s.clip && s.clip !== "auto") return false;
+      if (s.clipPath && s.clipPath.startsWith("inset(50%")) return false;
+    }
+    const r = el.getBoundingClientRect();
+    return r.width > 1 && r.height > 1;
+  };
+  const sel = (el) => {
+    let s = el.tagName.toLowerCase();
+    const c = (el.getAttribute("class") || "").split(/\s+/).filter(Boolean).slice(0, 4);
+    if (c.length) s += "." + c.join(".");
+    const p = el.parentElement;
+    const pc = p ? p.tagName.toLowerCase() + (p.getAttribute("class") || "").split(/\s+/).filter(Boolean).slice(0, 3).map((x) => "." + x).join("") : "";
+    return (pc ? pc + " > " : "") + s;
+  };
+  const txt = (el) => (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+  const clipRect = (el) => {
+    let r = { l: -1e9, t: -1e9, r: 1e9, b: 1e9 };
+    for (let a = el; a && a !== document.body; a = a.parentElement) {
+      const s = getComputedStyle(a);
+      if (s.overflowX !== "visible" || s.overflowY !== "visible") {
+        const b = a.getBoundingClientRect();
+        r = { l: Math.max(r.l, b.left), t: Math.max(r.t, b.top), r: Math.min(r.r, b.right), b: Math.min(r.b, b.bottom) };
+      }
+    }
+    return r;
+  };
+  const textRects = (el, own) => {
+    const out = [];
+    const nodes = own ? [...el.childNodes].filter((n) => n.nodeType === 3) : [];
+    if (!own) {
+      const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let n;
+      while ((n = tw.nextNode())) if (n.parentElement && vis(n.parentElement, true)) nodes.push(n);
+    }
+    for (const n of nodes) {
+      if (!n.textContent.trim()) continue;
+      const rg = document.createRange();
+      rg.selectNodeContents(n);
+      for (const q of rg.getClientRects()) if (q.width >= 1) out.push(q);
+    }
+    return out;
+  };
+  const union = (rects) => ({
+    left: Math.min(...rects.map((q) => q.left)),
+    top: Math.min(...rects.map((q) => q.top)),
+    right: Math.max(...rects.map((q) => q.right)),
+    bottom: Math.max(...rects.map((q) => q.bottom)),
+  });
+  // A box, less any negative margin: `-mx-2` on a link is a hover wash bleeding past the row on
+  // purpose, and the link's place is where its margins put it.
+  const layoutBox = (el) => {
+    const b = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    const m = (v) => Math.max(0, -parseFloat(v) || 0);
+    return { left: b.left + m(s.marginLeft), right: b.right - m(s.marginRight), top: b.top + m(s.marginTop), bottom: b.bottom - m(s.marginBottom) };
+  };
+  const BOXY = 'button,a[href],[role=button],[role=tab],[data-chip],[data-badge],[class*="chip"],[class*="badge"],[class*="pill"],input,select,textarea';
+  // A control's box is its reach, so a 44px tap area counts in an overlap; in the clipped check its
+  // place is its layout box, less a deliberate bleed.
+  const inkOf = (el, boxy, bleed = false) => {
+    if (boxy) return bleed ? layoutBox(el) : el.getBoundingClientRect();
+    const rects = textRects(el, true);
+    return rects.length ? union(rects) : el.getBoundingClientRect();
+  };
+  const layer = (el) => {
+    for (let a = el; a; a = a.parentElement) {
+      const p = getComputedStyle(a).position;
+      if (p === "fixed" || p === "sticky") return a;
+    }
+    return null;
+  };
+
+  // ── overlap ──
+  const cand = [];
+  for (const el of document.body.querySelectorAll("*")) {
+    if (["SCRIPT", "STYLE", "NOSCRIPT", "svg", "path", "TEMPLATE"].includes(el.tagName)) continue;
+    const boxy = el.matches(BOXY);
+    if (!boxy && ![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+    if (!vis(el)) continue;
+    // An inline link that wraps is one box per line, not the rectangle around both lines: that
+    // rectangle covered the words beside it in every sentence it wrapped in.
+    const inks = boxy && getComputedStyle(el).display === "inline" ? [...el.getClientRects()] : [inkOf(el, boxy)];
+    const c = clipRect(el);
+    for (const ink of inks) {
+      const r = { left: Math.max(ink.left, c.l), top: Math.max(ink.top, c.t), right: Math.min(ink.right, c.r), bottom: Math.min(ink.bottom, c.b) };
+      if (r.right - r.left < 2 || r.bottom - r.top < 2) continue;
+      cand.push({ el, r, fx: layer(el) });
+    }
+  }
+  const overlap = [];
+  for (let i = 0; i < cand.length; i++) {
+    for (let j = i + 1; j < cand.length; j++) {
+      const a = cand[i];
+      const b = cand[j];
+      if (a.el.contains(b.el) || b.el.contains(a.el) || a.fx !== b.fx) continue;
+      const ox = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
+      const oy = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
+      if (ox > 2 && oy > 2) overlap.push(`${Math.round(ox)}x${Math.round(oy)}px: "${txt(a.el)}" (${sel(a.el)}) over "${txt(b.el)}" (${sel(b.el)}) at ${JSON.stringify(R(a.r))}`);
+    }
+  }
+
+  // ── clipped ──
+  const docW = document.documentElement.scrollWidth;
+  const vw = document.documentElement.clientWidth;
+  const pageScroll = docW > vw + 1 ? [`the page scrolls sideways: ${docW}px in ${vw}px`] : [];
+  const clipped = new Map();
+  for (const el of document.body.querySelectorAll("*")) {
+    if (el.scrollWidth <= el.clientWidth + 2 || el.clientWidth === 0) continue;
+    if (["svg", "path", "INPUT", "TEXTAREA", "SELECT", "HTML", "BODY"].includes(el.tagName)) continue;
+    const cs = getComputedStyle(el);
+    if (cs.display === "inline" || cs.overflowX === "auto" || cs.overflowX === "scroll") continue;
+    if (cs.textOverflow === "ellipsis" || (cs.webkitLineClamp && cs.webkitLineClamp !== "none")) continue;
+    if (!vis(el)) continue;
+    const b = el.getBoundingClientRect();
+    const inner = { l: b.left + el.clientLeft + parseFloat(cs.paddingLeft), r: b.left + el.clientLeft + el.clientWidth - parseFloat(cs.paddingRight) };
+    let worst = null;
+    for (const d of el.querySelectorAll("*")) {
+      const ds = getComputedStyle(d);
+      if (ds.position === "absolute" || ds.position === "fixed") continue;
+      let skip = false;
+      for (let a = d.parentElement; a && a !== el; a = a.parentElement) {
+        const as = getComputedStyle(a);
+        if (as.position === "absolute" || as.position === "fixed" || as.overflowX !== "visible") {
+          skip = true;
+          break;
+        }
+      }
+      if (skip) continue;
+      const boxy = d.matches(BOXY);
+      if (!boxy && ![...d.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+      const ink = inkOf(d, boxy, true);
+      const spill = Math.max(ink.right - inner.r, inner.l - ink.left);
+      if (spill > 2 && vis(d) && (!worst || spill > worst.spill)) worst = { spill: Math.round(spill), el: d };
+    }
+    if (!worst) continue;
+    const prev = clipped.get(worst.el);
+    if (!prev || prev.container.contains(el)) {
+      clipped.set(worst.el, { container: el, line: `${worst.spill}px: "${txt(worst.el)}" (${sel(worst.el)}) past ${sel(el)} (${el.clientWidth}px, needs ${el.scrollWidth}px)` });
+    }
+  }
+
+  // ── heading ──
+  const cellInk = (cell) => {
+    const out = textRects(cell, false);
+    for (const e of cell.querySelectorAll("svg,img,button,input,[class*=chip],[class*=badge]")) if (vis(e, true)) out.push(e.getBoundingClientRect());
+    if (!out.length) return null;
+    const top = Math.min(...out.map((q) => q.top));
+    const line = out.filter((q) => q.top < top + 6);
+    return { left: Math.min(...out.map((q) => q.left)), right: Math.max(...line.map((q) => q.right)) };
+  };
+  const rightAligned = (el) => {
+    const cs = getComputedStyle(el);
+    return cs.textAlign === "right" || cs.textAlign === "end" || (cs.display.includes("flex") && /end/.test(cs.justifyContent));
+  };
+  const parts = (line) => [...line.children].filter((c) => !c.matches("[data-row-detail]"));
+  const heading = [];
+  const heads = [...document.querySelectorAll("[data-card-columns], [role=row]")].filter(
+    (h) => vis(h) && (h.matches("[data-card-columns]") || h.querySelector(":scope > [role=columnheader]")),
+  );
+  for (const h of heads) {
+    const card = h.closest('[role="table"]') || h.closest(".card") || h.parentElement;
+    const lines = new Set([...card.querySelectorAll("[data-card-row], .row-cols, [role=row]"), ...[...card.querySelectorAll("[data-col]")].map((c) => c.parentElement)]);
+    const rows = [...lines]
+      .filter((r) => r !== h && !heads.includes(r) && !h.contains(r) && !r.contains(h) && vis(r))
+      .filter((r) => h.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .slice(0, 25);
+    parts(h).forEach((hc, i) => {
+      if (!vis(hc)) return;
+      const seatHead = hc.matches(".row-seat");
+      const hInk = cellInk(hc);
+      if (!hInk) return;
+      const right = rightAligned(hc);
+      for (const r of rows) {
+        const cells = parts(r);
+        const cell = seatHead ? cells.find((c) => c.matches("[data-action-seat], .row-seat")) : cells[i];
+        if (!cell || !vis(cell)) continue;
+        let d;
+        if (right) {
+          const ci = cellInk(cell);
+          if (!ci) continue;
+          d = ci.right - hInk.right;
+        } else if (cell.matches("[data-col]") && hc.matches("[data-col]")) {
+          d = cell.getBoundingClientRect().left - hInk.left;
+        } else {
+          const ci = cellInk(cell);
+          if (!ci) continue;
+          d = ci.left - hInk.left;
+        }
+        if (Math.abs(d) > 4) {
+          heading.push(`"${txt(hc)}" ${Math.round(d)}px off its cell "${txt(cell).slice(0, 30)}" (${right ? "right" : "left"} edge; ${sel(hc)})`);
+          break;
+        }
+      }
+    });
+  }
+
+  // ── seat ──
+  const seat = [];
+  if (innerWidth >= tablet) {
+    for (const row of document.querySelectorAll("[data-card-row], .row-cols")) {
+      if (!vis(row) || row.matches("[data-card-columns]")) continue;
+      const s = [...row.children].find((c) => c.matches("[data-action-seat], .row-seat"));
+      if (!s || !vis(s) || !s.innerText.trim()) continue;
+      const kids = [...row.children].filter((c) => vis(c) && !c.matches("[data-row-detail]"));
+      const first = kids[0];
+      if (!first || first === s) continue;
+      const fr = first.getBoundingClientRect();
+      const sr = s.getBoundingClientRect();
+      if (sr.top < fr.bottom - 2 && sr.bottom > fr.top + 2) continue;
+      const cs = getComputedStyle(row);
+      const avail = row.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - parseFloat(cs.borderLeftWidth);
+      // A row whose first part takes the whole line is stacked by design (a person's role row
+      // below its four columns, D-1 §4 rule 9 on a phone): its seat has no first line to share.
+      if (fr.width >= avail - 1) continue;
+      // What each part needs: a fixed seat (`flex: none`: a number, a status, the action seat) its
+      // own width, which D-1 gives it whatever it holds; a share its text on one line, held to its
+      // min-width, the narrowest the table lets it be before the row wraps.
+      let need = (parseFloat(cs.columnGap) || 0) * (kids.length - 1);
+      for (const k of kids) {
+        const ks = getComputedStyle(k);
+        if (ks.flexGrow === "0" && ks.flexShrink === "0") {
+          need += k.getBoundingClientRect().width;
+          continue;
+        }
+        const old = k.style.cssText;
+        k.style.width = "max-content";
+        k.style.flex = "none";
+        k.style.maxWidth = "none";
+        need += k.getBoundingClientRect().width;
+        k.style.cssText = old;
+      }
+      if (need <= avail) seat.push(`"${txt(s)}" off the first line of "${txt(row)}" although it fits (${Math.round(need)}px of ${Math.round(avail)}px)`);
+    }
+  }
+
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, pageScroll };
+}

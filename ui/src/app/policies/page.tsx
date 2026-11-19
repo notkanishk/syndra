@@ -9,7 +9,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { ActionSeat, Card, CardColumns } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { FieldLabel } from "@/components/ui/Input";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -38,6 +38,9 @@ import { projectLabel } from "@/components/names/Unresolved";
 import { sortByName, sortNames } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 import { roleName } from "@/lib/names";
+
+/** The rule's sentence, then how many people hold its second role. */
+const COLS: Columns = ["w-full tablet:min-w-[320px] tablet:flex-1", `w-full ${NUMBER_COL}`];
 
 /**
  * S2 · Automation › Automatic rules.
@@ -91,9 +94,9 @@ export default function AutomaticRulesPage() {
       <Card>
         <ListStates
           head={
-            <CardColumns seat="default">
-              <span className="flex-1">If &hellip; then</span>
-              <span className="w-(--seat-number) text-right">People</span>
+            <CardColumns cols={COLS} seat="default">
+              <span>If &hellip; then</span>
+              <span>People</span>
             </CardColumns>
           }
           isLoading={rules.isLoading}
@@ -122,7 +125,8 @@ export default function AutomaticRulesPage() {
                 onClick={() => setEditing(rule)}
                 className="row-cols flex min-w-0 flex-1 flex-col items-start gap-y-1.5 py-(--row-y) text-left hover-tint tablet:flex-row tablet:flex-wrap tablet:items-center"
               >
-                <span className="w-full text-body tablet:min-w-[320px] tablet:flex-1">
+                <Cells cols={COLS}>
+                <span className="text-body">
                   <span className="text-muted">
                     <ProjectName id={rule.source_project} link={false} /> /{" "}
                     <Mono>{rule.source_role}</Mono>
@@ -144,6 +148,7 @@ export default function AutomaticRulesPage() {
                     shows; how many should have it (the rule applies to them
                     in Syndra's records) only explains it. */}
                 <RuleHolders rule={rule} />
+                </Cells>
               </button>
               <ActionSeat seat="default">
                 <Button variant="danger" size="sm" onClick={() => setRetiring(rule)}>
@@ -742,7 +747,7 @@ function RuleHolders({ rule }: { rule: MappingRuleRow }) {
   const seen = rule.observed_holder_count ?? undefined;
   const line = holdersLine(rule.holder_count ?? 0, seen, seen);
   return (
-    <span data-figure className="text-body tablet:w-(--seat-number) tablet:text-right">
+    <span data-figure className="text-body">
       {line.headline}
       {line.headline !== NOT_CHECKED && (
         <span className="text-small text-faint tablet:hidden">

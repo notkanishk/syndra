@@ -15,12 +15,15 @@ import { humanizeKey } from "@/lib/format";
  * the role's words as one link, the role keys under it.
  *
  * Their widths are the table's columns, not theirs: a queue's `Columns` list takes WHO_COL,
- * WHAT_COL and FIGURE_COL, for its headings and its rows alike.
+ * WHAT_COL and NUMBER_COL (when), for its headings and its rows alike.
+ *
+ * Both are shares held to a minimum, What twice Who's: a fixed 180 for Who and 160 for What, with
+ * the date and the wide seat, came to 798px, so on Drift the seat dropped under every row from
+ * 1024 to 1240 although the rows fitted (staging, 19 Nov). Now 140 + 120 + 110 + 300 and the gaps
+ * is 718, inside the narrowest desktop row (731).
  */
-export const WHO_COL = "w-full tablet:w-[180px] tablet:flex-none";
-export const WHAT_COL = "w-full min-w-0 tablet:w-auto tablet:min-w-[160px] tablet:flex-1";
-/** When it was found, revoked, or ends: a figure, right-aligned under a right-aligned heading (G16). */
-export const FIGURE_COL = "tablet:w-(--seat-number) tablet:flex-none tablet:text-right";
+export const WHO_COL = "w-full min-w-0 tablet:min-w-[140px] tablet:flex-1";
+export const WHAT_COL = "w-full min-w-0 tablet:min-w-[120px] tablet:flex-[2_1_0%]";
 
 /**
  * A queue row's left edge, 3px, unpainted: a row paints it when it says something (a safety-gated
@@ -44,7 +47,7 @@ export function WhoSeat({
     <div className="flex w-full min-w-0 items-center gap-3">
       <UserAvatar id={id} size="row" />
       <span className="min-w-0">
-        <UserName id={id} href={href ?? accountHref(id)} className="block text-body font-semibold" />
+        <UserName id={id} href={href ?? accountHref(id)} className="block truncate text-body font-semibold" />
         {sub ? <span className="block text-fine text-faint">{sub}</span> : <ServiceAccountTag id={id} />}
       </span>
     </div>

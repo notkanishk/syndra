@@ -262,7 +262,9 @@ export function CardHeaderLink({ href, children }: { href: string; children: Rea
  * label inside the disclosure instead.
  *
  * `cols` is the table's column list, the same one every row is given: each
- * heading is drawn in its column's box, so it sits exactly over its cells.
+ * heading is drawn in its column's box, so it sits exactly over its cells. It is
+ * required: a heading typed in widths of its own beside its rows drifted off
+ * them on nineteen tables (layout audit, 19 Nov 2026).
  *
  * `seat` draws the action column's heading cell at the rows' seat width, so the
  * headings over the other columns line up with their cells. It is empty (a
@@ -272,25 +274,41 @@ export function CardHeaderLink({ href, children }: { href: string; children: Rea
  * It wraps as a CardRow wraps: where a row's seat drops to a second line, the
  * seat's heading cell does too, so the columns above stay over theirs. A table
  * whose rows never wrap says so with `flex-nowrap` (the guard compares them).
+ *
+ * `detail` heads the rows' detail line: under the column headings, full width,
+ * from the text's edge, where every row's detail line is. A heading for what
+ * the detail line says, set beside another column's heading, sat over nothing
+ * at one width and stacked at the next (Drift's "Why", staging 19 Nov).
  */
 export function CardColumns({
   className = "",
   seat,
   seatLabel,
   cols,
+  detail,
   children,
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & { seat?: SeatWidth; seatLabel?: React.ReactNode; cols?: Columns }) {
+}: React.HTMLAttributes<HTMLDivElement> & {
+  seat?: SeatWidth;
+  seatLabel?: React.ReactNode;
+  cols: Columns;
+  detail?: React.ReactNode;
+}) {
   return (
     <div
       data-card-columns
       className={`row-cols hidden flex-wrap gap-y-1 px-(--card-x) py-2 text-fine font-semibold uppercase tracking-[0.09em] text-label tablet:flex ${className}`}
       {...props}
     >
-      {cols ? <Cells cols={cols}>{children}</Cells> : children}
+      <Cells cols={cols}>{children}</Cells>
       {seat && (
         <span aria-hidden={seatLabel ? undefined : true} className="row-seat" data-seat={seatWidth(seat)}>
           {seatLabel}
+        </span>
+      )}
+      {detail && (
+        <span data-row-detail className="basis-full">
+          {detail}
         </span>
       )}
     </div>
@@ -306,6 +324,26 @@ export function CardColumns({
  * 19 Nov): a heading over an empty column, a date out from under its label.
  */
 export type Columns = readonly string[];
+
+/*
+ * How a column is sized, so a row never clips and its headings never leave it (layout audit,
+ * 19 Nov 2026). A row's line is `flex-wrap`, and flex breaks a line on each part's basis held to its
+ * min-width, not on what it says. So every column states its size: a fixed seat (`w-*`, `flex-none`)
+ * where D-1 has one (a number, a status, a label), else a share held to a minimum
+ * (`min-w-[N] flex-1`, or `flex-[2_1_0%]` for a bigger share), its text wrapping or, for a name,
+ * truncated. Then the headings and every row break at the same widths, whatever they hold; the
+ * line breaks exactly when the minimums, the fixed seats and the action seat no longer fit, so a
+ * row whose words fit keeps its seat on its first line; and where the row cannot hold its columns
+ * the seat drops under it, right-aligned, and then the last column: never clipped. A share with no
+ * minimum (`min-w-0 flex-1`) reports 0 to the wrap and starves (a person's role row gave its source
+ * 36px at 1100); a size from the content wraps the rows where the headings do not. The guard
+ * (`unsizedColumns`) holds every heading's column to a width or a minimum.
+ */
+
+/** A number or a date, right-aligned under a right-aligned heading (G16); stacked on a phone. */
+export const NUMBER_COL = "tablet:w-(--seat-number) tablet:flex-none tablet:text-right";
+/** A status a table can say, as wide as its longest (D-1 §5 #22); stacked on a phone. */
+export const STATUS_COL = "tablet:w-(--seat-status) tablet:flex-none";
 
 /**
  * The parts of a header or a row, each in its column's box (`data-col`). A row

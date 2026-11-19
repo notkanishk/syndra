@@ -17,7 +17,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, CardRow, Cells, ROW, type Columns } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, Cells, NUMBER_COL, ROW, type Columns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { Input } from "@/components/ui/Input";
@@ -59,12 +59,16 @@ import { useStandingBindingConflicts, type StandingBindingConflicts } from "@/li
 /** Q2 (A-17): an empty queue still says "Send 0 changes". The owner's answer is a change to this one function. */
 const sendLabel = (known: boolean, n: number) => (known && n > 0 ? `Send ${n} ${n === 1 ? "change" : "changes"}` : "Send changes");
 
-/** The queue's columns, its headings' and every row's: who, the change, what caused it, how long it has waited. */
+/**
+ * The queue's columns, its headings' and every row's: who, the change, what caused it, how long it
+ * has waited. Shares held to a minimum: the change had none, so on a narrow row it would starve to
+ * nothing between two fixed 130s; now the line wraps instead (the layout audit, 19 Nov).
+ */
 const COLS: Columns = [
-  "w-full tablet:w-[130px] tablet:flex-none",
-  "w-full min-w-0 tablet:w-auto tablet:flex-1",
-  "w-full tablet:w-[130px] tablet:flex-none",
-  "tablet:w-(--seat-number) tablet:flex-none tablet:text-right",
+  "w-full min-w-0 tablet:min-w-[110px] tablet:flex-1",
+  "w-full min-w-0 tablet:min-w-[120px] tablet:flex-[2_1_0%]",
+  "w-full min-w-0 tablet:min-w-[100px] tablet:flex-1",
+  NUMBER_COL,
 ];
 
 /**
@@ -255,7 +259,7 @@ export default function PendingChangesPage() {
 
       <Card className={onlyStopped ? "hidden" : undefined}>
         {(cleared ? !folded : known && shown.length > 0) && (
-          <CardColumns cols={COLS} className="tablet:flex-nowrap">
+          <CardColumns cols={COLS}>
             <span>Who</span>
             <span>Change</span>
             <span>Caused by</span>
@@ -488,7 +492,7 @@ function PendingGroups({
             <Unfold open={open}>
               {group.rows.map((row) => (
                 <LeavingRow key={row.id} {...leave(row.id)}>
-                  <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:items-center`}>
+                  <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:flex-wrap tablet:items-center`}>
                     <Cells cols={COLS}>
                       <span className="text-body font-semibold">
                         <UserName id={row.user_id} />

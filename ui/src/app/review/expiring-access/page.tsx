@@ -10,9 +10,9 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { Crossfade } from "@/lib/motion";
 import { FoldChevron } from "@/components/ui/FoldChevron";
-import { EDGE, FIGURE_COL, WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
+import { EDGE, WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { BulkDialog } from "@/components/people/BulkDialog";
-import { ActionSeat, Card, CardColumns, CardHeader, Cells, ROW, type Columns } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, Cells, NUMBER_COL, ROW, type Columns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { StatusDot } from "@/components/ui/Badge";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
@@ -94,7 +94,7 @@ function windowDays(raw: string | null): Window {
  * The list's columns, its headings' and every row's: who, what, given by (from desktop), ends,
  * then the wide seat; a checkbox column first while rows are chosen.
  */
-const EXPIRING_COLS: Columns = [WHO_COL, WHAT_COL, "hidden desktop:block desktop:w-[160px] desktop:flex-none", FIGURE_COL];
+const EXPIRING_COLS: Columns = [WHO_COL, WHAT_COL, "hidden desktop:block desktop:w-[160px] desktop:flex-none", NUMBER_COL];
 const expiringCols = (selecting: boolean): Columns => (selecting ? [CHECK_COL, ...EXPIRING_COLS] : EXPIRING_COLS);
 
 const isString = (value: unknown): value is string => typeof value === "string";

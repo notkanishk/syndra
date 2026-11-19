@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { ActionSeat, Card, CardColumns, CardGrid, CardHeader, CardRow, Cells, ROW } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { StandingLine } from "@/components/ui/StandingLine";
-import { ACTIONS, actionsInProse, actionsOutsideSeats, cardGridsByHand, dotLinesOffIndent, headsOffRows, longNotes, NOTE_MAX } from "@/test-utils/layout";
+import { ACTIONS, actionsInProse, actionsOutsideSeats, cardGridsByHand, dotLinesOffIndent, headsOffRows, longNotes, NOTE_MAX, unsizedColumns } from "@/test-utils/layout";
 
 /**
  * D-1 §4: every action sits in its row's right seat on the first line, never in
@@ -51,13 +51,13 @@ describe("CardRow's action seat", () => {
   it("takes the table's width, and keeps an empty seat in its place", () => {
     const { container } = render(
       <Card>
-        <CardColumns seat="wide">
-          <span className="flex-1">Account</span>
+        <CardColumns cols={["min-w-[120px] flex-1"]} seat="wide">
+          <span>Account</span>
         </CardColumns>
-        <CardRow first seat="wide" action={<Button size="sm">Adopt</Button>}>
+        <CardRow first cols={["min-w-[120px] flex-1"]} seat="wide" action={<Button size="sm">Adopt</Button>}>
           <span>kofi</span>
         </CardRow>
-        <CardRow seat="wide">
+        <CardRow cols={["min-w-[120px] flex-1"]} seat="wide">
           <span>bianca</span>
         </CardRow>
       </Card>,
@@ -128,10 +128,10 @@ describe("CardRow's action seat", () => {
   it("is built on ROW, the box and column grid every list row takes, and the headings read the same grid", () => {
     const { container } = render(
       <Card>
-        <CardColumns>
+        <CardColumns cols={["min-w-[120px] flex-1"]}>
           <span>Name</span>
         </CardColumns>
-        <CardRow first>
+        <CardRow first cols={["min-w-[120px] flex-1"]}>
           <span>Becky Lynch</span>
         </CardRow>
       </Card>,
@@ -339,8 +339,8 @@ describe("cards side by side", () => {
 describe("a seat's heading", () => {
   it("names what the seat holds, at the seat's width, read by assistive tech, when the table says so", () => {
     const { container } = render(
-      <CardColumns seat="wide" seatLabel="Needs you">
-        <span className="flex-1">System</span>
+      <CardColumns cols={["min-w-[160px] flex-1"]} seat="wide" seatLabel="Needs you">
+        <span>System</span>
       </CardColumns>,
     );
     const cell = container.querySelector(".row-seat")!;
@@ -389,7 +389,7 @@ describe("the seat guard", () => {
 });
 
 describe("the column guard", () => {
-  const cols = ["tablet:w-[180px] tablet:flex-none", "min-w-0 tablet:flex-1", "tablet:w-(--seat-number) tablet:text-right"];
+  const cols = ["tablet:w-[180px] tablet:flex-none", "min-w-0 tablet:min-w-[120px] tablet:flex-1", "tablet:w-(--seat-number) tablet:text-right"];
 
   it("draws each heading and each cell in its column's box, and passes a table on one list and one seat", () => {
     const { container } = render(
@@ -423,13 +423,15 @@ describe("the column guard", () => {
     expect(headsOffRows(container)).toEqual([]);
   });
 
-  it("catches a heading typed beside its rows, a heading with no seat cell, and a part out of its column", () => {
-    // Drift on staging, 19 Nov: widths of the heading's own, and no cell over the seat.
+  it("catches a heading on columns of its own, a heading with no seat cell, and a part out of its column", () => {
+    // Drift on staging, 19 Nov: widths of the heading's own, and no cell over the seat. A heading can
+    // no longer be typed without a column list (`cols` is required: the type below), so the drift
+    // left is a list that is not its rows'.
     const { container, rerender } = render(
       <Card>
-        <CardColumns>
-          <span className="w-[180px]">Who</span>
-          <span className="flex-1">What</span>
+        <CardColumns cols={["w-[180px]", "w-[120px]"]}>
+          <span>Who</span>
+          <span>What</span>
         </CardColumns>
         <CardRow first cols={cols.slice(0, 2)} seat="wide" action={<Button size="sm">Adopt</Button>}>
           <span>Bianca Belair</span>
@@ -438,7 +440,7 @@ describe("the column guard", () => {
       </Card>,
     );
     expect(headsOffRows(container)).toEqual([
-      `a row off its headings' columns: [${cols[0]} | ${cols[1]}] under []: "Bianca BelairLaser cutterAdopt"`,
+      `a row off its headings' columns: [${cols[0]} | ${cols[1]}] under [w-[180px] | w-[120px]]: "Bianca BelairLaser cutterAdopt"`,
       'a row\'s seat (wide) under a heading seat of none: "Bianca BelairLaser cutterAdopt"',
     ]);
     // Requests: an avatar drawn as a part of its own pushed every cell after it out from under its heading.
@@ -506,7 +508,68 @@ describe("the column guard", () => {
     expect(headsOffRows(container)).toEqual([]);
     cleanup();
   });
+
+  it("holds every column to a width or a minimum: a share with neither starves, a column sized by its words wraps alone", () => {
+    // Staging, 19 Nov: a person's role row gave its source (`min-w-0 flex-1`) 36px at 1100, under a
+    // 94px chip; Connected systems' System heading had no size and its row's had 220.
+    const table = (columns: string[]) => (
+      <CardColumns cols={columns}>
+        {columns.map((c) => (
+          <span key={c}>{c || "words"}</span>
+        ))}
+      </CardColumns>
+    );
+    const { container, rerender } = render(table(["min-w-0 flex-1", "", "text-right"]));
+    expect(unsizedColumns(container)).toEqual([
+      'a column with no size (a width, or a min-width for one that flexes): [min-w-0 flex-1] "min-w-0 flex-1"',
+      'a column with no size (a width, or a min-width for one that flexes): [] "words"',
+      'a column with no size (a width, or a min-width for one that flexes): [text-right] "text-right"',
+    ]);
+    rerender(
+      table([
+        "w-full min-w-0 tablet:min-w-[140px] tablet:flex-1",
+        "min-w-[min(160px,100%)] flex-[2_1_0%]",
+        "tablet:w-(--seat-number) tablet:flex-none tablet:text-right",
+        "hidden desktop:block desktop:w-[130px] desktop:flex-none",
+        "hidden",
+      ]),
+    );
+    expect(unsizedColumns(container)).toEqual([]);
+    cleanup();
+  });
+
+  it("heads the rows' detail line under the columns, at the text's edge, never as a column", () => {
+    // Drift on staging, 19 Nov: Why sat beside What over nothing at 1100, and stacked at 1280.
+    const { container } = render(
+      <Card>
+        <CardColumns cols={cols} seat="wide" detail="Why">
+          <span>Who</span>
+          <span>What</span>
+          <span>Found</span>
+        </CardColumns>
+        <CardRow first cols={cols} seat="wide" detail="Maker not known.">
+          <span>Bianca Belair</span>
+          <span>Laser cutter</span>
+          <span>3 Nov</span>
+        </CardRow>
+      </Card>,
+    );
+    const head = container.querySelector("[data-card-columns]")!;
+    const why = head.lastElementChild!;
+    expect(why).toHaveTextContent("Why");
+    expect(why).toHaveAttribute("data-row-detail");
+    expect(why).toHaveClass("basis-full");
+    expect(why).not.toHaveAttribute("data-col");
+    expect(headsOffRows(container)).toEqual([]);
+  });
 });
+
+// A heading is given its table's columns, or it does not compile: typed beside its rows, nineteen
+// tables' headings drifted off them (layout audit, 19 Nov 2026). Never called; `tsc` reads it.
+export function headingWithoutColumns() {
+  // @ts-expect-error `cols` is required
+  return <CardColumns><span>Who</span></CardColumns>;
+}
 
 describe("the note guard", () => {
   it("fails a CardHeader note over 48 characters, pointing at caption, and passes a short fact", () => {
