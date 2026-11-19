@@ -177,7 +177,7 @@ describe("accounts table seats", () => {
     state.count = 2;
     render(<PeopleOnTarget target="truenas" />);
 
-    const heading = screen.getByText("Status");
+    const heading = screen.getByText("Status").closest("[data-col]") as HTMLElement;
     const row = screen.getByText("Charlotte Flair").closest("[data-account]") as HTMLElement;
     const standing = row.querySelector("[data-standing]") as HTMLElement;
     expect(standing).toHaveTextContent("Ready to use");

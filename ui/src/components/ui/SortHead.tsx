@@ -149,14 +149,17 @@ export function SortHead<K extends string>({
         aria-label={`Sort by ${by}`}
         data-sort={on ? (sort.dir > 0 ? "asc" : "desc") : "none"}
         onClick={() => onSort(name)}
-        className={`inline-flex items-center gap-[5px] text-left uppercase tracking-[inherit] motion-tint hover:text-ink ${
+        className={`relative inline-flex items-center text-left uppercase tracking-[inherit] motion-tint hover:text-ink ${
           on ? "text-ink" : ""
         }`}
       >
         {label}
+        {/* Hung past the label, into the column gap, so it takes no room in the heading: a reserved
+            arrow, invisible until pressed, held a right-aligned heading 16px short of the figures
+            under it (Drift's Found, staging 19 Nov). */}
         <span
           aria-hidden
-          className={`inline-block text-[11px] motion-turn ${on ? "opacity-100" : "opacity-0"} ${
+          className={`absolute left-full ml-[5px] inline-block text-[11px] motion-turn ${on ? "opacity-100" : "opacity-0"} ${
             on && sort.dir < 0 ? "rotate-180" : ""
           }`}
         >

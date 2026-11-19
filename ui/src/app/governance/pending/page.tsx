@@ -17,7 +17,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, CardRow, ROW } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, Cells, ROW, type Columns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { Input } from "@/components/ui/Input";
@@ -58,6 +58,14 @@ import { useStandingBindingConflicts, type StandingBindingConflicts } from "@/li
 
 /** Q2 (A-17): an empty queue still says "Send 0 changes". The owner's answer is a change to this one function. */
 const sendLabel = (known: boolean, n: number) => (known && n > 0 ? `Send ${n} ${n === 1 ? "change" : "changes"}` : "Send changes");
+
+/** The queue's columns, its headings' and every row's: who, the change, what caused it, how long it has waited. */
+const COLS: Columns = [
+  "w-full tablet:w-[130px] tablet:flex-none",
+  "w-full min-w-0 tablet:w-auto tablet:flex-1",
+  "w-full tablet:w-[130px] tablet:flex-none",
+  "tablet:w-(--seat-number) tablet:flex-none tablet:text-right",
+];
 
 /**
  * S3 · Automation › Pending changes.
@@ -247,11 +255,11 @@ export default function PendingChangesPage() {
 
       <Card className={onlyStopped ? "hidden" : undefined}>
         {(cleared ? !folded : known && shown.length > 0) && (
-          <CardColumns>
-            <span className="w-[130px]">Who</span>
-            <span className="flex-1">Change</span>
-            <span className="w-[130px]">Caused by</span>
-            <span className="w-(--seat-number) text-right">Waiting</span>
+          <CardColumns cols={COLS}>
+            <span>Who</span>
+            <span>Change</span>
+            <span>Caused by</span>
+            <span>Waiting</span>
           </CardColumns>
         )}
 
@@ -481,39 +489,41 @@ function PendingGroups({
               {group.rows.map((row) => (
                 <LeavingRow key={row.id} {...leave(row.id)}>
                   <div className={`row-divider flex flex-col items-start gap-y-1.5 ${ROW} tablet:flex-row tablet:items-center`}>
-                    <span className="w-full text-body font-semibold tablet:w-[130px] tablet:shrink-0">
-                      <UserName id={row.user_id} />
-                    </span>
+                    <Cells cols={COLS}>
+                      <span className="text-body font-semibold">
+                        <UserName id={row.user_id} />
+                      </span>
 
-                    <span className="flex w-full min-w-0 flex-col gap-[3px] tablet:flex-1">
-                      <span className="text-body">
-                        {row.op_type === "apply" ? (
-                          <SystemChange row={row} />
-                        ) : (
-                          <>
-                            <span className="text-muted">{verb(row.op_type)}</span>{" "}
-                            {(row.role_keys ?? []).map((key) => (
-                              <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-3" />
-                            ))}
-                            {row.wait_reason === "role_waits" && <WaitsMark className="ml-1.5" />}
-                          </>
+                      <span className="flex flex-col gap-[3px]">
+                        <span className="text-body">
+                          {row.op_type === "apply" ? (
+                            <SystemChange row={row} />
+                          ) : (
+                            <>
+                              <span className="text-muted">{verb(row.op_type)}</span>{" "}
+                              {(row.role_keys ?? []).map((key) => (
+                                <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-3" />
+                              ))}
+                              {row.wait_reason === "role_waits" && <WaitsMark className="ml-1.5" />}
+                            </>
+                          )}
+                        </span>
+                        <RowStatus row={row} skipWait={shared} />
+                        {/* The operator's words, kept with the change (task 1.8a). A
+                            connected system's row says its reason as its change. */}
+                        {row.op_type !== "apply" && row.said && (
+                          <span className="text-small text-ink">&ldquo;{row.said}&rdquo;</span>
                         )}
                       </span>
-                      <RowStatus row={row} skipWait={shared} />
-                      {/* The operator's words, kept with the change (task 1.8a). A
-                          connected system's row says its reason as its change. */}
-                      {row.op_type !== "apply" && row.said && (
-                        <span className="text-small text-ink">&ldquo;{row.said}&rdquo;</span>
-                      )}
-                    </span>
 
-                    <span className="w-full text-small tablet:w-[130px] tablet:shrink-0">
-                      <CausedBy row={row} bundles={bundles} rules={rules} setOff={count < 2} />
-                    </span>
+                      <span className="text-small">
+                        <CausedBy row={row} bundles={bundles} rules={rules} setOff={count < 2} />
+                      </span>
 
-                    <span data-figure className="text-small text-faint tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
-                      <Relative iso={row.created_at} />
-                    </span>
+                      <span data-figure className="text-small text-faint">
+                        <Relative iso={row.created_at} />
+                      </span>
+                    </Cells>
                   </div>
                 </LeavingRow>
               ))}

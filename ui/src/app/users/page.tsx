@@ -13,7 +13,7 @@ import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Card, CardColumns, ROW } from "@/components/ui/Card";
+import { Card, CardColumns, Cells, ROW, type Columns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
@@ -24,6 +24,7 @@ import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { Select } from "@/components/ui/Select";
 import {
+  CHECK_COL,
   RowCheckbox,
   SelectAllRow,
   SelectModeToggle,
@@ -54,6 +55,19 @@ import { useDebounce } from "@/lib/useDebounce";
 import { useIsTouch } from "@/lib/useViewport";
 import { daysUntil } from "@/lib/format";
 import { sortByName, sortNames } from "@/lib/sort";
+
+/**
+ * The list's columns, its headings' and every row's: person, bundles (from desktop), access,
+ * attention; a checkbox column first in bulk mode. The person column gives way to 180 for Access,
+ * the same for the heading and the rows, so neither shrinks away from the other.
+ */
+const PEOPLE_COLS: Columns = [
+  "w-full min-w-0 tablet:w-[250px] tablet:min-w-[180px]",
+  "hidden desktop:block desktop:w-[180px] desktop:flex-none",
+  "min-w-0 tablet:min-w-[170px] tablet:flex-1",
+  "tablet:w-(--seat-number) tablet:flex-none tablet:text-right",
+];
+const peopleCols = (bulkMode: boolean): Columns => (bulkMode ? [CHECK_COL, ...PEOPLE_COLS] : PEOPLE_COLS);
 
 /**
  * People's bulk verbs, in the desktop order. Every one opens a rehearsal, so
@@ -404,18 +418,12 @@ export default function PeoplePage() {
         <ListStates
           head={
             <>
-            <CardColumns>
-              {bulkMode && <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]" />}
-              <span className="w-[250px] min-w-[180px]">
-                <SortHead label="Person" name="person" sort={sort} onSort={setSort} />
-              </span>
-              <span className="hidden w-[180px] shrink-0 desktop:block">
-                <SortHead label="Bundles" name="bundles" sort={sort} onSort={setSort} />
-              </span>
-              <span className="min-w-[170px] flex-1">Access</span>
-              <span className="w-(--seat-number) shrink-0 text-right">
-                <SortHead label="Attention" name="attention" sort={sort} onSort={setSort} />
-              </span>
+            <CardColumns cols={peopleCols(bulkMode)}>
+              {bulkMode && <span />}
+              <SortHead label="Person" name="person" sort={sort} onSort={setSort} />
+              <SortHead label="Bundles" name="bundles" sort={sort} onSort={setSort} />
+              <span>Access</span>
+              <SortHead label="Attention" name="attention" sort={sort} onSort={setSort} />
             </CardColumns>
             {bulkMode && rows.length > 0 && (
               <SelectAllRow
@@ -566,8 +574,9 @@ function PersonRow({
     .join(" · ");
 
   const body = (
-    <>
-      <span className="flex w-full min-w-0 items-center gap-3 tablet:w-[250px]">
+    <Cells cols={peopleCols(bulkMode)}>
+      {bulkMode && <RowCheckbox label={`Select ${entry.user.name}`} {...selection.checkboxProps(entry.user.id)} />}
+      <span className="flex min-w-0 items-center gap-3">
         <Avatar name={entry.user.name} />
         <span className="min-w-0">
           {/* In bulk mode the row is a control, so the name becomes the only
@@ -601,7 +610,7 @@ function PersonRow({
         </span>
       </span>
 
-      <span className="hidden w-[180px] shrink-0 flex-wrap gap-1.5 desktop:flex">
+      <span className="flex flex-wrap gap-1.5">
         {sortNames(entry.bundle_names ?? []).map((name) => {
           // The version rides on the chip. "Lab Tech" and "Lab Tech v2" are
           // different facts about a person, and the row is where the
@@ -617,14 +626,10 @@ function PersonRow({
       </span>
 
       {/* Wraps. What somebody holds is what the row is read for. */}
-      <span className="min-w-0 text-small text-muted [text-wrap:pretty] tablet:min-w-[170px] tablet:flex-1 tablet:text-body">
-        {describeAccess(entry)}
-      </span>
+      <span className="block text-small text-muted [text-wrap:pretty] tablet:text-body">{describeAccess(entry)}</span>
 
-      <span className="tablet:w-(--seat-number) tablet:shrink-0 tablet:text-right">
-        <NeedsAttention entry={entry} />
-      </span>
-    </>
+      <NeedsAttention entry={entry} />
+    </Cells>
   );
 
   // Stacked on a phone, columns above the tablet breakpoint. The cells that
@@ -649,12 +654,6 @@ function PersonRow({
       className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft" : ""}`}
       {...selection.rowProps(entry.user.id)}
     >
-      <span className="w-[var(--tap)] desktop:w-[26px]">
-        <RowCheckbox
-          label={`Select ${entry.user.name}`}
-          {...selection.checkboxProps(entry.user.id)}
-        />
-      </span>
       {body}
     </label>
   );

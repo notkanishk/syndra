@@ -314,20 +314,21 @@ describe("Drift — sort", () => {
     expect(peopleIn(zitadel)).toEqual(["Finn Balor", "Chad Gable"]);
   });
 
-  it("gathers equal reasons under a label with their count", () => {
-    drift.data = [
-      item({ id: "a", user_id: "u1", upstream_actor: "x1", detected_at: "2026-10-18T06:00:00Z" }),
-      item({ id: "b", user_id: "u2", detected_at: "2026-10-17T06:00:00Z" }),
-      item({ id: "c", user_id: "u3", upstream_actor: "x1", detected_at: "2026-10-16T06:00:00Z" }),
-    ];
+  it("heads only the columns it fills: the reason is each row's detail line, under no heading", () => {
+    // Staging, 19 Nov: "Why Syndra can't explain it" headed an empty column, the reason drawn
+    // under the row. The headings are the row's columns, in its boxes, and nothing else.
     renderPage();
     const zitadel = screen.getByRole("region", { name: IN_ZITADEL });
-    fireEvent.click(within(zitadel).getByRole("button", { name: "Sort by why" }));
-
-    // A to Z by reason; inside a run, newest first.
-    const labels = within(zitadel).getAllByTestId("run-label").map((el) => el.textContent);
-    expect(labels).toEqual(["Made in Zitadel by a person2", "Maker not known1"]);
-    expect(peopleIn(zitadel)).toEqual(["Finn Balor", "Jimmy Uso", "Chad Gable"]);
+    const head = zitadel.querySelector("[data-card-columns]")!;
+    expect(Array.from(head.querySelectorAll(":scope > [data-col]"), (cell) => cell.textContent)).toEqual([
+      "Who↑",
+      "What they can get into↑",
+      "Found↑",
+    ]);
+    expect(within(zitadel).queryByRole("button", { name: "Sort by why" })).toBeNull();
+    const row = zitadel.querySelector("[data-card-row]")!;
+    expect(row.querySelectorAll(":scope > [data-col]")).toHaveLength(3);
+    expect(row.querySelector("[data-row-detail]")!.textContent).not.toBe("");
   });
 });
 

@@ -6,7 +6,6 @@ import {
   driftHref,
   driftRequest,
   hasAnyDriftFilter,
-  driftReason,
   matchesDriftSearch,
   originOf,
   parseDriftFilters,
@@ -179,20 +178,6 @@ describe("hasAnyDriftFilter", () => {
   it("is false only when nothing is set", () => {
     expect(hasAnyDriftFilter(EMPTY_DRIFT_FILTERS)).toBe(false);
     expect(hasAnyDriftFilter({ ...EMPTY_DRIFT_FILTERS, age: "today" })).toBe(true);
-  });
-});
-
-describe("driftReason", () => {
-  it("tells a removal from a write that never landed", () => {
-    const applied = row({ drift_type: "syndra_only", provenance: { applied_at: "2026-09-01T00:00:00Z" } });
-    expect(driftReason(applied)).toBe("removed");
-    expect(driftReason(row({ drift_type: "syndra_only", provenance: { granted_by: "x" } }))).toBe("never");
-  });
-
-  it("tells a person, the account itself, and nobody known", () => {
-    expect(driftReason(row({ upstream_actor: "u9" }))).toBe("person");
-    expect(driftReason(row({ upstream_actor: "u1", user_is_service_account: true }))).toBe("self");
-    expect(driftReason(row({}))).toBe("unknown");
   });
 });
 

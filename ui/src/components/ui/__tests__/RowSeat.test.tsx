@@ -6,10 +6,10 @@ import { EmptyState } from "@/components/states";
 import { SettingRow } from "@/components/targets/SettingRow";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
-import { ActionSeat, Card, CardColumns, CardGrid, CardHeader, CardRow, ROW } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardGrid, CardHeader, CardRow, Cells, ROW } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { StandingLine } from "@/components/ui/StandingLine";
-import { ACTIONS, actionsInProse, actionsOutsideSeats, cardGridsByHand, dotLinesOffIndent, longNotes, NOTE_MAX } from "@/test-utils/layout";
+import { ACTIONS, actionsInProse, actionsOutsideSeats, cardGridsByHand, dotLinesOffIndent, headsOffRows, longNotes, NOTE_MAX } from "@/test-utils/layout";
 
 /**
  * D-1 §4: every action sits in its row's right seat on the first line, never in
@@ -385,6 +385,80 @@ describe("the seat guard", () => {
     );
     expect(container.querySelectorAll(ACTIONS)).toHaveLength(2); // the fold toggle is an action, judged in prose, not by the seat
     expect(actionsOutsideSeats(container)).toEqual([]);
+  });
+});
+
+describe("the column guard", () => {
+  const cols = ["tablet:w-[180px] tablet:flex-none", "min-w-0 tablet:flex-1", "tablet:w-(--seat-number) tablet:text-right"];
+
+  it("draws each heading and each cell in its column's box, and passes a table on one list and one seat", () => {
+    const { container } = render(
+      <Card>
+        <CardColumns cols={cols} seat="wide">
+          <span>Who</span>
+          <span>What</span>
+          <span>Found</span>
+        </CardColumns>
+        <CardRow first cols={cols} seat="wide" action={<Button size="sm">Adopt</Button>} detail="Maker not known.">
+          <span>Bianca Belair</span>
+          <span>Laser cutter</span>
+          <span>3 Nov</span>
+        </CardRow>
+        <div className={ROW}>
+          <Cells cols={cols}>
+            <span>Kofi Kingston</span>
+            <span>Wood shop</span>
+            <span>28 Oct</span>
+          </Cells>
+          <ActionSeat seat="wide" />
+        </div>
+      </Card>,
+    );
+    const head = container.querySelector("[data-card-columns]")!;
+    const row = container.querySelector("[data-card-row]")!;
+    for (const line of [head, row]) {
+      expect(Array.from(line.querySelectorAll(":scope > [data-col]"), (cell) => cell.className)).toEqual(cols);
+    }
+    expect(screen.getByText("Found").parentElement).toHaveClass("tablet:text-right");
+    expect(headsOffRows(container)).toEqual([]);
+  });
+
+  it("catches a heading typed beside its rows, a heading with no seat cell, and a part out of its column", () => {
+    // Drift on staging, 19 Nov: widths of the heading's own, and no cell over the seat.
+    const { container, rerender } = render(
+      <Card>
+        <CardColumns>
+          <span className="w-[180px]">Who</span>
+          <span className="flex-1">What</span>
+        </CardColumns>
+        <CardRow first cols={cols.slice(0, 2)} seat="wide" action={<Button size="sm">Adopt</Button>}>
+          <span>Bianca Belair</span>
+          <span>Laser cutter</span>
+        </CardRow>
+      </Card>,
+    );
+    expect(headsOffRows(container)).toEqual([
+      `a row off its headings' columns: [${cols[0]} | ${cols[1]}] under []: "Bianca BelairLaser cutterAdopt"`,
+      'a row\'s seat (wide) under a heading seat of none: "Bianca BelairLaser cutterAdopt"',
+    ]);
+    // Requests: an avatar drawn as a part of its own pushed every cell after it out from under its heading.
+    rerender(
+      <Card>
+        <CardColumns cols={cols.slice(0, 2)}>
+          <span>Who</span>
+          <span>What</span>
+        </CardColumns>
+        <div className={ROW}>
+          <Cells cols={cols.slice(0, 2)}>
+            <span>B</span>
+            <span>Bianca Belair</span>
+            <span>Laser cutter</span>
+          </Cells>
+        </div>
+      </Card>,
+    );
+    expect(headsOffRows(container)).toHaveLength(1);
+    cleanup(); // the offenders were drawn on purpose
   });
 });
 
