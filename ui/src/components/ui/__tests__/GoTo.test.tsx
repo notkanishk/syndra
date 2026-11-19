@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { css } from "@/__tests__/cssTokens";
 import { GoTo, GoToPanel } from "@/components/ui/GoTo";
 import { NAME_CATALOG_KEY } from "@/lib/queries/useNameCatalog";
 import { ADVANCED_NAV, BASIC_NAV, memberNav } from "@/lib/nav";
@@ -72,6 +73,15 @@ describe("Go to", () => {
     expect(box.parentElement).toHaveClass("field-row");
     expect(box).not.toHaveClass("border");
     expect(box).not.toHaveClass("rounded-inner");
+    // The whole row is the target: its inset is the input's own, not the row's.
+    expect(box).toHaveClass("px-6", "py-3.5");
+    expect(box.parentElement).not.toHaveClass("px-6");
+  });
+
+  it("says the bare field's focus on its row at the house ring's 2px, in the ring's colour", () => {
+    const rule = /@utility field-row \{[\s\S]*?&:has\(> input:focus-visible\) \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(rule).toContain("border-bottom-color: var(--focus-ring);");
+    expect(rule).toContain("box-shadow: inset 0 -1px var(--focus-ring);");
   });
 
   it("is closed when not open, and reopens clean", () => {

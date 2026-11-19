@@ -41,3 +41,19 @@ export function StatusSeat({
     </span>
   );
 }
+
+/**
+ * A line its status dot leads, as a page's head says it: My access's line and
+ * the line that knows on a person's page (A-24 frame 18), one `HeaderLine`
+ * drawn one way. The dot's seat is always there, unseen while there is no tone
+ * (the read is out), so the words never shift when it lands; the words
+ * crossfade when they change.
+ */
+export function DotLine({ tone, text, className = "" }: { tone: StatusTone | "none"; text: string; className?: string }) {
+  return (
+    <span data-dot-line className={`flex items-center gap-2 ${className}`}>
+      <StatusDot tone={tone === "none" ? "neutral" : tone} className={tone === "none" ? "invisible" : ""} />
+      <Crossfade id={text}>{text}</Crossfade>
+    </span>
+  );
+}

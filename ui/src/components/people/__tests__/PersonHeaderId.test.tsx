@@ -77,7 +77,7 @@ describe("a person's header", () => {
     expect(screen.queryByText(/Everything this person can use/)).toBeNull();
     // A-24 frame 18: a head line with its dot. While checking the dot's seat is kept, unseen, so the words
     // never shift when the ladder's dot lands.
-    const dot = screen.getByText("Checking what Zitadel shows.").closest("[data-knows]")?.querySelector("[data-dot]");
+    const dot = screen.getByText("Checking what Zitadel shows.").closest("[data-dot-line]")?.querySelector("[data-dot]");
     expect(dot).toHaveClass("invisible");
   });
 
@@ -92,7 +92,7 @@ describe("a person's header", () => {
     };
     try {
       renderPerson();
-      const line = screen.getByText(/ends in 3 days\.$/).closest("[data-knows]");
+      const line = screen.getByText(/ends in 3 days\.$/).closest("[data-dot-line]");
       expect(line?.querySelector("[data-dot]")).toHaveClass("bg-warn");
       expect(line?.querySelector("[data-dot]")).not.toHaveClass("invisible");
     } finally {

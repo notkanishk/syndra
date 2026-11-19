@@ -29,7 +29,8 @@ import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ErrorState, RowSkeleton, SkeletonAfterDelay } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { Avatar } from "@/components/ui/Avatar";
-import { Chip, Mono, StatusDot } from "@/components/ui/Badge";
+import { Chip, Mono } from "@/components/ui/Badge";
+import { DotLine } from "@/components/ui/StatusSeat";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Notice } from "@/components/ui/Notice";
 import { StatusSeat } from "@/components/ui/StatusSeat";
@@ -72,20 +73,9 @@ import type { HeaderLine } from "@/components/member/headerLine";
 type Tab = "access" | "requests" | "activity";
 
 // The page opens on the line that knows (A-24 §9, Q10, `personLine`), not on a sentence that is the
-// same for everyone: what they hold, from Zitadel, and the one thing worth knowing.
-
-/**
- * The line that knows as A-24 frame 18 draws it: a head line, its ladder's dot then its words, amber
- * when it names an end. The dot's seat is kept while checking, so the words never shift as it lands.
- */
-function KnowsLine({ line }: { line: HeaderLine }) {
-  return (
-    <span data-knows className="flex items-center gap-2 text-small">
-      <StatusDot tone={line.tone === "none" ? "neutral" : line.tone} className={line.tone === "none" ? "invisible" : ""} />
-      <span>{line.text}</span>
-    </span>
-  );
-}
+// same for everyone: what they hold, from Zitadel, and the one thing worth knowing. Drawn as A-24 frame
+// 18 draws it, a head line led by its ladder's dot (`DotLine`, as My access draws its own line).
+const KnowsLine = ({ line }: { line: HeaderLine }) => <DotLine tone={line.tone} text={line.text} className="text-small" />;
 
 const TAB_LABELS: Record<Tab, string> = {
   access: "Access",

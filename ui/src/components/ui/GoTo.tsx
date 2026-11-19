@@ -133,6 +133,8 @@ export function GoToPanel({
     <Input
       type="search"
       bare={!embedded}
+      // The whole row is the field: its inset is the input's own, so a press anywhere in the row lands in it.
+      className={embedded ? "" : "px-6 py-3.5"}
       autoFocus={!embedded}
       role="combobox"
       aria-label={embedded ? "Go to by name" : "Go to"}
@@ -156,7 +158,7 @@ export function GoToPanel({
     // The phone's sheet keeps its boxed field inside its own padding; the dialog is the board's panel:
     // the field row, the list, the keys, edge to edge.
     <div className={`flex flex-col ${embedded ? "gap-3" : ""}`}>
-      {embedded ? field : <div className="field-row sticky top-0 bg-surface-2 px-6 py-3.5">{field}</div>}
+      {embedded ? field : <div className="field-row sticky top-0 bg-surface-2">{field}</div>}
 
       {(!showIdle || items.length > 0) && (
         <div id={listId} role="listbox" aria-label="Where to go" className={`flex flex-col ${embedded ? "-mx-6" : "pb-1.5"}`}>

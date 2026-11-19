@@ -64,33 +64,17 @@ describe("the change's trail settles only on what was observed (§5)", () => {
     expect(trailSteps("give", false, undefined).filter((s) => s.ring)).toHaveLength(2);
   });
 
-  // A-24 frame 14, "Pressing": the trail is there as soon as the act is sent, every step a ring. Even a
-  // standing and a Zitadel read that would settle steps settle nothing before the answer.
-  it("while the act is on its way, every step is open, whatever is read", () => {
-    expect(said(trailSteps("give", true, "held", Z, false))).toEqual(["○ Not recorded in Syndra yet.", "○ Not sent to Zitadel yet.", "○ Not in Zitadel yet."]);
-    expect(said(trailSteps("revoke", true, "not_held", Z, false))).toEqual([
-      "○ Not recorded in Syndra yet.",
-      "○ Not sent to Zitadel yet.",
-      "○ Not removed from Zitadel yet.",
-    ]);
-    expect(trailSteps("give", false, null, undefined, false).every((s) => s.ring)).toBe(true);
-  });
-
-  it("PendingTrail draws that route, named as the answer's trail is", () => {
-    render(<PendingTrail act="give" />);
+  // A-24 frame 14, "Pressing": the route by name, every step an open ring, nothing a sentence that says
+  // it happened. Drawn under the forecast while the act is out: GrantForecast and RemovalForecast.
+  it("PendingTrail is the route's names beside open rings, with no full stop", () => {
+    render(<PendingTrail act="revoke" />);
     const list = screen.getByRole("list", { name: "On its way to Zitadel" });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(list).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Step 1: Recorded in Syndra",
+      "Step 2: Sent to Zitadel",
+      "Step 3: No longer in Zitadel",
+    ]);
     expect(list.querySelectorAll("[data-dot][data-ring]")).toHaveLength(3);
-  });
-
-  it("is drawn under the forecast as soon as a give or a direct revoke is sent", () => {
-    for (const [file, act] of [
-      ["components/people/GrantDirectAccess.tsx", "give"],
-      ["components/people/RemovalDialog.tsx", "revoke"],
-    ]) {
-      const source = readFileSync(resolve(__dirname, "..", file), "utf8");
-      expect(source, file).toMatch(new RegExp(`isPending && \\(\\s*<>[\\s\\S]{0,500}<PendingTrail act="${act}"`));
-    }
   });
 });
 

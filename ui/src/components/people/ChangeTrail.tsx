@@ -57,15 +57,13 @@ export function trailSteps(
   sent: boolean,
   standing: Standing,
   zitadel?: { readAt: string },
-  /** False while the act is on its way and has not answered: nothing is observed, so every step is open. */
-  recorded = true,
 ): TrailCheck[] {
-  const there = recorded && zitadel !== undefined && (act === "give" ? standing === "held" : standing === "not_held");
-  const went = recorded && (sent || there || (act === "give" && standing === "sent"));
+  const there = zitadel !== undefined && (act === "give" ? standing === "held" : standing === "not_held");
+  const went = sent || there || (act === "give" && standing === "sent");
   const done = (sentence: string, faint?: string[]): TrailCheck => ({ tone: "healthy", sentence, faint });
   const open = (sentence: string): TrailCheck => ({ tone: "neutral", ring: true, sentence });
   return [
-    recorded ? done("Recorded in Syndra.") : open("Not recorded in Syndra yet."),
+    done("Recorded in Syndra."),
     went ? done("Sent to Zitadel.") : open("Not sent to Zitadel yet."),
     there
       ? done(act === "give" ? "In Zitadel." : "No longer in Zitadel.", [`Read back at ${formatClock(zitadel.readAt)}.`])
@@ -141,17 +139,25 @@ export function ChangeTrail({
   );
 }
 
+/** The route's three steps by name, as a label: no full stop, so none is a sentence that says it happened. */
+export const ROUTE: Record<ChangeAct, string[]> = {
+  give: ["Recorded in Syndra", "Sent to Zitadel", "In Zitadel"],
+  revoke: ["Recorded in Syndra", "Sent to Zitadel", "No longer in Zitadel"],
+};
+
 /**
  * The trail while the act is on its way (A-24 frame 14, "Pressing"): there as
- * soon as the act is sent, so the route is read before it is travelled, every
- * step a ring. Nothing settles here: the answer's own `ChangeTrail` takes its
- * place and settles each step only from what it observes. An answer with no
- * trail (a refusal; nothing queued) takes it away.
+ * soon as the act is sent, so the route is read before it is travelled. Each
+ * step is its name beside an open ring, and the ring says "not yet seen", so no
+ * label claims anything; even "Recorded" is unobserved until the answer. The
+ * answer's own `ChangeTrail` takes its place and settles each step only from
+ * what it observes. An answer with no trail (a refusal; nothing queued) takes
+ * it away.
  */
 export function PendingTrail({ act, className = "" }: { act: ChangeAct; className?: string }) {
   return (
     <div className={className}>
-      <CheckTrail label={TRAIL_LABEL} checks={trailSteps(act, false, null, undefined, false)} />
+      <CheckTrail label={TRAIL_LABEL} checks={ROUTE[act].map((sentence) => ({ tone: "neutral", ring: true, sentence }))} />
     </div>
   );
 }

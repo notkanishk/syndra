@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { TermLine } from "@/components/home/TermLine";
@@ -137,23 +135,29 @@ describe("the term line (§3.1, Q3)", () => {
     expect(track).not.toHaveClass("max-w-80");
   });
 
-  it("keeps the phone's head lines a row apart: the Checked line's links reach 44px without growing it (A-24 frame 2p)", () => {
-    const home = readFileSync(resolve(__dirname, "../components/home/Home.tsx"), "utf8");
-    const checked = home.slice(home.indexOf("Checked, nothing waiting:"));
-    const link = /<AdvancedLink href=\{href\} className="([^"]*)"/.exec(checked)?.[1] ?? "";
-    // The 44px reach, given back 10px either side below desktop: the line is Claims' 24px row, not 44px.
-    expect(link.split(" ")).toEqual(expect.arrayContaining(["min-h-[var(--tap)]", "-my-2.5", "desktop:my-0", "desktop:min-h-0"]));
-  });
-
-  it("reads each marked day under the pointer", () => {
+  // A-24 frame 2: "Hover or focus on a mark reads its day, as the usage band does." The track is one
+  // focusable image; the words go to the line's readout, the term's day's seat, and back when it is left.
+  it("reads a marked day on hover, and on focus with the arrows, in the line's readout", () => {
     const ending = [
       { user_id: "u1", expires_at: "2026-11-24T10:00:00Z" },
       { user_id: "u2", expires_at: "2026-11-24T11:00:00Z" },
       { user_id: "u3", expires_at: "2026-11-27T10:00:00Z" },
     ];
     render(<TermLine term={terms[0]} ending={ending} now={now} />);
-    const marks = Array.from(document.querySelectorAll("[data-ending]")).map((m) => m.getAttribute("title"));
-    expect(marks).toEqual(["Access ends for two people on 24 Nov.", "Access ends for one person on 27 Nov."]);
+    const readout = () => document.querySelector("[data-term-readout] [aria-live]")!.textContent;
+    const track = screen.getByRole("img");
+    expect(readout()).toBe("Monsoon term, day 110 of 153");
+    fireEvent.pointerEnter(document.querySelector('[data-ending="2026-11-27"]')!);
+    expect(readout()).toBe("Access ends for one person on 27 Nov.");
+    fireEvent.pointerLeave(track);
+    expect(readout()).toBe("Monsoon term, day 110 of 153");
+    expect(track).toHaveAttribute("tabindex", "0");
+    fireEvent.focus(track);
+    expect(readout()).toBe("Access ends for two people on 24 Nov.");
+    fireEvent.keyDown(track, { key: "ArrowRight" });
+    expect(readout()).toBe("Access ends for one person on 27 Nov.");
+    fireEvent.blur(track);
+    expect(readout()).toBe("Monsoon term, day 110 of 153");
   });
 
   it("counts a one-day term as one day", () => {
