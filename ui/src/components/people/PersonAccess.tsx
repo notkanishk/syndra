@@ -27,7 +27,7 @@ import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ErrorState, RowSkeleton, SkeletonAfterDelay } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { Avatar } from "@/components/ui/Avatar";
-import { Chip, Mono } from "@/components/ui/Badge";
+import { Chip, Mono, StatusDot } from "@/components/ui/Badge";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Notice } from "@/components/ui/Notice";
 import { StatusSeat } from "@/components/ui/StatusSeat";
@@ -65,11 +65,25 @@ import { projectSignInLine } from "@/lib/sign-in-line";
 import { sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 import { CHECKING, personLine } from "@/components/people/personLine";
+import type { HeaderLine } from "@/components/member/headerLine";
 
 type Tab = "access" | "requests" | "activity";
 
 // The page opens on the line that knows (A-24 §9, Q10, `personLine`), not on a sentence that is the
 // same for everyone: what they hold, from Zitadel, and the one thing worth knowing.
+
+/**
+ * The line that knows as A-24 frame 18 draws it: a head line, its ladder's dot then its words, amber
+ * when it names an end. The dot's seat is kept while checking, so the words never shift as it lands.
+ */
+function KnowsLine({ line }: { line: HeaderLine }) {
+  return (
+    <span data-knows className="flex items-center gap-2 text-small">
+      <StatusDot tone={line.tone === "none" ? "neutral" : line.tone} className={line.tone === "none" ? "invisible" : ""} />
+      <span>{line.text}</span>
+    </span>
+  );
+}
 
 const TAB_LABELS: Record<Tab, string> = {
   access: "Access",
@@ -132,7 +146,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
           <PageHeader
             className="w-full flex-1"
             title={seed.name}
-            lede={CHECKING}
+            lede={<KnowsLine line={{ tone: "none", text: CHECKING }} />}
             meta={<MetaRow>{[seed.email, seed.title || null, seed.team || null]}</MetaRow>}
           />
         </div>
@@ -317,7 +331,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
         <PageHeader
           className="w-full flex-1"
           title={user.name}
-          lede={personLine(access.data, { role: roleName })}
+          lede={<KnowsLine line={personLine(access.data, { role: roleName })} />}
           meta={
             <MetaRow>
               {[

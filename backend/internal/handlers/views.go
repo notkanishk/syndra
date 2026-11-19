@@ -43,8 +43,14 @@ func handleGetUsers(w http.ResponseWriter, r *http.Request) {
 func handleGetUserAccess(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	view, err := services.ExplainUserAccess(r.Context(), userID)
-	if err != nil {
+	if errors.Is(err, services.ErrUserNotInDirectory) {
+		// Zitadel has no account with this id: the one 404. My access says so, with its step.
 		viewError(w, err, http.StatusNotFound, "NOT_FOUND")
+		return
+	}
+	if err != nil {
+		// Anything else is Syndra failing to read, never "no such person".
+		viewError(w, err, http.StatusInternalServerError, "VIEW_ERROR")
 		return
 	}
 

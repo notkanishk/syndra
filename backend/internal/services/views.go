@@ -696,13 +696,18 @@ func allowanceBand(ctx context.Context, userID string) ([]models.AllowanceBand, 
 	return out, nil
 }
 
+// ErrUserNotInDirectory: Zitadel has no account with this id, after the live
+// lookup a cache miss makes. The only failure of ExplainUserAccess that is a
+// 404, so "Zitadel has no account for you" is never said for a store that failed.
+var ErrUserNotInDirectory = errors.New("user not found in directory")
+
 func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessView, error) {
 	user, ok, err := directory.Default.FindUser(ctx, userID)
 	if err != nil {
 		return models.UserAccessView{}, err
 	}
 	if !ok {
-		return models.UserAccessView{}, fmt.Errorf("user %q not found in directory", userID)
+		return models.UserAccessView{}, fmt.Errorf("%w: %q", ErrUserNotInDirectory, userID)
 	}
 
 	roleMap, bundles, err := collectUserRoles(ctx, userID)

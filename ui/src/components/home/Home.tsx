@@ -424,7 +424,9 @@ export function Home({ session }: { session: SessionUser }) {
             {clear.map(([name, href], index) => (
               <span key={href} className="inline-flex items-center gap-2">
                 {index > 0 && <span aria-hidden>·</span>}
-                <AdvancedLink href={href} className="inline-flex min-h-[var(--tap)] items-center text-ink link-hover desktop:min-h-0">
+                {/* The tap's 44px reach, without its height: -10px either side leaves the line the
+                    24px row Claims has, so the phone's lines sit 24px apart as drawn (A-24 frame 2p). */}
+                <AdvancedLink href={href} className="-my-2.5 inline-flex min-h-[var(--tap)] items-center text-ink link-hover desktop:my-0 desktop:min-h-0">
                   {name}
                 </AdvancedLink>
               </span>

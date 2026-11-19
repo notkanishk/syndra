@@ -33,9 +33,14 @@ function clearOnEscape(event: React.KeyboardEvent<HTMLInputElement>) {
  * Text input. 14px radius rather than a pill: a field the operator types a
  * claim name or a date into should read as a container, not as a control.
  * A `type="search"` field clears on its first Escape (`clearOnEscape`).
+ * `bare` is the field with no box, for a row that is its container (Go to's
+ * `field-row`, which also says its focus).
  */
-export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { dense?: boolean }>(
-  function Input({ className = "", dense = false, onKeyDown, ...props }, ref) {
+export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { dense?: boolean; bare?: boolean }>(
+  function Input({ className = "", dense = false, bare = false, onKeyDown, ...props }, ref) {
+    // A dialog field keeps its 15px (D-1 §6 pass 4), the size somebody types a claim name or a
+    // date at; the dense field reads the body step. type-scale-exempt
+    const box = bare ? "text-[15px]" : `rounded-inner border border-line-strong px-[15px] ${dense ? DENSE_FIELD : "py-3 text-[15px]"} motion-tint focus:border-accent-line`;
     return (
       <input
         ref={ref}
@@ -43,9 +48,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
           onKeyDown?.(event);
           if (props.type === "search") clearOnEscape(event);
         }}
-        // A dialog field keeps its 15px (D-1 §6 pass 4), the size somebody types a claim name or a
-        // date at; the dense field reads the body step. type-scale-exempt
-        className={`block w-full rounded-inner border border-line-strong bg-transparent px-[15px] ${dense ? DENSE_FIELD : "py-3 text-[15px]"} text-ink motion-tint placeholder:text-faint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${className}`}
+        className={`block w-full bg-transparent ${box} text-ink placeholder:text-faint disabled:cursor-not-allowed disabled:text-faint ${className}`}
         {...props}
       />
     );

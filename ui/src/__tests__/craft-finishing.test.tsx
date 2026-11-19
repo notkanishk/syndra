@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
-import { ChangeTrail, trailSteps } from "@/components/people/ChangeTrail";
+import { ChangeTrail, PendingTrail, trailSteps } from "@/components/people/ChangeTrail";
 import { EmptyState, PLATES_SHOWN, Plate } from "@/components/states";
 import { CheckTrail } from "@/components/ui/CheckTrail";
 import { usersQueryKeys } from "@/lib/queries/useUsers";
@@ -62,6 +62,35 @@ describe("the change's trail settles only on what was observed (§5)", () => {
     const [, , last] = trailSteps("give", true, "held", Z);
     expect(last.faint?.[0]).toMatch(/^Read back at \d\d:\d\d\.$/);
     expect(trailSteps("give", false, undefined).filter((s) => s.ring)).toHaveLength(2);
+  });
+
+  // A-24 frame 14, "Pressing": the trail is there as soon as the act is sent, every step a ring. Even a
+  // standing and a Zitadel read that would settle steps settle nothing before the answer.
+  it("while the act is on its way, every step is open, whatever is read", () => {
+    expect(said(trailSteps("give", true, "held", Z, false))).toEqual(["○ Not recorded in Syndra yet.", "○ Not sent to Zitadel yet.", "○ Not in Zitadel yet."]);
+    expect(said(trailSteps("revoke", true, "not_held", Z, false))).toEqual([
+      "○ Not recorded in Syndra yet.",
+      "○ Not sent to Zitadel yet.",
+      "○ Not removed from Zitadel yet.",
+    ]);
+    expect(trailSteps("give", false, null, undefined, false).every((s) => s.ring)).toBe(true);
+  });
+
+  it("PendingTrail draws that route, named as the answer's trail is", () => {
+    render(<PendingTrail act="give" />);
+    const list = screen.getByRole("list", { name: "On its way to Zitadel" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
+    expect(list.querySelectorAll("[data-dot][data-ring]")).toHaveLength(3);
+  });
+
+  it("is drawn under the forecast as soon as a give or a direct revoke is sent", () => {
+    for (const [file, act] of [
+      ["components/people/GrantDirectAccess.tsx", "give"],
+      ["components/people/RemovalDialog.tsx", "revoke"],
+    ]) {
+      const source = readFileSync(resolve(__dirname, "..", file), "utf8");
+      expect(source, file).toMatch(new RegExp(`isPending && \\(\\s*<>[\\s\\S]{0,500}<PendingTrail act="${act}"`));
+    }
   });
 });
 

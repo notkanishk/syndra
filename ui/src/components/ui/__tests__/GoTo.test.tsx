@@ -59,6 +59,21 @@ describe("Go to", () => {
     expect(screen.getAllByRole("option").length).toBeGreaterThan(5);
   });
 
+  // A-24 frame 22: the panel is the field row over the list. Centred on its own height it jumped as the
+  // list grew and shrank (title at y 140, 39, 356 on staging); it is pinned at a fixed top instead.
+  it("is the board's panel: pinned at a fixed top, no heading, the bare field row (A-24 frame 22)", () => {
+    renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    const dialog = screen.getByRole("dialog", { name: "Go to" });
+    expect(dialog).toHaveAttribute("aria-label", "Go to");
+    expect(dialog).toHaveClass("tablet:items-start", "tablet:pt-24");
+    expect(dialog).not.toHaveClass("tablet:items-center");
+    expect(within(dialog).queryByRole("heading")).toBeNull();
+    const box = within(dialog).getByRole("combobox");
+    expect(box.parentElement).toHaveClass("field-row");
+    expect(box).not.toHaveClass("border");
+    expect(box).not.toHaveClass("rounded-inner");
+  });
+
   it("is closed when not open, and reopens clean", () => {
     const { rerender } = renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
     type("pri");

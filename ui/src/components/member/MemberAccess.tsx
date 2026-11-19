@@ -35,6 +35,13 @@ import { useMyStorage } from "@/lib/queries/useMyStorage";
 import { useRequestsMine } from "@/lib/queries/useRequests";
 import { sortByName } from "@/lib/sort";
 import { roleName } from "@/lib/names";
+import { ApiError } from "@/lib/api-client";
+
+/** A member Zitadel has no account for (copy guide, My access): what is true, then the step. */
+export const NOT_IN_ZITADEL = {
+  said: "Zitadel has no account for you, so there's no access to show.",
+  next: "Ask makerspace staff to check your account.",
+} as const;
 
 /**
  * Member · My access (route-me, 52b + 52c). The landing route for members, and
@@ -79,6 +86,26 @@ export function MemberAccess({ session }: { session: SessionUser }) {
     project.standings?.[roleKey] ?? null;
 
   if (access.error) {
+    // The read answers 404 only when Zitadel has no account with this sign-in's id
+    // (`ErrUserNotInDirectory`, after a live lookup): not a failure to load, and not "removed".
+    // The greeting stays, and the one line says the true thing and what to do.
+    if (access.error instanceof ApiError && access.error.status === 404) {
+      return (
+        <div {...head} style={BELOW_HEADER}>
+          <h1 className="type-page-title">
+            {now ? greeting(now) : <span className="invisible">Afternoon</span>}, {firstName(session.name)}.
+          </h1>
+          <div className="mt-2 flex flex-col gap-1 text-body text-muted">
+            <span className="flex items-center gap-2">
+              <StatusDot tone="warn" />
+              {NOT_IN_ZITADEL.said}
+            </span>
+            <span className="pl-(--dot-indent) text-small text-faint">{NOT_IN_ZITADEL.next}</span>
+          </div>
+          <ShellNotices />
+        </div>
+      );
+    }
     return (
       <ErrorState
         title="Couldn't load your access."

@@ -3,7 +3,8 @@ import type { SessionUser } from "@/lib/session";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { MemberAccess } from "@/components/member/MemberAccess";
+import { MemberAccess, NOT_IN_ZITADEL } from "@/components/member/MemberAccess";
+import { ApiError } from "@/lib/api-client";
 
 const access = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 const grants = vi.hoisted(() => ({ value: [] as unknown[] }));
@@ -483,6 +484,26 @@ describe("MemberAccess first welcome", () => {
     expect(rows(first.container)).toBe(before);
     expect(screen.getByText(/It keeps the makerspace.s list of who can use what, and why\./)).toBeTruthy();
     expect(screen.queryByText("Nothing needs you right now.")).toBeNull();
+  });
+});
+
+// The access read answers 404 only when Zitadel has no account with this sign-in's id. That is not
+// "Couldn't load", and not "That item no longer exists": the greeting stays and the line says it.
+describe("a member Zitadel has no account for", () => {
+  it("keeps the greeting and says the true thing, with the step", () => {
+    access.value = { isLoading: false, data: undefined, error: new ApiError(404, { error: "NOT_FOUND", message: "user not found in directory" }), refetch: () => {} };
+    render(<MemberAccess session={session} />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/, Randy\.$/);
+    expect(screen.getByText(NOT_IN_ZITADEL.said)).toBeInTheDocument();
+    expect(screen.getByText(NOT_IN_ZITADEL.next)).toBeInTheDocument();
+    expect(screen.queryByText(/no longer exists|Couldn't load your access/)).toBeNull();
+  });
+
+  it("any other failure is still a failure to load", () => {
+    access.value = { isLoading: false, data: undefined, error: new ApiError(500, { error: "VIEW_ERROR", message: "x" }), refetch: () => {} };
+    render(<MemberAccess session={session} />);
+    expect(screen.getByText("Couldn't load your access.")).toBeInTheDocument();
+    expect(screen.queryByText(NOT_IN_ZITADEL.said)).toBeNull();
   });
 });
 

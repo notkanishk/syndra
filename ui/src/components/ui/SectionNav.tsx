@@ -118,6 +118,12 @@ export function ReadLine<T extends NavSection>({
  * gives back so it takes no room of its own. A CSS length, so a container whose
  * gap is a token passes the token (`var(--region-gap)`) and the two can never
  * disagree, at any width.
+ *
+ * The container is a flex column, never a grid. The give-back is a negative
+ * margin, and a grid track never goes below 0, so in a grid the pill's empty
+ * row keeps its gap and the first section sits a whole gap too low (TrueNAS,
+ * 79px under the read line where D-1 draws 41; the design-system guard holds
+ * the TrueNAS page to it).
  */
 export function SectionPill<T extends NavSection>({
   sections,

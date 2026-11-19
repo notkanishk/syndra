@@ -7,7 +7,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/states";
 import { Input } from "@/components/ui/Input";
 import { Kbd } from "@/components/ui/Kbd";
-import { Modal, ModalHeader } from "@/components/ui/Modal";
+import { Modal } from "@/components/ui/Modal";
 import { flatItems, goTo, recallLately, type GoToItem } from "@/lib/go-to";
 import { visitByKey } from "@/lib/motion";
 import type { NavEntry } from "@/lib/nav";
@@ -25,6 +25,11 @@ import { useUiView } from "@/lib/ui-view";
  * It is opened by a key dozens of times a day, so it appears at once and leaves
  * at once (A-24 §8): a still Modal. Escape clears what is typed, then closes.
  * A place it opens does not arrive (Q14).
+ *
+ * As drawn (A-24 frame 22): the field row is the top of the panel, with no
+ * heading over it and no box round it, and the panel is pinned at a fixed top
+ * so it never jumps as the list grows and shrinks. Its name is the dialog's
+ * `aria-label`, since no title shows it.
  */
 type GoToProps = {
   open: boolean;
@@ -45,11 +50,8 @@ const GO_TO_ESC = { typed: "clear, then close", empty: "close" } as const;
 
 export function GoTo({ open, onClose, nav }: GoToProps) {
   return (
-    <Modal open={open} onClose={onClose} size="sm" still>
-      <ModalHeader title="Go to" />
-      <div className="px-6 pb-5">
-        <GoToPanel nav={nav} onGo={onClose} />
-      </div>
+    <Modal open={open} onClose={onClose} size="sm" still pinned label="Go to">
+      <GoToPanel nav={nav} onGo={onClose} />
     </Modal>
   );
 }
@@ -127,30 +129,37 @@ export function GoToPanel({
     }
   }
 
+  const field = (
+    <Input
+      type="search"
+      bare={!embedded}
+      autoFocus={!embedded}
+      role="combobox"
+      aria-label={embedded ? "Go to by name" : "Go to"}
+      aria-expanded={items.length > 0}
+      aria-controls={listId}
+      aria-autocomplete="list"
+      aria-activedescendant={current ? optionId(current) : undefined}
+      autoComplete="off"
+      spellCheck={false}
+      placeholder={GO_TO_PLACEHOLDER[audience]}
+      value={query}
+      onChange={(event) => {
+        setQuery(event.target.value);
+        setActive(0);
+      }}
+      onKeyDown={onKeyDown}
+    />
+  );
+
   return (
-    <div className="flex flex-col gap-3">
-      <Input
-        type="search"
-        autoFocus={!embedded}
-        role="combobox"
-        aria-label={embedded ? "Go to by name" : "Go to"}
-        aria-expanded={items.length > 0}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        aria-activedescendant={current ? optionId(current) : undefined}
-        autoComplete="off"
-        spellCheck={false}
-        placeholder={GO_TO_PLACEHOLDER[audience]}
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setActive(0);
-        }}
-        onKeyDown={onKeyDown}
-      />
+    // The phone's sheet keeps its boxed field inside its own padding; the dialog is the board's panel:
+    // the field row, the list, the keys, edge to edge.
+    <div className={`flex flex-col ${embedded ? "gap-3" : ""}`}>
+      {embedded ? field : <div className="field-row sticky top-0 bg-surface-2 px-6 py-3.5">{field}</div>}
 
       {(!showIdle || items.length > 0) && (
-        <div id={listId} role="listbox" aria-label="Where to go" className="-mx-6 flex flex-col">
+        <div id={listId} role="listbox" aria-label="Where to go" className={`flex flex-col ${embedded ? "-mx-6" : "pb-1.5"}`}>
           {shown.map(({ group, items: rows }) => (
             <div key={group} role="group" aria-labelledby={`${base}-${group}`} className="flex flex-col">
               <div id={`${base}-${group}`} className="px-6 pb-1 pt-3">
@@ -194,7 +203,7 @@ export function GoToPanel({
       {showIdle && idle}
 
       {!embedded && (
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fine text-faint">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-divider px-6 py-2.5 text-fine text-faint">
           <span className="inline-flex items-center gap-1">
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd> move
