@@ -35,18 +35,18 @@ type AccessSpan struct {
 //     assignment, unless they were moved.
 //
 // direct_grant.revoked (a role Zitadel had that Syndra never gave) names no
-// role, and nothing dates a rule's role, so neither is here.
+// role, and nothing dates a rule's role, so neither is here. Nor is a retired
+// bundle: RetireBundleAndEnqueue deletes every assignment at once, with no
+// audit row for each holder, so its runs end where no record says.
 //
-// ponytail: the audit scan has no index on target_zitadel_user_id (one person,
-// a year, a few action names: a seq scan over a makerspace's audit log). Add a
-// (target_zitadel_user_id, created_at) index if the log outgrows that.
+// Every audit read, the lateral ones too, is by target, action and time:
+// idx_audit_logs_target_action_created (000102).
 const accessHistorySQL = `
 SELECT project_id, role_key, from_at, to_at FROM (
 	SELECT r.zitadel_project_id AS project_id, r.zitadel_role_key AS role_key,
 	       CASE WHEN uba.source = 'moved' THEN NULL ELSE uba.assigned_at END AS from_at,
 	       NULL::timestamptz AS to_at
 	  FROM user_bundle_assignments uba
-	  JOIN bundles b ON b.id = uba.bundle_id AND b.retired_at IS NULL
 	  JOIN bundle_version_effective_roles r ON r.version_id = uba.version_id
 	 WHERE uba.user_id = $1
 

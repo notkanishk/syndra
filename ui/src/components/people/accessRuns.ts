@@ -1,3 +1,4 @@
+import { countWord } from "@/components/member/headerLine";
 import type { RoleHistory, RoleRun } from "@/lib/queries/useUsers";
 import { holds, standingWords } from "@/lib/standing";
 import { shortDay } from "@/lib/term-dates";
@@ -12,7 +13,8 @@ export const TITLE = "Access over time";
 export const NOTE = "This year";
 export const CAPTION =
   "Each line runs from the day a role was given to the day it ended. What they hold today is read from Zitadel; the dates are Syndra's records.";
-export const CUT_SHORT = "Only the latest changes are drawn, so some earlier starts say not on record.";
+/** The read's cap drops whole older spans (services.AccessHistoryCap, 500), so it says what is left off. */
+export const CUT_SHORT = "Only the latest 500 changes are drawn; earlier ones this year are left off.";
 export const NOTHING = "No roles given, ended or held this year.";
 export const READ_FAILED = "Couldn't read access over time.";
 
@@ -52,7 +54,7 @@ export function whenLine(role: RoleHistory, first: string): string {
   const start = startOf(run, first);
   if (run.to) {
     const to = shortDay(dayOf(run.to));
-    return start === "unknown" ? `Ended ${to}` : start === "before" ? `Until ${to}` : `${shortDay(start)} to ${to}`;
+    return start === "unknown" ? `Start not on record · ended ${to}` : start === "before" ? `Until ${to}` : `${shortDay(start)} to ${to}`;
   }
   const parts = [start === "unknown" ? "Start not on record" : start === "before" ? "Since before this year" : `Since ${shortDay(start)}`];
   if (role.standing !== "held") parts.push(standingWords(role.standing, "operator") ?? "");
@@ -60,7 +62,7 @@ export function whenLine(role: RoleHistory, first: string): string {
   return parts.join(" · ");
 }
 
-/** The whole line as one sentence, every run: "Laser cutting · Operator, given 3 Aug, held today, ends 12 Dec". */
+/** The whole line as one sentence, every run, named as the line is: "Operator in Laser cutting, given 3 Aug, held today, ends 12 Dec". */
 export function lineSentence(role: RoleHistory, first: string, project: string, roleName: string): string {
   const runs = role.runs.map((run) => {
     const start = startOf(run, first);
@@ -72,10 +74,26 @@ export function lineSentence(role: RoleHistory, first: string, project: string, 
     }
     return words.join(", ");
   });
-  return `${project} · ${roleName}, ${runs.join("; ")}`;
+  return `${lineName(roleName, project)}, ${runs.join("; ")}`;
 }
 
-/** A run's place on the axis, from 0 to 100: `open` it reaches today; `clipped` it began before the window or off the record. */
+/** A line's name, the same seen and heard: "Operator in Laser cutting". */
+export const lineName = (roleName: string, project: string) => `${roleName} in ${project}`;
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** The chart as one picture (the board's): "Four roles this year. Two are held today." */
+export function chartSummary(roles: RoleHistory[]): string {
+  const n = roles.length;
+  const held = roles.filter((r) => holds(r.standing)).length;
+  return `${capital(countWord(n))} ${n === 1 ? "role" : "roles"} this year. ${held === 0 ? "None" : capital(countWord(held))} ${held === 1 ? "is" : "are"} held today.`;
+}
+
+/**
+ * A run's place on the axis, from 0 to 100; an open one reaches today. `clipped`: it began before the
+ * window or off the record. One with no start on record is drawn from where the run before it ended
+ * (the fold never lets it overlap one), or from the window's edge when it is the first.
+ */
 export interface Placed {
   left: number;
   width: number;
@@ -86,12 +104,14 @@ export interface Placed {
 
 export function placeRuns(role: RoleHistory, today: string): { runs: Placed[]; ahead: { left: number; width: number } | null } {
   const { first, last, at } = yearOf(today);
-  const runs = role.runs.map((run) => {
+  const runs: Placed[] = [];
+  for (const run of role.runs) {
     const start = startOf(run, first);
-    const left = start === "unknown" || start === "before" ? 0 : at(start);
+    const before = runs[runs.length - 1];
+    const left = start === "unknown" ? (before ? before.left + before.width : 0) : start === "before" ? 0 : at(start);
     const right = run.to ? at(dayOf(run.to)) : at(today);
-    return { left, width: Math.max(0, right - left), clipped: start === "unknown" || start === "before", held: !run.to && holds(role.standing) };
-  });
+    runs.push({ left, width: Math.max(0, right - left), clipped: start === "unknown" || start === "before", held: !run.to && holds(role.standing) });
+  }
   const open = role.runs.length > 0 && !role.runs[role.runs.length - 1].to;
   const end = role.ends ? dayOf(role.ends) : null;
   // The time left before an end, dashed amber: only for a role held today that ends, to the year's edge.

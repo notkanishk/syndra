@@ -2,7 +2,20 @@
 
 import { useShownNames } from "@/components/names/shownNames";
 import { projectLabel } from "@/components/names/Unresolved";
-import { CAPTION, CUT_SHORT, lineSentence, NOTE, NOTHING, placeRuns, READ_FAILED, TITLE, whenLine, yearOf } from "@/components/people/accessRuns";
+import {
+  CAPTION,
+  chartSummary,
+  CUT_SHORT,
+  lineName,
+  lineSentence,
+  NOTE,
+  NOTHING,
+  placeRuns,
+  READ_FAILED,
+  TITLE,
+  whenLine,
+  yearOf,
+} from "@/components/people/accessRuns";
 import { ErrorState } from "@/components/states";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { useAccessHistory } from "@/lib/queries/useUsers";
@@ -11,18 +24,24 @@ import { compareNames } from "@/lib/sort";
 import { termName } from "@/lib/term-dates";
 import { civilDay } from "@/lib/time";
 
-/** The name seat, as the board's (A-24 frame 19): from the tablet step, name · track. */
-const GRID = "grid grid-cols-1 gap-y-1.5 @tablet:grid-cols-[230px_minmax(0,1fr)] @tablet:gap-x-4 @tablet:gap-y-0";
-/** A line's name seat: the role in its project, its dates under it. Its two lines are the line's height. */
-const NAME = "flex flex-col justify-center py-2";
+/** Board part 3, frame 19: from the tablet step, a 230px name seat and the track, 16px apart. */
+const GRID = "grid grid-cols-1 @tablet:grid-cols-[230px_minmax(0,1fr)] @tablet:gap-x-4";
+/** The name seat: the line's name, its dates under it in the fine size, 9px above and below. */
+const NAME = "flex flex-col py-[9px]";
+/**
+ * Each cell carries its own rule (the board's), so the divider breaks at the column gap; the first
+ * line has none. On a phone the track sits under its name, inside the same rule.
+ */
+const rule = (first: boolean, track = false) => (first ? "" : track ? "@tablet:border-t @tablet:border-divider" : "border-t border-divider");
 
 /**
  * Access over time (A-24 §9 vivid, Q11; owner 19 Nov 2026): one card, a line per role from the day it
  * was given to the day it ended, on this year's axis with the terms marked and today in violet. Ink is
  * held today, grey has ended, the dashed amber run is the time left before an end. The usage band's
- * grammar (A-23): the strong baseline colours, a tick where the record starts short of the window,
- * the accent for today; spans, as the term line draws, not a chart. The dates are Syndra's records;
- * held today is the standing, the page's own read of Zitadel. Operators, in Advanced (the caller).
+ * grammar (A-23): the strong baseline colour, the accent for today; spans, as the term line draws, not
+ * a chart. The dates are Syndra's records; held today is the standing, the page's own read of Zitadel.
+ * The picture is one image named by the board's sentence; each line is also one sentence in a list a
+ * screen reader reads. Operators, in Advanced (the caller).
  */
 export function AccessOverTime({ userId, lines }: { userId: string; lines: number }) {
   const today = civilDay(new Date());
@@ -43,26 +62,28 @@ export function AccessOverTime({ userId, lines }: { userId: string; lines: numbe
   const hairlines = (
     <>
       {marks.map((m) => (
-        <span key={m.name + m.left} aria-hidden className="absolute inset-y-0 w-px bg-line-strong" style={{ left: `${m.left}%` }} />
+        <span key={m.name + m.left} className="absolute inset-y-0 w-px bg-line-strong" style={{ left: `${m.left}%` }} />
       ))}
-      <span aria-hidden data-today className="absolute inset-y-0 w-px bg-accent" style={{ left: `${now}%` }} />
+      <span data-today className="absolute inset-y-0 w-px bg-accent" style={{ left: `${now}%` }} />
     </>
   );
 
   let body;
   if (history.isPending) {
+    // The lines held today are known before the read; the ones that ended this year are not, and
+    // arrive with it. So the card holds at least as many lines as are held today, one at the least,
+    // each in the same two lines of type as a real one.
     body = (
       <div aria-busy="true" aria-label="Loading" className="flex flex-col">
         {Array.from({ length: Math.max(1, lines) }).map((_, i) => (
-          // The same two lines of type as a real line, so the card is as tall before the read as after.
-          <div key={i} className={`${GRID} ${i > 0 ? "border-t border-divider" : ""}`}>
-            <span className={NAME}>
+          <div key={i} className={GRID}>
+            <span className={`${NAME} ${rule(i === 0)}`}>
               <span className="text-body leading-[1.3]">
                 <span className="skeleton-bar inline-block h-[10px] w-40 align-middle" />
               </span>
-              <span className="text-small">&nbsp;</span>
+              <span className="text-fine">&nbsp;</span>
             </span>
-            <span className="flex min-h-6 items-center">
+            <span className={`flex min-h-6 items-center ${rule(i === 0, true)}`}>
               <span className="skeleton-bar h-1.5 w-full" />
             </span>
           </div>
@@ -73,58 +94,60 @@ export function AccessOverTime({ userId, lines }: { userId: string; lines: numbe
     body = <p className="text-body text-muted">{NOTHING}</p>;
   } else {
     body = (
-      <ul className="flex flex-col">
-        {roles.map((role, i) => {
-          const where = project(role);
-          const name = names.role(role.project_id, role.role_key);
-          const { runs, ahead } = placeRuns(role, today);
-          return (
-            <li key={role.project_id + "/" + role.role_key} data-line className={`${GRID} ${i > 0 ? "border-t border-divider" : ""}`}>
-              <span className="sr-only">{lineSentence(role, first, where, name)}</span>
-              <span aria-hidden className={NAME}>
-                <span className="text-body font-semibold leading-[1.3] [overflow-wrap:anywhere]">{`${name} in ${where}`}</span>
-                <span data-figure className="text-small text-faint">
-                  {whenLine(role, first)}
-                </span>
-              </span>
-              <span aria-hidden className="relative min-h-6">
-                {hairlines}
-                {runs.map((r, j) => (
-                  <span
-                    key={j}
-                    data-run={r.held ? "held" : "ended"}
-                    data-clipped={r.clipped || undefined}
-                    className={`absolute top-1/2 h-1.5 min-w-1.5 -translate-y-1/2 rounded-pill ${r.clipped ? "rounded-l-none" : ""} ${r.held ? "bg-ink" : "bg-line-strong"}`}
-                    style={{ left: `${r.left}%`, width: `${r.width}%` }}
-                  >
-                    {/* Began before the year, or off the record: the band's tick at the window's edge. */}
-                    {r.clipped && <span className="absolute -top-1 left-0 h-3.5 w-px bg-faint" />}
+      <>
+        <ul className="sr-only">
+          {roles.map((role) => (
+            <li key={role.project_id + "/" + role.role_key}>{lineSentence(role, first, project(role), names.role(role.project_id, role.role_key))}</li>
+          ))}
+        </ul>
+        <div role="img" aria-label={chartSummary(roles)} className="flex flex-col">
+          {roles.map((role, i) => {
+            const { runs, ahead } = placeRuns(role, today);
+            return (
+              <div key={role.project_id + "/" + role.role_key} data-line className={GRID}>
+                <span className={`${NAME} ${rule(i === 0)}`}>
+                  <span className="text-body font-semibold leading-[1.3] [overflow-wrap:anywhere]">
+                    {lineName(names.role(role.project_id, role.role_key), project(role))}
                   </span>
-                ))}
-                {ahead && (
-                  <span data-ahead className="absolute top-1/2 -translate-y-1/2 border-t-2 border-dashed border-warn" style={{ left: `${ahead.left}%`, width: `${ahead.width}%` }} />
-                )}
-              </span>
-            </li>
-          );
-        })}
-        {/* The axis, under the tracks: each term where it starts, and today. */}
-        <li aria-hidden className={GRID}>
-          <span />
-          <span data-axis data-figure className="relative h-6 text-fine text-faint">
-            {marks
-              .filter((m) => Math.abs(m.left - now) > 8)
-              .map((m) => (
-                <span key={m.name + m.left} className="absolute top-1.5 whitespace-nowrap pl-1.5" style={{ left: `${m.left}%` }}>
+                  <span data-figure data-when className="text-fine text-faint">
+                    {whenLine(role, first)}
+                  </span>
+                </span>
+                <span className={`relative min-h-6 ${rule(i === 0, true)}`}>
+                  {hairlines}
+                  {runs.map((r, j) => (
+                    <span
+                      key={j}
+                      data-run={r.held ? "held" : "ended"}
+                      data-clipped={r.clipped || undefined}
+                      className={`absolute top-1/2 h-1.5 min-w-1.5 -translate-y-1/2 rounded-pill ${r.held ? "bg-ink" : "bg-line-strong"}`}
+                      style={{ left: `${r.left}%`, width: `${r.width}%` }}
+                    />
+                  ))}
+                  {ahead && (
+                    <span data-ahead className="absolute top-1/2 -translate-y-1/2 border-t-2 border-dashed border-warn" style={{ left: `${ahead.left}%`, width: `${ahead.width}%` }} />
+                  )}
+                </span>
+              </div>
+            );
+          })}
+          {/* The axis, under the tracks: every term where it starts, and today. Late in December the
+              word turns to the left of its line, so it never leaves the card. */}
+          <div className={GRID}>
+            <span />
+            <span data-axis data-figure className="relative h-6 text-fine text-faint">
+              {marks.map((m) => (
+                <span key={m.name + m.left} className={`absolute top-1.5 whitespace-nowrap ${m.left > 0 ? "pl-1.5" : ""}`} style={{ left: `${m.left}%` }}>
                   {m.name}
                 </span>
               ))}
-            <span className={`absolute top-1.5 whitespace-nowrap text-accent-text ${now > 85 ? "-translate-x-full pr-1.5" : "pl-1.5"}`} style={{ left: `${now}%` }}>
-              Today
+              <span className={`absolute top-1.5 whitespace-nowrap text-accent-text ${now > 90 ? "-translate-x-full pr-1.5" : "pl-1.5"}`} style={{ left: `${now}%` }}>
+                Today
+              </span>
             </span>
-          </span>
-        </li>
-      </ul>
+          </div>
+        </div>
+      </>
     );
   }
 
@@ -135,7 +158,7 @@ export function AccessOverTime({ userId, lines }: { userId: string; lines: numbe
       {history.isError ? (
         <ErrorState bare title={READ_FAILED} error={history.error} onRetry={() => void history.refetch()} />
       ) : (
-        <div className="px-(--card-x) pb-4">{body}</div>
+        <div className="px-(--card-x) pt-1 pb-4">{body}</div>
       )}
     </Card>
   );

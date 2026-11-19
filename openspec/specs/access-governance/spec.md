@@ -130,7 +130,7 @@ A grant that exists in Zitadel with no matching Syndra expected record and no `e
 
 - **WHEN** `since` is not a `YYYY-MM-DD` makerspace day from a year before today to today
 - **THEN** the backend MUST answer 400 `VALIDATION_FAILED` with `details.since`
-- **AND** at most 500 spans are read, held-today rows first and then the newest endings, and `truncated` MUST say when the cap cut any off
+- **AND** at most 500 spans are read, held-today rows first and then the newest endings; older spans are left off whole, and `truncated` MUST say so
 
 #### Scenario: A start no record gives is not invented
 
@@ -141,3 +141,13 @@ A grant that exists in Zitadel with no matching Syndra expected record and no `e
 
 - **WHEN** Zitadel shows a role that no open record gives
 - **THEN** the role MUST still carry an open run with a null `from`, and its `standing`, not its records, MUST decide whether the card draws it as held
+
+#### Scenario: A span with no start never bridges a gap
+
+- **WHEN** a run with no recorded start ended after an earlier run had ended (a grant Feb to Apr, and one given by hand that expired in Jul)
+- **THEN** they MUST stay two runs, and the card MUST draw the second from where the first ended, never the months between as held
+
+#### Scenario: What no record names is not drawn
+
+- **WHEN** a bundle is retired (`RetireBundleAndEnqueue` deletes every assignment with one `bundle.retired` row, none per holder), a rule stops giving a role, or Syndra revokes a role it never gave (`direct_grant.revoked` names none)
+- **THEN** those runs MUST NOT be drawn, ended or otherwise; NEXT 0l holds the write-side rows that would date them

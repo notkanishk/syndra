@@ -1150,8 +1150,8 @@ const (
 type AccessHistory struct {
 	// Since is the window's first makerspace day, as asked.
 	Since string `json:"since"`
-	// Truncated says the row cap cut the oldest endings off: a run they would
-	// have started or ended is drawn as not on record.
+	// Truncated says the row cap left the oldest endings off: whole spans,
+	// not drawn at all, so the card says earlier ones this year are left off.
 	Truncated bool          `json:"truncated"`
 	Roles     []RoleHistory `json:"roles"`
 }

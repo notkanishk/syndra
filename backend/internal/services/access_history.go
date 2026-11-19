@@ -116,6 +116,11 @@ func historyStart(since string, now time.Time) (time.Time, error) {
 // one run, since the role was held throughout. Every role the records give
 // today has an open run: a rule's role, which no record dates, adds one from
 // no known start, and so does a role Zitadel shows with nothing given open.
+//
+// A span with no start says only when it ended, so it is placed by its end and
+// never joins a run across a gap: it joins only a run still open, and one that
+// ends inside the run before it adds nothing to it. Joined to an earlier run
+// that had ended, it would draw the months between as held, which no record says.
 func foldRuns(spans []db.AccessSpan, live map[roleKey]*models.EffectiveRole, observed map[string]bool) map[roleKey][]models.RoleRun {
 	by := map[roleKey][]db.AccessSpan{}
 	for _, s := range spans {
@@ -149,18 +154,33 @@ func foldRuns(spans []db.AccessSpan, live map[roleKey]*models.EffectiveRole, obs
 
 	out := make(map[roleKey][]models.RoleRun, len(by))
 	for k, ss := range by {
-		// No known start sorts first: it may have begun before anything dated.
+		// A span is placed by its start, or with none by its end; one with
+		// neither (open, undated) first, since it may have begun before anything.
+		at := func(s db.AccessSpan) *time.Time {
+			if s.From != nil {
+				return s.From
+			}
+			return s.To
+		}
 		sort.SliceStable(ss, func(i, j int) bool {
-			a, b := ss[i].From, ss[j].From
+			a, b := at(ss[i]), at(ss[j])
 			return a == nil && b != nil || a != nil && b != nil && a.Before(*b)
 		})
 		var runs []models.RoleRun
 		for _, s := range ss {
-			if n := len(runs); n > 0 && (runs[n-1].To == nil || s.From == nil || !s.From.After(*runs[n-1].To)) {
-				if runs[n-1].To != nil && (s.To == nil || s.To.After(*runs[n-1].To)) {
-					runs[n-1].To = s.To
+			if n := len(runs); n > 0 {
+				last := &runs[n-1]
+				switch {
+				case last.To == nil:
+					continue // still open: it covers everything after it
+				case s.From != nil && !s.From.After(*last.To):
+					if s.To == nil || s.To.After(*last.To) {
+						last.To = s.To
+					}
+					continue
+				case s.From == nil && s.To != nil && !s.To.After(*last.To):
+					continue // ended inside the run before it: nothing to add
 				}
-				continue
 			}
 			runs = append(runs, models.RoleRun{From: s.From, To: s.To})
 		}

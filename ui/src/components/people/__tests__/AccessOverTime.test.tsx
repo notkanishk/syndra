@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccessOverTime } from "@/components/people/AccessOverTime";
-import { CAPTION, CUT_SHORT, NOTHING, READ_FAILED } from "@/components/people/accessRuns";
+import { CAPTION, NOTHING, READ_FAILED } from "@/components/people/accessRuns";
 import type { AccessHistory, RoleHistory } from "@/lib/queries/useUsers";
 import { inZone } from "@/test-utils/zone";
 
@@ -50,7 +50,14 @@ function show(roles: RoleHistory[], truncated = false) {
   return render(<AccessOverTime userId="u1" lines={2} />);
 }
 
-const lineOf = (text: string) => screen.getByText(text).closest("li")!;
+/** What a screen reader hears, one sentence a line, in the chart's order. */
+const sentences = () => screen.getAllByRole("listitem").map((li) => li.textContent);
+/** The drawn line a sentence is about: the same place in the same order. */
+const lineOf = (text: string) => {
+  const i = sentences().indexOf(text);
+  expect(i, text).toBeGreaterThanOrEqual(0);
+  return document.querySelectorAll("[data-line]")[i];
+};
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-19T06:00:00Z") });
@@ -69,13 +76,21 @@ describe("Access over time", () => {
       role({ project_name: "3D printing", role_key: "member", runs: [{ from: "2025-09-01T04:00:00Z", to: null }] }),
       role({ role_key: "trained", standing: "not_held", runs: [{ from: null, to: "2026-08-14T04:00:00Z" }] }),
     ]);
-    const lines = screen.getAllByRole("listitem").filter((li) => li.hasAttribute("data-line"));
-    expect(lines.map((li) => li.querySelector(".sr-only")!.textContent)).toEqual([
-      "3D printing · Member, given before this year, held today",
-      "Laser cutting · Operator, given 3 Aug, held today, ends 12 Dec",
-      "Laser cutting · Trained, start not on record, ended 14 Aug",
-      "Wood shop · Member, given 3 Mar, ended 31 May",
+    expect(sentences()).toEqual([
+      "Member in 3D printing, given before this year, held today",
+      "Operator in Laser cutting, given 3 Aug, held today, ends 12 Dec",
+      "Trained in Laser cutting, start not on record, ended 14 Aug",
+      "Member in Wood shop, given 3 Mar, ended 31 May",
     ]);
+    // The picture is one image, named by the board's sentence; the lines are named as they are heard.
+    expect(screen.getByRole("img", { name: "Four roles this year. Two are held today." })).toBeInTheDocument();
+    expect([...document.querySelectorAll("[data-line]")].map((l) => l.firstElementChild!.firstElementChild!.textContent)).toEqual([
+      "Member in 3D printing",
+      "Operator in Laser cutting",
+      "Trained in Laser cutting",
+      "Member in Wood shop",
+    ]);
+    expect(screen.getByText("Start not on record · ended 14 Aug")).toBeInTheDocument();
     expect(screen.getByText(CAPTION)).toBeInTheDocument();
     expect(state.asked).toEqual(["u1@2026-01-01"]);
   });
@@ -86,38 +101,47 @@ describe("Access over time", () => {
       role({ role_key: "lathe", standing: "not_held", runs: [{ from: "2026-02-02T04:00:00Z", to: null }], ends: "2026-12-12T18:29:59Z" }),
       role({ role_key: "trained", standing: "not_held", runs: [{ from: "2026-02-02T04:00:00Z", to: "2026-08-14T04:00:00Z" }] }),
     ]);
-    const held = lineOf("Laser cutting · Operator, given 3 Aug, held today, ends 12 Dec");
+    const held = lineOf("Operator in Laser cutting, given 3 Aug, held today, ends 12 Dec");
     expect(held.querySelector("[data-run]")!.getAttribute("data-run")).toBe("held");
     expect(held.querySelector("[data-ahead]")).not.toBeNull();
     // Given, never seen in Zitadel: grey to today, its standing said, and no time left drawn.
-    const missing = lineOf("Laser cutting · Lathe, given 2 Feb, not in Zitadel, ends 12 Dec");
+    const missing = lineOf("Lathe in Laser cutting, given 2 Feb, not in Zitadel, ends 12 Dec");
     expect(missing.querySelector("[data-run]")!.getAttribute("data-run")).toBe("ended");
     expect(missing.querySelector("[data-ahead]")).toBeNull();
     expect(screen.getByText("Since 2 Feb · Not in Zitadel · ends 12 Dec")).toBeInTheDocument();
-    const ended = lineOf("Laser cutting · Trained, given 2 Feb, ended 14 Aug");
+    const ended = lineOf("Trained in Laser cutting, given 2 Feb, ended 14 Aug");
     expect(ended.querySelector("[data-run]")!.getAttribute("data-run")).toBe("ended");
     expect(screen.getByText("2 Feb to 14 Aug")).toBeInTheDocument();
   });
 
-  it("draws a start no record gives from the year's edge with its tick, and never says a day for it", () => {
+  it("draws a start no record gives from the year's edge, and never says a day for it", () => {
     show([
       role({ runs: [{ from: null, to: null }] }),
       role({ role_key: "lathe", runs: [{ from: "2025-06-01T04:00:00Z", to: null }] }),
       role({ role_key: "kiln", runs: [{ from: "2026-04-04T04:00:00Z", to: null }] }),
     ]);
-    const unknown = lineOf("Laser cutting · Operator, start not on record, held today");
+    const unknown = lineOf("Operator in Laser cutting, start not on record, held today");
     expect(unknown.querySelector("[data-run]")!.hasAttribute("data-clipped")).toBe(true);
     expect(screen.getByText("Start not on record")).toBeInTheDocument();
-    expect(lineOf("Laser cutting · Lathe, given before this year, held today").querySelector("[data-clipped]")).not.toBeNull();
+    expect(lineOf("Lathe in Laser cutting, given before this year, held today").querySelector("[data-clipped]")).not.toBeNull();
     expect(screen.getByText("Since before this year")).toBeInTheDocument();
-    expect(lineOf("Laser cutting · Kiln, given 4 Apr, held today").querySelector("[data-clipped]")).toBeNull();
+    expect(lineOf("Kiln in Laser cutting, given 4 Apr, held today").querySelector("[data-clipped]")).toBeNull();
+    expect(unknown.querySelector<HTMLElement>("[data-run]")!.style.left).toBe("0%");
+  });
+
+  it("draws a later run with no start from the end of the one before it, never from the edge", () => {
+    // Feb to Apr, then a grant by hand that ended in Jul: the months between are not drawn as held.
+    show([role({ standing: "not_held", runs: [{ from: "2026-02-02T04:00:00Z", to: "2026-04-01T04:00:00Z" }, { from: null, to: "2026-07-01T04:00:00Z" }] })]);
+    const [feb, later] = [...lineOf("Operator in Laser cutting, given 2 Feb, ended 1 Apr; start not on record, ended 1 Jul").querySelectorAll<HTMLElement>("[data-run]")];
+    expect(parseFloat(later.style.left)).toBeCloseTo(parseFloat(feb.style.left) + parseFloat(feb.style.width), 6);
+    expect(parseFloat(later.style.width)).toBeGreaterThan(0);
   });
 
   it("counts days in the makerspace's zone, the year's first day included", () => {
     // 04:00 UTC on 3 Aug is still 2 Aug in Los Angeles, and already 3 Aug where this test runs (Kolkata).
     inZone("America/Los_Angeles");
     show([role({ runs: [{ from: "2026-08-03T04:00:00Z", to: null }] })]);
-    expect(screen.getByText("Laser cutting · Operator, given 2 Aug, held today")).toBeInTheDocument();
+    expect(screen.getByText("Operator in Laser cutting, given 2 Aug, held today")).toBeInTheDocument();
   });
 
   it("asks for the year the makerspace is in, not the browser's", () => {
@@ -148,7 +172,8 @@ describe("Access over time", () => {
   it("says nothing was given, and that a cut-short read is cut short", () => {
     show([], true);
     expect(screen.getByText(NOTHING)).toBeInTheDocument();
-    expect(screen.getByText(`${CAPTION} ${CUT_SHORT}`)).toBeInTheDocument();
+    // The cap leaves whole older spans off, so the words say they are left off, not "not on record".
+    expect(screen.getByText(`${CAPTION} Only the latest 500 changes are drawn; earlier ones this year are left off.`)).toBeInTheDocument();
   });
 
   it("marks the terms and today on the axis", () => {

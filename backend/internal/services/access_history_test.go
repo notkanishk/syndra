@@ -27,7 +27,9 @@ func historyDay(t *testing.T, ymd string) *time.Time {
 func thisYear() string { return clock.Day(clock.Now())[:4] + "-01-01" }
 
 // The year's dates the tests use, always before today: early in the year.
-func early(t *testing.T, mmdd string) *time.Time { return historyDay(t, clock.Day(clock.Now())[:4]+"-"+mmdd) }
+func early(t *testing.T, mmdd string) *time.Time {
+	return historyDay(t, clock.Day(clock.Now())[:4]+"-"+mmdd)
+}
 
 func spansFrom(t *testing.T, spans ...db.AccessSpan) *time.Time {
 	t.Helper()
@@ -61,7 +63,9 @@ func roleIn(t *testing.T, h models.AccessHistory, project, role string) models.R
 	return models.RoleHistory{}
 }
 
-func sameTime(a, b *time.Time) bool { return a == nil && b == nil || a != nil && b != nil && a.Equal(*b) }
+func sameTime(a, b *time.Time) bool {
+	return a == nil && b == nil || a != nil && b != nil && a.Equal(*b)
+}
 
 func assertRuns(t *testing.T, got []models.RoleRun, want ...models.RoleRun) {
 	t.Helper()
@@ -192,6 +196,23 @@ func TestFoldRuns_JoinsWhatTouches(t *testing.T) {
 		{ProjectID: "p", RoleKey: "r", From: at(6), To: at(9)},
 	}, nil, nil)[k]
 	assertRuns(t, runs, models.RoleRun{From: at(2), To: at(4)}, models.RoleRun{From: at(5), To: at(9)})
+
+	// A span with no start never bridges a gap (PR 217 review): a grant Feb to
+	// Apr, and one given by hand that expired in Jul, are two runs, May and Jun
+	// never drawn as held. One that ends inside a run adds nothing to it, and
+	// one before an open run joins it.
+	runs = foldRuns([]db.AccessSpan{
+		{ProjectID: "p", RoleKey: "r", To: at(7)},
+		{ProjectID: "p", RoleKey: "r", From: at(2), To: at(4)},
+		{ProjectID: "p", RoleKey: "r", To: at(3)},
+	}, nil, nil)[k]
+	assertRuns(t, runs, models.RoleRun{From: at(2), To: at(4)}, models.RoleRun{To: at(7)})
+	runs = foldRuns([]db.AccessSpan{
+		{ProjectID: "p", RoleKey: "r", From: at(8)},
+		{ProjectID: "p", RoleKey: "r"},
+		{ProjectID: "p", RoleKey: "r", To: at(5)},
+	}, nil, nil)[k]
+	assertRuns(t, runs, models.RoleRun{})
 }
 
 // More spans than the cap: the oldest are left out and the answer says so.
