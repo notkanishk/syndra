@@ -102,10 +102,9 @@
   --radius-pill: 999px;
 
   /* ── Layers (A-19 P12) ───────────────────────────────────────────────────
-   * The steps that exist, named for what sits on them. A popover opened
+   * The four steps that exist, named for what sits on them. A popover opened
    * inside a dialog shows over it, so popover is the highest. Components say
    * `z-(--layer-dialog)`, never a number. */
-  --layer-under: -1; /* under its siblings, in an isolated parent: Home's head, so its light lies behind the cards */
   --layer-bar: 20; /* sticky bars: the selection bar, the section pill */
   --layer-pill: 30; /* a floating pill over the page, below any dialog */
   --layer-dialog: 50; /* dialogs, sheets and their scrim */
@@ -1112,64 +1111,70 @@
 /* The crossing pool's place as `door-cross` carries it: registered, so it glides. */
 @property --door-x { syntax: "<length>"; inherits: false; initial-value: 0px; }
 
+/* The one light (A-25 §2 rule 1, §3): every pool falls to nothing on an eased curve, six stops,
+   never a straight ramp to a rim. A light sets its strength (`--pool-k`) and draws these stops in
+   its own ellipse; its pseudo-elements inherit them. */
+:where(.hour-light, .lit-card) {
+  --pool-stops: color-mix(in srgb, var(--accent) var(--pool-k), transparent),
+    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.74), transparent) 20%,
+    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.44), transparent) 42%,
+    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.2), transparent) 62%,
+    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.06), transparent) 82%,
+    transparent;
+}
+
 @utility hour-light {
-  /* Boundless (owner, 19 Nov 2026: "the bounding box is breaking the immersion"): this box is the
-     head out to the content column's own edges (the rail's border, the window's) and up to the top
-     of the scroller, edges the page already draws, so the light meets them and no line of its own.
-     Below, where there is no such edge, the light's layer runs on (`-80cqh`) past where any pool
-     or the door's crossing reaches (135cqh at most), so it fades to nothing well inside it. It
-     falls under the head onto the canvas, behind the cards (Home's column is the stacking
-     context, the head sits under its siblings). */
+  /* The room's light, not the page's (A-25 §3; owner, 20 Nov 2026: "be careful of the bounding
+     boxes clipping the glow"): the column's own layer (`RoomLight`), behind the top bar and the
+     scroller, so neither the bar's hairline, the scroller's box nor its scrollbar's seat ends it,
+     and it stays while the page scrolls. Only the window and the rail, which has a ground of its
+     own, end it. Every pool and the door's crossing is spent inside the layer's height. */
   position: absolute;
-  inset: -24px calc(-1 * var(--page-x)) -28px;
+  inset: 0 0 auto;
+  height: 480px;
   z-index: -1;
   pointer-events: none;
-  /* The light is drawn on ::before, sized in this box's own units (cqw, cqh: a percentage of it,
-     as a length), so the door's glide interpolates lengths only (an ellipse whose size mixes % and
-     px is refused). */
+  /* Sized in this box's own units (cqw, cqh: a percentage of it, as a length), so the door's
+     crossing interpolates lengths only (an ellipse whose size mixes % and px is refused). */
   container-type: size;
-  --hour-light: color-mix(in srgb, var(--accent) calc(var(--hour-reach) * var(--hour-weight)), transparent);
+  --pool-k: calc(var(--hour-reach) * var(--hour-weight));
   &::before {
     content: "";
     position: absolute;
-    inset: 0 0 -80cqh;
-    background: radial-gradient(
-      ellipse var(--hour-w) var(--hour-h) at var(--hour-x) var(--hour-y),
-      var(--hour-light),
-      transparent 70%
-    );
+    inset: 0;
+    background: radial-gradient(ellipse var(--hour-w) var(--hour-h) at var(--hour-x) var(--hour-y), var(--pool-stops));
   }
 
   /* Morning: low, from the left. */
   &[data-hour="morning"] {
-    --hour-w: 60cqw;
-    --hour-h: 150cqh;
+    --hour-w: 50cqw;
+    --hour-h: 54cqh;
     --hour-x: 4cqw;
-    --hour-y: -20cqh;
+    --hour-y: 4cqh;
     --hour-reach: 26%;
   }
   /* Afternoon: overhead, wide and thin. */
   &[data-hour="afternoon"] {
-    --hour-w: 80cqw;
-    --hour-h: 120cqh;
+    --hour-w: 66cqw;
+    --hour-h: 46cqh;
     --hour-x: 50cqw;
-    --hour-y: -60cqh;
+    --hour-y: -12cqh;
     --hour-reach: 20%;
   }
   /* Evening: from the right, going down. */
   &[data-hour="evening"] {
-    --hour-w: 58cqw;
-    --hour-h: 135cqh;
+    --hour-w: 48cqw;
+    --hour-h: 50cqh;
     --hour-x: 86cqw;
-    --hour-y: -30cqh;
+    --hour-y: 0cqh;
     --hour-reach: 24%;
   }
   /* Quiet hours (22:00 to 05:00): a lamp beside the words. */
   &[data-hour="quiet"] {
-    --hour-w: 26cqw;
-    --hour-h: 90cqh;
-    --hour-x: 2cqw;
-    --hour-y: 40cqh;
+    --hour-w: 22cqw;
+    --hour-h: 34cqh;
+    --hour-x: 3cqw;
+    --hour-y: 30cqh;
     --hour-reach: 22%;
   }
 
@@ -1182,16 +1187,10 @@
     &[data-door]::after {
       content: "";
       position: absolute;
-      inset: 0 0 -80cqh;
-      background: radial-gradient(ellipse 48cqw 150cqh at var(--door-x) 30cqh, var(--hour-light), transparent 70%);
+      inset: 0;
+      background: radial-gradient(ellipse 42cqw 56cqh at var(--door-x) 25cqh, var(--pool-stops));
       animation: door-cross var(--door-open) var(--ease-tint) both;
     }
-  }
-
-  /* A phone's gutter is 16px, not the page's 26: the pool reaches to the edge and no further, so
-     the scroller never gains a sideways scroll. */
-  @media (width < theme(--breakpoint-tablet)) {
-    inset-inline: -16px;
   }
 
   @media (forced-colors: active) {
@@ -1209,17 +1208,15 @@
   position: relative;
   isolation: isolate;
 
+  --pool-k: calc(var(--lit-reach) * var(--hour-weight));
+
   &::before {
     content: "";
     position: absolute;
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: radial-gradient(
-      ellipse 60% 90px at 18% 0,
-      color-mix(in srgb, var(--accent) calc(var(--lit-reach) * var(--hour-weight)), transparent),
-      transparent 72%
-    );
+    background: radial-gradient(ellipse 60% 90px at 18% 0, var(--pool-stops));
   }
   &::after {
     content: "";

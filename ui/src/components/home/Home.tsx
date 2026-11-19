@@ -19,6 +19,7 @@ import { ReadGate } from "@/components/states/ReadGate";
 import { Button } from "@/components/ui/Button";
 import { Card, CardGrid, CardHeader, CardRow, type SeatWidth } from "@/components/ui/Card";
 import { BELOW_HEADER, MetaRow, usePageHead } from "@/components/ui/PageHeader";
+import { RoomLight } from "@/components/shell/RoomLight";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import {
@@ -385,15 +386,18 @@ export function Home({ session, door: opening = false }: { session: SessionUser;
   if (!calm) held.current = { grid, blocks };
 
   return (
-    // `isolate`: the hour's light falls past the head onto the canvas, under the head (`--layer-under`) and
-    // so under every block after it, whose cards are opaque.
-    <div className="isolate flex flex-col gap-4">
-      <div {...head} className={`${head.className} relative z-(--layer-under)`} style={BELOW_HEADER}>
+    <div className="flex flex-col gap-4">
+      <div {...head} className={`${head.className} relative isolate`} style={BELOW_HEADER}>
         {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
             place set by the part of the day on the greeting's own clock. The one written exception to
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
-        {/* On the first arrival of a sign-in a pool crosses the greeting once and this one settles in (`door-cross`). */}
-        {phase && <div aria-hidden data-hour={phase} data-door={door ? "" : undefined} className="hour-light" />}
+        {/* On the first arrival of a sign-in a pool crosses the greeting once and this one settles in (`door-cross`).
+            Drawn in the shell's column, not here: the room's light, which no box of the page can cut (A-25 §3). */}
+        {phase && (
+          <RoomLight>
+            <div aria-hidden data-hour={phase} data-door={door ? "" : undefined} className="hour-light" />
+          </RoomLight>
+        )}
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and

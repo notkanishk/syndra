@@ -1095,8 +1095,9 @@ describe("design system", () => {
     );
 
     // Its parent column is a flex item too, with the same default and the same
-    // consequence. It is also the size container the page frame's `cqw` reads.
-    expect(shell).toMatch(/<div className="@container flex min-h-0 min-w-0 flex-1 flex-col">/);
+    // consequence. It is also the size container the page frame's `cqw` reads, and the room's light's
+    // own layer (`RoomLight`, A-25 §3).
+    expect(shell).toMatch(/<div ref=\{setRoom\} className="@container relative isolate flex min-h-0 min-w-0 flex-1 flex-col">/);
   });
 
   // Every dysfunction is a Notice in the content column (6a), never a band

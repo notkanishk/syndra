@@ -77,7 +77,7 @@ describe("the door's light crosses the greeting on Home (§3.2): a pool left to 
     expect(cross).not.toContain("--hour-");
     // Registered, so the gradient glides rather than jumps.
     expect(css).toMatch(/@property --door-x \{ syntax: "<length>";/);
-    expect(light).toMatch(/&\[data-door\]::after \{[^}]*content: "";[^}]*radial-gradient\(ellipse \d+cqw \d+cqh at var\(--door-x\) \d+cqh, var\(--hour-light\), transparent 70%\)/);
+    expect(light).toMatch(/&\[data-door\]::after \{[^}]*content: "";[^}]*radial-gradient\(ellipse \d+cqw \d+cqh at var\(--door-x\) \d+cqh, var\(--pool-stops\)\)/);
   });
 
   it("never sums above the pool at rest: the hour's pool rises over exactly the window the crossing fades", () => {

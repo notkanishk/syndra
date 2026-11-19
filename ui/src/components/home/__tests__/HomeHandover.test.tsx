@@ -2,8 +2,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { Home } from "@/components/home/Home";
+import { RoomContext } from "@/components/shell/RoomLight";
 import { TINT_MS } from "@/lib/motion";
 import { DOOR_COOKIE, spendDoor } from "@/lib/motion/door";
 import { inZone } from "@/test-utils/zone";
@@ -83,15 +86,30 @@ vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alrea
 const session = { id: "op", name: "Kanishk", email: "k@example.org" } as unknown as SessionUser;
 const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-function mount(who: SessionUser = session, door = false) {
+/** The shell's column and its one scroller, as AppShell has them: the page renders in the scroller. */
+function shell() {
+  document.querySelector("[data-test-column]")?.remove();
+  const column = document.createElement("div");
+  column.setAttribute("data-test-column", "");
+  const scroll = document.createElement("div");
+  scroll.id = "app-scroll";
+  column.append(scroll);
+  document.body.append(column);
+  return { column, scroll };
+}
+
+function mount(who: SessionUser = session, door = false, room = true) {
   const queries = client();
+  const { column, scroll } = shell();
   const home = () => (
-    <QueryClientProvider client={queries}>
-      <Home session={who} door={door} />
-    </QueryClientProvider>
+    <RoomContext.Provider value={room ? column : null}>
+      <QueryClientProvider client={queries}>
+        <Home session={who} door={door} />
+      </QueryClientProvider>
+    </RoomContext.Provider>
   );
-  const view = render(home());
-  return { reread: () => view.rerender(home()), unmount: view.unmount };
+  const view = render(home(), { container: scroll });
+  return { reread: () => view.rerender(home()), unmount: view.unmount, column };
 }
 
 /** The phase of the outermost Unfold around `element`: the calm line's, or the grid's. */
@@ -335,11 +353,24 @@ describe("the room knows the hour", () => {
     expect(light).toHaveAttribute("data-hour", "morning");
     expect(light).toHaveAttribute("aria-hidden");
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Morning/);
-    // Behind the head: inside it, and the only light on the page.
-    // Under the head's words and under every block after it: Home's column is the stacking context.
-    expect(light.parentElement).toHaveClass("page-head", "relative", "z-(--layer-under)");
-    expect(light.parentElement!.parentElement).toHaveClass("isolate");
     expect(document.querySelectorAll(".hour-light")).toHaveLength(1);
+  });
+
+  it("is the room's light, drawn in the shell's column and never inside the scroller (A-25 §3)", () => {
+    inZone("UTC");
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    const { column } = mount(session, true);
+    const light = document.querySelector(".hour-light")!;
+    expect(light.parentElement).toBe(column);
+    expect(light.closest("#app-scroll")).toBeNull();
+    // Outside the shell there is no column, and no light: it is never drawn where the page is.
+    mount(session, true, false);
+    expect(document.querySelector(".hour-light")).toBeNull();
+    // The shell hands the column, not the scroller: the provider's element is the `@container` column.
+    const shellSource = readFileSync(resolve(__dirname, "../../shell/AppShell.tsx"), "utf8");
+    expect(shellSource).toMatch(/<div ref=\{setRoom\} className="@container relative isolate [^"]*"/);
+    expect(shellSource).toMatch(/<RoomContext\.Provider value=\{room\}>\s*<div ref=\{setRoom\}/);
+    expect(/<div id="app-scroll"[^>]*>/.exec(shellSource)?.[0]).not.toContain("setRoom");
   });
 
   it("is a lamp in the quiet hours, with the greeting and the calm line's sentence from the same part of the day", () => {

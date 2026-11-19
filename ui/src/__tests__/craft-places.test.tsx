@@ -61,24 +61,49 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
     // Still, but for the door's light once a sign-in (`[data-door]::before` and `::after`).
     const still = light.replace(/&\[data-door\]::(before|after) \{[^}]*\}/g, "");
     expect(still).not.toMatch(/animation|transition/);
-    expect(light).toContain("var(--accent)");
+    expect(light).toContain("var(--pool-stops)");
     expect(light).not.toMatch(/--(healthy|warn|danger)\b|#[0-9a-f]{3,6}\b/i);
     expect(light).toMatch(/@media \(forced-colors: active\)\s*\{\s*display: none;/);
-    // A phone's gutter is 16px: the pool reaches it and no further, so nothing scrolls sideways.
-    expect(light).toMatch(/@media \(width < theme\(--breakpoint-tablet\)\)\s*\{\s*inset-inline: -16px;/);
-    // No edge of its box is ever seen, and no mask draws one: the box meets the column's own edges and
-    // the scroller's top, and below, its layers run on past where any pool or the crossing reaches.
+    // The column's own layer (A-25 §3): its top, its full width, and no mask to end it.
     expect(light).not.toMatch(/mask/);
-    expect(light).toMatch(/inset: -24px calc\(-1 \* var\(--page-x\)\) -28px;/);
-    const below = Number(/&::before \{[^}]*inset: 0 0 -(\d+)cqh;/.exec(light)?.[1]);
-    expect(light).toMatch(new RegExp(`&\\[data-door\\]::after \\{[^}]*inset: 0 0 -${below}cqh;`));
-    // Each ellipse fades out at 70% of its radius: its lowest reach is y + 0.7h, inside 100 + below.
+    expect(light).toMatch(/position: absolute;\s*inset: 0 0 auto;\s*height: \d+px;\s*z-index: -1;/);
+    // Each pool falls to nothing at its full radius (the six stops), so its lowest reach is y + h:
+    // spent inside the layer, the crossing too (rule 1: a light ends before the box that holds it).
     const css = (k: string) => [...light.matchAll(new RegExp(`${k}: (-?\\d+)cqh;`, "g"))].map((m) => Number(m[1]));
     const [ys, hs] = [css("--hour-y"), css("--hour-h")];
     expect(ys).toHaveLength(4);
-    for (const [i, y] of ys.entries()) expect(y + 0.7 * hs[i], `pool ${i}`).toBeLessThan(100 + below - 10);
+    for (const [i, y] of ys.entries()) expect(y + hs[i], `pool ${i}`).toBeLessThan(100);
     const blob = /ellipse \d+cqw (\d+)cqh at var\(--door-x\) (\d+)cqh/.exec(light)!;
-    expect(Number(blob[2]) + 0.7 * Number(blob[1])).toBeLessThan(100 + below - 10);
+    expect(Number(blob[2]) + Number(blob[1])).toBeLessThan(100);
+  });
+
+  it("falls to nothing on the eased curve, never a straight ramp to a rim (A-25 §2 rule 1, §3)", () => {
+    // The stops, once: the strength, then 0.74, 0.44, 0.2 and 0.06 of it at 20, 42, 62 and 82%, then nothing.
+    const stops = /:where\(\.hour-light, \.lit-card\) \{\s*--pool-stops: ([^;]+);/.exec(css)?.[1] ?? "";
+    // Split at the commas between stops, not those inside a stop's own brackets.
+    const parts: string[] = [""];
+    let depth = 0;
+    for (const ch of stops) {
+      depth += ch === "(" ? 1 : ch === ")" ? -1 : 0;
+      if (ch === "," && depth === 0) parts.push("");
+      else parts[parts.length - 1] += ch;
+    }
+    for (const [i, part] of parts.entries()) parts[i] = part.trim().replace(/\s+/g, " ");
+    expect(parts).toHaveLength(6);
+    expect(parts[0]).toBe("color-mix(in srgb, var(--accent) var(--pool-k), transparent)");
+    const eased: Array<[string, string]> = [["0.74", "20%"], ["0.44", "42%"], ["0.2", "62%"], ["0.06", "82%"]];
+    for (const [i, [share, at]] of eased.entries()) {
+      expect(parts[i + 1]).toBe(`color-mix(in srgb, var(--accent) calc(var(--pool-k) * ${share}), transparent) ${at}`);
+    }
+    expect(parts[5]).toBe("transparent");
+    // Every light's gradient draws those stops and nothing else: no ramp to `transparent N%`.
+    for (const name of ["hour-light", "lit-card"]) {
+      const body = utility(name);
+      const gradients = [...body.matchAll(/radial-gradient\(([^;]*)\);/g)].map((m) => m[1]);
+      expect(gradients.length, name).toBeGreaterThan(0);
+      for (const g of gradients) expect(g, name).toMatch(/^ellipse [^,]+, var\(--pool-stops\)\)?$/);
+      expect(body, name).not.toMatch(/transparent \d+%/);
+    }
   });
 
   it("never takes the head's text under 4.5:1, at the pool's strongest, in both themes", () => {
