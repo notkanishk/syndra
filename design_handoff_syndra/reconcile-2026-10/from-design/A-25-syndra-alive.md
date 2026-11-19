@@ -115,6 +115,7 @@ Measured in the prototype, which has the same shell: the light is the same stren
 - **Frequency and the 50th time.** Rare. Once a sign-in on this device; every later visit is the still pool. A member who signs in daily sees 1.8s of light a day, and it holds nothing.
 - **Still form.** The hour's pool, at rest.
 - **Never.** On a failed read of Zitadel (the page then shows its Notice and no rows; a warm light over that would be the wrong tone). Under forced colours.
+- **While the read is out** (built, 20 Nov): the room is lit, as Home is. If the read lands unread, the light goes; if a later read lands, the pool comes back still, and the door never crosses a second time, because the door is the sign-in's first moment.
 - **Cost.** S. `MemberAccess.tsx:272-275` hands its hour and the door to the shell's layer, as Home does (§3); `app/page.tsx` passes `door` to both pages. The title's second sentence is `text-faint`, which clears the pool's strongest (measured above).
 - **Dial.** Quiet: the still pool only. **Warm, accepted:** pool and glide.
 

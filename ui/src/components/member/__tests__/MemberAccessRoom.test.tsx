@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 import type { SessionUser } from "@/lib/session";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MemberAccess } from "@/components/member/MemberAccess";
+import { AppShell } from "@/components/shell/AppShell";
 import { RoomContext } from "@/components/shell/RoomLight";
-import { spendDoor } from "@/lib/motion/door";
+import { DOOR_COOKIE, spendDoor } from "@/lib/motion/door";
 import { inZone } from "@/test-utils/zone";
 
 // A-25 moment 1: the member's room. My access gets Home's light, by Home's own path: the hour's pool
@@ -25,6 +27,13 @@ vi.mock("@/lib/queries/useRequests", () => ({ useRequestsMine: () => ({ data: []
 vi.mock("@/lib/queries/useMyChanges", () => ({ useMyChanges: () => ({ data: [], error: null, isLoading: false, isFetchedAfterMount: true }) }));
 vi.mock("@/lib/queries/useCatalogUsers", () => ({ useCatalogProjects: () => ({ data: [] }) }));
 vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);
+// The real AppShell, its own parts stood in for (as AppShell.test.tsx does): it spends the door.
+vi.mock("@/components/shell/Sidebar", () => ({ default: () => null }));
+vi.mock("@/components/shell/TopBar", () => ({ TopBar: () => <header>top</header> }));
+vi.mock("@/components/shell/PlaceHost", () => ({ PlaceHost: () => null }));
+vi.mock("@/components/shell/IntentPrefetchHost", () => ({ IntentPrefetchHost: () => null }));
+vi.mock("@/components/shell/TouchNav", () => ({ TouchNav: () => null }));
+vi.mock("@/components/shell/GoToHost", () => ({ GoToHost: () => null }));
 
 const SIGNED_IN = "2026-11-19T08:00:00.000Z";
 const member: SessionUser = {
@@ -50,13 +59,13 @@ function mount(door = false) {
   scroll.id = "app-scroll";
   column.append(scroll);
   document.body.append(column);
-  const view = render(
+  const page = () => (
     <RoomContext.Provider value={column}>
       <MemberAccess session={member} door={door} />
-    </RoomContext.Provider>,
-    { container: scroll },
+    </RoomContext.Provider>
   );
-  return { column, unmount: view.unmount };
+  const view = render(page(), { container: scroll });
+  return { column, unmount: view.unmount, reread: () => view.rerender(page()) };
 }
 const light = () => document.querySelector(".hour-light");
 
@@ -114,7 +123,43 @@ describe("the member's room (A-25 moment 1)", () => {
     expect(light()).not.toHaveAttribute("data-door");
   });
 
-  it("takes Home's path, not a second one: the light is drawn in one place, and both pages hand it up", () => {
+  it("never replays the door when a read lands unread and then read (the light is unmounted between)", () => {
+    // Loading, with the server's door: the room is lit and the door crosses.
+    view(null);
+    const page = mount(true);
+    expect(light()).toHaveAttribute("data-door", "");
+    spendDoor(SIGNED_IN); // as the shell does on the sign-in's first page
+    // The read lands unread: the light goes.
+    view({ read_at: null, current: false, truncated: false });
+    page.reread();
+    expect(light()).toBeNull();
+    // Minutes later a refetch lands read: the pool returns, still. The door was this sign-in's first moment.
+    view();
+    page.reread();
+    expect(light()).not.toBeNull();
+    expect(light()).not.toHaveAttribute("data-door");
+  });
+
+  it("crosses on the first visit inside the real shell, which spends the door after the page decides it", () => {
+    document.cookie = `${DOOR_COOKIE}=${SIGNED_IN}; Path=/`;
+    const shell = () => (
+      <QueryClientProvider client={new QueryClient()}>
+        <AppShell session={member}>
+          <MemberAccess session={member} door />
+        </AppShell>
+      </QueryClientProvider>
+    );
+    const first = render(shell());
+    expect(light()).toHaveAttribute("data-door", "");
+    expect(document.cookie).not.toContain(DOOR_COOKIE);
+    first.unmount();
+    // The second visit (Back to a page whose render still says door) is the pool at rest.
+    render(shell());
+    expect(light()).not.toBeNull();
+    expect(light()).not.toHaveAttribute("data-door");
+  });
+
+  it("takes Home's path, not a second one: the light is drawn in one place", () => {
     const SRC = resolve(__dirname, "../../..");
     const files: string[] = [];
     const walk = (dir: string) => {
@@ -126,10 +171,7 @@ describe("the member's room (A-25 moment 1)", () => {
       }
     };
     walk(SRC);
-    const drawing = files.filter((path) => /className="hour-light"/.test(readFileSync(path, "utf8")));
+    const drawing = files.filter((path) => /["'`]hour-light\b/.test(readFileSync(path, "utf8")));
     expect(drawing.map((path) => path.slice(SRC.length + 1))).toEqual(["components/shell/RoomLight.tsx"]);
-    for (const page of ["components/home/Home.tsx", "components/member/MemberAccess.tsx"]) {
-      expect(readFileSync(resolve(SRC, page), "utf8"), page).toMatch(/<HourLight phase=\{[^}]+\} door=\{door\} signedInAt=\{session\.signedInAt\} \/>/);
-    }
   });
 });

@@ -1,16 +1,17 @@
 import { firstTime, recallPaths } from "@/lib/memory";
 
 /**
- * The first arrival of a sign-in (A-24 §3.2, Q4): Home's light glides into its
- * place once, straight after signing in, and never again until the next one.
+ * The first arrival of a sign-in (A-24 §3.2, Q4; A-25 moment 1): the light of Home
+ * or My access crosses into its place once, straight after signing in, and never
+ * again until the next one.
  *
  * Decided before the first paint, so the light never rests and then starts
  * over. The sign-in (the OIDC callback, the dev identity picker) sets a
  * short-lived, readable cookie naming the sign-in's instant; the server's
- * render of Home reads it and marks the light in the first HTML.
+ * render of Home or My access reads it and marks the light in the first HTML.
  * The first page that mounts after the sign-in, whichever it is, spends it
  * (the shell deletes it), so a reload, a second tab or a later visit to Home
- * never replays it, and a sign-in that lands on another page spends its door
+ * or My access never replays it, and a sign-in that lands on another page spends its door
  * there. It names an instant only: no secret, no identity.
  *
  * ponytail: if the cookie were ever still there for a sign-in this device has
@@ -32,9 +33,9 @@ export const doorFor = (cookie: string | undefined, signedInAt: string | undefin
 
 /**
  * Whether this device has already opened the door for this sign-in. Read as
- * Home first renders on the client: on the page the server drew the door into
- * it is not yet recorded (the shell spends it after), so the hydrated render
- * matches; on a later mount (Back to a cached Home) it is, and the door stays shut.
+ * Home or My access first renders on the client: on the page the server drew the
+ * door into it is not yet recorded (the shell spends it after), so the hydrated
+ * render matches; on a later mount (Back to a cached page) it is, and the door stays shut.
  */
 export const openedAlready = (signedInAt: string | undefined): boolean =>
   typeof window !== "undefined" && Boolean(signedInAt) && recallPaths("local", OPENED).includes(signedInAt!);

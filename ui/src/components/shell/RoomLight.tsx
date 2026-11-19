@@ -23,7 +23,7 @@ export function RoomLight({ children }: { children: ReactNode }) {
  * The hour's light, one path for Home and My access (A-24 §3.1 and §3.2, A-25 moment 1): the hour's
  * pool, and the door's light crossing it once after a sign-in. Mounted with the page's first render,
  * so it decides the door before the shell spends it; drawn once there is an hour (`phase`, on the
- * greeting's clock), and not while a page says it has none (`phase` null).
+ * greeting's clock: null before it has read the clock).
  */
 export function HourLight({ phase, door, signedInAt }: { phase: DayPhase | null; door: boolean; signedInAt?: string }) {
   // The server decides the door from the sign-in's cookie; a cached render (Back) of a door this

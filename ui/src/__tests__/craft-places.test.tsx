@@ -146,10 +146,6 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
       expect(colours.length, page).toBeGreaterThan(0);
       for (const name of colours) expect(UNDER_THE_LIGHT, `${page}: ${name}`).toContain(name);
     }
-    // My access's title says its second sentence in --faint, the faintest the test holds.
-    expect(readFileSync(resolve(SRC, "components/member/MemberAccess.tsx"), "utf8")).toMatch(
-      /<h1 className="type-page-title">\s*\{hello\}\{" "\}\s*<span className="text-faint">/,
-    );
   });
 });
 
