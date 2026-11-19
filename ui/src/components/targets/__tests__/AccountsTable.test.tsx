@@ -169,7 +169,7 @@ describe("accounts table seats", () => {
     const token: Record<string, number> = { "--seat-number": 110, "--seat-action-wide": 300 };
     const px = (cls: string) => {
       expect(cls, `a share with a basis: "${cls}"`).not.toMatch(/flex-\[[\d.]+_[\d.]+_\d+px\]/);
-      const m = cls.match(/(?:^|\s)(?:w-\[(\d+)px\]|w-\((--[\w-]+)\)|min-w-\[(?:min\()?(\d+)px)/);
+      const m = cls.match(/(?:^|\s)(?:tablet:)?(?:w-\[(\d+)px\]|w-\((--[\w-]+)\)|min-w-\[(?:min\()?(\d+)px)/);
       expect(m, `a width or a minimum on "${cls}"`).not.toBeNull();
       return Number(m![1] ?? m![3] ?? token[m![2]]);
     };

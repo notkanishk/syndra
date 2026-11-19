@@ -8,7 +8,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/Badge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, CardRow, Cells, type Columns } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate } from "@/lib/format";
@@ -278,7 +278,7 @@ function Holders({
 }
 
 /** Person, how they got it, since when. */
-const HOLDER_COLS: Columns = ["min-w-[min(220px,100%)] flex-1", "min-w-[140px] flex-1", "w-(--seat-number) flex-none text-right"];
+const HOLDER_COLS: Columns = ["min-w-[min(220px,100%)] flex-1", "min-w-[140px] flex-1", NUMBER_COL];
 
 /** "Given by Kanishk Singh" · "Approved request" · "Moved from v2" · "Given when they joined". */
 function howTheyGotIt(holder: BundleHolder) {
@@ -470,7 +470,7 @@ function IncluderTile({
             ? `v${includer.draft_version} in its next version`
             : `Includes v${pinned}${behind ? `, ${gap === 1 ? "one" : gap} behind` : ""}`}
         </span>
-        <span data-figure className="w-(--seat-number) flex-none text-right text-small text-muted">
+        <span data-figure className={`${NUMBER_COL} text-small text-muted`}>
           {includer.people} {includer.people === 1 ? "person" : "people"}
         </span>
       </CardRow>

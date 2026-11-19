@@ -19,11 +19,13 @@ import { humanizeKey } from "@/lib/format";
  *
  * Both are shares held to a minimum, What twice Who's: a fixed 180 for Who and 160 for What, with
  * the date and the wide seat, came to 798px, so on Drift the seat dropped under every row from
- * 1024 to 1240 although the rows fitted (staging, 19 Nov). Now 140 + 120 + 110 + 300 and the gaps
- * is 718, inside the narrowest desktop row (731).
+ * 1024 to 1240 although the rows fitted (staging, 19 Nov). Now 130 + 90 + 110 + 300 and the gaps
+ * is 678; with Select's checkbox column (26 and a gap) 720, inside Drift's narrowest desktop row
+ * (728 at 1080, less its 3px edge). At 140 + 120 the select-mode line was 760, and its seat
+ * dropped under every row from 1080 to 1110 (measured).
  */
-export const WHO_COL = "w-full min-w-0 tablet:min-w-[140px] tablet:flex-1";
-export const WHAT_COL = "w-full min-w-0 tablet:min-w-[120px] tablet:flex-[2_1_0%]";
+export const WHO_COL = "w-full min-w-0 tablet:min-w-[130px] tablet:flex-1";
+export const WHAT_COL = "w-full min-w-0 tablet:min-w-[90px] tablet:flex-[2_1_0%]";
 
 /**
  * A queue row's left edge, 3px, unpainted: a row paints it when it says something (a safety-gated

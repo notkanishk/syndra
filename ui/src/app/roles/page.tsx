@@ -52,7 +52,7 @@ const ROLE_SORT: Record<RoleSort, (role: CatalogRole) => string | number> = {
  * the headings wrapped while the rows ran on and the card cut the count to "2 u" (staging, 19 Nov).
  */
 const ROLE_COLS: Columns = [
-  "w-full min-w-0 tablet:min-w-[120px] tablet:flex-1",
+  "w-full min-w-0 empty:hidden tablet:min-w-[120px] tablet:flex-1 tablet:empty:block",
   "w-full min-w-0 tablet:min-w-[160px] tablet:flex-[2_1_0%]",
   "hidden desktop:block desktop:min-w-[100px] desktop:flex-1",
   "hidden desktop:block desktop:min-w-[120px] desktop:flex-1",
@@ -295,9 +295,10 @@ export default function RolesPage() {
             >
               <Cells cols={ROLE_COLS}>
               {/* Under the project's own label the name is not said again, unless Syndra could not
-                  name it: then the id beside "Unknown project" is all there is to tell two apart. */}
+                  name it: then the id beside "Unknown project" is all there is to tell two apart. The
+                  cell stays, empty (`""`, so `:empty`), and takes no line on a phone. */}
               {underRun ? (
-                <span aria-hidden />
+                ""
               ) : (
                 <span className="block text-fine text-muted [text-wrap:pretty] tablet:text-body">
                   <ProjectName id={role.project_id} name={role.project_name} link={false} />

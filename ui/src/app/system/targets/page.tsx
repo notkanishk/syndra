@@ -6,7 +6,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { StatusDot } from "@/components/ui/Badge";
 import { ReadingWord, targetReading, type Reading } from "@/components/targets/TargetReading";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Card, CardColumns, CardRow, NUMBER_COL, type Columns } from "@/components/ui/Card";
+import { Card, CardColumns, CardRow, NUMBER_COL, STATUS_COL, type Columns } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
@@ -38,13 +38,14 @@ import { sortByName } from "@/lib/sort";
  */
 /**
  * The columns, the headings' and every row's: the system, its status, its people, then the wide
- * seat (Needs you). Shares held to a minimum: the heading's System had no size and the row's held
- * 220, so the row's seat dropped while the heading's did not, and STATUS sat 330px off its cell
- * (staging, 19 Nov).
+ * seat (Needs you). The system is a share held to a minimum, the status and the count D-1's seats
+ * (`STATUS_COL`, `NUMBER_COL`): the heading's System had no size and the row's held 220, so the
+ * row's seat dropped while the heading's did not, and STATUS sat 330px off its cell (staging,
+ * 19 Nov). 160 + 240 + 110 + 300 and the gaps is 858: one line from a 1204px window.
  */
 const SYSTEM_COLS: Columns = [
   "min-w-[min(160px,100%)] flex-1",
-  "min-w-[min(150px,100%)] flex-1",
+  STATUS_COL,
   NUMBER_COL,
 ];
 

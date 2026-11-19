@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { Owner } from "@/components/system/ServiceAccountOwner";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Card, CardColumns, CardRow, type Columns } from "@/components/ui/Card";
+import { Card, CardColumns, CardRow, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
@@ -29,7 +29,7 @@ const COLS: Columns = [
   "order-1 min-w-[120px] flex-1 tablet:min-w-[160px] tablet:flex-[1_1_0%]",
   "order-3 w-full min-w-0 tablet:order-2 tablet:w-auto tablet:min-w-[160px] tablet:flex-[2_1_0%]",
   "order-4 w-full tablet:order-3 tablet:w-auto tablet:min-w-[120px] tablet:flex-[1_1_0%]",
-  "order-2 w-[64px] flex-none text-right tablet:order-4 tablet:w-(--seat-number)",
+  `order-2 w-[64px] flex-none text-right tablet:order-4 ${NUMBER_COL}`,
 ];
 
 export default function ServiceAccountsPage() {

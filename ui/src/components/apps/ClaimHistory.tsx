@@ -6,7 +6,7 @@ import { UserName } from "@/components/names";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { ActionSeat, CardColumns, Cells, type Columns } from "@/components/ui/Card";
+import { ActionSeat, CardColumns, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Choice";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { StatusSeat } from "@/components/ui/StatusSeat";
@@ -35,7 +35,7 @@ const SEED = "As Actions v1 sent it";
  * the table. With one there is nothing to go back to, so no button.
  */
 /** Version, what changed, when it was saved. */
-const COLS: Columns = ["w-[130px] flex-none", "min-w-[220px] flex-1", "w-(--seat-number) flex-none text-right"];
+const COLS: Columns = ["w-[130px] flex-none", "min-w-[220px] flex-1", NUMBER_COL];
 
 export function ClaimHistory({
   appId,

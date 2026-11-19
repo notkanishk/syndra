@@ -17,17 +17,24 @@
  *   --views basic,advanced
  *   --themes light                         light and dark never differed in the audit
  *   --user dev_admin                       the demo identity it signs in as
- *   --record file.json / --replay file.json
+ *   --record / --replay [--tape file]
  *       Record the API's answers while checking one server, and replay them into
  *       another: check a local build (`bun next dev`, no ZITADEL_DOMAIN) against
- *       staging's data before it is deployed. The file holds real names: keep it
- *       outside the repo.
+ *       staging's data before it is deployed (the pre-merge gate). The tape holds
+ *       real names, so it lives in the system temp directory
+ *       (`syndra-layout.tape.json`) unless --tape names another file, and a tape
+ *       anywhere in the repo is refused. A request the tape does not hold fails
+ *       the replay: answered with a 404, the page would draw an error state and
+ *       pass for the wrong reason.
  *
  * Read-only: it signs in, reads pages, and never clicks.
  * System Chrome (`channel: "chrome"`); CHROME_PATH overrides it.
  * Exit codes, as `sweep:touch`: 1 found something, 2 signed out (wrong page), 3 could not run.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { chromium } from "playwright-core";
@@ -52,8 +59,9 @@ const { values: opt } = parseArgs({
     views: { type: "string", default: "basic,advanced" },
     themes: { type: "string", default: "light" },
     user: { type: "string", default: "dev_admin" },
-    record: { type: "string" },
-    replay: { type: "string" },
+    record: { type: "boolean", default: false },
+    replay: { type: "boolean", default: false },
+    tape: { type: "string" },
   },
 });
 if (!opt.base) {
@@ -64,7 +72,22 @@ const base = opt.base.replace(/\/$/, "");
 const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
 const widths = list(opt.widths).map(Number);
 
-const tape = opt.replay ? JSON.parse(readFileSync(opt.replay, "utf8")) : {};
+const tapePath = resolve(opt.tape ?? resolve(tmpdir(), "syndra-layout.tape.json"));
+if (opt.record) {
+  // Never in the repo: a tape is real members' names, and one `git add -A` from public.
+  let root = null;
+  try {
+    root = realpathSync(execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim());
+  } catch {}
+  const dir = existsSync(dirname(tapePath)) ? realpathSync(dirname(tapePath)) : dirname(tapePath);
+  const inside = root !== null && !relative(root, dir).startsWith("..") && !isAbsolute(relative(root, dir));
+  if (inside) {
+    console.error(`Refusing to record a tape inside the repo (${tapePath}): it holds real names. Leave out --tape, or name a file outside ${root}.`);
+    process.exit(3);
+  }
+}
+const tape = opt.replay ? JSON.parse(readFileSync(tapePath, "utf8")) : {};
+const missed = new Set();
 const keyOf = (req) => `${req.method()} ${new URL(req.url()).pathname}${new URL(req.url()).search} ${req.postData() ?? ""}`;
 
 let browser;
@@ -79,7 +102,9 @@ async function context(view) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   if (opt.replay) {
     await ctx.route("**/api/proxy/**", (route) => {
-      const hit = tape[keyOf(route.request())];
+      const key = keyOf(route.request());
+      const hit = tape[key];
+      if (!hit) missed.add(key);
       return hit
         ? route.fulfill({ status: hit.status, contentType: hit.type, body: hit.body })
         : route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
@@ -176,7 +201,11 @@ for (const view of list(opt.views)) {
   await ctx.close();
 }
 await browser.close();
-if (opt.record) writeFileSync(opt.record, JSON.stringify(tape));
+if (opt.record) {
+  writeFileSync(tapePath, JSON.stringify(tape));
+  console.error(`tape: ${Object.keys(tape).length} answers in ${tapePath}`);
+}
+for (const key of missed) findings.push(`tape missing ${key.trim()} (record again: it was answered 404)`);
 
 const unique = [...new Set(findings)];
 for (const line of unique) console.log(line);

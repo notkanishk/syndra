@@ -42,7 +42,7 @@ const PROJECT_SORT: Record<ProjectSort, (row: ProjectSummaryRow) => string | num
 const PROJECT_COLS: Columns = [
   "w-full min-w-0 tablet:min-w-[140px] tablet:flex-1",
   "w-full min-w-0 tablet:min-w-[140px] tablet:flex-[1.5_1_0%]",
-  "hidden desktop:block desktop:w-(--seat-number) desktop:flex-none desktop:text-right",
+  `hidden desktop:block ${NUMBER_COL}`,
   NUMBER_COL,
 ];
 

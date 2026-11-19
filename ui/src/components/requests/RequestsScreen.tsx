@@ -12,7 +12,7 @@ import { Crossfade } from "@/lib/motion";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { ActionSeat, Card, CardColumns, CardHeader, Cells, ROW, type Columns } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, CardHeader, Cells, NUMBER_COL, ROW, type Columns } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import {
@@ -685,7 +685,7 @@ function YourRequests({
                 {entry.justification || "No reason given"}
               </div>
             </div>
-            <div data-figure className="w-(--seat-number) shrink-0 text-small text-faint tablet:text-right">
+            <div data-figure className={`${NUMBER_COL} text-small text-faint`}>
               <Relative iso={entry.created_at} />
             </div>
             {/* One status seat: dot, word, note. A withdrawal reports here,

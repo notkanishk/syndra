@@ -7,7 +7,7 @@ import { HoldDialog } from "@/components/review/HoldDialog";
 import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
 import { RevokeDialog } from "@/components/targets/RevokeDialog";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader, CardRow, type Columns, type SeatWidth } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, NUMBER_COL, type Columns, type SeatWidth } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UNKNOWN_ACCOUNT, UserAvatar, UserName } from "@/components/names";
@@ -51,7 +51,7 @@ const COLS: Columns = [
   "min-w-[min(140px,100%)] flex-1",
   "min-w-[min(120px,100%)] flex-1",
   "min-w-[min(140px,100%)] flex-[1.3_1_0%]",
-  "w-(--seat-number) flex-none text-right",
+  NUMBER_COL,
 ];
 
 /** `stale`: the system isn't answering, so this is its last read and the card recedes (A-13). */

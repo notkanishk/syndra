@@ -880,11 +880,21 @@ function ExtendSeat({
  * `@container`), so it is the row's width that decides, wherever the page puts the card.
  * The source had no basis and got what was left: 36px at 1100, and its "Via bundle" chip ran into
  * the status (staging, 19 Nov).
+ *
+ * A member reading their own page has no seat (they revoke nothing), so their row holds its three
+ * columns from 662px (230 + 160 + 240 and two gaps) and stacks only below that. Two literal lists,
+ * not one built from a number: a container query's width is in the class, which Tailwind reads
+ * from the source.
  */
 const ROLE_COLS: Columns = [
   "w-full @min-[878px]:w-[230px] @min-[878px]:flex-none",
   "min-w-0 flex-[1_1_calc(50%_-_var(--row-gap))] @min-[878px]:min-w-[160px] @min-[878px]:flex-[1_1_0%]",
   "min-w-0 flex-[1_1_calc(50%_-_var(--row-gap))] @min-[878px]:w-(--seat-status) @min-[878px]:flex-none",
+];
+const ROLE_COLS_NO_SEAT: Columns = [
+  "w-full @min-[662px]:w-[230px] @min-[662px]:flex-none",
+  "min-w-0 flex-[1_1_calc(50%_-_var(--row-gap))] @min-[662px]:min-w-[160px] @min-[662px]:flex-[1_1_0%]",
+  "min-w-0 flex-[1_1_calc(50%_-_var(--row-gap))] @min-[662px]:w-(--seat-status) @min-[662px]:flex-none",
 ];
 
 function RoleGroup({
@@ -1000,7 +1010,7 @@ function RoleGroup({
           <CardRow
             first
             className="@container"
-            cols={ROLE_COLS}
+            cols={isOperator ? ROLE_COLS : ROLE_COLS_NO_SEAT}
             seat={isOperator ? "default" : undefined}
             action={isOperator ? actions : undefined}
           >

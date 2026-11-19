@@ -271,9 +271,11 @@ export function CardHeaderLink({ href, children }: { href: string; children: Rea
  * column of verbs needs no name) unless `seatLabel` names what the seat holds
  * ("Decision"), set at the seat's right edge, over its contents.
  *
- * It wraps as a CardRow wraps: where a row's seat drops to a second line, the
- * seat's heading cell does too, so the columns above stay over theirs. A table
- * whose rows never wrap says so with `flex-nowrap` (the guard compares them).
+ * It is `flex-wrap`, as every table row is: where a row's seat drops to a
+ * second line, the seat's heading cell does too, so the columns above stay over
+ * theirs. No table overrides it any more; the guard (`headsOffRows`) still
+ * compares the headings' wrap with their rows' at tablet and at desktop, so a
+ * line that stopped wrapping on one side only fails.
  *
  * `detail` heads the rows' detail line: under the column headings, full width,
  * from the text's edge, where every row's detail line is. A heading for what

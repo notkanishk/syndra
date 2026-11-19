@@ -80,11 +80,11 @@ vi.mock("@/lib/queries/useRequests", () => ({
   useDecideRequest: () => ({ isPending: false, mutateAsync: vi.fn() }),
 }));
 
-function renderPerson() {
+function renderPerson(isOperator = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <PersonAccess userId="u1" isOperator />
+      <PersonAccess userId="u1" isOperator={isOperator} />
     </QueryClientProvider>,
   );
 }
@@ -106,6 +106,18 @@ describe("a person's role row", () => {
     // cannot squeeze in beside them), then the seat.
     for (const half of [source, status]) expect(half).toHaveClass("flex-[1_1_calc(50%_-_var(--row-gap))]");
     expect(row.querySelector(":scope > [data-action-seat]")).toBeTruthy();
+  });
+
+  it("holds its three columns from 662px where there is no seat (a member's own page)", () => {
+    renderPerson(false);
+    const row = screen.getByText("Community - Basic").closest("[data-card-row]")!;
+    expect(row.querySelector(":scope > [data-action-seat]")).toBeNull();
+    const [name, source, status] = Array.from(row.querySelectorAll(":scope > [data-col]"));
+    // 230 + 160 + 240 and two gaps: no 200px seat to make room for.
+    expect(name).toHaveClass("@min-[662px]:w-[230px]");
+    expect(source).toHaveClass("@min-[662px]:min-w-[160px]");
+    expect(status).toHaveClass("@min-[662px]:w-(--seat-status)");
+    expect(row.innerHTML).not.toContain("@min-[878px]");
   });
 });
 

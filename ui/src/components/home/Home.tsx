@@ -421,10 +421,12 @@ export function Home({ session }: { session: SessionUser }) {
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-small text-muted">
             <StatusDot tone="healthy" />
             <span>Checked, nothing waiting:</span>
-            {/* The tap's 44px reach, as tall as it reaches until desktop: lifted by -10px either side
-                it kept the lines 24px apart, and each link's reach covered the one above it and the
-                Claims line (WCAG 2.5.8; staging, 19 Nov). MetaRow's dots, so a link that wraps never
-                starts its line with one. */}
+            {/* Each link is a 44px line of its own until desktop (D-1 §9, the Home answer). The product's
+                touch floor is 44px (`--tap`): WCAG 2.5.5 Target Size (Enhanced, AAA) and Apple's HIG,
+                above 2.5.8's 24px minimum. Lifted by -10px either side to keep the lines 24px apart,
+                each link's 44px overlapped the link above it and the Claims line, so the targets were
+                not separate (staging, 19 Nov). MetaRow's dots, so a link that wraps never starts its
+                line with one. */}
             <MetaRow>
               {clear.map(([name, href]) => (
                 <AdvancedLink

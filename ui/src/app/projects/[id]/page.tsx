@@ -12,7 +12,7 @@ import { Mono } from "@/components/ui/Badge";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, Cells, type Columns } from "@/components/ui/Card";
+import { Card, CardColumns, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
@@ -41,7 +41,7 @@ const COLS: Columns = [
   "min-w-[min(220px,100%)] flex-1",
   "hidden w-[130px] flex-none desktop:block",
   "hidden w-[140px] flex-none tablet:block",
-  "w-(--seat-number) flex-none text-right",
+  NUMBER_COL,
 ];
 
 export default function ProjectDetailPage({

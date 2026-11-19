@@ -27,7 +27,19 @@ cd ui && bun run test && bun run lint && bun run build
 cd addons/truenas && go test ./... && go vet ./...
 ```
 
-Before merging a UI PR, run the layout check in a real browser. jsdom can't lay out, so this check is the only one that sees overlaps, clipped text, headings off their cells, and seats off the first line. It is manual and not in CI, because CI can't reach the LAN. See `ui/scripts/layout-check/README.md`, which also covers checking a local build against staging's data.
+jsdom can't lay out, so the layout check is the only check that sees overlaps, clipped text, headings off their cells and seats off the first line. It runs a real browser. It is manual, not in CI, because CI can't reach the LAN. See `ui/scripts/layout-check/README.md`.
+
+**The pre-merge gate for a UI PR** is your local build replaying staging's data. Record a tape once; it goes to the system temp directory, and a tape path inside the repo is refused. Then run:
+
+```bash
+cd ui && bun run layout:check -- --base http://192.168.5.16:3001 --record   # once: reads staging
+cd ui && SESSION_SECRET=local bun next dev -p 3010 &
+cd ui && bun run layout:check -- --base http://localhost:3010 --replay
+```
+
+A request missing from the tape fails the check, so record again when a page reads something new.
+
+**After deploying**, run the same check against staging itself:
 
 ```bash
 cd ui && bun run layout:check -- --base http://192.168.5.16:3001

@@ -11,7 +11,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { ActionSeat, Card, CardColumns, Cells, type Columns } from "@/components/ui/Card";
+import { ActionSeat, Card, CardColumns, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { NextStep } from "@/components/ui/NextStep";
 import { RunLabel, SortHead, orderBy, runStarts, useSort } from "@/components/ui/SortHead";
@@ -115,7 +115,7 @@ type WaitSort = "role" | "marked" | "people";
 const COLS: Columns = [
   "min-w-[min(220px,100%)] flex-1",
   "hidden tablet:block tablet:min-w-[160px] tablet:flex-[1_1_0%]",
-  "w-full tablet:w-(--seat-number) tablet:flex-none tablet:text-right",
+  `w-full ${NUMBER_COL}`,
 ];
 
 function WaitingRoles({

@@ -106,6 +106,11 @@ describe("the roles index, as drawn", () => {
     expect(labels).toEqual(["Laser Lab2", "Wood shop1"]);
     expect(screen.queryAllByText("Laser Lab")).toHaveLength(1); // the label only; not once per row
     expect(order()).toEqual(["Alpha", "Beta", "Gamma"]); // A to Z inside the run
+    // Under its label the row keeps the project's column, empty, so the columns stay under their
+    // headings; an empty cell takes no line on a phone (a blank line opened every row there).
+    const project = screen.getByText("Alpha").closest("a")!.querySelector("[data-col]")!;
+    expect(project).toBeEmptyDOMElement();
+    expect(project).toHaveClass("empty:hidden", "tablet:empty:block");
     // Sorted by anything else, the name is back on each row.
     fireEvent.click(screen.getByRole("button", { name: "Sort by people" }));
     expect(screen.queryAllByTestId("run-label")).toHaveLength(0);
