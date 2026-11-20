@@ -10,7 +10,9 @@ import type { UserAccessView } from "@/lib/queries/useUsers";
 import { termHolding } from "@/lib/term-dates";
 import { inZone } from "@/test-utils/zone";
 
-import { block, colour, css, over, ratio } from "./cssTokens";
+import { SRC, block, colour, css, over, ratio } from "./cssTokens";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 /**
  * A-24 wave 3, places that know (§3.1, Q5, §9, Q18). Every line that knows
@@ -30,6 +32,9 @@ const utility = (name: string) => {
 
 // The setup holds the zone from TZ for the whole file: each test that picks its own puts it back.
   afterEach(() => inZone(process.env.TZ));
+
+/** Every colour of text the hour's light may lie under, held at 4.5:1 at the pool's strongest. */
+const UNDER_THE_LIGHT = ["--ink", "--muted", "--faint", "--accent-text", "--warn-text", "--danger-text"];
 
 describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", () => {
   const light = utility("hour-light");
@@ -58,8 +63,9 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
   it("has a place for every part of the day, is still, is the accent, fades inside its box, and goes under forced colours", () => {
     for (const phase of ["morning", "afternoon", "evening", "quiet"]) expect(light).toContain(`&[data-hour="${phase}"]`);
     expect(reaches).toHaveLength(4);
-    // Still, but for the door's light once a sign-in (`[data-door]::before` and `::after`).
-    const still = light.replace(/&\[data-door\]::(before|after) \{[^}]*\}/g, "");
+    // Still, but for the door's light once a sign-in (`[data-door]::before` and `::after`) and a pool
+    // lit only after its read settling in (`[data-settle]::before`).
+    const still = light.replace(/&\[data-(door|settle)\]::(before|after) \{[^}]*\}/g, "");
     expect(still).not.toMatch(/animation|transition/);
     expect(light).toContain("var(--pool-stops)");
     expect(light).not.toMatch(/--(healthy|warn|danger)\b|#[0-9a-f]{3,6}\b/i);
@@ -121,13 +127,26 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
         const lit = over([accent[0], accent[1], accent[2], (accent[3] ?? 1) * ((reach * weight) / 100)], colour(vars, "--canvas"));
         // The head sits on the app's canvas (`#app-root`), and its links end their hover on --accent-text;
         // status text on the canvas, should it ever scroll under the light, holds too.
-        for (const token of ["--ink", "--muted", "--faint", "--accent-text", "--warn-text", "--danger-text"]) {
+        for (const token of UNDER_THE_LIGHT) {
           const r = ratio(colour(vars, token), lit);
           if (r < 4.5) failures.push(`${theme} ${token} at ${reach}%: ${r.toFixed(2)}`);
         }
       }
     }
     expect(failures).toEqual([]);
+  });
+
+  it("holds every colour of text in the lit heads, Home's and My access's (A-25 moment 1)", () => {
+    const vars = block(':root,\n  [data-theme="dark"] {');
+    for (const page of ["components/home/Home.tsx", "components/member/MemberAccess.tsx"]) {
+      const source = readFileSync(resolve(SRC, page), "utf8");
+      // The lit head: the one that hands its hour up, to its Notices.
+      const at = source.indexOf("<HourLight ");
+      const head = source.slice(source.lastIndexOf("<div {...head} style={BELOW_HEADER}>", at), source.indexOf("<ShellNotices />", at));
+      const colours = [...head.matchAll(/\btext-([a-z-]+)/g)].map((m) => `--${m[1]}`).filter((name) => name in vars);
+      expect(colours.length, page).toBeGreaterThan(0);
+      for (const name of colours) expect(UNDER_THE_LIGHT, `${page}: ${name}`).toContain(name);
+    }
   });
 });
 

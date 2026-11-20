@@ -29,6 +29,8 @@ import type { SessionUser } from "@/lib/session";
 import { useEffect, useState } from "react";
 import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import { ShellNotices } from "@/components/shell/ShellNotices";
+import { HourLight } from "@/components/shell/RoomLight";
+import { useDayPhase } from "@/lib/useDayPhase";
 import { greeting, lastHere, WELCOME } from "@/lib/greeting";
 import { Crossfade, glideTo } from "@/lib/motion";
 import { needsPassword } from "@/components/kinds/storage/state";
@@ -56,7 +58,7 @@ export const NOT_IN_ZITADEL = {
  * attach to Direct / Via bundle / Automatic. No jargon anywhere on this screen
  * — no "derived", no effective_role_keys, no role keys.
  */
-export function MemberAccess({ session }: { session: SessionUser }) {
+export function MemberAccess({ session, door = false }: { session: SessionUser; door?: boolean }) {
   // The member's home is a screen's first paint (S11): the greeting tints in, then the cards arrive.
   const head = usePageHead();
   const access = useUserAccess(session.id);
@@ -77,6 +79,8 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   // stand-in so nothing below moves (same rule as Home).
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
+  // The part of the day for the room's light (A-25 moment 1), on the greeting's clock.
+  const phase = useDayPhase();
   // What Zitadel holds for this person arrives WITH the records that explain
   // it, in one response. It used to be a second call, which meant this screen
   // could render a headline from Syndra's records against rows marked from
@@ -270,6 +274,10 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   return (
     <div className="flex flex-col gap-4">
       <div {...head} style={BELOW_HEADER}>
+        {/* Home's light, for the member too (A-25 moment 1): the hour's pool and, once after a sign-in,
+            the door's crossing. Lit only after a good read of Zitadel (owner, 20 Nov 2026): never while
+            it is out, so nothing is cut off when it lands unread or fails; it settles in when it lands. */}
+        <HourLight phase={phase} door={door} signedInAt={session.signedInAt} lit={!unread} />
         <h1 className="type-page-title">
           {hello}{" "}
           <span className="text-faint">{session.firstVisit ? WELCOME : <>Here&rsquo;s what you can use.</>}</span>

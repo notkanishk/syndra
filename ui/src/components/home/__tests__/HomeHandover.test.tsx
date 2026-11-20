@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
 import { RoomContext } from "@/components/shell/RoomLight";
+import { AppShell } from "@/components/shell/AppShell";
 import { TINT_MS } from "@/lib/motion";
 import { DOOR_COOKIE, spendDoor } from "@/lib/motion/door";
 import { inZone } from "@/test-utils/zone";
@@ -72,7 +73,17 @@ vi.mock("@/lib/queries/useIndicators", () => ({
 vi.mock("@/lib/ui-view", () => ({
   useIsAdvanced: () => state.advanced,
   useUiView: () => ({ view: "basic", setView: () => {} }),
+  UiViewProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
+// The real AppShell, its own parts stood in for (as AppShell.test.tsx does): it spends the door.
+vi.mock("@/components/shell/Sidebar", () => ({ default: () => null }));
+vi.mock("@/components/shell/TopBar", () => ({ TopBar: () => <header>top</header> }));
+vi.mock("@/components/shell/PlaceHost", () => ({ PlaceHost: () => null }));
+vi.mock("@/components/shell/IntentPrefetchHost", () => ({ IntentPrefetchHost: () => null }));
+vi.mock("@/components/shell/TouchNav", () => ({ TouchNav: () => null }));
+vi.mock("@/components/shell/GoToHost", () => ({ GoToHost: () => null }));
+vi.mock("@/components/states/DegradedBanner", () => ({ DegradedBanner: () => null }));
+vi.mock("@/components/states/OfflineBanner", () => ({ OfflineBanner: () => null }));
 vi.mock("@/lib/queries/useTerms", () => ({ useTerms: () => ({ data: state.terms }) }));
 vi.mock("@/lib/query-client", async (original) => ({
   ...(await original<typeof import("@/lib/query-client")>()),
@@ -426,6 +437,26 @@ describe("the first arrival of a sign-in", () => {
     first.unmount();
     // A cached render that still says "door" (Back) finds it already opened here.
     mount(signedIn, true);
+    expect(light()).toBeNull();
+  });
+
+  it("crosses on the first visit inside the real shell, which spends the door after the page decides it", () => {
+    document.cookie = `${DOOR_COOKIE}=${signedIn.signedInAt}; Path=/`;
+    const queries = client();
+    const shell = () => (
+      <QueryClientProvider client={queries}>
+        <AppShell session={signedIn}>
+          <Home session={signedIn} door />
+        </AppShell>
+      </QueryClientProvider>
+    );
+    const first = render(shell());
+    expect(light()).not.toBeNull();
+    expect(document.cookie).not.toContain(DOOR_COOKIE);
+    first.unmount();
+    // The second visit (Back to a page whose render still says door) is the pool at rest.
+    render(shell());
+    expect(document.querySelector(".hour-light")).not.toBeNull();
     expect(light()).toBeNull();
   });
 

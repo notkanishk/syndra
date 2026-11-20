@@ -11,8 +11,8 @@ const ASK_EVERY_MS = 60_000; // not-motion: a clock's tick, once a minute
  * The part of the day (`dayPhase`, the greeting's clock), on the client only:
  * null on the server and the first render, which has another clock
  * (hydration). It is asked again each minute, and re-renders only when it
- * changes: Home's greeting, its light and its quiet-hours sentence turn together, even
- * on a Home left open across 22:00.
+ * changes: the greeting, the light and the quiet-hours sentence of Home or My access
+ * turn together, even on a page left open across 22:00.
  */
 export function useDayPhase(): DayPhase | null {
   const [phase, setPhase] = useState<DayPhase | null>(null);
