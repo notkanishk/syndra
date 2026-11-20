@@ -508,6 +508,22 @@
     }
   }
 
+  /* A read dot answering the trail's lamp (A-25 moment 5): its own glow opens once and is gone. The
+     ember's light, not `bloom`'s flat disc. */
+  @keyframes answer {
+    from {
+      opacity: 0;
+      scale: 0.3;
+    }
+    30% {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+      scale: 1;
+    }
+  }
+
   /* The lamp's breath (A-25 moment 3): its glow out and back, never the mark itself. */
   @keyframes lamp {
     from {
@@ -1166,7 +1182,7 @@
    wins over it. Unlayered, it beat every layer whatever its specificity, and a filled button's edge
    lit in the accent on an accent fill (review, 20 Nov 2026). */
 @layer base {
-  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light) {
+  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light, .trail-answer) {
     --pool-c: var(--accent);
     --pool-stops: color-mix(in srgb, var(--pool-c) var(--pool-k), transparent),
       color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.74), transparent) 20%,
@@ -2051,51 +2067,159 @@ html.theme-fading *::after {
   }
 }
 
-/* The trail lights (A-25 moment 5; owner, 20 Nov 2026: the recommendation, then the walk home and its
-   place inside the result): under a give's result, a pool that walks the change home, in the result
-   card's layer (the card is `isolate` when it holds a trail), under every line in the card. The accent at 26% of the room's weight, on the six eased stops inside
-   its own box, which `CheckTrail.tsx` keeps inside the result's card (rule 1). Each step of its walk, and
-   each step a read settles after it, is a travel on tint's even curve over flash (rule 4: a light on its
-   own errand is unhurried); it breathes while it is out; the box carries the travel and the going out,
-   its pool the breath, so neither stops the other. Arriving it settles in; leaving it fades over flash.
-   Still: no walk and no breath, it rests, and goes at once. Under forced colours it is not drawn: the ring and the words say where the change is. */
+/* The trail lights: the lamp carried home (A-25 moment 5; owner, 20 Nov 2026: "Carried", the
+   recommendation). One motion, three parts that are the same light, all in the result card's layer (the
+   card is `isolate` when it holds a trail), under every line in it:
+     the lamp   a pool centred on the dot, four quarter-ellipses round that point on the six eased stops,
+                each spent at its own far side, so each side has its own reach (240px over the sentence, 56px
+                up and down, the card's room on the left) and the pool has no edge. The accent at 26% of the
+                room's weight. One shape for the whole walk.
+     the line   the hairline between the dots, lit where the lamp is and nowhere else: a 1px box from the
+                first dot to the last, clipping a gradient that moves with the lamp. No motion of its own.
+     the moves  one wrapper a move, each a `transform` of its own step's height over flash on tint's even
+                curve; the next sets out a beat (flash less settle) after it, before it has landed, so the
+                lamp slows at each dot and never stops. Their sum is where the lamp is.
+   It swells in over arrive on settle's curve and goes out over flash on flash's. It breathes only while
+   it waits on a step not yet read (`CheckTrail.tsx`, the Web Animations API, so it ends from where it is).
+   Still: no moves, no breath. Under forced colours none of it is drawn: the ring and the words say where
+   the change is. */
 @layer components {
   .trail-light {
+    position: absolute;
+    left: var(--trail-x);
+    top: var(--trail-y);
+    width: 0;
+    height: 0;
     z-index: -1;
     --pool-k: calc(26% * var(--hour-weight));
     opacity: 0;
-    transition:
-      transform var(--trail-travel, 0s) var(--ease-tint),
-      opacity var(--duration-flash) var(--ease-flash);
+    transition: opacity var(--duration-flash) var(--ease-flash);
     &[data-going] {
       opacity: 1;
-      transition-duration: var(--trail-travel, 0s), var(--duration-settle);
+      transition: opacity var(--duration-arrive) var(--ease-settle);
       @starting-style {
         opacity: 0;
       }
     }
-    &::before {
+  }
+  .trail-pool {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transition:
+      scale var(--duration-arrive) var(--ease-settle),
+      opacity var(--duration-settle) var(--ease-tint);
+    [data-going] > & {
+      @starting-style {
+        scale: 0.86;
+      }
+    }
+    & > * {
+      position: absolute;
+      background: radial-gradient(ellipse farthest-side at var(--at), var(--pool-stops));
+    }
+    & > [data-quarter="tl"] {
+      right: 0;
+      bottom: 0;
+      width: var(--reach-left);
+      height: var(--reach-up);
+      --at: 100% 100%;
+    }
+    & > [data-quarter="tr"] {
+      left: 0;
+      bottom: 0;
+      width: var(--reach-right);
+      height: var(--reach-up);
+      --at: 0% 100%;
+    }
+    & > [data-quarter="bl"] {
+      right: 0;
+      top: 0;
+      width: var(--reach-left);
+      height: var(--reach-down);
+      --at: 100% 0%;
+    }
+    & > [data-quarter="br"] {
+      left: 0;
+      top: 0;
+      width: var(--reach-right);
+      height: var(--reach-down);
+      --at: 0% 0%;
+    }
+  }
+  /* One move: a point that carries what is inside it by its own step's height. */
+  .trail-move {
+    position: absolute;
+    left: 0;
+    top: 0;
+    [data-carried] & {
+      transition: transform var(--duration-flash) var(--ease-tint);
+    }
+  }
+  .trail-path {
+    position: absolute;
+    left: calc(var(--trail-x) - 0.5px);
+    top: var(--trail-y);
+    width: 1px;
+    height: var(--trail-length);
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--duration-flash) var(--ease-flash);
+    &[data-going] {
+      opacity: 1;
+      transition: opacity var(--duration-arrive) var(--ease-settle);
+      @starting-style {
+        opacity: 0;
+      }
+    }
+  }
+  .trail-thread {
+    position: absolute;
+    left: 0;
+    top: calc(-1 * var(--reach-up));
+    width: 1px;
+    height: calc(var(--reach-up) + var(--reach-down));
+    --thread-k: 60%;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.06), transparent) calc(var(--reach-up) * 0.18),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.2), transparent) calc(var(--reach-up) * 0.38),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.44), transparent) calc(var(--reach-up) * 0.58),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.74), transparent) calc(var(--reach-up) * 0.8),
+      color-mix(in srgb, var(--accent) var(--thread-k), transparent) var(--reach-up),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.74), transparent) calc(var(--reach-up) + var(--reach-down) * 0.2),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.44), transparent) calc(var(--reach-up) + var(--reach-down) * 0.42),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.2), transparent) calc(var(--reach-up) + var(--reach-down) * 0.62),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.06), transparent) calc(var(--reach-up) + var(--reach-down) * 0.82),
+      transparent
+    );
+  }
+  /* A read dot's answer as the lamp reaches it: its own lime glow (the ember's light, --healthy at 44%,
+     17px out from the 6px dot) opens once and is gone, under the words. Never on a ring. */
+  .trail-answer {
+    --pool-c: var(--healthy);
+    --pool-k: 44%;
+    &::after {
       content: "";
       position: absolute;
-      inset: 0;
+      inset: -17px;
+      z-index: -1;
+      border-radius: var(--radius-pill);
       background: radial-gradient(closest-side, var(--pool-stops));
+      opacity: 0;
     }
   }
-  /* Its breath, as the lamp's, only for a visitor who has not asked for less. Going out, the breath is
-     held where it is, so the fade starts from the strength it had rather than jumping back to full. */
   @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
-    .trail-light[data-breathe]::before {
-      animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate;
+    .trail-answer::after {
+      animation: answer var(--duration-flash) var(--ease-flash) both;
     }
-    .trail-light[data-breathe]:not([data-going])::before {
-      animation-play-state: paused;
-    }
-  }
-  .trail-light-glide {
-    --trail-travel: var(--duration-flash);
   }
   @media (forced-colors: active) {
-    .trail-light {
+    .trail-light,
+    .trail-path,
+    .trail-answer::after {
       display: none;
     }
   }

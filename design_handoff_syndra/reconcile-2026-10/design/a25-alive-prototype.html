@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark" data-btn="near">
+<html lang="en" data-theme="dark" data-btn="near" data-walk="carried">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,6 +9,8 @@
      Revised 20 Nov after the owner's review, twice. Round 2: moment 2 redrawn for restraint, moment 4 carried by
      something crisp, and no box cuts a light. Round 3 (his word: the edge; glide with light): the edge's sibling
      on buttons (three ways, html[data-btn]), and the rail's pill glides with a faint light under it.
+     Round 4 (his word on the built trail: the bloom moves, the dots do not, it is not organic): moment 5's walk
+     is one motion now, the lamp carried down the line, the line lit where it is, each dot answering once.
      The shell is AppShell's own (a column, a bar, one scroller), with the room's light behind both. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -69,7 +71,7 @@
    come in through the window. Nothing else ends one: no overflow, no
    scroller, no hairline, no layer shorter than the pool. A mask may give a
    light a shape (a hairline); it never gives it an end. */
-.pool, .rim::after, .mark::before, .ember::before, .trail-light::before {
+.pool, .rim::after, .mark::before, .ember::before, .glow i, .sdot::after {
   --c: var(--accent);
   --pool: radial-gradient(var(--shape, closest-side),
     color-mix(in srgb, var(--c) var(--k), transparent),
@@ -261,7 +263,7 @@ html:not([data-still]) .mark[data-room="waiting"] .md { animation: breathe var(-
 .nav-pill, .nav-light { position: absolute; left: 0; top: 0; pointer-events: none; transition: translate var(--duration-settle) var(--ease-settle); }
 .nav-pill { z-index: -1; width: var(--bw); height: var(--bh); border-radius: var(--radius-nav); background: var(--accent-soft); translate: var(--bx) var(--by); }
 .nav-light { z-index: -2; width: var(--lw); height: var(--lh); --k: calc(6% * var(--hour-weight)); translate: calc(var(--bx) + var(--bw) / 2 - 50%) calc(var(--by) + var(--bh) / 2 - 50%); }
-.jump, html[data-still] :is(.nav-pill, .nav-light, .trail-light) { transition: none !important; }
+.jump, .jump :is(.lamp, .glow, .thread, .sdot), html[data-still] :is(.nav-pill, .nav-light, .trail, .lamp, .glow, .thread, .sdot) { transition: none !important; }
 .frag { width: 252px; padding: 14px; background: var(--rail); border: 1px solid var(--line); border-radius: var(--radius-card); }
 .tabs { position: relative; isolation: isolate; display: flex; width: min(390px, 100%); padding: 8px 6px; background: var(--rail); border-top: 1px solid var(--line); }
 .tabs a { position: relative; flex: 1; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-radius: 13px; font-size: 12.5px; color: var(--muted); cursor: pointer; transition: color var(--duration-tint) var(--ease-tint); }
@@ -277,24 +279,71 @@ html:not([data-still]) .mark[data-room="waiting"] .md { animation: breathe var(-
 .nav.fc a[aria-current] { background: Highlight; color: HighlightText; }
 .nav.fc a[aria-current]::before { background: HighlightText; }
 
-/* ── 5 · The trail ─────────────────────────────────────────────────────── */
-.outcome { position: relative; isolation: isolate; flex: 0 1 460px; padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius-inner); background: var(--surface-1); }
-.outcome h3 { display: flex; align-items: center; gap: 8px; font: 600 var(--text-title)/1.3 var(--display); }
-.outcome > p { margin-top: 4px; padding-left: 14px; }
-.trail { position: relative; margin: 16px 0 0 14px; }
-.step { position: relative; display: flex; gap: 10px; min-height: 36px; }
-.step .sd { position: relative; width: 6px; flex: none; }
-.step .sd::before { content: ""; position: absolute; top: 8px; width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--faint); transition: background-color var(--duration-tint) var(--ease-tint) var(--light-lead), border-color var(--duration-tint) var(--ease-tint) var(--light-lead); }
-.step .sd::after { content: ""; position: absolute; left: 2.5px; top: 20px; bottom: -4px; width: 1px; background: var(--line-strong); }
-.step:last-child .sd::after { display: none; }
-.step[data-done] .sd::before { background: var(--healthy); border-color: var(--healthy); }
-.trail-light { position: absolute; left: -20px; top: -37px; width: 280px; height: 96px; z-index: -1; translate: 0 var(--ty, 0px); opacity: 0;
-  transition: translate var(--duration-flash) var(--ease-tint), opacity var(--duration-flash) var(--ease-flash); }
-.trail-light::before { content: ""; position: absolute; inset: 0; --k: calc(26% * var(--hour-weight)); }
-.trail[data-state="going"] .trail-light { opacity: 1; transition-duration: var(--duration-flash), var(--duration-settle); }
-html:not([data-still]) .trail[data-state="going"] .trail-light::before { animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate; }
-.rest-line { margin-top: 10px; padding-left: 14px; transition: opacity var(--duration-settle) var(--ease-tint); }
-.trail[data-state="going"] ~ .rest-line { opacity: 0; }
+/* ── 5 · The trail: the keeper walks the change home (redrawn 20 Nov) ─────
+   One motion, three parts that are the same light:
+     the lamp    a soft pool centred on the line of dots, wide over the
+                 sentence, never taller or wider than its card has room for,
+                 and the same shape for the whole walk. It is carried: each
+                 move to the next dot takes a flash on tint's even curve and
+                 sets out a settle before the last has landed, so it slows
+                 at each step and never stops between them.
+     the line    the hairline between the dots is lit where the lamp is
+                 (the edge's own language). It has no motion of its own.
+     the dots    a dot that was read is lime before, during and after. As
+                 the lamp reaches it, its own lime glow opens once and is
+                 gone, --light-lead behind the light. Nothing is ever emptied.
+   A beat is flash less settle (640ms). Every time and curve is a token.
+   --m1 to --m4 are the moves, each a length that glides on its own; the
+   lamp and the line both stand at their sum. */
+@property --m1 { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --m2 { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --m3 { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --m4 { syntax: "<length>"; inherits: true; initial-value: 0px; }
+html { --walk-ease: var(--ease-tint); } html[data-walk="stepped"] { --walk-ease: var(--ease-settle); }
+.outcome { position: relative; isolation: isolate; flex: 0 1 460px; display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; border: 1px solid var(--line-strong); border-radius: var(--radius-inner); background: var(--surface-1); }
+.outcome h3 { display: flex; align-items: center; gap: 10px; font: 600 var(--text-title)/1.3 var(--display); }
+.outcome .msg { line-height: 1.55; }
+.outcome .next { padding-left: 16px; }
+.trail { position: relative; --y0: 11px; --plen: 0px; --rl: 23px; --rr: 240px; --rt: 56px; --rb: 56px;
+  --walk: calc(var(--m1) + var(--m2) + var(--m3) + var(--m4));
+  transition: --m1 var(--duration-flash) var(--walk-ease), --m2 var(--duration-flash) var(--walk-ease), --m3 var(--duration-flash) var(--walk-ease), --m4 var(--duration-flash) var(--walk-ease); }
+.trail ol { margin: 0; padding: 0; list-style: none; }
+.step { display: grid; grid-template-columns: 14px 1fr; column-gap: 12px; }
+.step > span { display: flex; flex-direction: column; align-items: center; }
+.step > div { display: flex; flex-direction: column; gap: 4px; padding-bottom: 14px; }
+.step:last-child > div { padding-bottom: 0; }
+.step small { font-size: 13px; }
+.sdot { position: relative; z-index: 1; width: 6px; height: 6px; flex: none; margin-top: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--faint);
+  transition: background-color var(--duration-tint) var(--ease-tint) var(--light-lead), box-shadow var(--duration-tint) var(--ease-tint) var(--light-lead); }
+.step[data-done] .sdot { background: var(--healthy); box-shadow: inset 0 0 0 1.5px var(--healthy); }
+.wire { margin-top: 6px; width: 1px; flex: 1; background: var(--line); }
+/* The dot's answer: its own lime glow, the ember's, opening once. */
+.sdot::after { content: ""; position: absolute; inset: -17px; border-radius: 50%; --c: var(--healthy); --k: 44%; opacity: 0; }
+html:not([data-still]) .sdot.answered::after { animation: answer var(--duration-flash) var(--ease-flash) both; }
+@keyframes answer { from { opacity: 0; scale: .3; } 30% { opacity: 1; } to { opacity: 0; scale: 1; } }
+/* The lamp: a point on the first dot, carried by the moves. Its pool is four quarters round that point,
+   each spent at its own far side, so the left and the foot can be as short as the card's room and the
+   pool still has no edge. It swells in over arrive and goes out over flash. */
+.lamp { position: absolute; left: 7px; top: var(--y0); width: 0; height: 0; z-index: -1; translate: 0 var(--walk); opacity: 0; pointer-events: none; transition: opacity var(--duration-flash) var(--ease-flash); }
+.glow { position: absolute; left: 0; top: 0; width: 0; height: 0; scale: .86; transition: scale var(--duration-arrive) var(--ease-settle), opacity var(--duration-settle) var(--ease-tint); }
+.trail[data-light] :is(.lamp, .thread) { opacity: 1; transition: opacity var(--duration-arrive) var(--ease-settle); }
+.trail[data-light] .glow { scale: 1; }
+.glow i { position: absolute; --k: calc(26% * var(--hour-weight)); --shape: ellipse farthest-side at var(--at); }
+.glow .tl { right: 0; bottom: 0; width: var(--rl); height: var(--rt); --at: 100% 100%; }
+.glow .tr { left: 0; bottom: 0; width: var(--rr); height: var(--rt); --at: 0% 100%; }
+.glow .bl { right: 0; top: 0; width: var(--rl); height: var(--rb); --at: 100% 0%; }
+.glow .br { left: 0; top: 0; width: var(--rr); height: var(--rb); --at: 0% 0%; }
+/* The line: one pixel, from the first dot to the last, lit where the lamp is. The box gives the light
+   the line's shape; along the line it ends by its own falloff. */
+.path { position: absolute; left: 6.5px; top: var(--y0); width: 1px; height: var(--plen); overflow: hidden; pointer-events: none; }
+.thread { position: absolute; left: 0; top: calc(-1 * var(--rt)); width: 1px; height: calc(var(--rt) + var(--rb)); translate: 0 var(--walk); opacity: 0; transition: opacity var(--duration-flash) var(--ease-flash);
+  --c: var(--accent); --tk: 60%;
+  background: linear-gradient(to bottom, transparent,
+    color-mix(in srgb, var(--c) calc(var(--tk) * .06), transparent) calc(var(--rt) * .18), color-mix(in srgb, var(--c) calc(var(--tk) * .2), transparent) calc(var(--rt) * .38),
+    color-mix(in srgb, var(--c) calc(var(--tk) * .44), transparent) calc(var(--rt) * .58), color-mix(in srgb, var(--c) calc(var(--tk) * .74), transparent) calc(var(--rt) * .8),
+    color-mix(in srgb, var(--c) var(--tk), transparent) var(--rt),
+    color-mix(in srgb, var(--c) calc(var(--tk) * .74), transparent) calc(var(--rt) + var(--rb) * .2), color-mix(in srgb, var(--c) calc(var(--tk) * .44), transparent) calc(var(--rt) + var(--rb) * .42),
+    color-mix(in srgb, var(--c) calc(var(--tk) * .2), transparent) calc(var(--rt) + var(--rb) * .62), color-mix(in srgb, var(--c) calc(var(--tk) * .06), transparent) calc(var(--rt) + var(--rb) * .82), transparent); }
 
 /* ── 6 · Go to ─────────────────────────────────────────────────────────── */
 .goto { position: fixed; inset: 0; z-index: 50; background: var(--scrim); display: flex; justify-content: center; align-items: flex-start; overflow: hidden; }
@@ -336,7 +385,7 @@ html:not([data-still]) .earned .ember::before { animation: ember var(--duration-
 .dock .seg { border: 0; background: none; }
 html[data-still] *, html[data-still] *::before, html[data-still] *::after { animation: none !important; }
 @media (forced-colors: active) {
-  .pool, .rim::after, .mark::before, .ember::before, .trail-light, .nav-pill { display: none; }
+  .pool, .rim::after, .mark::before, .ember::before, .lamp, .path, .sdot::after, .nav-pill { display: none; }
   :is(.nav, .tabs) a[aria-current] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
   :is(.nav, .tabs) a[aria-current]::before { background: HighlightText; }
   :is(.nav, .tabs) a[aria-current]:focus-visible { outline-color: CanvasText; }
@@ -496,27 +545,42 @@ html[data-still] *, html[data-still] *::before, html[data-still] *::after { anim
       </section>
 
       <section class="m" id="m5">
-        <p class="faint">5 of 7 · Occasional · only by your own act</p>
+        <p class="faint">5 of 7 · Occasional · only by your own act · the walk, redrawn 20 Nov</p>
         <h2>The trail lights</h2>
-        <p class="muted">After you change something, a light rests on the step your change has reached, and moves on only when Syndra has seen the next one happen. When the change is home, the light goes out.</p>
+        <p class="muted">The keeper walks your change home with the lamp. The light is carried down the trail in one movement, the line it follows is lit where the lamp is, and each step it reaches answers once, in its own lime. A step that was read is never shown as unread: a dot only ever glows.</p>
         <div class="stage">
-          <div class="outcome">
+          <div class="outcome" id="outcome">
             <h3><i class="dot"></i>Given</h3>
-            <p class="muted">Operator in Laser cutting, to Becky Lynch.</p>
-            <div class="trail" id="trail" data-state="home">
-              <span class="trail-light jump"></span>
-              <div class="step" data-done><span class="sd"></span><span>Recorded in Syndra.</span></div>
-              <div class="step" data-done><span class="sd"></span><span>Sent to Zitadel.</span></div>
-              <div class="step" data-done><span class="sd"></span><span>In Zitadel. <span class="faint" data-figure>Read back at 14:32.</span></span></div>
+            <p class="msg">Operator in Laser cutting, to Becky Lynch.</p>
+            <div class="trail" id="trail">
+              <span class="lamp" aria-hidden="true"><span class="glow"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></span></span>
+              <span class="path" aria-hidden="true"><span class="thread"></span></span>
+              <ol aria-label="Where this change is">
+                <li class="step" data-done><span><i class="sdot"></i><i class="wire"></i></span><div><span>Recorded in Syndra.</span></div></li>
+                <li class="step" data-done><span><i class="sdot"></i><i class="wire"></i></span><div><span>Sent to Zitadel.</span></div></li>
+                <li class="step" data-done><span><i class="sdot"></i></span><div><span>In Zitadel.</span><small class="faint" data-figure>Read back at 14:32.</small></div></li>
+              </ol>
             </div>
-            <p class="faint rest-line">Nothing for you to do.</p>
+            <p class="faint next">Nothing for you to do.</p>
           </div>
           <div class="side">
-            <button class="btn outline sm" id="give">Give the role again</button>
-            <p class="faint">Here the steps settle on a timer. In Syndra each settles only on what was read back, so the light can wait a long while, breathing, and that is the truth.</p>
+            <div class="pair"><button class="btn outline sm" id="walk-home">Play again</button><button class="btn outline sm" id="walk-live">A step still to come</button></div>
+            <div class="seg" data-set="walk" aria-label="How the lamp travels">
+              <button data-v="carried" aria-pressed="true">Carried</button><button data-v="stepped">Stepped</button>
+            </div>
+            <p class="faint">Play again is the common case: every step was read before the result appeared, so the lamp walks over what is already true. A step still to come shows the lamp waiting, breathing, on a step not yet read; when the read comes, the lamp moves on and the dot fills a beat behind it.</p>
           </div>
         </div>
-        <p class="faint">Travel 900ms on tint's curve, the light leading the dot by 40ms. It breathes while it waits (the licensed loop: still happening). Never on a refusal or a failure (those have no trail), and never on a removal: nothing that takes access away is lit.</p>
+        <div class="opts">
+          <div><b>Carried</b><span class="note">Recommended</span>
+            <p class="muted">One glide. Each move takes 900ms on tint's even curve and sets out before the last has landed, so the lamp slows at every step and never stops between them.</p>
+            <p class="faint">What it costs: the steps are felt as a rhythm in the dots, not as stops of the light.</p></div>
+          <div><b>Stepped</b>
+            <p class="muted">The same beats on settle's curve: the lamp goes to each step quickly and eases a long while into it. A footfall at every dot.</p>
+            <p class="faint">What it costs: it sets out abruptly each time, which is the stop and start you saw, only softer.</p></div>
+        </div>
+        <p class="faint">Measured, carried: three steps take 3.1s. Between the first dot and the last the lamp never stops: it runs at 48 to 67px a second, and no frame moves it more than 1.1px. The dots answer 640ms apart, each within 4px of the lamp reaching it. Faint ink at the pool's strongest is 5.0:1 in both rooms; the lime dot on the lit card is 10:1 in the dark room and 4.2:1 on paper; the lit line is 1.8:1 against the card.</p>
+        <p class="faint">The lamp swells in over 420ms, a beat is 640ms (a flash less a settle), and it goes out over 900ms. Still form: the lamp at rest on the step the change has reached, no walk, no glow from the dots, no breath. Never on a removal, a refusal or a failure: nothing that takes access away is lit.</p>
       </section>
 
       <section class="m" id="m6">
@@ -579,6 +643,7 @@ html[data-still] *, html[data-still] *::before, html[data-still] *::after { anim
     theme: (v) => (root.dataset.theme = v),
     still: (v) => (v ? (root.dataset.still = "") : delete root.dataset.still),
     btn: (v) => (root.dataset.btn = v),
+    walk: (v) => (root.dataset.walk = v),
     hour: (v) => {
       $$(".light").forEach((l) => (l.dataset.hour = v));
       const word = v === "quiet" ? "Evening" : v[0].toUpperCase() + v.slice(1);
@@ -679,26 +744,68 @@ html[data-still] *, html[data-still] *::before, html[data-still] *::after { anim
     });
   }, { passive: true });
 
-  // ── 5 · The trail: the light rests on the open step ───────────────────
-  const trail = $("#trail"), beam = $(".trail-light", trail), steps = $$(".step", trail);
-  let timers = [];
-  const say = (i, done, words, faint = "") => {
-    steps[i].toggleAttribute("data-done", done);
-    steps[i].lastElementChild.innerHTML = words + (faint ? ` <span class="faint" data-figure>${faint}</span>` : "");
+  // ── 5 · The trail: one walk ───────────────────────────────────────────
+  // Every time is a token. A beat is flash less settle: each move sets out a settle before the last lands.
+  const ms = (name) => parseFloat(getComputedStyle(root).getPropertyValue(name));
+  const FLASH = ms("--duration-flash"), ARRIVE = ms("--duration-arrive"), LEAD = ms("--light-lead"), BREATHE = ms("--duration-breathe"), BEAT = FLASH - ms("--duration-settle");
+  const trail = $("#trail"), card = $("#outcome"), steps = $$(".step", trail), dots = steps.map((s) => $(".sdot", s)), glow = $(".glow", trail);
+  const dotY = (i) => steps[i].offsetTop + 11; // a dot's centre: its 8px above, and half of its 6px
+  const stride = (j) => dotY(j + 1) - dotY(j) + "px";
+  let timers = [], breath = null;
+  const later = (wait, fn) => timers.push(setTimeout(fn, wait));
+  const at = (name, on) => (on ? (trail.dataset[name] = "") : delete trail.dataset[name]);
+  // Where the walk starts, how long the line is, and the room the pool has: the same shape for the whole walk.
+  const lay = () => {
+    const c = card.getBoundingClientRect(), t = trail.getBoundingClientRect(), x = t.left + 7, keep = 4, last = steps.length - 1;
+    const v = { "--y0": dotY(0), "--plen": dotY(last) - dotY(0), "--rl": Math.min(240, x - c.left - keep), "--rr": Math.min(240, c.right - x - keep),
+      "--rt": Math.min(56, t.top + dotY(0) - c.top - keep), "--rb": Math.min(56, c.bottom - t.top - dotY(last) - keep) };
+    for (const k in v) trail.style.setProperty(k, Math.max(0, v[k]) + "px");
   };
-  const beamTo = (i) => beam.style.setProperty("--ty", steps[i].offsetTop + "px");
-  $("#give").addEventListener("click", () => {
-    timers.forEach(clearTimeout);
-    say(1, false, "Not sent to Zitadel yet."); say(2, false, "Not in Zitadel yet.");
-    beam.classList.add("jump"); beamTo(1); reflow(beam); beam.classList.remove("jump");
-    trail.dataset.state = "going";
-    timers = [
-      setTimeout(() => { beamTo(2); say(1, true, "Sent to Zitadel."); say(2, false, "Not read back from Zitadel yet."); }, 1100),
-      setTimeout(() => { say(2, true, "In Zitadel.", "Read back at 14:32."); trail.dataset.state = "home"; }, 4600),
-    ];
-  });
-  beamTo(2);
-
+  const say = (i, done, words, faint) => {
+    steps[i].toggleAttribute("data-done", done);
+    steps[i].lastElementChild.innerHTML = `<span>${words}</span>` + (faint ? `<small class="faint" data-figure>${faint}</small>` : "");
+  };
+  const answer = (i) => { dots[i].classList.remove("answered"); reflow(dots[i]); dots[i].classList.add("answered"); };
+  // The breath, only while the lamp waits on a step not yet read. It ends from where it is, never with a jump.
+  const breathe = () => { breath = glow.animate({ opacity: [1, 0.5] }, { duration: BREATHE, direction: "alternate", iterations: Infinity, easing: getComputedStyle(root).getPropertyValue("--ease-breathe").trim() }); };
+  const exhale = () => { if (!breath) return; glow.style.opacity = getComputedStyle(glow).opacity; breath.cancel(); breath = null; reflow(glow); glow.style.opacity = ""; };
+  const out = () => at("light", false); // it goes out over a flash
+  // Back to the result as it first appears. `before` sets what was read; nothing is seen to change.
+  const rest = (before) => {
+    timers.forEach(clearTimeout); timers = []; breath?.cancel(); breath = null;
+    trail.classList.add("jump"); at("light", false); before?.();
+    for (let m = 1; m <= 4; m++) trail.style.setProperty("--m" + m, "0px");
+    dots.forEach((d) => d.classList.remove("answered"));
+    reflow(trail); trail.classList.remove("jump");
+  };
+  // The walk, to `end`: the last step when the change is home, or its first step not yet read.
+  const walk = (end, home, before) => {
+    rest(before); lay();
+    if (root.hasAttribute("data-still")) { // still: there at once, on the step it has reached
+      for (let j = 0; j < end; j++) trail.style.setProperty("--m" + (j + 1), stride(j));
+      at("light", true);
+      return later(home ? BREATHE : 2200, home ? out : () => settle(end));
+    }
+    at("light", true); // she lifts the lamp: it swells in on the first step
+    for (let j = 0; j <= end; j++) later(ARRIVE + j * BEAT, () => {
+      if (j < end) trail.style.setProperty("--m" + (j + 1), stride(j)); // it sets out for the next step
+      if (steps[j].hasAttribute("data-done")) later(LEAD, () => answer(j)); // and the step it is on answers, a beat behind
+    });
+    later(ARRIVE + end * BEAT + (home ? BEAT : FLASH), home ? out : () => { breathe(); later(2200, () => settle(end)); });
+  };
+  // A read came back while the lamp waited on step i: the lamp moves on, and the dot fills a beat behind it.
+  const settle = (i) => {
+    exhale();
+    if (i + 1 < steps.length) trail.style.setProperty("--m" + (i + 1), stride(i));
+    say(i, true, "In Zitadel.", "Read back at 14:32."); // the dot's own fill waits --light-lead, in its transition
+    later(LEAD, () => answer(i));
+    later(BEAT, out);
+  };
+  $("#walk-home").addEventListener("click", () => walk(2, true, () => say(2, true, "In Zitadel.", "Read back at 14:32.")));
+  $("#walk-live").addEventListener("click", () => walk(2, false, () => say(2, false, "Not read back from Zitadel yet.")));
+  lay(); addEventListener("resize", lay); document.fonts?.ready.then(lay);
+  // Once, the first time the result is in view: the walk as someone would meet it.
+  new IntersectionObserver((seen, watch) => { if (seen[0].isIntersecting) { watch.disconnect(); walk(2, true); } }, { root: scroller, threshold: 0.9 }).observe(card);
   // ── 6 · Go to: at once, and one breath of light behind it ─────────────
   const goto = $("#goto"), field = $("#goto-in");
   const openGoto = () => { goto.hidden = false; field.value = ""; field.focus(); };

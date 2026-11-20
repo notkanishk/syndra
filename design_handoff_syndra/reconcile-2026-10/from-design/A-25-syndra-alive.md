@@ -2,13 +2,13 @@
 
 **Asked by the owner, 19 Nov 2026:** "syndra should have a soul, syndra should have character, syndra should feel alive and a joy to interact with."
 
-**Status:** revised twice on 20 Nov 2026, each time after the owner reviewed the live prototype. §0 records what he decided. Nothing was published by me: the lead republishes. Moment 0 has since been built in the worktree from this answer (§3); nothing else here is built.
+**Status:** revised three times on 20 Nov 2026, each time after the owner reviewed the prototype or a build of it. §0 records what he decided. Nothing was published by me: the lead republishes. The build is moving alongside this answer: moment 0 and moment 5 have been built from it, and moment 5 is redrawn here after he saw it on staging.
 
-**The prototype:** `design/a25-alive-prototype.html`. One file, 726 lines, no scripts from elsewhere (the two fonts are the only request). It is Syndra's own shell (a rail, a column, a bar, one scroller) at 1440, a phone's bar at 390, both themes, and a Moving / Still switch that shows every still form. The ways a button may answer your hand are behind a switch in moment 2. The published copy differs from it only in its title.
+**The prototype:** `design/a25-alive-prototype.html`. One file, 833 lines, no scripts from elsewhere (the two fonts are the only request). It is Syndra's own shell (a rail, a column, a bar, one scroller) at 1440, a phone's bar at 390, both themes, and a Moving / Still switch that shows every still form. The ways a button may answer your hand are behind a switch in moment 2, and the two ways the lamp may travel in moment 5. The published copy differs from it only in its title.
 
 **Checked, and how.** The prototype was run in headless Chrome, at 1440 by 900 and 390 by 844, in both themes, and measured, not looked at. Each light was photographed on and off; the difference is that light alone, read one pixel inside and outside every box that could end it, and under every word it could fall behind. Every number below marked *measured* comes from that. I still have not seen it with eyes, so strengths are set by number against things Syndra already draws. Mechanically: tags balance, the CSS parses with no warnings (the project's own `lightningcss`), the script passes a syntax check and raises no error when run, every custom property it reads is defined, and there is no sideways scroll at 390.
 
-**Read for this:** RULES, FINAL §4, CRAFT and SOURCES, the copy guide §2, A-18 §4, A-24 §3, §4, §7, §8 and what 7w built from it, the craft research (motion, space, psychology, delight), and the light as it is in code today. Every `file:line` is the worktree of `feat/addon-contract-a24-w4` at `7c487295`, read again this round: it has moved twice since the first draft, and every line cited here was found again.
+**Read for this:** RULES, FINAL §4, CRAFT and SOURCES, the copy guide §2, A-18 §4, A-24 §3, §4, §7, §8 and what 7w built from it, the craft research (motion, space, psychology, delight), and the light as it is in code today. Every `file:line` outside moment 5 is the worktree of `feat/addon-contract-a24-w4` at `7c487295`, as read in round 3. Moment 5 cites `feat/addon-contract-a25-trail` at `b68d206d`, read in round 4. The code has moved on between the two (more of these moments are being built), and the round 3 lines were not read again.
 
 ---
 
@@ -38,6 +38,12 @@
 | R2 · Your place in the rail | "do glide with light" | **Settled: the pill glides, with a light under it.** Built to be right, not argued: a build-ready spec (§4, moment 4). |
 | R3 · The room's light stays while the page scrolls | not answered | **Open** (§10 Q3). The worktree already builds it this way (`c2c594c1`), and its code calls it "the owner's R3" (`RoomLight.tsx:10`). It is not his word yet. |
 | R4 · The hour's light comes in through the window, and from behind the rail | not answered | **Open** (§10 Q4). |
+
+**Third review** (of moment 5, built on staging):
+
+| What he saw | His word | Where it stands |
+|---|---|---|
+| The trail's light walking the change home, inside the result's card | "the purple bloom is moving but the green dots are not animated - or at least not percievable. make the bloom more graceful and softer edges. the whole flow of the dots as well as the bloom doesnt feel organic in this state" | **Redrawn** (§4, moment 5): the lamp, the line and the dots are one motion. Two ways the lamp may travel are behind a switch; one is recommended (§10 Q5). |
 
 ## 1 · The character, in one paragraph
 
@@ -91,7 +97,7 @@ Measured in the prototype, which has the same shell: the light is the same stren
 | 2 | Light under your hand | Constant | The hairline of the thing your hand is on, lit where your hand is nearest: cards, and buttons | M | **settled: the edge.** Buttons: three ways, one recommended |
 | 3 | The lamp breathes | Ambient | The mark's glow breathes while the reading is live | S | accepted |
 | 4 | Your place in the rail | Frequent | The pill is carried to where you go, with a faint light under it | M | **settled: glide with light** |
-| 5 | The trail lights | Occasional | A light rests on the step your change has reached | M | accepted |
+| 5 | The trail lights | Occasional | The lamp is carried down the trail, the line is lit where it is, and each step answers once | M | accepted, built, and **redrawn** after he saw it |
 | 6 | Go to is lit | Constant, by key | One breath of light behind Go to | S | accepted, as a week's trial |
 | 7 | The ember | At rest | A clear queue's lime dot holds a low glow | S | accepted, last |
 
@@ -102,7 +108,7 @@ Measured in the prototype, which has the same shell: the light is the same stren
 3. Light under your hand: the edge, on every card frame and on `Button` in one change, because they share one rule and one listener. On every route (the owner, 20 Nov, on staging: "only home page shows the effect").
 4. The lamp breathes.
 5. Your place in the rail: the glide, with its light. After the lamp, because the rail's light is the lamp's, falling on your place.
-6. The trail lights.
+6. The trail lights: built (`b68d206d`), then redrawn and built as chosen, Carried (§10 Q5).
 7. Go to is lit (one week on staging, then the owner's word).
 8. The ember.
 9. The older lights (`flash`, the lit card), as one small pass.
@@ -275,23 +281,98 @@ In the prototype behind a switch (`html[data-btn]`), beside the card, at true si
 - **Cost.** M: the indicator's new kind, one layer in the rail and one in the tab bar, the pointer signal.
 - **Linear's lesson, kept in view.** Linear made its sidebar "a few notches dimmer" so the main content takes precedence (https://linear.app/now/behind-the-latest-design-refresh, read; CRAFT §5.4). That is why the pool is 6% and not the 20% of the first draft, and why it is held under a card's brightness.
 
-### 5 · The trail lights
+### 5 · The trail lights (redrawn 20 Nov, after the owner saw it built)
 
-*Settled 20 Nov 2026, after the owner tried it on staging ("could barely see it": the stand-in answers at once, so every step was settled before the result showed, and the light flashed on the last step and went inside a second). The owner chose two changes, both built:*
+**The owner, of the build on staging:** "the purple bloom is moving but the green dots are not animated - or at least not percievable. make the bloom more graceful and softer edges. the whole flow of the dots as well as the bloom doesnt feel organic in this state".
 
-- **The walk home.** When a give's result first appears with steps already settled, the light appears on the first step and walks down them in order, one step a flash (`translate`, `--duration-flash`, `--ease-tint`). It stays and breathes on the step the change has reached, or, if the change is already home, rests one breath (`--duration-breathe`) on the last step and fades over flash on `--ease-flash`. The dots it passes are already filled: it walks over what is true and never makes a settled step look unsettled, and no dot is held back. `--light-lead` applies only to a step that settles while the light waits on it. It runs once per change, from the operator's own act only: the light is for a give that had already gone out when its result first appeared, and a give queued for Send and sent later never walks (it is not this act's moment; decided in the build review, 20 Nov 2026). A step once seen settled stays settled. Still (reduced motion): no walk, the light rests on the step reached, or on the last for one breath, then goes. Three steps take about 2.7s to reach the last.
-- **Inside the result.** The trail sits inside the outcome's card, under what happened and above what to do next, as the prototype draws it. The card is the light's room and its layer: 280 by 96 on every step, spent inside the card's inner box (the card has no overflow of its own; its edge would be the box), under every line in the card. The trail is not re-read with the card's status on each settle (`aria-live="off"`).
+**Why it read that way.** Four things in the build (`feat/addon-contract-a25-trail`, `b68d206d`), none of them a bug:
 
-*The text below is the first settlement; where it differs, the two points above win.*
+1. **The pool is not on the dots.** It starts 4px inside the card's left and is 280px wide (`CheckTrail.tsx:102, 158-163`), so its centre is about 140px into the sentence and the dots sit in its faint margin. The bloom and the dots are two things side by side.
+2. **It hops.** One step per timer (`CheckTrail.tsx:128-133`), each a 900ms transform on tint's curve (`globals.css:2066-2068, 2094-2096`), so it comes to a full stop on every dot and starts again.
+3. **It changes size as it lands.** The pool is sized again on each step by the room that step has (`CheckTrail.tsx:162-163`), at once.
+4. **The dots have nothing to do.** They are already lime, rightly. The 40ms lead (`CheckTrail.tsx:71`, `globals.css:1893-1895`) delays a fill that is not happening. And the pool breathes the whole time it is out, also while it walks (`CheckTrail.tsx:184`, `globals.css:2087-2092`), so its strength pulses against its travel.
 
-- **What.** Under a result, the change's trail has a soft light resting on the step the change has reached: the first open one. When Syndra reads the next step as true, the light moves down to it, and the dot fills 40ms behind. When the last step is read back, the light goes out. The change is home.
-- **Why it gives soul.** It is the keeper walking your change to the door with the lamp, and it is information: where it is now, and that she is still looking. The trail already breathes truth ("each one settles only on what was observed", `ChangeTrail.tsx:41`); the light makes the waiting felt, not just listed.
-- **Motion.** A pool 280 by 96px, the accent at 26% (times `--hour-weight`), inside the outcome's own block and spent within 20px of the trail's left. Travel: `translate` to the next step over `--duration-flash` (900ms) on `--ease-tint`. The dot's fill follows by `--light-lead` (40ms), the built rule. While a step is open the pool breathes (`--duration-breathe`, the licensed loop, and exactly its meaning). Leaving: opacity to 0 over `--duration-flash` on `--ease-flash`. Light is not page content, so it may travel the 36px between steps; nothing with ink in it moves. *Measured:* spent at every edge of its block; faint ink at its strongest 4.97:1 in the dark room, 4.94:1 on paper.
-- **Frequency and the 50th time.** Occasional, and only by your own act. When Zitadel answers at once (the common case) the light is seen for under a second and goes: it shrinks itself.
-- **Still form.** The light on the open step, no travel and no breath; gone when the change is home.
-- **Never.** On a refusal or a failure: those have no trail (`changeTrailFor`, `ChangeTrail.tsx:34-35`). **On a removal's trail** (`RemovalDialog.tsx:446`, act `remove`): it takes access away, and grave is no light (§1). This was found by tracing where the trail is drawn; the first draft missed it. **On a give that waits for someone to press Send** (`sent` false, "Not sent to Zitadel yet."): Syndra is not moving it, and a breathing light would claim work that isn't happening. The light comes only once Syndra has sent the give (decided in the build review, 20 Nov 2026). Never ahead of a read (CRAFT §2.6): not on the route drawn before the answer (`PendingTrail`) either. And when the trail stops looking (`TRAIL_WATCH_MS`, six minutes, `ChangeTrail.tsx:19`) the light goes out with it.
-- **Cost.** M. One element in `CheckTrail` (`CheckTrail.tsx:29-46`), placed at the first step with `ring`; shown only by `ChangeTrail` for a give (`GrantDirectAccess.tsx:257`), never by the claims trails (`DebugMode.tsx:361`, `ClaimPreview.tsx:157`), which are checks and not journeys.
-- **Dial.** Quiet: as built (the dots fill on tint). **Warm, accepted:** the light.
+**The redrawing: one motion, three parts that are the same light.** "The keeper walks the change home": she carries a lamp down the line of steps, the line shows where the lamp is, and each step she reaches answers her.
+
+| Part | What it does | Why it is true |
+|---|---|---|
+| **The lamp** | A soft pool centred on the dot's own centre, wide over the sentence. One shape for the whole walk. It is carried down the trail in one movement. | It is light. It says nothing by itself. |
+| **The line** | The hairline between the dots is lit where the lamp is, and nowhere else. It has no motion of its own: it is the lamp's light, falling on a line. The language of the edge (moment 2). | A line is not a step. Lighting it claims nothing. |
+| **The dots** | A dot that was read is lime before, during and after. As the lamp reaches it, its own lime glow opens once and is gone, a beat behind the light. | A glow is added to what is true. Nothing is emptied, dimmed or recoloured, ever. |
+
+It is not a progress bar: nothing fills, nothing is left behind, and when the lamp has gone the trail is exactly what it was.
+
+#### The walk, in tokens
+
+No new token. A **beat** is `--duration-flash` less `--duration-settle`: 640ms. For a trail of *n* read steps:
+
+| When | What |
+|---|---|
+| 0 | The lamp swells in on the first dot: opacity 0 to 1 and scale 0.86 to 1, over `--duration-arrive` (420ms) on `--ease-settle`. The line under it is lit with it. |
+| 420ms + 640ms × *j*, for each step *j* from the first | **A beat.** The lamp sets out for the next step, if there is one: a move of one step's height over `--duration-flash` (900ms) on `--ease-tint`. `--light-lead` (40ms) later, the dot it is on answers: its glow opens over `--duration-flash` on `--ease-flash`. |
+| one beat after the last step's beat | **Home.** The lamp and the line go out: opacity to 0 over `--duration-flash` on `--ease-flash`. |
+| Altogether | 420 + 640 × *n* + 900. Three steps: 3.2s (*measured:* gone at 3.1s). Two: 2.6s. Four: 3.9s. |
+
+**The moves overlap.** Each takes 900ms and the next sets out 640ms after it, a settle before it has landed. The lamp's place is the sum of the moves, so it slows as it comes to each dot and is already leaving as it arrives. *Measured* over 236 frames: no frame moves it backward, none moves it more than 1.1px, and between the first dot and the last it runs at 48 to 67px a second and never stops. The built walk stops dead on every dot.
+
+**The dots' rhythm is the walk's.** *Measured:* the three glows begin at 0.49s, 1.12s and 1.77s, 640ms apart, each when the lamp is within 4px of that dot; each is at its fullest 230ms later and gone in 900ms. That is the organic part: the eye reads lamp, dot, lamp, dot as one thing.
+
+#### The lamp's shape
+
+| | Built | Redrawn |
+|---|---|---|
+| Centre | 140px into the sentence | the dot's own centre (`DOT_CENTRE`, `CheckTrail.tsx:100`), on the line |
+| Shape | one ellipse, 280 by 96, `closest-side` | four quarters round the centre, each a quarter-ellipse spent at its own far side, so each side has its own reach and the pool still has no edge |
+| Reach | 140px each way across, 48px up and down | right: 240px, over the sentence. Up and down: 56px. Left: the room there is, which is 24px in the card (its `px-5` and half the dot's column), less 4px kept. |
+| Sized | on every step, at once | **once, for the whole walk:** each reach is the smaller of its number above and the room the card has on that side at the walk's tightest step, less the 4px already kept (`MARGIN_KEPT`, `CheckTrail.tsx:104`) |
+| Strength | `--accent` at 26% × `--hour-weight` | the same. It reads softer because it is taller, its falloff is the six eased stops over 56px and not 48, and its strongest point is on the dot, not under the words. |
+
+*Measured,* the lamp held on each of the three steps, both themes: spent at every edge of the card. Faint ink at the pool's strongest point: 5.01:1 in the dark room, 4.97:1 on paper (muted 6.9:1 and 7.2:1; ink on the first word 13.5:1 and 14.1:1). Where a faint line really sits under a step: 5.47:1 and 5.20:1. The light is under the words, in the card's own layer, as built (`ActionOutcome.tsx:182-184`).
+
+**The line.** One pixel, from the first dot's centre to the last dot's, at the dots' own x. `--accent` at 60% at the lamp's centre, falling off up and down the line on the same stops and the same 56px as the pool. *Measured:* 1.8:1 against the card beside it where the lamp is (1.16:1 unlit, which is the built `bg-line`, `CheckTrail.tsx:72`). The dots stand in front of it.
+
+**A dot's answer.** The ember's own light (moment 7): `--healthy` at 44%, reaching 17px out from the 6px dot, `closest-side`. Keyframes: opacity 0 and scale 0.3, to opacity 1 at 30%, to opacity 0 and scale 1. Only a dot that was read answers: a ring does not. *Measured:* spent at every edge of the card (the dot's centre is 27px from it), and nothing where the words begin. The lime dot stays 10:1 against the lit card in the dark room and 4.2:1 on paper.
+
+#### While a step is still to come
+
+- The walk ends on the first step not yet read (the build's `end`, `CheckTrail.tsx:64`). That dot is a ring and does not answer.
+- **Only now does the lamp breathe:** from the moment it has landed, opacity 1 to 0.5 on `--duration-breathe` and `--ease-breathe`, the licensed loop. The line stays lit and steady.
+- **When the read comes back:** the breath ends from where it is, easing to full over `--duration-settle` (*measured:* the same strength the frame before and the frame after, so no jump). In the same frame the lamp sets out for the next step, if there is one. The dot fills over tint, `--light-lead` behind (the built `light-lead`, `globals.css:1893-1895`; *measured:* 50ms after the read), and its glow opens. If that was the last step, the lamp goes out one beat later.
+- When the trail stops looking (`TRAIL_WATCH_MS`, `ChangeTrail.tsx:19, 133-138`) the lamp goes out, as built.
+
+#### Two ways the lamp may travel
+
+Both are in the prototype behind a switch. They differ only in the curve of each move.
+
+| | **Carried** (recommended) | Stepped |
+|---|---|---|
+| Each move | `--ease-tint`, the even curve | `--ease-settle`, front-loaded |
+| *Measured* between the dots | 48 to 67px a second; never stops; at most 1.1px a frame | up to 235px a second, then under 2px a second; 3.9px in a frame |
+| A dot's glow begins | within 4px of the lamp reaching it | when the lamp has already gone 14px past it |
+| It reads as | one glide that slows at each step | a footfall at each dot |
+| What it costs | the steps are felt as a rhythm in the dots, not as stops of the light | it sets out abruptly each time: the stop and start he saw, only softer |
+
+**Recommended: carried.** It is rule 4 ("a light on its own errand is unhurried", tint's even curve), and it is the one in which the dots and the lamp keep time.
+
+#### Still form, and never
+
+- **Still** (reduced motion): no walk, no glow from the dots, no breath. The lamp and the lit line are on the step the change has reached from the first frame; when the change is home they rest one breath and go at once, as built (`CheckTrail.tsx:122, 140`). *Measured:* one place, no glow, gone at 2.4s.
+- **Forced colours:** the lamp, the line and the glow are not drawn. The ring and the words say where the change is.
+- **Never.** On a removal's trail (`ChangeTrail.tsx:130`: a give only), a refusal or a failure. Before the change has been sent (the same line), and on a give that had not gone out when its result first appeared: one queued for Send and sent later never walks, because it is not this act's moment (decided in the build review, 20 Nov 2026). A step once seen settled stays settled. Ahead of a read. A dot emptied, dimmed or recoloured.
+
+#### For the build
+
+- **`TrailLight`** (`CheckTrail.tsx:120-189`). Replace the one-timer-a-step chain (`:128-133`) with the beats: `ARRIVE_MS + j * (FLASH_MS - SETTLE_MS)`, all in `lib/motion/still.ts` (`:11, 23, 32`; `LIGHT_LEAD_MS`, `:19`). The home rest (`:137-142`) becomes one beat, not a breath; the still form keeps its breath.
+- **The moves as a sum.** The prototype holds one registered length per move and transitions each alone. For the build, one wrapper per move, each a `transform` of its own step's height on `--duration-flash` and `--ease-tint`, keeps it on the compositor, as the built glide is. Steps of different heights (a wrapped sentence, a faint line) each move by their own height.
+- **The pool:** four quarter-ellipses round one point, on `--pool-stops` (`globals.css:1169-1177`); `--pool-k` as built (`globals.css:2065`). Measured once per walk against the room (`[data-trail-room]`, `CheckTrail.tsx:154`), and again only if the card changes size.
+- **The line:** a one-pixel box from the first dot's centre to the last, clipping a gradient that moves by the same sum. The box gives the light the line's shape (rule 1 allows a shape); along the line it ends by its own falloff.
+- **The dot's answer:** one keyframe set, on the dot inside a lit trail (`CheckTrail.tsx:71`). It is the ember's light, so if moment 7 is built first it is that keyframe's sibling. `bloom` (`globals.css:451, 1423`) is the flat disc and is not it.
+- **The breath** moves from "always while out" (`CheckTrail.tsx:184`) to "only while waiting", and ends from where it is.
+- **Guards, as tests.** `trail-light.test.tsx`: a read dot's fill is the same on every frame of the walk; a ring never glows; the beats are the tokens' own arithmetic; still has one place. `contrast.test.ts:90-99` already holds faint ink at the pool's strongest; the pool's strength is unchanged, so its number holds. Measured on staging, as §7.4: spent at every edge of the card on each step.
+- **Where a box could cut it.** The card (`ActionOutcome.tsx:182-184`), on the left: the dot's centre is 27px from its edge, so the left reach is 24px less the 4px kept, and the dot's glow reaches 20px. A dialog's panel (`Modal.tsx:392`) holds the card whole. Nothing else.
+
+- **Frequency and the 50th time.** Occasional, and only by your own act. About three seconds, once, and it holds nothing: every word is there from the first frame.
+- **Cost.** M: `TrailLight`'s schedule and shape, one keyframe, the line.
 
 ### 6 · Go to is lit
 
@@ -367,6 +448,7 @@ Already in the product and already right: "Evening, Kanishk. Three things need y
 | 0 | The prototype scrolled the window; the app never does | Its light passed behind the bar only because the whole page scrolled. In the app the scroller begins under the bar (§3). | The prototype has the app's shell now, and the light is the column's. *Measured:* the same strength each side of the bar's hairline. |
 | 5 | The outcome's block | *Measured:* spent at every edge | Moved 16px right, so it is spent inside a dialog's 24px margin too. |
 | 7 | The card | *Measured:* spent at every edge | Nothing. |
+| 5 | The result's card (round 4, the redrawn walk) | *Measured,* the lamp held on each of three steps, and a dot's glow at its fullest, in both themes: spent at every edge of the card, and nothing where the words begin | The pool's left reach is the room the card has (24px, less 4 kept), set once for the walk. |
 | 1 | The phone's frame | The pool meets it at its strongest: the frame is that drawing's window. | Kept. |
 
 ### 7.2 What still ends a light, on purpose
@@ -401,7 +483,8 @@ Worktree `feat/addon-contract-a24-w4` at `7c487295`. Nothing in this table was m
 | 3 | The rail | `Sidebar.tsx:69` (`overflow-y-auto`, `pt-5`, `px-3`); the mark at `:71`, 22px (`SyndraMark.tsx:32`) | The glow's centre is about 31px from the rail's top. At 1.3 widths that edge cuts it. | 0.85 widths: 30px from its centre. |
 | 3 | The bar's mark on a phone | `TopBar.tsx:43` (16px, inside `px-4`) | Its centre is 24px from the window's side. | 0.85 widths: 22px. |
 | 4 | The rail, the tab bar | `Sidebar.tsx:69`, `TouchNav.tsx:93` | A pool taller than the room it has is cut by the rail's top or bottom; one taller than the tab bar spills onto the page. | Sized by the rail: the table in moment 4. |
-| 5 | A dialog's panel | `Modal.tsx:392` (`overflow-y-auto`); the trail is in it at `GrantDirectAccess.tsx:257` (`mx-6`) | The trail's only homes are dialogs. A pool reaching more than 24px left of the trail, or below the last step into the footer, is cut by the panel's scroller. | Spent within 20px of the trail's left, and inside the trail's own height. The footer is not checked. **Superseded 20 Nov 2026:** the trail is inside the outcome's card, and the pool is spent inside the card's inner box (the layout check's `trail` rule). |
+| 5 | The result's card | `ActionOutcome.tsx:182-184` (`data-trail-room`, `isolate`; at `b68d206d`) | The trail now sits inside the result's card, and the lamp is centred on the dot, 27px from the card's left edge. A pool reaching further left than that would leave the card. | Four quarters, each with its own reach; the left one is the room there is, less 4px (moment 5). |
+| 5 | A dialog's panel | `Modal.tsx:392` (`overflow-y-auto`) | It holds the card whole, so it cuts nothing the card does not. | None. |
 | 5 | A removal's trail | `RemovalDialog.tsx:446` | Not a clip, a trace: this trail belongs to taking access away. | No light when the act is `remove`. |
 | 5 | The trail itself | `CheckTrail.tsx:31` | None: it has no overflow. | None. |
 | 6 | Go to's scrim | `Modal.tsx:371` (`fixed inset-0`) | The scrim is the window. A pool taller than twice its centre's height is cut at the window's top. | Sized by the window. |
@@ -417,13 +500,13 @@ A jsdom test cannot see a clipped light. Each light's change measures itself on 
 ## 8 · The checklist (CRAFT §12), run on the revised prototype
 
 - **The 50th time.** Each moment has a class and sits under its ceiling. Moment 2 is colour on one pixel. Three sit at their ceiling and are flagged: the lamp's loop (accepted), Go to's breath (on trial), and the rail's glide, which at 260ms crosses the 150ms line as Tabs do (the owner's choice).
-- **Truth.** The trail's light moves only on a read, and goes out with the watch. The lamp breathes only on a real reading. No warm line is written that a read does not back. A light never carries a fact alone: in the rail the pill, the word and the dot carry it.
+- **Truth.** The trail's light moves only on a read, and goes out with the watch. On its walk a read dot is the same lime on every frame (*measured*): it only gains a glow. The lamp breathes only on a real reading. No warm line is written that a read does not back. A light never carries a fact alone: in the rail the pill, the word and the dot carry it.
 - **Never on grave.** No light on a consent, a danger button, a refusal, a failure, a Notice or a removal's trail. The prototype draws a danger button beside the others: it takes none.
 - **Space and type.** Three sizes on the page (34, 22, 14) and the fine 12.5. Names A to Z. Figures tabular. No box except the outcome's own block and the cards.
 - **One pattern per job.** One utility lights every edge (a card's, a button's); one listener feeds it. The rail's pill moves by the movement Tabs already have.
 - **Both rooms, both hands.** Dark and light by the tokens; the Still switch draws every still form; the forced-colours form of the rail is drawn; the keyboard gets the same light as the pointer (a focused row lights the hairline beside it, a focused button its own).
 - **No box cuts a light.** *Measured:* at 1440 and 390, in both themes, every light is spent at every box, except the hour's at the window and the rail (§7.2).
-- **Contrast.** *Measured:* no line of text under a light is below 4.5:1. The lowest are the word on the rail's pill over its pool in the dark room, 4.72:1, and faint ink under the morning pool on paper, 4.74:1. No light falls behind a button's label at all.
+- **Contrast.** *Measured:* no line of text under a light is below 4.5:1. The lowest are the word on the rail's pill over its pool in the dark room, 4.72:1, and faint ink under the morning pool on paper, 4.74:1. Under the trail's lamp faint ink is 4.97:1 or better. No light falls behind a button's label at all.
 - **Character.** Each screen has one thing only Syndra would have: the lamp, and its light.
 - **Not checked.** Anything by eye. Frame cost. The real app (§7.3). Real forced colours on Windows.
 
@@ -437,14 +520,18 @@ A jsdom test cannot see a clipped light. Each light's change measures itself on 
 6. What the rail marks today when the current place is inside a folded group.
 7. Forced colours on the real rail, tab bar and sheet, on Windows: that only the weight is left today, and that the repair holds.
 8. The contrast test gains: the word on the pill over the pool's centre, the rail's dot on the pill, faint ink at each pool's strongest, and no light behind a button's label.
-9. Whether a member's shell holds a read that can honestly drive the lamp.
-10. The rail's polling interval, so "live" has a number (`Sidebar.tsx:140`: "The rail is polled").
+9. The redrawn walk on staging: frames sampled as in the prototype (never backward, never stopped between dots, the dots' glows a beat apart), and the pool spent at every edge of the card when the sentence wraps or a step carries faint lines.
+10. Whether a member's shell holds a read that can honestly drive the lamp.
+11. The rail's polling interval, so "live" has a number (`Sidebar.tsx:140`: "The rail is polled").
 
 ---
 
 ## 10 · The owner's questions, this round
 
-1. **How a button answers your hand.** Where your hand is; the whole edge; or as built. And whether the filled button takes it. **Recommended: where your hand is, on outline, ghost and filled alike.** If you would rather the primary button stay plain, it is left out and nothing else changes.
-2. **The rail's light is at 6%,** a little under the 8% you saw, and much wider: as wide as the rail and four rows tall, so it is seen as a soft fall of light and not as a brighter pill. At 6% the lit rail stays under a card's own brightness. **Recommended: 6%.** If it is too faint to find, 8% is the next step, and the rail is then a shade brighter than a card.
-3. **The room's light stays while the page scrolls** (open from last round; the worktree already builds it so). To pass behind the top bar, the light has to belong to the column and not to the page, so it no longer leaves with the greeting when Home is scrolled. **Recommended: it stays.**
-4. **The hour's light still comes in through the window, and from behind the rail** (open from last round). At its strongest at the window's top in the afternoon and evening, and at 82 to 90% beside the rail in the morning and the quiet hours (§7.2). That is the picture you approved. If it is one of the cuts you saw, the pools move wholly inside the page, which is a different picture: a pool that floats, not a light that comes in. **Recommended: keep it.**
+*All five decided on 20 Nov 2026: 1 to 4 "yes to recommended", and 5 "Carried". Each is marked below; the text is kept as it was asked.*
+
+1. **Decided, 20 Nov: where your hand is (the recommendation).** **How a button answers your hand.** Where your hand is; the whole edge; or as built. And whether the filled button takes it. **Recommended: where your hand is, on outline, ghost and filled alike.** If you would rather the primary button stay plain, it is left out and nothing else changes.
+2. **Decided, 20 Nov: 6% (the recommendation).** **The rail's light is at 6%,** a little under the 8% you saw, and much wider: as wide as the rail and four rows tall, so it is seen as a soft fall of light and not as a brighter pill. At 6% the lit rail stays under a card's own brightness. **Recommended: 6%.** If it is too faint to find, 8% is the next step, and the rail is then a shade brighter than a card.
+3. **Decided, 20 Nov: it stays (the recommendation).** **The room's light stays while the page scrolls** (open from last round; the worktree already builds it so). To pass behind the top bar, the light has to belong to the column and not to the page, so it no longer leaves with the greeting when Home is scrolled. **Recommended: it stays.**
+4. **Decided, 20 Nov: as approved (the recommendation).** **The hour's light still comes in through the window, and from behind the rail** (open from last round). At its strongest at the window's top in the afternoon and evening, and at 82 to 90% beside the rail in the morning and the quiet hours (§7.2). That is the picture you approved. If it is one of the cuts you saw, the pools move wholly inside the page, which is a different picture: a pool that floats, not a light that comes in. **Recommended: keep it.**
+5. **Decided, 20 Nov: Carried (the recommendation), built on `feat/addon-contract-a25-trail`.** **How the lamp travels down the trail.** Carried: one glide that slows at each step and never stops. Stepped: a footfall at each dot. Everything else about the redrawn walk is the same in both. **Recommended: carried.**

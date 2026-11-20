@@ -3431,6 +3431,35 @@ end to end) found no missing function; three regressions with one root cause
       - (6) Simpler walk: it reads its end through a ref, so it depends on its own steps only, and its rest is one timeout (`FLASH_MS + BREATHE_MS`, or `BREATHE_MS` when still).
       - (7) The README says the `trail` rule runs by hand.
       - Mutation-checked, each red (1 each): the trail read with its status, travel from the first frame, the list as the layer, the card not `isolate`, sent not latched, eligibility not latched, and the rest without the last move's flash.
+    - *The trail lights: the lamp carried home (owner, 20 Nov 2026: "Carried", the recommendation, after "the bloom moves, the dots do not, it is not organic"). A-25 §4.5 as redrawn in round 4, and its prototype, are committed with it; §10's five questions are marked decided.*
+      - **The lamp** (`CheckTrail.tsx` `TrailLamp`): a pool centred on the dot (7px across, the dot's centre down), four quarter-ellipses round that point on the six eased stops (`ellipse farthest-side`), reaching 240px over the sentence, 56px up and down, and the card's room less 4px on the left. It is measured once against the card's inner box at the walk's tightest steps, again only if the card or the list changes size, never per step. 26% × `--hour-weight`, as before.
+      - **Carried** (`useTrailWalk`): one wrapper per move, each a `transform` of its own step's height on `--duration-flash` and `--ease-tint`, nested so the lamp is their sum and stays on the compositor (the standard way; the prototype's registered `@property` lengths are not used). The first move sets out at `ARRIVE_MS`, each next one a beat later (`BEAT_MS = FLASH_MS - SETTLE_MS`, 640ms, no new token). It swells in over arrive and goes out over flash; home, a beat after the last step; waiting, it breathes only once it has landed (Web Animations, so the breath ends from where it is).
+      - **The line**: a 1px box from the first dot to the last, clipping a gradient (the accent at 60% at the lamp's centre, on the same stops) carried by the same moves. The dots stand in front of it.
+      - **The dots**: a read dot answers once, `--light-lead` behind the lamp reaching it: `trail-answer`, the ember's light (`--healthy` at 44%, 17px out, `@keyframes answer`), under the words. A ring never answers; no dot's fill is ever touched.
+      - **Still**: one place, no glow, no breath, gone one breath later at home. **Forced colours**: no lamp, no line, no glow. Kept: `aria-live="off"`, no slide-in, `isolate` on the card, the latches, eligibility, no link in a lit result.
+      - **Measured in Chrome**, a real give on the replayed tape, sampled every frame (253 frames over 4.2s), at 1280 dark and 390 light:
+        - Walk: no backward frame, at most 1.08px a frame (1.09 at 390), the line exactly on the lamp on every frame, 70px travelled.
+        - The dots' glows begin at 465, 1098 and 1748ms, with the lamp 0.4, 3.5 and 3.7px from each dot; each is fullest about 250ms later and gone about 770ms after it began.
+        - Every read dot's fill is one value on every frame (lime, rgb(163, 230, 53) dark and rgb(77, 124, 15) light).
+        - The lamp is inside the card's inner box on every frame, and the `trail` rule reports 0. Gone at 3048ms.
+        - Waiting on an open step, it breathes only after landing, and the ring never glows. The live read: the pool's strength moves at most 0.012 a frame across it (0.05 at most in the whole run), the dot fills 51ms after the read and its glow opens at 84ms, and the lamp is out 1.37s later.
+        - Still: one place, no glow, gone at 2408ms.
+        - At the lamp's strongest point (its dot) the strength is unchanged, so faint ink keeps 5.02:1 (dark) and 4.96:1 (paper), held by `contrast.test.ts`.
+      - **Mutation-checked**, each red:
+        - the lamp off the dot (2), and above it (3);
+        - the moves not overlapping (1);
+        - breathing while walking (2);
+        - the glow with the light rather than behind it (1);
+        - a ring answering (2);
+        - a read dot dimmed until reached (1);
+        - walking (2), answering (1) and gliding (1) when still;
+        - reach past the card's foot (3) and side (2);
+        - the line not carried with the lamp (1);
+        - home going out a breath later rather than a beat (2);
+        - walking again when the change comes home (1);
+        - the glow drawn under forced colours (1);
+        - a queued give lit (2), and a removal lit (1);
+        - the lamp at 40% (2).
   - [x] 7w-5 Access over time (§9 vivid, Q11, read proposal Q-W3-1; the owner, 19 Nov 2026: "i dont see the access over time chart anywhere", which settles both as yes). Board part 3, frame 19 (`person-vivid`).
     *Done (branch `feat/addon-contract-access-history`):*
     - **The read.** `GET /api/v1/users/{id}/access-history?since=YYYY-MM-DD` (`handlers/access_history.go`, route beside `/access` in `router.go`), `withOperatorAuth`: never a member's, not even their own. `since` is a makerspace day from a year before today to today (`services.historyStart`, else 400 `VALIDATION_FAILED`, `details.since`). Answer: `{since, truncated, roles: [{project_id, project_name, project_name_resolved, role_key, standing, ends?, runs: [{from, to}]}]}`, `from` null where no record says when a run began, `to` null where the records give it today.

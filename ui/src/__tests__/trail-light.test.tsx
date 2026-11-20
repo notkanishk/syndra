@@ -9,16 +9,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChangeTrail, PendingTrail, TRAIL_WATCH_MS, changeTrailFor, trailSteps } from "@/components/people/ChangeTrail";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { StatusDot } from "@/components/ui/Badge";
-import { CheckTrail, type TrailCheck } from "@/components/ui/CheckTrail";
-import { BREATHE_MS, FLASH_MS } from "@/lib/motion";
+import { BEAT_MS, CheckTrail, type TrailCheck } from "@/components/ui/CheckTrail";
+import { ARRIVE_MS, BREATHE_MS, FLASH_MS, LIGHT_LEAD_MS, SETTLE_MS } from "@/lib/motion";
 import { motionInTests } from "@/test-utils/motion";
 import { SRC, css } from "./cssTokens";
 
-// A-25 moment 5, the trail lights (owner, 20 Nov 2026: the recommendation; then, on staging, "could barely
-// see it": the walk home, and the trail inside its result). Under a give's result, once Syndra has sent it,
-// a light appears on the first step and walks down the steps already seen to the step the change has
-// reached, waits there breathing, moves on when a read settles the next, and when the change is home rests
-// one breath on the last step and goes out; it also goes out when the trail stops looking.
+// A-25 moment 5, the trail lights: the lamp carried home (owner, 20 Nov 2026: "Carried", the recommendation,
+// after "the bloom moves, the dots do not, it is not organic"). Under a give's result, once Syndra had sent
+// it, a lamp centred on the dots is carried down the steps already seen in one motion, the hairline lit where
+// it is, each read dot's own glow opening once as it is reached. It waits and breathes on the step reached,
+// or goes out a beat after the last; a read that settles the step sends it on.
 
 const person = vi.hoisted(() => ({ standing: "" as string, readAt: "2026-11-20T09:00:00Z", updatedAt: 0 }));
 vi.mock("@/lib/queries/useUsers", () => ({
@@ -46,22 +46,29 @@ const lit = (checks: TrailCheck[]) => (
   </Card>
 );
 const light = () => document.querySelector<HTMLElement>("[data-trail-light]");
+const path = () => document.querySelector<HTMLElement>("[data-trail-path]");
 const steps = () => screen.getAllByRole("listitem");
 const current = () => steps().findIndex((li) => li.getAttribute("aria-current") === "step");
-const dots = () => [...document.querySelectorAll("[data-dot]")];
-/** Where the light's box is, from the list's top left. */
-const pool = () => {
-  const el = light()!;
-  const [, left, top] = /^translate\((-?[\d.]+)px, (-?[\d.]+)px\)$/.exec(el.style.transform)!.map(Number);
-  const height = parseFloat(el.style.height);
-  const width = parseFloat(el.style.width);
-  return { left, top, height, width, centre: top + height / 2, bottom: top + height, right: left + width, step: Number(el.dataset.step) };
+const dots = () => [...document.querySelectorAll("li [data-dot]")];
+const px = (el: HTMLElement, name: string) => parseFloat(el.style.getPropertyValue(name));
+/** Where a stack of moves has carried what is inside it: the sum of the moves that have set out. */
+const carried = (root: HTMLElement) =>
+  [...root.querySelectorAll<HTMLElement>(".trail-move")].reduce((sum, move) => sum + (parseFloat(/translateY\((-?[\d.]+)px\)/.exec(move.style.transform)?.[1] ?? "0") || 0), 0);
+/** The lamp's centre, from the list's top: the first dot, and the sum of its moves. */
+const lampAt = () => px(light()!, "--trail-y") + carried(light()!);
+const moves = () => Number(light()!.dataset.moves);
+const answered = () => dots().map((d) => d.classList.contains("trail-answer"));
+/**
+ * Time passing, a millisecond at a time by default: React answers a timer as it fires in a browser, so each
+ * timer the answer sets is set at the time it really is, not at the end of a long jump.
+ */
+const tick = (ms: number, step = 1) => {
+  for (let t = 0; t < ms; t += step) act(() => void vi.advanceTimersByTime(Math.min(step, ms - t)));
 };
-const tick = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
 
 // jsdom lays nothing out, so the dialog's give is laid out here: the card's inner box is 470 by 200, with
 // its 1px border at 0,0; the list sits 20px in (the card's padding) and 59px down (the word and sentence
-// above it); its steps are 36px apart, so each dot's centre is 11, 47 and 83 down the list.
+// above it); its steps are 36px apart, so each dot's centre is 11, 47 and 83 down the list, 7 across.
 const STEP = 36;
 const CARD = { width: 470, height: 200, border: 1 };
 const LIST = { left: 21, top: 60 };
@@ -104,91 +111,174 @@ afterEach(() => {
 const open = (sentence: string): TrailCheck => ({ tone: "neutral", ring: true, sentence });
 const done = (sentence: string): TrailCheck => ({ tone: "healthy", sentence });
 
-describe("the walk home", () => {
-  it("appears on the first step and walks down each step already seen, in order, one a flash, to the open step", () => {
+describe("the lamp: one shape, on the dots", () => {
+  it("is centred on the first dot, on the line, and keeps one shape for the whole walk", () => {
     motionInTests();
     vi.useFakeTimers();
     render(give());
-    const visited = [pool().step];
-    expect(pool().centre).toBeCloseTo(11);
-    for (let i = 0; i < 4; i++) {
-      tick(FLASH_MS);
-      if (pool().step !== visited.at(-1)) visited.push(pool().step);
+    const lamp = light()!;
+    expect(px(lamp, "--trail-x")).toBe(7);
+    expect(px(lamp, "--trail-y")).toBe(11);
+    const shape = ["--reach-left", "--reach-right", "--reach-up", "--reach-down"].map((v) => lamp.style.getPropertyValue(v));
+    // Over the sentence 240, up and down 56 at most, on the left the card's room less the 4px kept.
+    expect(shape).toEqual(["23px", "240px", "56px", "54px"]);
+    for (let t = 0; t < ARRIVE_MS + 3 * BEAT_MS; t += BEAT_MS / 2) {
+      tick(BEAT_MS / 2);
+      expect(["--reach-left", "--reach-right", "--reach-up", "--reach-down"].map((v) => light()!.style.getPropertyValue(v))).toEqual(shape);
     }
-    expect(visited).toEqual([0, 1, 2]);
-    expect(pool().centre).toBeCloseTo(2 * STEP + 11);
-    // The open step: it waits there, breathing, and does not go out.
-    tick(BREATHE_MS * 3);
-    expect(pool().step).toBe(2);
+    // The line is the dots' own: from the first dot's centre to the last, at their x.
+    expect([px(path()!, "--trail-x"), px(path()!, "--trail-y"), px(path()!, "--trail-length")]).toEqual([7, 11, 2 * STEP]);
+  });
+
+  it("is spent inside the card's inner box on every step it is carried to", () => {
+    motionInTests();
+    vi.useFakeTimers();
+    render(give());
+    const lamp = light()!;
+    const [left, right, up, down] = ["--reach-left", "--reach-right", "--reach-up", "--reach-down"].map((v) => px(lamp, v));
+    for (const step of [0, 1, 2]) {
+      const y = 11 + step * STEP;
+      expect(7 - left, `step ${step}`).toBeGreaterThanOrEqual(INNER.left + 4);
+      expect(7 + right, `step ${step}`).toBeLessThanOrEqual(INNER.right - 4);
+      expect(y - up, `step ${step}`).toBeGreaterThanOrEqual(INNER.top + 4);
+      expect(y + down, `step ${step}`).toBeLessThanOrEqual(INNER.bottom - 4);
+    }
+  });
+
+  it("is never larger than the card it sits in: a shallow card shortens its reach, never its place", () => {
+    vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
+      return this.matches("[data-trail-room]") ? 59 + 2 * STEP + 22.5 + 16 : 0;
+    });
+    render(give());
+    const down = px(light()!, "--reach-down");
+    expect(down).toBeLessThan(56);
+    expect(11 + 2 * STEP + down).toBeLessThanOrEqual(2 * STEP + 22.5 + 16 - 4);
+  });
+});
+
+describe("carried home", () => {
+  it("swells in on the first dot, then sets out for each next step a beat apart, each move longer than a beat", () => {
+    expect(BEAT_MS).toBe(FLASH_MS - SETTLE_MS);
+    expect(BEAT_MS).toBeLessThan(FLASH_MS);
+    motionInTests();
+    vi.useFakeTimers();
+    render(give());
     expect(light()).toHaveAttribute("data-going");
-    expect(light()).toHaveAttribute("data-breathe");
-    expect(light()).toHaveClass("trail-light-glide");
+    expect(light()).toHaveAttribute("data-carried");
+    expect([moves(), lampAt()]).toEqual([0, 11]);
+    tick(ARRIVE_MS - 1);
+    expect(moves()).toBe(0);
+    tick(1);
+    expect([moves(), lampAt()]).toEqual([1, 11 + STEP]);
+    // The next sets out a beat later, while the first is still on its way (a flash long): they overlap.
+    tick(BEAT_MS - 1);
+    expect(moves()).toBe(1);
+    tick(1);
+    expect([moves(), lampAt()]).toEqual([2, 11 + 2 * STEP]);
+    // The line is carried by the same moves.
+    expect(carried(path()!)).toBe(2 * STEP);
+    tick(BEAT_MS * 3);
+    expect(moves()).toBe(2);
+    expect(css).toMatch(/\.trail-move \{[^}]*\[data-carried\] & \{\s*transition: transform var\(--duration-flash\) var\(--ease-tint\);/);
   });
 
-  it("appears where it is, on the first step, and travels only once it leaves it: never sliding in", () => {
+  it("walks over what is true: every read dot keeps its fill on every beat, and a ring stays a ring", () => {
     motionInTests();
     vi.useFakeTimers();
     render(give());
-    expect(pool().step).toBe(0);
-    expect(light()).not.toHaveClass("trail-light-glide");
-    tick(FLASH_MS);
-    expect(pool().step).toBe(1);
-    expect(light()).toHaveClass("trail-light-glide");
-  });
-
-  it("walks over what is true: every dot it passes is already filled, and stays filled, at every beat", () => {
-    motionInTests();
-    vi.useFakeTimers();
-    render(give());
-    for (let t = 0; t <= 3 * FLASH_MS; t += FLASH_MS / 3) {
+    for (let t = 0; t <= ARRIVE_MS + 3 * BEAT_MS; t += LIGHT_LEAD_MS) {
       const [recorded, sent, there] = dots();
-      expect(recorded, `at ${t}ms`).not.toHaveAttribute("data-ring");
-      expect(sent, `at ${t}ms`).not.toHaveAttribute("data-ring");
+      for (const dot of [recorded, sent]) {
+        expect(dot, `at ${t}ms`).toHaveClass("bg-healthy");
+        expect(dot, `at ${t}ms`).not.toHaveAttribute("data-ring");
+      }
       expect(there, `at ${t}ms`).toHaveAttribute("data-ring");
-      tick(FLASH_MS / 3);
+      tick(LIGHT_LEAD_MS);
     }
   });
 
-  it("runs once: a re-render, or a step settling after it, moves the light at once and never walks again", () => {
+  it("each read dot answers once, a beat behind the lamp reaching it; a ring never answers", () => {
     motionInTests();
     vi.useFakeTimers();
-    const checks = [done("Recorded."), open("Not sent yet."), open("Not in yet.")];
-    const view = render(lit(checks));
-    tick(FLASH_MS * 3);
-    expect(pool().step).toBe(1);
-    view.rerender(lit([...checks]));
-    expect(pool().step).toBe(1);
-    // A step settles while it waits: it moves on at once, the dot filling a beat behind it.
-    view.rerender(lit([done("Recorded."), done("Sent."), open("Not in yet.")]));
-    expect(pool().step).toBe(2);
-    expect(dots()[1]).toHaveClass("light-lead");
+    render(give());
+    expect(answered()).toEqual([false, false, false]);
+    tick(ARRIVE_MS + LIGHT_LEAD_MS - 1);
+    expect(answered()).toEqual([false, false, false]);
+    tick(1);
+    expect(answered()).toEqual([true, false, false]);
+    tick(BEAT_MS - 1);
+    expect(answered()).toEqual([true, false, false]);
+    tick(1);
+    expect(answered()).toEqual([true, true, false]);
+    tick(BEAT_MS * 4);
+    expect(answered()).toEqual([true, true, false]);
+    // Its glow is the ember's light, opening once: a keyframe set of its own, not `bloom`'s disc.
+    expect(css).toMatch(/@keyframes answer \{\s*from \{\s*opacity: 0;\s*scale: 0\.3;\s*\}\s*30% \{\s*opacity: 1;\s*\}\s*to \{\s*opacity: 0;\s*scale: 1;/);
+    expect(css).toMatch(/\.trail-answer::after \{\s*animation: answer var\(--duration-flash\) var\(--ease-flash\) both;/);
   });
 
-  it("rests one breath on the last step once the change is home, and goes out", () => {
+  it("does not breathe while it walks; it breathes only once it has landed on a step not yet read", () => {
     motionInTests();
     vi.useFakeTimers();
-    render(lit([done("Recorded."), done("Sent."), done("In.")]));
-    tick(FLASH_MS);
-    tick(FLASH_MS);
-    expect(pool().step).toBe(2);
-    // Arriving takes the flash; then one breath.
-    tick(FLASH_MS + BREATHE_MS - 1);
+    render(give());
+    for (let t = 0; t < ARRIVE_MS + 2 * BEAT_MS + FLASH_MS; t += 100) {
+      expect(light(), `at ${t}ms`).not.toHaveAttribute("data-breathing");
+      tick(100);
+    }
+    tick(100);
+    expect(light()).toHaveAttribute("data-breathing");
+  });
+
+  it("when the read lands, it stops breathing, the dot answers a beat behind, and the lamp goes out a beat later", () => {
+    motionInTests();
+    vi.useFakeTimers();
+    const view = render(give());
+    tick(ARRIVE_MS + 2 * BEAT_MS + FLASH_MS + 100);
+    expect(light()).toHaveAttribute("data-breathing");
+    person.standing = "held";
+    person.readAt = "2026-11-20T09:05:00Z";
+    view.rerender(give());
+    expect(light()).not.toHaveAttribute("data-breathing");
+    expect(answered()[2]).toBe(false);
+    tick(LIGHT_LEAD_MS);
+    expect(answered()[2]).toBe(true);
+    expect(light()).toHaveAttribute("data-going");
+    tick(BEAT_MS - LIGHT_LEAD_MS);
+    expect(light()).not.toHaveAttribute("data-going");
+    expect(path()).not.toHaveAttribute("data-going");
+  });
+
+  it("goes out a beat after the last step once the change is home, and runs once", () => {
+    motionInTests();
+    vi.useFakeTimers();
+    const checks = [done("Recorded."), done("Sent."), done("In.")];
+    const view = render(lit(checks));
+    tick(ARRIVE_MS + 2 * BEAT_MS);
+    expect(moves()).toBe(2);
+    expect(answered()).toEqual([true, true, false]);
+    tick(LIGHT_LEAD_MS);
+    expect(answered()).toEqual([true, true, true]);
+    tick(BEAT_MS - LIGHT_LEAD_MS - 1);
     expect(light()).toHaveAttribute("data-going");
     tick(1);
     expect(light()).not.toHaveAttribute("data-going");
-    // Its breath is held where it is while it fades, never reset to full.
-    expect(light()).toHaveAttribute("data-breathe");
-    expect(css).toMatch(/\.trail-light\[data-breathe\]:not\(\[data-going\]\)::before \{\s*animation-play-state: paused;/);
+    // Once: a re-render never sets it walking again.
+    view.rerender(lit([...checks]));
+    tick(ARRIVE_MS + 3 * BEAT_MS);
+    expect(moves()).toBe(2);
+    expect(light()).not.toHaveAttribute("data-going");
   });
 
-  it("does not walk when still (reduced motion): it rests on the last settled step for one breath, then goes", () => {
+  it("is still under reduced motion: one place, no glow, no breath, and home it goes one breath later", () => {
     motionInTests(false);
     vi.useFakeTimers();
     render(lit([done("Recorded."), done("Sent."), done("In.")]));
-    expect(pool().step).toBe(2);
-    expect(light()).not.toHaveClass("trail-light-glide");
-    expect(light()).not.toHaveAttribute("data-breathe");
-    tick(BREATHE_MS - 1);
+    expect(light()).not.toHaveAttribute("data-carried");
+    expect([moves(), lampAt()]).toEqual([2, 11 + 2 * STEP]);
+    tick(LIGHT_LEAD_MS * 2);
+    expect(answered()).toEqual([false, false, false]);
+    expect(light()).not.toHaveAttribute("data-breathing");
+    tick(BREATHE_MS - LIGHT_LEAD_MS * 2 - 1);
     expect(light()).toHaveAttribute("data-going");
     tick(1);
     expect(light()).not.toHaveAttribute("data-going");
@@ -196,10 +286,12 @@ describe("the walk home", () => {
 
   it("rests on the open step from the first frame when still, without breath", () => {
     motionInTests(false);
+    vi.useFakeTimers();
     render(give());
-    expect(pool().step).toBe(2);
+    expect(moves()).toBe(2);
+    tick(FLASH_MS * 3);
     expect(light()).toHaveAttribute("data-going");
-    expect(light()).not.toHaveAttribute("data-breathe");
+    expect(light()).not.toHaveAttribute("data-breathing");
   });
 
   it("goes out when the trail stops looking, after TRAIL_WATCH_MS, though the step is still open", () => {
@@ -208,27 +300,24 @@ describe("the walk home", () => {
     person.updatedAt = at + 1;
     render(give());
     expect(light()).toHaveAttribute("data-going");
-    tick(TRAIL_WATCH_MS - 1);
+    tick(TRAIL_WATCH_MS - 1, 999);
     expect(light()).toHaveAttribute("data-going");
     tick(1);
     expect(steps()[2]).toHaveTextContent("Not read back from Zitadel yet.");
     expect(light()).not.toHaveAttribute("data-going");
   });
 
-  it("travels on tint's curve over flash, a pool of the accent at 26% of the room's weight, going out on flash's", () => {
+  it("is a pool of the accent at 26% of the room's weight in four quarters, swelling in and going out on tokens", () => {
     const rule = /\n  \.trail-light \{([\s\S]*?)\n  \}\n/.exec(css)?.[1] ?? "";
     expect(rule).toMatch(/--pool-k: calc\(26% \* var\(--hour-weight\)\);/);
-    expect(rule).toMatch(/transform var\(--trail-travel, 0s\) var\(--ease-tint\),\s*opacity var\(--duration-flash\) var\(--ease-flash\);/);
-    expect(rule).toMatch(/background: radial-gradient\(closest-side, var\(--pool-stops\)\);/);
-    // It breathes only for a visitor who has not asked for less (lamp.test.tsx holds every glow to that).
-    expect(css).toMatch(
-      /@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{\s*\.trail-light\[data-breathe\]::before \{\s*animation: breathe var\(--duration-breathe\) var\(--ease-breathe\) infinite alternate;/,
-    );
-    expect(css).toMatch(/\.trail-light-glide \{\s*--trail-travel: var\(--duration-flash\);/);
+    expect(rule).toMatch(/transition: opacity var\(--duration-flash\) var\(--ease-flash\);/);
+    expect(rule).toMatch(/&\[data-going\] \{\s*opacity: 1;\s*transition: opacity var\(--duration-arrive\) var\(--ease-settle\);/);
+    expect(css).toMatch(/background: radial-gradient\(ellipse farthest-side at var\(--at\), var\(--pool-stops\)\);/);
+    expect(css).toMatch(/\[data-going\] > & \{\s*@starting-style \{\s*scale: 0\.86;/);
   });
 
-  it("is not drawn under forced colours", () => {
-    expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.trail-light \{\s*display: none;/);
+  it("is not drawn under forced colours: no lamp, no line, no glow", () => {
+    expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.trail-light,\s*\.trail-path,\s*\.trail-answer::after \{\s*display: none;/);
   });
 });
 
@@ -312,11 +401,11 @@ describe("a route's current step is the route's, whether or not it is lit", () =
     expect(current()).toBe(-1);
   });
 
-  it("is the step reached, whatever step the light is walking", () => {
+  it("is the step reached, whatever step the lamp is carried to", () => {
     motionInTests();
     vi.useFakeTimers();
     render(give());
-    expect(pool().step).toBe(0);
+    expect(moves()).toBe(0);
     expect(current()).toBe(2);
   });
 });
@@ -398,33 +487,5 @@ describe("its place: inside the result's card (rule 1)", () => {
     expect(list).not.toHaveClass("isolate");
     // And a lit result holds no link: a violet way on would sit under 4.5:1 at the light's centre (contrast.test.ts).
     expect(container.querySelector("a")).toBeNull();
-  });
-
-  it("gets its whole 280 by 96 on every step it walks, spent inside the card's inner box", () => {
-    motionInTests();
-    vi.useFakeTimers();
-    render(give());
-    for (const step of [0, 1, 2]) {
-      const p = pool();
-      expect(p.step).toBe(step);
-      expect(p.centre, `step ${step}`).toBeCloseTo(step * STEP + 11);
-      expect([p.width, p.height], `step ${step}`).toEqual([280, 96]);
-      expect(p.left, `step ${step}`).toBeGreaterThanOrEqual(INNER.left);
-      expect(p.top, `step ${step}`).toBeGreaterThanOrEqual(INNER.top);
-      expect(p.right, `step ${step}`).toBeLessThanOrEqual(INNER.right);
-      expect(p.bottom, `step ${step}`).toBeLessThanOrEqual(INNER.bottom);
-      tick(FLASH_MS);
-    }
-  });
-
-  it("is never larger than the card it sits in: a shallow card keeps it inside its edge", () => {
-    vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
-      return this.matches("[data-trail-room]") ? 59 + 2 * STEP + 22.5 + 16 : 0;
-    });
-    render(give());
-    const p = pool();
-    expect(p.step).toBe(2);
-    expect(p.bottom).toBeLessThanOrEqual(2 * STEP + 22.5 + 16);
-    expect(p.height).toBeLessThan(96);
   });
 });

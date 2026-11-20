@@ -34,8 +34,8 @@
  *   place     your place's light (A-25 moment 4) reaching past the rail or the tab
  *             bar it lives in: its pool must be spent inside the room's own box (the
  *             rail's whole scroll content, the bar).
- *   trail     a change's light (A-25 moment 5) reaching past the result's card it
- *             sits in: its pool must be spent inside the card's inner box. A dialog
+ *   trail     a change's lamp (A-25 moment 5) reaching past the result's card it
+ *             sits in: its four quarters must be spent inside the card's inner box. A dialog
  *             opens only from a click, so a replay sees one only where a page draws
  *             a trail open.
  *   lamp      the mark's breathing glow (A-25 moment 3) reaching past a box that
@@ -455,18 +455,26 @@ export function detect({ tablet = 720 } = {}) {
   }
 
   // ── trail ──
-  // The change's light (A-25 moment 5) is a closest-side pool spent at its own box's edge. Its trail sits
-  // inside its result (the outcome's card, `data-trail-room`): the box must lie inside the card's inner box,
-  // so the card's edge never cuts it. A light with no room is a finding of its own.
+  // The change's lamp (A-25 moment 5) is four quarter-ellipses round its dot, each spent at its own far side:
+  // together they must lie inside the card's inner box (the result it sits in, `data-trail-room`), so the
+  // card's edge never cuts it, wherever the walk has carried it. A lamp with no room is a finding of its own.
   const trail = [];
-  for (const pool of document.querySelectorAll("[data-trail-light]")) {
-    if (!vis(pool, true) || parseFloat(getComputedStyle(pool).opacity) === 0) continue;
-    const room = pool.closest("[data-trail-room]");
+  for (const lamp of document.querySelectorAll("[data-trail-light]")) {
+    const shown = getComputedStyle(lamp);
+    if (shown.display === "none" || parseFloat(shown.opacity) === 0) continue;
+    const room = lamp.closest("[data-trail-room]");
     if (!room) {
-      trail.push(`a change's light outside any result's card (${sel(pool)})`);
+      trail.push(`a change's light outside any result's card (${sel(lamp)})`);
       continue;
     }
-    const p = pool.getBoundingClientRect();
+    const quarters = [...lamp.querySelectorAll("[data-quarter]")].map((q) => q.getBoundingClientRect()).filter((q) => q.width > 0 && q.height > 0);
+    if (quarters.length === 0) continue;
+    const p = {
+      left: Math.min(...quarters.map((q) => q.left)),
+      top: Math.min(...quarters.map((q) => q.top)),
+      right: Math.max(...quarters.map((q) => q.right)),
+      bottom: Math.max(...quarters.map((q) => q.bottom)),
+    };
     const r = room.getBoundingClientRect();
     const left = r.left + room.clientLeft;
     const top = r.top + room.clientTop;
