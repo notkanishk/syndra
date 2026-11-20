@@ -21,6 +21,16 @@ vi.mock("@/lib/ui-view", () => ({
 }));
 vi.mock("@/components/shell/AccountSheet", () => ({ AccountSheet: () => <span>account</span> }));
 vi.mock("@/components/shell/ThemeToggle", () => ({ ThemeToggle: () => <span>theme</span> }));
+// The rail's read, as the Sidebar tests stand it in: a live reading, so the lamp watches (A-25 moment 3).
+vi.mock("@/lib/queries/useIndicators", async (original) => ({
+  ...(await original<typeof import("@/lib/queries/useIndicators")>()),
+  useIndicatorsRead: () => ({
+    data: { pending_requests: 0, expiring_grants: 0, holds_due: 0, pending_propagation: 0, drift: 0, unconfirmed_revocations: 0, revocations_escalated: false, zitadel_reachable: true },
+    isPlaceholderData: false,
+    isError: false,
+    fetchStatus: "idle",
+  }),
+}));
 vi.mock("@/components/shell/GoToHost", () => ({ OPEN_GO_TO: "syndra:open-go-to" }));
 
 const session = { id: "u1", name: "Dexter Lumis", email: "dexter@example.edu" } as SessionUser;
@@ -43,6 +53,10 @@ describe("the phone's top bar", () => {
     // Phone only: both leave at the tablet breakpoint, where the rail holds the mark.
     expect(mark(container)!.parentElement!.className).toMatch(/tablet:hidden/);
     expect(goTo()!.className).toMatch(/tablet:hidden/);
+    // The phone's lamp is the rail's: on a live reading it watches (A-25 moment 3), and the words
+    // beside it paint over its glow.
+    expect(mark(container)).toHaveAttribute("data-room", "watch");
+    expect(screen.getByRole("navigation", { name: "Where you are" })).toHaveClass("relative");
   });
 
   it("shows a member the mark, and no Go to (three pages need no jump)", () => {
@@ -51,6 +65,8 @@ describe("the phone's top bar", () => {
     const { container } = render(<TopBar session={session} />);
     expect(mark(container)).toBeTruthy();
     expect(goTo()).toBeNull();
+    // A member's lamp is still until their reading is proven.
+    expect(mark(container)).not.toHaveAttribute("data-room");
   });
 
   it("asks the one Go to to open, by event", () => {

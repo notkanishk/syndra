@@ -1983,8 +1983,9 @@ html.theme-fading *::after {
     .syndra-mark[data-room="watch"]::before {
       animation: lamp calc(var(--door-breath) / 2) var(--ease-breathe) infinite alternate;
     }
+    /* Waiting breathes the dot's own breath, so a change of room restarts it in step with the dot. */
     .syndra-mark[data-room="waiting"]::before {
-      animation: lamp var(--duration-breathe) var(--ease-breathe) infinite alternate;
+      animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate;
     }
   }
   @media (forced-colors: active) {

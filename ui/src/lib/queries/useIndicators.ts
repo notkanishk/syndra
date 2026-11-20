@@ -97,14 +97,18 @@ export function settleIndicators(
   });
 }
 
+/** How often the rail asks: frequent enough that a badge is never stale for long, cheap enough that
+ *  it costs four integers to be right. */
+const POLL_MS = 30_000;
+
 function indicatorsQuery(enabled: boolean) {
   return queryOptions({
     queryKey: ["governance", "indicators"],
-    queryFn: () => request<Indicators>("/governance/indicators"),
+    // A read that hangs ends before the next poll is due, so a stuck GET can never keep the reading
+    // (and the lamp, A-25 moment 3) "live".
+    queryFn: () => request<Indicators>("/governance/indicators", { signal: AbortSignal.timeout((POLL_MS * 2) / 3) }),
     enabled,
-    // Frequent enough that a badge is never stale for long, cheap enough that
-    // it costs four integers to be right.
-    refetchInterval: 30_000,
+    refetchInterval: POLL_MS,
     refetchOnWindowFocus: true,
     // A failed poll must never blank the rail: a badge that flickers to zero
     // reads as "the queue cleared", which is a lie with consequences.
@@ -162,23 +166,17 @@ export function useZitadelReachable(enabled: boolean): boolean | undefined {
 /**
  * What the lamp says (A-25 moment 3): "watch" while the rail holds a live reading, so the mark's glow
  * breathes; "waiting" while that reading says Zitadel isn't answering, amber and quicker; nothing
- * without one (before the first reading, or while the read keeps failing), and the lamp is still. An
- * operator's only: a member's lamp stays still until a reading of theirs is proven (accepted). The
- * same read the rail already makes, so the rail and the phone's bar ask nothing more.
+ * without one (before the first reading, while the read keeps failing, or offline), and the lamp is
+ * still. An operator's only: a member's lamp stays still until a reading of theirs is proven
+ * (accepted). The rail passes its own reading; the phone's bar the same read (`useIndicatorsRead`).
  */
 export function lampRoom(
   isOperator: boolean,
-  reading: { data?: Indicators; isPlaceholderData: boolean; isError?: boolean },
+  reading: { data?: Indicators; isPlaceholderData: boolean; isError?: boolean; fetchStatus?: string },
 ): "watch" | "waiting" | undefined {
-  if (!isOperator || reading.isPlaceholderData || reading.isError || !reading.data) return undefined;
+  // Offline, the poll is paused: the last reading is not a live one.
+  if (!isOperator || reading.isPlaceholderData || reading.isError || reading.fetchStatus === "paused" || !reading.data) return undefined;
   return reading.data.zitadel_reachable === false ? "waiting" : "watch";
-}
-
-/** The lamp for a part that does not hold the reading itself (the phone's bar): the same read, asked. */
-export function useLampRoom(isOperator: boolean): "watch" | "waiting" | undefined {
-  // Outside a query provider (a bar drawn on its own) there is no reading, and the lamp is still.
-  const client = useContext(QueryClientContext);
-  return lampRoom(isOperator, useQuery(indicatorsQuery(isOperator && client !== undefined), client ?? NO_CLIENT));
 }
 
 export function useIndicators(enabled: boolean) {

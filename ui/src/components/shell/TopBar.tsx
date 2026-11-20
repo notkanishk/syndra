@@ -14,7 +14,7 @@ import { crumbsFor } from "@/lib/nav";
 import { useSystemNamesIfRead } from "@/lib/queries/useFieldSchema";
 import type { SessionUser } from "@/lib/session";
 import { useUiView } from "@/lib/ui-view";
-import { useLampRoom } from "@/lib/queries/useIndicators";
+import { lampRoom, useIndicatorsRead } from "@/lib/queries/useIndicators";
 
 /**
  * The 66px header: where you are on the left, what you're looking at on the
@@ -28,7 +28,7 @@ export function TopBar({ session }: { session: SessionUser }) {
   notePage(pathname);
   const { audience, isOperator } = useUiView();
   // The phone's lamp is the rail's (A-25 moment 3): one reading, one answer.
-  const room = useLampRoom(isOperator);
+  const room = lampRoom(isOperator, useIndicatorsRead(isOperator));
   const { crumb } = usePageCrumb();
 
   // An operator's system page is crumbed by the roster's name (the rail reads
@@ -45,7 +45,8 @@ export function TopBar({ session }: { session: SessionUser }) {
       <span className="flex-none tablet:hidden">
         <SyndraMark size={16} welcome room={room} />
       </span>
-      <nav aria-label="Where you are" className="min-w-0 truncate text-body">
+      {/* `relative`: the words paint over the lamp's glow beside them (A-25 moment 3). */}
+      <nav aria-label="Where you are" className="relative min-w-0 truncate text-body">
         {trail.length === 0 ? (
           <span className="font-semibold text-ink">Syndra</span>
         ) : (

@@ -376,6 +376,10 @@ export function detect({ tablet = 720 } = {}) {
   // The glow behind a lit mark is a closest-side pool, so it is spent at its own box's edge: that box
   // (the mark's, grown by the pseudo-element's computed inset) must sit inside everything that clips it.
   const lamp = [];
+  // On an operator's page the rail holds a reading, so the lamp is lit: none lit means the page (or a
+  // tape) had no reading, and the glow was never measured. Said, not passed in silence.
+  const operator = document.querySelector('nav[aria-label="Main navigation"] a[href="/users"]');
+  if (operator && !document.querySelector(".syndra-mark[data-room]")) lamp.push("no lit lamp on an operator's page: no reading, so its glow was not measured");
   for (const mark of document.querySelectorAll(".syndra-mark[data-room]")) {
     // Drawn, read aloud or not: the mark is aria-hidden, and its light is what is on screen.
     if (!vis(mark, true)) continue;

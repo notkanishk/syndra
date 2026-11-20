@@ -70,8 +70,9 @@ export default function Sidebar() {
     <div className="hidden w-[252px] flex-none flex-col gap-5 overflow-y-auto border-r border-line bg-rail px-3 pb-[22px] pt-5 tablet:flex">
       <div className="flex items-center gap-2.5 px-2">
         <SyndraMark welcome room={room} />
+        {/* `relative`: the word paints over the lamp's glow beside it (A-25 moment 3). */}
         {/* type-scale-exempt: the wordmark is the brand's, not a step of the type scale. */}
-        <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
+        <span className="relative font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
       </div>
 
       {/* No `gap`: each row carries its own 3px above it (`mt-[3px]`), so a part

@@ -278,6 +278,8 @@ describe("the mark in the rail", () => {
     expect(room()).toBe("watch");
     // The dot itself never moves: only the glow behind it breathes.
     expect(document.querySelector(".syndra-mark-dot")).not.toHaveClass("breathe");
+    // The wordmark paints over the glow beside it.
+    expect(screen.getByText("Syndra", { selector: "span.font-display" })).toHaveClass("relative");
     answering.unmount();
     indicators.data = { ...quiet, zitadel_reachable: false };
     indicators.isPlaceholderData = true;

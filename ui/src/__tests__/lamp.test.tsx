@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { lampRoom, useLampRoom, type Indicators } from "@/lib/queries/useIndicators";
+import { lampRoom, type Indicators } from "@/lib/queries/useIndicators";
 import { css } from "./cssTokens";
 
 // A-25 moment 3, the lamp breathes (accepted: "rest recommended seem good"): while the rail holds a
@@ -44,21 +42,16 @@ describe("the lamp breathes only on a live reading", () => {
     expect(lampRoom(true, { data: reading, isPlaceholderData: true })).toBeUndefined();
     expect(lampRoom(true, { data: undefined, isPlaceholderData: false })).toBeUndefined();
     expect(lampRoom(true, { data: reading, isPlaceholderData: false, isError: true })).toBeUndefined();
+    // Offline: the poll is paused, and the last reading is not a live one.
+    expect(lampRoom(true, { data: reading, isPlaceholderData: false, fetchStatus: "paused" })).toBeUndefined();
+    expect(lampRoom(true, { data: reading, isPlaceholderData: false, fetchStatus: "idle" })).toBe("watch");
     // A member's lamp stays still until their reading is proven (accepted).
     expect(lampRoom(false, { data: reading, isPlaceholderData: false })).toBeUndefined();
   });
 
-  it("is the same answer for the phone's bar, from the same read, and still outside a provider", () => {
-    const client = new QueryClient();
-    client.setQueryData(["governance", "indicators"], reading);
-    const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-    expect(renderHook(() => useLampRoom(true), { wrapper }).result.current).toBe("watch");
-    expect(renderHook(() => useLampRoom(true)).result.current).toBeUndefined();
-  });
-
   it("breathes only on a lit mark: once every --door-breath while watching, on --duration-breathe while waiting", () => {
     expect(breathing).toMatch(/\.syndra-mark\[data-room="watch"\]::before \{\s*animation: lamp calc\(var\(--door-breath\) \/ 2\) var\(--ease-breathe\) infinite alternate;/);
-    expect(breathing).toMatch(/\.syndra-mark\[data-room="waiting"\]::before \{\s*animation: lamp var\(--duration-breathe\) var\(--ease-breathe\) infinite alternate;/);
+    expect(breathing).toMatch(/\.syndra-mark\[data-room="waiting"\]::before \{\s*animation: breathe var\(--duration-breathe\) var\(--ease-breathe\) infinite alternate;/);
     // The glow is drawn only on a lit mark; the mark as built has no glow and nothing that moves.
     expect(css).not.toMatch(/\.syndra-mark::before \{\s*content/);
     expect(braced(css, "@keyframes lamp {")).toMatch(/from \{\s*opacity: 0\.28;\s*scale: 0\.76;\s*\}\s*to \{\s*opacity: 1;\s*scale: 1;/);
@@ -75,7 +68,7 @@ describe("what the lamp draws", () => {
   it("is still under reduced motion: at rest, 0.72, and its breath only for a visitor who has not asked for less", () => {
     expect(glow).toMatch(/opacity: 0\.72;/);
     expect(glow).not.toMatch(/animation/);
-    expect(css.replace(breathing, "")).not.toMatch(/animation: lamp/);
+    expect(css.replace(breathing, "")).not.toMatch(/::before \{\s*animation: (lamp|breathe)/);
   });
 
   it("is gone under forced colours", () => {
@@ -83,10 +76,7 @@ describe("what the lamp draws", () => {
     expect(MOTION).toContain("(forced-colors: none)");
   });
 
-  it("reaches 0.85 mark-widths, so a 22px mark 31px in from the rail's top and side, and a 16px one 24px from a phone's edge, spend it inside", () => {
+  it("reaches 0.85 mark-widths out (the layout check's `lamp` rule measures it against every clip)", () => {
     expect(glow).toMatch(/inset: calc\(var\(--mark-size\) \* -0\.85\);/);
-    const reach = (size: number) => size * (0.5 + 0.85);
-    expect(reach(22)).toBeLessThan(31);
-    expect(reach(16)).toBeLessThan(24);
   });
 });
