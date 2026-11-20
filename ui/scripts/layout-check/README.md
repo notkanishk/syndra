@@ -47,6 +47,7 @@ It prints one line per finding (`page width view theme kind …`) and exits 1 if
 | `seat` | From tablet up, an action seat is off its row's first line although the row fits. Fixed seats count at their widths, and shares count at their words, held to their minimums. |
 | `steady` | An unchosen FilterPills or Tabs option whose `label-steady` is narrower than its words at the chosen option's weight (0.5px of rounding), or reserves words other than its own. Choosing it would push its neighbours. Measured, never clicked. |
 | `edge` | Inside the page, something drawn like a card that does not wear the light under your hand: neither a `card` or `panel` frame nor a `rim`. Drawn like a card: its roundest corner at least a card's or a panel's radius and less than a pill's, a hairline on all four sides (over 0 and at most 1.5px), and a ground that is a surface token at any alpha (read by painting the computed colour onto one pixel, so `oklab` and `color-mix` are read too), or a drawn gradient. Inside `[data-no-hand]`, a dialog or a popover is out of it by design (A-25 moment 2). |
+| `lamp` | The mark's breathing glow (A-25 moment 3) reaches past a box that clips it: the rail's scroller, the phone's bar or the window. Its pool is spent at its own box's edge, so that box, read from the glow's computed inset, must sit inside every clip. |
 | `pageScroll` | The page scrolls sideways. |
 | `tape missing` | In a replay, a request the tape doesn't hold (exit 4, not 1). |
 

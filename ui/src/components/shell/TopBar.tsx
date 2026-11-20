@@ -14,6 +14,7 @@ import { crumbsFor } from "@/lib/nav";
 import { useSystemNamesIfRead } from "@/lib/queries/useFieldSchema";
 import type { SessionUser } from "@/lib/session";
 import { useUiView } from "@/lib/ui-view";
+import { useLampRoom } from "@/lib/queries/useIndicators";
 
 /**
  * The 66px header: where you are on the left, what you're looking at on the
@@ -26,6 +27,8 @@ export function TopBar({ session }: { session: SessionUser }) {
   // pass and ask whether they are its first paint (a Notice, A-08 §5).
   notePage(pathname);
   const { audience, isOperator } = useUiView();
+  // The phone's lamp is the rail's (A-25 moment 3): one reading, one answer.
+  const room = useLampRoom(isOperator);
   const { crumb } = usePageCrumb();
 
   // An operator's system page is crumbed by the roster's name (the rail reads
@@ -40,7 +43,7 @@ export function TopBar({ session }: { session: SessionUser }) {
       {/* The mark has a seat on a phone (A-20 P6): the rail that holds it is
           hidden there, and the one-shot bloom lights whichever is on screen. */}
       <span className="flex-none tablet:hidden">
-        <SyndraMark size={16} welcome />
+        <SyndraMark size={16} welcome room={room} />
       </span>
       <nav aria-label="Where you are" className="min-w-0 truncate text-body">
         {trail.length === 0 ? (

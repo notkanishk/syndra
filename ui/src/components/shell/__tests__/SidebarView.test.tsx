@@ -18,7 +18,8 @@ vi.mock("@/lib/ui-view", () => ({
   useUiView: () => ({ ...view, view: "basic", setView: () => {}, revealInAdvanced: () => {} }),
 }));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => ({ data: [] }) }));
-vi.mock("@/lib/queries/useIndicators", () => ({
+vi.mock("@/lib/queries/useIndicators", async (original) => ({
+  ...(await original<typeof import("@/lib/queries/useIndicators")>()),
   useIndicators: () => ({ data: undefined, isPlaceholderData: false }),
 }));
 

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { useTargets } from "@/lib/queries/useTargets";
 import { useMySystems } from "@/lib/queries/useMySystems";
-import { useIndicators, type Indicators } from "@/lib/queries/useIndicators";
+import { lampRoom, useIndicators, type Indicators } from "@/lib/queries/useIndicators";
 import { leafMatches, memberNav, operatorNav, type NavLeaf } from "@/lib/nav";
 // Shared with the tab bar, because the rail and the tab bar are two renderings
 // of one tree and a count that is danger in one cannot be accent in the other.
@@ -30,7 +30,8 @@ import { SyndraMark } from "./SyndraMark";
 export default function Sidebar() {
   const pathname = usePathname();
   const { audience, isOperator } = useUiView();
-  const { data, isPlaceholderData } = useIndicators(isOperator);
+  const reading = useIndicators(isOperator);
+  const { data, isPlaceholderData } = reading;
   // The placeholder zeros are not a reading: until a real one lands, and for
   // good if the read keeps failing, no badge says "nothing waiting".
   const indicators = isPlaceholderData ? undefined : data;
@@ -50,8 +51,8 @@ export default function Sidebar() {
   // switching moves only the parts that come and go (A-08 §3).
   const advanced = audience === "advanced";
   const entries = member ? memberNav(mine ?? []) : operatorNav(targets ?? []);
-  // The mark says the room (A-24 Q5) only where the rail's reading proves it: Zitadel not answering.
-  const room = isOperator && indicators?.zitadel_reachable === false ? "waiting" : undefined;
+  // The lamp (A-24 Q5, A-25 moment 3): it breathes on a live reading, amber while Zitadel isn't answering.
+  const room = lampRoom(isOperator, reading);
   const followsView = (advancedOnly: boolean | undefined, key: string, part: React.ReactNode) =>
     advancedOnly ? (
       <Unfold key={key} open={advanced}>

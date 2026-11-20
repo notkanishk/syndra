@@ -159,6 +159,28 @@ export function useZitadelReachable(enabled: boolean): boolean | undefined {
   return query.isPlaceholderData ? undefined : query.data?.zitadel_reachable;
 }
 
+/**
+ * What the lamp says (A-25 moment 3): "watch" while the rail holds a live reading, so the mark's glow
+ * breathes; "waiting" while that reading says Zitadel isn't answering, amber and quicker; nothing
+ * without one (before the first reading, or while the read keeps failing), and the lamp is still. An
+ * operator's only: a member's lamp stays still until a reading of theirs is proven (accepted). The
+ * same read the rail already makes, so the rail and the phone's bar ask nothing more.
+ */
+export function lampRoom(
+  isOperator: boolean,
+  reading: { data?: Indicators; isPlaceholderData: boolean; isError?: boolean },
+): "watch" | "waiting" | undefined {
+  if (!isOperator || reading.isPlaceholderData || reading.isError || !reading.data) return undefined;
+  return reading.data.zitadel_reachable === false ? "waiting" : "watch";
+}
+
+/** The lamp for a part that does not hold the reading itself (the phone's bar): the same read, asked. */
+export function useLampRoom(isOperator: boolean): "watch" | "waiting" | undefined {
+  // Outside a query provider (a bar drawn on its own) there is no reading, and the lamp is still.
+  const client = useContext(QueryClientContext);
+  return lampRoom(isOperator, useQuery(indicatorsQuery(isOperator && client !== undefined), client ?? NO_CLIENT));
+}
+
 export function useIndicators(enabled: boolean) {
   const query = useQuery(indicatorsQuery(enabled));
 

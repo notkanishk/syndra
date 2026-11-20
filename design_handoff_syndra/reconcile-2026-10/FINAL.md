@@ -213,7 +213,7 @@ The spec is `A-05-motion.md` and the `Motion v2` board (S1–S18 with still form
 - **Settle:** 260ms, `--ease-settle`. Height, position, an indicator gliding, a sheet rising.
 - **Arrive:** 420ms, `--ease-arrive`, 8px. `--arrive-step` 40ms between rows, capped at 5 (row 6 onwards arrives with row 5).
 - **Flash:** 900ms, `--ease-flash`. The bloom, a 9px ring of the dot's own colour, once.
-- **Breathe:** 2400ms, `--ease-breathe`. **The only loop in the product.**
+- **Breathe:** 2400ms, `--ease-breathe`. **One of two loops in the product.** The other is the lamp's (A-25 moment 3, accepted: "rest recommended seem good"): the mark's glow out and back once every `--door-breath` (10s) while the rail holds a live reading, on a healthy state; amber and on breathe's 2400ms while Zitadel isn't answering. Still without a reading, for a member, and under reduced motion; gone under forced colours.
 - **Glide:** `--duration-glide` 520ms, on settle's curve. Scrolling only.
 - **`--travel-cap: 10px`.** Nothing in the page travels further. A phone sheet from its edge and a control's own indicator are outside the cap.
 
@@ -255,7 +255,7 @@ Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Coun
 | Breathe | The amber dot of a Notice for something stale or waiting (Zitadel isn't answering, a system waiting to retry, last known data), and Insights' node while an answer is computed. Nothing else loops. | Every amber Notice; Insights |
 | Insights answer | Lights travel once along the answer, then rest. Hovering or focusing a named person or role lights its line (tint). No halo, no travelling lights at rest. | route-insights |
 
-**Never:** a shake; a bounce; a count that ticks; a row that scales; a route transition (until D-1 §7a's spec lands: the owner wants page transitions, 18 Nov 2026); a loop other than breathe; a bloom for something the reader didn't do; arrive replaying on refresh, filter or sort; anything travelling more than 10px in the page.
+**Never:** a shake; a bounce; a count that ticks; a row that scales; a route transition (until D-1 §7a's spec lands: the owner wants page transitions, 18 Nov 2026); a loop other than breathe and the lamp's; a bloom for something the reader didn't do; arrive replaying on refresh, filter or sort; anything travelling more than 10px in the page.
 
 **Decided (owner, 18 Nov 2026, Q8): the sign-in door is exempt (D-1 §7, M14).** The door at `/login` keeps its two ambient loops (the pool's breath and the grain) and its own timings: it is the one ceremonial screen, always the dark room. Its numbers are not typed in rules, though: each is a `--door-*` token in `globals.css`, and `ceremony.ts` mirrors its two easings with a test holding them equal. Both loops start only for a reader who has not asked for less motion, and the door's choreography collapses under reduced motion. The motion guards skip `ceremony.ts`, and the door's own timers elsewhere carry a `// door-exempt:` marker; nothing else is skipped.
 

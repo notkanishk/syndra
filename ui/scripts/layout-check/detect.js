@@ -28,6 +28,9 @@
  *             element is not responding to the hover"). Its wearers are a button's
  *             `rim` and the frame utilities `card` and `panel`; what is inside
  *             `[data-no-hand]`, a dialog or a popover is out of it by design.
+ *   lamp      the mark's breathing glow (A-25 moment 3) reaching past a box that
+ *             clips it (the rail's scroller, the phone's bar, the window): its pool
+ *             must be spent inside every edge, read from the glow's own computed box.
  *
  * Page-level horizontal scroll is reported too. `tablet` is the breakpoint below
  * which the seat wraps by design (D-1 §4 rule 9).
@@ -369,5 +372,27 @@ export function detect({ tablet = 720 } = {}) {
     }
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, pageScroll };
+  // ── lamp ──
+  // The glow behind a lit mark is a closest-side pool, so it is spent at its own box's edge: that box
+  // (the mark's, grown by the pseudo-element's computed inset) must sit inside everything that clips it.
+  const lamp = [];
+  for (const mark of document.querySelectorAll(".syndra-mark[data-room]")) {
+    // Drawn, read aloud or not: the mark is aria-hidden, and its light is what is on screen.
+    if (!vis(mark, true)) continue;
+    const glow = getComputedStyle(mark, "::before");
+    if (glow.content === "none" || glow.display === "none") continue;
+    const m = mark.getBoundingClientRect();
+    const box = { l: m.left + parseFloat(glow.left), t: m.top + parseFloat(glow.top), r: m.right - parseFloat(glow.right), b: m.bottom - parseFloat(glow.bottom) };
+    const clip = clipRect(mark);
+    const edge = { l: Math.max(clip.l, 0), t: Math.max(clip.t, 0), r: Math.min(clip.r, innerWidth), b: Math.min(clip.b, innerHeight) };
+    const past = [
+      ["left", edge.l - box.l],
+      ["top", edge.t - box.t],
+      ["right", box.r - edge.r],
+      ["bottom", box.b - edge.b],
+    ].filter(([, by]) => by > 0.5);
+    for (const [side, by] of past) lamp.push(`the lamp's glow is cut ${by.toFixed(1)}px at its ${side} (${sel(mark)})`);
+  }
+
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pageScroll };
 }

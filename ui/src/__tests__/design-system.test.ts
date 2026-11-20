@@ -562,7 +562,7 @@ describe("design system", () => {
   // states are licensed to say "this is still happening": degraded, and
   // loading. Everything else holds still, and the healthy state earns its calm
   // by being the only thing on screen that is perfectly still.
-  it("licenses exactly one looping animation outside the doorway", () => {
+  it("licenses exactly two looping animations outside the doorway: breathe, and the lamp's (A-25 moment 3)", () => {
     const css = readFileSync(GLOBALS_CSS, "utf8");
 
     // The doorway's ambience is its own, opt-in and guarded above.
@@ -570,8 +570,10 @@ describe("design system", () => {
     const loops = app.match(/animation:[^;]*infinite[^;]*;/g) ?? [];
 
     expect(loops.length, `Looping animations found:\n${loops.join("\n")}`).toBeGreaterThan(0);
+    // Breathe means still happening; the lamp's breath is the watch, accepted at ten seconds a breath
+    // (A-25 moment 3: "This is a second loop, on a healthy state").
     for (const loop of loops) {
-      expect(loop, `Only 'breathe' may loop, found: ${loop}`).toContain("breathe");
+      expect(loop, `Only 'breathe' and 'lamp' may loop, found: ${loop}`).toMatch(/animation: (breathe|lamp) /);
     }
   });
 
