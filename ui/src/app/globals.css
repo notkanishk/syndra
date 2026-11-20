@@ -873,6 +873,11 @@
         var(--ring-fade), var(--duration-press) !important;
       transition-delay: 0s !important;
     }
+    /* The current place lists two properties, so it states two: control's list, read by position,
+       would hand its press the tint. */
+    .place-current {
+      transition-duration: var(--duration-tint), var(--duration-press) !important;
+    }
     /* The seat's press is the same 3% gesture. */
     .seat > span {
       transition-duration:
@@ -1161,7 +1166,7 @@
    wins over it. Unlayered, it beat every layer whatever its specificity, and a filled button's edge
    lit in the accent on an accent fill (review, 20 Nov 2026). */
 @layer base {
-  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark) {
+  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light) {
     --pool-c: var(--accent);
     --pool-stops: color-mix(in srgb, var(--pool-c) var(--pool-k), transparent),
       color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.74), transparent) 20%,
@@ -1460,6 +1465,16 @@ html.theme-fading *::after {
   &:active:not(:disabled) {
     transform: scale(0.97);
   }
+}
+
+/* The current place in the rail or the tab bar (A-25 moment 4): a control whose fill snaps, never
+   fades, when the pill takes over, so the two never show together. Its colour still tints and its
+   press keeps press's timing; the property list is control's less what snaps, each with its own
+   duration and curve, so neither borrows the other's. */
+@utility place-current {
+  transition-property: color, transform;
+  transition-duration: var(--duration-tint), var(--duration-press);
+  transition-timing-function: var(--ease-tint), var(--ease-press);
 }
 
 /* The scrim tints first (S1); the card follows 40ms behind it. */
@@ -1991,6 +2006,29 @@ html.theme-fading *::after {
   }
   @media (forced-colors: active) {
     .syndra-mark::before {
+      display: none;
+    }
+  }
+}
+
+/* Your place's light (A-25 moment 4; owner, 20 Nov 2026: "do glide with light", at 6%): one pool
+   under the place's pill, the rail's (or the tab bar's) own layer, under everything in it. The accent
+   at 6% of the room's weight, never brighter than the page; it falls to nothing on the six eased stops
+   inside its own box, which `Place.tsx` keeps inside the room it has (rule 1). It moves with the pill
+   and on the pill's own movement; its size changes at once. Under forced colours neither is drawn:
+   the place takes the system's Highlight (`nav-place`). */
+@layer components {
+  .place-light {
+    z-index: -1;
+    --pool-k: calc(6% * var(--hour-weight));
+    background: radial-gradient(closest-side, var(--pool-stops));
+  }
+  .place-light-glide {
+    transition: transform var(--duration-settle) var(--ease-settle);
+  }
+  @media (forced-colors: active) {
+    .place-light,
+    .place-pill {
       display: none;
     }
   }
