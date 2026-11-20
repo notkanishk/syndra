@@ -10,7 +10,7 @@ import { AdvancedLink } from "@/components/ui/AdvancedLink";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { ClaimsLine } from "@/components/home/ClaimsLine";
-import { TermLine } from "@/components/home/TermLine";
+import { TermLine, TermLineSeat } from "@/components/home/TermLine";
 import { Makerspace } from "@/components/home/Makerspace";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Owner } from "@/components/system/ServiceAccountOwner";
@@ -19,6 +19,7 @@ import { ReadGate } from "@/components/states/ReadGate";
 import { Button } from "@/components/ui/Button";
 import { Card, CardGrid, CardHeader, CardRow, type SeatWidth } from "@/components/ui/Card";
 import { BELOW_HEADER, MetaRow, usePageHead } from "@/components/ui/PageHeader";
+import { RoomLight } from "@/components/shell/RoomLight";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import {
@@ -50,6 +51,7 @@ import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
 import { Unfold } from "@/lib/motion";
+import { openedAlready } from "@/lib/motion/door";
 import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
@@ -61,6 +63,11 @@ import { useTerms } from "@/lib/queries/useTerms";
 import { termDayLine, termHolding } from "@/lib/term-dates";
 import { compareNames, sortByName, sortNames } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
+
+/** The Checked line's box and its links' shape, shared with its seat so the two are one height. */
+const CHECKED_LINE = "flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-small";
+// A 44px line of its own until desktop (`--tap`, D-1 §9), so the seat holds that same height.
+const CHECKED_LINK = "inline-flex min-h-[var(--tap)] items-center text-small desktop:min-h-0";
 
 /**
  * Home — the operator landing. Two zones, in a fixed order.
@@ -103,7 +110,7 @@ import { useShownNames } from "@/components/names/shownNames";
  * changes and Unexplained access belong to the machine, and the machine lives
  * in Advanced.
  */
-export function Home({ session }: { session: SessionUser }) {
+export function Home({ session, door: opening = false }: { session: SessionUser; door?: boolean }) {
   // Home is the most-visited first paint (S11): the greeting tints in, then the blocks arrive.
   const head = usePageHead();
   const advanced = useIsAdvanced();
@@ -224,13 +231,21 @@ export function Home({ session }: { session: SessionUser }) {
   // UTC and hydration failed (React #418). They appear on mount, in a seat held
   // by an invisible stand-in so nothing below moves (same rule as Relative).
   const [now, setNow] = useState<Date | null>(null);
+  // The first arrival of a sign-in (A-24 §3.2): the server decides it from the sign-in's cookie; a cached
+  // render (Back) of a door this device has already opened stays still.
+  const [door] = useState(() => opening && !openedAlready(session.signedInAt));
   // Before paint, so a page reached by a link is drawn with its greeting and term line in place.
-  useLayoutEffect(() => setNow(new Date()), []);
+  useLayoutEffect(() => {
+    setNow(new Date());
+  }, []);
   // The part of the day for the light, on the greeting's clock, turning with the rail's mark at 22:00.
   const phase = useDayPhase();
   const terms = useTerms();
   const termDay = now && terms.data ? termDayLine(terms.data, now) : null;
   const term = now && terms.data ? termHolding(terms.data, now) : undefined;
+  // The term line holds its seat while its read is out, so a head drawn before it lands is already its
+  // full height; it folds, smoothly, only once the read has said there is no term.
+  const termPending = terms.data === undefined && !terms.error;
   const loading = summary.isLoading || requests.isLoading || onboarding.isLoading;
   const error = summary.error ?? requests.error ?? onboarding.error ?? accounts.error;
   // While the load is failing the count is unknown, and "nothing needs you" is
@@ -372,11 +387,17 @@ export function Home({ session }: { session: SessionUser }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div {...head} className={`${head.className} relative isolate`} style={BELOW_HEADER}>
+      <div {...head} style={BELOW_HEADER}>
         {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
             place set by the part of the day on the greeting's own clock. The one written exception to
             "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
-        {phase && <div aria-hidden data-hour={phase} className="hour-light" />}
+        {/* On the first arrival of a sign-in a pool crosses the greeting once and this one settles in (`door-cross`).
+            Drawn in the shell's column, not here: the room's light, which no box of the page can cut (A-25 §3). */}
+        {phase && (
+          <RoomLight>
+            <div aria-hidden data-hour={phase} data-door={door ? "" : undefined} className="hour-light" />
+          </RoomLight>
+        )}
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and
@@ -405,8 +426,12 @@ export function Home({ session }: { session: SessionUser }) {
         {/* The term line (A-24 §3.1, Q3): from the terms setting and Ending soon's own read. It opens
             when its reads land, so nothing below jumps. */}
         {now && (
-          <Unfold open={Boolean(term)}>
-            {term && <TermLine term={term} ending={summary.data?.expiring_grants ?? []} now={now} />}
+          <Unfold open={termPending || Boolean(term)}>
+            {term ? (
+              <TermLine term={term} ending={summary.data?.expiring_grants ?? []} now={now} />
+            ) : (
+              termPending && <TermLineSeat />
+            )}
           </Unfold>
         )}
         {/* Claims delivery's one line: fixed here, ahead of anything that folds,
@@ -416,9 +441,18 @@ export function Home({ session }: { session: SessionUser }) {
             where there is a queue to read: the one calm line below says the rest. */}
         {/* It goes and comes with the grid, by the same Unfold, in step with the swap (A-12 §1).
             Mounted with the first read, so it is simply there when the page arrives. */}
-        {!error && !loading && (
-          <Unfold open={swap.gridOpen && clear.length > 0}>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-small text-muted">
+        {/* It holds its line while the queue's reads are out, so the head is its full height from the
+            first frame; once they land it stays or folds away like any line. */}
+        <Unfold open={!error && (loading || (swap.gridOpen && clear.length > 0))}>
+          {loading ? (
+            // The line's own box and one link of its shape: the seat is the line's height at every width.
+            <div aria-hidden data-line-seat="checked" className={`invisible ${CHECKED_LINE}`}>
+              <StatusDot tone="healthy" />
+              <span>Checked, nothing waiting:</span>
+              <span className={CHECKED_LINK}>Holds due</span>
+            </div>
+          ) : (
+          <div className={`${CHECKED_LINE} text-muted`}>
             <StatusDot tone="healthy" />
             <span>Checked, nothing waiting:</span>
             {/* Each link is a 44px line of its own until desktop (D-1 §9, the Home answer). The product's
@@ -432,15 +466,15 @@ export function Home({ session }: { session: SessionUser }) {
                 <AdvancedLink
                   key={href}
                   href={href}
-                  className="inline-flex min-h-[var(--tap)] items-center text-small text-ink link-hover desktop:min-h-0"
+                  className={`${CHECKED_LINK} text-ink link-hover`}
                 >
                   {name}
                 </AdvancedLink>
               ))}
             </MetaRow>
           </div>
-          </Unfold>
-        )}
+          )}
+        </Unfold>
         {/* The shell's Notices, under the whole head (A-20 P3, G7). */}
         <ShellNotices />
       </div>

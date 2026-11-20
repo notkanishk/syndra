@@ -1117,8 +1117,17 @@ describe("design system", () => {
     );
 
     // Its parent column is a flex item too, with the same default and the same
-    // consequence. It is also the size container the page frame's `cqw` reads.
-    expect(shell).toMatch(/<div className="@container flex min-h-0 min-w-0 flex-1 flex-col">/);
+    // consequence. It is also the size container the page frame's `cqw` reads, and the room's light's
+    // own layer (`RoomLight`, A-25 §3): the column is what the shell hands, never the scroller.
+    expect(shell).toMatch(/<RoomContext\.Provider value=\{room\}>\s*<div ref=\{setRoom\} className="@container relative isolate flex min-h-0 min-w-0 flex-1 flex-col">/);
+    expect(scroller![0]).not.toContain("setRoom");
+    // The light lies behind the bar, the scroller and main: a ground on any of them would hide it.
+    const bar = /<header className="([^"]+)"/.exec(readFileSync(resolve(SRC_ROOT, "components/shell/TopBar.tsx"), "utf8"));
+    const main = /<main id="main"[^>]*className="([^"]+)"/.exec(shell);
+    for (const [name, found] of [["the top bar", bar], ["#app-scroll", scroller], ["main", main]] as const) {
+      expect(found, name).not.toBeNull();
+      expect(found![1], `${name} has no ground of its own`).not.toMatch(/(^|\s)([a-z-]+:)*bg-/);
+    }
   });
 
   // Every dysfunction is a Notice in the content column (6a), never a band

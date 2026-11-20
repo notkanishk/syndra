@@ -370,6 +370,17 @@
     }
   }
 
+  /* The door's light (A-24 §3.2): a pool crosses the greeting left to right and dissolves while the
+     hour's own pool settles in where it lives, over the same last 35%, so the two sum to one. */
+  @keyframes door-cross {
+    from { --door-x: -10cqw; opacity: 0; }
+    20%, 65% { opacity: 1; }
+    to { --door-x: 62cqw; opacity: 0; }
+  }
+  @keyframes door-settle {
+    from, 65% { opacity: 0; }
+  }
+
   /* A phone sheet rises from the bottom edge of the screen and nothing else:
      the scrim carries the fade. Its own travel, so not held to --travel-cap. */
   @keyframes sheet-rise {
@@ -701,7 +712,8 @@
     --healthy: var(--lime-700);
 
     --warn: #a86a00;
-    --warn-text: #8a5600;
+    /* 4.83:1 under the hour's light at its strongest on paper (was #8a5600: 4.34), 6.14 on the bare canvas. */
+    --warn-text: #805000;
     --warn-ink: #ffffff;
     --warn-soft: rgba(168, 106, 0, 0.1);
     --warn-line: rgba(168, 106, 0, 0.3);
@@ -1111,58 +1123,163 @@
 /* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind
    Home's head, its place set by the part of the day (`dayPhase`, the greeting's
    own clock). The ONE written exception to "colour is never decorative" above,
-   with its bounds: Home's head only; still (no animation, no loop); the accent,
+   with its bounds: Home's head (and the door's light crossing into it, `door-cross`, once a
+   sign-in, A-24 §3.2), and a member's card on its first day (`lit-card`, A-24
+   §3.3); still (no loop, and no animation but the door's, once a sign-in); the accent,
    never a status colour; the same rule in both rooms; gone under forced colours;
    and never strong enough to take a line of text in the head under 4.5:1 (the
    contrast test holds it, at the pool's strongest point, in both themes).
-   `--hour-shape` is where the pool sits, `--hour-reach` how much accent it holds. */
+   `--hour-x`/`--hour-y` is where the pool sits, `--hour-w`/`--hour-h` its size,
+   `--hour-reach` how much accent it holds. */
+/* The crossing pool's place as `door-cross` carries it: registered, so it glides. */
+@property --door-x { syntax: "<length>"; inherits: false; initial-value: 0px; }
+
+/* The one light (A-25 §2 rule 1, §3): every pool falls to nothing on an eased curve, six stops,
+   never a straight ramp to a rim. A light sets its strength (`--pool-k`) and draws these stops in
+   its own ellipse; its pseudo-elements inherit them. */
+:where(.hour-light, .lit-card) {
+  --pool-stops: color-mix(in srgb, var(--accent) var(--pool-k), transparent),
+    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.74), transparent) 20%,
+    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.44), transparent) 42%,
+    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.2), transparent) 62%,
+    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.06), transparent) 82%,
+    transparent;
+}
+
 @utility hour-light {
+  /* The room's light, not the page's (A-25 §3; owner, 20 Nov 2026: "be careful of the bounding
+     boxes clipping the glow"): the column's own layer (`RoomLight`), behind the top bar and the
+     scroller, so neither the bar's hairline, the scroller's box nor its scrollbar's seat ends it,
+     and it stays while the page scrolls. Only the window and the rail, which has a ground of its
+     own, end it. Every pool and the door's crossing is spent inside the layer's height. */
   position: absolute;
-  inset: -24px -26px -28px;
+  inset: 0 0 auto;
+  height: 480px;
   z-index: -1;
   pointer-events: none;
-  background: radial-gradient(
-    var(--hour-shape),
-    color-mix(in srgb, var(--accent) calc(var(--hour-reach) * var(--hour-weight)), transparent),
-    transparent 70%
-  );
-  /* The pool fades to nothing inside its own box on every side (a mask is alpha only, so its
-     colour words are no colour on screen): where a place puts the light past the box's edge,
-     that edge is never seen as a line, in either room. */
-  mask-image:
-    linear-gradient(to right, transparent, black 18%, black 82%, transparent),
-    linear-gradient(to bottom, transparent, black 22%, black 78%, transparent);
-  mask-composite: intersect;
+  /* Sized in this box's own units (cqw, cqh: a percentage of it, as a length), so the door's
+     crossing interpolates lengths only (an ellipse whose size mixes % and px is refused). */
+  container-type: size;
+  --pool-k: calc(var(--hour-reach) * var(--hour-weight));
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse var(--hour-w) var(--hour-h) at var(--hour-x) var(--hour-y), var(--pool-stops));
+  }
 
   /* Morning: low, from the left. */
   &[data-hour="morning"] {
-    --hour-shape: ellipse 60% 150% at 4% -20%;
+    --hour-w: 50cqw;
+    --hour-h: 54cqh;
+    --hour-x: 4cqw;
+    --hour-y: 4cqh;
     --hour-reach: 26%;
   }
   /* Afternoon: overhead, wide and thin. */
   &[data-hour="afternoon"] {
-    --hour-shape: ellipse 80% 120% at 50% -60%;
+    --hour-w: 66cqw;
+    --hour-h: 46cqh;
+    --hour-x: 50cqw;
+    --hour-y: -12cqh;
     --hour-reach: 20%;
   }
   /* Evening: from the right, going down. */
   &[data-hour="evening"] {
-    --hour-shape: ellipse 58% 135% at 86% -30%;
+    --hour-w: 48cqw;
+    --hour-h: 50cqh;
+    --hour-x: 86cqw;
+    --hour-y: 0cqh;
     --hour-reach: 24%;
   }
   /* Quiet hours (22:00 to 05:00): a lamp beside the words. */
   &[data-hour="quiet"] {
-    --hour-shape: ellipse 26% 90% at 2% 40%;
+    --hour-w: 22cqw;
+    --hour-h: 34cqh;
+    --hour-x: 3cqw;
+    --hour-y: 30cqh;
     --hour-reach: 22%;
   }
 
-  /* A phone's gutter is 16px, not the page's 26: the pool reaches to the edge and no further, so
-     the scroller never gains a sideways scroll. */
-  @media (width < theme(--breakpoint-tablet)) {
-    inset-inline: -16px;
+  /* A sign-in's first Home (A-24 §3.2): the hour's own light, crossing then settling, never
+     stronger than at rest. */
+  @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
+    &[data-door]::before {
+      animation: door-settle var(--door-open) var(--ease-tint) both;
+    }
+    &[data-door]::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 42cqw 56cqh at var(--door-x) 25cqh, var(--pool-stops));
+      animation: door-cross var(--door-open) var(--ease-tint) both;
+    }
   }
 
   @media (forced-colors: active) {
     display: none;
+  }
+}
+
+/* The current place under forced colours (A-25 moment 4, repair 1): the rail's row, the tab bar's
+   tab and the phone sheet's row take the system's own selected colours, a filled box with its words
+   in HighlightText. Forced, the place's 15% fill keeps its alpha and vanishes, its dot with it, and
+   only the weight is left. Inside, the pill's dot and any badge give way to the box. With the
+   system's correction off, nothing of the app's own may reach it: no `flash` taking the box away,
+   and a focus ring in the system's text colour, not `--focus-ring`. */
+@utility nav-place {
+  @media (forced-colors: active) {
+    &[aria-current="page"] {
+      forced-color-adjust: none;
+      background-color: Highlight;
+      color: HighlightText;
+      animation: none;
+      & * {
+        background-color: transparent;
+        color: inherit;
+      }
+      &:focus-visible {
+        outline-color: CanvasText;
+      }
+    }
+  }
+}
+
+/* A member's card on its first day (A-24 §3.3, Q6): the door's light on its top
+   edge and a violet hairline, on the first visit after that access starts and
+   never again. The same light as Home's head, under the same bounds: still, the
+   accent at the same weight per room, clipped by the card's own edge, under
+   4.5:1 for nothing on it (the contrast test holds it), gone under forced colours. */
+@utility lit-card {
+  --lit-reach: 22%;
+  position: relative;
+  isolation: isolate;
+
+  --pool-k: calc(var(--lit-reach) * var(--hour-weight));
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(ellipse 60% 90px at 18% 0, var(--pool-stops));
+  }
+  &::after {
+    content: "";
+    position: absolute;
+    inset-inline: 24px 40%;
+    top: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--accent) 24%, var(--accent) 60%, transparent);
+  }
+
+  @media (forced-colors: active) {
+    &::before,
+    &::after {
+      display: none;
+    }
   }
 }
 
@@ -1179,49 +1296,88 @@
   animation: hairline-draw var(--duration-flash) var(--ease-flash) both;
 }
 
-/* A plate (A-24 §7, Q9): the door, in hairlines with one lit point. Shut, with
-   lime, for a queue that is clear; open, with violet light, for a list that is
-   beginning. Drawn in both rooms from the tokens; shown only once the owner has
-   seen them (PLATES_SHOWN). */
+/* A plate (A-24 §7, Q9): the sign-in door, drawn small (owner, 19 Nov 2026:
+   "make the drawings closer to how the login arch is"). The login arch's own
+   proportion (430 by 392, the top's radius 190: here 48 by 44, radius 21),
+   its violet hairline (`--door-stroke`), its uprights dissolving into the
+   floor (`--door-arch-mask`), and its light inside fading into the room. Shut,
+   for a queue that is clear: the arch closed and dim (`--door-ring-base`), its
+   light low, a lime point at its foot on an unbroken floor. Open, for a list
+   that is beginning: the login's own pool inside (`--door-pool`), the floor
+   broken at the doorway and the light spilling through onto the ground in
+   front, a violet point. 1px lines on whole pixels and an 8px point; both
+   rooms from the tokens; gone under forced colours with the other lights.
+   Shown for the owner to judge at true size on staging (PLATES_SHOWN), at the
+   three places the board draws. */
 @utility plate {
   position: relative;
   width: 64px;
-  height: 76px;
+  height: 60px;
   flex: none;
 
   & > .plate-arch {
     position: absolute;
-    inset: 0 10px;
-    border: 1.5px solid var(--line-strong);
+    top: 4px;
+    left: 8px;
+    width: 48px;
+    height: 44px;
+    border: 1px solid var(--door-ring-base);
     border-bottom: 0;
-    border-radius: 999px 999px 0 0;
-    background: var(--tint-1);
+    border-radius: 21px 21px 0 0;
+    background: radial-gradient(50% 50% at 50% 70%, var(--door-pool-edge), transparent 72%);
+    mask-image: var(--door-arch-mask);
+    -webkit-mask-image: var(--door-arch-mask);
   }
   & > .plate-floor {
     position: absolute;
+    top: 48px;
     inset-inline: 0;
-    bottom: 0;
-    height: 1.5px;
-    background: var(--line-strong);
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--line-strong) 20%, var(--line-strong) 80%, transparent);
   }
   & > .plate-point {
     position: absolute;
+    top: 44px;
     left: 50%;
-    bottom: -3px;
-    width: 7px;
-    height: 7px;
-    margin-left: -3.5px;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
     border-radius: 50%;
     background: var(--healthy);
     box-shadow: 0 0 0 5px color-mix(in srgb, var(--healthy) 16%, transparent);
   }
   &[data-plate="open"] > .plate-arch {
-    border-color: var(--accent-line);
-    background: linear-gradient(to top, color-mix(in srgb, var(--accent) 40%, transparent), transparent 88%);
+    border-color: var(--door-stroke);
+    background:
+      radial-gradient(50% 50% at 50% 70%, var(--door-pool), var(--door-pool-edge) 46%, transparent 72%),
+      linear-gradient(to top, var(--door-pool-edge), transparent 62%);
+  }
+  /* The doorway's foot is open: the floor stops at each jamb, and the light falls through onto the ground. */
+  &[data-plate="open"] > .plate-floor {
+    background: linear-gradient(
+      to right,
+      transparent,
+      var(--line-strong) 8px,
+      transparent 8px calc(100% - 8px),
+      var(--line-strong) calc(100% - 8px),
+      transparent
+    );
+  }
+  &[data-plate="open"] > .plate-floor::after {
+    content: "";
+    position: absolute;
+    inset-inline: 8px;
+    top: 0;
+    height: 12px;
+    background: radial-gradient(50% 100% at 50% 0, var(--door-pool), var(--door-pool-edge) 46%, transparent 72%);
   }
   &[data-plate="open"] > .plate-point {
     background: var(--accent);
     box-shadow: 0 0 0 5px var(--accent-soft);
+  }
+
+  @media (forced-colors: active) {
+    display: none;
   }
 }
 
@@ -1576,12 +1732,6 @@ html.theme-fading *::after {
   &:not([data-settled]) {
     animation: fade var(--duration-tint) var(--ease-tint) both;
   }
-  /* A quiet visit (A-24 Q14: seen before this session, or reached by key): the
-     header tints in and nothing after it arrives; the content is simply there. */
-  &[data-quiet] {
-    animation: fade var(--duration-tint) var(--ease-tint) both;
-  }
-
   &:not([data-settled]) ~ * {
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
     animation-delay: calc(var(--duration-tint) + (var(--arrive-cap) - 1) * var(--arrive-step));
@@ -2043,6 +2193,10 @@ html.theme-fading *::after {
 
   --door-stroke: rgba(155, 123, 255, 0.5);
   --door-ring-base: rgba(155, 123, 255, 0.22);
+  /* The door's pool of light, its heart and its edge: the sign-in screen's pool
+     and the plates' doorway light (A-24 §7) are one light. */
+  --door-pool: rgba(127, 90, 240, 0.3);
+  --door-pool-edge: rgba(127, 90, 240, 0.08);
   --door-ring-lit: rgba(206, 188, 255, 0.92);
   --door-amber: #f5a524;
   --door-amber-stroke: rgba(245, 165, 36, 0.5);
@@ -2083,6 +2237,9 @@ html.theme-fading *::after {
   --door-link-fade: 0.15s;
   --door-breath: 10s;
   --door-grain: 0.75s;
+
+  /* The door's light gliding into the hour's pool, once a sign-in (A-24 §3.2). */
+  --door-open: 1800ms;
 }
 
 /* The arch group is the one fixed-width thing here. Below ~480px it scales on
@@ -2151,12 +2308,7 @@ body:has(.login-stage) {
   }
 
   .login-pool {
-    background: radial-gradient(
-      50% 50% at 50% 50%,
-      rgba(127, 90, 240, 0.3),
-      rgba(127, 90, 240, 0.08) 46%,
-      transparent 72%
-    );
+    background: radial-gradient(50% 50% at 50% 50%, var(--door-pool), var(--door-pool-edge) 46%, transparent 72%);
   }
 
   /* Amber only ever means a broken assumption. It is at zero until one. */

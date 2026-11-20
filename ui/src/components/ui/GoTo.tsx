@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/Input";
 import { Kbd } from "@/components/ui/Kbd";
 import { Modal } from "@/components/ui/Modal";
 import { flatItems, goTo, recallLately, type GoToItem } from "@/lib/go-to";
-import { visitByKey } from "@/lib/motion";
 import type { NavEntry } from "@/lib/nav";
 import { useNameCatalog } from "@/lib/queries/useNameCatalog";
 import { useUiView } from "@/lib/ui-view";
@@ -179,10 +178,7 @@ export function GoToPanel({
                     role="option"
                     aria-selected={selected}
                     tabIndex={-1}
-                    onClick={() => {
-                      visitByKey(item.href);
-                      onGo();
-                    }}
+                    onClick={onGo}
                     className={`motion-tint flex min-h-[var(--tap)] items-center gap-3 px-6 py-1.5 ${selected ? "bg-tint-2" : ""}`}
                   >
                     <span className="flex min-w-0 flex-1 flex-col">

@@ -24,6 +24,9 @@ export interface SessionUser {
   firstVisit?: boolean;
   // When the person was last here before this sign-in (A-20 P18); absent on the first.
   previousSignIn?: string;
+  // When this sign-in happened: the one instant the first arrival is kept to (A-24 §3.2).
+  // Stamped by the session factories below, for every kind of sign-in; absent on an older cookie.
+  signedInAt?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -34,6 +37,7 @@ interface DemoSessionCookie {
   type: "demo";
   userId: string;
   role: SessionRole;
+  signedInAt?: string;
 }
 
 export interface OidcSessionCookie {
@@ -49,6 +53,7 @@ export interface OidcSessionCookie {
   expiresAt: number; // Unix seconds
   firstVisit?: boolean;
   previousSignIn?: string;
+  signedInAt?: string;
 }
 
 type SessionCookiePayload = DemoSessionCookie | OidcSessionCookie;
@@ -220,6 +225,7 @@ function decodeSessionPayload(value: string): SessionCookiePayload | null {
         expiresAt: parsed.expiresAt,
         ...(parsed.firstVisit === true ? { firstVisit: true } : {}),
         ...(typeof parsed.previousSignIn === "string" ? { previousSignIn: parsed.previousSignIn } : {}),
+        ...(typeof parsed.signedInAt === "string" ? { signedInAt: parsed.signedInAt } : {}),
       };
     }
 
@@ -227,7 +233,12 @@ function decodeSessionPayload(value: string): SessionCookiePayload | null {
     if (!parsed.userId || (parsed.role !== "admin" && parsed.role !== "user")) {
       return null;
     }
-    return { type: "demo", userId: parsed.userId, role: parsed.role };
+    return {
+      type: "demo",
+      userId: parsed.userId,
+      role: parsed.role,
+      ...(typeof parsed.signedInAt === "string" ? { signedInAt: parsed.signedInAt } : {}),
+    };
   } catch {
     return null;
   }
@@ -237,14 +248,18 @@ function decodeSessionPayload(value: string): SessionCookiePayload | null {
 // Public session factories
 // ---------------------------------------------------------------------------
 
-export function createSessionValue(userId: string): string | null {
+// Every sign-in is stamped here, the one place each kind becomes a session: the
+// instant the first arrival is kept to (A-24 §3.2). Not a secret, and not identity.
+export const signedInNow = () => new Date().toISOString();
+
+export function createSessionValue(userId: string, signedInAt: string = signedInNow()): string | null {
   const user = getDemoUser(userId);
   if (!user) return null;
-  return encodeSession({ type: "demo", userId: user.id, role: user.role });
+  return encodeSession({ type: "demo", userId: user.id, role: user.role, signedInAt });
 }
 
 export function createOidcSessionValue(payload: OidcSessionCookie): string {
-  return encodeSession(payload);
+  return encodeSession({ ...payload, signedInAt: payload.signedInAt ?? signedInNow() });
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +306,7 @@ export async function getSession(): Promise<SessionUser | null> {
       sessionType: "oidc",
       ...(payload.firstVisit ? { firstVisit: true } : {}),
       ...(payload.previousSignIn ? { previousSignIn: payload.previousSignIn } : {}),
+      ...(payload.signedInAt ? { signedInAt: payload.signedInAt } : {}),
     };
   }
 
@@ -302,5 +318,5 @@ export async function getSession(): Promise<SessionUser | null> {
 
   const user = getDemoUser(payload.userId);
   if (!user || user.role !== payload.role) return null;
-  return user;
+  return payload.signedInAt ? { ...user, signedInAt: payload.signedInAt } : user;
 }

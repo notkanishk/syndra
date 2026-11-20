@@ -156,7 +156,7 @@ describe("a long wait says so once (§6)", () => {
   });
 });
 
-describe("the list closes, and plates wait for the owner (§4.1, §7, Q9)", () => {
+describe("the list closes, and the plates (§4.1, §7, Q9)", () => {
   it("closing: the sentence takes the heading size and a lime hairline draws once over one flash", () => {
     render(<EmptyState resolved closes title="Nothing here needs you." />);
     expect(screen.getByText("Nothing here needs you.")).toHaveClass("type-section-title");
@@ -166,9 +166,15 @@ describe("the list closes, and plates wait for the owner (§4.1, §7, Q9)", () =
     expect(rule).toContain("var(--healthy)");
   });
 
-  it("does not draw a plate until the owner has seen them at true size", () => {
-    expect(PLATES_SHOWN).toBe(false);
-    render(<EmptyState resolved plate="shut" title="Everyone inside is on the list." />);
+  it("draws a plate in the right seat where one is earned, and none where a search missed", () => {
+    // Shown on the wave-4 branch for the owner to judge at true size (Q9).
+    expect(PLATES_SHOWN).toBe(true);
+    const { unmount } = render(<EmptyState resolved plate="shut" title="Everyone inside is on the list." />);
+    const seat = screen.getByRole("status");
+    // Last in the row, after the words: the right seat, never between a sentence and its link.
+    expect(seat.lastElementChild).toHaveAttribute("data-plate", "shut");
+    unmount();
+    render(<EmptyState title="Nobody matches that." guidance="Try a shorter search." />);
     expect(document.querySelector("[data-plate]")).toBeNull();
   });
 
@@ -187,5 +193,29 @@ describe("the list closes, and plates wait for the owner (§4.1, §7, Q9)", () =
     const rule = css.slice(css.indexOf("@utility plate"), css.indexOf("/* The shared bloom"));
     expect(rule).not.toMatch(/#[0-9a-f]{3,6}\b/i);
     expect(rule).toContain('&[data-plate="open"]');
+    // At true size: 1px lines on whole pixels, and an 8px point centred on the floor.
+    expect(rule).not.toMatch(/\d\.\dpx/);
+    expect(rule).toMatch(/& > \.plate-floor \{[^}]*height: 1px;/);
+    expect(rule).toMatch(/& > \.plate-point \{[^}]*width: 8px;\s*height: 8px;\s*margin-left: -4px;/);
+    // The sign-in door, drawn small (owner, 19 Nov 2026): the login arch's own proportion and top, its violet
+    // hairline, its uprights dissolving into the floor, and its own pool of light, from the same tokens.
+    const arch = /& > \.plate-arch \{[^}]*\}/.exec(rule)?.[0] ?? "";
+    const px = (name: string, from: string) => Number(new RegExp(`${name}: (\\d+)px`).exec(from)?.[1]);
+    const login = { w: px("--door-arch-w", css), h: px("--door-arch-h", css), r: px("--door-arch-r", css) };
+    const w = px("width", arch);
+    expect(Math.abs(px("height", arch) - (w * login.h) / login.w)).toBeLessThanOrEqual(1);
+    expect(Math.abs(Number(/border-radius: (\d+)px/.exec(arch)?.[1]) - (w * login.r) / login.w)).toBeLessThanOrEqual(1);
+    expect(arch).toMatch(/border: 1px solid var\(--door-ring-base\);/);
+    expect(arch).toContain("mask-image: var(--door-arch-mask);");
+    expect(arch).toContain("var(--door-pool-edge)");
+    expect(rule).toMatch(/&\[data-plate="open"\] > \.plate-arch \{[^}]*border-color: var\(--door-stroke\);[^}]*var\(--door-pool\),/);
+    // One light: the sign-in screen's pool is drawn from the same two tokens.
+    expect(css).toMatch(/\.login-pool \{\s*background: radial-gradient\(50% 50% at 50% 50%, var\(--door-pool\), var\(--door-pool-edge\) 46%, transparent 72%\);/);
+    expect(rule).not.toMatch(/rgba?\(/);
+    // Open reads as open, not a different fill: the floor breaks at the jambs and the light spills through.
+    expect(rule).toMatch(/&\[data-plate="open"\] > \.plate-floor \{[^}]*transparent 8px calc\(100% - 8px\)/);
+    expect(rule).toMatch(/&\[data-plate="open"\] > \.plate-floor::after \{[^}]*var\(--door-pool\)/);
+    // Gone under forced colours, with the other lights.
+    expect(rule).toMatch(/@media \(forced-colors: active\)\s*\{\s*display: none;/);
   });
 });

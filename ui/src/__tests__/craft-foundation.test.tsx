@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
 import { LATELY_SHOWN, goTo, keepLately, recallLately } from "@/lib/go-to";
-import { ArriveList, Crossfade, TINT_MS, TIP_WARM_MS, notePage, quietVisit, visitByKey } from "@/lib/motion";
+import { ArriveList, Crossfade, TINT_MS, TIP_WARM_MS, notePage } from "@/lib/motion";
 import { ADVANCED_NAV, BASIC_NAV } from "@/lib/nav";
 import { NAME_CATALOG_KEY } from "@/lib/queries/useNameCatalog";
 import { setMediaQuery } from "@/test-utils/media";
@@ -59,67 +59,52 @@ const go = (path: string) => {
   notePage(path);
 };
 
-describe("a place arrives once a session, and never by key (Q14)", () => {
-  it("arrives on the first visit to a path, and is quiet on every later one", () => {
+describe("a place arrives on every visit, and Back is still (S11; Q14 reversed by the owner, 19 Nov 2026)", () => {
+  const head = () => screen.getByRole("heading", { level: 1 }).parentElement!.parentElement!.parentElement!;
+
+  it("arrives on a second visit as on the first: the header tints in and what follows rises", () => {
     go("/a24/people");
-    expect(quietVisit()).toBe(false);
+    render(<PageHeader title="People" />);
+    expect(head()).not.toHaveAttribute("data-settled");
+    cleanup();
     go("/a24/home");
     go("/a24/people");
-    expect(quietVisit()).toBe(true);
-  });
-
-  it("is quiet on a first visit made by key: Enter on a link is a click with no pointer", () => {
-    render(
-      <>
-        <a href="/a24/by-key" onClick={(event) => event.preventDefault()}>
-          By key
-        </a>
-        <a href="/a24/by-pointer" onClick={(event) => event.preventDefault()}>
-          By pointer
-        </a>
-      </>,
-    );
-    fireEvent.click(screen.getByText("By key"), { detail: 0 });
-    go("/a24/by-key");
-    expect(quietVisit()).toBe(true);
-
-    fireEvent.click(screen.getByText("By pointer"), { detail: 1 });
-    go("/a24/by-pointer");
-    expect(quietVisit()).toBe(false);
-  });
-
-  it("is quiet when Go to opened it, however it was pressed", () => {
-    visitByKey("/a24/from-go-to");
-    go("/a24/from-go-to");
-    expect(quietVisit()).toBe(true);
-  });
-
-  it("tints the header in over content that is simply there, and the CSS stages nothing after it", () => {
-    go("/a24/roles");
-    go("/a24/elsewhere");
-    go("/a24/roles");
-    render(<PageHeader title="Roles" />);
-    const head = screen.getByRole("heading", { level: 1 }).parentElement!.parentElement!.parentElement!;
-    expect(head).toHaveAttribute("data-quiet");
-    expect(head).toHaveAttribute("data-settled");
-
-    const pageHead = body(css, "@utility page-head");
-    const quiet = body(pageHead, "&[data-quiet]");
-    expect(quiet).toContain("animation: fade var(--duration-tint) var(--ease-tint)");
-    // Everything that arrives is keyed on an unsettled head; a quiet head is settled, so nothing does.
-    for (const rule of pageHead.match(/&[^{]*~[^{]*\{/g) ?? []) expect(rule).toContain(":not([data-settled])");
-  });
-
-  it("settles a list on a quiet visit, so its rows are simply there", () => {
-    go("/a24/list");
-    go("/a24/away");
-    go("/a24/list");
+    render(<PageHeader title="People" />);
+    expect(head()).not.toHaveAttribute("data-settled");
+    cleanup();
     const { container } = render(
       <ArriveList>
         <div>One</div>
       </ArriveList>,
     );
-    expect(container.querySelector(".arrive-list")).toHaveAttribute("data-settled");
+    expect(container.querySelector(".arrive-list")).not.toHaveAttribute("data-settled");
+  });
+
+  it("arrives when reached by key too: Enter on a link is a visit like any other", () => {
+    render(
+      <a href="/a24/by-key" onClick={(event) => event.preventDefault()}>
+        By key
+      </a>,
+    );
+    fireEvent.click(screen.getByText("By key"), { detail: 0 });
+    cleanup();
+    go("/a24/by-key");
+    render(<PageHeader title="By key" />);
+    expect(head()).not.toHaveAttribute("data-settled");
+  });
+
+  it("is still on Back: the page is simply there", () => {
+    go("/a24/back");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    render(<PageHeader title="Back" />);
+    expect(head()).toHaveAttribute("data-settled");
+  });
+
+  it("keeps no memory of where it has arrived, and nothing marks a visit by key", () => {
+    const arrive = readFileSync(resolve(SRC, "lib/motion/arrive.tsx"), "utf8");
+    expect(arrive).not.toMatch(/sessionStorage|recallPaths|syndra:arrived|visitByKey|detail === 0/);
+    // The page head has one way in, and no quiet one.
+    expect(body(css, "@utility page-head")).not.toContain("data-quiet");
   });
 });
 

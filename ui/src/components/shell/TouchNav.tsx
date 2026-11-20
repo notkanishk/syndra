@@ -158,7 +158,7 @@ function Tab({
     <Link
       href={destination.href}
       aria-current={active ? "page" : undefined}
-      className={`relative flex min-h-[var(--tap)] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 control press-scale ${
+      className={`nav-place relative flex min-h-[var(--tap)] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 control press-scale ${
         active ? "bg-accent-soft" : ""
       }`}
     >
@@ -578,7 +578,7 @@ function SheetRow({
       replace
       onClick={onPick}
       aria-current={active ? "page" : undefined}
-      className={`mt-0.5 flex min-h-[var(--tap)] items-center gap-2.5 rounded-[12px] text-body control press-scale ${
+      className={`nav-place mt-0.5 flex min-h-[var(--tap)] items-center gap-2.5 rounded-[12px] text-body control press-scale ${
         nested ? "pl-7 pr-3.5" : "px-3.5"
       } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-muted"}`}
     >

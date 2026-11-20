@@ -14,7 +14,8 @@ import {
 } from "@/lib/oidc";
 import { buildRedirectUrl, isSecureRequest } from "@/lib/request-url";
 import { safeReturnPath } from "@/lib/return-path";
-import { createOidcSessionValue, SESSION_COOKIE_NAME, type OidcSessionCookie } from "@/lib/session";
+import { doorCookie } from "@/lib/motion/door";
+import { createOidcSessionValue, SESSION_COOKIE_NAME, signedInNow, type OidcSessionCookie } from "@/lib/session";
 
 function redirectToLogin(request: Request, error: string): Response {
   // Was built straight off request.url with no forwarded-host handling at all,
@@ -135,6 +136,7 @@ export async function GET(request: Request): Promise<Response> {
     expiresAt: fields.expiresAt,
     ...(firstVisit ? { firstVisit: true } : {}),
     ...(previousSignIn ? { previousSignIn } : {}),
+    signedInAt: signedInNow(),
   };
 
   const sessionValue = createOidcSessionValue(payload);
@@ -149,6 +151,8 @@ export async function GET(request: Request): Promise<Response> {
     path: "/",
     maxAge,
   });
+  // The door is decided before the first paint (A-24 §3.2): the first page's server render reads this.
+  cookieStore.set({ ...doorCookie(payload.signedInAt!), secure: isSecure });
 
   // Back to where they were, if they were anywhere. Validated a third time,
   // here at the point of use: the value has been through a cookie and a

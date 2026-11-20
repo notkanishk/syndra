@@ -1,5 +1,8 @@
+import { cookies } from "next/headers";
+
 import { MemberAccess } from "@/components/member/MemberAccess";
 import { Home } from "@/components/home/Home";
+import { DOOR_COOKIE, doorFor } from "@/lib/motion/door";
 import { getSession } from "@/lib/session";
 
 /**
@@ -17,6 +20,10 @@ export default async function LandingPage() {
   const session = await getSession();
   if (!session) return null;
 
-  if (session.role === "admin") return <Home session={session} />;
+  // The door (A-24 §3.2) is decided here, before the first paint: the sign-in's own cookie, read by the server.
+  if (session.role === "admin") {
+    const door = doorFor((await cookies()).get(DOOR_COOKIE)?.value, session.signedInAt);
+    return <Home session={session} door={door} />;
+  }
   return <MemberAccess session={session} />;
 }

@@ -24,7 +24,7 @@ import { Withheld } from "@/components/ui/Withheld";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import { holds, onItsWay as onItsWayStanding, standingTone, standingWords, type Standing } from "@/lib/standing";
 import { useMyChanges, type MyChange } from "@/lib/queries/useMyChanges";
-import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
+import { useUserAccess, useUserGrants, type UserAccessView } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { useEffect, useState } from "react";
 import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
@@ -35,6 +35,8 @@ import { needsPassword } from "@/components/kinds/storage/state";
 import { useMyStorage } from "@/lib/queries/useMyStorage";
 import { useRequestsMine } from "@/lib/queries/useRequests";
 import { sortByName } from "@/lib/sort";
+import { firstTime, idHash } from "@/lib/memory";
+import { isSameDay } from "@/lib/time";
 import { roleName } from "@/lib/names";
 import { ApiError } from "@/lib/api-client";
 
@@ -85,6 +87,26 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   // read here. A role it says nothing about has no standing: not checked.
   const standing = (project: (typeof projects)[number], roleKey: string): Standing =>
     project.standings?.[roleKey] ?? null;
+
+  // The lit card (A-24 §3.3, Q6): a project whose access began today is lit on the
+  // first visit after it starts, and on no other. Decided once, on this visit's own
+  // answers from Zitadel and the feed: a cached answer, a read that failed or one
+  // that hasn't landed decides nothing. Only a start Zitadel holds is spent then,
+  // so one on its way or not yet held is still lit on the visit after it starts.
+  const [lit, setLit] = useState<ReadonlySet<string> | null>(null);
+  const read =
+    access.isFetchedAfterMount &&
+    !access.error &&
+    Boolean(access.data?.observation?.read_at) &&
+    changes.isFetchedAfterMount &&
+    changes.data !== undefined &&
+    !changes.error;
+  useEffect(() => {
+    if (lit !== null || !now || !read) return;
+    const who = idHash(session.id);
+    const starts = startedOn(changes.data ?? [], access.data?.projects ?? [], now);
+    setLit(new Set(starts.filter((c) => firstTime("local", LIT, `${who}:${c.project_id}:${c.at}`, LIT_KEPT)).map((c) => c.project_id)));
+  }, [lit, now, read, changes.data, access.data, session.id]);
 
   // The greeting, in every state the page has a head: the reader's clock, so it waits for mount in an unseen seat.
   const hello = (
@@ -189,7 +211,6 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   };
   const held = (projectId: string, roleKey: string) =>
     holds(projects.find((p) => p.project_id === projectId)?.standings?.[roleKey]);
-  const today = (iso: string) => now !== null && new Date(iso).toDateString() === now.toDateString();
   // Roles that are on their way, from either answer: an approval in the feed
   // (a request, not a role's holding), or a role whose standing says so.
   const onItsWay = new Map<string, NamedRole>();
@@ -236,15 +257,9 @@ export function MemberAccess({ session }: { session: SessionUser }) {
             label: projectName(r.project_id) ? named(r.project_id, r.role_key).label : undefined,
           })),
         onItsWay: Array.from(onItsWay.values()),
-        startedToday: feed.flatMap((change) => {
+        startedToday: startedOn(feed, projects, now).flatMap((change) => {
           const project = projectName(change.project_id);
-          return (change.kind === "given" || change.kind === "request_approved") &&
-            !change.waiting &&
-            today(change.at) &&
-            held(change.project_id, change.role_key) &&
-            project
-            ? [{ project, projectId: change.project_id }]
-            : [];
+          return project ? [{ project, projectId: change.project_id }] : [];
         }),
       })
     : null;
@@ -343,6 +358,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
       ) : (
         <div className="flex flex-wrap gap-4">
           {sortByName(projects, (p) => p.project_name || "", (p) => p.project_id).map((project) => {
+            const isLit = lit?.has(project.project_id) ?? false;
             const roles = [...project.source_roles, ...project.derived_roles]
               .map((role) => ({
                 ...role,
@@ -354,8 +370,13 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                 return x < y ? -1 : x > y ? 1 : 0;
               });
             return (
-              <Card key={project.project_id} className="min-w-[min(420px,100%)] flex-1">
+              // In its alphabetical place, lit or not: nothing is pinned (A-24 frame 8).
+              <Card
+                key={project.project_id}
+                className={`min-w-[min(420px,100%)] flex-1${isLit ? " lit-card" : ""}`}
+              >
                 <CardHeader
+                  note={isLit ? "From today" : undefined}
                   title={
                     // The id is the target of the header line's jump: its title flashes on landing.
                     <span id={`card-${project.project_id}`}>
@@ -430,6 +451,25 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         />
       )}
     </div>
+  );
+}
+
+/** The starts this device has lit, as `<id hash>:<project>:<instant>`: a shared computer keeps its newest few. */
+const LIT = "syndra:lit";
+const LIT_KEPT = 50;
+
+/**
+ * Roles given or approved on `now`'s makerspace day that Zitadel holds: the
+ * line's "From today" (rung 6) and the lit card read this one list. A role
+ * still on its way has not started.
+ */
+function startedOn(feed: MyChange[], projects: UserAccessView["projects"], now: Date): MyChange[] {
+  return feed.filter(
+    (change) =>
+      (change.kind === "given" || change.kind === "request_approved") &&
+      !change.waiting &&
+      isSameDay(new Date(change.at), now) &&
+      holds(projects.find((p) => p.project_id === change.project_id)?.standings?.[change.role_key]),
   );
 }
 

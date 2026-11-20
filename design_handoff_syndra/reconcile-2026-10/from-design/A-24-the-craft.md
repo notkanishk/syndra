@@ -260,6 +260,7 @@ Each has my recommended answer. The first thirteen are drawn on the boards.
 12. **A year of days** on Insights. **Recommended: yes, once counting has run a term.**
 13. **Go to remembers your last five places**, on this device. **Recommended: yes.**
 14. **A place arrives once per session, and never by key.** This tightens S11 in FINAL §4. **Recommended: yes.**
+    **Reversed by the owner, 19 Nov: arrive on every visit.** Every forward navigation arrives (link, Go to, Enter); Back, Forward, a reload, a filter, a sort and the Basic/Advanced switch stay still. FINAL §4 S11 says so.
 15. **Reduced motion keeps tint.** **Recommended: yes.**
 16. **The name carries you** from a row to its page's title: one exception to the 10px cap. **Recommended: spike it inside the Next 16 slice, and keep it only if it is still welcome on the hundredth open.**
 17. **Humour, a "celebrate" action, a pool of rotating lines.** The research offers them; the copy guide's keeper never jokes. **Recommended: no. Warmth stays exactness at the right moment.**
@@ -283,6 +284,7 @@ Each has my recommended answer. The first thirteen are drawn on the boards.
   **Answered (code, 18 Nov 2026, wave 2): no.** `GET /audit` filters by `user_id` as actor *or* target, pages by a keyset cursor and caps at 200; it has no `since`, no actor-only filter and no action filter, and no row says whether its change is held. `confirmed_at` (observed in Zitadel) is on the outbox row only, and no read returns it. So the ledger line ("You decided 4 requests today. All 4 are in Zitadel.") is **not built**. The smallest read that would make it true, proposed and not built: `GET /me/today`, read-only, operator-gated, answering `{decided, sent, in_zitadel, since}` for the signed-in operator from `audit_logs` (actor = them, created_at at or after the start of the makerspace's day in its configured zone, the decision actions) joined to each act's outbox rows (`status` applied for sent, `confirmed_at` for in Zitadel). Until it exists, every queue ends warm without it.
 - Whether `<ViewTransition>` can name one element per row without duplicate names when a person appears twice on a page (§2, vivid).
 - What the sign-in door says after sign-out. Not read. A closing line there would be the same idea as §4's day.
+  **Answered (code, 19 Nov 2026, wave 4):** the same as to anyone arriving. `POST /auth/logout` deletes the session and PKCE cookies and redirects to a bare `/login` (`app/auth/logout/route.ts`), with no parameter, so the door cannot tell a sign-out from a first visit; only a failure (`?error=`) or an ended session (`SESSION_ENDED`) changes what it says. A closing line would need the logout redirect to carry one, and is not built. Wave 4 keeps the first arrival to the sign-in itself instead (`signedInAt` on the session), so a sign-out and a new sign-in always open the door again.
 
 ## 14 · What would change, in one table
 

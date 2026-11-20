@@ -88,7 +88,9 @@ export function SkeletonAfterDelay({
 
 /**
  * Empty — a sentence naming what is absent, one line of guidance, one link to
- * the next move. No illustration, no "you're all caught up!".
+ * the next move. No "you're all caught up!", and no illustration but a plate
+ * (A-24 §7, Q9): the shut door where a queue is clear, the open door where a
+ * list is only beginning, none where a search missed or a read failed.
  *
  * `resolved` separates the two very different things an empty list can mean.
  * A triage queue with nothing in it is *resolved*: work existed, and none of
@@ -159,10 +161,10 @@ export function EmptyState({
 export type PlateKind = "shut" | "open";
 
 /**
- * Plates are drawn and ready, and not shown (A-24 Q9: the owner judges them at
- * true size on staging first). Turning them on is this one constant.
+ * Plates are shown on this branch for the owner to judge at true size on
+ * staging (A-24 Q9) before it merges. Turning them off is this one constant.
  */
-export const PLATES_SHOWN = false;
+export const PLATES_SHOWN = true;
 
 /**
  * A plate (A-24 §7): a drawing from the door, in hairlines with one lit point,

@@ -4,7 +4,9 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
+import { RoomContext } from "@/components/shell/RoomLight";
 import { TINT_MS } from "@/lib/motion";
+import { DOOR_COOKIE, spendDoor } from "@/lib/motion/door";
 import { inZone } from "@/test-utils/zone";
 import type { SessionUser } from "@/lib/session";
 import { setMediaQuery } from "@/test-utils/media";
@@ -20,6 +22,8 @@ const state = vi.hoisted(() => ({
   own: false,
   terms: [] as Array<{ name: string; start: string; end: string }> | undefined,
   governance: {} as Record<string, unknown>,
+  // Whether the queue's first read is still out.
+  loading: false,
 }));
 
 const quiet = () => ({
@@ -38,7 +42,7 @@ vi.mock("@/lib/queries/useServiceAccounts", () => ({
   serviceAccountHref: (id: string) => `/system/service-accounts/${id}`,
 }));
 vi.mock("@/lib/queries/useGovernance", () => ({
-  useGovernanceSummary: () => ({ data: state.governance, isLoading: false, error: null, refetch: vi.fn() }),
+  useGovernanceSummary: () => ({ data: state.loading ? undefined : state.governance, isLoading: state.loading, error: null, refetch: vi.fn() }),
 }));
 vi.mock("@/lib/queries/useRequests", () => ({
   useRequestsAdmin: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
@@ -80,15 +84,30 @@ vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alrea
 const session = { id: "op", name: "Kanishk", email: "k@example.org" } as unknown as SessionUser;
 const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-function mount() {
+/** The shell's column and its one scroller, as AppShell has them: the page renders in the scroller. */
+function shell() {
+  document.querySelector("[data-test-column]")?.remove();
+  const column = document.createElement("div");
+  column.setAttribute("data-test-column", "");
+  const scroll = document.createElement("div");
+  scroll.id = "app-scroll";
+  column.append(scroll);
+  document.body.append(column);
+  return { column, scroll };
+}
+
+function mount(who: SessionUser = session, door = false, room = true) {
   const queries = client();
+  const { column, scroll } = shell();
   const home = () => (
-    <QueryClientProvider client={queries}>
-      <Home session={session} />
-    </QueryClientProvider>
+    <RoomContext.Provider value={room ? column : null}>
+      <QueryClientProvider client={queries}>
+        <Home session={who} door={door} />
+      </QueryClientProvider>
+    </RoomContext.Provider>
   );
-  const view = render(home());
-  return { reread: () => view.rerender(home()) };
+  const view = render(home(), { container: scroll });
+  return { reread: () => view.rerender(home()), unmount: view.unmount, column };
 }
 
 /** The phase of the outermost Unfold around `element`: the calm line's, or the grid's. */
@@ -107,6 +126,7 @@ beforeEach(() => {
   state.advanced = true;
   state.own = false;
   state.terms = [];
+  state.loading = false;
   // The day's close is kept on this device: every test starts with none.
   window.localStorage.clear();
   state.governance = drifting();
@@ -331,9 +351,19 @@ describe("the room knows the hour", () => {
     expect(light).toHaveAttribute("data-hour", "morning");
     expect(light).toHaveAttribute("aria-hidden");
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Morning/);
-    // Behind the head: inside it, and the only light on the page.
-    expect(light.parentElement).toHaveClass("page-head", "isolate");
     expect(document.querySelectorAll(".hour-light")).toHaveLength(1);
+  });
+
+  it("is the room's light, drawn in the shell's column and never inside the scroller (A-25 §3)", () => {
+    inZone("UTC");
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    const { column } = mount(session, true);
+    const light = document.querySelector(".hour-light")!;
+    expect(light.parentElement).toBe(column);
+    expect(light.closest("#app-scroll")).toBeNull();
+    // Outside the shell there is no column, and no light: it is never drawn where the page is.
+    mount(session, true, false);
+    expect(document.querySelector(".hour-light")).toBeNull();
   });
 
   it("is a lamp in the quiet hours, with the greeting and the calm line's sentence from the same part of the day", () => {
@@ -364,6 +394,48 @@ describe("the room knows the hour", () => {
   });
 });
 
+// A-24 §3.2, Q4: the door's light travels the greeting once, straight after signing in.
+describe("the first arrival of a sign-in", () => {
+  const signedIn = { ...session, signedInAt: "2026-11-19T08:00:00.000Z" } as SessionUser;
+  // The door is the hour's light gliding into place: nothing else on the page is touched.
+  const light = () => document.querySelector(".hour-light[data-door]");
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("marks the light, and only the light, when the server says so: the page arrives as on any visit", () => {
+    mount(signedIn, true);
+    expect(light()).toHaveAttribute("aria-hidden");
+    expect(document.querySelectorAll("[data-door]")).toHaveLength(1);
+    expect(document.querySelector("[data-door-step], [data-door-light], .door-through")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 }).parentElement).not.toHaveAttribute("data-door");
+  });
+
+  it("is the server's to decide: without its answer the light rests, whatever the session says", () => {
+    mount(signedIn);
+    expect(light()).toBeNull();
+  });
+
+  it("is once: spent by the first page, so Home again (Back to a cached page, a reload) keeps it still", () => {
+    const first = mount(signedIn, true);
+    expect(light()).not.toBeNull();
+    // The shell spends the door on the sign-in's first page: the cookie goes, and this device remembers.
+    document.cookie = `${DOOR_COOKIE}=${signedIn.signedInAt}; Path=/`;
+    spendDoor(signedIn.signedInAt);
+    expect(document.cookie).not.toContain(DOOR_COOKIE);
+    first.unmount();
+    // A cached render that still says "door" (Back) finds it already opened here.
+    mount(signedIn, true);
+    expect(light()).toBeNull();
+  });
+
+  it("glides again for the next sign-in", () => {
+    spendDoor(signedIn.signedInAt);
+    mount({ ...signedIn, signedInAt: "2026-11-20T08:00:00.000Z" } as SessionUser, true);
+    expect(light()).not.toBeNull();
+  });
+});
+
 // A-24 §3.1, Q3: the term line, from the terms setting and Ending soon's own read.
 describe("the term line on Home", () => {
   const term = () => screen.queryByText(/^Monsoon term, day 110 of 153$/)?.closest("[data-term-line]");
@@ -378,17 +450,76 @@ describe("the term line on Home", () => {
     expect(term()?.closest(".unfold")).toHaveAttribute("data-phase", "open");
   });
 
-  it("unfolds when the terms land late, rather than popping in, and is gone between terms", () => {
+  it("holds its seat while the terms are out, then fills it, and folds only when the read says there is no term", () => {
     vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
     state.terms = undefined;
     const home = mount();
-    expect(term()).toBeFalsy();
+    // The head is its full height from the first frame: the line's seat is held, open, before the read lands.
+    const seat = document.querySelector('[data-line-seat="term"]');
+    expect(seat).not.toBeNull();
+    expect(seat!.closest(".unfold")).toHaveAttribute("data-phase", "open");
+    // The term lands in the seat that was already there: nothing opens, nothing moves.
     state.terms = [{ name: "Monsoon", start: "2026-08-01", end: "2026-12-31" }];
     home.reread();
-    expect(term()?.closest(".unfold")).toHaveAttribute("data-phase", "opening");
+    expect(term()?.closest(".unfold")).toHaveAttribute("data-phase", "open");
+    expect(document.querySelector('[data-line-seat="term"]')).toBeNull();
+    // Between terms the read says there is none: the line folds, smoothly, as any line does.
     state.terms = [{ name: "Spring", start: "2027-01-10", end: "2027-05-20" }];
     home.reread();
     later(TINT_MS * 4);
     expect(screen.queryByText(/term, day/)).toBeNull();
+  });
+
+  it("folds its held seat when the read lands with no term at all", () => {
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    state.terms = undefined;
+    const home = mount();
+    const unfold = document.querySelector('[data-line-seat="term"]')!.closest(".unfold")!;
+    state.terms = [];
+    home.reread();
+    expect(unfold.getAttribute("data-phase")).not.toBe("open");
+  });
+
+  // A seat is the line's own size at every width: the same box classes (the phone's and the desktop's, the
+  // tap reach and its negative margin), only unseen. Colour and the link's hover are not size.
+  const sizeClasses = (el: Element) =>
+    (el.getAttribute("class") ?? "").split(/\s+/).filter((c) => c && !/^(invisible|text-(muted|faint|ink)|link-hover)$/.test(c)).sort();
+
+  it("holds each late line's seat at the line's own size, on a desktop and on a phone", () => {
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    state.terms = undefined;
+    state.loading = true;
+    const home = mount();
+    const termSeat = document.querySelector('[data-line-seat="term"]')!;
+    const checkedSeat = document.querySelector('[data-line-seat="checked"]')!;
+    const seat = { term: sizeClasses(termSeat), track: sizeClasses(termSeat.children[1]), checked: sizeClasses(checkedSeat), link: sizeClasses(checkedSeat.lastElementChild!) };
+    state.terms = [{ name: "Monsoon", start: "2026-08-01", end: "2026-12-31" }];
+    state.loading = false;
+    home.reread();
+    const line = document.querySelector("[data-term-line]")!;
+    expect(seat.term).toEqual(sizeClasses(line));
+    expect(seat.track).toEqual(sizeClasses(line.querySelector("[data-term-track]")!));
+    // The phone's two rows and the desktop's one are both in those classes: the track's own row below `tablet`.
+    expect(seat.track).toEqual(expect.arrayContaining(["row-start-2", "col-span-2", "tablet:row-start-1"]));
+    const checked = screen.getByText("Checked, nothing waiting:").parentElement!;
+    expect(seat.checked).toEqual(sizeClasses(checked));
+    expect(seat.link).toEqual(sizeClasses(checked.querySelector("a")!));
+    // A 44px line of its own on a phone (D-1 §9, PR 219), its text's height on a desktop, as the line.
+    expect(seat.link).toEqual(expect.arrayContaining(["min-h-[var(--tap)]", "desktop:min-h-0"]));
+    expect(seat.link).not.toContain("-my-2.5");
+  });
+
+  it("holds the Checked line's seat while the queue is read, so the head never grows when it lands", () => {
+    vi.setSystemTime(new Date("2026-11-18T08:10:00Z"));
+    state.loading = true;
+    const home = mount();
+    const seat = document.querySelector('[data-line-seat="checked"]');
+    expect(seat).not.toBeNull();
+    expect(seat).toHaveAttribute("aria-hidden");
+    expect(seat!.closest(".unfold")).toHaveAttribute("data-phase", "open");
+    // The read lands with a queue that has clear blocks: the real line takes the seat.
+    state.loading = false;
+    home.reread();
+    expect(document.querySelector('[data-line-seat="checked"]')).toBeNull();
   });
 });

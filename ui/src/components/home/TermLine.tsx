@@ -25,6 +25,26 @@ export interface Ending {
  * block does not. The words are plain text; only the track is a picture, and
  * its name is the one sentence it adds. Days are the makerspace's (`civilDay`).
  */
+/** The line's own box and its track's place in it: the line and its seat share them, so they are one size. */
+const LINE =
+  "grid max-w-[760px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3.5 pb-1.5 pt-3.5 text-small text-faint tablet:grid-cols-[auto_minmax(0,1fr)_auto]";
+const TRACK = "relative col-span-2 row-start-2 h-3.5 rounded-inner tablet:col-span-1 tablet:col-start-2 tablet:row-start-1";
+
+/**
+ * The term line's seat while the terms are read (Home holds it so the head never grows when they land):
+ * the line's own box, its words' and its end's places held by unseen text, the track's row held empty.
+ * Desktop one row, a phone two, exactly as the line.
+ */
+export function TermLineSeat() {
+  return (
+    <div aria-hidden data-line-seat="term" className={`invisible ${LINE}`}>
+      <span>Term, day 1 of 1</span>
+      <span className={TRACK} />
+      <span>Ends 1 Jan</span>
+    </div>
+  );
+}
+
 export function TermLine({ term, ending, now }: { term: Term; ending: Ending[]; now: Date }) {
   const today = civilDay(now);
   const days = daysBetween(term.start, term.end) + 1;
@@ -60,7 +80,7 @@ export function TermLine({ term, ending, now }: { term: Term; ending: Ending[]; 
     <div
       data-term-line
       data-figure
-      className="grid max-w-[760px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3.5 pb-1.5 pt-3.5 text-small text-faint tablet:grid-cols-[auto_minmax(0,1fr)_auto]"
+      className={LINE}
     >
       {/* Every reading in one cell, the unread ones unseen, so the seat is as wide as the widest and
           reading a mark never moves the track under the pointer. */}
@@ -86,7 +106,7 @@ export function TermLine({ term, ending, now }: { term: Term; ending: Ending[]; 
         onBlur={() => setRead(null)}
         onKeyDown={keys}
         onPointerLeave={() => setRead(null)}
-        className="relative col-span-2 row-start-2 h-3.5 rounded-inner tablet:col-span-1 tablet:col-start-2 tablet:row-start-1"
+        className={TRACK}
       >
         <span className="absolute inset-x-0 top-1/2 h-px bg-line-strong" />
         <span className="absolute left-0 top-1/2 h-px bg-muted" style={{ width: at(today) }} />
