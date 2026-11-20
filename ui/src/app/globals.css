@@ -1156,14 +1156,19 @@
 /* The one light (A-25 §2 rule 1, §3): every pool falls to nothing on an eased curve, six stops,
    never a straight ramp to a rim. A light sets its strength (`--pool-k`), and its colour if it is not
    the accent (`--pool-c`), and draws these stops in its own shape; its pseudo-elements inherit them. */
-:where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark) {
-  --pool-c: var(--accent);
-  --pool-stops: color-mix(in srgb, var(--pool-c) var(--pool-k), transparent),
-    color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.74), transparent) 20%,
-    color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.44), transparent) 42%,
-    color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.2), transparent) 62%,
-    color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.06), transparent) 82%,
-    transparent;
+/* In the base layer: a default, so any light's own colour or strength (in components or utilities)
+   wins over it. Unlayered, it beat every layer whatever its specificity, and a filled button's edge
+   lit in the accent on an accent fill (review, 20 Nov 2026). */
+@layer base {
+  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark) {
+    --pool-c: var(--accent);
+    --pool-stops: color-mix(in srgb, var(--pool-c) var(--pool-k), transparent),
+      color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.74), transparent) 20%,
+      color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.44), transparent) 42%,
+      color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.2), transparent) 62%,
+      color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.06), transparent) 82%,
+      transparent;
+  }
 }
 
 @utility hour-light {

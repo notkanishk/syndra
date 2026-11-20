@@ -247,6 +247,40 @@ describe("who wears it", () => {
     expect(WEARERS.split(", ").sort()).toEqual(drawn.sort());
   });
 
+  it("lets a light's own colour win: every --pool-* default sits in a lower cascade layer than every override", () => {
+    // Where each declaration of a pool's colour or strength lives, by the cascade's own order: base,
+    // components, utilities (Tailwind's @utility), then unlayered, which beats every layer whatever its
+    // specificity. A default unlayered was why a filled button's edge lit in the accent on its accent fill.
+    const RANK = { base: 1, components: 2, utilities: 3, unlayered: 4 } as const;
+    const layerAt = (index: number): keyof typeof RANK => {
+      let depth = 0;
+      let opener = "";
+      for (let i = 0; i < index; i++) {
+        if (css[i] === "{") {
+          if (depth === 0) opener = css.slice(css.lastIndexOf("\n", i) + 1, i);
+          depth++;
+        } else if (css[i] === "}") depth--;
+      }
+      if (depth === 0) return "unlayered";
+      if (/@layer base/.test(opener)) return "base";
+      if (/@layer components/.test(opener)) return "components";
+      if (/@utility /.test(opener)) return "utilities";
+      return "unlayered";
+    };
+    for (const prop of ["--pool-c", "--pool-k", "--pool-stops"]) {
+      const found = [...css.matchAll(new RegExp(`^\\s*${prop}:`, "gm"))].map((m) => {
+        const before = css.slice(0, m.index);
+        const selector = before.slice(before.lastIndexOf("{", m.index) - 200, before.lastIndexOf("{"));
+        return { rank: RANK[layerAt(m.index!)], isDefault: /:where\(\.hour-light/.test(selector) };
+      });
+      const defaults = found.filter((f) => f.isDefault);
+      const overrides = found.filter((f) => !f.isDefault);
+      for (const d of defaults) for (const o of overrides) expect(d.rank, prop).toBeLessThan(o.rank);
+    }
+    // And the pool's default is not unlayered at all.
+    expect(layerAt(css.indexOf(":where(.hour-light, .lit-card,"))).toBe("base");
+  });
+
   it("answers no hand with a flat ring", () => {
     const files: string[] = [];
     const walk = (dir: string) => {
