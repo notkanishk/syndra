@@ -268,7 +268,9 @@ export function detect({ tablet = 720 } = {}) {
       if (!vis(row) || row.matches("[data-card-columns]")) continue;
       const s = [...row.children].find((c) => c.matches("[data-action-seat], .row-seat"));
       if (!s || !vis(s) || !s.innerText.trim()) continue;
-      const kids = [...row.children].filter((c) => vis(c) && !c.matches("[data-row-detail]"));
+      // Every drawn part takes its room on the line, read aloud or not: an aria-hidden avatar left
+      // out of the sum made a row 1px short of its seat read as one that fits (Home's new people, 860).
+      const kids = [...row.children].filter((c) => vis(c, true) && !c.matches("[data-row-detail]"));
       const first = kids[0];
       if (!first || first === s) continue;
       const fr = first.getBoundingClientRect();
