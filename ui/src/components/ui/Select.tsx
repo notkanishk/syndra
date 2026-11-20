@@ -131,7 +131,7 @@ export function Segmented<T extends string>({
               active ? `${box ? "" : "bg-accent-dense "}text-accent-ink` : "text-muted hover:text-ink"
             } ${option.disabled ? "cursor-not-allowed opacity-50" : ""}`}
           >
-            <SteadyLabel text={option.label} />
+            {option.label}
           </button>
         );
       })}

@@ -6,7 +6,8 @@
  * This loads each page in Chrome at each width, runs `detect.js` in it, and
  * exits non-zero on any overlap over 2px, any clipped text outside a
  * `truncate`, any column heading more than 4px off its cells, a seat off its
- * row's first line when the row fits, or a page that scrolls sideways.
+ * row's first line when the row fits, an unchosen option narrower than it will
+ * be once chosen, or a page that scrolls sideways.
  *
  *   bun run layout:check -- --base "$SYNDRA_STAGING_URL"
  *

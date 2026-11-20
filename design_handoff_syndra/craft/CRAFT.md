@@ -87,6 +87,8 @@ Every option is drawn at up to three settings, so the owner chooses character wi
 - **Why:** a transition can be retargeted mid-run; a keyframe cannot, so a reversal waits or jumps. Only transform and opacity stay off the main thread, which a console with large tables keeps busy.
 - **Seen in:** https://emilkowal.ski/ui/building-a-toast-component · https://web.dev/articles/animations-guide
 - **Syndra: adopt.** A row returning mid-fade already reverses (FINAL §4).
+- **The one exception: a control's indicator** (`GlideIndicator`, `indicator-glide`). An out-of-flow indicator with no children may transition its own `width` and `height` beside `transform`. A pill scaled whole squashes its round ends, and one drawn in parts to avoid that showed its seams as two lines under a translucent fill (staging, 20 Nov 2026), so it is one element that takes the chosen option's size. Absolutely positioned and childless, it is the only box that re-lays out, never the group. MUI's Tabs indicator does the same (`left` and `width`). Never `left` or `top`: its place is a transform.
+  - Seen in: https://github.com/mui/material-ui/blob/master/packages/mui-material/src/Tabs/Tabs.js
 
 **1.8 Never from nothing, and from where it belongs.**
 - **Why:** nothing in the world appears from zero size; a popover that grows from its trigger visibly belongs to it.

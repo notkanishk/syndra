@@ -637,7 +637,11 @@ describe("design system", () => {
     const css = readFileSync(GLOBALS_CSS, "utf8");
     const steady = atRuleBody(css, "@utility label-steady");
     expect(steady, "globals.css must declare a label-steady utility").not.toBe("");
-    expect(steady).toMatch(/flex-direction:\s*column/);
+    // A flex column: the copy is an item beneath the words, so `height: 0` takes
+    // no height while its width still counts. Inline, the copy would sit beside them.
+    const own = steady.slice(0, steady.indexOf("&::after"));
+    expect(own).toMatch(/display:\s*inline-flex;/);
+    expect(own).toMatch(/flex-direction:\s*column/);
     const after = steady.slice(steady.indexOf("&::after"));
     expect(after).toMatch(/content:\s*attr\(data-label\)/);
     expect(after).toMatch(/height:\s*0/);

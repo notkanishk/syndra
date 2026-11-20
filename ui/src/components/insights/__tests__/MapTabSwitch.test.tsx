@@ -2,6 +2,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DENSE_FIELD } from "@/components/ui/Input";
 import { setMediaQuery } from "@/test-utils/media";
 
 let query = "";
@@ -101,5 +102,14 @@ describe("Insights toolbar", () => {
     expect(within(row).getByRole("radiogroup", { name: "View" })).toBeInTheDocument();
     expect(row).not.toContainElement(choice());
     expect(row.nextElementSibling).toContainElement(choice());
+  });
+
+  // Unfold eases a line opening and closing, not a swap: Ending soon's pills and
+  // A group's fields must be one height, or swapping lenses jumps the page below.
+  it("draws A group's fields dense, the height of the pills they replace", () => {
+    query = "lens=group&group=team%3Alasers";
+    render(<Mount />);
+    expect(screen.getByRole("combobox", { name: "Which group" }).className).toContain(DENSE_FIELD);
+    expect(screen.getByRole("textbox", { name: "Team name" }).className).toContain(DENSE_FIELD);
   });
 });

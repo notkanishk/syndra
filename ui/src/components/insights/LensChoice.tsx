@@ -12,10 +12,14 @@ const TOOLBAR_GAP = 10;
 /** The gap between this line and the team's line beneath it (`gap-2`). */
 const LINE_GAP = 8;
 
-/** One line: its words, then its control, at the right under the lens pills; on a phone they stack. */
+/**
+ * One line: its words, then its control, at the right under the lens pills; on a phone they stack.
+ * Every line is the same height (`--control-md`, the pills' own; the fields beside them are dense),
+ * so swapping one lens for another moves nothing below: `Unfold` eases opening and closing, not a swap.
+ */
 function Line({ words, children }: { words: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 tablet:justify-end">
+    <div className="flex flex-col items-start gap-1.5 tablet:min-h-(--control-md) tablet:flex-row tablet:items-center tablet:justify-end tablet:gap-3">
       {/* The control carries the same words as its name; said once. */}
       <span aria-hidden className="text-small text-muted">
         {words}
@@ -49,6 +53,7 @@ export function LensChoice({ url, lens }: { url: InsightsUrl; lens: string }) {
         <Line words="Which group">
           <div className="w-full tablet:w-64">
             <Select
+              dense
               aria-label="Which group"
               value={team === null ? url.group : "team"}
               onChange={(e) => url.set({ group: e.target.value === "left" ? null : e.target.value === "team" ? "team:" : e.target.value })}
@@ -63,6 +68,7 @@ export function LensChoice({ url, lens }: { url: InsightsUrl; lens: string }) {
           <Line words="Team name">
             <div className="w-full tablet:w-64">
               <Input
+                dense
                 key={team ?? ""}
                 aria-label="Team name"
                 placeholder="Team name"
