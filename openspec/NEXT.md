@@ -15,6 +15,28 @@ Four buckets, in the order they actually unblock each other:
 
 ---
 
+## 0n. Parked design picks, kept for when we return (swept 20 Nov 2026)
+
+Owner, 20 Nov 2026: "look for more such 'picks kept for when we return' items and add them to next.md so that they are not forgotten". One place for every design the owner picked or accepted and then parked. Each line says what was decided, what is still open, and where the drawing lives. Items already tracked in their own section are listed by name only.
+
+**Not tracked anywhere else until now**
+- **N25 Jump to anything** (benched 14 Oct; **revived 20 Nov**). Picked: 3b "Ask", a display-face field with the Syndra mark, results by kind, a preview pane, deterministic questions answered from Insights with a "Read as" line, and `@` `#` `/` scope chips for People, Roles and Pages. Open: the look, which is the owner's (4a Glass, 4b Halo or 4c Edge-lit), then the build. Only navigation-only Go to is built (`GoTo.tsx`). Drawing: the canvas board `route-additions` (frames jx-*, gl-*) and `verdicts.md` N25; it is being redrawn as A-26 with an interactive prototype. A-25 moment 6 (the light behind Go to) is **on hold** for it (branch `feat/addon-contract-a25-goto`, no PR). `needs-info`
+- **N24 A role's sheet** (benched 14 Oct). Picked: 1a, a Modal lg opened by any role name that leads nowhere else, with folds per route (bundle and version, by hand, by rule), state in the link (`?role=`), and "Follow it on the map". Open: build (`RoleSheet`, `GET /roles/{project}/{key}/holders`). Drawing: `route-additions`, `verdicts.md` N24. `ready-for-agent`
+- **N26 Send one batch** (benched 14 Oct). Picked: 5b, a Select seat on each batch and single change in Pending changes, the bar reading "Send 7 changes", and the rest keeping their order. Open: build (`POST /outbox/drain` with `batches`/`rows`, refusing a partial batch with `409 BATCH_PARTIAL`). Drawing: `route-additions`, `verdicts.md` N26. `ready-for-agent`
+- **A-07 §35 The Zitadel key guide as a dialog (2c)** (benched Oct). The four inline steps are built; the dialog is not, because replacing the key is rare. Open: the owner's word to revive it. `needs-info`
+- **A-23 O3 busiest day and O5 export on Usage** ("not now", Oct/Nov). Open: the owner's word to revive them. `needs-info`
+- **A-25 Syndra alive, what is left.** Built and merged: the boundless glide, the member's room, the edge, the lamp, the rail's glide and the trail (carried). Open: moment 6 (on hold for N25 above); moment 7, the ember; and Q10, the older lights (`flash` at `globals.css` and the lit card still use the cut falloff, accepted "once the rest are judged"). `ready-for-agent` after the owner judges each on staging.
+
+**Already tracked in their own section** (listed here so the parked set is whole)
+- A-24 Q19 term in review, Q12 a year of days, Q16 the name carries you, §4.1 the ledger line (`GET /me/today`), Q5 the mark's lime and dim, §5 "what stays" before a revoke, Q11's write-path follow-ups: section 0l.
+- D-1 Q7 page transitions, when and the leaving page: section 0j.
+- Deleting a TrueNAS account from Syndra: section 0k.
+- A-19 Go to's entry on a phone in Basic: "An extension of you (A-19), wave 1 navigation".
+
+Swept: `verdicts.md` (every BENCHED and pending block), every `from-design/A-*.md` and `D-1`, `FINAL.md`, the canvas's `benched-additions.md`, and every `changes/*/tasks.md`. Nothing else is parked: N27 Daylight is done, LDAP sync is gone, and A-20 P18 is built.
+
+---
+
 ## 0j. Density, alignment and motion, D-1 (18 Nov 2026)
 
 Source: `from-design/D-1-density-and-alignment.md` and boards `design/d1-density-1..4`; tracked as addon-contract **7u**. Pass 1 (tokens and shared parts, #200), pass 2 (seats, #201), pass 3 (Home, #202), pass 4 (type, #203), pass 5's code side (#204) and the motion pass (#205) merged; the owner round (Q4 the Name row, Q5 silence in table rows, the Home folders row held while read, the pill's transform-only glide) built on branch `feat/addon-contract-d1-owner`. Open: pass 5's publish (BRIDGE steps 2 and 3, after the owner's OK). **Owner (18 Nov 2026): Q1–Q8 decided**, "yes, do recommended" for Q1–Q6 and Q8; Q7 flipped: page transitions are wanted, and a designer is specifying them (D-1 §7a). Open: **page transitions**, built from that spec when it lands.
