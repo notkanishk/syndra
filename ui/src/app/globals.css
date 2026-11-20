@@ -1894,6 +1894,17 @@ html.theme-fading *::after {
   transition-delay: var(--light-lead);
 }
 
+/* A dot not read fresh (A-13 §1.4): a 1.5px ring in its tone's colour (the dot's `color`), drawn inside
+   it as a shadow, not a border, so its size never changes and the ring tints into a fill and back with
+   `motion-tint`, never empty between them (A-25 moment 5: a trail's dot fills behind the light). */
+@utility dot-ring {
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  /* Forced colours drop every shadow: the ring is a border there, in the system's colour. */
+  @media (forced-colors: active) {
+    border: 1.5px solid currentColor;
+  }
+}
+
 /* ── The mark ─────────────────────────────────────────────────────────────
  * A contained orb: a faint base ring under a brighter arc, with a lit dot at
  * the centre. It is a miniature of the login's arch-and-orb, which is the
@@ -2070,10 +2081,14 @@ html.theme-fading *::after {
       background: radial-gradient(closest-side, var(--pool-stops));
     }
   }
-  /* Its breath, as the lamp's, only for a visitor who has not asked for less. */
+  /* Its breath, as the lamp's, only for a visitor who has not asked for less. Going out, the breath is
+     held where it is, so the fade starts from the strength it had rather than jumping back to full. */
   @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
     .trail-light[data-breathe]::before {
       animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate;
+    }
+    .trail-light[data-breathe]:not([data-going])::before {
+      animation-play-state: paused;
     }
   }
   .trail-light-glide {
@@ -2110,7 +2125,10 @@ html.theme-fading *::after {
   }
   &[data-stale] [data-dot] {
     background-color: transparent;
-    border-width: 1.5px;
+    box-shadow: inset 0 0 0 1.5px currentColor;
+    @media (forced-colors: active) {
+      border: 1.5px solid currentColor;
+    }
   }
   &[data-recedes] {
     transition-property: background-color, border-color, box-shadow;

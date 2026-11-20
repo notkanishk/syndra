@@ -58,11 +58,13 @@ describe("the trail reads the person again while its last step is open", () => {
     expect(person.refetch).toHaveBeenCalledTimes(1);
   });
 
-  it("for no longer than the watch, however long the step stays open", () => {
+  it("for no longer than the watch, however long the step stays open (one clock: the light's)", () => {
     render(trail());
-    act(() => void vi.advanceTimersByTime(TRAIL_WATCH_MS + TRAIL_REREAD_MS * 4));
+    act(() => void vi.advanceTimersByTime(TRAIL_WATCH_MS - 1));
+    expect(person.refetch).toHaveBeenCalledTimes(Math.floor(TRAIL_WATCH_MS / TRAIL_REREAD_MS) - 1);
+    act(() => void vi.advanceTimersByTime(1));
     const calls = person.refetch.mock.calls.length;
-    expect(calls).toBe(Math.floor(TRAIL_WATCH_MS / TRAIL_REREAD_MS) - 1);
+    expect(calls).toBeLessThanOrEqual(Math.floor(TRAIL_WATCH_MS / TRAIL_REREAD_MS));
     act(() => void vi.advanceTimersByTime(TRAIL_REREAD_MS * 10));
     expect(person.refetch).toHaveBeenCalledTimes(calls);
   });

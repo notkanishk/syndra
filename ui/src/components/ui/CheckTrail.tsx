@@ -27,15 +27,16 @@ export interface TrailCheck {
  *
  * `label` makes it a route rather than a set of checks (A-24 §5, a change's
  * trail): the list is named by it, and each step is read as "Step n:" with no
- * pass or fail word, because its own sentence already says how far it got.
+ * pass or fail word, because its own sentence already says how far it got. A
+ * route's current step is the one it has reached, its first open (`ring`) one
+ * (`aria-current="step"`).
  *
- * `light` is a change's own (A-25 moment 5): a soft light resting on the step
- * the change has reached, its first open (`ring`) one, which is also the list's
- * current step. It moves only when the steps do, which is only on a read; each
- * dot fills `--light-lead` behind it; it goes out when no step is open (the
- * change is home) or when `light` turns false (the trail stopped looking).
- * Undefined, there is no light at all: a check's trail, a removal's, a route
- * not yet answered.
+ * `light` is a change's own (A-25 moment 5): a soft light resting on that
+ * step. It moves only when the steps do, which is only on a read; each dot
+ * fills `--light-lead` behind it; it goes out when no step is open (the change
+ * is home) or when `light` turns false (the trail stopped looking). Undefined,
+ * there is no light at all: a check's trail, a removal's, a route not yet
+ * answered or not yet sent.
  */
 export function CheckTrail({
   checks,
@@ -49,11 +50,12 @@ export function CheckTrail({
   light?: boolean;
 }) {
   const lit = light !== undefined;
-  const open = light ? checks.findIndex((check) => check.ring) : -1;
+  // The step a route has reached: its current step, whether or not a light rests on it.
+  const open = label !== undefined || lit ? checks.findIndex((check) => check.ring) : -1;
   const { ref, box } = useGlideIndicator<HTMLOListElement>(open);
   return (
     <ol ref={ref} className={`flex flex-col ${lit ? "relative isolate" : ""}`} aria-label={label ?? "Checks"}>
-      {lit && <TrailLight trail={ref} box={box} going={open >= 0} />}
+      {lit && <TrailLight trail={ref} box={box} going={Boolean(light) && open >= 0} />}
       {checks.map((check, i) => {
         const details = !compact || check.tone !== "healthy";
         return (
@@ -90,31 +92,34 @@ export function CheckTrail({
 
 /** Where the light rests on a step: its dot's centre, under the dot's `mt-[8px]` and half its `size-1.5`. */
 const DOT_CENTRE = 11;
-/** The pool (A-25 moment 5): 280 by 96, its left 20px outside the trail, so it is spent inside a dialog's 24px margin. */
-const POOL = { width: 280, height: 96, left: -20 };
+/** The pool (A-25 moment 5): at most 280 by 96. */
+const POOL = { width: 280, height: 96 };
+/** How far inside its room's side margin the pool is spent: 20px out of a dialog's 24 (A-25 §7). */
+const MARGIN_KEPT = 4;
 
 /**
  * The change's light: one pool on the open step's dot, the trail's own layer,
- * under everything in it. It is never taller than the ground it has, from the
- * thing above the trail's block to the thing below it (the outcome above; the
- * dialog's footer, which has a ground of its own, below), so its closest-side
- * falloff is spent before either (rule 1). Where it rested last it stays, to
- * go out there.
+ * under everything in it. Its room is the trail's block and that block's own
+ * margins (`data-trail-room`): it reaches into the side margin to 4px short of
+ * its edge, and is never taller than the block and its top and bottom margins
+ * allow, so its closest-side falloff is spent inside them (rule 1), whatever
+ * sits around the block and however the panel has scrolled. Where it rested
+ * last it stays, to go out there.
  */
 function TrailLight({ trail, box, going }: { trail: RefObject<HTMLOListElement | null>; box: Box | null; going: boolean }) {
-  const [pool, setPool] = useState<{ top: number; width: number; height: number } | null>(null);
+  const [pool, setPool] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   useLayoutEffect(() => {
     const list = trail.current;
     if (!list || !box) return;
-    const at = list.getBoundingClientRect();
-    const block = list.closest<HTMLElement>("[data-trail-room]") ?? list;
-    const edge = block.getBoundingClientRect();
-    const margin = getComputedStyle(block);
-    const above = (block.previousElementSibling?.getBoundingClientRect().bottom ?? edge.top - parseFloat(margin.marginTop)) - at.top;
-    const below = (block.nextElementSibling?.getBoundingClientRect().top ?? edge.bottom + parseFloat(margin.marginBottom)) - at.top;
+    const margin = getComputedStyle(list.closest<HTMLElement>("[data-trail-room]") ?? list);
+    const px = (value: string) => parseFloat(value) || 0;
+    // From the list's top: up to its block's top margin, down through the list and its bottom margin.
+    const above = -px(margin.marginTop);
+    const below = list.offsetHeight + px(margin.marginBottom);
+    const left = -Math.max(0, px(margin.marginLeft) - MARGIN_KEPT);
     const centre = box.top + DOT_CENTRE;
     const height = Math.max(0, Math.min(POOL.height, 2 * Math.min(centre - above, below - centre)));
-    setPool({ top: centre - height / 2, width: Math.min(POOL.width, at.width - POOL.left), height });
+    setPool({ left, top: centre - height / 2, width: Math.min(POOL.width, list.offsetWidth - left), height });
   }, [trail, box]);
   if (!pool) return null;
   const still = stillMotion();
@@ -122,11 +127,14 @@ function TrailLight({ trail, box, going }: { trail: RefObject<HTMLOListElement |
     <span
       aria-hidden
       data-trail-light
+      // Not one of the list's steps: the glide indicator's observer leaves it alone.
+      data-indicator="light"
       data-going={going ? "" : undefined}
-      // Breath while a step is open: still happening (the licensed loop). Neither travels nor breathes when still.
-      data-breathe={going && !still ? "" : undefined}
+      // Its breath (the licensed loop, still happening); held where it is while the light goes out, so the
+      // fade starts from the strength it had. Neither travels nor breathes when still.
+      data-breathe={still ? undefined : ""}
       className={`trail-light pointer-events-none absolute left-0 top-0 ${still ? "" : "trail-light-glide"}`}
-      style={{ transform: `translate(${POOL.left}px, ${pool.top}px)`, width: pool.width, height: pool.height }}
+      style={{ transform: `translate(${pool.left}px, ${pool.top}px)`, width: pool.width, height: pool.height }}
     />
   );
 }

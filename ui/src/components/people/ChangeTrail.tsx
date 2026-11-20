@@ -122,19 +122,7 @@ export function ChangeTrail({
   const steps = trailSteps(act, sent, standing, newer);
   const open = steps[steps.length - 1].tone !== "healthy";
 
-  // Read again while the last step is open, on the page's own query, never past the watch.
-  const reread = access.refetch;
-  useEffect(() => {
-    if (!open) return;
-    const until = at + TRAIL_WATCH_MS;
-    const timer = setInterval(() => {
-      if (Date.now() >= until) clearInterval(timer);
-      else void reread();
-    }, TRAIL_REREAD_MS);
-    return () => clearInterval(timer);
-  }, [open, reread, at]);
-
-  // The light keeps company with the looking (A-25 moment 5): when the watch ends, it goes out with it.
+  // The one clock for whether the trail is looking: until the watch ends. The re-reads and the light both follow it.
   const [watching, setWatching] = useState(() => Date.now() < at + TRAIL_WATCH_MS);
   useEffect(() => {
     if (!watching) return;
@@ -142,10 +130,21 @@ export function ChangeTrail({
     return () => clearTimeout(timer);
   }, [watching, at]);
 
-  // A give's trail only: a removal takes access away, and nothing that does is lit (A-25 §1).
+  // Read again while the last step is open and the trail is looking, on the page's own query.
+  const reread = access.refetch;
+  useEffect(() => {
+    if (!open || !watching) return;
+    const timer = setInterval(() => void reread(), TRAIL_REREAD_MS);
+    return () => clearInterval(timer);
+  }, [open, watching, reread]);
+
+  // The light (A-25 moment 5), on a give's trail only, and only once Syndra has sent it: a removal takes access
+  // away, and nothing that does is lit (A-25 §1); a give that waits for someone to press Send is not moving, and
+  // a breathing light would say it was. It goes out with the looking.
+  const light = act === "give" && steps[1].tone === "healthy" ? watching : undefined;
   return (
     <div className={className} data-trail-room>
-      <CheckTrail label={TRAIL_LABEL} checks={steps} light={act === "give" ? watching : undefined} />
+      <CheckTrail label={TRAIL_LABEL} checks={steps} light={light} />
     </div>
   );
 }
