@@ -7,6 +7,7 @@ import {
   ARRIVE_MS,
   ARRIVE_SETTLED_MS,
   ARRIVE_STEP_MS,
+  DOOR_OPEN_MS,
   FOLD_MS,
   LIGHT_LEAD_MS,
 } from "@/lib/motion";
@@ -447,6 +448,7 @@ describe("design system", () => {
     }
     expect(FOLD_MS, "FOLD_MS must equal --duration-fold").toBe(Number(/--duration-fold:\s*(\d+)ms/.exec(css)?.[1]));
     expect(LIGHT_LEAD_MS, "LIGHT_LEAD_MS must equal --light-lead").toBe(Number(/--light-lead:\s*(\d+)ms/.exec(css)?.[1]));
+    expect(DOOR_OPEN_MS, "DOOR_OPEN_MS must equal --door-open").toBe(Number(/--door-open:\s*(\d+)ms/.exec(css)?.[1]));
 
     // Outside the token's own declaration, no 40ms and no fold calc remain.
     const code = withoutComments(css)

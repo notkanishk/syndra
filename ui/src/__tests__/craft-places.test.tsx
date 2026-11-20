@@ -64,7 +64,7 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
     for (const phase of ["morning", "afternoon", "evening", "quiet"]) expect(light).toContain(`&[data-hour="${phase}"]`);
     expect(reaches).toHaveLength(4);
     // Still, but for the door's light once a sign-in (`[data-door]::before` and `::after`).
-    const still = light.replace(/&\[data-door\]::(before|after) \{[^}]*\}/g, "");
+    const still = light.replace(/&\[data-(door|settle)\]::(before|after) \{[^}]*\}/g, "");
     expect(still).not.toMatch(/animation|transition/);
     expect(light).toContain("var(--pool-stops)");
     expect(light).not.toMatch(/--(healthy|warn|danger)\b|#[0-9a-f]{3,6}\b/i);

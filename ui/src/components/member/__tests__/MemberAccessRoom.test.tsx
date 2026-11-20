@@ -10,6 +10,7 @@ import { MemberAccess } from "@/components/member/MemberAccess";
 import { AppShell } from "@/components/shell/AppShell";
 import { RoomContext } from "@/components/shell/RoomLight";
 import { DOOR_COOKIE, spendDoor } from "@/lib/motion/door";
+import { DOOR_OPEN_MS } from "@/lib/motion";
 import { inZone } from "@/test-utils/zone";
 
 // A-25 moment 1: the member's room. My access gets Home's light, by Home's own path: the hour's pool
@@ -68,6 +69,28 @@ function mount(door = false) {
   return { column, unmount: view.unmount, reread: () => view.rerender(page()) };
 }
 const light = () => document.querySelector(".hour-light");
+/** Whether a light, or a door, was ever in the document while the test ran: nothing drawn and taken away unseen. */
+function everDrawn() {
+  const seen = { light: false, door: false };
+  const look = (node: Node) => {
+    if (!(node instanceof Element)) return;
+    const lights = [node, ...node.querySelectorAll(".hour-light")].filter((el) => el.matches(".hour-light"));
+    seen.light ||= lights.length > 0;
+    seen.door ||= lights.some((el) => el.hasAttribute("data-door"));
+  };
+  const watcher = new MutationObserver(() => {});
+  watcher.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-door"] });
+  return () => {
+    // Every node added, and every node whose door changed, since the watch began: even one gone again.
+    for (const record of watcher.takeRecords()) {
+      record.addedNodes.forEach(look);
+      look(record.target);
+    }
+    look(document.body);
+    watcher.disconnect();
+    return seen;
+  };
+}
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -77,6 +100,7 @@ beforeEach(() => {
   view();
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
   inZone(process.env.TZ);
 });
@@ -97,7 +121,7 @@ describe("the member's room (A-25 moment 1)", () => {
     expect(light()).not.toHaveAttribute("data-door");
   });
 
-  it("is never lit over a page that could not read Zitadel", () => {
+  it("is never lit over a page that could not read Zitadel, and never while the read is out", () => {
     // Zitadel never read: the page's Notice and no rows.
     view({ read_at: null, current: false, truncated: false });
     mount(true);
@@ -106,10 +130,10 @@ describe("the member's room (A-25 moment 1)", () => {
     view(null, new Error("unreachable"));
     mount(true);
     expect(light()).toBeNull();
-    // Still loading is not a failure: the room is lit while the read is out.
+    // Still loading: nothing yet, so nothing can be cut off when it lands.
     view(null);
     mount(true);
-    expect(light()).not.toBeNull();
+    expect(light()).toBeNull();
   });
 
   it("crosses once a sign-in: spent by the first page, so My access again stays still", () => {
@@ -123,20 +147,59 @@ describe("the member's room (A-25 moment 1)", () => {
     expect(light()).not.toHaveAttribute("data-door");
   });
 
-  it("never replays the door when a read lands unread and then read (the light is unmounted between)", () => {
-    // Loading, with the server's door: the room is lit and the door crosses.
+  it("loading, then unread: never lit, and no door ever drawn", () => {
+    const drawn = everDrawn();
     view(null);
     const page = mount(true);
-    expect(light()).toHaveAttribute("data-door", "");
-    spendDoor(SIGNED_IN); // as the shell does on the sign-in's first page
-    // The read lands unread: the light goes.
     view({ read_at: null, current: false, truncated: false });
     page.reread();
     expect(light()).toBeNull();
-    // Minutes later a refetch lands read: the pool returns, still. The door was this sign-in's first moment.
+    expect(drawn()).toEqual({ light: false, door: false });
+  });
+
+  it("loading, then read: the door crosses once when the read lands in time, and the pool settles in after that", () => {
+    view(null);
+    const page = mount(true);
+    expect(light()).toBeNull();
     view();
     page.reread();
+    expect(light()).toHaveAttribute("data-door", "");
+    spendDoor(SIGNED_IN); // as the shell does on the sign-in's first page
+    // A refetch lands unread, then read: the pool goes, then settles back in; the door never crosses again.
+    view({ read_at: null, current: false, truncated: false });
+    page.reread();
+    expect(light()).toBeNull();
+    view();
+    page.reread();
+    expect(light()).toHaveAttribute("data-settle", "");
+    expect(light()).not.toHaveAttribute("data-door");
+  });
+
+  it("settles in without crossing when the read takes longer than the crossing itself (--door-open)", () => {
+    let clock = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => clock);
+    view(null);
+    const page = mount(true);
+    clock += DOOR_OPEN_MS + 1;
+    view();
+    page.reread();
+    expect(light()).toHaveAttribute("data-settle", "");
+    expect(light()).not.toHaveAttribute("data-door");
+  });
+
+  it("on a revisit, the still pool only: settled in after the read, or there at once from a cached one", () => {
+    spendDoor(SIGNED_IN);
+    view(null);
+    const page = mount(true);
+    view();
+    page.reread();
+    expect(light()).toHaveAttribute("data-settle", "");
+    expect(light()).not.toHaveAttribute("data-door");
+    page.unmount();
+    // A read already in hand at the first render: the pool is simply there, as on Home.
+    mount(true);
     expect(light()).not.toBeNull();
+    expect(light()).not.toHaveAttribute("data-settle");
     expect(light()).not.toHaveAttribute("data-door");
   });
 

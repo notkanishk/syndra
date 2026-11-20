@@ -275,10 +275,9 @@ export function MemberAccess({ session, door = false }: { session: SessionUser; 
     <div className="flex flex-col gap-4">
       <div {...head} style={BELOW_HEADER}>
         {/* Home's light, for the member too (A-25 moment 1): the hour's pool and, once after a sign-in,
-            the door's crossing. Lit while the read is out; gone if it lands unread (its Notice and no
-            rows are not a warm moment), and unmounted then, so a read that lands later never replays
-            the door. */}
-        {!(access.data && unread) && <HourLight phase={phase} door={door} signedInAt={session.signedInAt} />}
+            the door's crossing. Lit only after a good read of Zitadel (owner, 20 Nov 2026): never while
+            it is out, so nothing is cut off when it lands unread or fails; it settles in when it lands. */}
+        <HourLight phase={phase} door={door} signedInAt={session.signedInAt} lit={!access.error && !unread} />
         <h1 className="type-page-title">
           {hello}{" "}
           <span className="text-faint">{session.firstVisit ? WELCOME : <>Here&rsquo;s what you can use.</>}</span>

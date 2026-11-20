@@ -1193,6 +1193,10 @@
       background: radial-gradient(ellipse 42cqw 56cqh at var(--door-x) 25cqh, var(--pool-stops));
       animation: door-cross var(--door-open) var(--ease-tint) both;
     }
+    /* A page lit only after its read (My access, A-25 moment 1): the pool settles in, never pops. */
+    &[data-settle]::before {
+      animation: fade var(--duration-settle) var(--ease-settle) both;
+    }
   }
 
   @media (forced-colors: active) {

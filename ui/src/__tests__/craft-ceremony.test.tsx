@@ -93,7 +93,9 @@ describe("the door's light crosses the greeting on Home (§3.2): a pool left to 
   it("is the pool at rest under reduced motion or forced colours", () => {
     expect(light).toMatch(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{\s*&\[data-door\]::before \{/);
     const outside = light.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@media \(forced-colors: none\) and \(prefers-reduced-motion: no-preference\) \{[\s\S]*?\n  \}\n/, "");
-    expect(outside).not.toMatch(/door-cross|door-settle|::after/);
+    expect(outside).not.toMatch(/door-cross|door-settle|::after|data-settle/);
+    // A page lit only after its read settles the pool in on the settle tokens, inside the same bound.
+    expect(light).toMatch(/&\[data-settle\]::before \{\s*animation: fade var\(--duration-settle\) var\(--ease-settle\) both;\s*\}/);
   });
 
   it("touches nothing else: no staging of the head, no held blocks, no full-window layer", () => {

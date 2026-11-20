@@ -17,6 +17,8 @@ export const GLIDE_MS = 520;
 export const FOLD_MS = 200; // --duration-fold
 /** Closing's second beat: the scrim follows the sheet by this much (S1). */
 export const LIGHT_LEAD_MS = 40; // --light-lead
+/** The door's light crossing (A-24 §3.2): a page lit later than this settles in rather than crossing. */
+export const DOOR_OPEN_MS = 1800; // --door-open
 /** A value that changed while you were looking elsewhere washes once for this long. */
 export const FLASH_MS = 900; // --duration-flash
 /** How long a press that landed keeps its bloom: flash's, and a beat. */
