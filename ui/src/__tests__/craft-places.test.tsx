@@ -63,7 +63,8 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
   it("has a place for every part of the day, is still, is the accent, fades inside its box, and goes under forced colours", () => {
     for (const phase of ["morning", "afternoon", "evening", "quiet"]) expect(light).toContain(`&[data-hour="${phase}"]`);
     expect(reaches).toHaveLength(4);
-    // Still, but for the door's light once a sign-in (`[data-door]::before` and `::after`).
+    // Still, but for the door's light once a sign-in (`[data-door]::before` and `::after`) and a pool
+    // lit only after its read settling in (`[data-settle]::before`).
     const still = light.replace(/&\[data-(door|settle)\]::(before|after) \{[^}]*\}/g, "");
     expect(still).not.toMatch(/animation|transition/);
     expect(light).toContain("var(--pool-stops)");

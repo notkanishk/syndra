@@ -29,7 +29,8 @@ export function RoomLight({ children }: { children: ReactNode }) {
  *
  * How it arrives is decided once, the first time it is drawn: lit from the first render, it is there
  * at once (or crosses, if the door is due); lit later, it settles in, and crosses only if the door is
- * due and the wait was shorter than the crossing itself (`--door-open`). Drawn again after going, it
+ * due and the page is still within the crossing's own length (`--door-open`) of its first appearance
+ * (`performance.now()`: a due door is only ever a full page load). Drawn again after going, it
  * settles in: the door is the sign-in's first moment, never a later one.
  */
 export function HourLight({
@@ -44,19 +45,16 @@ export function HourLight({
   lit?: boolean;
 }) {
   // The server decides the door from the sign-in's cookie; a cached render (Back) of a door this
-  // device has already opened stays still.
-  const [due] = useState(() => door && !openedAlready(signedInAt));
-  const [first] = useState(() => ({ lit, at: performance.now() }));
-  const [arrival, setArrival] = useState<"cross" | "settle" | "still" | "gone" | null>(null);
+  // device has already opened stays still. Taken at the first render, with whether it was lit then.
+  const [start] = useState(() => ({ due: door && !openedAlready(signedInAt), lit }));
+  const [arrival, setArrival] = useState<"cross" | "still" | "settle" | null>(null);
   const shown = Boolean(phase) && lit;
-  // Derived once from what the page says (React's state-from-props pattern): no effect, no frame without it.
-  if (shown && (arrival === null || arrival === "gone")) {
-    const prompt = first.lit || performance.now() - first.at <= DOOR_OPEN_MS;
-    setArrival(arrival === null && due && prompt ? "cross" : arrival === null && first.lit ? "still" : "settle");
-  } else if (!shown && arrival !== null && arrival !== "gone") {
-    setArrival("gone");
-  }
-  if (!shown || arrival === null || arrival === "gone") return null;
+  // Derived from what the page says (React's state-from-props pattern): no effect, no frame without it.
+  if (shown && arrival === null) {
+    const inTime = start.lit || performance.now() <= DOOR_OPEN_MS;
+    setArrival(start.due && inTime ? "cross" : start.lit ? "still" : "settle");
+  } else if (!shown && arrival !== null && arrival !== "settle") setArrival("settle");
+  if (!shown || !arrival) return null;
   return (
     <RoomLight>
       <div

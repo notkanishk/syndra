@@ -92,7 +92,12 @@ function everDrawn() {
   };
 }
 
+// The page's clock (`performance.now()`, from its first appearance): at its start unless a test moves it.
+const clock = { now: 0 };
+
 beforeEach(() => {
+  clock.now = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => clock.now);
   window.localStorage.clear();
   inZone("Asia/Kolkata");
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -175,12 +180,11 @@ describe("the member's room (A-25 moment 1)", () => {
     expect(light()).not.toHaveAttribute("data-door");
   });
 
-  it("settles in without crossing when the read takes longer than the crossing itself (--door-open)", () => {
-    let clock = 1000;
-    vi.spyOn(performance, "now").mockImplementation(() => clock);
+  it("settles in without crossing when the read lands later than the crossing itself (--door-open)", () => {
     view(null);
     const page = mount(true);
-    clock += DOOR_OPEN_MS + 1;
+    // The page's own clock, from its first appearance: past the crossing's length.
+    clock.now = DOOR_OPEN_MS + 1;
     view();
     page.reread();
     expect(light()).toHaveAttribute("data-settle", "");

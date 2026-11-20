@@ -277,7 +277,7 @@ export function MemberAccess({ session, door = false }: { session: SessionUser; 
         {/* Home's light, for the member too (A-25 moment 1): the hour's pool and, once after a sign-in,
             the door's crossing. Lit only after a good read of Zitadel (owner, 20 Nov 2026): never while
             it is out, so nothing is cut off when it lands unread or fails; it settles in when it lands. */}
-        <HourLight phase={phase} door={door} signedInAt={session.signedInAt} lit={!access.error && !unread} />
+        <HourLight phase={phase} door={door} signedInAt={session.signedInAt} lit={!unread} />
         <h1 className="type-page-title">
           {hello}{" "}
           <span className="text-faint">{session.firstVisit ? WELCOME : <>Here&rsquo;s what you can use.</>}</span>
