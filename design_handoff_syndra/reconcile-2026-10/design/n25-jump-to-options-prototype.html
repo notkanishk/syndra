@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-opt="d">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A-26 · Go to, round 3: five ways</title>
+<!-- A-26 prototype, round 3, 21 Nov 2026. The owner on round 2: "so ugly ... too cluttered ... more elegant".
+     So: elegance by subtraction, five ways (html[data-opt]): a Arc bar, b Quiet palette, c Fluent,
+     d Lamp-led (recommended), e Spotlight (Tahoe, Liquid Glass). One engine, five skins; every one is typeable.
+     Proposed; nothing here is built beyond what Go to already is. Tokens copied from ui/src/app/globals.css.
+     One file, no scripts from elsewhere; the fonts are the only request. Ring names; made-up data.
+     Round 2 put every word in an opaque well, which is what made boxes inside boxes. Here the glass is thick
+     (Acrylic-grade: 78% in the dark room, 84% on paper, over a 36px blur) and the words sit on it. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..700&family=Figtree:wght@400..700&display=swap">
+<style>
+/* ── Tokens, as globals.css has them ─────────────────────────────────────── */
+:root {
+  --violet-600: #6f4ae0; --violet-500: #7f5af0; --violet-400: #9b7bff; --violet-300: #c9b6ff; --on-violet: #f7f4ff;
+  --ease-tint: cubic-bezier(0.4, 0, 0.6, 1); --ease-press: cubic-bezier(0.22, 0.61, 0.36, 1); --ease-settle: cubic-bezier(0.16, 1, 0.3, 1); --ease-flash: cubic-bezier(0.33, 1, 0.68, 1);
+  --duration-tint: 120ms; --duration-press: 180ms; --duration-settle: 260ms; --duration-flash: 900ms;
+  --radius-card: 20px; --radius-nav: 12px; --radius-pill: 999px;
+  --text-title: 17px; --page-x: 26px;
+  --display: "Bricolage Grotesque", "Figtree", system-ui, sans-serif; --body: "Figtree", system-ui, sans-serif;
+}
+:root, [data-theme="dark"] {
+  --ground: #080906; --canvas: #0b0c0a; --surface-1: #141612; --surface-2: #1b1e19; --rail: #101210;
+  --line: rgba(255,255,255,.06); --line-strong: rgba(255,255,255,.14); --divider: rgba(255,255,255,.05);
+  --ink: #f3f5ef; --muted: rgba(243,245,239,.7); --faint: rgba(243,245,239,.56);
+  --accent: var(--violet-500); --accent-text: var(--violet-400); --accent-ink: var(--on-violet); --accent-dense: var(--violet-600);
+  --accent-soft: rgba(155,123,255,.15); --accent-line: rgba(155,123,255,.28); --focus-ring: var(--violet-300);
+  --tint-1: rgba(243,245,239,.04); --tint-2: rgba(243,245,239,.07); --tint-3: rgba(243,245,239,.09); --hover: rgba(243,245,239,.05);
+  --shadow-dialog: 0 22px 50px rgba(0,0,0,.55); --scrim: rgba(0,0,0,.55); --shadow-popover: 0 18px 40px rgba(0,0,0,.5); --shadow-card: none;
+  --avatar-from: #403466; --avatar-to: #211b33;
+  --mark-base: rgba(155,123,255,.22); --mark-arc: rgba(206,188,255,.92); --mark-arc-opacity: .62; --mark-dot: var(--violet-400); --mark-glow: rgba(155,123,255,.6);
+  --hour-weight: 1; color-scheme: dark;
+  /* Proposed (A-26 round 3): how thick the glass is, and what its rim catches. */
+  --glass: 78%; --spec: var(--violet-300); --lens: blur(2px) saturate(220%) brightness(1.5);
+}
+[data-theme="light"] {
+  --ground: #f4f1fb; --canvas: #f4f1fb; --surface-1: #fff; --surface-2: #fff; --rail: #fff;
+  --line: rgba(37,28,66,.08); --line-strong: rgba(37,28,66,.16); --divider: rgba(37,28,66,.06);
+  --ink: #1d1830; --muted: rgba(29,24,48,.78); --faint: rgba(29,24,48,.66);
+  --accent: #7a5af8; --accent-text: #5b3fd6; --accent-ink: #fff; --accent-dense: #5b3fd6;
+  --accent-soft: rgba(122,90,248,.12); --accent-line: rgba(122,90,248,.32); --focus-ring: var(--accent-text);
+  --tint-1: rgba(37,28,66,.03); --tint-2: rgba(37,28,66,.06); --tint-3: rgba(37,28,66,.08); --hover: rgba(37,28,66,.04);
+  --shadow-dialog: 0 22px 50px rgba(60,40,120,.18); --scrim: rgba(60,40,120,.35); --shadow-popover: 0 18px 40px rgba(60,40,120,.14); --shadow-card: 0 2px 10px rgba(60,40,120,.05);
+  --avatar-from: #cdbdfa; --avatar-to: #a58ef0;
+  --mark-base: rgba(91,63,214,.18); --mark-arc: rgba(76,48,196,.85); --mark-arc-opacity: .9; --mark-dot: var(--accent-text); --mark-glow: rgba(91,63,214,.3);
+  --hour-weight: .75; color-scheme: light;
+  --glass: 84%; --spec: var(--accent); --lens: blur(2px) saturate(220%) brightness(1.06);
+}
+/* Proposed (A-26, kept from round 2): a kind's own colour. No new hue is written down: each is the accent
+   turned on its own wheel. Roles keep violet; People are its warm neighbour, Pages its cool one. Never lime,
+   amber or red: those say a state. Where a browser cannot turn a colour, every kind is the accent. */
+:root, [data-theme] {
+  --kind-people: var(--accent); --kind-people-text: var(--accent-text); --kind-people-solid: var(--accent-dense);
+  --kind-roles: var(--accent); --kind-roles-text: var(--accent-text); --kind-roles-solid: var(--accent-dense);
+  --kind-pages: var(--accent); --kind-pages-text: var(--accent-text); --kind-pages-solid: var(--accent-dense);
+}
+@supports (color: oklch(from red l c h)) {
+  :root, [data-theme] {
+    --kind-people: oklch(from var(--accent) l c calc(h + 44)); --kind-people-text: oklch(from var(--accent-text) l c calc(h + 44)); --kind-people-solid: oklch(from var(--accent-dense) calc(l - .04) c calc(h + 44));
+    --kind-pages: oklch(from var(--accent) l c calc(h - 46)); --kind-pages-text: oklch(from var(--accent-text) l c calc(h - 46)); --kind-pages-solid: oklch(from var(--accent-dense) calc(l - .06) c calc(h - 46));
+  }
+  [data-theme="light"] { --kind-pages-text: oklch(from var(--accent-text) calc(l - .05) c calc(h - 46)); }
+}
+[data-kind="people"], html[data-mode="people"] { --kc: var(--kind-people); --kt: var(--kind-people-text); --ks: var(--kind-people-solid); }
+[data-kind="roles"], html[data-mode="roles"] { --kc: var(--kind-roles); --kt: var(--kind-roles-text); --ks: var(--kind-roles-solid); }
+[data-kind="pages"], html[data-mode="pages"] { --kc: var(--kind-pages); --kt: var(--kind-pages-text); --ks: var(--kind-pages-solid); }
+html[data-mode] { --light: var(--kc); --lt: var(--kt); }
+
+/* ── The five ways: only measures differ here. --ax is the one left axis: what you type, and every row
+   beneath it, start on it. ── */
+html { --pad: 8px; --gap: 12px; --blur: 36px; --sat: 170%; --ax: calc(var(--gx) + var(--mk) + var(--gap)); }
+html[data-opt="a"] { --w: 620px; --top: clamp(112px, 21vh, 220px); --r: 18px; --fh: 60px; --fs: 22px; --ff: var(--display); --gx: 20px; --mk: 20px; --row-r: 12px; --row-h: 44px; }
+html[data-opt="b"] { --w: 680px; --top: 96px; --r: 16px; --fh: 54px; --fs: 17px; --ff: var(--body); --gx: 22px; --mk: 0px; --gap: 0px; --row-r: 10px; --row-h: 40px; }
+html[data-opt="c"] { --w: 640px; --top: 8px; --r: 12px; --fh: 48px; --fs: 16px; --ff: var(--body); --gx: 18px; --mk: 18px; --row-r: 8px; --row-h: 40px; --pad: 6px; --blur: 30px; --sat: 125%; --glass: 88%; }
+html[data-opt="d"] { --w: 660px; --top: 96px; --r: 28px; --fh: 68px; --fs: 23px; --ff: var(--display); --gx: 20px; --mk: 32px; --gap: 14px; --row-r: 12px; --row-h: 42px; }
+html[data-opt="e"] { --w: 608px; --top: clamp(112px, 29vh, 320px); --r: 34px; --fh: 60px; --fs: 21px; --ff: var(--display); --gx: 20px; --mk: 20px; --row-r: 16px; --row-h: 44px; }
+@media (max-width: 719px) {
+  :root { --page-x: 16px; }
+  html[data-opt] { --w: 100%; --top: 12px; --fs: 18px; --row-h: 48px; }
+  html[data-opt="d"] { --mk: 28px; --fh: 62px; --fs: 19px; } html[data-opt="c"] { --top: 8px; --fs: 16px; }
+}
+
+/* ── The one light (A-25 §2): a colour (--c) at a strength (--k), falling to nothing on six eased stops.
+   No box ends it. A mask may give it a shape (a hairline); never an end. ── */
+.pool, .halo, .mark::before, .scope .lit {
+  --c: var(--accent);
+  background: radial-gradient(closest-side,
+    color-mix(in srgb, var(--c) var(--k), transparent),
+    color-mix(in srgb, var(--c) calc(var(--k) * .74), transparent) 20%,
+    color-mix(in srgb, var(--c) calc(var(--k) * .44), transparent) 42%,
+    color-mix(in srgb, var(--c) calc(var(--k) * .2), transparent) 62%,
+    color-mix(in srgb, var(--c) calc(var(--k) * .06), transparent) 82%,
+    transparent);
+  pointer-events: none;
+}
+
+/* ── The page behind: a stand-in for Syndra's shell ──────────────────────── */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--ground); }
+body { margin: 0; color: var(--ink); font: 14px/1.5 var(--body); -webkit-font-smoothing: antialiased; }
+h1, h2, h3, p { margin: 0; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+[data-figure] { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .faint { color: var(--faint); font-size: 12.5px; }
+.cap { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 6px; background: var(--tint-3); font: 600 12px/1 var(--body); color: var(--muted); }
+.app { display: grid; grid-template-columns: 252px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: clip; }
+.rail { min-height: 0; overflow-y: auto; background: var(--rail); border-right: 1px solid var(--line); padding: 18px 14px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 2px 10px 18px; font: 600 17px var(--display); }
+.nav a { display: flex; align-items: center; gap: 9px; margin-top: 3px; padding: 9px 12px; border-radius: var(--radius-nav); color: var(--muted); }
+.nav a::before { content: ""; width: 6px; height: 6px; flex: none; border-radius: 50%; background: color-mix(in srgb, var(--ink) 20%, transparent); }
+.nav a[aria-current] { color: var(--accent-text); font-weight: 600; background: var(--accent-soft); }
+.nav a[aria-current]::before { background: var(--accent-text); }
+.col { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--canvas); }
+.bar { flex: none; height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 var(--page-x); border-bottom: 1px solid var(--line); }
+.bar b { font-weight: 600; } .bar .ask { margin-left: auto; }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.page { padding: 24px var(--page-x) 140px; max-width: 980px; display: flex; flex-direction: column; gap: 18px; }
+.page h1 { font: 600 28px/1.15 var(--display); letter-spacing: -.01em; }
+.page .lede { max-width: 62ch; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: none; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--hover); }
+.card { background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--radius-card); box-shadow: var(--shadow-card); overflow: hidden; }
+.card header { display: flex; align-items: baseline; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--divider); }
+.card header h3 { font-size: var(--text-title); font-weight: 600; }
+.card .line { display: flex; align-items: center; gap: 14px; min-height: 50px; padding: 8px 20px; }
+.card .line + .line { border-top: 1px solid var(--divider); }
+.card .line span:nth-child(2) { flex: 1; min-width: 0; } .card .line b { display: block; font-weight: 600; } .card .line small { font-size: 13px; color: var(--muted); }
+.av { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; color: var(--ink); background: linear-gradient(140deg, var(--avatar-from), var(--avatar-to)); }
+@media (max-width: 719px) { .app { grid-template-columns: minmax(0, 1fr); } .rail { display: none; } .bar { height: 66px; } }
+
+/* ── The mark: the lamp ──────────────────────────────────────────────────── */
+.mark { --s: 22px; position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: var(--s); height: var(--s); }
+.mark i { display: block; border-radius: 50%; }
+.mark .mb, .mark .ma { position: absolute; inset: 0; border: calc(var(--s) / 15) solid var(--mark-base); }
+.mark .mb { mask-image: radial-gradient(closest-side, #000 88%, rgba(0,0,0,.5) 97%, transparent 100%); }
+.mark .ma { border-color: var(--mark-arc); opacity: var(--mark-arc-opacity); mask-image: conic-gradient(from 0deg, #000 0deg, rgba(0,0,0,.28) 118deg, transparent 158deg, transparent 202deg, rgba(0,0,0,.28) 242deg, #000 360deg); }
+.mark .md { position: relative; width: 35%; height: 35%; background: var(--mark-dot); box-shadow: 0 0 calc(var(--s) * .64) calc(var(--s) * .09) var(--mark-glow); }
+.mark::before { content: ""; position: absolute; inset: calc(var(--s) * -.6); border-radius: 50%; --c: var(--mark-dot); --k: 36%; opacity: .72; }
+
+/* ── Go to ─────────────────────────────────────────────────────────────────
+   As built (GoTo.tsx, Modal `still pinned`): pinned from the top, and the field never moves. What grows,
+   grows beneath it. One surface: thick glass, one hairline, no well inside it. */
+.goto { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: center; align-items: flex-start; padding: var(--top) 8px 8px; background: var(--scrim); overflow: hidden; }
+.gt { position: relative; width: min(var(--w), 100%); }
+.gt::before { content: ""; position: absolute; inset: 0; border-radius: var(--r); box-shadow: var(--shadow-dialog); pointer-events: none; }
+.pal { position: relative; display: flex; flex-direction: column; border-radius: var(--r); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line-strong);
+  background-color: color-mix(in srgb, var(--surface-2) var(--glass), transparent); -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat)); backdrop-filter: blur(var(--blur)) saturate(var(--sat)); }
+/* The rim (A-25, the edge): the pane's own hairline, lit from its lamp and falling off along the edge. */
+.pal::after { content: ""; position: absolute; inset: 0; padding: 1px; border-radius: inherit; pointer-events: none; display: none;
+  background: radial-gradient(circle 300px at var(--rx, 50%) 0px, color-mix(in srgb, var(--light, var(--accent)) 62%, transparent), color-mix(in srgb, var(--light, var(--accent)) 22%, transparent) 45%, transparent);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+html[data-opt="a"] .pal::after, html[data-opt="d"] .pal::after { display: block; }
+
+/* The light behind (A-25, moment 6), sized by the window so no edge ends it. The wash is its one-time
+   sibling in a kind's colour: Arc's splash, on Syndra's own flash. */
+.pool { position: absolute; left: var(--lx, 50%); top: var(--ly, 130px); width: var(--lw, 800px); height: var(--lh, 260px); translate: -50% -50%; display: none; }
+.glow { --k: calc(46% * var(--hour-weight)); opacity: .6; }
+.wash { --c: var(--light, var(--accent)); --k: calc(72% * var(--hour-weight)); opacity: 0; }
+html[data-opt="a"] .pool, html[data-opt="b"] .glow, html[data-opt="d"] .pool { display: block; }
+
+.field { display: flex; align-items: center; gap: var(--gap); flex: none; height: var(--fh); padding: 0 var(--gx); }
+.field input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; outline: none; font: 500 var(--fs)/1.2 var(--ff); letter-spacing: -.01em; text-overflow: ellipsis; caret-color: var(--lt, var(--accent-text)); }
+.field input::placeholder { color: var(--faint); opacity: 1; }
+.orb { --s: var(--mk); }
+html[data-opt="b"] .orb { display: none; }
+.halo { display: none; }
+/* d: the lamp is the field's first glyph, and the one thing that moves. In a mode it takes that kind's colour. */
+html[data-opt="d"] .orb::before { display: none; }
+html[data-opt="d"] .halo { display: block; position: absolute; inset: calc(var(--s) * -.42); --c: var(--light, var(--mark-dot)); --k: 44%; opacity: .72; }
+html[data-opt="d"] .orb i { transition: background-color var(--duration-settle) var(--ease-tint), border-color var(--duration-settle) var(--ease-tint), box-shadow var(--duration-settle) var(--ease-tint); }
+html[data-opt="d"][data-mode] .orb { --mark-dot: var(--lt); --mark-arc: var(--lt); --mark-base: color-mix(in srgb, var(--light) 26%, transparent); --mark-glow: color-mix(in srgb, var(--light) 60%, transparent); }
+
+/* A mode, said five ways. Always its kind in words; the colour is company. Click it, or Backspace, to leave. */
+.scope { position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: 6px; flex: none; margin: 0; padding: 0; border: 0; background: none; font: 600 13px/1 var(--body); color: color-mix(in srgb, var(--kt) 78%, var(--ink)); white-space: nowrap; cursor: pointer; }
+.scope::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; }
+.scope svg, .scope .lit { display: none; }
+html[data-opt="a"] .scope { height: 26px; padding: 0 11px; border-radius: var(--radius-pill); color: var(--accent-ink); }
+html[data-opt="a"] .scope::before { background: var(--ks); }
+html[data-opt="a"] .scope .lit { display: block; position: absolute; z-index: -2; inset: -15px -20px; border-radius: 50%; --c: var(--kc); --k: calc(50% * var(--hour-weight)); }
+html[data-opt="b"] .scope::after { content: "›"; margin-left: 4px; font-weight: 400; color: var(--faint); }
+html[data-opt="b"] .scope { margin-right: 10px; }
+html[data-opt="c"] .scope { height: 26px; padding: 0 9px; border-radius: 6px; }
+html[data-opt="c"] .scope::before, html[data-opt="e"] .scope::before { background: color-mix(in srgb, var(--kc) 18%, transparent); }
+html[data-opt="e"] .scope { height: 30px; padding: 0 12px 0 9px; border-radius: var(--radius-pill); }
+html[data-opt="e"] .scope svg { display: block; }
+/* What Tab would do, said quietly at the field's end, only while a kind's own word is being typed. */
+.tail { display: inline-flex; align-items: center; gap: 7px; flex: none; padding: 6px 2px; border: 0; background: none; font-size: 13px; color: var(--muted); white-space: nowrap; cursor: pointer; }
+@media (max-width: 719px) { .tail .cap { display: none; } .tail { color: color-mix(in srgb, var(--kt) 78%, var(--ink)); font-weight: 600; min-height: 44px; } }
+
+/* What grows beneath: one list, on the same glass. It scrolls inside itself and softens at its ends. */
+.body { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
+.scroller { position: relative; min-height: 0; max-height: min(calc(var(--row-h) * 7.6), calc(100dvh - var(--top) - var(--fh) - 104px)); overflow-y: auto; overscroll-behavior: contain; padding: 0 var(--pad) var(--pad); scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--ft, 0px), #000 calc(100% - var(--fb, 0px)), transparent); mask-image: linear-gradient(to bottom, transparent, #000 var(--ft, 0px), #000 calc(100% - var(--fb, 0px)), transparent); }
+.row { display: flex; align-items: center; gap: 12px; min-height: var(--row-h); padding: 0 14px 0 calc(var(--ax) - var(--pad)); border-radius: var(--row-r); cursor: pointer; }
+.row .n { flex: 0 1 auto; min-width: 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .w { flex: 1 1 0; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .k { flex: none; font-size: 13px; color: var(--faint); }
+.row[aria-selected="true"], .ans[aria-selected="true"] { background: var(--tint-2); }
+.g { padding: 12px 14px 4px calc(var(--ax) - var(--pad)); font-size: 13px; font-weight: 600; color: var(--faint); }
+.g:first-child { padding-top: 6px; }
+/* An answer: the sentence, the names, the time of the read, the way to the map. No box. */
+.ans { display: flex; flex-direction: column; gap: 3px; padding: 10px 14px 12px calc(var(--ax) - var(--pad)); border-radius: var(--row-r); cursor: pointer; }
+.ans .back { font-size: 13px; color: var(--muted); }
+.ans h3 { font: 600 19px/1.3 var(--display); letter-spacing: -.01em; }
+.ans .foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin-top: 5px; font-size: 13px; }
+/* Accent words on glass sit a step nearer ink (proposed): they hold 4.5:1 on a chosen row, and with no scrim. */
+.link { color: color-mix(in srgb, var(--accent-text) 78%, var(--ink)); font-weight: 600; } .link + .faint { margin-left: -6px; } .pal .faint { font-size: 13px; }
+.say { padding: 8px 14px 6px calc(var(--ax) - var(--pad)); }
+.say b { display: block; font: 600 var(--text-title)/1.35 var(--display); }
+.say p { font-size: 13px; color: var(--muted); max-width: 56ch; }
+
+/* b: the quiet palette. One hairline under the field; one faint line of keys; a peek only when asked for. */
+html[data-opt="b"] .body { border-top: 1px solid var(--line); } html[data-opt="b"] .scroller { padding-top: 6px; }
+.keys, .peek { display: none; }
+html[data-opt="b"] .keys { display: flex; flex-wrap: wrap; gap: 2px 16px; padding: 9px var(--gx) 11px; font-size: 13px; color: var(--faint); }
+.keys b { font-weight: 600; color: var(--muted); margin-right: 3px; } .keys .end { margin-left: auto; }
+html[data-opt="b"] .body.peeking { grid-template-columns: minmax(0, 1fr) 264px; }
+html[data-opt="b"] .peeking .peek { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px 18px 16px; border-left: 1px solid var(--line); font-size: 13px; }
+.peek h4 { margin: 0; font: 600 var(--text-title)/1.25 var(--display); } .peek ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; } .peek li b { display: block; font-weight: 600; font-size: 13.5px; } .peek li span, .peek p { color: var(--muted); }
+
+/* c: Fluent, in Syndra's tokens. Acrylic (a little grain), lifted by its shadow and not by a border, no
+   scrim (a flyout is light-dismiss), and the chosen row wears a 3px accent pill that glides to the next. */
+html[data-opt="c"] .goto { background: none; }
+html[data-opt="c"] .pal { box-shadow: inset 0 1px 0 var(--line-strong);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 .09 0 0 0 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E"); }
+html[data-opt="c"] .gt::before { box-shadow: var(--shadow-dialog), 0 2px 8px color-mix(in srgb, var(--scrim) 40%, transparent); }
+.ind { position: absolute; top: 0; pointer-events: none; display: none; }
+html[data-opt="c"] .ind { display: block; left: var(--pad); width: 3px; height: 16px; border-radius: 2px; background: var(--lt, var(--accent-text)); transition: transform var(--duration-tint) var(--ease-settle); }
+/* d: no fill on the chosen row. The lamp puts a point of light beside it, and its words come up to ink. */
+html[data-opt="d"] .ind { display: block; left: calc(var(--gx) + var(--mk) / 2 - 3px); width: 6px; height: 6px; border-radius: 50%; background: var(--lt, var(--accent-text)); box-shadow: 0 0 10px 1px color-mix(in srgb, var(--light, var(--accent)) 70%, transparent); }
+html[data-opt="d"] .row[aria-selected="true"], html[data-opt="d"] .ans[aria-selected="true"] { background: none; }
+html[data-opt="d"] .row .n { color: var(--muted); } html[data-opt="d"] .row[aria-selected="true"] .n { color: var(--ink); }
+html[data-opt="d"] .row .w { color: var(--faint); }
+html[data-opt="d"] .scroller { padding-bottom: 14px; margin-top: -6px; }
+
+/* e: Spotlight, after macOS Tahoe. A pill of liquid glass, mid-screen. The rim is a lens of its own: a thin
+   ring that shows the page behind it sharper and brighter than the glass does, with one hairline of light
+   that follows the pointer. The three kinds wait beside it as glass buttons, and go when you type. */
+.lens, .kinds { display: none; }
+html[data-opt="e"] .gt { padding: 4px; }
+html[data-opt="e"] .pal { border-radius: calc(var(--r) - 4px); box-shadow: none; }
+html[data-opt="e"] .lens { display: block; position: absolute; inset: 0; padding: 4px; border-radius: var(--r); pointer-events: none;
+  background: color-mix(in srgb, var(--surface-2) 30%, transparent); -webkit-backdrop-filter: var(--lens); backdrop-filter: var(--lens);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+html[data-opt="e"] .lens::after { content: ""; position: absolute; inset: 0; padding: 1px; border-radius: inherit;
+  background: radial-gradient(circle 190px at var(--px, 50%) var(--py, 0px), color-mix(in srgb, var(--spec) 95%, transparent), color-mix(in srgb, var(--spec) 28%, transparent) 55%, transparent);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+html[data-opt="e"] .kinds { display: flex; gap: 8px; position: absolute; left: calc(100% + 10px); top: 12px; }
+.kinds button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; color: var(--muted); cursor: pointer;
+  background: color-mix(in srgb, var(--surface-2) var(--glass), transparent); -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat)); backdrop-filter: blur(var(--blur)) saturate(var(--sat)); box-shadow: inset 0 0 0 1px var(--line-strong), inset 0 1px 0 color-mix(in srgb, var(--spec) 40%, transparent); }
+.kinds button:hover { color: var(--kt); }
+svg.gl { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; } .scope svg.gl { width: 15px; height: 15px; }
+@media (max-width: 1019px) { html[data-opt="e"] .kinds { position: static; margin-top: 10px; justify-content: center; } }
+
+/* Where a pane cannot blur, or less transparency is asked for: the same pane, solid. Nothing else changes. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .pal, .kinds button { background-color: var(--surface-2); } html .lens { display: none; } }
+@media (prefers-reduced-transparency: reduce) { .pal, .kinds button { background-color: var(--surface-2); background-image: none !important; -webkit-backdrop-filter: none; backdrop-filter: none; } html[data-opt="e"] .lens { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--line-strong); } }
+
+/* A phone. b is the built sheet, from the foot; the others float at the top, clear of the keyboard. */
+@media (max-width: 719px) {
+  .scroller { max-height: calc(100dvh - var(--top) - var(--fh) - 72px); }
+  html[data-opt="b"] .goto { padding: 24px 0 0; align-items: stretch; }
+  html[data-opt="b"] .gt { display: flex; } html[data-opt="b"] .gt::before { display: none; }
+  html[data-opt="b"] .pal { flex: 1; border-radius: var(--r) var(--r) 0 0; } html[data-opt="b"] .body { flex: 1; align-content: start; }
+  html[data-opt="b"] .keys, html[data-opt="b"] .peeking .peek { display: none; } html[data-opt="b"] .body.peeking { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── The prototype's own switch: small, in the corner ──────────────────── */
+.sw { position: fixed; left: 10px; bottom: 10px; z-index: 60; display: flex; align-items: center; gap: 1px; max-width: calc(100vw - 20px); padding: 3px; border-radius: var(--radius-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.sw button { height: 24px; min-width: 24px; padding: 0 7px; border: 0; border-radius: var(--radius-pill); background: none; font: 600 12px/1 var(--body); color: var(--faint); cursor: pointer; white-space: nowrap; }
+.sw button[aria-pressed="true"] { background: var(--tint-3); color: var(--ink); }
+.sw span { padding: 0 10px 0 7px; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw i { width: 1px; height: 14px; margin: 0 3px; background: var(--line-strong); }
+html[data-still] *, html[data-still] *::before, html[data-still] *::after { animation: none !important; transition: none !important; }
+@media (forced-colors: active) {
+  .pool, .halo, .mark::before, .scope .lit, html .pal::after, html .lens { display: none !important; }
+  .row[aria-selected="true"], .ans[aria-selected="true"] { forced-color-adjust: none; background: Highlight !important; color: HighlightText; }
+  .row[aria-selected="true"] *, .ans[aria-selected="true"] * { color: HighlightText !important; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="rail">
+    <div class="brand"><span class="mark"><i class="mb"></i><i class="ma"></i><i class="md"></i></span>Syndra</div>
+    <nav class="nav" aria-label="Main navigation" id="nav"></nav>
+  </aside>
+  <main class="col">
+    <div class="bar">
+      <span><b>Syndra</b> <span class="faint">/</span> <b id="crumb">People</b></span>
+      <button class="btn ask" id="open">Go to <span class="cap">/</span></button>
+    </div>
+    <div class="scroll">
+      <div class="page">
+        <h1 id="title">People</h1>
+        <p class="muted lede" id="lede">A stand-in for Syndra behind Go to. Press <span class="cap">/</span> or <span class="cap">⌘K</span>. Type a name. Type "people" and press <span class="cap">Tab</span>, or start with <span class="cap">@</span> <span class="cap">#</span> <span class="cap">/</span>, to look among one kind; Backspace leaves it. Or ask: who has operator in laser.</p>
+        <p class="faint">A-26, round 3 · 21 Nov 2026 · proposed. Five ways, switched at the bottom left. Go to, Lately and the two-stage Esc are built; the rest is not.</p>
+        <div class="card" id="people"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="goto" id="goto" hidden>
+  <span class="pool glow" id="glow" aria-hidden="true"></span>
+  <span class="pool wash" id="wash" aria-hidden="true"></span>
+  <div class="gt" id="gt">
+    <i class="lens" aria-hidden="true"></i>
+    <div class="pal" id="pal" role="dialog" aria-modal="true" aria-label="Go to">
+      <div class="field" id="field">
+        <span class="mark orb" id="orb" aria-hidden="true"><i class="halo" id="halo"></i><i class="mb"></i><i class="ma"></i><i class="md"></i></span>
+        <button class="scope" id="scope" hidden></button>
+        <input id="q" type="text" role="combobox" enterkeyhint="go" aria-label="Go to" aria-controls="list" aria-autocomplete="list" aria-expanded="false" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="tail" id="tail" hidden></button>
+      </div>
+      <div class="body" id="body" hidden>
+        <div class="scroller" id="scroller"><i class="ind" id="ind" hidden></i><div id="list" role="listbox" aria-label="Where to go"></div></div>
+        <aside class="peek" id="peek" aria-live="polite"></aside>
+      </div>
+      <p class="keys" id="keys"></p>
+    </div>
+    <div class="kinds" id="kinds" role="group" aria-label="Look only among"></div>
+  </div>
+  <p id="said" role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)"></p>
+</div>
+
+<div class="sw" role="group" aria-label="Prototype: which way, which room">
+  <button data-opt="a" title="Arc bar">A</button><button data-opt="b" title="Quiet palette">B</button><button data-opt="c" title="Fluent">C</button><button data-opt="d" title="Lamp-led, recommended" aria-pressed="true">D</button><button data-opt="e" title="Spotlight">E</button>
+  <span id="sw-name"></span><i></i>
+  <button id="sw-theme" title="Dark room or paper">Light</button><button id="sw-still" title="Reduced motion">Still</button>
+</div>
+
+<script>
+(() => {
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const root = document.documentElement;
+  const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const READ = "Read from Zitadel at 14:32.";
+  const token = (name) => getComputedStyle(root).getPropertyValue(name).trim();
+  const ms = (name) => parseFloat(token(name));
+  const still = () => root.hasAttribute("data-still");
+  const opt = () => root.dataset.opt;
+  const phone = () => innerWidth < 720;
+  const NAMES = { a: "Arc bar", b: "Quiet palette", c: "Fluent", d: "Lamp-led · recommended", e: "Spotlight" };
+  const GLYPH = {
+    people: `<svg class="gl" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 19.5c.8-3.4 3.6-5 7-5s6.2 1.6 7 5"/></svg>`,
+    roles: `<svg class="gl" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15.5" r="3.5"/><path d="M10.6 13 19 4.5M15.5 8l2.5 2.5"/></svg>`,
+    pages: `<svg class="gl" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="2.5"/><path d="M9 9h6M9 13h6"/></svg>`,
+  };
+
+  // ── A small room: made-up data, ring names. What somebody has is what the answers count. ──
+  const ROLES = [
+    { id: "print-op", name: "3D printing · Operator", say: "Operator in 3D printing" },
+    { id: "elec-bench", name: "Electronics · Bench", say: "Bench in Electronics" },
+    { id: "laser-door", name: "Laser cutting · Door", say: "Door in Laser cutting" },
+    { id: "laser-op", name: "Laser cutting · Operator", say: "Operator in Laser cutting" },
+    { id: "wood-hand", name: "Wood shop · Hand tools", say: "Hand tools in Wood shop" },
+    { id: "wood-machine", name: "Wood shop · Machine tools", say: "Machine tools in Wood shop" },
+  ];
+  const BUNDLES = [
+    { id: "lab-tech", name: "Lab tech", gives: ["laser-op", "laser-door", "print-op"] },
+    { id: "safety", name: "Safety basics", gives: ["laser-door"] },
+    { id: "welcome", name: "Welcome", gives: ["wood-hand", "elec-bench"] },
+  ];
+  const h = (role, via, until) => ({ role, via, until });
+  const PEOPLE = [
+    { id: "asuka", name: "Asuka", what: "Student · Architecture", holds: [h("laser-op", "lab-tech", "2 Dec"), h("laser-door", "lab-tech", "2 Dec"), h("print-op", "lab-tech", "2 Dec"), h("wood-hand", "welcome", "30 Apr")] },
+    { id: "bayley", name: "Bayley", what: "Student · Product design", holds: [h("wood-hand", "welcome", "30 Apr"), h("elec-bench", "welcome", "30 Apr")] },
+    { id: "becky", name: "Becky Lynch", what: "Research assistant · Design", holds: [h("laser-op", null, "12 Dec"), h("laser-door", "safety", "30 Apr"), h("wood-hand", "welcome", "30 Apr"), h("elec-bench", "welcome", "30 Apr")] },
+    { id: "bianca", name: "Bianca Belair", what: "Student · Mechanical", holds: [h("print-op", null, "9 Jan"), h("laser-door", "safety", "30 Apr")] },
+    { id: "cody", name: "Cody Rhodes", what: "Lab technician", holds: [h("laser-op", "lab-tech", "30 Apr"), h("laser-door", "lab-tech", "30 Apr"), h("print-op", "lab-tech", "30 Apr"), h("wood-machine", null, "30 Apr")] },
+    { id: "iyo", name: "Iyo Sky", what: "Student · Electronics", holds: [h("elec-bench", "welcome", "30 Apr"), h("wood-hand", "welcome", "30 Apr")] },
+    { id: "rhea", name: "Rhea Ripley", what: "Student · Architecture", holds: [h("wood-hand", null, "20 Dec"), h("wood-machine", null, "20 Dec")] },
+    { id: "seth", name: "Seth Rollins", what: "Visiting researcher", holds: [h("laser-door", "safety", "15 Dec")] },
+  ];
+  const by = (list) => Object.fromEntries(list.map((x) => [x.id, x]));
+  const R = by(ROLES), B = by(BUNDLES), P = by(PEOPLE);
+  const holders = (role) => PEOPLE.filter((p) => p.holds.some((x) => x.role === role));
+  const inBundle = (b) => PEOPLE.filter((p) => p.holds.some((x) => x.via === b));
+  const people = (n) => (n === 1 ? "1 person" : n + " people");
+  const PROJECTS = ["3D printing", "Electronics", "Laser cutting", "Wood shop"].map((name) => ({ id: name, name, what: ROLES.filter((r) => r.name.startsWith(name)).length + " roles" }));
+  const APPS = [{ name: "Door controller", what: "Reads Laser cutting" }, { name: "Print queue", what: "Reads 3D printing" }, { name: "Storage", what: "Reads every project" }].map((a) => ({ ...a, id: a.name }));
+  const WAITING = 3; // what the rail's own read says is waiting to be sent
+  const PAGES = [["Automatic rules", "What a role gives by rule"], ["Bundles", "Sets of roles, given together"], ["Change history", "What changed, and who changed it"], ["Home", "What needs you today"], ["Insights", "Who can reach what, and how"], ["Pending changes", WAITING + " waiting for you to send"], ["People", PEOPLE.length + " people"], ["Settings", "Zitadel, terms and the rest"]].map(([name, what]) => ({ id: name, name, what }));
+  // One catalogue, in the built groups' order after Lately (lib/go-to.ts, GO_TO_GROUPS).
+  const KINDS = [
+    { key: "pages", group: "Pages", kind: "Page", items: PAGES },
+    { key: "people", group: "People", kind: "Person", items: PEOPLE },
+    { key: "projects", group: "Projects", kind: "Project", items: PROJECTS },
+    { key: "roles", group: "Roles", kind: "Role", items: ROLES.map((r) => ({ ...r, what: people(holders(r.id).length) })) },
+    { key: "apps", group: "Apps", kind: "App", items: APPS },
+    { key: "bundles", group: "Bundles", kind: "Bundle", items: BUNDLES.map((b) => ({ ...b, what: people(inBundle(b.id).length) })) },
+  ];
+  const item = (k, x) => ({ type: "place", key: k.key + ":" + x.id, kindKey: k.key, kind: k.kind, id: x.id, name: x.name, what: x.what });
+  const EVERY = KINDS.flatMap((k) => k.items.map((x) => item(k, x)));
+  const find = (key) => EVERY.find((i) => i.key === key);
+  const MODES = { people: { word: "People", hint: "A person", sigil: "@", one: "person" }, roles: { word: "Roles", hint: "A role", sigil: "#", one: "role" }, pages: { word: "Pages", hint: "A page", sigil: "/", one: "page" } };
+  const ASKS = ["Who has Operator in Laser cutting", "Who has Hand tools without Bench", "Path from Becky Lynch to Operator in 3D printing", "What if Lab tech went"];
+  let lately = ["people:becky", "bundles:welcome", "roles:laser-op", "pages:Insights", "people:cody"]; // the last five places, most recent first
+
+  // ── Reading what is typed ──────────────────────────────────────────────
+  const fold = (t) => t.toLowerCase().replace(/[\s·.,:;()_/\\?-]+/g, " ").trim();
+  // Every word typed starts a word of the name; 0 is the whole name, then a prefix, then words (insights/question.ts, rank).
+  const rank = (label, phrase) => {
+    const name = fold(label), typed = fold(phrase).replace(/\b(in|the)\b/g, " ").replace(/\s+/g, " ").trim();
+    if (!typed) return null;
+    if (name === typed) return 0;
+    if (name.startsWith(typed)) return 1;
+    const words = name.split(" ");
+    return typed.split(" ").every((p) => words.some((w) => w.startsWith(p))) ? 2 : null;
+  };
+  const best = (phrase, list) => list.map((x) => ({ x, r: rank(x.name, phrase) })).filter((m) => m.r != null).sort((a, b) => a.r - b.r || a.x.name.localeCompare(b.x.name))[0]?.x;
+  // A question, read by a fixed grammar and never by guessing (insights/question.ts). `null`: not a question.
+  // `{ reading }`: one of its sentences is being typed. `{ unread }`: it is a question, and no sentence fits it.
+  const ask = (text) => {
+    const t = fold(text);
+    if (!/^(who|what|path|how|why|when|where|which|compare)\b/.test(t)) return null;
+    const things = [...ROLES, ...BUNDLES];
+    let m;
+    if ((m = /^who has (.+?)(?: without (.+))?$/.exec(t))) {
+      const has = best(m[1], things), without = m[2] ? best(m[2], things) : null;
+      if (has && (!m[2] || without)) return { kind: "who", has, without };
+    } else if ((m = /^path from (.+?) to (.+)$/.exec(t))) {
+      const person = best(m[1], PEOPLE), role = best(m[2], ROLES);
+      if (person && role) return { kind: "path", person, role };
+    } else if ((m = /^what if (.+?) went$/.exec(t))) {
+      const bundle = best(m[1], BUNDLES);
+      if (bundle) return { kind: "gone", bundle };
+    }
+    const naming = /^(?:who has (.+?)(?: without (.+))?|path from (.+?) to (.+)|what if (.+?) went)$/.exec(t)?.slice(1).filter(Boolean) ?? [];
+    const lost = naming.find((n) => !best(n, [...things, ...PEOPLE]));
+    if (lost) return { unread: true, lost };
+    return ["who has", "path from", "what if"].some((o) => o.startsWith(t) || t.startsWith(o + " ")) ? { reading: true } : { unread: true };
+  };
+  const got = (thing) => (thing.gives ? inBundle(thing.id) : holders(thing.id)); // who has a role, or is in a bundle
+  const said = (thing) => thing.say ?? "the " + thing.name + " bundle";
+  const names = (list) => (list.length < 2 ? list.map((p) => p.name).join("") : list.slice(0, -1).map((p) => p.name).join(", ") + " and " + list.at(-1).name);
+  // `back` is the keeper reading the question back; `title` is the same sentence as Insights will head it.
+  const answer = (q) => {
+    if (q.kind === "who") {
+      const found = got(q.has).filter((p) => !q.without || !got(q.without).includes(p));
+      const tail = q.without ? ` and not ${said(q.without)}` : "";
+      return { key: "who:" + q.has.id + ":" + (q.without?.id ?? ""), title: `Who has ${q.has.name}${q.without ? " without " + q.without.name : ""}`, back: `You're asking who has ${q.has.name}${q.without ? " and not " + q.without.name : ""}.`,
+        head: found.length ? `${people(found.length)} ${found.length === 1 ? "has" : "have"} ${said(q.has)}${tail}.` : `Nobody has ${said(q.has)}${tail}.`,
+        body: found.length ? names(found) + "." : "Nothing for you to do." };
+    }
+    if (q.kind === "path") {
+      const hold = q.person.holds.find((x) => x.role === q.role.id);
+      const giver = BUNDLES.filter((b) => b.gives.includes(q.role.id)).map((b) => b.name);
+      return { key: "path:" + q.person.id + ":" + q.role.id, title: `Path from ${q.person.name} to ${q.role.name}`, back: `You're asking how ${q.person.name} comes to ${q.role.name}.`,
+        head: hold ? `${q.person.name} has ${q.role.say}.` : `${q.person.name} does not have ${q.role.say}.`,
+        body: hold ? `${hold.via ? "Through the " + B[hold.via].name + " bundle" : "Given by makerspace staff"}, until ${hold.until}.` : giver.length ? `The ${giver.join(" and ")} bundle${giver.length > 1 ? "s give" : " gives"} it.` : "No bundle gives it; it is given by hand." };
+    }
+    const found = inBundle(q.bundle.id), lost = found.reduce((n, p) => n + p.holds.filter((x) => x.via === q.bundle.id).length, 0);
+    return { key: "gone:" + q.bundle.id, title: `What if ${q.bundle.name} went`, back: `You're asking what goes if ${q.bundle.name} goes.`, head: found.length ? `${people(found.length)} would lose ${lost} roles.` : `Nobody has anything through ${q.bundle.name}.`, body: found.length ? names(found) + ". Nothing is changed by asking." : "Nothing is changed by asking." };
+  };
+  // A kind's own word, being typed, offers its mode: "peo" offers People. Tab takes it.
+  const offered = () => { const w = fold(query); return scope === "all" && w.length >= 2 ? Object.keys(MODES).find((k) => fold(MODES[k].word).startsWith(w) || MODES[k].one === w) ?? null : null; };
+
+  // ── What the panel holds: one list of things Enter can open ─────────────
+  // At rest it holds almost nothing, by design: a and e nothing at all; b, c and d the one place you were
+  // last (so "/" then Enter still takes you back). ↓ on an empty field brings the rest of Lately.
+  let query = "", scope = "all", madeFrom = "", active = 0, things = [], shown = null, more = false, peek = false;
+  const az = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  const compute = () => {
+    const q = query.trim(), groups = [], o = opt(), flat = "ade".includes(o);
+    shown = scope === "all" && q ? ask(q) : null;
+    if (shown?.kind) shown.answer = answer(shown);
+    if (!q && scope === "all") {
+      const items = lately.map(find).filter(Boolean).slice(0, more ? 5 : "ae".includes(o) ? 0 : 1).map((t) => ({ ...t, tag: "Lately" }));
+      // The line that knows: only when something is waiting, from the rail's own read, and never first.
+      if (WAITING && (more || "bc".includes(o))) items.push({ ...find("pages:Pending changes"), key: "needs", what: `${WAITING} changes are waiting for you to send`, tag: "Needs you" });
+      if (items.length) groups.push({ items });
+    } else if (shown && !shown.kind) {
+      groups.push({ items: ASKS.map((text) => ({ type: "ask", key: "ask:" + text, name: text + "?", tag: "Ask" })) });
+    } else {
+      // A question's own names are what also match; a name typed plainly matches itself.
+      const needles = shown ? Object.values(shown).filter((v) => v && v.name).map((v) => v.name) : [q];
+      const score = (i) => Math.min(...needles.map((n) => rank(i.name, n) ?? (fold(i.name).includes(fold(n)) ? 3 : 9)));
+      const hits = [];
+      for (const k of KINDS) {
+        if (scope !== "all" && scope !== k.key) continue;
+        const hit = k.items.map((x) => item(k, x)).map((i) => ({ i, r: q ? score(i) : 0 })).filter((m) => m.r < 9);
+        if (!hit.length) continue;
+        if (scope !== "all") groups.push({ items: hit.map((m) => m.i).sort(az) }); // one kind, A to Z
+        else if (flat) hits.push(...hit);
+        else groups.push({ label: k.group, items: hit.sort((a, b) => a.r - b.r).slice(0, 3).map((m) => m.i) });
+      }
+      // a, d, e: one flat list, the best match first, its kind at the right.
+      if (hits.length) groups.push({ items: hits.sort((a, b) => a.r - b.r).slice(0, shown ? 3 : 7).map((m) => ({ ...m.i, tag: m.i.kind })) });
+    }
+    things = [...(shown?.answer ? [{ type: "answer", key: "answer" }] : []), ...groups.flatMap((g) => g.items)];
+    active = Math.min(active, Math.max(0, things.length - 1));
+    return groups;
+  };
+
+  const goto = $("#goto"), gt = $("#gt"), list = $("#list"), scroller = $("#scroller"), body = $("#body"), input = $("#q"), keys = $("#keys"), scopeEl = $("#scope"), tail = $("#tail"), halo = $("#halo"), ind = $("#ind"), peekEl = $("#peek"), kinds = $("#kinds");
+  kinds.innerHTML = Object.entries(MODES).map(([k, m]) => `<button data-mode="${k}" data-kind="${k}" aria-label="Only ${m.word.toLowerCase()}" title="Only ${m.word.toLowerCase()}  ${m.sigil}">${GLYPH[k]}</button>`).join("");
+  const draw = () => {
+    const groups = compute(), q = query.trim(), cur = things[active], o = opt();
+    const sel = (t) => `aria-selected="${t.key === cur?.key}" id="o-${things.indexOf(t)}" data-i="${things.indexOf(t)}" role="option"`;
+    let html = "";
+    if (shown?.answer) {
+      const a = shown.answer, mine = cur?.type === "answer";
+      // She reads it back in words (a, b, c, e). In d the lamp answers, and the sentence itself names what she read.
+      html += `<div class="ans" ${sel(things[0])}>${o === "d" ? "" : `<p class="back">${esc(a.back)}</p>`}
+        <h3 data-anchor>${esc(a.head)}</h3><p class="muted">${esc(a.body)}</p>
+        <p class="foot"><span class="link">Follow it on the map →</span><span class="faint">${mine ? "↵" : "⌘↵"}</span><span class="faint" data-figure>${READ}</span></p></div>`;
+    } else if (shown) {
+      html += `<div class="say"><b>${shown.lost ? `Nobody and nothing here is called "${esc(shown.lost)}".` : shown.unread ? "That isn't a question Syndra can answer." : "Syndra answers these, and only these."}</b>${shown.reading ? "" : `<p>She answers only what she can read exactly, and she never guesses. These she can:</p>`}</div>`;
+    }
+    for (const g of groups) {
+      if (g.label) html += `<div class="g">${g.label}</div>`;
+      for (const t of g.items) html += `<div class="row" ${sel(t)}><span class="n">${esc(t.name)}</span><span class="w">${t.what ? esc(t.what) : ""}</span>${t.tag ? `<span class="k">${t.tag}</span>` : ""}</div>`;
+    }
+    if (q && !things.length && !shown) html += `<div class="say"><b>Nothing by that name${scope === "all" ? "" : " among " + MODES[scope].word.toLowerCase()}.</b><p>${scope === "all" ? "Try fewer letters, or the start of any word in the name." : "Backspace looks everywhere."}</p></div>`;
+    list.innerHTML = html;
+    body.hidden = !html;
+    input.setAttribute("aria-expanded", String(!!html));
+    input.setAttribute("aria-activedescendant", cur ? "o-" + active : "");
+    input.placeholder = scope !== "all" ? MODES[scope].hint : phone() ? "A name, or a question" : "A person, a role, a page, or a question";
+    // The mode, and what the light takes from it.
+    scopeEl.hidden = scope === "all";
+    if (scope !== "all") { scopeEl.dataset.kind = scope; scopeEl.innerHTML = `<i class="lit"></i>${GLYPH[scope]}${MODES[scope].word}`; scopeEl.setAttribute("aria-label", `Looking only among ${MODES[scope].word.toLowerCase()}. Look everywhere again.`); root.dataset.mode = scope; } else delete root.dataset.mode;
+    const off = offered();
+    tail.hidden = !off;
+    if (off) { tail.dataset.kind = off; tail.dataset.mode = off; tail.innerHTML = `<span class="cap">Tab</span>only ${MODES[off].word.toLowerCase()}`; }
+    kinds.hidden = !!html || scope !== "all";
+    $(`[aria-selected="true"]`, list)?.scrollIntoView({ block: "nearest" });
+    // b only: one faint line of keys, and the peek.
+    const peekable = cur?.kindKey === "people" || cur?.kindKey === "roles";
+    if (!peekable) peek = false;
+    body.classList.toggle("peeking", peek);
+    if (peek) drawPeek(cur);
+    const k = (key, word) => `<span><b>${key}</b>${word}</span>`;
+    keys.innerHTML = k("↑↓", "move") + k("↵", cur?.type === "answer" ? "follow it on the map" : cur?.type === "ask" ? "ask it" : "open")
+      + (peekable ? k(peek ? "←" : "→", peek ? "close the peek" : "peek") : "")
+      + (scope === "all" && !q ? k("@", "people") + k("#", "roles") + k("/", "pages") : "") + (scope !== "all" ? k("⌫", "everywhere again") : "")
+      + `<span class="end"><b>esc</b>${q || scope !== "all" ? "clear, then close" : "close"}</span>`;
+    place(); fades();
+  };
+  // The chosen row's mark (c: the accent pill; d: the lamp's point). One element; it never resizes.
+  const place = () => {
+    const el = $(`[aria-selected="true"]`, list);
+    ind.hidden = !el;
+    if (!el) return;
+    const a = $("[data-anchor]", el) ?? el, hgt = a === el ? el.offsetHeight : parseFloat(getComputedStyle(a).lineHeight);
+    ind.style.transform = `translateY(${a.offsetTop + (hgt - ind.offsetHeight) / 2}px)`;
+  };
+  // A list that scrolls never cuts a line at its edge: it softens into the glass where there is more.
+  const fades = () => {
+    scroller.style.setProperty("--ft", scroller.scrollTop > 2 ? "18px" : "0px");
+    scroller.style.setProperty("--fb", scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 2 ? "26px" : "0px");
+  };
+  scroller.addEventListener("scroll", fades);
+  // b's peek: what Enter would open, before it is opened. Only when → asks for it.
+  const drawPeek = (t) => {
+    if (t.kindKey === "people") { const p = P[t.id];
+      peekEl.innerHTML = `<div><h4>${esc(p.name)}</h4><p>${esc(p.what)}</p></div><p>Has ${p.holds.length} roles</p><ul>${p.holds.map((x) => `<li><b>${esc(R[x.role].name)}</b><span data-figure>${x.via ? "Through " + esc(B[x.via].name) : "Given by makerspace staff"}, until ${x.until}</span></li>`).join("")}</ul><p class="faint" data-figure>${READ}</p>`;
+    } else { const found = holders(t.id);
+      peekEl.innerHTML = `<div><h4>${esc(t.name)}</h4><p>Role</p></div><p>${found.length ? people(found.length) + (found.length === 1 ? " has it" : " have it") : "Nobody has it yet"}</p><ul>${found.map((p) => `<li><b>${esc(p.name)}</b><span>${esc(p.what)}</span></li>`).join("")}</ul><p class="faint" data-figure>${READ}</p>`; }
+  };
+
+  // ── Light, and the one moment each way has ─────────────────────────────
+  const TINT = ms("--duration-tint"), PRESS = ms("--duration-press"), SETTLE = ms("--duration-settle"), FLASH = ms("--duration-flash");
+  // Where the light is: on the lamp (d), or the field's middle. Sized by the window, so no edge ends it.
+  const aim = () => {
+    const f = $("#field").getBoundingClientRect(), o = $("#orb").getBoundingClientRect(), p = $("#pal").getBoundingClientRect();
+    let lx = opt() === "d" && o.width ? o.left + o.width / 2 : f.left + f.width / 2; const ly = f.top + f.height / 2;
+    if (Math.min(lx, innerWidth - lx) < 280) lx = innerWidth / 2;
+    const set = (k, v) => goto.style.setProperty(k, v + "px");
+    set("--lx", lx); set("--ly", ly); set("--lw", Math.min(1180, 2 * Math.min(lx, innerWidth - lx))); set("--lh", Math.min(620, 2 * ly)); set("--rx", lx - p.left);
+  };
+  const wash = () => $("#wash").animate([{ opacity: 0 }, { opacity: 1, offset: TINT / (TINT + FLASH) }, { opacity: 0 }], { duration: TINT + FLASH, easing: "ease-out" });
+  const flare = (to = 1.3) => halo.animate([{ opacity: 0.72, scale: 1 }, { opacity: 1, scale: to, offset: 0.25 }, { opacity: 0.72, scale: 1 }], { duration: FLASH, easing: token("--ease-flash") });
+  const moment = {
+    // a: Arc's own gesture. The bar presses in a little and comes back, and its light washes once in the kind's colour.
+    scope: () => { if (still()) return;
+      if (opt() === "a") { gt.animate([{ transform: "none" }, { transform: "scale(.965)", offset: 0.42 }, { transform: "none" }], { duration: PRESS + 60, easing: token("--ease-press") }); wash(); }
+      if (opt() === "d") { flare(); wash(); } }, // d: the lamp flares once in its new colour
+    // d: the lamp breathes once as Go to opens. c: Fluent's entrance, from the button when it was clicked.
+    open: (from) => { gt.style.transformOrigin = ""; if (still()) return;
+      if (opt() === "d") { halo.animate([{ opacity: 0, scale: 0.76 }, { opacity: 1, scale: 1, offset: 0.12 }, { opacity: 0.72, scale: 1 }], { duration: TINT + FLASH, easing: token("--ease-tint") }); $("#glow").animate([{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 0.6 }], { duration: TINT + FLASH, easing: token("--ease-tint") }); }
+      if (opt() === "c") { const g = gt.getBoundingClientRect(), b = from?.getBoundingClientRect();
+        gt.style.transformOrigin = b ? `${b.left + b.width / 2 - g.left}px ${b.top + b.height / 2 - g.top}px` : "50% 0";
+        gt.animate([{ transform: "translateY(-8px) scale(.96)" }, { transform: "none" }], { duration: 250, easing: "cubic-bezier(0, 0, 0, 1)" });
+        $("#pal").animate([{ opacity: 0 }, { opacity: 1 }], { duration: 83, easing: "linear" }); } },
+  };
+  // d: the lamp opens once when an answer has landed and the typing has rested a settle. Once a question.
+  let landed = "", rest = 0;
+  const land = () => {
+    clearTimeout(rest);
+    rest = setTimeout(() => {
+      const key = shown?.answer?.key ?? "";
+      if (key && key !== landed && opt() === "d" && !still()) flare(1.34);
+      landed = key;
+      if (key) $("#said").textContent = shown.answer.head;
+    }, SETTLE);
+  };
+
+  // ── A mode: what you typed becomes it, and Backspace gives the typing back ──
+  const setMode = (kind, typed) => {
+    scope = kind; madeFrom = typed && !Object.values(MODES).some((m) => m.sigil === typed) ? typed : ""; query = ""; input.value = ""; active = 0; more = false; draw(); input.focus();
+    $("#said").textContent = `Looking only among ${MODES[kind].word.toLowerCase()}. Backspace looks everywhere again.`;
+    moment.scope();
+  };
+  const clearMode = (giveBack) => {
+    if (scope === "all") return;
+    scope = "all"; query = giveBack ? madeFrom : ""; madeFrom = ""; input.value = query; active = 0; draw(); input.focus();
+    $("#said").textContent = "Looking everywhere.";
+  };
+
+  // ── Going somewhere. Go to opens places and follows answers; it never does anything else. ──
+  const go = (t, follow) => {
+    if (!t) return;
+    if (t.type === "ask") { query = t.name.replace(/\?$/, ""); input.value = query; active = 0; draw(); return land(); }
+    const answerOf = follow || t.type === "answer" ? shown?.answer : null;
+    if (answerOf) { $("#crumb").textContent = "Insights"; $("#title").textContent = answerOf.title; $("#lede").textContent = "Go to closed, and Insights opened with the question already asked: the same sentence, on the map."; }
+    else { $("#crumb").textContent = t.kindKey === "pages" ? t.name : KINDS.find((k) => k.key === t.kindKey).group; $("#title").textContent = t.name; $("#lede").textContent = "Go to closed and this place opened. It is the first of Lately the next time Go to is empty.";
+      const key = t.kindKey + ":" + t.id; lately = [key, ...lately.filter((k) => k !== key)].slice(0, 5); }
+    close();
+  };
+  const open = (from) => { query = ""; scope = "all"; madeFrom = ""; active = 0; landed = ""; more = false; peek = false; input.value = ""; goto.hidden = false; $("#app").inert = true; draw(); aim(); input.focus(); moment.open(from); };
+  const close = () => { goto.hidden = true; $("#app").inert = false; $("#open").focus(); };
+
+  input.addEventListener("input", () => {
+    const v = input.value, sig = Object.entries(MODES).find(([, m]) => v.startsWith(m.sigil));
+    if (sig && scope === "all") return setMode(sig[0], sig[1].sigil); // a key at the start becomes the mode, and is not kept
+    query = v; active = 0; more = false; draw(); land();
+  });
+  input.addEventListener("keydown", (e) => {
+    const atEnd = input.selectionStart === input.value.length;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (e.key === "ArrowDown" && !query && scope === "all" && !more) { more = true; active = "ae".includes(opt()) ? 0 : 1; return draw(); } // the rest of Lately, asked for
+      if (!things.length) return;
+      active = (active + (e.key === "ArrowDown" ? 1 : -1) + things.length) % things.length; draw();
+    }
+    else if (e.key === "Enter") { e.preventDefault(); go(things[active], (e.metaKey || e.ctrlKey) && shown?.answer); }
+    else if (e.key === "Tab" && !e.shiftKey && offered()) { e.preventDefault(); setMode(offered(), query.trim()); } // only while a mode is offered; otherwise Tab is the browser's
+    else if (e.key === "Backspace" && input.value === "" && scope !== "all") { e.preventDefault(); clearMode(true); } // an empty field gives the typing back
+    else if (opt() === "b" && e.key === "ArrowRight" && atEnd && !peek && ["people", "roles"].includes(things[active]?.kindKey) && !phone()) { e.preventDefault(); peek = true; draw(); }
+    else if (e.key === "ArrowLeft" && peek) { e.preventDefault(); peek = false; draw(); }
+  });
+  list.addEventListener("click", (e) => { const el = e.target.closest("[data-i]"); if (el) { active = +el.dataset.i; go(things[active]); } });
+  list.addEventListener("pointermove", (e) => { const el = e.target.closest("[data-i]"); if (el && +el.dataset.i !== active && e.movementX + e.movementY !== 0) { active = +el.dataset.i; draw(); } });
+  goto.addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (b && scope === "all") setMode(b.dataset.mode, b === tail ? query.trim() : ""); });
+  scopeEl.addEventListener("click", () => clearMode(false));
+  // e: the rim's hairline of light follows the pointer. Colour only; nothing travels.
+  goto.addEventListener("pointermove", (e) => { if (opt() !== "e") return; const r = gt.getBoundingClientRect(); gt.style.setProperty("--px", e.clientX - r.left + "px"); gt.style.setProperty("--py", e.clientY - r.top + "px"); });
+  $("#open").addEventListener("click", (e) => open(e.currentTarget));
+  goto.addEventListener("pointerdown", (e) => { if (e.target === goto) close(); });
+  addEventListener("resize", () => { if (!goto.hidden) { draw(); aim(); } });
+  addEventListener("keydown", (e) => {
+    const typing = e.target.matches?.("input, textarea"), shut = goto.hidden;
+    if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); shut ? open() : close(); }
+    else if (e.key === "/" && !typing && shut) { e.preventDefault(); open(); }
+    else if (e.key === "Escape" && !shut) { e.preventDefault(); if (query !== "" || scope !== "all" || more) { query = ""; input.value = ""; more = false; scope === "all" ? draw() : clearMode(false); } else close(); } // clear, then close
+  });
+
+  // ── The page behind, and the prototype's switch ────────────────────────
+  $("#nav").innerHTML = PAGES.map((p) => `<a${p.name === "People" ? ' aria-current="page"' : ""}>${p.name}</a>`).join("");
+  $("#people").innerHTML = `<header><h3>People</h3><span class="faint" data-figure>${PEOPLE.length}</span></header>` + PEOPLE.map((p) => `<div class="line"><span class="av">${p.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}</span><span><b>${p.name}</b><small>${p.what}</small></span><span class="faint" data-figure>${p.holds.length} roles</span></div>`).join("");
+  const again = () => { if (!goto.hidden) { draw(); aim(); input.focus(); } };
+  const setOpt = (o) => { root.dataset.opt = o; $$(".sw [data-opt]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.opt === o))); $("#sw-name").textContent = NAMES[o]; more = false; peek = false; active = 0; again(); if (!goto.hidden) moment.open(); };
+  $(".sw").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.opt) return setOpt(b.dataset.opt);
+    if (b.id === "sw-theme") { root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark"; b.setAttribute("aria-pressed", String(root.dataset.theme === "light")); }
+    if (b.id === "sw-still") { root.toggleAttribute("data-still"); b.setAttribute("aria-pressed", String(still())); }
+    again(); });
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) $("#sw-still").click();
+  const asked = new URLSearchParams(location.search).get("opt");
+  $("#sw-name").textContent = NAMES[opt()];
+  if (NAMES[asked]) setOpt(asked);
+  open();
+})();
+</script>
+</body>
+</html>
