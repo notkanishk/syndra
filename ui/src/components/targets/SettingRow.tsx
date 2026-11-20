@@ -20,7 +20,9 @@ export function SettingRow({
   return (
     <CardRow className="first:border-t-0" seat="default" action={action}>
       <span className="type-label w-(--seat-label) flex-none text-label">{label}</span>
-      <span className="min-w-0 flex-[1_1_240px]">{children}</span>
+      {/* A share held to a minimum, never a basis: a 240px basis made the line 642px, so at 950 the seat
+          dropped under a value that fitted in 589 (layout check, staging, 20 Nov 2026). */}
+      <span className="min-w-[min(var(--seat-value),100%)] flex-1">{children}</span>
     </CardRow>
   );
 }

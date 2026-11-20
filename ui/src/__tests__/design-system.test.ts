@@ -1451,6 +1451,23 @@ describe("density and alignment (D-1)", () => {
     expect(readFileSync(resolve(SRC_ROOT, "components/ui/Button.tsx"), "utf8")).toMatch(/<span id=\{reasonId\} data-reason /);
   });
 
+  // Staging, 20 Nov: a setting's label held at 170 from `tablet:` beside a 200px seat left its value
+  // 5px at 768, where the rail leaves a 447px card. The label's switch is the row's width, read from
+  // the tokens and the seat, in one place (`LabelRow`, `row-label`); a hand-typed label is the old bug.
+  it("draws a setting's label in one place, switched by the row's width and the tokens", () => {
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      if (/\btablet:w-\(--seat-label\)/.test(readFileSync(file, "utf8"))) found.push(file.replace(SRC_ROOT, "src"));
+    }
+    expect(found, "a setting's row is LabelRow (components/ui/Card.tsx)").toEqual([]);
+    const label = namedAtRuleBody(css, "@utility", "row-label");
+    expect(label).toContain("--label-fits: calc(var(--seat-label) + var(--seat-value) + var(--label-seat) + 2 * var(--row-gap));");
+    expect(label).toContain("flex: 0 0 max(var(--seat-label), calc((var(--label-fits) - 100%) * 999));");
+    expect(label).toContain("max-width: 100%;");
+    expect(label).toMatch(/--label-seat: var\(--seat-action\);[\s\S]*&\[data-seat="wide"\]\s*\{\s*--label-seat: var\(--seat-action-wide\);/);
+    expect(label).toContain("padding-block: min(var(--part-pad, 0px), max(0px, calc((100% - var(--label-fits)) * 999)));");
+  });
+
   // Staging, 19 Nov: a grid item's automatic minimum is its min-content, so a LeavingRow could never
   // be narrower than the sum of its columns, and the card clipped People's Attention column at 768.
   it("lets a leaving row be narrower than its columns, so it is the card's width and they wrap", () => {
