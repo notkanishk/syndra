@@ -8,7 +8,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/Badge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { CARD_EDGE, Card, CardColumns, CardHeader, CardRow, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow, Cells, NUMBER_COL, type Columns } from "@/components/ui/Card";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate } from "@/lib/format";
@@ -370,7 +370,7 @@ export function ThroughOtherBundles({
 }) {
   const people = includers.reduce((n, i) => n + i.people, 0);
   return (
-    <section id="through-bundles" className={`card ${CARD_EDGE} scroll-mt-6 overflow-hidden`}>
+    <section id="through-bundles" className="card scroll-mt-6 overflow-hidden">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-4">
         <h3 className="type-card-title">Through other bundles</h3>
         <span className="text-small text-faint">

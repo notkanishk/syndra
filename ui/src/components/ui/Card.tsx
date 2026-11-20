@@ -12,13 +12,6 @@ import { Unfold } from "@/lib/motion";
  * note, then one row per item separated by a divider.
  */
 
-/**
- * The light under your hand (A-25 moment 2): a card's hairline, lit where the hand is nearest. The one
- * path every card-like surface takes to wear it, `Card` itself and the few frames that draw their own
- * (a stat tile, Insights' panels); `edge-light.test.tsx` refuses a card frame without it.
- */
-export const CARD_EDGE = "rim rim-card";
-
 export function Card({
   className = "",
   stale,
@@ -35,9 +28,8 @@ export function Card({
 }) {
   return (
     <div
-      // The light under your hand (A-25 moment 2): its hairline, lit where the hand is nearest. Not on
-      // a stale card, which recedes.
-      className={`card overflow-hidden ${stale ? "" : `${CARD_EDGE} `}${className}`}
+      // The `card` frame carries the light under your hand (A-25 moment 2); a stale card is refused it.
+      className={`card overflow-hidden ${className}`}
       data-stale={stale || undefined}
       data-recedes={stale === undefined ? undefined : ""}
       {...props}

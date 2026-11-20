@@ -1,5 +1,4 @@
 import { AdvancedLink } from "@/components/ui/AdvancedLink";
-import { CARD_EDGE } from "@/components/ui/Card";
 
 /**
  * The 3-tile stat row: label caps / big value / one-line sub.
@@ -49,8 +48,9 @@ export function StatCard({
       <p className="mt-1.5 measure text-small leading-[1.5] text-muted">{detail}</p>
     </>
   );
-  // A tile lights like any card, a link or not (A-25 moment 2: cards light, not only links).
-  const frame = `card ${CARD_EDGE} min-w-[260px] flex-1 px-5 py-4`;
+  // A tile lights like any card, a link or not (A-25 moment 2: cards light, not only links): its
+  // `card` frame carries the edge.
+  const frame = "card min-w-[260px] flex-1 px-5 py-4";
   return href ? (
     <AdvancedLink
       href={href}

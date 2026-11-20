@@ -1,6 +1,5 @@
 "use client";
 
-import { CARD_EDGE } from "@/components/ui/Card";
 import { ArriveList } from "@/lib/motion";
 import { useRef, useState } from "react";
 
@@ -131,7 +130,7 @@ export function LaneMap({
         role="group"
         aria-label="Access map"
         onClick={(e) => e.target === e.currentTarget && onPick(null)}
-        className={`${CARD_EDGE} relative min-w-[1040px] overflow-hidden rounded-card border border-line bg-surface-0`}
+        className="rim rim-card relative min-w-[1040px] overflow-hidden rounded-card border border-line bg-surface-0"
         style={{
           height: H,
           backgroundImage: "radial-gradient(color-mix(in oklch, var(--line-strong) 70%, transparent) 1px, transparent 1.3px)",

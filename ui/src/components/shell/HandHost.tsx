@@ -2,11 +2,16 @@
 
 import { useEffect } from "react";
 
+/** The edge's wearers: a button's `rim` and every card frame (globals.css draws the edge on these). */
+export const WEARERS = ".rim, .card, .panel";
+/** The wearers that light like a card: beside a focused row, at a card's reach. */
+const CARDS = ".card, .panel, .rim-card";
+
 /** Every wearer of the edge's light around `start`, innermost first (a button, then its card). */
 function wearers(start: EventTarget | null): HTMLElement[] {
   const found: HTMLElement[] = [];
   if (!(start instanceof Element) || !start.closest("[data-hand]")) return found;
-  for (let el = start.closest<HTMLElement>(".rim"); el; el = el.parentElement?.closest<HTMLElement>(".rim") ?? null) {
+  for (let el = start.closest<HTMLElement>(WEARERS); el; el = el.parentElement?.closest<HTMLElement>(WEARERS) ?? null) {
     found.push(el);
   }
   return found;
@@ -49,7 +54,7 @@ export function HandHost() {
       const target = event.target;
       if (!(target instanceof Element) || !target.matches(":focus-visible")) return;
       const row = target.getBoundingClientRect();
-      for (const card of wearers(target).filter((el) => el.classList.contains("rim-card"))) {
+      for (const card of wearers(target).filter((el) => el.matches(CARDS))) {
         const box = card.getBoundingClientRect();
         card.style.setProperty("--fx", `${row.left + row.width / 2 - box.left}px`);
         card.style.setProperty("--fy", `${row.top + row.height / 2 - box.top}px`);

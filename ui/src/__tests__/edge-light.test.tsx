@@ -2,7 +2,7 @@
 import { render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HandHost } from "@/components/shell/HandHost";
+import { HandHost, WEARERS } from "@/components/shell/HandHost";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
@@ -12,18 +12,17 @@ import { SRC, block, colour, css, over, ratio, type RGBA } from "./cssTokens";
 
 // A-25 moment 2, the edge (owner, 20 Nov 2026: "i really like the edge"): the hairline of the thing
 // your hand is on, lit where your hand is nearest, on cards and on outline, ghost and filled buttons,
-// by one utility and one listener.
+// by one edge in globals.css, worn by every card frame, and one listener.
 
 const utility = (name: string) => {
   const start = css.indexOf(`@utility ${name} {`);
   expect(start, name).toBeGreaterThan(-1);
   return css.slice(start, css.indexOf("\n}\n", start) + 2);
 };
-const rim = utility("rim");
 /** The block a selector opens, braces balanced. */
 function braced(source: string, opener: string): string {
   const start = source.indexOf(opener);
-  expect(start, opener).toBeGreaterThan(-1);
+  if (start < 0) return "";
   let depth = 0;
   for (let i = source.indexOf("{", start); i < source.length; i++) {
     depth += source[i] === "{" ? 1 : source[i] === "}" ? -1 : 0;
@@ -31,9 +30,17 @@ function braced(source: string, opener: string): string {
   }
   return source.slice(start);
 }
-const SCOPE = ":where([data-hand]) &:not(.lit-card, :where([data-no-hand] *)) {";
-const scoped = braced(rim, SCOPE);
-const unscoped = rim.replace(scoped, "");
+/** The edge, one block in globals.css: its wearers, their kinds, and what it draws where. */
+const edge = braced(css, "@layer components {\n  /* The edge's wearers");
+const OWN = ":where(.rim, .card, .panel) {";
+const CARD_KIND = ":is(.card, .panel, .rim-card) {";
+const SCOPE = ":where([data-hand]) :is(.rim, .card, .panel):not(.lit-card, [data-stale], :where([data-no-hand] *)) {";
+const scoped = braced(edge, SCOPE);
+const unscoped = edge.replace(scoped, "");
+/** The frame utilities: any that draws a card's radius, a surface and a one-pixel hairline. */
+const FRAMES = [...css.matchAll(/@utility ([\w-]+) \{([^}]*)\}/g)]
+  .filter(([, , body]) => /border-radius: var\(--radius-(card|panel)\)/.test(body) && /background-color: var\(--surface-\d\)/.test(body) && /border: 1px solid/.test(body))
+  .map(([, name]) => name);
 
 /** A pointer's move, as a browser sends it (jsdom has no PointerEvent). */
 function move(target: Element, x: number, y: number, pointerType = "mouse") {
@@ -198,25 +205,45 @@ describe("who wears it", () => {
 
   it("is a card's own hairline, at inset 0 inside its border (a card clips at its padding edge), never on a stale card", () => {
     const card = render(<Card data-testid="c" />).getByTestId("c");
-    expect(card).toHaveClass("card", "overflow-hidden", "rim", "rim-card");
-    expect(rim).toMatch(/^\s*--rim-inset: 0px;/m);
-    expect(braced(rim, "&.rim-card {")).not.toMatch(/--rim-inset/);
-    expect(braced(rim, "&.rim-outline {")).toMatch(/--rim-inset: -1px;/);
-    expect(braced(rim, "&.rim-filled {")).toMatch(/--rim-inset: 1px;/);
+    expect(card).toHaveClass("card", "overflow-hidden");
+    expect(card.matches(WEARERS)).toBe(true);
+    expect(braced(edge, OWN)).toMatch(/--rim-inset: 0px;/);
+    expect(braced(edge, CARD_KIND)).not.toMatch(/--rim-inset/);
+    expect(braced(edge, ".rim.rim-outline {")).toMatch(/--rim-inset: -1px;/);
+    expect(braced(edge, ".rim.rim-filled {")).toMatch(/--rim-inset: 1px;/);
+    // A stale card recedes: the scope refuses it.
     const stale = render(<Card data-testid="s" stale />).getByTestId("s");
-    expect(stale).not.toHaveClass("rim");
+    expect(stale).toHaveAttribute("data-stale");
+    expect(SCOPE).toContain("[data-stale]");
   });
 
   it("is a stat tile's too, a link or not, with no flat ring of its own (owner on staging, 20 Nov: \"these dont show the effect\")", () => {
     const linked = render(<StatCard label="Connected systems" value="3" detail="All answering." href="/system" />);
     const tile = linked.getByRole("link", { name: "Connected systems" });
-    expect(tile).toHaveClass("card", "rim", "rim-card");
+    expect(tile.matches(WEARERS)).toBe(true);
     expect(tile.className).not.toMatch(/hover:shadow/);
     const still = render(<StatCard label="Members" value="120" detail="In Zitadel." />);
-    expect(still.container.querySelector("[data-stat-tile]")).toHaveClass("card", "rim", "rim-card");
+    expect(still.container.querySelector("[data-stat-tile]")!.matches(WEARERS)).toBe(true);
   });
 
-  it("is worn by every card frame through the one path, and no card answers a hand with a flat ring instead", () => {
+  it("is carried by every frame utility, so no frame can be drawn without it", () => {
+    // Every utility that draws a card's radius, a surface and a hairline is a wearer, in CSS and in the listener.
+    expect(FRAMES.sort()).toEqual(["card", "panel"]);
+    // Read from the CSS itself: who has the edge's own values, who lights like a card, who is drawn.
+    const listed = (re: RegExp) => (re.exec(edge)?.[1] ?? "").split(",").map((part) => part.trim());
+    const own = listed(/:where\(([^)]*)\) \{\s*position: relative;/);
+    const kind = listed(/:is\(([^)]*)\) \{\s*--rim-k: 50%;/);
+    const drawn = listed(/:where\(\[data-hand\]\) :is\(([^)]*)\):not\(/);
+    for (const frame of FRAMES) {
+      expect(own, frame).toContain(`.${frame}`);
+      expect(kind, frame).toContain(`.${frame}`);
+      expect(drawn, frame).toContain(`.${frame}`);
+      expect(WEARERS.split(", "), frame).toContain(`.${frame}`);
+    }
+    expect(WEARERS.split(", ").sort()).toEqual(drawn.sort());
+  });
+
+  it("answers no hand with a flat ring, and opts no frame out without saying why", () => {
     const files: string[] = [];
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {
@@ -228,31 +255,35 @@ describe("who wears it", () => {
     };
     walk(SRC);
     const flatRings: string[] = [];
-    const bareCards: string[] = [];
+    const silent: string[] = [];
     for (const path of files) {
       const rel = path.slice(SRC.length + 1);
       const source = readFileSync(path, "utf8");
+      const lines = source.split("\n");
       // The old language, a flat accent ring all round under the hand: banned, the edge replaces it.
-      source.split("\n").forEach((line, i) => {
+      lines.forEach((line, i) => {
         if (/hover:shadow-\[0_0_0_1px|hover:border-accent/.test(line)) flatRings.push(`${rel}:${i + 1}`);
       });
-      // Every card frame drawn outside `Card` wears the edge by the shared constant.
-      if (rel === "components/ui/Card.tsx") continue;
-      for (const m of source.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
-        const cls = m[1] ?? m[2];
-        if (/(^|\s)card(\s|$)/.test(cls) && !cls.includes("${CARD_EDGE}")) bareCards.push(`${rel}: ${cls.slice(0, 40)}`);
+      // A frame that refuses the light says why, in a comment just above it.
+      for (const tag of source.matchAll(/<[A-Za-z][^<>]*?data-no-hand[^<>]*?>/g)) {
+        const cls = /className=(?:"([^"]*)"|\{`([^`]*)`\})/.exec(tag[0]);
+        const classes = cls ? (cls[1] ?? cls[2]) : "";
+        if (!FRAMES.some((frame) => new RegExp(`(^|\\s)${frame}(\\s|$)`).test(classes))) continue;
+        const at = source.slice(0, tag.index).split("\n").length;
+        const above = lines.slice(Math.max(0, at - 4), at).join("\n");
+        if (!/(\/\/|\{\/\*)[^\n]*\b(light|hand|edge)\b/i.test(above)) silent.push(`${rel}:${at}`);
       }
     }
     expect(flatRings).toEqual([]);
-    expect(bareCards).toEqual([]);
+    expect(silent).toEqual([]);
   });
 
   it("is each wearer's own: a button inside a card never takes the card's strength, reach or place", () => {
     // Declared on every wearer, so nothing inherits from the card around it; the kinds are compound
     // (`.rim.rim-card`), decided by specificity, not by the order the CSS is written in.
-    for (const own of ["--rim-k: 46%;", "--rim-r: 84px;", "--rim-inset: 0px;"]) expect(unscoped, own).toContain(own);
-    expect(css).not.toMatch(/@utility rim-(card|outline|filled)\b/);
-    for (const kind of ["rim-card", "rim-outline", "rim-filled"]) expect(unscoped, kind).toContain(`&.${kind} {`);
+    for (const own of ["--rim-k: 46%;", "--rim-r: 84px;", "--rim-inset: 0px;"]) expect(braced(edge, OWN), own).toContain(own);
+    expect(css).not.toMatch(/@utility rim(-card|-outline|-filled)?\b/);
+    for (const kind of [CARD_KIND, ".rim.rim-outline {", ".rim.rim-filled {"]) expect(unscoped, kind).toContain(kind);
     // The pointer's place is not inherited: a frame's write restyles the wearer alone.
     expect(css).toMatch(/@property --px \{ syntax: "<length-percentage>"; inherits: false; initial-value: 50%; \}/);
     expect(css).toMatch(/@property --py \{ syntax: "<length-percentage>"; inherits: false; initial-value: 50%; \}/);
@@ -278,13 +309,13 @@ describe("who wears it", () => {
 
 describe("what it draws", () => {
   it("is drawn only where the page says, never inside a Notice or a closed part, never under forced colours, only for a hand that hovers", () => {
-    for (const state of ["&::after {", "&:hover::after {", "&:focus-visible::after {", "&.rim-card:has(:focus-visible)::after {"]) {
+    for (const state of ["&::after {", "&:hover::after {", "&:focus-visible::after {", "&:is(.card, .panel, .rim-card):has(:focus-visible)::after {"]) {
       expect(scoped, state).toContain(state);
     }
     expect(unscoped).not.toMatch(/::after \{\s*content/);
     expect(SCOPE).toContain(":where([data-no-hand] *)");
     expect(scoped).toMatch(/@media \(hover: hover\) \{\s*&:hover::after/);
-    expect(rim).toMatch(/@media \(forced-colors: active\) \{\s*&::after \{\s*display: none;/);
+    expect(edge).toMatch(/@media \(forced-colors: active\) \{\s*:is\(\.rim, \.card, \.panel\)::after \{\s*display: none;/);
   });
 
   it("holds A-25's measured ratios: never fainter than the strong hairline on a card, never louder than a whole lit edge", () => {
@@ -295,7 +326,7 @@ describe("what it draws", () => {
     const ramp = block(":root {\n    --violet-600");
     const themes = { dark: { ...ramp, ...block(':root,\n  [data-theme="dark"] {') }, light: { ...ramp, ...block('[data-theme="light"] {') } };
     const strength = (kind?: string) =>
-      Number(/--rim-k: (\d+)%;/.exec(kind ? braced(rim, `&.${kind} {`) : unscoped)?.[1] ?? /--rim-k: (\d+)%;/.exec(unscoped)![1]) / 100;
+      Number(/--rim-k: (\d+)%;/.exec(braced(edge, kind ?? OWN))?.[1] ?? /--rim-k: (\d+)%;/.exec(braced(edge, OWN))![1]) / 100;
     // The filled button's colour, by its token.
     expect(braced(scoped, "&.rim-filled {")).toMatch(/--pool-c: var\(--rim-filled\);/);
     const filledInk = /--rim-filled: var\((--[\w-]+)\);/.exec(css)![1];
@@ -305,15 +336,15 @@ describe("what it draws", () => {
       const canvas = colour(vars, "--canvas");
       const surface = colour(vars, "--surface-1");
       const hairline = ratio(over(colour(vars, "--line-strong"), surface), surface);
-      const edge = over(colour(vars, "--line-strong"), canvas);
+      const edgeColour = over(colour(vars, "--line-strong"), canvas);
       const face = colour(vars, "--accent-dense");
-      const card = ratio(lit(accent, strength("rim-card"), surface), surface);
-      const outline = ratio(lit(accent, strength("rim-outline"), edge), canvas);
+      const card = ratio(lit(accent, strength(CARD_KIND), surface), surface);
+      const outline = ratio(lit(accent, strength(".rim.rim-outline {"), edgeColour), canvas);
       const ghost = ratio(lit(accent, strength(), canvas), canvas);
-      const filled = ratio(lit(colour(vars, filledInk), strength("rim-filled"), face), face);
+      const filled = ratio(lit(colour(vars, filledInk), strength(".rim.rim-filled {"), face), face);
       expect(card, `${theme} card`).toBeGreaterThanOrEqual(hairline);
       expect(card, `${theme} card`).toBeLessThan(2.2);
-      expect(outline, `${theme} outline`).toBeGreaterThan(ratio(edge, canvas));
+      expect(outline, `${theme} outline`).toBeGreaterThan(ratio(edgeColour, canvas));
       expect(outline, `${theme} outline`).toBeLessThan(2.6);
       expect(ghost, `${theme} ghost`).toBeGreaterThanOrEqual(1.5);
       expect(ghost, `${theme} ghost`).toBeLessThan(2.6);

@@ -20,8 +20,10 @@ import { resolve } from "node:path";
  * that answer is missing.
  */
 
-const utility = (name: string) => {
-  const start = css.indexOf(`@utility ${name} {`);
+/** The edge under your hand (A-25 moment 2): one block, worn by every card frame. */
+const edgeBlock = () => utility("", "@layer components {\n  /* The edge's wearers");
+const utility = (name: string, opener = `@utility ${name} {`) => {
+  const start = css.indexOf(opener);
   let depth = 0;
   for (let i = css.indexOf("{", start); i < css.length; i += 1) {
     if (css[i] === "{") depth += 1;
@@ -85,7 +87,7 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
 
   it("falls to nothing on the eased curve, never a straight ramp to a rim (A-25 §2 rule 1, §3)", () => {
     // The stops, once: the strength, then 0.74, 0.44, 0.2 and 0.06 of it at 20, 42, 62 and 82%, then nothing.
-    const stops = /:where\(\.hour-light, \.lit-card, \.rim\) \{\s*--pool-c: var\(--accent\);\s*--pool-stops: ([^;]+);/.exec(css)?.[1] ?? "";
+    const stops = /:where\(\.hour-light, \.lit-card, \.rim, \.card, \.panel\) \{\s*--pool-c: var\(--accent\);\s*--pool-stops: ([^;]+);/.exec(css)?.[1] ?? "";
     // Split at the commas between stops, not those inside a stop's own brackets.
     const parts: string[] = [""];
     let depth = 0;
@@ -103,8 +105,7 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
     }
     expect(parts[5]).toBe("transparent");
     // Every light's gradient draws those stops and nothing else: no ramp to `transparent N%`.
-    for (const name of ["hour-light", "lit-card", "rim"]) {
-      const body = utility(name);
+    for (const [name, body] of [["hour-light", utility("hour-light")], ["lit-card", utility("lit-card")], ["the edge", edgeBlock()]] as const) {
       const gradients = [...body.matchAll(/radial-gradient\(([^;]*)\);/g)].map((m) => m[1]);
       expect(gradients.length, name).toBeGreaterThan(0);
       for (const g of gradients) {

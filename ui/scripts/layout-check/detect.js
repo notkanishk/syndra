@@ -22,6 +22,12 @@
  *   steady    an unchosen FilterPills or Tabs option whose `label-steady` is
  *             narrower than its words at the chosen weight, so choosing it would
  *             push its neighbours (20 Nov 2026). Read only: it measures, never clicks.
+ *   edge      something drawn like a card inside the page (a frame's radius or
+ *             more, a one-pixel border, a surface token's ground) that does not wear
+ *             the light under your hand (A-25 moment 2; owner, 20 Nov 2026: "this
+ *             element is not responding to the hover"). Its wearers are a button's
+ *             `rim` and the frame utilities `card` and `panel`; what is inside
+ *             `[data-no-hand]`, a dialog or a popover is out of it by design.
  *
  * Page-level horizontal scroll is reported too. `tablet` is the breakpoint below
  * which the seat wraps by design (D-1 §4 rule 9).
@@ -313,5 +319,32 @@ export function detect({ tablet = 720 } = {}) {
     if (have + 0.5 < need) steady.push(`"${txt(option)}" is ${have.toFixed(1)}px, ${need.toFixed(1)}px once chosen: choosing it moves its neighbours (${sel(option)})`);
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, pageScroll };
+  // ── edge ──
+  // A card by how it is drawn, not by its class: what grep cannot find (a frame typed by hand).
+  // The smallest frame radius and the surface grounds are read from the tokens themselves.
+  const edge = [];
+  const page = document.querySelector("main[data-hand]");
+  if (page) {
+    const token = (prop, value) => {
+      const probe = document.createElement("div");
+      probe.style[prop] = value;
+      document.body.appendChild(probe);
+      const got = getComputedStyle(probe)[prop];
+      probe.remove();
+      return got;
+    };
+    const grounds = new Set(["--surface-0", "--surface-1", "--surface-2"].map((t) => token("backgroundColor", `var(${t})`)));
+    const radius = Math.min(parseFloat(token("borderTopLeftRadius", "var(--radius-card)")), parseFloat(token("borderTopLeftRadius", "var(--radius-panel)")));
+    for (const el of page.querySelectorAll("*")) {
+      const cs = getComputedStyle(el);
+      if (parseFloat(cs.borderTopLeftRadius) < radius || cs.borderTopWidth !== "1px" || cs.borderTopStyle === "none") continue;
+      if (!grounds.has(cs.backgroundColor)) continue;
+      if (el.matches(".rim, .card, .panel")) continue;
+      if (el.closest('[data-no-hand], [role="dialog"], [popover], .shadow-popover')) continue;
+      if (!vis(el)) continue;
+      edge.push(`"${txt(el)}" is drawn like a card and does not wear the edge (${sel(el)})`);
+    }
+  }
+
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, pageScroll };
 }

@@ -25,7 +25,7 @@ describe("a StatCard that is a link", () => {
     expect(card.className).toContain("active:[background-image:linear-gradient(var(--tint-3),var(--tint-3))]");
     expect(card.className).not.toMatch(/active:bg-/);
     // Under the hand it wears the edge like any card (A-25 moment 2), not the old flat ring all round.
-    expect(card).toHaveClass("rim", "rim-card");
+    expect(card).toHaveClass("card");
     expect(card.className).not.toContain("hover:shadow-[0_0_0_1px");
   });
 
