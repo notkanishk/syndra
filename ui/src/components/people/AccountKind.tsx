@@ -5,7 +5,7 @@ import { useState } from "react";
 import { ServiceAccountDialog } from "@/components/system/ServiceAccountDialogs";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardHeader, LabelRow } from "@/components/ui/Card";
 import { serviceAccountHref } from "@/lib/queries/useServiceAccounts";
 import type { UserProfile } from "@/lib/types";
 
@@ -24,10 +24,11 @@ export function AccountKind({ user }: { user: Pick<UserProfile, "id" | "name" | 
   return (
     <Card>
       <CardHeader title="This account" />
-      <CardRow
+      <LabelRow
         first
         top
         seat="wide"
+        label="Kind"
         action={
           service ? (
             <ArrowLink href={serviceAccountHref(user.id)}>Open its service account page</ArrowLink>
@@ -38,14 +39,11 @@ export function AccountKind({ user }: { user: Pick<UserProfile, "id" | "name" | 
           )
         }
       >
-        <span className="w-full text-small font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">Kind</span>
-        <span className="min-w-0 flex-1 text-body">
-          <span className="font-semibold">{service ? "A service account" : "A person"}</span>
-          <span className="block text-small text-faint">
-            {service ? "Listed under System, not People" : "Signs in with a password in Zitadel"}
-          </span>
+        <span className="font-semibold">{service ? "A service account" : "A person"}</span>
+        <span className="text-small text-faint">
+          {service ? "Listed under System, not People" : "Signs in with a password in Zitadel"}
         </span>
-      </CardRow>
+      </LabelRow>
       {marking && <ServiceAccountDialog mode="mark" account={{ id: user.id, name: user.name }} onClose={() => setMarking(false)} />}
     </Card>
   );

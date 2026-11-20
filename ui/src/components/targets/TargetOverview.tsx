@@ -1362,12 +1362,13 @@ function Reading({
       action={action}
       detail={children && <span className="block pl-(--dot-indent)">{children}</span>}
     >
-      {/* No `min-w-0`: its floor is its longest word, so where that and the seat do not share a line
-          (390), flex drops the seat under it. With none it reported 0 to the wrap and its word was cut
-          to 65px of the 82 its state word needs (layout check, staging, 20 Nov 2026). */}
-      <div className="flex flex-1 gap-2">
+      {/* A share held to a minimum, so where it and the seat do not share a line (390) flex drops the
+          seat under it, whatever the words say; past the minimum a long word (a hostname) wraps. With
+          `min-w-0` it reported 0 to the wrap and its state word was cut to 65px of the 82 it needs
+          (layout check, staging, 20 Nov 2026). */}
+      <div className="flex min-w-[min(120px,100%)] flex-1 gap-2">
         <StatusDot tone={tone} className="mt-[7px]" />
-        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-body font-semibold">{label}</span>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-body font-semibold [overflow-wrap:anywhere]">{label}</span>
       </div>
     </CardRow>
   );

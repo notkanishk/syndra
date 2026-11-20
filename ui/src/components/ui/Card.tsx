@@ -353,17 +353,42 @@ export const NUMBER_COL = "tablet:w-(--seat-number) tablet:flex-none tablet:text
 export const STATUS_COL = "tablet:w-(--seat-status) tablet:flex-none";
 
 /**
- * A setting row's label (label · value · the default seat): in `--seat-label` beside its value where
- * the ROW holds all three (170, the value at least 160, the seat 200 and two gaps at their widest,
- * 18: 566px), and on a line of its own above them where it does not, as on a phone. The row decides,
- * so it wears `@container` (as a person's role row does), never the window: at 768 the rail leaves a
- * card 447px wide, and a label held at 170 from `tablet:` beside the 200px seat left its value 5px,
- * its words cut to a letter (layout check, staging, 20 Nov 2026). Stacked, it is a heading over its
- * value, not a part on the seat's line, so it drops the padding that centres one there (`row-top`).
- * A container query's width is in the class, which Tailwind reads from the source: a literal.
+ * A setting's row: its label, its value, and the seat (D-1 §4), the one way a page draws one.
+ *
+ * The label (`row-label`, globals.css) sits beside the value where the row holds the label, the
+ * value at its narrowest (`--seat-value`) and this seat, and above them where it does not, so the
+ * seat stays on the value's line. The row's width decides, read against the tokens and the seat it
+ * is given, never the window's. The value never goes under `--seat-value` (or the row, if narrower),
+ * so a long verb in the seat wraps the seat under it rather than crushing it. On a phone an empty
+ * seat takes no line: it would only add a gap under the value.
  */
-export const LABEL_COL =
-  "w-full text-small font-semibold text-muted @max-[566px]:py-0 @min-[566px]:w-(--seat-label) @min-[566px]:shrink-0";
+export function LabelRow({
+  label,
+  seat = "default",
+  action,
+  first = false,
+  top = false,
+  children,
+}: {
+  label: React.ReactNode;
+  seat?: "default" | "wide";
+  action?: React.ReactNode;
+  first?: boolean;
+  /** More than one line: each part's first line centred on the seat's control (`row-top`). */
+  top?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <CardRow first={first} top={top} seat={seat} action={action} className="max-tablet:[&>[data-action-seat]:empty]:hidden">
+      <span data-label-col data-seat={seat === "wide" ? "wide" : undefined} className="row-label text-small font-semibold text-muted">
+        {label}
+      </span>
+      <span data-value-col className="flex min-w-[min(var(--seat-value),100%)] flex-1 flex-col gap-0.5 text-body [overflow-wrap:anywhere]">
+        {children}
+      </span>
+    </CardRow>
+  );
+}
 
 /**
  * The parts of a header or a row, each in its column's box (`data-col`). A row
