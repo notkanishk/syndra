@@ -127,12 +127,12 @@ function TabBar({
   counts: Partial<Record<IndicatorKey, number>> | undefined;
 }) {
   // Your place, as in the rail (A-25 moment 4): the pill and its light glide across on a tap.
-  const place = usePlace(pathname);
+  const place = usePlace(pathname, destinations.length);
   return (
     // Inset rather than edge-to-edge: at four tabs the corners of a 390px
     // screen are the furthest points from a thumb's arc, and the two tabs that
     // land there are the two nobody taps.
-    <div ref={place.ref} onPointerDown={place.onPointerDown} className="relative mx-auto flex w-full max-w-[420px] items-stretch gap-1 px-1.5 pb-2">
+    <div ref={place.ref} onClick={place.onClick} className="relative mx-auto flex w-full max-w-[420px] items-stretch gap-1 px-1.5 pb-2">
       <PlaceMarks group={place.ref} box={place.box} travel={place.travel} axis="bar" />
       {destinations.map((destination) => (
         <Tab
@@ -169,7 +169,8 @@ function Tab({
       href={destination.href}
       aria-current={active ? "page" : undefined}
       className={`nav-place relative flex min-h-[var(--tap)] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 control press-scale ${
-        active && !boxed ? "bg-accent-soft" : ""
+        // Its own fill snaps, never fades, when the pill takes over.
+        active ? `${boxed ? "" : "bg-accent-soft "}[transition-property:color,transform]` : ""
       }`}
     >
       <span

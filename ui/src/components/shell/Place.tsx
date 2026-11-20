@@ -1,32 +1,43 @@
 "use client";
 
-import { useLayoutEffect, useState, type PointerEvent, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useState, type MouseEvent, type RefObject } from "react";
 
-import { GlideIndicator, stillMotion, useGlideIndicator, type Box } from "@/lib/motion";
+import { GlideIndicator, SETTLE_MS, stillMotion, useGlideIndicator, type Box } from "@/lib/motion";
 
 /**
  * Your place in the rail and the tab bar (A-25 moment 4; owner, 20 Nov 2026: "do glide with light").
  * The pill, the bold violet word and the dot carry the place; the pill glides to a new one with the
  * glide indicator's own movement, shaped as the row is (one box, its own corners), and a faint light
  * travels under it. It travels only when the place was reached by the pointer, a press on one of the
- * group's own links just before the path changed; a key (Go to, Enter on a row), Back and a first
- * paint land it at once, and so does reduced motion. A place folded away (a row Basic does not show)
- * has no box: no pill and no light, and the rail marks it as it always has.
+ * group's own links just before the path changed (a plain primary click); a key (Go to, Enter on a
+ * row), Back, a first paint and a later re-measure land it at once, and so does reduced motion. A
+ * place inside a fold that is moving or shut has no box: no pill and no light, and the row's own fill
+ * marks it while it is there.
  */
-export function usePlace<T extends HTMLElement = HTMLDivElement>(pathname: string) {
-  const { ref, box } = useGlideIndicator<T>(pathname);
+export function usePlace<T extends HTMLElement = HTMLDivElement>(pathname: string, view?: unknown) {
+  // Measured again when the path changes or the view does: a view's fold moves the rows.
+  const { ref, box } = useGlideIndicator<T>(`${pathname} ${String(view)}`);
   const [pressed, setPressed] = useState<string | null>(null);
   const [place, setPlace] = useState({ path: pathname, travel: false });
-  // Decided once, when the path changes: travel only if this group's own link was pressed for it.
+  // Decided once, when the path changes: travel only if this group's own link was clicked for it.
   if (place.path !== pathname) {
     setPlace({ path: pathname, travel: pressed === pathname });
     setPressed(null);
   }
-  const onPointerDown = (event: PointerEvent<HTMLElement>) => {
+  // One glide, then still: a later re-measure (a resize, a fold) lands it at once.
+  useEffect(() => {
+    if (!place.travel) return;
+    const settled = setTimeout(() => setPlace((now) => (now.path === place.path ? { ...now, travel: false } : now)), SETTLE_MS);
+    return () => clearTimeout(settled);
+  }, [place]);
+  // A plain primary click by a pointer on one of the group's own links: not a key (detail 0), not a
+  // new tab or window (a modifier, another button), which leaves this page where it is.
+  const onClick = (event: MouseEvent<HTMLElement>) => {
+    if (event.detail === 0 || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
     if (link && event.currentTarget.contains(link)) setPressed(new URL(link.href).pathname);
   };
-  return { ref, box, travel: place.travel, onPointerDown };
+  return { ref, box, travel: place.travel, onClick };
 }
 
 /** The pill and its light, inside the group whose rows they mark. */
@@ -45,7 +56,7 @@ export function PlaceMarks({
   return (
     <>
       <PlaceLight group={group} box={box} travel={travel} axis={axis} />
-      <GlideIndicator box={box} kind="box" travel={travel} className="place-pill bg-accent-soft" />
+      <GlideIndicator box={box} kind="fill" travel={travel} className="place-pill bg-accent-soft" />
     </>
   );
 }

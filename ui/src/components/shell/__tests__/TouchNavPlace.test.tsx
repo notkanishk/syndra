@@ -32,7 +32,7 @@ const bar = () => (
   </QueryClientProvider>
 );
 const nav = () => screen.getByRole("navigation", { name: "Main navigation" });
-const pill = () => nav().querySelector<HTMLElement>('[data-indicator="box"]');
+const pill = () => nav().querySelector<HTMLElement>(".place-pill");
 const light = () => nav().querySelector<HTMLElement>('[data-place-light="bar"]');
 const tab = (name: string) => within(nav()).getByRole("link", { name: new RegExp(`^${name}`) });
 
@@ -55,7 +55,7 @@ describe("your place in the tab bar", () => {
   it("glides only after a tap on one of the bar's tabs; a key, Back and a first paint land it at once", () => {
     const view = render(bar());
     expect(pill()!.className).not.toMatch(/indicator-glide/);
-    fireEvent.pointerDown(tab("People"));
+    fireEvent.click(tab("People"), { detail: 1 });
     pathname.value = "/users";
     view.rerender(bar());
     expect(pill()!.className).toMatch(/indicator-glide/);

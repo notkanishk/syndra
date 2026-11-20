@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import Sidebar from "@/components/shell/Sidebar";
-import { GlideIndicator } from "@/lib/motion";
+import { GlideIndicator, SETTLE_MS } from "@/lib/motion";
 import { motionInTests } from "@/test-utils/motion";
 import { block, colour, css, over, ratio, type RGBA } from "./cssTokens";
 
@@ -13,9 +14,10 @@ import { block, colour, css, over, ratio, type RGBA } from "./cssTokens";
 // it; only when the pointer took you there.
 
 const pathname = vi.hoisted(() => ({ value: "/" }));
+const view = vi.hoisted(() => ({ audience: "basic" }));
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.value }));
 vi.mock("@/lib/ui-view", () => ({
-  useUiView: () => ({ audience: "basic", isOperator: true, view: "basic", setView: () => {}, revealInAdvanced: () => {} }),
+  useUiView: () => ({ audience: view.audience, isOperator: true, view: view.audience, setView: () => {}, revealInAdvanced: () => {} }),
 }));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => ({ data: [] }) }));
 vi.mock("@/lib/queries/useMySystems", () => ({ useMySystems: () => ({ data: [] }) }));
@@ -31,12 +33,13 @@ const rail = () => (
   </QueryClientProvider>
 );
 const nav = () => screen.getByRole("navigation", { name: "Main navigation" });
-const pill = () => nav().querySelector<HTMLElement>('[data-indicator="box"]');
+const pill = () => nav().querySelector<HTMLElement>(".place-pill");
 const light = () => nav().querySelector<HTMLElement>("[data-place-light]");
 const link = (name: string) => within(nav()).getByRole("link", { name: new RegExp(`^${name}`) });
 
 beforeEach(() => {
   pathname.value = "/";
+  view.audience = "basic";
   // A test of the motion itself: the run is still by default (reduced motion lands it at once).
   motionInTests();
 });
@@ -48,7 +51,7 @@ describe("your place travels only when the pointer took you there", () => {
     expect(pill()).not.toBeNull();
     expect(pill()!.className).not.toMatch(/indicator-glide/);
     // A press on People, then the path changes: the pill and its light glide.
-    fireEvent.pointerDown(link("People"));
+    fireEvent.click(link("People"), { detail: 1 });
     pathname.value = "/users";
     view.rerender(rail());
     expect(pill()!.className).toMatch(/indicator-glide/);
@@ -67,7 +70,7 @@ describe("your place travels only when the pointer took you there", () => {
   it("does not travel under reduced motion, even after a press", () => {
     motionInTests(false);
     const view = render(rail());
-    fireEvent.pointerDown(link("People"));
+    fireEvent.click(link("People"), { detail: 1 });
     pathname.value = "/users";
     view.rerender(rail());
     expect(pill()!.className).not.toMatch(/indicator-glide/);
@@ -81,7 +84,7 @@ describe("your place travels only when the pointer took you there", () => {
         <button type="button">People elsewhere</button>
       </>,
     );
-    fireEvent.pointerDown(screen.getByText("People elsewhere"));
+    fireEvent.click(screen.getByText("People elsewhere"), { detail: 1 });
     pathname.value = "/users";
     view.rerender(
       <>
@@ -93,13 +96,74 @@ describe("your place travels only when the pointer took you there", () => {
   });
 });
 
+describe("what a click is, and how long a glide lasts", () => {
+  it("is a plain primary click: a cmd-click or a middle click, then a key's arrival on that path, does not glide", () => {
+    const view = render(rail());
+    fireEvent.click(link("People"), { detail: 1, metaKey: true });
+    fireEvent.click(link("People"), { detail: 1, button: 1 });
+    pathname.value = "/users";
+    view.rerender(rail());
+    expect(pill()!.className).not.toMatch(/indicator-glide/);
+  });
+
+  it("glides once: after the settle, a later re-measure lands it at once", () => {
+    vi.useFakeTimers();
+    try {
+      const view = render(rail());
+      fireEvent.click(link("People"), { detail: 1 });
+      pathname.value = "/users";
+      view.rerender(rail());
+      expect(pill()!.className).toMatch(/indicator-glide/);
+      act(() => {
+        vi.advanceTimersByTime(SETTLE_MS);
+      });
+      expect(pill()!.className).not.toMatch(/indicator-glide/);
+      expect(light()!.className).not.toMatch(/place-light-glide/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("a place that folds away", () => {
+  it("leaves no pill on any row when Advanced turns to Basic under it (its row folds, the next would take its seat)", () => {
+    // jsdom runs no animations; give Unfold an engine that does, so the row really folds (it is
+    // there, closing) rather than leaving at once.
+    const engine = Element.prototype as unknown as { getAnimations?: () => Animation[] };
+    const had = "getAnimations" in engine;
+    engine.getAnimations = () => [];
+    try {
+      pathname.value = "/bundles";
+      view.audience = "advanced";
+      const shell = render(rail());
+      expect(pill()).not.toBeNull();
+      view.audience = "basic";
+      shell.rerender(rail());
+      // The row is folding: it has no place, so there is no pill and no light anywhere.
+      expect(nav().querySelector('.unfold[data-phase="closing"] a[aria-current="page"]')).not.toBeNull();
+      expect(pill()).toBeNull();
+      expect(light()).toBeNull();
+    } finally {
+      if (!had) delete engine.getAnimations;
+    }
+  });
+});
+
+describe("the first HTML", () => {
+  it("draws no pill and keeps the row's own fill, until the page is measured on the client", () => {
+    const html = renderToString(rail());
+    expect(html).not.toMatch(/place-pill|data-place-light/);
+    expect(html).toMatch(/aria-current="page"[^>]*class="[^"]*bg-accent-soft/);
+  });
+});
+
 describe("the pill is one box, shaped as its row", () => {
   it("is drawn with the row's own corners, never round caps, and the row gives up its own fill once it is there", () => {
     render(rail());
     expect(pill()).not.toHaveClass("rounded-pill");
     expect(link("Home")).not.toHaveClass("bg-accent-soft");
     expect(link("Home")).toHaveClass("relative");
-    const { container } = render(<GlideIndicator box={{ left: 12, top: 67, width: 227, height: 39, radius: "12px" }} kind="box" />);
+    const { container } = render(<GlideIndicator box={{ left: 12, top: 67, width: 227, height: 39, radius: "12px" }} kind="fill" />);
     const box = container.querySelector<HTMLElement>("[data-indicator]")!;
     expect(box.style.borderRadius).toBe("12px");
     expect(box).not.toHaveClass("rounded-pill");

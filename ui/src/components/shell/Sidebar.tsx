@@ -55,7 +55,7 @@ export default function Sidebar() {
   // The lamp (A-24 Q5, A-25 moment 3): it breathes on a live reading, amber while Zitadel isn't answering.
   const room = lampRoom(isOperator, reading);
   // Your place: the pill and its light, gliding only when a press on a row took you there.
-  const place = usePlace<HTMLElement>(pathname);
+  const place = usePlace<HTMLElement>(pathname, advanced);
   const followsView = (advancedOnly: boolean | undefined, key: string, part: React.ReactNode) =>
     advancedOnly ? (
       <Unfold key={key} open={advanced}>
@@ -82,7 +82,7 @@ export default function Sidebar() {
 
       {/* No `gap`: each row carries its own 3px above it (`mt-[3px]`), so a part
           that folds takes its gap with it and the rows after it do not hop. */}
-      <nav ref={place.ref} onPointerDown={place.onPointerDown} className="relative -mt-[3px] flex flex-col" aria-label="Main navigation">
+      <nav ref={place.ref} onClick={place.onClick} className="relative -mt-[3px] flex flex-col" aria-label="Main navigation">
         <PlaceMarks group={place.ref} box={place.box} travel={place.travel} axis="rail" />
         {entries.map((entry) =>
           entry.kind === "leaf"
@@ -172,7 +172,8 @@ function NavRow({
         nested ? "py-2 pl-[21px] pr-3" : "px-3 py-[9px]"
       } ${
         active
-          ? `${boxed ? "" : "bg-accent-soft "}font-semibold text-accent-text`
+          ? // Its own fill snaps, never fades, when the pill takes over, so the two never show at once.
+            `${boxed ? "" : "bg-accent-soft "}font-semibold text-accent-text [transition-property:color,transform]`
           : "text-muted hover:bg-[var(--hover)]"
       }`}
     >

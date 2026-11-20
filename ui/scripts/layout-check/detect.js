@@ -28,6 +28,9 @@
  *             element is not responding to the hover"). Its wearers are a button's
  *             `rim` and the frame utilities `card` and `panel`; what is inside
  *             `[data-no-hand]`, a dialog or a popover is out of it by design.
+ *   pill      your place's pill (A-25 moment 4) off its row: it must sit on the
+ *             group's visible current row within 0.5px, and a group with no visible
+ *             current row (a row folded away) has none.
  *   place     your place's light (A-25 moment 4) reaching past the rail or the tab
  *             bar it lives in: its pool must be spent inside the room's own box (the
  *             rail's whole scroll content, the bar).
@@ -401,6 +404,26 @@ export function detect({ tablet = 720 } = {}) {
     for (const [side, by] of past) lamp.push(`the lamp's glow is cut ${by.toFixed(1)}px at its ${side} (${sel(mark)})`);
   }
 
+  // ── pill ──
+  // The pill marks the row you are on, exactly; a row that is folded (or folding) has no pill at all,
+  // so a pill left behind on the row that took its seat is a finding (review, 21 Nov 2026).
+  const pill = [];
+  for (const mark of document.querySelectorAll(".place-pill")) {
+    const group = mark.parentElement;
+    if (!group || !vis(group, true)) continue;
+    const row = [...group.querySelectorAll('[aria-current="page"]')].find(
+      (el) => vis(el, true) && !el.closest('.unfold:not([data-phase="open"])'),
+    );
+    if (!row) {
+      pill.push(`a pill with no current row in sight (${sel(group)})`);
+      continue;
+    }
+    const a = mark.getBoundingClientRect();
+    const b = row.getBoundingClientRect();
+    const off = Math.max(Math.abs(a.left - b.left), Math.abs(a.top - b.top), Math.abs(a.width - b.width), Math.abs(a.height - b.height));
+    if (off > 0.5) pill.push(`the pill is ${off.toFixed(1)}px off "${txt(row)}" (${sel(group)})`);
+  }
+
   // ── place ──
   // The light under your place is a closest-side pool, spent at its own box's edge: that box must lie
   // inside the room it lives in, the rail's whole scroll content (it scrolls with its row) or the bar.
@@ -422,5 +445,5 @@ export function detect({ tablet = 720 } = {}) {
     for (const [side, by] of past) place.push(`your place's light reaches ${by.toFixed(1)}px past its room at the ${side} (${sel(room)})`);
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, place, pageScroll };
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pill, place, pageScroll };
 }

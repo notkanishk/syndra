@@ -29,7 +29,9 @@ export function useGlideIndicator<T extends HTMLElement = HTMLDivElement>(choice
 
   const measure = useCallback(() => {
     const active = ref.current?.querySelector<HTMLElement>(ACTIVE);
-    if (!active) return setBox(null);
+    // A choice inside a fold that is moving (or shut) has no place yet: no indicator, and the caller's
+    // own fill marks it, so a row folding away never leaves the indicator on the row that follows.
+    if (!active || active.closest('.unfold:not([data-phase="open"])')) return setBox(null);
     const next = {
       left: active.offsetLeft,
       top: active.offsetTop,
@@ -54,7 +56,14 @@ export function useGlideIndicator<T extends HTMLElement = HTMLDivElement>(choice
     watch.observe(group);
     // The segments, whatever their tag (a button, a link); not the indicator itself.
     group.querySelectorAll(":scope > :not([data-indicator]), :scope button, :scope a").forEach((segment) => watch.observe(segment));
-    return () => watch.disconnect();
+    // A fold that opens or shuts, and a segment that arrives or leaves, moves the choice without
+    // resizing anything the observer above was given (a row mounted after it, a fold settling open).
+    const changes = new MutationObserver(measure);
+    changes.observe(group, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-phase"] });
+    return () => {
+      watch.disconnect();
+      changes.disconnect();
+    };
   }, [measure]);
 
   return { ref, box };
@@ -67,9 +76,9 @@ export function GlideIndicator({
   className = "",
 }: {
   box: Box | null;
-  /** A pill (`fill`), a line under (`underline`), or one box with the option's own corners (`box`:
-   *  the rail's place, whose rows are 12px boxes, never round caps; A-25 moment 4). */
-  kind: "fill" | "underline" | "box";
+  /** A fill shaped as the option is (its own corners: a pill's round ends, a rail row's 12px), or a
+   *  line under it. */
+  kind: "fill" | "underline";
   /** Whether a change of place glides; false lands it at once (a key, Back, a first paint). */
   travel?: boolean;
   /** The indicator's colour, a token class. */
@@ -78,19 +87,19 @@ export function GlideIndicator({
   if (!box) return null;
   const { left, top, width, height } =
     kind === "underline" ? { left: box.left, top: box.top + box.height - 1, width: box.width, height: 2 } : box;
-  // One element, round at both ends at every point of the glide. It moves by
-  // transform and takes the active option's width and height: never scaled, so
-  // its ends never squash, and never drawn in parts, whose overlaps doubled a
-  // translucent fill into two lines (staging, 20 Nov 2026). It is out of flow,
-  // so a change of its size lays out itself alone, never the group.
+  // One element, shaped as the active option at every point of the glide: its corners are the
+  // option's own (round ends for a pill, 12px for a rail row; A-25 moment 4). It moves by transform
+  // and takes the option's width and height: never scaled, so its ends never squash, and never drawn
+  // in parts, whose overlaps doubled a translucent fill into two lines (staging, 20 Nov 2026). It is
+  // out of flow, so a change of its size lays out itself alone, never the group.
   // Absent under reduced motion, and when the caller says this change does not travel: it lands at once.
   const glide = travel && !stillMotion() ? "indicator-glide" : "";
   return (
     <span
       aria-hidden
       data-indicator={kind}
-      className={`pointer-events-none absolute left-0 top-0 ${kind === "box" ? "" : "rounded-pill"} ${glide} ${className}`}
-      style={{ transform: `translate(${left}px, ${top}px)`, width, height, borderRadius: kind === "box" ? box.radius : undefined }}
+      className={`pointer-events-none absolute left-0 top-0 ${kind === "underline" ? "rounded-pill" : ""} ${glide} ${className}`}
+      style={{ transform: `translate(${left}px, ${top}px)`, width, height, borderRadius: kind === "fill" ? box.radius : undefined }}
     />
   );
 }

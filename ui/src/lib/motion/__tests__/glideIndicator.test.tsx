@@ -52,12 +52,14 @@ describe("the glide indicator's observer", () => {
  * (staging, 20 Nov 2026), so it has no parts at all.
  */
 describe("the glide indicator's shape", () => {
-  it("draws a fill as one round element, translated and sized, with no parts", () => {
-    const { container } = render(<GlideIndicator box={{ left: 10, top: 4, width: 100, height: 30, radius: "0px" }} kind="fill" className="bg-accent" />);
+  it("draws a fill as one element shaped as the option (its own corners), translated and sized, with no parts", () => {
+    const { container } = render(<GlideIndicator box={{ left: 10, top: 4, width: 100, height: 30, radius: "999px" }} kind="fill" className="bg-accent" />);
     expect(container.querySelectorAll("*")).toHaveLength(1);
     const fill = container.querySelector<HTMLElement>("[data-indicator]")!;
     expect(fill.children).toHaveLength(0);
-    expect(fill).toHaveClass("rounded-pill", "bg-accent");
+    expect(fill).toHaveClass("bg-accent");
+    // The option's own corners: a pill's round ends here, a rail row's 12px there (A-25 moment 4).
+    expect(fill.style.borderRadius).toBe("999px");
     expect(fill.style.transform).toBe("translate(10px, 4px)");
     expect(fill.style.transform).not.toMatch(/scale/);
     expect([fill.style.width, fill.style.height, fill.style.left, fill.style.top]).toEqual(["100px", "30px", "", ""]);
