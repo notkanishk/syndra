@@ -34,6 +34,11 @@
  *   place     your place's light (A-25 moment 4) reaching past the rail or the tab
  *             bar it lives in: its pool must be spent inside the room's own box (the
  *             rail's whole scroll content, the bar).
+ *   trail     a change's light (A-25 moment 5) reaching past what holds it: its pool
+ *             must be spent inside its dialog panel's sides and scroll content, and
+ *             between the trail's neighbours (the outcome, the footer), whose grounds
+ *             are in front of it. A dialog opens only from a click, so a replay sees
+ *             one only where a page draws a trail open.
  *   lamp      the mark's breathing glow (A-25 moment 3) reaching past a box that
  *             clips it (the rail's scroller, the phone's bar, the window): its pool
  *             must be spent inside every edge, read from the glow's own computed box.
@@ -450,5 +455,36 @@ export function detect({ tablet = 720 } = {}) {
     for (const [side, by] of past) place.push(`your place's light reaches ${by.toFixed(1)}px past its room at the ${side} (${sel(room)})`);
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pill, place, pageScroll };
+  // ── trail ──
+  // The change's light (A-25 moment 5) is a closest-side pool spent at its own box's edge. Its trail lives
+  // in a dialog, whose panel scrolls: the box must lie inside the panel's sides (its 24px margin) and its
+  // scroll content, and between the trail's neighbours (the outcome above, the footer below), whose
+  // grounds are in front of it and would end it at strength.
+  const trail = [];
+  for (const pool of document.querySelectorAll("[data-trail-light]")) {
+    if (!vis(pool, true) || parseFloat(getComputedStyle(pool).opacity) === 0) continue;
+    const p = pool.getBoundingClientRect();
+    let scroller = pool.parentElement;
+    while (scroller && scroller !== document.body && getComputedStyle(scroller).overflowY === "visible" && getComputedStyle(scroller).overflowX === "visible")
+      scroller = scroller.parentElement;
+    const past = [];
+    if (scroller && scroller !== document.body) {
+      const r = scroller.getBoundingClientRect();
+      const left = r.left + scroller.clientLeft;
+      const top = r.top + scroller.clientTop - scroller.scrollTop;
+      past.push(
+        ["its scroller's left", left - p.left],
+        ["its scroller's right", p.right - (left + scroller.clientWidth)],
+        ["its scroller's top", top - p.top],
+        ["its scroller's bottom", p.bottom - (top + scroller.scrollHeight)],
+      );
+    }
+    const room = pool.closest("[data-trail-room]");
+    if (room?.previousElementSibling) past.push(["the ground above it", room.previousElementSibling.getBoundingClientRect().bottom - p.top]);
+    if (room?.nextElementSibling) past.push(["the ground below it", p.bottom - room.nextElementSibling.getBoundingClientRect().top]);
+    for (const [side, by] of past.filter(([, by]) => by > 0.5))
+      trail.push(`a change's light reaches ${by.toFixed(1)}px past ${side} (${sel(room ?? pool)})`);
+  }
+
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pill, place, trail, pageScroll };
 }

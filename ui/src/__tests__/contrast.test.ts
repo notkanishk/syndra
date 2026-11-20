@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { SRC, block, colour, over, ratio } from "./cssTokens";
+import { SRC, block, colour, css, over, ratio } from "./cssTokens";
 
 /**
  * Quiet text clears AA on every ground it can sit on (A-09 §1–2).
@@ -84,4 +84,27 @@ describe("text drawn with its own alpha", () => {
     }
     expect(found).toEqual([]);
   });
+});
+
+describe("text under a light", () => {
+  // The trail's light (A-25 moment 5) at its strongest, its centre, on the dialog's panel: every line of
+  // the trail under it keeps 4.5:1. A change's steps are ink, and a read's time faint; they carry no
+  // link (violet, 4.03:1 there in the dark room), which `trail-light.test.tsx` holds.
+  const ramp = block(":root {\n    --violet-600");
+  const k = Number(/\.trail-light \{[^}]*--pool-k: calc\((\d+)% \* var\(--hour-weight\)\);/.exec(css)?.[1]) / 100;
+
+  for (const [theme, { vars }] of Object.entries(THEMES)) {
+    it(`keeps every line of a lit trail at 4.5:1 in the ${theme} room`, () => {
+      const all = { ...ramp, ...vars };
+      const accent = colour(all, "--accent");
+      const lit = over([accent[0], accent[1], accent[2], (accent[3] ?? 1) * k * Number(all["--hour-weight"])], colour(all, "--surface-2"));
+      const failures: string[] = [];
+      for (const token of ["--ink", "--muted", "--faint"]) {
+        const r = ratio(colour(all, token), lit);
+        if (r < 4.5) failures.push(`${token}: ${r.toFixed(2)}`);
+      }
+      expect(k).toBeGreaterThan(0);
+      expect(failures).toEqual([]);
+    });
+  }
 });

@@ -1166,7 +1166,7 @@
    wins over it. Unlayered, it beat every layer whatever its specificity, and a filled button's edge
    lit in the accent on an accent fill (review, 20 Nov 2026). */
 @layer base {
-  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light) {
+  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light) {
     --pool-c: var(--accent);
     --pool-stops: color-mix(in srgb, var(--pool-c) var(--pool-k), transparent),
       color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.74), transparent) 20%,
@@ -1888,6 +1888,12 @@ html.theme-fading *::after {
   animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate;
 }
 
+/* What a light walks with changes a beat behind it (A-25 §2): a trail's dot fills `--light-lead` after
+   the change's light sets out for the next step. Reduced motion keeps tint and drops the beat. */
+@utility light-lead {
+  transition-delay: var(--light-lead);
+}
+
 /* ── The mark ─────────────────────────────────────────────────────────────
  * A contained orb: a faint base ring under a brighter arc, with a lit dot at
  * the centre. It is a miniature of the login's arch-and-orb, which is the
@@ -2029,6 +2035,52 @@ html.theme-fading *::after {
   @media (forced-colors: active) {
     .place-light,
     .place-pill {
+      display: none;
+    }
+  }
+}
+
+/* The trail lights (A-25 moment 5; owner, 20 Nov 2026: the recommendation): under a give's result, a
+   pool on the step the change has reached, the trail's own layer, under everything in it. The accent
+   at 26% of the room's weight, on the six eased stops inside its own box, which `CheckTrail.tsx` keeps
+   inside the trail's ground (rule 1). It travels to the next step only when a read settles one, on
+   tint's even curve over flash (rule 4: a light on its own errand is unhurried), and it breathes while
+   a step is open; the box carries the travel and the going out, its pool the breath, so neither stops
+   the other. Arriving it settles in; leaving it fades over flash. Still: it rests, and goes at once.
+   Under forced colours it is not drawn: the ring and the words say where the change is. */
+@layer components {
+  .trail-light {
+    z-index: -1;
+    --pool-k: calc(26% * var(--hour-weight));
+    opacity: 0;
+    transition:
+      transform var(--trail-travel, 0s) var(--ease-tint),
+      opacity var(--duration-flash) var(--ease-flash);
+    &[data-going] {
+      opacity: 1;
+      transition-duration: var(--trail-travel, 0s), var(--duration-settle);
+      @starting-style {
+        opacity: 0;
+      }
+    }
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(closest-side, var(--pool-stops));
+    }
+  }
+  /* Its breath, as the lamp's, only for a visitor who has not asked for less. */
+  @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
+    .trail-light[data-breathe]::before {
+      animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate;
+    }
+  }
+  .trail-light-glide {
+    --trail-travel: var(--duration-flash);
+  }
+  @media (forced-colors: active) {
+    .trail-light {
       display: none;
     }
   }

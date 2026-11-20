@@ -86,7 +86,9 @@ export function trailSteps(
  * While its last step is open it reads the person again every
  * `TRAIL_REREAD_MS`, through the page's own query, for at most
  * `TRAIL_WATCH_MS`, and stops once that step settles or the sheet closes.
- * Its steps fill on tint as each is observed (the dot's own transition).
+ * Its steps fill on tint as each is observed (the dot's own transition). A
+ * give's trail carries the change's light on its open step while it looks
+ * (A-25 moment 5); its block is the light's room (`data-trail-room`).
  */
 export function ChangeTrail({
   userId,
@@ -132,9 +134,18 @@ export function ChangeTrail({
     return () => clearInterval(timer);
   }, [open, reread, at]);
 
+  // The light keeps company with the looking (A-25 moment 5): when the watch ends, it goes out with it.
+  const [watching, setWatching] = useState(() => Date.now() < at + TRAIL_WATCH_MS);
+  useEffect(() => {
+    if (!watching) return;
+    const timer = setTimeout(() => setWatching(false), at + TRAIL_WATCH_MS - Date.now());
+    return () => clearTimeout(timer);
+  }, [watching, at]);
+
+  // A give's trail only: a removal takes access away, and nothing that does is lit (A-25 §1).
   return (
-    <div className={className}>
-      <CheckTrail label={TRAIL_LABEL} checks={steps} />
+    <div className={className} data-trail-room>
+      <CheckTrail label={TRAIL_LABEL} checks={steps} light={act === "give" ? watching : undefined} />
     </div>
   );
 }
