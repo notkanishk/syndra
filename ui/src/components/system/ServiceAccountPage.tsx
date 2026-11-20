@@ -12,7 +12,7 @@ import { ReadGate } from "@/components/states/ReadGate";
 import { Owner } from "@/components/system/ServiceAccountOwner";
 import { ServiceAccountDialog, UnmarkDialog } from "@/components/system/ServiceAccountDialogs";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardHeader, CardRow, LABEL_COL } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ApiError } from "@/lib/api-client";
 import { formatShortDate } from "@/lib/format";
@@ -171,8 +171,8 @@ function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <CardRow first={first} seat="default" action={action}>
-      <span className="w-full text-small font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">{label}</span>
+    <CardRow first={first} seat="default" action={action} className="@container">
+      <span className={LABEL_COL}>{label}</span>
       <span className="min-w-0 flex-1 text-body [overflow-wrap:anywhere]">{children}</span>
     </CardRow>
   );

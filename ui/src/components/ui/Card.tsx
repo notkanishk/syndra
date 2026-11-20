@@ -353,6 +353,19 @@ export const NUMBER_COL = "tablet:w-(--seat-number) tablet:flex-none tablet:text
 export const STATUS_COL = "tablet:w-(--seat-status) tablet:flex-none";
 
 /**
+ * A setting row's label (label · value · the default seat): in `--seat-label` beside its value where
+ * the ROW holds all three (170, the value at least 160, the seat 200 and two gaps at their widest,
+ * 18: 566px), and on a line of its own above them where it does not, as on a phone. The row decides,
+ * so it wears `@container` (as a person's role row does), never the window: at 768 the rail leaves a
+ * card 447px wide, and a label held at 170 from `tablet:` beside the 200px seat left its value 5px,
+ * its words cut to a letter (layout check, staging, 20 Nov 2026). Stacked, it is a heading over its
+ * value, not a part on the seat's line, so it drops the padding that centres one there (`row-top`).
+ * A container query's width is in the class, which Tailwind reads from the source: a literal.
+ */
+export const LABEL_COL =
+  "w-full text-small font-semibold text-muted @max-[566px]:py-0 @min-[566px]:w-(--seat-label) @min-[566px]:shrink-0";
+
+/**
  * The parts of a header or a row, each in its column's box (`data-col`). A row
  * on `ROW` that is not a CardRow (a link, a label) draws its parts through it
  * too. A part that is sometimes absent keeps its place with an empty cell,

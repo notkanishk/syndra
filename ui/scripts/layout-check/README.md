@@ -29,6 +29,8 @@ A branch that adds a new read can't be recorded from staging, because staging do
 
 The server's own `/healthz` read (`src/lib/zone.ts`, the makerspace's time zone and locale) goes from the Next server to the backend, not through the browser, so it isn't on the tape. Locally the dates show in UTC, labelled as UTC, and staging shows them in the makerspace's zone. A zone label is short, so this doesn't change what the check finds.
 
+A pass shows only that the layout holds on the data the tape recorded. On 20 Nov 2026 this check passed on staging, then later the same day reported 19 findings. The code at the check's own merge reported the same 19 on the later data, so staging's data had changed, not the code. The rows that broke were an unassigned NAS account, people with network storage, and readings with a note. A row shape that staging doesn't have yet is unchecked. Run the check after a data change as well as after a deploy.
+
 ## After deploying
 
 ```bash
