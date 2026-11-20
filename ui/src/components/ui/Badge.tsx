@@ -129,7 +129,7 @@ export function Mono({
  * reachability column are one idiom. They were two.
  */
 export const STATUS_TONE = {
-  healthy: { dot: "bg-healthy", edge: "border-healthy", label: "text-ink" },
+  healthy: { dot: "bg-healthy", edge: "text-healthy", label: "text-ink" },
   // A reading that is a runtime fact and not a state of health: a target that
   // is registered and has not published a manifest yet.
   //
@@ -139,10 +139,10 @@ export const STATUS_TONE = {
   // that the colour does not mean anything, which is the only thing that makes
   // amber useful anywhere else. Lime is worse: nothing has been read, so
   // nothing is healthy.
-  neutral: { dot: "bg-faint", edge: "border-faint", label: "text-muted" },
-  accent: { dot: "bg-accent", edge: "border-accent", label: "text-accent-text" },
-  warn: { dot: "bg-warn", edge: "border-warn", label: "text-warn-text" },
-  danger: { dot: "bg-danger", edge: "border-danger", label: "text-danger-text" },
+  neutral: { dot: "bg-faint", edge: "text-faint", label: "text-muted" },
+  accent: { dot: "bg-accent", edge: "text-accent", label: "text-accent-text" },
+  warn: { dot: "bg-warn", edge: "text-warn", label: "text-warn-text" },
+  danger: { dot: "bg-danger", edge: "text-danger", label: "text-danger-text" },
 } as const;
 
 export type StatusTone = keyof typeof STATUS_TONE;
@@ -153,6 +153,7 @@ export function StatusDot({
   ring = false,
   fill,
   className = "",
+  ...data
 }: {
   tone: StatusTone;
   /** A token expression that replaces the fill: Insights' pins are shades of the accent no tone names. */
@@ -167,15 +168,20 @@ export function StatusDot({
    */
   ring?: boolean;
   className?: string;
+  /** A caller's own handle on the dot (`data-freshness-dot`). */
+  [attribute: `data-${string}`]: string | undefined;
 }) {
   const t = STATUS_TONE[tone];
+  // The ring is the tone's colour (`edge`) drawn as an inset shadow, not a border: a dot filling from its
+  // ring tints both ways at once (`motion-tint`), so it never empties between them (A-25 moment 5).
   return (
     <span
+      {...data}
       aria-hidden
       data-dot
       data-ring={ring ? "" : undefined}
       style={fill ? { background: fill } : undefined}
-      className={`size-1.5 shrink-0 rounded-pill motion-tint ${t.edge} ${ring ? "border-[1.5px]" : t.dot} ${bloom ? "bloom" : ""} ${className}`}
+      className={`size-1.5 shrink-0 rounded-pill motion-tint ${t.edge} ${ring ? "dot-ring" : t.dot} ${bloom ? "bloom" : ""} ${className}`}
     />
   );
 }

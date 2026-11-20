@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useId, useRef, useState } from "r
 
 import { copyLine, cooldownLine, READ_AGAIN, READING, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { CardRow } from "@/components/ui/Card";
 import { Crossfade, LANDED_HOLD_MS, PRESS_FORGET_MS } from "@/lib/motion";
@@ -108,12 +109,17 @@ const TONE: Record<Freshness, string> = {
  * `pressed: false`). A cooldown carried in the data is the reader's own press, so it is amber, and a system that cannot be reached are
  * amber; every other reading is drawn by its age.
  */
-export function toneOf(reading: Freshness, why: string | undefined, pressed: boolean): { text: string; dot: string } {
-  if (why === STALE.cached || (why === STALE.cooldown && !pressed)) return { text: "text-faint", dot: "bg-faint" };
-  if (why === STALE.cooldown) return { text: "text-warn-text", dot: "bg-warn" };
+export function toneOf(
+  reading: Freshness,
+  why: string | undefined,
+  pressed: boolean,
+): { text: string; dot: { tone: StatusTone; ring?: boolean } } {
+  if (why === STALE.cached || (why === STALE.cooldown && !pressed)) return { text: "text-faint", dot: { tone: "neutral" } };
+  if (why === STALE.cooldown) return { text: "text-warn-text", dot: { tone: "warn" } };
   return {
     text: TONE[reading],
-    dot: reading === "live" || reading === "ageing" ? "bg-healthy" : reading === "stale" ? "bg-warn" : "border border-warn",
+    // `provisional` is the one ring: the dots' own ring (StatusDot), never one drawn here.
+    dot: reading === "live" || reading === "ageing" ? { tone: "healthy" } : reading === "stale" ? { tone: "warn" } : { tone: "warn", ring: true },
   };
 }
 
@@ -290,11 +296,7 @@ export function ReadFreshness({
           the target could not confirm it. */}
       {/* The dot and the sentence wrap as one, so a long sentence never leaves the dot alone on its line. */}
       <span className="flex min-w-0 items-start gap-2">
-      <span
-        aria-hidden
-        data-freshness-dot
-        className={`mt-[0.5em] size-1.5 flex-none rounded-pill motion-tint ${blooming ? "bloom " : ""}${tone.dot}`}
-      />
+      <StatusDot data-freshness-dot="" tone={tone.dot.tone} ring={tone.dot.ring} bloom={blooming} className="mt-[0.5em]" />
       {/* The new line crossfades in over the old one when a read the reader asked for lands (S17). */}
       <Crossfade id={blooming ? `landed:${landed}` : "read"}>
         <span id={lineId} className={tone.text}>

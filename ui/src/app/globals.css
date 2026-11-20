@@ -508,6 +508,22 @@
     }
   }
 
+  /* A read dot answering the trail's lamp (A-25 moment 5): its own glow opens once and is gone. The
+     ember's light, not `bloom`'s flat disc. */
+  @keyframes answer {
+    from {
+      opacity: 0;
+      scale: 0.3;
+    }
+    30% {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+      scale: 1;
+    }
+  }
+
   /* The lamp's breath (A-25 moment 3): its glow out and back, never the mark itself. */
   @keyframes lamp {
     from {
@@ -1166,7 +1182,7 @@
    wins over it. Unlayered, it beat every layer whatever its specificity, and a filled button's edge
    lit in the accent on an accent fill (review, 20 Nov 2026). */
 @layer base {
-  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light) {
+  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light, .trail-answer) {
     --pool-c: var(--accent);
     --pool-stops: color-mix(in srgb, var(--pool-c) var(--pool-k), transparent),
       color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.74), transparent) 20%,
@@ -1888,6 +1904,23 @@ html.theme-fading *::after {
   animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate;
 }
 
+/* What a light walks with changes a beat behind it (A-25 §2): a trail's dot fills `--light-lead` after
+   the change's light sets out for the next step. Reduced motion keeps tint and drops the beat. */
+@utility light-lead {
+  transition-delay: var(--light-lead);
+}
+
+/* A dot not read fresh (A-13 §1.4): a 1.5px ring in its tone's colour (the dot's `color`), drawn inside
+   it as a shadow, not a border, so its size never changes and the ring tints into a fill and back with
+   `motion-tint`, never empty between them (A-25 moment 5: a trail's dot fills behind the light). */
+@utility dot-ring {
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  /* Forced colours drop every shadow: the ring is a border there, in the system's colour. */
+  @media (forced-colors: active) {
+    border: 1.5px solid currentColor;
+  }
+}
+
 /* ── The mark ─────────────────────────────────────────────────────────────
  * A contained orb: a faint base ring under a brighter arc, with a lit dot at
  * the centre. It is a miniature of the login's arch-and-orb, which is the
@@ -2034,6 +2067,166 @@ html.theme-fading *::after {
   }
 }
 
+/* The trail lights: the lamp carried home (A-25 moment 5; owner, 20 Nov 2026: "Carried", the
+   recommendation). One motion, three parts that are the same light, all in the result card's layer (the
+   card is `isolate` when it holds a trail), under every line in it:
+     the lamp   a pool centred on the dot, four quarter-ellipses round that point on the six eased stops,
+                each spent at its own far side, so each side has its own reach (240px over the sentence, 56px
+                up and down, the card's room on the left) and the pool has no edge. The accent at 26% of the
+                room's weight. One shape for the whole walk.
+     the line   the hairline between the dots, lit where the lamp is and nowhere else: a 1px box from the
+                first dot to the last, clipping a gradient that moves with the lamp. No motion of its own.
+     the moves  one wrapper a move, each a `transform` of its own step's height over flash on tint's even
+                curve; the next sets out a beat (flash less settle) after it, before it has landed, so the
+                lamp slows at each dot and never stops. Their sum is where the lamp is.
+   It swells in over arrive on settle's curve and goes out over flash on flash's. It breathes only while
+   it waits on a step not yet read (`CheckTrail.tsx`, the Web Animations API, so it ends from where it is).
+   Still: no moves, no breath. Under forced colours none of it is drawn: the ring and the words say where
+   the change is. */
+@layer components {
+  .trail-light {
+    position: absolute;
+    left: var(--trail-x);
+    top: var(--trail-y);
+    width: 0;
+    height: 0;
+    z-index: -1;
+    --pool-k: calc(26% * var(--hour-weight));
+    opacity: 0;
+    transition: opacity var(--duration-flash) var(--ease-flash);
+    &[data-going] {
+      opacity: 1;
+      transition: opacity var(--duration-arrive) var(--ease-settle);
+      @starting-style {
+        opacity: 0;
+      }
+    }
+  }
+  /* It swells in from 86% as it is lit, by its state and not by where it sits: the moves wrap it. */
+  .trail-pool {
+    position: absolute;
+    left: 0;
+    top: 0;
+    scale: 0.86;
+    transition:
+      scale var(--duration-arrive) var(--ease-settle),
+      opacity var(--duration-settle) var(--ease-tint);
+    [data-going] & {
+      scale: 1;
+      @starting-style {
+        scale: 0.86;
+      }
+    }
+    & > * {
+      position: absolute;
+      background: radial-gradient(ellipse farthest-side at var(--at), var(--pool-stops));
+    }
+    & > [data-quarter="tl"] {
+      right: 0;
+      bottom: 0;
+      width: var(--reach-left);
+      height: var(--reach-up);
+      --at: 100% 100%;
+    }
+    & > [data-quarter="tr"] {
+      left: 0;
+      bottom: 0;
+      width: var(--reach-right);
+      height: var(--reach-up);
+      --at: 0% 100%;
+    }
+    & > [data-quarter="bl"] {
+      right: 0;
+      top: 0;
+      width: var(--reach-left);
+      height: var(--reach-down);
+      --at: 100% 0%;
+    }
+    & > [data-quarter="br"] {
+      left: 0;
+      top: 0;
+      width: var(--reach-right);
+      height: var(--reach-down);
+      --at: 0% 0%;
+    }
+  }
+  /* One move: a point that carries what is inside it by its own step's height. */
+  .trail-move {
+    position: absolute;
+    left: 0;
+    top: 0;
+    [data-carried] & {
+      transition: transform var(--duration-flash) var(--ease-tint);
+    }
+  }
+  .trail-path {
+    position: absolute;
+    left: calc(var(--trail-x) - 0.5px);
+    top: var(--trail-y);
+    width: 1px;
+    height: var(--trail-length);
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--duration-flash) var(--ease-flash);
+    &[data-going] {
+      opacity: 1;
+      transition: opacity var(--duration-arrive) var(--ease-settle);
+      @starting-style {
+        opacity: 0;
+      }
+    }
+  }
+  .trail-thread {
+    position: absolute;
+    left: 0;
+    top: calc(-1 * var(--reach-up));
+    width: 1px;
+    height: calc(var(--reach-up) + var(--reach-down));
+    --thread-k: 60%;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.06), transparent) calc(var(--reach-up) * 0.18),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.2), transparent) calc(var(--reach-up) * 0.38),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.44), transparent) calc(var(--reach-up) * 0.58),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.74), transparent) calc(var(--reach-up) * 0.8),
+      color-mix(in srgb, var(--accent) var(--thread-k), transparent) var(--reach-up),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.74), transparent) calc(var(--reach-up) + var(--reach-down) * 0.2),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.44), transparent) calc(var(--reach-up) + var(--reach-down) * 0.42),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.2), transparent) calc(var(--reach-up) + var(--reach-down) * 0.62),
+      color-mix(in srgb, var(--accent) calc(var(--thread-k) * 0.06), transparent) calc(var(--reach-up) + var(--reach-down) * 0.82),
+      transparent
+    );
+  }
+  /* A read dot's answer as the lamp reaches it: its own lime glow (the ember's light, --healthy at 44%,
+     17px out from the 6px dot) opens once and is gone, under the words. Never on a ring. */
+  .trail-answer {
+    --pool-c: var(--healthy);
+    --pool-k: 44%;
+    &::after {
+      content: "";
+      position: absolute;
+      inset: -17px;
+      z-index: -1;
+      background: radial-gradient(closest-side, var(--pool-stops));
+      opacity: 0;
+    }
+  }
+  @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
+    .trail-answer::after {
+      animation: answer var(--duration-flash) var(--ease-flash) both;
+    }
+  }
+  @media (forced-colors: active) {
+    .trail-light,
+    .trail-path,
+    .trail-answer::after {
+      display: none;
+    }
+  }
+}
+
 /* ── Surfaces ─────────────────────────────────────────────────────────────
  * One card treatment used everywhere. In light it carries a soft lift instead
  * of a hairline, per the design's light-theme note.
@@ -2058,7 +2251,7 @@ html.theme-fading *::after {
   }
   &[data-stale] [data-dot] {
     background-color: transparent;
-    border-width: 1.5px;
+    @apply dot-ring;
   }
   &[data-recedes] {
     transition-property: background-color, border-color, box-shadow;

@@ -252,9 +252,15 @@ function GrantDirectAccessOpen({
           <PendingTrail act="give" className="mx-6 mb-1 mt-3" />
         </>
       )}
-      {result && <ActionOutcome outcome={result.outcome} word={result.word} person={userId} className="mx-6 mb-1" />}
-      {result?.trail && (
-        <ChangeTrail userId={userId} projectId={projectId} roleKey={roleKey} act="give" {...result.trail} className="mx-6 mb-1 mt-3" />
+      {result && (
+        <ActionOutcome
+          outcome={result.outcome}
+          word={result.word}
+          person={userId}
+          className="mx-6 mb-1"
+          // The change's trail, inside its result (A-25 moment 5, as the board draws it).
+          trail={result.trail && <ChangeTrail userId={userId} projectId={projectId} roleKey={roleKey} act="give" {...result.trail} className="mt-1.5" />}
+        />
       )}
       {result && step.after}
 

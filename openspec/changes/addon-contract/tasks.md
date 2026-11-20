@@ -3364,6 +3364,114 @@ end to end) found no missing function; three regressions with one root cause
     - *The rail's glide, review round (Opus review of c7385945).* Blocker: after an Advanced to Basic switch the current row folded away under you, the size observer measured it mid-fold and the pill stayed on the row that took its seat (the observer watched only rows that existed at mount). Now a row inside a fold that is not open is unplaced, the glide is measured again when the view flips (`usePlace(pathname, view)`), and a `MutationObserver` re-measures when a fold's phase changes or a row arrives. The layout check gains `pill`: the pill must sit on its group's visible current row within 0.5px, and a group without one has no pill. "Travel next" is a plain primary click on one of the group's links (`onClick`; not a key, `detail` 0; not a modifier or another button), and the glide is one-shot: after `SETTLE_MS` a later re-measure lands it at once. `kind="box"` is gone: `fill` takes the option's measured corners, so every pill is shaped as its option (round for a pill, 12px for a rail row). The server's HTML draws no pill and keeps the row's own fill. The current row's fill snaps (`[transition-property:color,transform]`), so it and the pill never show together at hydration. Mutation-checked: a folding row measured (1 red), a modifier click counting (1), a key counting (2), the glide never ending (1), the measured corners ignored (1), the server's row without its fill (1). Accepted as low and left: the light's height on a content change, and the tab's press shrink.
     - *The rail's glide, the replay with layout regressions merged (PR 227, d0ce637f).* A fresh tape from staging, replayed into this build at 390 to 1440 and at 860, 900, 950, 1060 and 1180, all rules: 0 findings once the `seat` rule counted every drawn part. It had left Home's `aria-hidden` avatar out of a new person's row, so a row a few pixels short of its seat at 860 (an avatar and a gap past the 499px it has) read as one that fits; the seat wraps there by design (D-1 §4 rule 9). `vis(c, true)` for a row's parts, as the lamp already counts its mark; mutation-checked (back to `vis(c)`: the five rows return). Page loads that ran out of time with eleven widths in parallel on the dev server were rerun in smaller batches, and each came back clean.
     - *The rail's glide, second review round (Opus check of f6b14a3a, nothing blocking; staging confirms the glide and the view-switch fix).* (1) The fold check counted any fold around the choice, so a Segmented in an opening `Unfold` (a shape's line) had no box, and nothing re-measured when the fold opened outside the group: only a fold inside the group hides the choice now. (2) The `MutationObserver` is exercised: Basic to Advanced on `/bundles`, the row arrives in an opening fold, and the pill is there once the fold opens, with no resize. (3) The current row's timing is one utility, `place-current` (colour on tint, transform on press, each with its own duration and curve, with its reduced-motion durations beside `.control`'s), used by the rail and the tab bar; the arbitrary `[transition-property:color,transform]` over control's ten-entry list had given the press the tint's 120ms. (4) The `seat` rule leaves out parts out of flow (`absolute`, `fixed`). (5) The corner is read from `borderTopLeftRadius`, falling back to `var(--radius-pill)` where none is read. (6) The pill rule's date (20 Nov), and the first-HTML test reads the markup as a document. Mutation-checked, each red: any fold counting (1), no mutation observer (1), no corner fallback (1), the press on tint (1), the reduced-motion rule gone (1), the tab bar and the rail back to the arbitrary class (1 each).
+    - *The trail lights (A-25 moment 5, build order step 6; owner, 20 Nov 2026: the recommendation). Branch `feat/addon-contract-a25-trail`, on 71dd3107.*
+      - **What it does.** Under a give's result, once Syndra has sent it, `ChangeTrail` passes `CheckTrail` a `light`. One pool rests on the first open (`ring`) step: a route's current step (`aria-current="step"`, on every route trail, lit or not), measured by the glide indicator's one hook.
+      - **How it moves.** It travels there only when the steps change, which is only on a read, over `--duration-flash` on `--ease-tint`. Each dot fills `--light-lead` behind it (`light-lead`). While a step is open it breathes, gated on no-preference as the lamp's is.
+      - **How it goes out.** When no step is open (home) it fades over flash on `--ease-flash`. It also goes out when the watch ends (`TRAIL_WATCH_MS`), though the step is still open.
+      - **Where it never is.** Not on a removal's trail (act `revoke`), a refusal or a failure (no trail at all), a give that waits for someone to press Send (Syndra isn't moving it; decided in the build review, A-25 §4.5 updated), the route before the answer (`PendingTrail`), or the claims trails (`DebugMode`, `ClaimPreview`). It isn't drawn under forced colours. Still (reduced motion), it rests with no travel and no breath.
+      - **Rule 1 in the real dialog** (a give answered locally on the replayed tape, read by `detect.js`'s new `trail` rule).
+        - The pool is 280 wide from 20px left of the trail, which leaves 5px inside the panel's 24px margin.
+        - It is no taller than its own block and that block's margins allow (`data-trail-room`, `mx-6 mb-1 mt-3`), whatever sits around it and however the panel has scrolled. Measured: 28px tall on the last step, which has its own row and 4px of margin under its dot.
+        - Its side is the room's own margin less 4px (20 of `mx-6`'s 24), never the caller's number.
+        - First round, sized to the neighbours: with the clamp removed, the rule reported "30.0px past the ground below it". The rule still reads the neighbours, which a block's own margins always clear. `trail-light.test.tsx` holds the geometry.
+      - **Contrast.** Under the light's centre on the panel: faint 4.77:1 in the dark room and 4.96:1 on paper, ink 11.56 and 13.30, muted 6.53 and 7.20. A violet link would be 4.03 in the dark room, and a change's steps carry none (held).
+      - **Mutation-checked**, each red:
+        - the last open step, not the first (3);
+        - lit ahead of a read (4);
+        - no lead (1), and the lead not the token (1);
+        - a removal lit (1), and a refusal with a trail (2);
+        - the watch never ending it (1);
+        - breath when still (1), travel when still (1), and breath ungated (2);
+        - drawn under forced colours (1);
+        - a check's trail lit (1), and debug mode passing a light, bare or valued (1 each);
+        - the light at 40% (2);
+        - the room clamp gone (3).
+      - **Open for the owner.** On the common answer (Zitadel took it, waiting on the read back) the light rests on the last step at 280 by 28: the room under that step is its own row and the trail's 4px margin. A-25 drew 96 inside an outcome block with room under the trail. The owner is deciding whether the trail moves inside the outcome card, as the board draws it; the sizing is generic, so it takes the room it is given there.
+    - *The trail lights, review round (Opus review of 47044c97, no blockers).*
+      - (1) The pool no longer flashes going out: its breath runs whether or not it is going, and pauses where it is (`:not([data-going])`), so the fade starts from the strength it had.
+      - (2) It is sized from its room's own margins, not its neighbours' (no sliver when the panel scrolls).
+      - (3) A ring dot is an inset shadow in its tone's colour (`dot-ring`, the tone in `color`), which `motion-tint` carries into the fill. Checked in Chrome: swapping a ring dot to filled left no frame empty, where the 1.5px border it replaced left the dot empty for its first 55ms. Under forced colours the ring is a border. A stale card's dots ring the same way.
+      - (4) `aria-current="step"` is the route's, lit or not, once it has reached a step past a settled one (follow-up: a route drawn before its answer marks none).
+      - (5) One clock: the re-reads run only while the trail is watching.
+      - (6) `PendingTrail` is held unlit.
+      - (7) The side is from the room's margin.
+      - (8) A queued give has no light until Syndra has sent it.
+      - (9) The light is `data-indicator`, a safeguard so the glide's observer would leave it alone. The observer is set up before the light mounts, so it never sees it either way; the test holds the attribute only.
+      - Mutation-checked, each red: the breath tied to going (1), the pause rule gone (1), the room's bottom (1) and top (1) not its own, the ring a border (1) and not a shadow (1), the current step only when lit (2), the re-reads ignoring the watch (1), the pending route lit (1), the side a fixed number (1), a queued give lit (2), the `data-indicator` attribute removed (1: the attribute's own check, not the observer); and the first round's guards again against the moved code: ahead of a read (3), a removal lit (1), breath when still (1), breath ungated (2).
+    - *The trail lights, follow-ups (Opus verify of 70d67f04, nothing blocking).*
+      - (1) Item 9's observer half could not fail: dropped, and the line above corrected.
+      - (2) The ring's forced-colours border is held.
+      - (3) One ring: the stale card's dots `@apply dot-ring`, and the compiled CSS carries its forced-colours border to them too.
+      - (4) A route marks no current step until one before it is settled, so `PendingTrail` marks none.
+      - (5) One ring style: the freshness line's `provisional` dot, hand-drawn as a 1px `border-warn`, is now `StatusDot` with `ring` and `tone="warn"` (the 1.5px ring every other ring dot draws). Its own handle (`data-freshness-dot`) passes through.
+      - Mutation-checked, each red: the ring's forced-colours border gone (1), the stale dots' ring not applied (1), the pending route marking a step (1), the room's top not its own (1, now held by a block with no top margin), the provisional reading filled (1).
+    - *The trail lights: the walk home, inside the result (owner on staging, 20 Nov 2026: "could barely see it"; the stand-in answers at once, so every step was settled before the result showed and the light flashed on the last step).* The owner chose both changes; A-25 §4.5 and the §7 audit row are updated.
+      - **The walk home** (`CheckTrail.tsx` `TrailLight`): the light appears on the first step and walks down the steps already seen, one a flash on tint's curve, to the step reached, where it waits and breathes; home, it rests one breath on the last step and goes out over flash. The dots it passes are already filled (it walks over truth); `--light-lead` only matters to a dot that changes, which is a step settling while the light waits. Once per change; still, no walk (it rests on the step reached, or one breath on the last). It is placed before it travels, so it never slides in from the list's corner. Its position is its own (`data-step`), apart from the route's current step (`aria-current`), so the glide indicator no longer measures trails (`[aria-current="step"]` left its selector, and with it the `data-indicator` safeguard).
+      - **Inside the result** (`ActionOutcome` `trail`, under what happened and above what to do next; `GrantDirectAccess` and `RemovalDialog` both): the card is the light's room (`data-trail-room`) and the pool is sized to its inner box. `detect.js`'s `trail` rule now holds the pool inside its card's inner box.
+      - **Measured in Chrome** on a give answered locally on the replayed tape, at 1280 (dark and light) and 390 (light):
+        - 280 by 96 on every step, 4px inside the card's side and 7px above its inner bottom; 0 `trail` findings. With the pool pushed 12px past the card's side, the rule reported "12.0px past its card's left".
+        - The walk: step 1 to 908ms, step 2 to 1815ms, resting on step 3 from about 2.7s; the dots read filled, filled, ring throughout.
+        - At the light's strongest (its centre, full breath), the ground goes from rgb(20, 22, 18) to rgb(48, 40, 76) in the dark room (1.33:1 against the unlit card) and from white to rgb(229, 223, 254) on paper (1.29:1). At the breath's low, 1.13:1 in both. Faint ink keeps 5.02:1 (dark) and 4.96:1 (paper) at the centre, on the card (`contrast.test.ts` now measures on `--surface-1`). 26% is kept.
+      - **Mutation-checked**, each red:
+        - the walk skipping a step (3), no walk with motion (4), and a walk when still (3);
+        - dots rung while lit (1);
+        - walking again when a step settles (4);
+        - no rest at home (2), and never going out at home (2);
+        - sliding in from the corner (1);
+        - taller than its card (1), and past its side (1);
+        - the card not its room (1), and the trail after the next step (1);
+        - a removal lit (1), a queued give lit (2), and a refusal with a trail (2);
+        - the light at 40% on the card (2).
+    - *The trail lights, review round (Opus review of b68d206d, no outright blockers).*
+      - (1) The trail is `aria-live="off"` inside its result's `status`, so a settling step does not re-read the whole card.
+      - (2) No slide-in: the light travels only once it has left the first step (`!still && at > 0`). In Chrome, its transform held at one value for every frame of its first 300ms, without the travel.
+      - (3) The pool lies under every line in the card: the card is `isolate` when it holds a trail, and the list is only `relative`. In Chrome, every visible line of the card hit-tests above the light.
+      - (4) Once seen sent, a step stays sent (`gone`). The light is for a give that had already gone out when its result first appeared (`eligible`, latched at first render); a give queued for Send and sent later never walks (coordinator's decision; A-25 §4.5 updated).
+      - (5) The contrast comment is corrected: on the light's centre a violet link would be 4.37:1 in the dark room. A lit result holds none, and a test holds that.
+      - (6) Simpler walk: it reads its end through a ref, so it depends on its own steps only, and its rest is one timeout (`FLASH_MS + BREATHE_MS`, or `BREATHE_MS` when still).
+      - (7) The README says the `trail` rule runs by hand.
+      - Mutation-checked, each red (1 each): the trail read with its status, travel from the first frame, the list as the layer, the card not `isolate`, sent not latched, eligibility not latched, and the rest without the last move's flash.
+    - *The trail lights: the lamp carried home (owner, 20 Nov 2026: "Carried", the recommendation, after "the bloom moves, the dots do not, it is not organic"). A-25 §4.5 as redrawn in round 4, and its prototype, are committed with it; §10's five questions are marked decided.*
+      - **The lamp** (`CheckTrail.tsx` `TrailLamp`): a pool centred on the dot (7px across, the dot's centre down), four quarter-ellipses round that point on the six eased stops (`ellipse farthest-side`), reaching 240px over the sentence, 56px up and down, and the card's room less 4px on the left. It is measured once against the card's inner box at the walk's tightest steps, again only if the card or the list changes size, never per step. 26% × `--hour-weight`, as before.
+      - **Carried** (`useTrailWalk`): one wrapper per move, each a `transform` of its own step's height on `--duration-flash` and `--ease-tint`, nested so the lamp is their sum and stays on the compositor (the standard way; the prototype's registered `@property` lengths are not used). The first move sets out at `ARRIVE_MS`, each next one a beat later (`BEAT_MS = FLASH_MS - SETTLE_MS`, 640ms, no new token). It swells in over arrive and goes out over flash; home, a beat after the last step; waiting, it breathes only once it has landed (Web Animations, so the breath ends from where it is).
+      - **The line**: a 1px box from the first dot to the last, clipping a gradient (the accent at 60% at the lamp's centre, on the same stops) carried by the same moves. The dots stand in front of it.
+      - **The dots**: a read dot answers once, `--light-lead` behind the lamp reaching it: `trail-answer`, the ember's light (`--healthy` at 44%, 17px out, `@keyframes answer`), under the words. A ring never answers; no dot's fill is ever touched.
+      - **Still**: one place, no glow, no breath, gone one breath later at home. **Forced colours**: no lamp, no line, no glow. Kept: `aria-live="off"`, no slide-in, `isolate` on the card, the latches, eligibility, no link in a lit result.
+      - **Measured in Chrome**, a real give on the replayed tape, sampled every frame (253 frames over 4.2s), at 1280 dark and 390 light:
+        - Walk: no backward frame, at most 1.08px a frame (1.09 at 390), the line exactly on the lamp on every frame, 70px travelled.
+        - The dots' glows begin at 465, 1098 and 1748ms, with the lamp 0.4, 3.5 and 3.7px from each dot; each is fullest about 250ms later and gone about 770ms after it began.
+        - Every read dot's fill is one value on every frame (lime, rgb(163, 230, 53) dark and rgb(77, 124, 15) light).
+        - The lamp is inside the card's inner box on every frame, and the `trail` rule reports 0. Gone at 3048ms.
+        - Waiting on an open step, it breathes only after landing, and the ring never glows. The live read: the pool's strength moves at most 0.012 a frame across it (0.05 at most in the whole run), the dot fills 51ms after the read and its glow opens at 84ms, and the lamp is out 1.37s later.
+        - Still: one place, no glow, gone at 2408ms.
+        - At the lamp's strongest point (its dot) the strength is unchanged, so faint ink keeps 5.02:1 (dark) and 4.96:1 (paper), held by `contrast.test.ts`.
+      - **Mutation-checked**, each red:
+        - the lamp off the dot (2), and above it (3);
+        - the moves not overlapping (1);
+        - breathing while walking (2);
+        - the glow with the light rather than behind it (1);
+        - a ring answering (2);
+        - a read dot dimmed until reached (1);
+        - walking (2), answering (1) and gliding (1) when still;
+        - reach past the card's foot (3) and side (2);
+        - the line not carried with the lamp (1);
+        - home going out a breath later rather than a beat (2);
+        - walking again when the change comes home (1);
+        - the glow drawn under forced colours (1);
+        - a queued give lit (2), and a removal lit (1);
+        - the lamp at 40% (2).
+    - *The lamp carried home, review round (Opus review of c16db6fa, one blocker).*
+      - (1) **The swell now runs on a real trail.** It read `[data-going] > &`, which only matched while the pool was the lamp's own child, and the measured moves wrap it. The pool now rests at 0.86 and is 1 under `[data-going]` at any depth, with `@starting-style` 0.86, on `--duration-arrive`. A test renders a 3-step trail and holds that the pool sits inside the moves and that the rule reads its state through a descendant selector. In Chrome, on a real 3-step give, two moves deep, the pool's computed scale is 0.86 at its first frame (390 light), then 0.94, 0.97, 0.99, and 1 by 390ms, never going back.
+      - (2) **A late read walks, never jumps.** `reached` is the dot the lamp has come to, and each next beat is a beat after the last move set out. So a read that settles two steps sets the lamp out at once and the next move a beat later, each dot answering with it.
+      - (3) **Smaller fixes.** `trail-answer` only on a lit trail; no `border-radius` on the glow (the `closest-side` pool is round already). The lamp and its line sit beside the list, in one `relative` box (`data-trail`), before it, so the list holds only its steps. In Chrome every visible line of the card still hits above the light, and every dot above the lit line.
+      - (4) **Guards.** All four quarter rules are held (corner, reach, far side). `detect.js` reports a lamp missing a quarter, or one that measures nothing; in Chrome, a quarter taken out and every reach set to nought each gave their finding.
+      - Kept as it is: the `answer` keyframe would replay if a trail's container went `display: none` and back, since an animation restarts when its box is made again. No container does that today.
+      - Measured again in Chrome (253 frames, 1280 dark and 390 light):
+        - Walk: 0 backward frames, 1.08px a frame at most, the line on the lamp, 70px travelled.
+        - Glows begin at 462, 1096 and 1746ms, with the lamp 0.4, 3.5 and 3.7px from each dot.
+        - Read dots keep one lime on every frame; the lamp is inside the card on every frame; gone at 3045ms.
+        - Waiting: breath only after landing. Still: one place, gone at 2412ms.
+      - Mutation-checked, each red: the swell back on a child selector (1), no resting scale (1), a quarter rule gone (1), a quarter on the wrong corner (1), a late read jumping (5), the lamp after its list (1), and the lamp back in the list (5).
   - [x] 7w-5 Access over time (§9 vivid, Q11, read proposal Q-W3-1; the owner, 19 Nov 2026: "i dont see the access over time chart anywhere", which settles both as yes). Board part 3, frame 19 (`person-vivid`).
     *Done (branch `feat/addon-contract-access-history`):*
     - **The read.** `GET /api/v1/users/{id}/access-history?since=YYYY-MM-DD` (`handlers/access_history.go`, route beside `/access` in `router.go`), `withOperatorAuth`: never a member's, not even their own. `since` is a makerspace day from a year before today to today (`services.historyStart`, else 400 `VALIDATION_FAILED`, `details.since`). Answer: `{since, truncated, roles: [{project_id, project_name, project_name_resolved, role_key, standing, ends?, runs: [{from, to}]}]}`, `from` null where no record says when a run began, `to` null where the records give it today.

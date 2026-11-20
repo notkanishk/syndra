@@ -86,7 +86,10 @@ export function trailSteps(
  * While its last step is open it reads the person again every
  * `TRAIL_REREAD_MS`, through the page's own query, for at most
  * `TRAIL_WATCH_MS`, and stops once that step settles or the sheet closes.
- * Its steps fill on tint as each is observed (the dot's own transition).
+ * Its steps fill on tint as each is observed (the dot's own transition). A
+ * give's trail carries the change's light on its open step while it looks
+ * (A-25 moment 5); it sits inside its result (`ActionOutcome`'s `trail`), whose
+ * card is the light's room.
  */
 export function ChangeTrail({
   userId,
@@ -117,24 +120,40 @@ export function ChangeTrail({
   const newer =
     readAt && before !== undefined && (before === null || Date.parse(readAt) > Date.parse(before)) ? { readAt } : undefined;
   const standing = after ? access.data?.projects?.find((p) => p.project_id === projectId)?.standings?.[roleKey] : undefined;
-  const steps = trailSteps(act, sent, standing, newer);
+  // Once seen sent, it stays sent: a later read that has lost sight of it never takes the step back.
+  const [gone, setGone] = useState(false);
+  const steps = trailSteps(act, sent || gone, standing, newer);
+  if (!gone && steps[1].tone === "healthy") setGone(true);
   const open = steps[steps.length - 1].tone !== "healthy";
+  // The light is for this operator's own act going out (A-25 moment 5): a give that had already gone out when
+  // its result first appeared. One queued for Send, and sent later, never walks: it is not this act's moment.
+  const [eligible] = useState(() => act === "give" && steps[1].tone === "healthy");
 
-  // Read again while the last step is open, on the page's own query, never past the watch.
+  // The one clock for whether the trail is looking: until the watch ends. The re-reads and the light both follow it.
+  const [watching, setWatching] = useState(() => Date.now() < at + TRAIL_WATCH_MS);
+  useEffect(() => {
+    if (!watching) return;
+    const timer = setTimeout(() => setWatching(false), at + TRAIL_WATCH_MS - Date.now());
+    return () => clearTimeout(timer);
+  }, [watching, at]);
+
+  // Read again while the last step is open and the trail is looking, on the page's own query.
   const reread = access.refetch;
   useEffect(() => {
-    if (!open) return;
-    const until = at + TRAIL_WATCH_MS;
-    const timer = setInterval(() => {
-      if (Date.now() >= until) clearInterval(timer);
-      else void reread();
-    }, TRAIL_REREAD_MS);
+    if (!open || !watching) return;
+    const timer = setInterval(() => void reread(), TRAIL_REREAD_MS);
     return () => clearInterval(timer);
-  }, [open, reread, at]);
+  }, [open, watching, reread]);
 
+  // The light (A-25 moment 5), on a give's trail only, and only when it had gone out as its result appeared: a
+  // removal takes access away, and nothing that does is lit (A-25 §1); a give that waits for someone to press
+  // Send is not moving, and a breathing light would say it was. It goes out with the looking.
+  const light = eligible ? watching : undefined;
   return (
-    <div className={className}>
-      <CheckTrail label={TRAIL_LABEL} checks={steps} />
+    // Inside its result's `status`, which reads itself whole on every change: a step settling is not read
+    // as the whole card again (the trail is read where it is).
+    <div className={className} aria-live="off">
+      <CheckTrail label={TRAIL_LABEL} checks={steps} light={light} />
     </div>
   );
 }

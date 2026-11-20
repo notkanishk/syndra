@@ -135,7 +135,7 @@ describe("how a copy is drawn", () => {
     expect(line(/you can read again in/).className).toContain("text-warn-text");
     unmount();
     render(<ReadFreshness state={{ readAt: ago(1), current: false, stale: { reason: "unreachable" } }} subject="The list" />);
-    expect(dot().className).toContain("border-warn");
+    expect(dot()).toHaveClass("dot-ring", "text-warn");
     expect(line(/can.t be reached/).className).toContain("text-warn-text");
   });
 

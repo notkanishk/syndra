@@ -34,6 +34,10 @@
  *   place     your place's light (A-25 moment 4) reaching past the rail or the tab
  *             bar it lives in: its pool must be spent inside the room's own box (the
  *             rail's whole scroll content, the bar).
+ *   trail     a change's lamp (A-25 moment 5) reaching past the result's card it
+ *             sits in: its four quarters must be spent inside the card's inner box. A dialog
+ *             opens only from a click, so a replay sees one only where a page draws
+ *             a trail open.
  *   lamp      the mark's breathing glow (A-25 moment 3) reaching past a box that
  *             clips it (the rail's scroller, the phone's bar, the window): its pool
  *             must be spent inside every edge, read from the glow's own computed box.
@@ -450,5 +454,48 @@ export function detect({ tablet = 720 } = {}) {
     for (const [side, by] of past) place.push(`your place's light reaches ${by.toFixed(1)}px past its room at the ${side} (${sel(room)})`);
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pill, place, pageScroll };
+  // ── trail ──
+  // The change's lamp (A-25 moment 5) is four quarter-ellipses round its dot, each spent at its own far side:
+  // together they must lie inside the card's inner box (the result it sits in, `data-trail-room`), so the
+  // card's edge never cuts it, wherever the walk has carried it. A lamp with no room is a finding of its own.
+  const trail = [];
+  for (const lamp of document.querySelectorAll("[data-trail-light]")) {
+    const shown = getComputedStyle(lamp);
+    if (shown.display === "none" || parseFloat(shown.opacity) === 0) continue;
+    const room = lamp.closest("[data-trail-room]");
+    if (!room) {
+      trail.push(`a change's light outside any result's card (${sel(lamp)})`);
+      continue;
+    }
+    // All four quarters, each with a reach: a lamp short of one, or measuring nothing, is drawn wrong.
+    const parts = [...lamp.querySelectorAll("[data-quarter]")];
+    const missing = ["tl", "tr", "bl", "br"].filter((q) => !parts.some((part) => part.dataset.quarter === q));
+    if (missing.length) {
+      trail.push(`a change's lamp without its ${missing.join(", ")} quarter (${sel(room)})`);
+      continue;
+    }
+    const quarters = parts.map((q) => q.getBoundingClientRect());
+    if (quarters.every((q) => q.width < 1 || q.height < 1)) {
+      trail.push(`a change's lamp that measures nothing (${sel(room)})`);
+      continue;
+    }
+    const p = {
+      left: Math.min(...quarters.map((q) => q.left)),
+      top: Math.min(...quarters.map((q) => q.top)),
+      right: Math.max(...quarters.map((q) => q.right)),
+      bottom: Math.max(...quarters.map((q) => q.bottom)),
+    };
+    const r = room.getBoundingClientRect();
+    const left = r.left + room.clientLeft;
+    const top = r.top + room.clientTop;
+    const past = [
+      ["left", left - p.left],
+      ["top", top - p.top],
+      ["right", p.right - (left + room.clientWidth)],
+      ["bottom", p.bottom - (top + room.clientHeight)],
+    ].filter(([, by]) => by > 0.5);
+    for (const [side, by] of past) trail.push(`a change's light reaches ${by.toFixed(1)}px past its card's ${side} (${sel(room)})`);
+  }
+
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pill, place, trail, pageScroll };
 }

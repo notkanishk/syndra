@@ -280,8 +280,8 @@ describe("what the target reports", () => {
       // The pool still reads healthy and the alert still reads amber: a ring
       // of each dot's own colour, never all amber.
       const dots = Array.from(card().querySelectorAll("[data-dot]"));
-      expect(dots.some((d) => d.className.includes("border-healthy"))).toBe(true);
-      expect(dots.some((d) => d.className.includes("border-warn"))).toBe(true);
+      expect(dots.some((d) => d.className.includes("text-healthy"))).toBe(true);
+      expect(dots.some((d) => d.className.includes("text-warn"))).toBe(true);
     });
 
     it("rises back, filled, once it answers", () => {

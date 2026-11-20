@@ -30,6 +30,11 @@ function braced(source: string, opener: string): string {
   }
   return source.slice(start);
 }
+/** The CSS with every block gated on `prefers-reduced-motion: no-preference` taken out. */
+function ungated(source: string): string {
+  const at = source.search(/@media [^{]*\(prefers-reduced-motion: no-preference\) \{/);
+  return at < 0 ? source : ungated(source.slice(0, at) + source.slice(at + braced(source.slice(at), "@media").length));
+}
 const MOTION = "@media (forced-colors: none) and (prefers-reduced-motion: no-preference) {\n    .syndra-mark";
 const breathing = braced(css, MOTION);
 const glow = braced(css, '.syndra-mark[data-room]::before {');
@@ -68,7 +73,9 @@ describe("what the lamp draws", () => {
   it("is still under reduced motion: at rest, 0.72, and its breath only for a visitor who has not asked for less", () => {
     expect(glow).toMatch(/opacity: 0\.72;/);
     expect(glow).not.toMatch(/animation/);
-    expect(css.replace(breathing, "")).not.toMatch(/::before \{\s*animation: (lamp|breathe)/);
+    // No glow breathes outside a block gated on no-preference: the lamp's, and every light's since (the trail's).
+    expect(ungated(css)).not.toMatch(/::before \{\s*animation: (lamp|breathe)/);
+    expect(ungated(css)).not.toContain(breathing);
   });
 
   it("is gone under forced colours", () => {
