@@ -28,6 +28,9 @@
  *             element is not responding to the hover"). Its wearers are a button's
  *             `rim` and the frame utilities `card` and `panel`; what is inside
  *             `[data-no-hand]`, a dialog or a popover is out of it by design.
+ *   place     your place's light (A-25 moment 4) reaching past the rail or the tab
+ *             bar it lives in: its pool must be spent inside the room's own box (the
+ *             rail's whole scroll content, the bar).
  *   lamp      the mark's breathing glow (A-25 moment 3) reaching past a box that
  *             clips it (the rail's scroller, the phone's bar, the window): its pool
  *             must be spent inside every edge, read from the glow's own computed box.
@@ -398,5 +401,26 @@ export function detect({ tablet = 720 } = {}) {
     for (const [side, by] of past) lamp.push(`the lamp's glow is cut ${by.toFixed(1)}px at its ${side} (${sel(mark)})`);
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pageScroll };
+  // ── place ──
+  // The light under your place is a closest-side pool, spent at its own box's edge: that box must lie
+  // inside the room it lives in, the rail's whole scroll content (it scrolls with its row) or the bar.
+  const place = [];
+  for (const pool of document.querySelectorAll("[data-place-light]")) {
+    const room = pool.closest("[data-place-room]");
+    if (!room || !vis(room, true)) continue;
+    const p = pool.getBoundingClientRect();
+    const r = room.getBoundingClientRect();
+    const left = r.left + room.clientLeft;
+    const top = r.top + room.clientTop - room.scrollTop;
+    const inside = { l: left, t: top, r: left + room.clientWidth, b: top + room.scrollHeight };
+    const past = [
+      ["left", inside.l - p.left],
+      ["top", inside.t - p.top],
+      ["right", p.right - inside.r],
+      ["bottom", p.bottom - inside.b],
+    ].filter(([, by]) => by > 0.5);
+    for (const [side, by] of past) place.push(`your place's light reaches ${by.toFixed(1)}px past its room at the ${side} (${sel(room)})`);
+  }
+
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, place, pageScroll };
 }

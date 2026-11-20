@@ -18,19 +18,30 @@ import { stillMotion } from "./still";
  */
 const ACTIVE = '[aria-checked="true"], [aria-current="page"], [aria-current="location"]';
 
-type Box = { left: number; top: number; width: number; height: number };
+/** Where the active option is, in its group, and its own corners (for an indicator shaped as it is). */
+export type Box = { left: number; top: number; width: number; height: number; radius: string };
 
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-export function useGlideIndicator(choice: unknown) {
-  const ref = useRef<HTMLDivElement>(null);
+export function useGlideIndicator<T extends HTMLElement = HTMLDivElement>(choice: unknown) {
+  const ref = useRef<T>(null);
   const [box, setBox] = useState<Box | null>(null);
 
   const measure = useCallback(() => {
     const active = ref.current?.querySelector<HTMLElement>(ACTIVE);
     if (!active) return setBox(null);
-    const next = { left: active.offsetLeft, top: active.offsetTop, width: active.offsetWidth, height: active.offsetHeight };
-    setBox((cur) => (cur && cur.left === next.left && cur.top === next.top && cur.width === next.width && cur.height === next.height ? cur : next));
+    const next = {
+      left: active.offsetLeft,
+      top: active.offsetTop,
+      width: active.offsetWidth,
+      height: active.offsetHeight,
+      radius: getComputedStyle(active).borderRadius,
+    };
+    setBox((cur) =>
+      cur && cur.left === next.left && cur.top === next.top && cur.width === next.width && cur.height === next.height && cur.radius === next.radius
+        ? cur
+        : next,
+    );
   }, []);
 
   // When the choice changes; size changes are the observer's.
@@ -52,29 +63,34 @@ export function useGlideIndicator(choice: unknown) {
 export function GlideIndicator({
   box,
   kind,
+  travel = true,
   className = "",
 }: {
   box: Box | null;
-  kind: "fill" | "underline";
+  /** A pill (`fill`), a line under (`underline`), or one box with the option's own corners (`box`:
+   *  the rail's place, whose rows are 12px boxes, never round caps; A-25 moment 4). */
+  kind: "fill" | "underline" | "box";
+  /** Whether a change of place glides; false lands it at once (a key, Back, a first paint). */
+  travel?: boolean;
   /** The indicator's colour, a token class. */
   className?: string;
 }) {
   if (!box) return null;
   const { left, top, width, height } =
-    kind === "fill" ? box : { left: box.left, top: box.top + box.height - 1, width: box.width, height: 2 };
+    kind === "underline" ? { left: box.left, top: box.top + box.height - 1, width: box.width, height: 2 } : box;
   // One element, round at both ends at every point of the glide. It moves by
   // transform and takes the active option's width and height: never scaled, so
   // its ends never squash, and never drawn in parts, whose overlaps doubled a
   // translucent fill into two lines (staging, 20 Nov 2026). It is out of flow,
   // so a change of its size lays out itself alone, never the group.
-  // Absent under reduced motion, where it lands at once.
-  const glide = stillMotion() ? "" : "indicator-glide";
+  // Absent under reduced motion, and when the caller says this change does not travel: it lands at once.
+  const glide = travel && !stillMotion() ? "indicator-glide" : "";
   return (
     <span
       aria-hidden
-      data-indicator
-      className={`pointer-events-none absolute left-0 top-0 rounded-pill ${glide} ${className}`}
-      style={{ transform: `translate(${left}px, ${top}px)`, width, height }}
+      data-indicator={kind}
+      className={`pointer-events-none absolute left-0 top-0 ${kind === "box" ? "" : "rounded-pill"} ${glide} ${className}`}
+      style={{ transform: `translate(${left}px, ${top}px)`, width, height, borderRadius: kind === "box" ? box.radius : undefined }}
     />
   );
 }

@@ -9,6 +9,7 @@ import { RetryPill } from "@/components/shell/RetryPill";
 import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
 import { Unfold } from "@/lib/motion";
+import { PlaceMarks, usePlace } from "@/components/shell/Place";
 import { GoToPanel } from "@/components/ui/GoTo";
 import {
   leafMatches,
@@ -90,7 +91,9 @@ export function TouchNav() {
       aria-label="Main navigation"
       // `tablet:hidden` and not a JS branch: the rail takes over at the same
       // width, and one of the two is always the only one visible.
-      className="flex-none border-t border-line bg-rail px-1.5 pb-[env(safe-area-inset-bottom)] pt-2 tablet:hidden"
+      // `relative isolate`, `data-place-room`: the bar is the room your place's light lives in (A-25 moment 4).
+      data-place-room
+      className="relative isolate flex-none border-t border-line bg-rail px-1.5 pb-[env(safe-area-inset-bottom)] pt-2 tablet:hidden"
     >
       {settling ? (
         // The bar's own height, empty: the same seat tabs or the trigger take.
@@ -123,16 +126,20 @@ function TabBar({
   pathname: string;
   counts: Partial<Record<IndicatorKey, number>> | undefined;
 }) {
+  // Your place, as in the rail (A-25 moment 4): the pill and its light glide across on a tap.
+  const place = usePlace(pathname);
   return (
     // Inset rather than edge-to-edge: at four tabs the corners of a 390px
     // screen are the furthest points from a thumb's arc, and the two tabs that
     // land there are the two nobody taps.
-    <div className="mx-auto flex w-full max-w-[420px] items-stretch gap-1 px-1.5 pb-2">
+    <div ref={place.ref} onPointerDown={place.onPointerDown} className="relative mx-auto flex w-full max-w-[420px] items-stretch gap-1 px-1.5 pb-2">
+      <PlaceMarks group={place.ref} box={place.box} travel={place.travel} axis="bar" />
       {destinations.map((destination) => (
         <Tab
           key={destination.href}
           destination={destination}
           active={destinationMatches(destination, pathname)}
+          boxed={place.box !== null}
           counts={counts}
         />
       ))}
@@ -143,10 +150,13 @@ function TabBar({
 function Tab({
   destination,
   active,
+  boxed,
   counts,
 }: {
   destination: TouchDestination;
   active: boolean;
+  /** The bar's pill marks the place: the tab no longer holds the fill itself (until it is measured, it does). */
+  boxed: boolean;
   counts: Partial<Record<IndicatorKey, number>> | undefined;
 }) {
   const count = destination.indicator ? Number(counts?.[destination.indicator] ?? 0) : undefined;
@@ -159,7 +169,7 @@ function Tab({
       href={destination.href}
       aria-current={active ? "page" : undefined}
       className={`nav-place relative flex min-h-[var(--tap)] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 control press-scale ${
-        active ? "bg-accent-soft" : ""
+        active && !boxed ? "bg-accent-soft" : ""
       }`}
     >
       <span

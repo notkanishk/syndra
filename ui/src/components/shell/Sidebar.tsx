@@ -14,6 +14,7 @@ import { RetryPill } from "@/components/shell/RetryPill";
 import { useUiView } from "@/lib/ui-view";
 import { useFlashOnChange } from "@/lib/motion";
 import { Unfold } from "@/lib/motion";
+import { PlaceMarks, usePlace } from "@/components/shell/Place";
 import { SyndraMark } from "./SyndraMark";
 
 /**
@@ -53,6 +54,8 @@ export default function Sidebar() {
   const entries = member ? memberNav(mine ?? []) : operatorNav(targets ?? []);
   // The lamp (A-24 Q5, A-25 moment 3): it breathes on a live reading, amber while Zitadel isn't answering.
   const room = lampRoom(isOperator, reading);
+  // Your place: the pill and its light, gliding only when a press on a row took you there.
+  const place = usePlace<HTMLElement>(pathname);
   const followsView = (advancedOnly: boolean | undefined, key: string, part: React.ReactNode) =>
     advancedOnly ? (
       <Unfold key={key} open={advanced}>
@@ -67,7 +70,9 @@ export default function Sidebar() {
     // is deliberate — the tab bar reads the same query, so one poll serves both
     // — and it means a rotation does not remount the rail and reset the
     // `settled` guard that stops every badge flashing on arrival.
-    <div className="hidden w-[252px] flex-none flex-col gap-5 overflow-y-auto border-r border-line bg-rail px-3 pb-[22px] pt-5 tablet:flex">
+    // `relative isolate`, `data-place-room`: the rail is the room your place's light lives in (A-25
+    // moment 4), under everything in it.
+    <div data-place-room className="relative isolate hidden w-[252px] flex-none flex-col gap-5 overflow-y-auto border-r border-line bg-rail px-3 pb-[22px] pt-5 tablet:flex">
       <div className="flex items-center gap-2.5 px-2">
         <SyndraMark welcome room={room} />
         {/* `relative`: the word paints over the lamp's glow beside it (A-25 moment 3). */}
@@ -77,7 +82,8 @@ export default function Sidebar() {
 
       {/* No `gap`: each row carries its own 3px above it (`mt-[3px]`), so a part
           that folds takes its gap with it and the rows after it do not hop. */}
-      <nav className="-mt-[3px] flex flex-col" aria-label="Main navigation">
+      <nav ref={place.ref} onPointerDown={place.onPointerDown} className="relative -mt-[3px] flex flex-col" aria-label="Main navigation">
+        <PlaceMarks group={place.ref} box={place.box} travel={place.travel} axis="rail" />
         {entries.map((entry) =>
           entry.kind === "leaf"
             ? followsView(
@@ -90,6 +96,7 @@ export default function Sidebar() {
                   indicators={indicators}
                   settled={!isPlaceholderData}
                   nested={false}
+                  boxed={place.box !== null}
                 />,
               )
             : followsView(
@@ -111,6 +118,7 @@ export default function Sidebar() {
                         indicators={indicators}
                         settled={!isPlaceholderData}
                         nested
+                        boxed={place.box !== null}
                       />,
                     ),
                   )}
@@ -129,6 +137,7 @@ function NavRow({
   indicators,
   settled,
   nested,
+  boxed,
 }: {
   item: NavLeaf;
   pathname: string;
@@ -136,6 +145,8 @@ function NavRow({
   /** False while the rail is showing the query's placeholder zeros. */
   settled: boolean;
   nested: boolean;
+  /** The rail's pill marks the place: the row no longer holds the fill itself (until it is measured, it does). */
+  boxed: boolean;
 }) {
   const active = leafMatches(item, pathname);
   const count = item.indicator && indicators ? Number(indicators[item.indicator] ?? 0) : undefined;
@@ -155,13 +166,13 @@ function NavRow({
       // `min-h-[var(--tap)]` up to desktop: the rail appears at the tablet breakpoint and
       // a tablet is still a thumb, which is the whole argument
       // touch-targets.test.tsx makes. Its own links were 38-43px there.
-      className={`nav-place mt-[3px] flex min-h-[var(--tap)] items-center gap-[9px] rounded-nav text-body control desktop:min-h-0 ${
+      className={`nav-place relative mt-[3px] flex min-h-[var(--tap)] items-center gap-[9px] rounded-nav text-body control desktop:min-h-0 ${
         changed ? "flash " : ""
       }${
         nested ? "py-2 pl-[21px] pr-3" : "px-3 py-[9px]"
       } ${
         active
-          ? "bg-accent-soft font-semibold text-accent-text"
+          ? `${boxed ? "" : "bg-accent-soft "}font-semibold text-accent-text`
           : "text-muted hover:bg-[var(--hover)]"
       }`}
     >

@@ -27,7 +27,7 @@ function Group({ tag }: { tag: "a" | "button" }) {
   const Segment = tag;
   return (
     <div ref={ref} data-testid="group" className="relative">
-      <GlideIndicator box={{ left: 0, top: 0, width: 10, height: 10 }} kind="fill" />
+      <GlideIndicator box={{ left: 0, top: 0, width: 10, height: 10, radius: "0px" }} kind="fill" />
       <Segment aria-current="location" href={tag === "a" ? "#one" : undefined}>
         One {box ? "measured" : ""}
       </Segment>
@@ -53,7 +53,7 @@ describe("the glide indicator's observer", () => {
  */
 describe("the glide indicator's shape", () => {
   it("draws a fill as one round element, translated and sized, with no parts", () => {
-    const { container } = render(<GlideIndicator box={{ left: 10, top: 4, width: 100, height: 30 }} kind="fill" className="bg-accent" />);
+    const { container } = render(<GlideIndicator box={{ left: 10, top: 4, width: 100, height: 30, radius: "0px" }} kind="fill" className="bg-accent" />);
     expect(container.querySelectorAll("*")).toHaveLength(1);
     const fill = container.querySelector<HTMLElement>("[data-indicator]")!;
     expect(fill.children).toHaveLength(0);
@@ -64,7 +64,7 @@ describe("the glide indicator's shape", () => {
   });
 
   it("draws an underline 2px tall at the bottom of the active segment", () => {
-    const { container } = render(<GlideIndicator box={{ left: 10, top: 4, width: 100, height: 30 }} kind="underline" />);
+    const { container } = render(<GlideIndicator box={{ left: 10, top: 4, width: 100, height: 30, radius: "0px" }} kind="underline" />);
     const line = container.querySelector<HTMLElement>("[data-indicator]")!;
     expect(line.children).toHaveLength(0);
     expect(line.style.transform).toBe("translate(10px, 33px)");
