@@ -45,6 +45,7 @@ It prints one line per finding (`page width view theme kind …`) and exits 1 if
 | `clipped` | Text runs more than 2px past a box that doesn't scroll and isn't a `truncate`/ellipsis or line clamp. A negative margin is a deliberate bleed, not a spill. |
 | `heading` | A column heading is more than 4px off its cells. A left-aligned heading's text is compared with the column's box, so an avatar, dot or chip padding inside the column belongs to the column (D-1 draws Person over the avatar). A right-aligned heading is compared text to text. |
 | `seat` | From tablet up, an action seat is off its row's first line although the row fits. Fixed seats count at their widths, and shares count at their words, held to their minimums. |
+| `steady` | An unchosen FilterPills or Tabs option whose `label-steady` is narrower than its words at the chosen option's weight (0.5px of rounding), or reserves words other than its own. Choosing it would push its neighbours. Measured, never clicked. |
 | `pageScroll` | The page scrolls sideways. |
 | `tape missing` | In a replay, a request the tape doesn't hold (exit 4, not 1). |
 

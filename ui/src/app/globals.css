@@ -1042,13 +1042,35 @@
 
 /* A control's own indicator (Segmented's fill, Tabs' underline) gliding to
    the choice on settle. Outside the travel cap: it goes where you sent it.
-   Transform only, so it never lays the group out again (`GlideIndicator`
-   draws the pill in three parts so its ends stay round). Absent under reduced
-   motion, where it jumps. */
+   Its place by transform, its size by width and height: `GlideIndicator` is
+   one out-of-flow element, so resizing it lays out nothing but itself, and it
+   is never scaled, so its round ends never squash. Never left or top, which
+   would move it by layout. Absent under reduced motion, where it lands at once. */
 @utility indicator-glide {
-  transition-property: transform;
+  transition-property: transform, width, height;
   transition-duration: var(--duration-settle);
   transition-timing-function: var(--ease-settle);
+}
+
+/* A label that keeps its width whatever its weight (owner, 20 Nov 2026: the
+   button you just clicked moved away). It reserves the width of its own words
+   at the selected weight, in a pseudo-element that takes no height and is
+   never seen, so an option turning semibold never pushes its neighbours.
+   `SteadyLabel` wears it and sets `data-label` to the words it shows. */
+@utility label-steady {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+
+  &::after {
+    content: attr(data-label);
+    height: 0;
+    visibility: hidden;
+    overflow: hidden;
+    user-select: none;
+    pointer-events: none;
+    font-weight: --theme(--font-weight-semibold);
+  }
 }
 
 /* A dialog's card where it is a sheet (S3): below the tablet breakpoint it

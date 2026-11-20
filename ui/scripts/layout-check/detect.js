@@ -3,7 +3,7 @@
  * must stay one self-contained function: no imports, no closure over this module.
  *
  * It is the 19 Nov 2026 staging audit's detector (648 page runs), made strict
- * enough to gate a merge. Four findings, each a defect jsdom cannot see because
+ * enough to gate a merge. Five findings, each a defect jsdom cannot see because
  * it never lays anything out:
  *
  *   overlap   two visible pieces of text (or controls) cross by more than 2px on
@@ -19,6 +19,9 @@
  *             Status over the dot). Right-aligned: text against text.
  *   seat      from tablet up, a row's action seat off its first line although the
  *             row's parts fit on one line at their natural widths (D-1 §4 rule 1).
+ *   steady    an unchosen FilterPills or Tabs option whose `label-steady` is
+ *             narrower than its words at the chosen weight, so choosing it would
+ *             push its neighbours (20 Nov 2026). Read only: it measures, never clicks.
  *
  * Page-level horizontal scroll is reported too. `tablet` is the breakpoint below
  * which the seat wraps by design (D-1 §4 rule 9).
@@ -282,5 +285,33 @@ export function detect({ tablet = 720 } = {}) {
     }
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, pageScroll };
+  // ── steady ──
+  // An unchosen option of FilterPills or Tabs is already as wide as it will be once chosen and
+  // semibold, so choosing it moves nothing (owner, 20 Nov 2026). Its `label-steady` must be at least
+  // as wide as its words at the chosen option's weight, measured in a detached copy; 0.5px of rounding.
+  const steady = [];
+  for (const label of document.querySelectorAll(".label-steady")) {
+    const option = label.closest("[role=radio], button, a");
+    if (!option || !vis(label) || option.matches('[aria-checked="true"], [aria-current]')) continue;
+    const words = label.firstElementChild;
+    if (!words) continue;
+    if (label.dataset.label !== words.textContent) {
+      steady.push(`"${txt(option)}" reserves "${label.dataset.label}", not its own words (${sel(option)})`);
+      continue;
+    }
+    const chosen = option.parentElement?.querySelector('[aria-checked="true"], [aria-current]');
+    const probe = document.createElement("span");
+    const ws = getComputedStyle(words);
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre;left:-9999px;top:0";
+    for (const k of ["fontFamily", "fontSize", "fontStyle", "fontStretch", "letterSpacing", "fontFeatureSettings"]) probe.style[k] = ws[k];
+    probe.style.fontWeight = chosen ? getComputedStyle(chosen).fontWeight : "600";
+    probe.textContent = words.textContent;
+    document.body.appendChild(probe);
+    const need = probe.getBoundingClientRect().width;
+    probe.remove();
+    const have = label.getBoundingClientRect().width;
+    if (have + 0.5 < need) steady.push(`"${txt(option)}" is ${have.toFixed(1)}px, ${need.toFixed(1)}px once chosen: choosing it moves its neighbours (${sel(option)})`);
+  }
+
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, pageScroll };
 }

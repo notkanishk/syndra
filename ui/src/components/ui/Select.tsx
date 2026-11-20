@@ -3,6 +3,7 @@
 import React from "react";
 
 import { PILL } from "@/components/ui/Button";
+import { SteadyLabel } from "@/components/ui/SteadyLabel";
 import { GlideIndicator, useGlideIndicator } from "@/lib/motion";
 import { DENSE_FIELD } from "@/components/ui/Input";
 
@@ -179,7 +180,7 @@ export function FilterPills<T extends string>({
               active ? `${box ? "" : "bg-tint-3 "}font-semibold text-ink` : "text-muted hover:text-ink"
             } disabled:cursor-not-allowed disabled:text-faint disabled:hover:text-faint`}
           >
-            {option.label}
+            <SteadyLabel text={option.label} />
           </button>
         );
       })}

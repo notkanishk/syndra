@@ -272,7 +272,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
   return (
     <>
       <div className="flex flex-col gap-2.5">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
+        <div data-toolbar className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
           <QuestionSeat
             entities={entities}
             question={question}
@@ -316,8 +316,10 @@ export function MapTab({ url }: { url: InsightsUrl }) {
               )}
             </div>
           )}
-          <LensChoice url={url} lens={lens} />
         </div>
+        {/* The lens's own choice is a line beneath, never a sibling in the row above: arriving
+            there it pushed the question and the pills you had just clicked sideways (20 Nov 2026). */}
+        <LensChoice url={url} lens={lens} />
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           {topology.data && !asOn && (
