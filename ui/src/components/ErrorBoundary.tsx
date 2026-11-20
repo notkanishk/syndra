@@ -39,6 +39,8 @@ export class ErrorBoundary extends React.Component<
       return (
         <div
           role="alert"
+          // An error is like a Notice: not answered by light (A-25 moment 2).
+          data-no-hand=""
           className="flex flex-col gap-2.5 rounded-card border border-danger-line bg-surface-1 px-6 py-7"
         >
           <div className="type-empty-title">This page couldn&rsquo;t render.</div>

@@ -2140,8 +2140,10 @@ html.theme-fading *::after {
   }
 
   /* Its light, only where it is drawn: never a first-day card (its pool and strength are its own),
-     never a stale one (it recedes), never inside `[data-no-hand]`. */
-  :where([data-hand]) :is(.rim, .card, .panel):not(.lit-card, [data-stale], :where([data-no-hand] *)) {
+     never a stale one (it recedes), never a frame that refuses it or anything inside one
+     (`[data-no-hand]`: a Notice, an error, a closed part), never a placeholder (a frame whose content
+     is still a skeleton, `aria-busy`: nothing in it to act on yet). */
+  :where([data-hand]) :is(.rim, .card, .panel):not(.lit-card, [data-stale], [data-no-hand], [data-no-hand] *, :has(> [aria-busy="true"])) {
     --pool-k: var(--rim-k);
     &.rim-filled {
       --pool-c: var(--rim-filled);

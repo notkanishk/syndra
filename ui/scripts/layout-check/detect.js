@@ -321,7 +321,7 @@ export function detect({ tablet = 720 } = {}) {
 
   // ── edge ──
   // A card by how it is drawn, not by its class: what grep cannot find (a frame typed by hand).
-  // The smallest frame radius and the surface grounds are read from the tokens themselves.
+  // The frame radii, the pill's and the surface grounds are read from the tokens themselves.
   const edge = [];
   const page = document.querySelector("main[data-hand]");
   if (page) {
@@ -333,12 +333,35 @@ export function detect({ tablet = 720 } = {}) {
       probe.remove();
       return got;
     };
-    const grounds = new Set(["--surface-0", "--surface-1", "--surface-2"].map((t) => token("backgroundColor", `var(${t})`)));
+    // A colour as sRGB and alpha, whatever syntax it is computed in (rgb, oklab, color-mix): painted
+    // onto one pixel and read back. A surface token at any strength is still that surface.
+    const ink = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    const paint = (colour) => {
+      ink.clearRect(0, 0, 1, 1);
+      ink.fillStyle = "rgba(0, 0, 0, 0)";
+      ink.fillStyle = colour;
+      ink.fillRect(0, 0, 1, 1);
+      return [...ink.getImageData(0, 0, 1, 1).data];
+    };
+    const grounds = ["--surface-0", "--surface-1", "--surface-2"].map((t) => paint(token("backgroundColor", `var(${t})`)));
+    const isGround = (colour) => {
+      const [r, g, b, a] = paint(colour);
+      return a > 0 && grounds.some(([R, G, B]) => Math.abs(r - R) <= 4 && Math.abs(g - G) <= 4 && Math.abs(b - B) <= 4);
+    };
     const radius = Math.min(parseFloat(token("borderTopLeftRadius", "var(--radius-card)")), parseFloat(token("borderTopLeftRadius", "var(--radius-panel)")));
+    const pill = parseFloat(token("borderTopLeftRadius", "var(--radius-pill)"));
+    const CORNERS = ["borderTopLeftRadius", "borderTopRightRadius", "borderBottomRightRadius", "borderBottomLeftRadius"];
+    const SIDES = ["borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth"];
     for (const el of page.querySelectorAll("*")) {
       const cs = getComputedStyle(el);
-      if (parseFloat(cs.borderTopLeftRadius) < radius || cs.borderTopWidth !== "1px" || cs.borderTopStyle === "none") continue;
-      if (!grounds.has(cs.backgroundColor)) continue;
+      // A frame's corners: as round as a card or a panel, never a pill (a pill is a control, not a card).
+      const round = Math.max(...CORNERS.map((c) => parseFloat(cs[c]) || 0));
+      if (round < radius || round >= pill) continue;
+      // A hairline all round: every side drawn, none heavier than a hairline.
+      if (!SIDES.every((side) => { const w = parseFloat(cs[side]); return w > 0 && w <= 1.5; })) continue;
+      // On a surface: a surface token at any alpha, or a drawn ground (a gradient) on a frame's shape.
+      const onSurface = isGround(cs.backgroundColor) || cs.backgroundImage !== "none";
+      if (!onSurface) continue;
       if (el.matches(".rim, .card, .panel")) continue;
       if (el.closest('[data-no-hand], [role="dialog"], [popover], .shadow-popover')) continue;
       if (!vis(el)) continue;

@@ -21,9 +21,9 @@ import { resolve } from "node:path";
  */
 
 /** The edge under your hand (A-25 moment 2): one block, worn by every card frame. */
-const edgeBlock = () => utility("", "@layer components {\n  /* The edge's wearers");
-const utility = (name: string, opener = `@utility ${name} {`) => {
-  const start = css.indexOf(opener);
+const edgeBlock = () => utility("", "@layer components {", css.lastIndexOf("@layer components {", css.indexOf(":where(.rim, .card, .panel) {")));
+const utility = (name: string, opener = `@utility ${name} {`, start = css.indexOf(opener)) => {
+  if (start < 0) throw new Error(`not in the CSS: ${opener}`);
   let depth = 0;
   for (let i = css.indexOf("{", start); i < css.length; i += 1) {
     if (css[i] === "{") depth += 1;

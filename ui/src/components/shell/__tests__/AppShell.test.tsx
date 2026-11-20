@@ -17,11 +17,6 @@ vi.mock("@/components/states/DegradedBanner", () => ({ DegradedBanner: () => nul
 vi.mock("@/components/states/OfflineBanner", () => ({ OfflineBanner: () => null }));
 vi.mock("@/lib/page-crumb", () => ({ PageCrumbProvider: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("@/lib/ui-view", () => ({ UiViewProvider: ({ children }: { children: React.ReactNode }) => children }));
-const route = vi.hoisted(() => ({ path: "/" }));
-vi.mock("next/navigation", async (original) => ({
-  ...(await original<typeof import("next/navigation")>()),
-  usePathname: () => route.path,
-}));
 
 describe("AppShell skip link", () => {
   it("is the first focusable thing and points at a focusable main", () => {
@@ -78,17 +73,12 @@ describe("AppShell scrolling", () => {
 describe("AppShell, the light under your hand (A-25 moment 2)", () => {
   // Everywhere (owner on staging, 20 Nov: "only home page shows the effect"): the shell's main carries
   // the scope on every route; what must not light opts out where it is drawn.
-  it("marks main on every route", () => {
-    const routes = ["/", "/users", "/users/u1", "/projects", "/roles", "/applications", "/requests", "/governance/drift", "/insights", "/system/targets/truenas", "/settings", "/me"];
-    for (const path of routes) {
-      route.path = path;
-      const { container, unmount } = render(
-        <AppShell session={{ id: "u1", role: "admin" } as SessionUser}>
-          <p>page</p>
-        </AppShell>,
-      );
-      expect(container.querySelector("main")!.hasAttribute("data-hand"), path).toBe(true);
-      unmount();
-    }
+  it("marks main on every route (the shell does not ask which)", () => {
+    const { container } = render(
+      <AppShell session={{ id: "u1", role: "admin" } as SessionUser}>
+        <p>page</p>
+      </AppShell>,
+    );
+    expect(container.querySelector("main")).toHaveAttribute("data-hand", "");
   });
 });

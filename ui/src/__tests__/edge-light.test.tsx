@@ -19,10 +19,10 @@ const utility = (name: string) => {
   expect(start, name).toBeGreaterThan(-1);
   return css.slice(start, css.indexOf("\n}\n", start) + 2);
 };
-/** The block a selector opens, braces balanced. */
-function braced(source: string, opener: string): string {
-  const start = source.indexOf(opener);
-  if (start < 0) return "";
+/** The block a selector opens, braces balanced; a selector that is not there fails the file, never a test vacuously. */
+function braced(source: string, opener: string, from = source.indexOf(opener)): string {
+  if (from < 0) throw new Error(`not in the CSS: ${opener}`);
+  const start = from;
   let depth = 0;
   for (let i = source.indexOf("{", start); i < source.length; i++) {
     depth += source[i] === "{" ? 1 : source[i] === "}" ? -1 : 0;
@@ -30,13 +30,17 @@ function braced(source: string, opener: string): string {
   }
   return source.slice(start);
 }
-/** The edge, one block in globals.css: its wearers, their kinds, and what it draws where. */
-const edge = braced(css, "@layer components {\n  /* The edge's wearers");
 const OWN = ":where(.rim, .card, .panel) {";
+/** The edge, one block in globals.css (the layer that opens with its wearers' own values): its kinds, and what it draws where. */
+const edge = braced(css, "@layer components {", css.lastIndexOf("@layer components {", css.indexOf(OWN)));
 const CARD_KIND = ":is(.card, .panel, .rim-card) {";
-const SCOPE = ":where([data-hand]) :is(.rim, .card, .panel):not(.lit-card, [data-stale], :where([data-no-hand] *)) {";
-const scoped = braced(edge, SCOPE);
-const unscoped = edge.replace(scoped, "");
+const NOT = '.lit-card, [data-stale], [data-no-hand], [data-no-hand] *, :has(> [aria-busy="true"])';
+const SCOPE = `:where([data-hand]) :is(.rim, .card, .panel):not(${NOT}) {`;
+/** What the edge draws outside its scope: every wearer's own values and kinds. */
+const unscopedBlock = () => edge.replace(scopedBlock(), "");
+/** The rule's own selector, read from the CSS, and the block it opens. */
+const drawnSelector = () => /(:where\(\[data-hand\]\) :is\(\.rim, \.card, \.panel\):not\(.*\)) \{/.exec(edge)?.[1] ?? "";
+const scopedBlock = () => braced(edge, SCOPE);
 /** The frame utilities: any that draws a card's radius, a surface and a one-pixel hairline. */
 const FRAMES = [...css.matchAll(/@utility ([\w-]+) \{([^}]*)\}/g)]
   .filter(([, , body]) => /border-radius: var\(--radius-(card|panel)\)/.test(body) && /background-color: var\(--surface-\d\)/.test(body) && /border: 1px solid/.test(body))
@@ -180,8 +184,8 @@ describe("the light under your hand: one listener, for cards and buttons", () =>
     flush();
     expect(view.getAllByRole("button")[0].style.getPropertyValue("--px")).toBe("");
     view.unmount();
-    const scoped = page();
-    move(scoped.getAllByRole("button")[0], 10, 10, "touch");
+    const inScope = page();
+    move(inScope.getAllByRole("button")[0], 10, 10, "touch");
     expect(frames).toEqual([]);
   });
 
@@ -243,7 +247,7 @@ describe("who wears it", () => {
     expect(WEARERS.split(", ").sort()).toEqual(drawn.sort());
   });
 
-  it("answers no hand with a flat ring, and opts no frame out without saying why", () => {
+  it("answers no hand with a flat ring", () => {
     const files: string[] = [];
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {
@@ -255,27 +259,40 @@ describe("who wears it", () => {
     };
     walk(SRC);
     const flatRings: string[] = [];
-    const silent: string[] = [];
     for (const path of files) {
-      const rel = path.slice(SRC.length + 1);
-      const source = readFileSync(path, "utf8");
-      const lines = source.split("\n");
-      // The old language, a flat accent ring all round under the hand: banned, the edge replaces it.
-      lines.forEach((line, i) => {
-        if (/hover:shadow-\[0_0_0_1px|hover:border-accent/.test(line)) flatRings.push(`${rel}:${i + 1}`);
+      readFileSync(path, "utf8").split("\n").forEach((line, i) => {
+        // The old language, a flat accent ring all round under the hand: banned, the edge replaces it.
+        if (/hover:shadow-\[0_0_0_1px|hover:border-accent/.test(line)) flatRings.push(`${path.slice(SRC.length + 1)}:${i + 1}`);
       });
-      // A frame that refuses the light says why, in a comment just above it.
-      for (const tag of source.matchAll(/<[A-Za-z][^<>]*?data-no-hand[^<>]*?>/g)) {
-        const cls = /className=(?:"([^"]*)"|\{`([^`]*)`\})/.exec(tag[0]);
-        const classes = cls ? (cls[1] ?? cls[2]) : "";
-        if (!FRAMES.some((frame) => new RegExp(`(^|\\s)${frame}(\\s|$)`).test(classes))) continue;
-        const at = source.slice(0, tag.index).split("\n").length;
-        const above = lines.slice(Math.max(0, at - 4), at).join("\n");
-        if (!/(\/\/|\{\/\*)[^\n]*\b(light|hand|edge)\b/i.test(above)) silent.push(`${rel}:${at}`);
-      }
     }
     expect(flatRings).toEqual([]);
-    expect(silent).toEqual([]);
+  });
+
+  it("is drawn on a frame, and never on one that refuses it, sits inside one, is a first-day card, is stale, or is still a placeholder", () => {
+    // The rule's own `:not()`: the frame carrying `data-no-hand` itself, not only what is inside one.
+    const drawn = drawnSelector();
+    expect(drawn).toMatch(/:not\([^)]*\[data-no-hand\],/);
+    const view = render(
+      <main data-hand="">
+        <Card data-testid="lit" />
+        <Card data-testid="refuses" data-no-hand="" />
+        <div data-no-hand="">
+          <Card data-testid="inside" />
+        </div>
+        <Card data-testid="first-day" className="lit-card" />
+        <Card data-testid="stale" stale />
+        <Card data-testid="placeholder">
+          <div aria-busy="true" />
+        </Card>
+        <div data-testid="panel" className="panel" />
+        <Button>Act</Button>
+      </main>,
+    );
+    const is = (id: string) => view.getByTestId(id).matches(drawn);
+    expect(is("lit")).toBe(true);
+    expect(is("panel")).toBe(true);
+    expect(view.getByRole("button").matches(drawn)).toBe(true);
+    for (const id of ["refuses", "inside", "first-day", "stale", "placeholder"]) expect(is(id), id).toBe(false);
   });
 
   it("is each wearer's own: a button inside a card never takes the card's strength, reach or place", () => {
@@ -283,16 +300,16 @@ describe("who wears it", () => {
     // (`.rim.rim-card`), decided by specificity, not by the order the CSS is written in.
     for (const own of ["--rim-k: 46%;", "--rim-r: 84px;", "--rim-inset: 0px;"]) expect(braced(edge, OWN), own).toContain(own);
     expect(css).not.toMatch(/@utility rim(-card|-outline|-filled)?\b/);
-    for (const kind of [CARD_KIND, ".rim.rim-outline {", ".rim.rim-filled {"]) expect(unscoped, kind).toContain(kind);
+    for (const kind of [CARD_KIND, ".rim.rim-outline {", ".rim.rim-filled {"]) expect(unscopedBlock(), kind).toContain(kind);
     // The pointer's place is not inherited: a frame's write restyles the wearer alone.
     expect(css).toMatch(/@property --px \{ syntax: "<length-percentage>"; inherits: false; initial-value: 50%; \}/);
     expect(css).toMatch(/@property --py \{ syntax: "<length-percentage>"; inherits: false; initial-value: 50%; \}/);
-    expect(braced(scoped, "&::after {")).toMatch(/--px: inherit;\s*--py: inherit;/);
+    expect(braced(scopedBlock(), "&::after {")).toMatch(/--px: inherit;\s*--py: inherit;/);
   });
 
   it("leaves a first-day card's light as it is: 22% of the accent, by the room's weight, on every route", () => {
     // Nothing outside the drawn scope sets a pool's strength or colour, and the scope is never a lit card.
-    expect(unscoped).not.toMatch(/--pool-[a-z]+:/);
+    expect(unscopedBlock()).not.toMatch(/--pool-[a-z]+:/);
     expect(SCOPE).toContain(":not(.lit-card");
     // So a lit card's strength is its own: --lit-reach times --hour-weight, in both rooms.
     const lit = utility("lit-card");
@@ -310,11 +327,11 @@ describe("who wears it", () => {
 describe("what it draws", () => {
   it("is drawn only where the page says, never inside a Notice or a closed part, never under forced colours, only for a hand that hovers", () => {
     for (const state of ["&::after {", "&:hover::after {", "&:focus-visible::after {", "&:is(.card, .panel, .rim-card):has(:focus-visible)::after {"]) {
-      expect(scoped, state).toContain(state);
+      expect(scopedBlock(), state).toContain(state);
     }
-    expect(unscoped).not.toMatch(/::after \{\s*content/);
-    expect(SCOPE).toContain(":where([data-no-hand] *)");
-    expect(scoped).toMatch(/@media \(hover: hover\) \{\s*&:hover::after/);
+    expect(unscopedBlock()).not.toMatch(/::after \{\s*content/);
+    expect(SCOPE).toContain("[data-no-hand] *");
+    expect(scopedBlock()).toMatch(/@media \(hover: hover\) \{\s*&:hover::after/);
     expect(edge).toMatch(/@media \(forced-colors: active\) \{\s*:is\(\.rim, \.card, \.panel\)::after \{\s*display: none;/);
   });
 
@@ -328,7 +345,7 @@ describe("what it draws", () => {
     const strength = (kind?: string) =>
       Number(/--rim-k: (\d+)%;/.exec(braced(edge, kind ?? OWN))?.[1] ?? /--rim-k: (\d+)%;/.exec(braced(edge, OWN))![1]) / 100;
     // The filled button's colour, by its token.
-    expect(braced(scoped, "&.rim-filled {")).toMatch(/--pool-c: var\(--rim-filled\);/);
+    expect(braced(scopedBlock(), "&.rim-filled {")).toMatch(/--pool-c: var\(--rim-filled\);/);
     const filledInk = /--rim-filled: var\((--[\w-]+)\);/.exec(css)![1];
     const lit = (c: RGBA, k: number, under: RGBA) => over([c[0], c[1], c[2], (c[3] ?? 1) * k], under);
     for (const [theme, vars] of Object.entries(themes)) {
