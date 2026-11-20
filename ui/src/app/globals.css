@@ -194,6 +194,7 @@
      verbs any row of that table can ever show. A min-width, so a long label
      grows it and the right edge never moves; an empty seat keeps its place. */
   --seat-label: 170px; /* a setting's label */
+  --seat-value: 160px; /* a setting's value, at its narrowest beside its label (LabelRow) */
   --seat-number: 110px; /* a number or a date, right-aligned (G16) */
   --seat-status: 240px; /* a status a table can say, as wide as its longest ("Waiting on makerspace staff"; §5 #22, #39) */
   --seat-action-narrow: 140px; /* one short verb, or one link */
@@ -2149,13 +2150,37 @@ html.theme-fading *::after {
 @layer components {
   @media (width >= theme(--breakpoint-tablet)) {
     :where(.row-top) > :where(:not([data-action-seat], [data-row-detail])) {
-      padding-block: calc((var(--tap) - 1lh) / 2);
+      --part-pad: calc((var(--tap) - 1lh) / 2);
+      padding-block: var(--part-pad);
     }
   }
   @media (width >= theme(--breakpoint-desktop)) {
     :where(.row-top) > :where(:not([data-action-seat], [data-row-detail])) {
-      padding-block: calc((var(--control-sm) - 1lh) / 2);
+      --part-pad: calc((var(--control-sm) - 1lh) / 2);
+      padding-block: var(--part-pad);
     }
+  }
+}
+
+/* A setting row's label (`LabelRow`): beside its value where the ROW holds the label, the value at
+   its narrowest (`--seat-value`) and the seat, a gap between each; on a line of its own above them
+   where it does not, as on a phone, so the seat stays on the value's line (D-1 §4). The row
+   decides, never the window: at 768 the rail leaves a card 447px wide, and a label held at 170 from
+   `tablet:` beside a 200px seat left its value 5px (layout check, staging, 20 Nov 2026).
+   Read from the tokens, so it moves with them. A container query cannot read a custom property, so
+   the switch is the basis: `100%` is the row's width; short of `--label-fits` the basis runs far
+   past it and `max-width` holds it to the line (the label takes the line), and from there it is
+   `--seat-label`. Stacked, it is a heading over its value, not a part on the seat's line, so the
+   same switch drops the padding that centres a part there (`--part-pad`, `row-top`). */
+@utility row-label {
+  --label-seat: var(--seat-action);
+  --label-fits: calc(var(--seat-label) + var(--seat-value) + var(--label-seat) + 2 * var(--row-gap));
+  flex: 0 0 max(var(--seat-label), calc((var(--label-fits) - 100%) * 999));
+  max-width: 100%;
+  padding-block: min(var(--part-pad, 0px), max(0px, calc((100% - var(--label-fits)) * 999)));
+
+  &[data-seat="wide"] {
+    --label-seat: var(--seat-action-wide);
   }
 }
 

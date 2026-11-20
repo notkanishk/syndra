@@ -12,7 +12,7 @@ import { ReadGate } from "@/components/states/ReadGate";
 import { Owner } from "@/components/system/ServiceAccountOwner";
 import { ServiceAccountDialog, UnmarkDialog } from "@/components/system/ServiceAccountDialogs";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardHeader, CardRow, LabelRow } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ApiError } from "@/lib/api-client";
 import { formatShortDate } from "@/lib/format";
@@ -103,7 +103,7 @@ function ServiceAccountView({
 
       <Card>
         <CardHeader title="This account" />
-        <SettingRow
+        <LabelRow
           first
           label="Purpose"
           action={
@@ -113,8 +113,8 @@ function ServiceAccountView({
           }
         >
           {account.purpose || <span className="text-faint">Nothing written yet</span>}
-        </SettingRow>
-        <SettingRow
+        </LabelRow>
+        <LabelRow
           label="Owner"
           action={
             <Button size="sm" onClick={() => setDialog("owner")}>
@@ -123,8 +123,8 @@ function ServiceAccountView({
           }
         >
           <Owner id={account.owner_id} />
-        </SettingRow>
-        <SettingRow
+        </LabelRow>
+        <LabelRow
           label="Kind"
           action={
             machine ? (
@@ -147,7 +147,7 @@ function ServiceAccountView({
               </>
             )}
           </span>
-        </SettingRow>
+        </LabelRow>
       </Card>
 
       <Holds userId={account.id} name={account.name} />
@@ -155,26 +155,6 @@ function ServiceAccountView({
       {dialog === "purpose" && <ServiceAccountDialog mode="purpose" account={account} onClose={() => setDialog(null)} />}
       {dialog === "owner" && <ServiceAccountDialog mode="owner" account={account} onClose={() => setDialog(null)} />}
     </div>
-  );
-}
-
-/** Label seat, value, then the action seat: the settings card's one row shape. */
-function SettingRow({
-  label,
-  action,
-  first = false,
-  children,
-}: {
-  label: string;
-  action: React.ReactNode;
-  first?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <CardRow first={first} seat="default" action={action}>
-      <span className="w-full text-small font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">{label}</span>
-      <span className="min-w-0 flex-1 text-body [overflow-wrap:anywhere]">{children}</span>
-    </CardRow>
   );
 }
 
@@ -249,7 +229,10 @@ function Holds({ userId, name }: { userId: string; name: string }) {
                 <span aria-hidden className="text-faint"> · </span>
                 <span>{roleName}</span>
               </span>
-              <span className="order-last w-full min-w-0 tablet:order-none tablet:w-auto tablet:flex-1">
+              {/* Held to the source's minimum on a person's page (160), so the seat wraps rather than
+                  starving it: with none it got 7px beside the 260 name and the seat at 860, and its
+                  "Direct" chip ran out (layout check, staging, 20 Nov 2026). */}
+              <span className="order-last w-full min-w-0 tablet:order-none tablet:w-auto tablet:min-w-[min(160px,100%)] tablet:flex-1">
                 <AccessSourceList reasons={reasons} />
               </span>
             </CardRow>

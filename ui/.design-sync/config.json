@@ -54,6 +54,7 @@
     "CardColumns": "src/components/ui/Card.tsx",
     "CardGrid": "src/components/ui/Card.tsx",
     "ActionSeat": "src/components/ui/Card.tsx",
+    "LabelRow": "src/components/ui/Card.tsx",
     "Cells": "src/components/ui/Card.tsx",
     "RowField": "src/components/ui/Card.tsx",
     "Checkbox": "src/components/ui/Choice.tsx",

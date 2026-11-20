@@ -79,7 +79,7 @@ function show(v: PersonTargetView) {
 
 /** The value cell of the row whose label is `label`. */
 function rowOf(label: string) {
-  const cell = screen.getAllByText(label).find((el) => el.className.includes("tablet:w-(--seat-label)"));
+  const cell = screen.getAllByText(label).find((el) => el.hasAttribute("data-label-col"));
   if (!cell?.parentElement) throw new Error(`no ${label} row`);
   return cell.parentElement;
 }

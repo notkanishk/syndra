@@ -10,7 +10,7 @@ import { AdvancedLink } from "@/components/ui/AdvancedLink";
 import { Reads } from "@/components/results/ReadResult";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
-import { Card, CardRow } from "@/components/ui/Card";
+import { Card, LabelRow } from "@/components/ui/Card";
 import { NextStep } from "@/components/ui/NextStep";
 import { ReadAgainError, ReadAgainProvider } from "@/components/ui/ReadFreshness";
 import { Notice } from "@/components/ui/Notice";
@@ -121,10 +121,9 @@ export function CardTop({ target, name, status }: { target: string; name: string
 /** Label seat · value · the action seat, which holds a link or nothing (the setup card's row). */
 export function Row({ label, seat, first = false, children }: { label: string; seat?: ReactNode; first?: boolean; children: ReactNode }) {
   return (
-    <CardRow first={first} top seat="default" action={seat}>
-      <span className="w-full text-small font-semibold text-muted tablet:w-(--seat-label) tablet:shrink-0">{label}</span>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-body [overflow-wrap:anywhere]">{children}</span>
-    </CardRow>
+    <LabelRow first={first} top label={label} action={seat}>
+      {children}
+    </LabelRow>
   );
 }
 
