@@ -3405,6 +3405,23 @@ end to end) found no missing function; three regressions with one root cause
       - (4) A route marks no current step until one before it is settled, so `PendingTrail` marks none.
       - (5) One ring style: the freshness line's `provisional` dot, hand-drawn as a 1px `border-warn`, is now `StatusDot` with `ring` and `tone="warn"` (the 1.5px ring every other ring dot draws). Its own handle (`data-freshness-dot`) passes through.
       - Mutation-checked, each red: the ring's forced-colours border gone (1), the stale dots' ring not applied (1), the pending route marking a step (1), the room's top not its own (1, now held by a block with no top margin), the provisional reading filled (1).
+    - *The trail lights: the walk home, inside the result (owner on staging, 20 Nov 2026: "could barely see it"; the stand-in answers at once, so every step was settled before the result showed and the light flashed on the last step).* The owner chose both changes; A-25 §4.5 and the §7 audit row are updated.
+      - **The walk home** (`CheckTrail.tsx` `TrailLight`): the light appears on the first step and walks down the steps already seen, one a flash on tint's curve, to the step reached, where it waits and breathes; home, it rests one breath on the last step and goes out over flash. The dots it passes are already filled (it walks over truth); `--light-lead` only matters to a dot that changes, which is a step settling while the light waits. Once per change; still, no walk (it rests on the step reached, or one breath on the last). It is placed before it travels, so it never slides in from the list's corner. Its position is its own (`data-step`), apart from the route's current step (`aria-current`), so the glide indicator no longer measures trails (`[aria-current="step"]` left its selector, and with it the `data-indicator` safeguard).
+      - **Inside the result** (`ActionOutcome` `trail`, under what happened and above what to do next; `GrantDirectAccess` and `RemovalDialog` both): the card is the light's room (`data-trail-room`) and the pool is sized to its inner box. `detect.js`'s `trail` rule now holds the pool inside its card's inner box.
+      - **Measured in Chrome** on a give answered locally on the replayed tape, at 1280 (dark and light) and 390 (light):
+        - 280 by 96 on every step, 4px inside the card's side and 7px above its inner bottom; 0 `trail` findings. With the pool pushed 12px past the card's side, the rule reported "12.0px past its card's left".
+        - The walk: step 1 to 908ms, step 2 to 1815ms, resting on step 3 from about 2.7s; the dots read filled, filled, ring throughout.
+        - At the light's strongest (its centre, full breath), the ground goes from rgb(20, 22, 18) to rgb(48, 40, 76) in the dark room (1.33:1 against the unlit card) and from white to rgb(229, 223, 254) on paper (1.29:1). At the breath's low, 1.13:1 in both. Faint ink keeps 5.02:1 (dark) and 4.96:1 (paper) at the centre, on the card (`contrast.test.ts` now measures on `--surface-1`). 26% is kept.
+      - **Mutation-checked**, each red:
+        - the walk skipping a step (3), no walk with motion (4), and a walk when still (3);
+        - dots rung while lit (1);
+        - walking again when a step settles (4);
+        - no rest at home (2), and never going out at home (2);
+        - sliding in from the corner (1);
+        - taller than its card (1), and past its side (1);
+        - the card not its room (1), and the trail after the next step (1);
+        - a removal lit (1), a queued give lit (2), and a refusal with a trail (2);
+        - the light at 40% on the card (2).
   - [x] 7w-5 Access over time (§9 vivid, Q11, read proposal Q-W3-1; the owner, 19 Nov 2026: "i dont see the access over time chart anywhere", which settles both as yes). Board part 3, frame 19 (`person-vivid`).
     *Done (branch `feat/addon-contract-access-history`):*
     - **The read.** `GET /api/v1/users/{id}/access-history?since=YYYY-MM-DD` (`handlers/access_history.go`, route beside `/access` in `router.go`), `withOperatorAuth`: never a member's, not even their own. `since` is a makerspace day from a year before today to today (`services.historyStart`, else 400 `VALIDATION_FAILED`, `details.since`). Answer: `{since, truncated, roles: [{project_id, project_name, project_name_resolved, role_key, standing, ends?, runs: [{from, to}]}]}`, `from` null where no record says when a run began, `to` null where the records give it today.

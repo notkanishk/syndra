@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { ARROW_LINK } from "@/components/ui/ArrowLink";
 import { CopyableValue } from "@/components/ui/CopyableValue";
@@ -88,6 +88,7 @@ export function ActionOutcome({
   placement = "block",
   word,
   person,
+  trail,
   className = "",
 }: {
   outcome: Outcome;
@@ -100,6 +101,11 @@ export function ActionOutcome({
   word: string;
   /** The person this change is about: "Waiting for you to send →" opens Pending changes narrowed to them. */
   person?: string;
+  /**
+   * The change's trail (A-24 §5), inside the result as A-25 draws it (owner, 20 Nov 2026): under what
+   * happened and above what to do next. The card is its light's room (`data-trail-room`). Block only.
+   */
+  trail?: ReactNode;
   className?: string;
 }) {
   // A refusal inside the add-on's cooldown counts down in its own next step.
@@ -173,6 +179,7 @@ export function ActionOutcome({
     <Opens>
     <div
       role={grave ? "alert" : "status"}
+      data-trail-room={trail ? "" : undefined}
       className={`${celebrates ? "lift-in" : "tint-in"} flex flex-col gap-2.5 rounded-inner border px-5 py-4 ${
         grave ? "border-danger-line bg-surface-1" : "border-line-strong bg-surface-1"
       } ${className}`}
@@ -194,6 +201,7 @@ export function ActionOutcome({
       {outcome.detail && (
         <p className="text-small leading-[1.5] text-faint">{outcome.detail}</p>
       )}
+      {trail}
       {(() => {
         const next = nextLine(outcome, [outcome.message, outcome.detail]);
         return next && <p className="text-small leading-[1.5] text-faint">{next}</p>;

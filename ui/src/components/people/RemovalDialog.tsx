@@ -441,9 +441,18 @@ function DirectDialog({
           {!cancelOnly && userId && <PendingTrail act="revoke" className="mx-6 mb-1 mt-3" />}
         </>
       )}
-      {outcome && <ActionOutcome word={word ?? resultWord(outcome, cancelOnly ? "cancel" : "revoke")} outcome={outcome} person={userId} className="mx-6 mb-1" />}
-      {trail && userId && (
-        <ChangeTrail userId={userId} projectId={removal.projectId} roleKey={removal.roleKey} act="revoke" {...trail} className="mx-6 mb-1 mt-3" />
+      {outcome && (
+        <ActionOutcome
+          word={word ?? resultWord(outcome, cancelOnly ? "cancel" : "revoke")}
+          outcome={outcome}
+          person={userId}
+          className="mx-6 mb-1"
+          // The change's trail, inside its result, as a give's is (A-25 moment 5): one place for a trail.
+          trail={
+            trail &&
+            userId && <ChangeTrail userId={userId} projectId={removal.projectId} roleKey={removal.roleKey} act="revoke" {...trail} className="mt-1.5" />
+          }
+        />
       )}
       {outcome && succeeded(outcome) && step.after}
 

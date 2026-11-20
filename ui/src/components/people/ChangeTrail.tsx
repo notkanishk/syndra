@@ -88,7 +88,8 @@ export function trailSteps(
  * `TRAIL_WATCH_MS`, and stops once that step settles or the sheet closes.
  * Its steps fill on tint as each is observed (the dot's own transition). A
  * give's trail carries the change's light on its open step while it looks
- * (A-25 moment 5); its block is the light's room (`data-trail-room`).
+ * (A-25 moment 5); it sits inside its result (`ActionOutcome`'s `trail`), whose
+ * card is the light's room.
  */
 export function ChangeTrail({
   userId,
@@ -143,7 +144,7 @@ export function ChangeTrail({
   // a breathing light would say it was. It goes out with the looking.
   const light = act === "give" && steps[1].tone === "healthy" ? watching : undefined;
   return (
-    <div className={className} data-trail-room>
+    <div className={className}>
       <CheckTrail label={TRAIL_LABEL} checks={steps} light={light} />
     </div>
   );

@@ -87,9 +87,10 @@ describe("text drawn with its own alpha", () => {
 });
 
 describe("text under a light", () => {
-  // The trail's light (A-25 moment 5) at its strongest, its centre, on the dialog's panel: every line of
-  // the trail under it keeps 4.5:1. A change's steps are ink, and a read's time faint; they carry no
-  // link (violet, 4.03:1 there in the dark room), which `trail-light.test.tsx` holds.
+  // The trail's light (A-25 moment 5) at its strongest, its centre, on the result's card it sits in: every
+  // line under it keeps 4.5:1, the trail's and the card's (its word and sentence in ink, a detail, a read's
+  // time and the next step in faint). A change's steps carry no link, which `trail-light.test.tsx` holds,
+  // and a lit result never shows "Waiting for you to send" (a queued give is not lit).
   const ramp = block(":root {\n    --violet-600");
   const k = Number(/\.trail-light \{[^}]*--pool-k: calc\((\d+)% \* var\(--hour-weight\)\);/.exec(css)?.[1]) / 100;
 
@@ -97,7 +98,7 @@ describe("text under a light", () => {
     it(`keeps every line of a lit trail at 4.5:1 in the ${theme} room`, () => {
       const all = { ...ramp, ...vars };
       const accent = colour(all, "--accent");
-      const lit = over([accent[0], accent[1], accent[2], (accent[3] ?? 1) * k * Number(all["--hour-weight"])], colour(all, "--surface-2"));
+      const lit = over([accent[0], accent[1], accent[2], (accent[3] ?? 1) * k * Number(all["--hour-weight"])], colour(all, "--surface-1"));
       const failures: string[] = [];
       for (const token of ["--ink", "--muted", "--faint"]) {
         const r = ratio(colour(all, token), lit);

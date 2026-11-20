@@ -16,8 +16,7 @@ import { stillMotion } from "./still";
  * the first measurement (server render, first paint) there is no box and the
  * caller gives the active button its own fill, so nothing is ever unmarked.
  */
-// A trail's open step too (`step`): the change's light rests on it (A-25 moment 5).
-const ACTIVE = '[aria-checked="true"], [aria-current="page"], [aria-current="location"], [aria-current="step"]';
+const ACTIVE = '[aria-checked="true"], [aria-current="page"], [aria-current="location"]';
 
 /** Where the active option is, in its group, and its own corners (for an indicator shaped as it is). */
 export type Box = { left: number; top: number; width: number; height: number; radius: string };

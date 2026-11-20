@@ -1,10 +1,10 @@
 "use client";
 
-import { useLayoutEffect, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Ticks } from "@/components/ui/TokenBlock";
-import { stillMotion, useGlideIndicator, type Box } from "@/lib/motion";
+import { BREATHE_MS, FLASH_MS, stillMotion } from "@/lib/motion";
 
 export interface TrailCheck {
   tone: StatusTone;
@@ -32,12 +32,15 @@ export interface TrailCheck {
  * past a settled one (`aria-current="step"`): a route drawn before its answer
  * has seen nothing, so it has reached nothing.
  *
- * `light` is a change's own (A-25 moment 5): a soft light resting on that
- * step. It moves only when the steps do, which is only on a read; each dot
- * fills `--light-lead` behind it; it goes out when no step is open (the change
- * is home) or when `light` turns false (the trail stopped looking). Undefined,
- * there is no light at all: a check's trail, a removal's, a route not yet
- * answered or not yet sent.
+ * `light` is a change's own (A-25 moment 5): a soft light that walks the
+ * change home. It appears on the first step and walks down the steps already
+ * seen, one a flash, to the first open one, where it waits and breathes; a step
+ * that settles while it waits moves it on, the dot filling `--light-lead`
+ * behind it. When no step is open it rests one breath on the last, and goes
+ * out; it also goes out when `light` turns false (the trail stopped looking).
+ * It walks over what is already true: the dots it passes are filled by the
+ * steps, never by the light. Undefined, there is no light at all: a check's
+ * trail, a removal's, a route not yet answered or not yet sent.
  */
 export function CheckTrail({
   checks,
@@ -55,10 +58,10 @@ export function CheckTrail({
   // step that was seen: a route with nothing settled yet (drawn before its answer) has reached nothing.
   const first = label !== undefined || lit ? checks.findIndex((check) => check.ring) : -1;
   const open = first > 0 ? first : -1;
-  const { ref, box } = useGlideIndicator<HTMLOListElement>(open);
   return (
-    <ol ref={ref} className={`flex flex-col ${lit ? "relative isolate" : ""}`} aria-label={label ?? "Checks"}>
-      {lit && <TrailLight trail={ref} box={box} going={Boolean(light) && open >= 0} />}
+    <ol className={`flex flex-col ${lit ? "relative isolate" : ""}`} aria-label={label ?? "Checks"}>
+      {/* Where its walk ends: the first open step, or the last step once the change is home. */}
+      {lit && <TrailLight end={first >= 0 ? first : checks.length - 1} home={first < 0} on={Boolean(light)} />}
       {checks.map((check, i) => {
         const details = !compact || check.tone !== "healthy";
         return (
@@ -97,47 +100,98 @@ export function CheckTrail({
 const DOT_CENTRE = 11;
 /** The pool (A-25 moment 5): at most 280 by 96. */
 const POOL = { width: 280, height: 96 };
-/** How far inside its room's side margin the pool is spent: 20px out of a dialog's 24 (A-25 §7). */
+/** How far inside its room's sides the pool is spent. */
 const MARGIN_KEPT = 4;
 
 /**
- * The change's light: one pool on the open step's dot, the trail's own layer,
- * under everything in it. Its room is the trail's block and that block's own
- * margins (`data-trail-room`): it reaches into the side margin to 4px short of
- * its edge, and is never taller than the block and its top and bottom margins
- * allow, so its closest-side falloff is spent inside them (rule 1), whatever
- * sits around the block and however the panel has scrolled. Where it rested
- * last it stays, to go out there.
+ * The change's light: one pool on a step's dot, the trail's own layer, under
+ * everything in it. Its room is the result it sits in (`data-trail-room`, the
+ * outcome's card): it is never wider or taller than the card's inner box allows
+ * on the step it is on, so its closest-side falloff is spent inside the card's
+ * edge (rule 1); in the card, 280 by 96 on every step.
+ *
+ * Its walk home runs once, from the first step to `end`, one step a flash on
+ * tint's curve. After it, a step that settles moves it at once. Still (reduced
+ * motion), there is no walk: it is on `end` from the first frame. When the
+ * change is `home` it rests one breath on the last step and goes out; it goes
+ * out at once when `on` turns false. Where it rested last it stays, to go out
+ * there.
  */
-function TrailLight({ trail, box, going }: { trail: RefObject<HTMLOListElement | null>; box: Box | null; going: boolean }) {
+function TrailLight({ end, home, on }: { end: number; home: boolean; on: boolean }) {
+  const still = stillMotion();
+  const [walk, setWalk] = useState(() => ({ step: still ? end : 0, done: still || end === 0 }));
+  // When its last move set out (a step of the walk, or a step settling after it): it rests one breath after
+  // it arrives.
+  const setOut = useRef(0);
+  useEffect(() => {
+    setOut.current = Date.now();
+  }, [end]);
+  useEffect(() => {
+    if (walk.done) return;
+    if (walk.step >= end) return setWalk({ step: end, done: true });
+    const next = setTimeout(() => {
+      setOut.current = Date.now();
+      setWalk({ step: walk.step + 1, done: false });
+    }, FLASH_MS);
+    return () => clearTimeout(next);
+  }, [walk, end]);
+  const at = walk.done ? end : walk.step;
+
+  const [rested, setRested] = useState(false);
+  useEffect(() => {
+    if (!home || !walk.done || rested) return;
+    const arriving = still ? 0 : Math.max(0, setOut.current + FLASH_MS - Date.now());
+    const timer = setTimeout(() => setRested(true), arriving + BREATHE_MS);
+    return () => clearTimeout(timer);
+  }, [home, walk.done, rested, still]);
+
+  // Measured from its own list (its parent), which is laid out before it is.
+  const self = useRef<HTMLSpanElement>(null);
   const [pool, setPool] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   useLayoutEffect(() => {
-    const list = trail.current;
-    if (!list || !box) return;
-    const margin = getComputedStyle(list.closest<HTMLElement>("[data-trail-room]") ?? list);
-    const px = (value: string) => parseFloat(value) || 0;
-    // From the list's top: up to its block's top margin, down through the list and its bottom margin.
-    const above = -px(margin.marginTop);
-    const below = list.offsetHeight + px(margin.marginBottom);
-    const left = -Math.max(0, px(margin.marginLeft) - MARGIN_KEPT);
-    const centre = box.top + DOT_CENTRE;
-    const height = Math.max(0, Math.min(POOL.height, 2 * Math.min(centre - above, below - centre)));
-    setPool({ left, top: centre - height / 2, width: Math.min(POOL.width, list.offsetWidth - left), height });
-  }, [trail, box]);
-  if (!pool) return null;
-  const still = stillMotion();
+    const el = self.current?.parentElement;
+    if (!el) return;
+    const measure = () => {
+      const step = el.querySelectorAll<HTMLElement>(":scope > li")[at];
+      if (!step) return;
+      // The room's inner box, from the list's own top left.
+      const room = el.closest<HTMLElement>("[data-trail-room]") ?? el;
+      const a = el.getBoundingClientRect();
+      const r = room.getBoundingClientRect();
+      const top = r.top + room.clientTop - a.top;
+      const left = r.left + room.clientLeft - a.left + MARGIN_KEPT;
+      const bottom = top + room.clientHeight;
+      const right = left - 2 * MARGIN_KEPT + room.clientWidth;
+      const centre = step.offsetTop + DOT_CENTRE;
+      const height = Math.max(0, Math.min(POOL.height, 2 * Math.min(centre - top, bottom - centre)));
+      setPool({ left, top: centre - height / 2, width: Math.max(0, Math.min(POOL.width, right - left)), height });
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [at]);
+
+  // It appears where it is, never sliding in from the list's corner: it travels only once it has been placed.
+  const [placed, setPlaced] = useState(false);
+  useEffect(() => {
+    if (pool && !placed) setPlaced(true);
+  }, [pool, placed]);
+
+  const going = on && !(home && rested);
   return (
     <span
+      ref={self}
       aria-hidden
       data-trail-light
-      // Not one of the list's steps: the glide indicator's observer leaves it alone.
-      data-indicator="light"
+      data-step={at}
       data-going={going ? "" : undefined}
       // Its breath (the licensed loop, still happening); held where it is while the light goes out, so the
-      // fade starts from the strength it had. Neither travels nor breathes when still.
+      // fade starts from the strength it had. Neither walks, travels nor breathes when still.
       data-breathe={still ? undefined : ""}
-      className={`trail-light pointer-events-none absolute left-0 top-0 ${still ? "" : "trail-light-glide"}`}
-      style={{ transform: `translate(${pool.left}px, ${pool.top}px)`, width: pool.width, height: pool.height }}
+      className={`trail-light pointer-events-none absolute left-0 top-0 ${still || !placed ? "" : "trail-light-glide"}`}
+      style={pool ? { transform: `translate(${pool.left}px, ${pool.top}px)`, width: pool.width, height: pool.height } : { width: 0, height: 0 }}
     />
   );
 }
