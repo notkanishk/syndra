@@ -52,7 +52,8 @@
   --glass: 84%;
 }
 /* Proposed (A-26, kept from round 2): a kind's own colour. No new hue is written down: each is the accent
-   turned on its own wheel. Roles keep violet; People are its warm neighbour, Pages its cool one. Never lime,
+   turned on its own wheel. People are its warm neighbour, Pages its cool one, Roles the aqua beyond Pages
+   (owner, 21 Nov 2026: violet is Syndra's own, so no kind takes it). Never lime,
    amber or red: those say a state. Where a browser cannot turn a colour, every kind is the accent. */
 :root, [data-theme] {
   --kind-people: var(--accent); --kind-people-text: var(--accent-text); --kind-people-solid: var(--accent-dense);
@@ -62,6 +63,7 @@
 @supports (color: oklch(from red l c h)) {
   :root, [data-theme] {
     --kind-people: oklch(from var(--accent) l c calc(h + 44)); --kind-people-text: oklch(from var(--accent-text) l c calc(h + 44)); --kind-people-solid: oklch(from var(--accent-dense) calc(l - .04) c calc(h + 44));
+    --kind-roles: oklch(from var(--accent) l c calc(h - 100)); --kind-roles-text: oklch(from var(--accent-text) l c calc(h - 100)); --kind-roles-solid: oklch(from var(--accent-dense) calc(l - .06) c calc(h - 100));
     --kind-pages: oklch(from var(--accent) l c calc(h - 46)); --kind-pages-text: oklch(from var(--accent-text) l c calc(h - 46)); --kind-pages-solid: oklch(from var(--accent-dense) calc(l - .06) c calc(h - 46));
   }
   [data-theme="light"] { --kind-pages-text: oklch(from var(--accent-text) calc(l - .05) c calc(h - 46)); }
