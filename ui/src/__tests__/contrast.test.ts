@@ -87,10 +87,11 @@ describe("text drawn with its own alpha", () => {
 });
 
 describe("text under a light", () => {
-  // The trail's light (A-25 moment 5) at its strongest, its centre, on the result's card it sits in: every
-  // line under it keeps 4.5:1, the trail's and the card's (its word and sentence in ink, a detail, a read's
-  // time and the next step in faint). A change's steps carry no link, which `trail-light.test.tsx` holds,
-  // and a lit result never shows "Waiting for you to send" (a queued give is not lit).
+  // The trail's light (A-25 moment 5) at its strongest, its centre, on the result's card it sits in. The pool
+  // is the card's own layer, under every line in the card, so every line there keeps 4.5:1 over it: the word
+  // and sentence in ink, a detail, a read's time and the next step in faint. A way on in violet would not (4.37
+  // in the dark room), and a lit card holds none: only a give that went out is lit, and its result's next step
+  // is words, not a link (`trail-light.test.tsx` holds both).
   const ramp = block(":root {\n    --violet-600");
   const k = Number(/\.trail-light \{[^}]*--pool-k: calc\((\d+)% \* var\(--hour-weight\)\);/.exec(css)?.[1]) / 100;
 

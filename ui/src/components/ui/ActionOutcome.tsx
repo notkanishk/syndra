@@ -180,7 +180,8 @@ export function ActionOutcome({
     <div
       role={grave ? "alert" : "status"}
       data-trail-room={trail ? "" : undefined}
-      className={`${celebrates ? "lift-in" : "tint-in"} flex flex-col gap-2.5 rounded-inner border px-5 py-4 ${
+      // With a trail, the card is its light's layer: the pool sits under every line in it (`isolate`).
+      className={`${celebrates ? "lift-in" : "tint-in"} ${trail ? "isolate" : ""} flex flex-col gap-2.5 rounded-inner border px-5 py-4 ${
         grave ? "border-danger-line bg-surface-1" : "border-line-strong bg-surface-1"
       } ${className}`}
     >

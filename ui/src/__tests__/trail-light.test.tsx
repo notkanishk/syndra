@@ -125,19 +125,14 @@ describe("the walk home", () => {
     expect(light()).toHaveClass("trail-light-glide");
   });
 
-  it("appears where it is: placed first, it travels only after, never sliding in from the list's corner", async () => {
+  it("appears where it is, on the first step, and travels only once it leaves it: never sliding in", () => {
     motionInTests();
-    const classes: string[] = [];
-    const watch = new MutationObserver((records) => {
-      for (const r of records) if ((r.target as Element).matches?.("[data-trail-light]")) classes.push(r.oldValue ?? "");
-    });
-    watch.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"], attributeOldValue: true });
+    vi.useFakeTimers();
     render(give());
-    await Promise.resolve();
-    watch.disconnect();
-    // It was drawn without the travel first; the travel came after.
-    expect(classes.length).toBeGreaterThan(0);
-    expect(classes[0]).not.toMatch(/trail-light-glide/);
+    expect(pool().step).toBe(0);
+    expect(light()).not.toHaveClass("trail-light-glide");
+    tick(FLASH_MS);
+    expect(pool().step).toBe(1);
     expect(light()).toHaveClass("trail-light-glide");
   });
 
@@ -238,13 +233,30 @@ describe("the walk home", () => {
 });
 
 describe("a step settling while it waits", () => {
-  it("appears on a give only once Syndra has sent it, by its answer or by a read", () => {
+  it("is for the act's own going out: a give queued for Send and sent later settles its step, and never walks", () => {
     const view = render(give("give", false));
     expect(light()).toBeNull();
     person.standing = "sent";
     view.rerender(give("give", false));
+    expect(steps()[1]).toHaveTextContent("Sent to Zitadel.");
     expect(current()).toBe(2);
-    expect(light()).toHaveAttribute("data-going");
+    expect(light()).toBeNull();
+  });
+
+  it("keeps a step it has seen: once sent, a later read that has lost sight of it never takes it back", () => {
+    const view = render(give("give", false));
+    person.standing = "sent";
+    view.rerender(give("give", false));
+    expect(steps()[1]).toHaveTextContent("Sent to Zitadel.");
+    person.standing = "";
+    view.rerender(give("give", false));
+    expect(steps()[1]).toHaveTextContent("Sent to Zitadel.");
+    expect(current()).toBe(2);
+  });
+
+  it("is read where it is: inside its result's status, a step settling does not read the whole card again", () => {
+    render(give());
+    expect(screen.getByRole("list").closest("[aria-live]")).toHaveAttribute("aria-live", "off");
   });
 
   it("wears the light's lead on every dot of a lit trail: only a dot that changes ever uses it", () => {
@@ -369,6 +381,23 @@ describe("its place: inside the result's card (rule 1)", () => {
   it("is the card's only when it holds a trail", () => {
     const { container } = render(<ActionOutcome outcome={{ kind: "applied", message: "Done" }} word="Given" />);
     expect(container.querySelector("[data-trail-room]")).toBeNull();
+    expect(container.querySelector(".isolate")).toBeNull();
+  });
+
+  it("lies under every line in the card: the card is its layer, not the list", () => {
+    const { container } = render(
+      <ActionOutcome
+        outcome={{ kind: "applied", message: "Becky Lynch can use Operator on their own now" }}
+        word="Given"
+        trail={<CheckTrail label="On its way" light checks={[done("Recorded."), open("Not sent yet.")]} />}
+      />,
+    );
+    expect(container.querySelector("[data-trail-room]")).toHaveClass("isolate");
+    const list = container.querySelector("ol")!;
+    expect(list).toHaveClass("relative");
+    expect(list).not.toHaveClass("isolate");
+    // And a lit result holds no link: a violet way on would sit under 4.5:1 at the light's centre (contrast.test.ts).
+    expect(container.querySelector("a")).toBeNull();
   });
 
   it("gets its whole 280 by 96 on every step it walks, spent inside the card's inner box", () => {

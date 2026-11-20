@@ -2052,8 +2052,8 @@ html.theme-fading *::after {
 }
 
 /* The trail lights (A-25 moment 5; owner, 20 Nov 2026: the recommendation, then the walk home and its
-   place inside the result): under a give's result, a pool that walks the change home, the trail's own
-   layer, under everything in it. The accent at 26% of the room's weight, on the six eased stops inside
+   place inside the result): under a give's result, a pool that walks the change home, in the result
+   card's layer (the card is `isolate` when it holds a trail), under every line in the card. The accent at 26% of the room's weight, on the six eased stops inside
    its own box, which `CheckTrail.tsx` keeps inside the result's card (rule 1). Each step of its walk, and
    each step a read settles after it, is a travel on tint's even curve over flash (rule 4: a light on its
    own errand is unhurried); it breathes while it is out; the box carries the travel and the going out,

@@ -120,8 +120,14 @@ export function ChangeTrail({
   const newer =
     readAt && before !== undefined && (before === null || Date.parse(readAt) > Date.parse(before)) ? { readAt } : undefined;
   const standing = after ? access.data?.projects?.find((p) => p.project_id === projectId)?.standings?.[roleKey] : undefined;
-  const steps = trailSteps(act, sent, standing, newer);
+  // Once seen sent, it stays sent: a later read that has lost sight of it never takes the step back.
+  const [gone, setGone] = useState(false);
+  const steps = trailSteps(act, sent || gone, standing, newer);
+  if (!gone && steps[1].tone === "healthy") setGone(true);
   const open = steps[steps.length - 1].tone !== "healthy";
+  // The light is for this operator's own act going out (A-25 moment 5): a give that had already gone out when
+  // its result first appeared. One queued for Send, and sent later, never walks: it is not this act's moment.
+  const [eligible] = useState(() => act === "give" && steps[1].tone === "healthy");
 
   // The one clock for whether the trail is looking: until the watch ends. The re-reads and the light both follow it.
   const [watching, setWatching] = useState(() => Date.now() < at + TRAIL_WATCH_MS);
@@ -139,12 +145,14 @@ export function ChangeTrail({
     return () => clearInterval(timer);
   }, [open, watching, reread]);
 
-  // The light (A-25 moment 5), on a give's trail only, and only once Syndra has sent it: a removal takes access
-  // away, and nothing that does is lit (A-25 §1); a give that waits for someone to press Send is not moving, and
-  // a breathing light would say it was. It goes out with the looking.
-  const light = act === "give" && steps[1].tone === "healthy" ? watching : undefined;
+  // The light (A-25 moment 5), on a give's trail only, and only when it had gone out as its result appeared: a
+  // removal takes access away, and nothing that does is lit (A-25 §1); a give that waits for someone to press
+  // Send is not moving, and a breathing light would say it was. It goes out with the looking.
+  const light = eligible ? watching : undefined;
   return (
-    <div className={className}>
+    // Inside its result's `status`, which reads itself whole on every change: a step settling is not read
+    // as the whole card again (the trail is read where it is).
+    <div className={className} aria-live="off">
       <CheckTrail label={TRAIL_LABEL} checks={steps} light={light} />
     </div>
   );

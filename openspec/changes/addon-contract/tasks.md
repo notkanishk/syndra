@@ -3422,6 +3422,15 @@ end to end) found no missing function; three regressions with one root cause
         - the card not its room (1), and the trail after the next step (1);
         - a removal lit (1), a queued give lit (2), and a refusal with a trail (2);
         - the light at 40% on the card (2).
+    - *The trail lights, review round (Opus review of b68d206d, no outright blockers).*
+      - (1) The trail is `aria-live="off"` inside its result's `status`, so a settling step does not re-read the whole card.
+      - (2) No slide-in: the light travels only once it has left the first step (`!still && at > 0`). In Chrome, its transform held at one value for every frame of its first 300ms, without the travel.
+      - (3) The pool lies under every line in the card: the card is `isolate` when it holds a trail, and the list is only `relative`. In Chrome, every visible line of the card hit-tests above the light.
+      - (4) Once seen sent, a step stays sent (`gone`). The light is for a give that had already gone out when its result first appeared (`eligible`, latched at first render); a give queued for Send and sent later never walks (coordinator's decision; A-25 §4.5 updated).
+      - (5) The contrast comment is corrected: on the light's centre a violet link would be 4.37:1 in the dark room. A lit result holds none, and a test holds that.
+      - (6) Simpler walk: it reads its end through a ref, so it depends on its own steps only, and its rest is one timeout (`FLASH_MS + BREATHE_MS`, or `BREATHE_MS` when still).
+      - (7) The README says the `trail` rule runs by hand.
+      - Mutation-checked, each red (1 each): the trail read with its status, travel from the first frame, the list as the layer, the card not `isolate`, sent not latched, eligibility not latched, and the rest without the last move's flash.
   - [x] 7w-5 Access over time (§9 vivid, Q11, read proposal Q-W3-1; the owner, 19 Nov 2026: "i dont see the access over time chart anywhere", which settles both as yes). Board part 3, frame 19 (`person-vivid`).
     *Done (branch `feat/addon-contract-access-history`):*
     - **The read.** `GET /api/v1/users/{id}/access-history?since=YYYY-MM-DD` (`handlers/access_history.go`, route beside `/access` in `router.go`), `withOperatorAuth`: never a member's, not even their own. `since` is a makerspace day from a year before today to today (`services.historyStart`, else 400 `VALIDATION_FAILED`, `details.since`). Answer: `{since, truncated, roles: [{project_id, project_name, project_name_resolved, role_key, standing, ends?, runs: [{from, to}]}]}`, `from` null where no record says when a run began, `to` null where the records give it today.

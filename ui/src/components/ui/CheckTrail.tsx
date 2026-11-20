@@ -59,7 +59,7 @@ export function CheckTrail({
   const first = label !== undefined || lit ? checks.findIndex((check) => check.ring) : -1;
   const open = first > 0 ? first : -1;
   return (
-    <ol className={`flex flex-col ${lit ? "relative isolate" : ""}`} aria-label={label ?? "Checks"}>
+    <ol className={`flex flex-col ${lit ? "relative" : ""}`} aria-label={label ?? "Checks"}>
       {/* Where its walk ends: the first open step, or the last step once the change is home. */}
       {lit && <TrailLight end={first >= 0 ? first : checks.length - 1} home={first < 0} on={Boolean(light)} />}
       {checks.map((check, i) => {
@@ -104,9 +104,9 @@ const POOL = { width: 280, height: 96 };
 const MARGIN_KEPT = 4;
 
 /**
- * The change's light: one pool on a step's dot, the trail's own layer, under
- * everything in it. Its room is the result it sits in (`data-trail-room`, the
- * outcome's card): it is never wider or taller than the card's inner box allows
+ * The change's light: one pool on a step's dot, in its room's layer (the
+ * result's card, `data-trail-room`, which is `isolate`), under every line in
+ * the card. It is never wider or taller than the card's inner box allows
  * on the step it is on, so its closest-side falloff is spent inside the card's
  * edge (rule 1); in the card, 280 by 96 on every step.
  *
@@ -120,28 +120,24 @@ const MARGIN_KEPT = 4;
 function TrailLight({ end, home, on }: { end: number; home: boolean; on: boolean }) {
   const still = stillMotion();
   const [walk, setWalk] = useState(() => ({ step: still ? end : 0, done: still || end === 0 }));
-  // When its last move set out (a step of the walk, or a step settling after it): it rests one breath after
-  // it arrives.
-  const setOut = useRef(0);
+  // The walk reads where it ends as it goes, so only its own steps drive it.
+  const until = useRef(end);
   useEffect(() => {
-    setOut.current = Date.now();
-  }, [end]);
+    until.current = end;
+  });
   useEffect(() => {
     if (walk.done) return;
-    if (walk.step >= end) return setWalk({ step: end, done: true });
-    const next = setTimeout(() => {
-      setOut.current = Date.now();
-      setWalk({ step: walk.step + 1, done: false });
-    }, FLASH_MS);
+    if (walk.step >= until.current) return setWalk({ step: walk.step, done: true });
+    const next = setTimeout(() => setWalk({ step: walk.step + 1, done: false }), FLASH_MS);
     return () => clearTimeout(next);
-  }, [walk, end]);
+  }, [walk]);
   const at = walk.done ? end : walk.step;
 
+  // Home: one breath on the last step once it has arrived (its last move is a flash), then out.
   const [rested, setRested] = useState(false);
   useEffect(() => {
     if (!home || !walk.done || rested) return;
-    const arriving = still ? 0 : Math.max(0, setOut.current + FLASH_MS - Date.now());
-    const timer = setTimeout(() => setRested(true), arriving + BREATHE_MS);
+    const timer = setTimeout(() => setRested(true), still ? BREATHE_MS : FLASH_MS + BREATHE_MS);
     return () => clearTimeout(timer);
   }, [home, walk.done, rested, still]);
 
@@ -173,12 +169,8 @@ function TrailLight({ end, home, on }: { end: number; home: boolean; on: boolean
     return () => watch.disconnect();
   }, [at]);
 
-  // It appears where it is, never sliding in from the list's corner: it travels only once it has been placed.
-  const [placed, setPlaced] = useState(false);
-  useEffect(() => {
-    if (pool && !placed) setPlaced(true);
-  }, [pool, placed]);
-
+  // It appears where it is, on the first step, and travels only once it has left it: never sliding in.
+  const glide = !still && at > 0;
   const going = on && !(home && rested);
   return (
     <span
@@ -190,7 +182,7 @@ function TrailLight({ end, home, on }: { end: number; home: boolean; on: boolean
       // Its breath (the licensed loop, still happening); held where it is while the light goes out, so the
       // fade starts from the strength it had. Neither walks, travels nor breathes when still.
       data-breathe={still ? undefined : ""}
-      className={`trail-light pointer-events-none absolute left-0 top-0 ${still || !placed ? "" : "trail-light-glide"}`}
+      className={`trail-light pointer-events-none absolute left-0 top-0 ${glide ? "trail-light-glide" : ""}`}
       style={pool ? { transform: `translate(${pool.left}px, ${pool.top}px)`, width: pool.width, height: pool.height } : { width: 0, height: 0 }}
     />
   );
