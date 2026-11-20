@@ -209,10 +209,11 @@ export function LimitDialog({
                 { value: "none", label: "No limit" },
               ]}
             />
+            {/* Dense: never taller than the Segmented, so its arrival never re-centres the choice just clicked. */}
             {kind === "size" && (
               <span className="flex items-center gap-2">
                 <span className="w-[110px]">
-                  <Input aria-label="Limit in GB" type="number" min={1} value={gb} onChange={(e) => setGb(e.target.value)} />
+                  <Input dense aria-label="Limit in GB" type="number" min={1} value={gb} onChange={(e) => setGb(e.target.value)} />
                 </span>
                 <span className="text-body text-muted">GB</span>
               </span>

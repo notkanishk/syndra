@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HomeLine, LimitDialog, limitVerb } from "@/components/kinds/storage/HomeLimit";
+import { DENSE_FIELD } from "@/components/ui/Input";
 import type { AccountHome } from "@/lib/queries/useTargets";
 
 // A-03 §3: one person's own home folder limit, on the system's account list.
@@ -140,6 +141,14 @@ describe("giving one person their own limit", () => {
     fireEvent.click(screen.getByRole("button", { name: "End this limit" }));
     await waitFor(() => expect(sent.map((s) => s.path)).toEqual(["/allowances/a1/lift"]));
     await waitFor(() => expect(screen.getByText("Ended")).toBeTruthy());
+  });
+
+  // The GB field arrives beside "Up to a size". Taller than the choice, it
+  // re-centred the row and moved the choice you had just clicked (20 Nov 2026);
+  // dense, it is never taller than the Segmented, so the choice stays put.
+  it("draws the GB field no taller than the choice beside it", () => {
+    wrap(<LimitDialog target="truenas" name="Charlotte Flair" home={base} onClose={vi.fn()} />);
+    expect(screen.getByLabelText("Limit in GB").className).toContain(DENSE_FIELD);
   });
 });
 

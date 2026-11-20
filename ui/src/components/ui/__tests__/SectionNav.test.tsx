@@ -129,7 +129,19 @@ describe("the floating pill", () => {
     expect(pill().querySelectorAll("[data-indicator]")).toHaveLength(1);
     const links = within(pill()).getAllByRole("link");
     expect(links.every((a) => !a.classList.contains(PILL_FILL))).toBe(true);
-    expect(pill().querySelector("[data-indicator] > *")).toHaveClass(PILL_FILL);
+    expect(pill().querySelector("[data-indicator]")).toHaveClass(PILL_FILL);
+  });
+
+  // Choosing a section must not move the others (owner, 20 Nov 2026). The pill
+  // reserves no label width, so every section is one weight, here or not.
+  it("draws every section at one weight, so the current one is never wider", () => {
+    render(<Page />);
+    place(-40, { "sec-a": 10, "sec-b": 900 });
+    const weight = (a: HTMLElement) => a.className.split(/\s+/).filter((c) => /^font-(?:thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/.test(c));
+    const links = within(pill()).getAllByRole("link");
+    expect(links[0]).toHaveAttribute("aria-current", "location");
+    expect(weight(links[0])).toEqual(["font-semibold"]);
+    expect(links.map(weight)).toEqual(links.map(() => ["font-semibold"]));
   });
 
   it("moves the fill, and turns the arrows, as the reader passes into the next section", () => {

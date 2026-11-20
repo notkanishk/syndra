@@ -34,13 +34,10 @@ const options = [
   { value: "c", label: "C" },
 ];
 const indicator = () => document.querySelector<HTMLElement>("[data-indicator]");
-/** Where the indicator starts along the row and how wide it is, read from its transforms (it has no left or width). */
+/** Where the indicator starts along the row (its transform; it has no left) and how wide it is. */
 const placed = () => {
   const el = indicator()!;
-  const end = el.lastElementChild as HTMLElement;
-  const left = Number(/translate\((-?[\d.]+)px/.exec(el.style.transform)?.[1]);
-  const width = Number(/translateX\((-?[\d.]+)px/.exec(end.style.transform)?.[1]) + parseFloat(end.style.width);
-  return { left, width };
+  return { left: Number(/translate\((-?[\d.]+)px/.exec(el.style.transform)?.[1]), width: parseFloat(el.style.width) };
 };
 
 const controls = {
@@ -76,5 +73,43 @@ describe.each(Object.entries(controls))("%s indicator", (_name, draw) => {
     motionInTests();
     render(draw("a"));
     expect(indicator()!.className).toContain("indicator-glide");
+  });
+});
+
+// The chosen option turns semibold; its label must not widen and push the
+// rest (owner, 20 Nov 2026: "the button you just clicked moves away"). Where
+// the weight changes, each label reserves its own words at the chosen weight
+// (`label-steady` in globals.css).
+const steady = { FilterPills: controls.FilterPills, Tabs: controls.Tabs };
+describe.each(Object.entries(steady))("%s labels", (name, draw) => {
+  it("reserve every option's selected width, so choosing one moves none", () => {
+    render(draw("a"));
+    for (const option of screen.getAllByRole(name === "Tabs" ? "button" : "radio")) {
+      const label = option.querySelector<HTMLElement>(".label-steady");
+      expect(label, `${option.textContent} wears label-steady`).not.toBeNull();
+      expect(label!.dataset.label).toBe(option.textContent);
+    }
+  });
+});
+
+// Segmented reserves nothing: every option is one weight, chosen or not, which
+// is what keeps its options still.
+describe("Segmented labels", () => {
+  it("are one weight, chosen or not", () => {
+    render(controls.Segmented("b"));
+    const weight = (el: HTMLElement) => el.className.split(/\s+/).filter((c) => /^font-(?:thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/.test(c));
+    const options = screen.getAllByRole("radio");
+    expect(options[1]).toBeChecked();
+    expect(options.map(weight)).toEqual(options.map(() => ["font-semibold"]));
+  });
+});
+
+describe("a tab's count", () => {
+  it("is reserved with its label, so a count beside the current tab moves nothing either", () => {
+    render(<Tabs label="Pick" options={[{ value: "h", label: "History", count: 3 }, { value: "p", label: "People" }]} value="h" onSelect={() => {}} />);
+    const [history, people] = screen.getAllByRole("button");
+    expect(history).toHaveTextContent("History 3");
+    expect(history.querySelector<HTMLElement>(".label-steady")!.dataset.label).toBe("History 3");
+    expect(people.querySelector<HTMLElement>(".label-steady")!.dataset.label).toBe("People");
   });
 });
