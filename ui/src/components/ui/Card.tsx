@@ -28,7 +28,9 @@ export function Card({
 }) {
   return (
     <div
-      className={`card overflow-hidden ${className}`}
+      // The light under your hand (A-25 moment 2): its hairline, lit where the hand is nearest. Not on
+      // a stale card, which recedes.
+      className={`card overflow-hidden ${stale ? "" : "rim rim-card "}${className}`}
       data-stale={stale || undefined}
       data-recedes={stale === undefined ? undefined : ""}
       {...props}

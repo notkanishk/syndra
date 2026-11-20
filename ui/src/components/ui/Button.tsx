@@ -69,6 +69,16 @@ const VARIANTS: Record<Variant, string> = {
   dangerConfirm: "bg-danger text-danger-ink hover:brightness-110",
 };
 
+/** The light under your hand (A-25 moment 2, option A): each variant's edge, lit where the hand is
+ *  nearest. Never on a destructive button, and never on a disabled one: neither answers a hand. */
+const RIM: Record<Variant, string> = {
+  accent: "rim rim-filled",
+  outline: "rim rim-outline",
+  ghost: "rim",
+  danger: "",
+  dangerConfirm: "",
+};
+
 /** A blocked control keeps the semantic colour it would otherwise carry, at
  *  reduced alpha — it must still read as the destructive action it is. */
 const DISABLED: Record<Variant, string> = {
@@ -200,6 +210,6 @@ export function buttonClasses({
   // under the finger. Destructive buttons behave identically — muscle memory
   // must never depend on what a button does.
   return `inline-flex items-center justify-center gap-2 relative rounded-pill font-semibold control press-scale disabled:cursor-not-allowed ${sizeClass} ${
-    disabled ? DISABLED[variant] : VARIANTS[variant]
+    disabled ? DISABLED[variant] : `${VARIANTS[variant]} ${RIM[variant]}`
   } ${className}`;
 }

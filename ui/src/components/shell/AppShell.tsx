@@ -1,8 +1,10 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useLayoutEffect, useState } from "react";
 
 import { GoToHost } from "@/components/shell/GoToHost";
+import { HAND_FIRST, HandHost } from "@/components/shell/HandHost";
 import { KeysHost } from "@/components/shell/KeysHost";
 import { IntentPrefetchHost } from "@/components/shell/IntentPrefetchHost";
 import { PlaceHost } from "@/components/shell/PlaceHost";
@@ -63,6 +65,8 @@ export function AppShell({
   useLayoutEffect(() => spendDoor(session.signedInAt), [session.signedInAt]);
   // The column, where a page's light is drawn (`RoomLight`, A-25 §3).
   const [room, setRoom] = useState<HTMLDivElement | null>(null);
+  // The light under your hand (A-25 moment 2) is on where it ships first: Home and People.
+  const hand = HAND_FIRST.test(usePathname() ?? "");
   return (
     <UiViewProvider isOperator={session.role === "admin"} selfId={session.id} initialView={initialView}>
       <PageCrumbProvider>
@@ -114,7 +118,7 @@ export function AppShell({
                     rather than covering it. They sit under the page's own
                     header (A-20 P3, G7), in the seat `ShellNotices` holds. */}
                 {/* tabIndex -1 so the skip link's jump moves focus here, not only the scroll. */}
-                <main id="main" tabIndex={-1} className="px-4 pb-9 pt-5 tablet:px-(--page-x) tablet:pt-(--page-top)">
+                <main id="main" tabIndex={-1} data-hand={hand ? "" : undefined} className="px-4 pb-9 pt-5 tablet:px-(--page-x) tablet:pt-(--page-top)">
                   <ShellNoticesProvider>{children}</ShellNoticesProvider>
                 </main>
               </div>
@@ -122,6 +126,7 @@ export function AppShell({
           </RoomContext.Provider>
           <TouchNav />
           <GoToHost />
+          <HandHost />
           <KeysHost />
           <PlaceHost />
           <IntentPrefetchHost />

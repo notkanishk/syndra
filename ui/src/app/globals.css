@@ -9,6 +9,7 @@
  *
  * Colour is semantic, never decorative, with ONE written exception: the hour's
  * light behind Home's and My access's heads (`hour-light`, A-24 Q2, A-25 moment 1,
+ * and the edge under your hand, `rim`, A-25 moment 2,
  * bounded where it is drawn).
  * Five roles:
  *
@@ -1137,14 +1138,15 @@
 @property --door-x { syntax: "<length>"; inherits: false; initial-value: 0px; }
 
 /* The one light (A-25 §2 rule 1, §3): every pool falls to nothing on an eased curve, six stops,
-   never a straight ramp to a rim. A light sets its strength (`--pool-k`) and draws these stops in
-   its own ellipse; its pseudo-elements inherit them. */
-:where(.hour-light, .lit-card) {
-  --pool-stops: color-mix(in srgb, var(--accent) var(--pool-k), transparent),
-    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.74), transparent) 20%,
-    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.44), transparent) 42%,
-    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.2), transparent) 62%,
-    color-mix(in srgb, var(--accent) calc(var(--pool-k) * 0.06), transparent) 82%,
+   never a straight ramp to a rim. A light sets its strength (`--pool-k`), and its colour if it is not
+   the accent (`--pool-c`), and draws these stops in its own shape; its pseudo-elements inherit them. */
+:where(.hour-light, .lit-card, .rim) {
+  --pool-c: var(--accent);
+  --pool-stops: color-mix(in srgb, var(--pool-c) var(--pool-k), transparent),
+    color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.74), transparent) 20%,
+    color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.44), transparent) 42%,
+    color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.2), transparent) 62%,
+    color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.06), transparent) 82%,
     transparent;
 }
 
@@ -2099,6 +2101,70 @@ html.theme-fading *::after {
 /* Neutral hover for nav rows and list rows. Background only — no lift, no
    shadow, no border change. Nav rows use the same tint as table rows, so the
    sidebar and the table read as one surface. */
+/* The light under your hand (A-25 moment 2, the edge; owner, 20 Nov 2026: "i really like the edge"):
+   the hairline of the thing your hand is on, lit where your hand is nearest. A one-pixel ring on the
+   wearer's own edge (the mask gives it its shape; the light ends by its own falloff along it), one
+   pool at the pointer (`--px`, `--py`, written by `HandHost`, the one listener), in on tint, out on
+   settle. Nothing in the fill, nothing behind a word: no label's contrast moves. The built hover, the
+   press and the focus ring are as they were. Only where the page says (`[data-hand]`), and never
+   inside `[data-no-hand]` (a Notice, a closed part) or on a first-day card (its edges are its own).
+   Under forced colours it is not drawn; on touch nothing follows. */
+@utility rim {
+  position: relative;
+  --pool-k: var(--rim-k, 46%);
+
+  :where([data-hand]) &:not(.lit-card, :where([data-no-hand] *)) {
+    &::after {
+      content: "";
+      position: absolute;
+      inset: var(--rim-inset, 0px);
+      padding: 1px;
+      border-radius: inherit;
+      pointer-events: none;
+      background: radial-gradient(circle var(--rim-r, 84px) at var(--px, 50%) var(--py, 50%), var(--pool-stops));
+      mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+      opacity: 0;
+      transition: opacity var(--duration-settle) var(--ease-tint);
+    }
+    @media (hover: hover) {
+      &:hover::after {
+        opacity: 1;
+        transition-duration: var(--duration-tint);
+      }
+    }
+    /* The keyboard's answer: a focused button's whole edge; a card's, beside its focused row. */
+    &:focus-visible::after {
+      opacity: 1;
+      transition-duration: var(--duration-tint);
+      background: radial-gradient(circle 600px at 50% 50%, var(--pool-stops));
+    }
+    &.rim-card:has(:focus-visible)::after {
+      opacity: 1;
+      transition-duration: var(--duration-tint);
+      background: radial-gradient(circle 90px at var(--fx, 50%) var(--fy, 50%), var(--pool-stops));
+    }
+  }
+  @media (forced-colors: active) {
+    &::after {
+      display: none;
+    }
+  }
+}
+/* Where each wearer's ring sits and how strong (A-25 moment 2, the build's table). A card is
+   `overflow-hidden`, which clips at the padding edge, so its ring is inside its border. */
+@utility rim-card {
+  --rim-k: 50%;
+  --rim-r: 320px;
+}
+@utility rim-outline {
+  --rim-inset: -1px;
+}
+@utility rim-filled {
+  --rim-inset: 1px;
+  --rim-k: 34%;
+  --pool-c: var(--rim-filled);
+}
+
 @utility hover-tint {
   transition-property: color, background-color, border-color, outline-color;
   --tint-durations: var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--ring-fade);
@@ -2224,6 +2290,10 @@ html.theme-fading *::after {
   --door-arch-mask: linear-gradient(to bottom, #000 6%, rgba(0, 0, 0, 0.5) 54%, transparent 95%);
 
   --door-arch-w: 430px;
+
+  /* The light under your hand on a filled button (A-25 moment 2): one pixel inside its edge, in the
+     button's own ink, so it shows where the hand is without brightening the button. */
+  --rim-filled: var(--accent-ink);
   --door-arch-h: 392px;
   --door-arch-r: 190px;
   /* Keeps the wordmark and the button clear of the uprights. A percentage

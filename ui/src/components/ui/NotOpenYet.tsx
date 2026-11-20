@@ -39,6 +39,8 @@ export function NotOpenYet({
   const page = size === "page";
   return (
     <div
+      // Not open yet is not answered by light (A-25 moment 2): nothing in it can be used.
+      data-no-hand=""
       className={`flex flex-col border border-dashed border-line-strong ${
         page ? "gap-[22px] rounded-card p-5" : "gap-3.5 rounded-inner px-4 pb-4 pt-3.5"
       }`}
