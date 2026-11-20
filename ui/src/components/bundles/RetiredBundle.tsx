@@ -5,7 +5,6 @@ import { useState } from "react";
 
 import { BundleVersions } from "@/components/bundles/BundleVersions";
 import { FoldHeading } from "@/components/ui/FoldHeading";
-import { TabLabel } from "@/components/bundles/TabLabel";
 import { RoleRef, UserName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Chip } from "@/components/ui/Badge";
@@ -102,8 +101,8 @@ function RetiredBundleView({ bundleId, bundle }: { bundleId: string; bundle: Bun
           value={tab}
           onSelect={setTab}
           options={[
-            { value: "history", label: <TabLabel text="History" n={(versions.data ?? []).length} /> },
-            { value: "gave", label: <TabLabel text="What it gave" n={(gave.data ?? []).length} /> },
+            { value: "history", label: "History", count: (versions.data ?? []).length },
+            { value: "gave", label: "What it gave", count: (gave.data ?? []).length },
           ]}
         />
 

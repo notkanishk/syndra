@@ -20,9 +20,6 @@ const ACTIVE = '[aria-checked="true"], [aria-current="page"], [aria-current="loc
 
 type Box = { left: number; top: number; width: number; height: number };
 
-/** How far the indicator's middle runs under each cap, in px, so no seam shows where they meet. */
-const TUCK = 0.5;
-
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export function useGlideIndicator(choice: unknown) {
@@ -65,30 +62,19 @@ export function GlideIndicator({
   if (!box) return null;
   const { left, top, width, height } =
     kind === "fill" ? box : { left: box.left, top: box.top + box.height - 1, width: box.width, height: 2 };
-  // It moves by transform alone, so a glide is composited and never lays the
-  // group out again (CSS Transforms 1; the compositor's one cheap property with
-  // opacity). A pill scaled whole would squash its rounded ends, so it is drawn
-  // as three parts: two caps, translated and never scaled, so they stay round,
-  // and a square-ended middle, translated and scaled along x only. The middle
-  // runs `TUCK` under each cap: two edges that only abut leave a hairline seam
-  // at a fractional position mid-glide (each is antialiased on its own).
-  const cap = Math.min(height, width) / 2;
-  // Absent under reduced motion, where it jumps.
+  // One element, round at both ends at every point of the glide. It moves by
+  // transform and takes the active option's width and height: never scaled, so
+  // its ends never squash, and never drawn in parts, whose overlaps doubled a
+  // translucent fill into two lines (staging, 20 Nov 2026). It is out of flow,
+  // so a change of its size lays out itself alone, never the group.
+  // Absent under reduced motion, where it lands at once.
   const glide = stillMotion() ? "" : "indicator-glide";
-  const part = `absolute left-0 top-0 ${glide} ${className}`;
   return (
     <span
       aria-hidden
       data-indicator
-      className={`pointer-events-none absolute left-0 top-0 ${glide}`}
-      style={{ transform: `translate(${left}px, ${top}px)` }}
-    >
-      <span className={`${part} rounded-l-pill`} style={{ width: cap, height }} />
-      <span
-        className={`${part} origin-left`}
-        style={{ width: 1, height, transform: `translateX(${cap - TUCK}px) scaleX(${Math.max(width - 2 * cap, 0) + 2 * TUCK})` }}
-      />
-      <span className={`${part} rounded-r-pill`} style={{ width: cap, height, transform: `translateX(${width - cap}px)` }} />
-    </span>
+      className={`pointer-events-none absolute left-0 top-0 rounded-pill ${glide} ${className}`}
+      style={{ transform: `translate(${left}px, ${top}px)`, width, height }}
+    />
   );
 }

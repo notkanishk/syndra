@@ -7,7 +7,6 @@ import { useMemo, useState } from "react";
 import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
 import { BundlePeople, BundleVersions, ThroughOtherBundles } from "@/components/bundles/BundleVersions";
 import { ChangeLines } from "@/components/bundles/IncludeChangeLine";
-import { TabLabel } from "@/components/bundles/TabLabel";
 import { RetiredBundlePage } from "@/components/bundles/RetiredBundle";
 import { ProjectName, RoleRef } from "@/components/names";
 import { projectLabel } from "@/components/names/Unresolved";
@@ -229,9 +228,9 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
           value={tab}
           onSelect={setTab}
           options={[
-            { value: "grants", label: <TabLabel text="What it gives" n={roleCount} /> },
-            { value: "people", label: <TabLabel text="People" n={holders} /> },
-            { value: "history", label: <TabLabel text="History" n={(versions.data ?? []).length} /> },
+            { value: "grants", label: "What it gives", count: roleCount },
+            { value: "people", label: "People", count: holders },
+            { value: "history", label: "History", count: (versions.data ?? []).length },
           ]}
         />
 

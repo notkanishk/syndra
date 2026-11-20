@@ -1,8 +1,7 @@
 "use client";
 
-import React from "react";
-
 import { PILL } from "@/components/ui/Button";
+import { SteadyLabel } from "@/components/ui/SteadyLabel";
 import { GlideIndicator, useGlideIndicator } from "@/lib/motion";
 
 /**
@@ -27,9 +26,9 @@ import { GlideIndicator, useGlideIndicator } from "@/lib/motion";
  * marked by an underline that glides to the choice (S10, `GlideIndicator`),
  * and its content swaps in place with no slide.
  *
- * `label` is a node rather than a string because a tab may carry its own count,
- * and a count beside a tab label is the one place a number belongs inside a
- * control instead of beside it.
+ * A tab may carry its own `count`: a count beside a tab label is the one place
+ * a number belongs inside a control instead of beside it. Label and count are
+ * one `SteadyLabel`, so the current tab turning semibold never moves the rest.
  */
 export function Tabs<T extends string>({
   options,
@@ -38,7 +37,8 @@ export function Tabs<T extends string>({
   label,
   className = "",
 }: {
-  options: Array<{ value: T; label: React.ReactNode }>;
+  /** `count`, when given, sits after the label in a fainter ink: the one place a number belongs inside a control. */
+  options: Array<{ value: T; label: string; count?: number }>;
   value: T;
   onSelect: (next: T) => void;
   /** Names the group for a screen reader — "Views of this person's access". */
@@ -69,7 +69,10 @@ export function Tabs<T extends string>({
               active ? "font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >
-            {option.label}
+            <SteadyLabel text={option.count === undefined ? option.label : `${option.label} ${option.count}`}>
+              {option.label}
+              {option.count !== undefined && <> <span className="text-faint">{option.count}</span></>}
+            </SteadyLabel>
           </button>
         );
       })}

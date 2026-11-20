@@ -83,10 +83,12 @@ export function HomeChoice({
                     { value: "none", label: "No limit" },
                   ]}
                 />
+                {/* Dense: never taller than the Segmented, so its arrival never re-centres the choice just clicked. */}
                 {limit === "size" && (
                   <span className="flex items-center gap-2">
                     <span className="w-[110px]">
                       <Input
+                        dense
                         aria-label="Limit in GB"
                         type="number"
                         min={1}
