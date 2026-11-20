@@ -2,12 +2,6 @@
 
 import { useEffect } from "react";
 
-/**
- * Where the light under your hand is on first (A-25 moment 2, build order: "Home and People first").
- * The shell marks its `main` with `data-hand` on these routes; the full rollout is this one line.
- */
-export const HAND_FIRST = /^\/($|users(\/|$))/;
-
 /** Every wearer of the edge's light around `start`, innermost first (a button, then its card). */
 function wearers(start: EventTarget | null): HTMLElement[] {
   const found: HTMLElement[] = [];

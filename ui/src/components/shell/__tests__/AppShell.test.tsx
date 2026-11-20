@@ -76,17 +76,18 @@ describe("AppShell scrolling", () => {
 
 
 describe("AppShell, the light under your hand (A-25 moment 2)", () => {
-  // Home and People first: the shell's main carries the scope there, and nowhere else yet.
-  it("marks main on Home and People, and on no other page", () => {
-    const routes = [["/", true], ["/users", true], ["/users/u1", true], ["/requests", false], ["/roles", false], ["/me", false]] as const;
-    for (const [path, on] of routes) {
+  // Everywhere (owner on staging, 20 Nov: "only home page shows the effect"): the shell's main carries
+  // the scope on every route; what must not light opts out where it is drawn.
+  it("marks main on every route", () => {
+    const routes = ["/", "/users", "/users/u1", "/projects", "/roles", "/applications", "/requests", "/governance/drift", "/insights", "/system/targets/truenas", "/settings", "/me"];
+    for (const path of routes) {
       route.path = path;
       const { container, unmount } = render(
         <AppShell session={{ id: "u1", role: "admin" } as SessionUser}>
           <p>page</p>
         </AppShell>,
       );
-      expect(container.querySelector("main")!.hasAttribute("data-hand"), path).toBe(on);
+      expect(container.querySelector("main")!.hasAttribute("data-hand"), path).toBe(true);
       unmount();
     }
   });

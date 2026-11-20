@@ -21,7 +21,8 @@ export function RuleConsentFailed({
 }) {
   if (!consent.failed) return null;
   return (
-    <span className={className ?? "flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-small text-muted"} role="status">
+    // A consent's body is not answered by light (A-25 moment 2): its retry keeps the built hover only.
+    <span data-no-hand="" className={className ?? "flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-small text-muted"} role="status">
       <span>{consent.unread}</span>
       {/* `data-inline`: it retries the sentence beside it, so it belongs to that sentence, not to a row's seat (D-1 §4). */}
       <Button variant="outline" size="sm" onClick={consent.retry} data-inline>

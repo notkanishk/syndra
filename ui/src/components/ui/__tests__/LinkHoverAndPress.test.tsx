@@ -24,8 +24,9 @@ describe("a StatCard that is a link", () => {
     // surface still shows through; `active:bg-*` would have replaced it.
     expect(card.className).toContain("active:[background-image:linear-gradient(var(--tint-3),var(--tint-3))]");
     expect(card.className).not.toMatch(/active:bg-/);
-    // The accent ring on hover stays.
-    expect(card.className).toContain("hover:shadow-[0_0_0_1px_var(--accent-line)]");
+    // Under the hand it wears the edge like any card (A-25 moment 2), not the old flat ring all round.
+    expect(card).toHaveClass("rim", "rim-card");
+    expect(card.className).not.toContain("hover:shadow-[0_0_0_1px");
   });
 
   it("is not a link, and presses nothing, without an href", () => {

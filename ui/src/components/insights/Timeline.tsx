@@ -1,5 +1,6 @@
 "use client";
 
+import { CARD_EDGE } from "@/components/ui/Card";
 import { addDays, dayLabel, daysBetween, isFirstOfMonth, monthLabel } from "@/components/insights/days";
 
 /** Where a point a fraction along the track sits: the native thumb never reaches the ends. */
@@ -34,7 +35,7 @@ export function Timeline({
   const months = Array.from({ length: last + 1 }, (_, i) => addDays(from, i)).filter(isFirstOfMonth);
 
   return (
-    <div className="tint-in flex flex-col gap-3 rounded-card border border-line bg-surface-1 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]">
+    <div className={`${CARD_EDGE} tint-in flex flex-col gap-3 rounded-card border border-line bg-surface-1 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]`}>
       <span className="type-label flex-none">Date</span>
       <div className="relative h-[42px] w-full flex-1">
         <input

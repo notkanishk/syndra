@@ -2,10 +2,13 @@
 import { render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HAND_FIRST, HandHost } from "@/components/shell/HandHost";
+import { HandHost } from "@/components/shell/HandHost";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { block, colour, css, over, ratio, type RGBA } from "./cssTokens";
+import { StatCard } from "@/components/ui/StatCard";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { SRC, block, colour, css, over, ratio, type RGBA } from "./cssTokens";
 
 // A-25 moment 2, the edge (owner, 20 Nov 2026: "i really like the edge"): the hairline of the thing
 // your hand is on, lit where your hand is nearest, on cards and on outline, ghost and filled buttons,
@@ -175,10 +178,6 @@ describe("the light under your hand: one listener, for cards and buttons", () =>
     expect(frames).toEqual([]);
   });
 
-  it("ships first on Home and People (A-25's build order)", () => {
-    for (const path of ["/", "/users", "/users/u1"]) expect(HAND_FIRST.test(path), path).toBe(true);
-    for (const path of ["/requests", "/roles", "/userspace", "/me"]) expect(HAND_FIRST.test(path), path).toBe(false);
-  });
 });
 
 describe("who wears it", () => {
@@ -206,6 +205,46 @@ describe("who wears it", () => {
     expect(braced(rim, "&.rim-filled {")).toMatch(/--rim-inset: 1px;/);
     const stale = render(<Card data-testid="s" stale />).getByTestId("s");
     expect(stale).not.toHaveClass("rim");
+  });
+
+  it("is a stat tile's too, a link or not, with no flat ring of its own (owner on staging, 20 Nov: \"these dont show the effect\")", () => {
+    const linked = render(<StatCard label="Connected systems" value="3" detail="All answering." href="/system" />);
+    const tile = linked.getByRole("link", { name: "Connected systems" });
+    expect(tile).toHaveClass("card", "rim", "rim-card");
+    expect(tile.className).not.toMatch(/hover:shadow/);
+    const still = render(<StatCard label="Members" value="120" detail="In Zitadel." />);
+    expect(still.container.querySelector("[data-stat-tile]")).toHaveClass("card", "rim", "rim-card");
+  });
+
+  it("is worn by every card frame through the one path, and no card answers a hand with a flat ring instead", () => {
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) {
+          if (name !== "__tests__" && name !== "node_modules") walk(path);
+        } else if (/\.tsx?$/.test(name)) files.push(path);
+      }
+    };
+    walk(SRC);
+    const flatRings: string[] = [];
+    const bareCards: string[] = [];
+    for (const path of files) {
+      const rel = path.slice(SRC.length + 1);
+      const source = readFileSync(path, "utf8");
+      // The old language, a flat accent ring all round under the hand: banned, the edge replaces it.
+      source.split("\n").forEach((line, i) => {
+        if (/hover:shadow-\[0_0_0_1px|hover:border-accent/.test(line)) flatRings.push(`${rel}:${i + 1}`);
+      });
+      // Every card frame drawn outside `Card` wears the edge by the shared constant.
+      if (rel === "components/ui/Card.tsx") continue;
+      for (const m of source.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
+        const cls = m[1] ?? m[2];
+        if (/(^|\s)card(\s|$)/.test(cls) && !cls.includes("${CARD_EDGE}")) bareCards.push(`${rel}: ${cls.slice(0, 40)}`);
+      }
+    }
+    expect(flatRings).toEqual([]);
+    expect(bareCards).toEqual([]);
   });
 
   it("is each wearer's own: a button inside a card never takes the card's strength, reach or place", () => {
