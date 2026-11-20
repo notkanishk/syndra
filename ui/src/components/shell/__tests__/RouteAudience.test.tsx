@@ -18,7 +18,8 @@ import { UiViewProvider } from "@/lib/ui-view";
 const pathname = vi.hoisted(() => ({ value: "/" }));
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.value }));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => ({ data: [] }) }));
-vi.mock("@/lib/queries/useIndicators", () => ({
+vi.mock("@/lib/queries/useIndicators", async (original) => ({
+  ...(await original<typeof import("@/lib/queries/useIndicators")>()),
   useIndicators: () => ({ data: undefined, isPlaceholderData: true }),
   useIndicatorsRead: () => ({ data: undefined, isPlaceholderData: true }),
 }));

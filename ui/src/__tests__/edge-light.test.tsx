@@ -278,7 +278,7 @@ describe("who wears it", () => {
       for (const d of defaults) for (const o of overrides) expect(d.rank, prop).toBeLessThan(o.rank);
     }
     // And the pool's default is not unlayered at all.
-    expect(layerAt(css.indexOf(":where(.hour-light, .lit-card, .rim, .card, .panel) {"))).toBe("base");
+    expect(layerAt(css.indexOf(":where(.hour-light, .lit-card,"))).toBe("base");
   });
 
   it("answers no hand with a flat ring", () => {

@@ -25,7 +25,8 @@ vi.mock("@/lib/queries/useTargets", () => ({
 vi.mock("@/lib/queries/useMySystems", () => ({
   useMySystems: () => mine,
 }));
-vi.mock("@/lib/queries/useIndicators", () => ({
+vi.mock("@/lib/queries/useIndicators", async (original) => ({
+  ...(await original<typeof import("@/lib/queries/useIndicators")>()),
   useIndicators: () => indicators,
 }));
 
@@ -271,10 +272,14 @@ describe("the mark in the rail", () => {
     expect(document.querySelector(".syndra-mark-dot")).toHaveClass("breathe");
   });
 
-  it("is otherwise as built: with Zitadel answering, without a real reading, and for a member", () => {
+  it("watches (the lamp breathes) on a live reading, and is still without one and for a member (A-25 moment 3)", () => {
     indicators.data = { ...quiet, pending_requests: 2 };
     const answering = renderRail();
-    expect(room()).toBeNull();
+    expect(room()).toBe("watch");
+    // The dot itself never moves: only the glow behind it breathes.
+    expect(document.querySelector(".syndra-mark-dot")).not.toHaveClass("breathe");
+    // The wordmark paints over the glow beside it.
+    expect(screen.getByText("Syndra", { selector: "span.font-display" })).toHaveClass("relative");
     answering.unmount();
     indicators.data = { ...quiet, zitadel_reachable: false };
     indicators.isPlaceholderData = true;

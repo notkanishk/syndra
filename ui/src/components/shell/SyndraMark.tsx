@@ -20,13 +20,13 @@ import { useEffect, useRef, useState } from "react";
 export const WELCOMED = "syndra:mark-welcomed";
 
 /**
- * What the room is like, said by the dot in the rail at rest (A-24 Q5). Only what
- * the rail's reading can prove: "waiting", amber and breathing, while Zitadel
- * isn't answering. The lime of nothing waiting and the dim of quiet hours wait
- * for a reading that carries every block Home counts (NEXT 0l); until then the
- * mark is otherwise as built. A dot, not words: the rail's own counts say what.
+ * What the room is like, said by the mark (A-24 Q5, A-25 moment 3). Only what the rail's reading can
+ * prove: "watch", a live reading, so the lamp's glow breathes once every ten seconds; "waiting",
+ * amber and quicker, while Zitadel isn't answering (the Notice says so in words). The lime of
+ * nothing waiting and the dim of quiet hours wait for a reading that carries every block Home counts
+ * (NEXT 0l). A light, not words: the rail's own counts say what.
  */
-export type Room = "waiting";
+export type Room = "watch" | "waiting";
 
 export function SyndraMark({
   size = 22,
@@ -37,7 +37,7 @@ export function SyndraMark({
   size?: number;
   className?: string;
   welcome?: boolean;
-  /** Unknown (undefined) draws the mark as built. */
+  /** Unknown (undefined) draws the mark as built, still. */
   room?: Room;
 }) {
   const [bloom, setBloom] = useState(false);

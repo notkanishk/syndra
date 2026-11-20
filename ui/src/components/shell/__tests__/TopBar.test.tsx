@@ -20,6 +20,16 @@ vi.mock("@/lib/ui-view", () => ({
 }));
 vi.mock("@/components/shell/AccountSheet", () => ({ AccountSheet: () => <span>account</span> }));
 vi.mock("@/components/shell/ThemeToggle", () => ({ ThemeToggle: () => <span>theme</span> }));
+// The rail's read, as the Sidebar tests stand it in: a live reading, so the lamp watches (A-25 moment 3).
+vi.mock("@/lib/queries/useIndicators", async (original) => ({
+  ...(await original<typeof import("@/lib/queries/useIndicators")>()),
+  useIndicatorsRead: () => ({
+    data: { pending_requests: 0, expiring_grants: 0, holds_due: 0, pending_propagation: 0, drift: 0, unconfirmed_revocations: 0, revocations_escalated: false, zitadel_reachable: true },
+    isPlaceholderData: false,
+    isError: false,
+    fetchStatus: "idle",
+  }),
+}));
 
 const session = { id: "u1", name: "Dexter Lumis", email: "dexter@example.edu" } as SessionUser;
 
