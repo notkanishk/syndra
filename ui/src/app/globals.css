@@ -1136,6 +1136,10 @@
    `--hour-reach` how much accent it holds. */
 /* The crossing pool's place as `door-cross` carries it: registered, so it glides. */
 @property --door-x { syntax: "<length>"; inherits: false; initial-value: 0px; }
+/* Where the hand is in a wearer's own box (`HandHost`): not inherited, so a frame's write restyles
+   the wearer alone, not the rows inside it, and a button never takes its card's place. */
+@property --px { syntax: "<length-percentage>"; inherits: false; initial-value: 50%; }
+@property --py { syntax: "<length-percentage>"; inherits: false; initial-value: 50%; }
 
 /* The one light (A-25 §2 rule 1, §3): every pool falls to nothing on an eased curve, six stops,
    never a straight ramp to a rim. A light sets its strength (`--pool-k`), and its colour if it is not
@@ -2111,17 +2115,41 @@ html.theme-fading *::after {
    Under forced colours it is not drawn; on touch nothing follows. */
 @utility rim {
   position: relative;
-  --pool-k: var(--rim-k, 46%);
+  /* Each wearer's own, never its card's: a button inside a card is a button (the kinds below are
+     compound, so specificity decides them, not the order they are written in). */
+  --rim-k: 46%;
+  --rim-r: 84px;
+  --rim-inset: 0px;
+  /* Where each wearer's ring sits and how strong (A-25 moment 2, the build's table). A card is
+     `overflow-hidden`, which clips at the padding edge, so its ring is inside its border. */
+  &.rim-card {
+    --rim-k: 50%;
+    --rim-r: 320px;
+  }
+  &.rim-outline {
+    --rim-inset: -1px;
+  }
+  &.rim-filled {
+    --rim-inset: 1px;
+    --rim-k: 34%;
+  }
 
+  /* Its light, only where it is drawn: a first-day card keeps its own pool and strength. */
   :where([data-hand]) &:not(.lit-card, :where([data-no-hand] *)) {
+    --pool-k: var(--rim-k);
+    &.rim-filled {
+      --pool-c: var(--rim-filled);
+    }
     &::after {
       content: "";
       position: absolute;
-      inset: var(--rim-inset, 0px);
+      inset: var(--rim-inset);
       padding: 1px;
       border-radius: inherit;
       pointer-events: none;
-      background: radial-gradient(circle var(--rim-r, 84px) at var(--px, 50%) var(--py, 50%), var(--pool-stops));
+      --px: inherit;
+      --py: inherit;
+      background: radial-gradient(circle var(--rim-r) at var(--px) var(--py), var(--pool-stops));
       mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
       opacity: 0;
       transition: opacity var(--duration-settle) var(--ease-tint);
@@ -2149,20 +2177,6 @@ html.theme-fading *::after {
       display: none;
     }
   }
-}
-/* Where each wearer's ring sits and how strong (A-25 moment 2, the build's table). A card is
-   `overflow-hidden`, which clips at the padding edge, so its ring is inside its border. */
-@utility rim-card {
-  --rim-k: 50%;
-  --rim-r: 320px;
-}
-@utility rim-outline {
-  --rim-inset: -1px;
-}
-@utility rim-filled {
-  --rim-inset: 1px;
-  --rim-k: 34%;
-  --pool-c: var(--rim-filled);
 }
 
 @utility hover-tint {
