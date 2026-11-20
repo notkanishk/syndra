@@ -47,6 +47,8 @@ describe("your place in the tab bar", () => {
     expect(pill()).not.toBeNull();
     expect(pill()).not.toHaveClass("rounded-pill");
     expect(tab("Home")).not.toHaveClass("bg-accent-soft");
+    // The rail's one timing for a current place: the fill snaps, the press keeps press's.
+    expect(tab("Home")).toHaveClass("place-current");
     // The bar is the room its light lives in, under everything in it.
     expect(nav()).toHaveAttribute("data-place-room");
     expect(nav()).toHaveClass("relative", "isolate");

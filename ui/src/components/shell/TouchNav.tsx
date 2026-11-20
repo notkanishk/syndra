@@ -170,7 +170,7 @@ function Tab({
       aria-current={active ? "page" : undefined}
       className={`nav-place relative flex min-h-[var(--tap)] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 control press-scale ${
         // Its own fill snaps, never fades, when the pill takes over.
-        active ? `${boxed ? "" : "bg-accent-soft "}[transition-property:color,transform]` : ""
+        active ? `${boxed ? "" : "bg-accent-soft "}place-current` : ""
       }`}
     >
       <span

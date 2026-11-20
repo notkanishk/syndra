@@ -873,6 +873,11 @@
         var(--ring-fade), var(--duration-press) !important;
       transition-delay: 0s !important;
     }
+    /* The current place lists two properties, so it states two: control's list, read by position,
+       would hand its press the tint. */
+    .place-current {
+      transition-duration: var(--duration-tint), var(--duration-press) !important;
+    }
     /* The seat's press is the same 3% gesture. */
     .seat > span {
       transition-duration:
@@ -1460,6 +1465,16 @@ html.theme-fading *::after {
   &:active:not(:disabled) {
     transform: scale(0.97);
   }
+}
+
+/* The current place in the rail or the tab bar (A-25 moment 4): a control whose fill snaps, never
+   fades, when the pill takes over, so the two never show together. Its colour still tints and its
+   press keeps press's timing; the property list is control's less what snaps, each with its own
+   duration and curve, so neither borrows the other's. */
+@utility place-current {
+  transition-property: color, transform;
+  transition-duration: var(--duration-tint), var(--duration-press);
+  transition-timing-function: var(--ease-tint), var(--ease-press);
 }
 
 /* The scrim tints first (S1); the card follows 40ms behind it. */

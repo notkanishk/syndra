@@ -173,7 +173,7 @@ function NavRow({
       } ${
         active
           ? // Its own fill snaps, never fades, when the pill takes over, so the two never show at once.
-            `${boxed ? "" : "bg-accent-soft "}font-semibold text-accent-text [transition-property:color,transform]`
+            `${boxed ? "" : "bg-accent-soft "}font-semibold text-accent-text place-current`
           : "text-muted hover:bg-[var(--hover)]"
       }`}
     >

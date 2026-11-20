@@ -5,7 +5,7 @@ import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import Sidebar from "@/components/shell/Sidebar";
-import { GlideIndicator, SETTLE_MS } from "@/lib/motion";
+import { GlideIndicator, SETTLE_MS, TINT_MS } from "@/lib/motion";
 import { motionInTests } from "@/test-utils/motion";
 import { block, colour, css, over, ratio, type RGBA } from "./cssTokens";
 
@@ -147,13 +147,53 @@ describe("a place that folds away", () => {
       if (!had) delete engine.getAnimations;
     }
   });
+
+  it("finds the row once the fold it arrives in has opened, though nothing was resized (the fold's phase is watched)", async () => {
+    // The fold opens on its own timer and no size the ResizeObserver was given changes, so only the
+    // watch on the group's folds can say the row now has its place.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const engine = Element.prototype as unknown as { getAnimations?: () => Animation[] };
+    const had = "getAnimations" in engine;
+    engine.getAnimations = () => [];
+    vi.useFakeTimers();
+    try {
+      pathname.value = "/bundles";
+      const shell = render(rail());
+      // Basic: Bundles is not in the rail, so there is no place and no pill.
+      expect(pill()).toBeNull();
+      view.audience = "advanced";
+      shell.rerender(rail());
+      // The row arrives inside an opening fold: no place yet.
+      expect(nav().querySelector('.unfold[data-phase="opening"] a[aria-current="page"]')).not.toBeNull();
+      expect(pill()).toBeNull();
+      // Async: a mutation is reported on a microtask, after the fold's timer has set its phase.
+      await act(async () => {
+        vi.advanceTimersByTime(TINT_MS + SETTLE_MS + 100);
+      });
+      expect(nav().querySelector('.unfold[data-phase="open"] a[aria-current="page"]')).not.toBeNull();
+      expect(pill()).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+      if (!had) delete engine.getAnimations;
+    }
+  });
 });
 
 describe("the first HTML", () => {
   it("draws no pill and keeps the row's own fill, until the page is measured on the client", () => {
     const html = renderToString(rail());
     expect(html).not.toMatch(/place-pill|data-place-light/);
-    expect(html).toMatch(/aria-current="page"[^>]*class="[^"]*bg-accent-soft/);
+    // Read as a document, not as text: whatever order the attributes come in.
+    const doc = document.createElement("div");
+    doc.innerHTML = html;
+    expect(doc.querySelector('[aria-current="page"]')).toHaveClass("bg-accent-soft");
   });
 });
 
@@ -163,6 +203,15 @@ describe("the pill is one box, shaped as its row", () => {
     expect(pill()).not.toHaveClass("rounded-pill");
     expect(link("Home")).not.toHaveClass("bg-accent-soft");
     expect(link("Home")).toHaveClass("relative");
+    // Its fill snaps, its colour tints and its press keeps press's timing: one utility, each property
+    // with its own duration and curve (a two-property list over control's ten gave the press the tint's).
+    expect(link("Home")).toHaveClass("place-current");
+    const current = /@utility place-current \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(current).toMatch(/transition-property: color, transform;/);
+    expect(current).toMatch(/transition-duration: var\(--duration-tint\), var\(--duration-press\);/);
+    expect(current).toMatch(/transition-timing-function: var\(--ease-tint\), var\(--ease-press\);/);
+    // Reduced motion: the press is held at press, as control's is.
+    expect(css).toMatch(/\.place-current \{\s*transition-duration: var\(--duration-tint\), var\(--duration-press\) !important;/);
     const { container } = render(<GlideIndicator box={{ left: 12, top: 67, width: 227, height: 39, radius: "12px" }} kind="fill" />);
     const box = container.querySelector<HTMLElement>("[data-indicator]")!;
     expect(box.style.borderRadius).toBe("12px");

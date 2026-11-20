@@ -268,9 +268,12 @@ export function detect({ tablet = 720 } = {}) {
       if (!vis(row) || row.matches("[data-card-columns]")) continue;
       const s = [...row.children].find((c) => c.matches("[data-action-seat], .row-seat"));
       if (!s || !vis(s) || !s.innerText.trim()) continue;
-      // Every drawn part takes its room on the line, read aloud or not: an aria-hidden avatar left
-      // out of the sum made a row 1px short of its seat read as one that fits (Home's new people, 860).
-      const kids = [...row.children].filter((c) => vis(c, true) && !c.matches("[data-row-detail]"));
+      // Every drawn part in the row's flow takes its room on the line, read aloud or not: an aria-hidden
+      // avatar left out of the sum made a row 1px short of its seat read as one that fits (Home's new
+      // people, 860). A part out of flow (absolute, fixed: a pill, a light) takes none.
+      const kids = [...row.children].filter(
+        (c) => vis(c, true) && !c.matches("[data-row-detail]") && !["absolute", "fixed"].includes(getComputedStyle(c).position),
+      );
       const first = kids[0];
       if (!first || first === s) continue;
       const fr = first.getBoundingClientRect();
@@ -408,7 +411,7 @@ export function detect({ tablet = 720 } = {}) {
 
   // ── pill ──
   // The pill marks the row you are on, exactly; a row that is folded (or folding) has no pill at all,
-  // so a pill left behind on the row that took its seat is a finding (review, 21 Nov 2026).
+  // so a pill left behind on the row that took its seat is a finding (review, 20 Nov 2026).
   const pill = [];
   for (const mark of document.querySelectorAll(".place-pill")) {
     const group = mark.parentElement;

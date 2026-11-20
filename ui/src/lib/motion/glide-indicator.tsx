@@ -28,16 +28,21 @@ export function useGlideIndicator<T extends HTMLElement = HTMLDivElement>(choice
   const [box, setBox] = useState<Box | null>(null);
 
   const measure = useCallback(() => {
-    const active = ref.current?.querySelector<HTMLElement>(ACTIVE);
-    // A choice inside a fold that is moving (or shut) has no place yet: no indicator, and the caller's
-    // own fill marks it, so a row folding away never leaves the indicator on the row that follows.
-    if (!active || active.closest('.unfold:not([data-phase="open"])')) return setBox(null);
+    const group = ref.current;
+    const active = group?.querySelector<HTMLElement>(ACTIVE);
+    // A choice inside a fold of the group's own that is moving (or shut) has no place yet: no indicator,
+    // and the caller's own fill marks it, so a row folding away never leaves the indicator on the row that
+    // follows. A fold around the whole group moves the group, not the choice within it, and its phase is
+    // outside what this hook watches: a Segmented in an opening fold is measured as it is.
+    const fold = active?.closest('.unfold:not([data-phase="open"])');
+    if (!group || !active || (fold && group.contains(fold))) return setBox(null);
     const next = {
       left: active.offsetLeft,
       top: active.offsetTop,
       width: active.offsetWidth,
       height: active.offsetHeight,
-      radius: getComputedStyle(active).borderRadius,
+      // One corner, the longhand: the shorthand reads "" in some engines. No corner read, a pill's.
+      radius: getComputedStyle(active).borderTopLeftRadius || "var(--radius-pill)",
     };
     setBox((cur) =>
       cur && cur.left === next.left && cur.top === next.top && cur.width === next.width && cur.height === next.height && cur.radius === next.radius
