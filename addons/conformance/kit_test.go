@@ -1293,7 +1293,9 @@ func TestAnUnansweredWithdrawThatBoundAnAccountIsOwnedUpTo(t *testing.T) {
 	defer close(released)
 	// The withdraw reaches the subject and takes effect (it binds the account),
 	// and only then is the run cancelled and the reply held back. Cancelling on
-	// arrival let Run read the subject before the withdraw had landed.
+	// arrival let Run read the subject before the withdraw had landed: the
+	// reference had not yet leased the call (reference.go:1003), so the kit's
+	// drained() saw in_flight 0 and read the final plan early.
 	url, _ := serveRewriting(t, testSecret, func(r *http.Request, body []byte, answered bool) {
 		if armed.Load() && !answered && r.URL.Path == "/apply" && bytes.Contains(body, []byte(`"desired":{"enabled":false}`)) {
 			withdrawing.Store(true)
