@@ -2125,10 +2125,7 @@ html.theme-fading *::after {
   }
   &[data-stale] [data-dot] {
     background-color: transparent;
-    box-shadow: inset 0 0 0 1.5px currentColor;
-    @media (forced-colors: active) {
-      border: 1.5px solid currentColor;
-    }
+    @apply dot-ring;
   }
   &[data-recedes] {
     transition-property: background-color, border-color, box-shadow;

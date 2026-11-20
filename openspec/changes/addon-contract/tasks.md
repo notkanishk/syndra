@@ -3391,13 +3391,20 @@ end to end) found no missing function; three regressions with one root cause
       - (1) The pool no longer flashes going out: its breath runs whether or not it is going, and pauses where it is (`:not([data-going])`), so the fade starts from the strength it had.
       - (2) It is sized from its room's own margins, not its neighbours' (no sliver when the panel scrolls).
       - (3) A ring dot is an inset shadow in its tone's colour (`dot-ring`, the tone in `color`), which `motion-tint` carries into the fill. Checked in Chrome: swapping a ring dot to filled left no frame empty, where the 1.5px border it replaced left the dot empty for its first 55ms. Under forced colours the ring is a border. A stale card's dots ring the same way.
-      - (4) `aria-current="step"` is the route's, lit or not.
+      - (4) `aria-current="step"` is the route's, lit or not, once it has reached a step past a settled one (follow-up: a route drawn before its answer marks none).
       - (5) One clock: the re-reads run only while the trail is watching.
       - (6) `PendingTrail` is held unlit.
       - (7) The side is from the room's margin.
       - (8) A queued give has no light until Syndra has sent it.
-      - (9) The light is `data-indicator`, so the glide's observer leaves it alone.
-      - Mutation-checked, each red: the breath tied to going (1), the pause rule gone (1), the room's bottom (1) and top (1) not its own, the ring a border (1) and not a shadow (1), the current step only when lit (2), the re-reads ignoring the watch (1), the pending route lit (1), the side a fixed number (1), a queued give lit (2), the light observed as a step (1); and the first round's guards again against the moved code: ahead of a read (3), a removal lit (1), breath when still (1), breath ungated (2).
+      - (9) The light is `data-indicator`, a safeguard so the glide's observer would leave it alone. The observer is set up before the light mounts, so it never sees it either way; the test holds the attribute only.
+      - Mutation-checked, each red: the breath tied to going (1), the pause rule gone (1), the room's bottom (1) and top (1) not its own, the ring a border (1) and not a shadow (1), the current step only when lit (2), the re-reads ignoring the watch (1), the pending route lit (1), the side a fixed number (1), a queued give lit (2), the `data-indicator` attribute removed (1: the attribute's own check, not the observer); and the first round's guards again against the moved code: ahead of a read (3), a removal lit (1), breath when still (1), breath ungated (2).
+    - *The trail lights, follow-ups (Opus verify of 70d67f04, nothing blocking).*
+      - (1) Item 9's observer half could not fail: dropped, and the line above corrected.
+      - (2) The ring's forced-colours border is held.
+      - (3) One ring: the stale card's dots `@apply dot-ring`, and the compiled CSS carries its forced-colours border to them too.
+      - (4) A route marks no current step until one before it is settled, so `PendingTrail` marks none.
+      - (5) One ring style: the freshness line's `provisional` dot, hand-drawn as a 1px `border-warn`, is now `StatusDot` with `ring` and `tone="warn"` (the 1.5px ring every other ring dot draws). Its own handle (`data-freshness-dot`) passes through.
+      - Mutation-checked, each red: the ring's forced-colours border gone (1), the stale dots' ring not applied (1), the pending route marking a step (1), the room's top not its own (1, now held by a block with no top margin), the provisional reading filled (1).
   - [x] 7w-5 Access over time (§9 vivid, Q11, read proposal Q-W3-1; the owner, 19 Nov 2026: "i dont see the access over time chart anywhere", which settles both as yes). Board part 3, frame 19 (`person-vivid`).
     *Done (branch `feat/addon-contract-access-history`):*
     - **The read.** `GET /api/v1/users/{id}/access-history?since=YYYY-MM-DD` (`handlers/access_history.go`, route beside `/access` in `router.go`), `withOperatorAuth`: never a member's, not even their own. `since` is a makerspace day from a year before today to today (`services.historyStart`, else 400 `VALIDATION_FAILED`, `details.since`). Answer: `{since, truncated, roles: [{project_id, project_name, project_name_resolved, role_key, standing, ends?, runs: [{from, to}]}]}`, `from` null where no record says when a run began, `to` null where the records give it today.

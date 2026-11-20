@@ -153,6 +153,7 @@ export function StatusDot({
   ring = false,
   fill,
   className = "",
+  ...data
 }: {
   tone: StatusTone;
   /** A token expression that replaces the fill: Insights' pins are shades of the accent no tone names. */
@@ -167,12 +168,15 @@ export function StatusDot({
    */
   ring?: boolean;
   className?: string;
+  /** A caller's own handle on the dot (`data-freshness-dot`). */
+  [attribute: `data-${string}`]: string | undefined;
 }) {
   const t = STATUS_TONE[tone];
   // The ring is the tone's colour (`edge`) drawn as an inset shadow, not a border: a dot filling from its
   // ring tints both ways at once (`motion-tint`), so it never empties between them (A-25 moment 5).
   return (
     <span
+      {...data}
       aria-hidden
       data-dot
       data-ring={ring ? "" : undefined}

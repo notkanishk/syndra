@@ -162,10 +162,14 @@ describe("each dot fills a beat behind the light, and never empties on the way",
     expect(dot).toHaveClass("dot-ring", "text-faint", "motion-tint");
     expect(dot.className).not.toMatch(/border/);
     expect(css).toMatch(/@utility dot-ring \{\s*box-shadow: inset 0 0 0 1\.5px currentColor;/);
+    // Forced colours drop every shadow: there the ring is a border in the system's colour.
+    expect(css).toMatch(
+      /@utility dot-ring \{\s*box-shadow: inset 0 0 0 1\.5px currentColor;[^}]*@media \(forced-colors: active\) \{\s*border: 1\.5px solid currentColor;/,
+    );
     // The tint carries the shadow, so the ring and the fill cross over rather than one going first.
     expect(/@utility motion-tint \{\s*transition-property:[^;]*box-shadow/.test(css)).toBe(true);
-    // A stale card's dots ring the same way.
-    expect(css).toMatch(/&\[data-stale\] \[data-dot\] \{\s*background-color: transparent;\s*box-shadow: inset 0 0 0 1\.5px currentColor;/);
+    // A stale card's dots ring the same way: the one ring, applied, so its forced-colours border comes with it.
+    expect(css).toMatch(/&\[data-stale\] \[data-dot\] \{\s*background-color: transparent;\s*@apply dot-ring;\s*\}/);
   });
 });
 
@@ -190,6 +194,12 @@ describe("a route's current step is the route's, whether or not it is lit", () =
     render(<CheckTrail label="On its way" checks={[done("Recorded."), open("Not sent yet.")]} />);
     expect(current()).toBe(1);
     expect(light()).toBeNull();
+  });
+
+  it("marks nothing before the answer: a route with no step seen has reached none", () => {
+    render(<PendingTrail act="give" />);
+    expect(steps()).toHaveLength(3);
+    expect(current()).toBe(-1);
   });
 });
 
@@ -265,21 +275,10 @@ describe("its motion", () => {
     expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.trail-light \{\s*display: none;/);
   });
 
-  it("is not one of the list's steps to the glide indicator's observer", () => {
-    const observed: Element[] = [];
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        observe(el: Element) {
-          observed.push(el);
-        }
-        disconnect() {}
-      },
-    );
+  it("is marked as no step of the list's (`data-indicator`), as the glide indicator's own marks are", () => {
+    // A safeguard: the glide's observer, which watches a group's steps, leaves out what carries it.
     render(lit([done("Recorded."), open("Not sent yet.")]));
-    expect(light()).toHaveAttribute("data-indicator");
-    expect(observed.length).toBeGreaterThan(0);
-    expect(observed).not.toContain(light());
+    expect(light()).toHaveAttribute("data-indicator", "light");
   });
 });
 
@@ -287,7 +286,6 @@ describe("no box cuts it (rule 1): sized by its own room", () => {
   it("is spent inside its block's own margins, whatever is around it, on every step", () => {
     // `mx-6 mb-1 mt-3`: from 12 above the list to 4 below it, and 4px short of the 24 at its side.
     for (const [name, checks, step] of [
-      ["the first step", [open("Not recorded yet."), open("Not sent yet."), open("Not in yet.")], 0],
       ["the second step", [done("Recorded."), open("Not sent yet."), open("Not in yet.")], 1],
       ["the last step", [done("Recorded."), done("Sent."), open("Not read back yet.")], 2],
     ] as const) {
@@ -304,6 +302,11 @@ describe("no box cuts it (rule 1): sized by its own room", () => {
     const view = render(lit([done("Recorded."), done("Sent."), open("Not read back yet.")]));
     expect(pool().height).toBeCloseTo(31);
     view.unmount();
+    // With no margin above, the second step's dot is 47 under the block's top: 94 tall, all it has above.
+    const flush = render(lit([done("Recorded."), open("Not sent yet."), open("Not in yet.")], "0px 24px 4px"));
+    expect(pool().top).toBeGreaterThanOrEqual(0);
+    expect(pool().height).toBeCloseTo(94);
+    flush.unmount();
   });
 
   it("takes its side from the room's own margin, never a number of the caller's", () => {

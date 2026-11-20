@@ -29,7 +29,8 @@ export interface TrailCheck {
  * trail): the list is named by it, and each step is read as "Step n:" with no
  * pass or fail word, because its own sentence already says how far it got. A
  * route's current step is the one it has reached, its first open (`ring`) one
- * (`aria-current="step"`).
+ * past a settled one (`aria-current="step"`): a route drawn before its answer
+ * has seen nothing, so it has reached nothing.
  *
  * `light` is a change's own (A-25 moment 5): a soft light resting on that
  * step. It moves only when the steps do, which is only on a read; each dot
@@ -50,8 +51,10 @@ export function CheckTrail({
   light?: boolean;
 }) {
   const lit = light !== undefined;
-  // The step a route has reached: its current step, whether or not a light rests on it.
-  const open = label !== undefined || lit ? checks.findIndex((check) => check.ring) : -1;
+  // The step a route has reached: its current step, whether or not a light rests on it. Reached only past a
+  // step that was seen: a route with nothing settled yet (drawn before its answer) has reached nothing.
+  const first = label !== undefined || lit ? checks.findIndex((check) => check.ring) : -1;
+  const open = first > 0 ? first : -1;
   const { ref, box } = useGlideIndicator<HTMLOListElement>(open);
   return (
     <ol ref={ref} className={`flex flex-col ${lit ? "relative isolate" : ""}`} aria-label={label ?? "Checks"}>
