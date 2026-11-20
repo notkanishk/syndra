@@ -3460,6 +3460,18 @@ end to end) found no missing function; three regressions with one root cause
         - the glow drawn under forced colours (1);
         - a queued give lit (2), and a removal lit (1);
         - the lamp at 40% (2).
+    - *The lamp carried home, review round (Opus review of c16db6fa, one blocker).*
+      - (1) **The swell now runs on a real trail.** It read `[data-going] > &`, which only matched while the pool was the lamp's own child, and the measured moves wrap it. The pool now rests at 0.86 and is 1 under `[data-going]` at any depth, with `@starting-style` 0.86, on `--duration-arrive`. A test renders a 3-step trail and holds that the pool sits inside the moves and that the rule reads its state through a descendant selector. In Chrome, on a real 3-step give, two moves deep, the pool's computed scale is 0.86 at its first frame (390 light), then 0.94, 0.97, 0.99, and 1 by 390ms, never going back.
+      - (2) **A late read walks, never jumps.** `reached` is the dot the lamp has come to, and each next beat is a beat after the last move set out. So a read that settles two steps sets the lamp out at once and the next move a beat later, each dot answering with it.
+      - (3) **Smaller fixes.** `trail-answer` only on a lit trail; no `border-radius` on the glow (the `closest-side` pool is round already). The lamp and its line sit beside the list, in one `relative` box (`data-trail`), before it, so the list holds only its steps. In Chrome every visible line of the card still hits above the light, and every dot above the lit line.
+      - (4) **Guards.** All four quarter rules are held (corner, reach, far side). `detect.js` reports a lamp missing a quarter, or one that measures nothing; in Chrome, a quarter taken out and every reach set to nought each gave their finding.
+      - Kept as it is: the `answer` keyframe would replay if a trail's container went `display: none` and back, since an animation restarts when its box is made again. No container does that today.
+      - Measured again in Chrome (253 frames, 1280 dark and 390 light):
+        - Walk: 0 backward frames, 1.08px a frame at most, the line on the lamp, 70px travelled.
+        - Glows begin at 462, 1096 and 1746ms, with the lamp 0.4, 3.5 and 3.7px from each dot.
+        - Read dots keep one lime on every frame; the lamp is inside the card on every frame; gone at 3045ms.
+        - Waiting: breath only after landing. Still: one place, gone at 2412ms.
+      - Mutation-checked, each red: the swell back on a child selector (1), no resting scale (1), a quarter rule gone (1), a quarter on the wrong corner (1), a late read jumping (5), the lamp after its list (1), and the lamp back in the list (5).
   - [x] 7w-5 Access over time (§9 vivid, Q11, read proposal Q-W3-1; the owner, 19 Nov 2026: "i dont see the access over time chart anywhere", which settles both as yes). Board part 3, frame 19 (`person-vivid`).
     *Done (branch `feat/addon-contract-access-history`):*
     - **The read.** `GET /api/v1/users/{id}/access-history?since=YYYY-MM-DD` (`handlers/access_history.go`, route beside `/access` in `router.go`), `withOperatorAuth`: never a member's, not even their own. `since` is a makerspace day from a year before today to today (`services.historyStart`, else 400 `VALIDATION_FAILED`, `details.since`). Answer: `{since, truncated, roles: [{project_id, project_name, project_name_resolved, role_key, standing, ends?, runs: [{from, to}]}]}`, `from` null where no record says when a run began, `to` null where the records give it today.

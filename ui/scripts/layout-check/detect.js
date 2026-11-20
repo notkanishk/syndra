@@ -467,8 +467,18 @@ export function detect({ tablet = 720 } = {}) {
       trail.push(`a change's light outside any result's card (${sel(lamp)})`);
       continue;
     }
-    const quarters = [...lamp.querySelectorAll("[data-quarter]")].map((q) => q.getBoundingClientRect()).filter((q) => q.width > 0 && q.height > 0);
-    if (quarters.length === 0) continue;
+    // All four quarters, each with a reach: a lamp short of one, or measuring nothing, is drawn wrong.
+    const parts = [...lamp.querySelectorAll("[data-quarter]")];
+    const missing = ["tl", "tr", "bl", "br"].filter((q) => !parts.some((part) => part.dataset.quarter === q));
+    if (missing.length) {
+      trail.push(`a change's lamp without its ${missing.join(", ")} quarter (${sel(room)})`);
+      continue;
+    }
+    const quarters = parts.map((q) => q.getBoundingClientRect());
+    if (quarters.every((q) => q.width < 1 || q.height < 1)) {
+      trail.push(`a change's lamp that measures nothing (${sel(room)})`);
+      continue;
+    }
     const p = {
       left: Math.min(...quarters.map((q) => q.left)),
       top: Math.min(...quarters.map((q) => q.top)),

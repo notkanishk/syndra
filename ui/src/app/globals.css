@@ -2102,14 +2102,17 @@ html.theme-fading *::after {
       }
     }
   }
+  /* It swells in from 86% as it is lit, by its state and not by where it sits: the moves wrap it. */
   .trail-pool {
     position: absolute;
     left: 0;
     top: 0;
+    scale: 0.86;
     transition:
       scale var(--duration-arrive) var(--ease-settle),
       opacity var(--duration-settle) var(--ease-tint);
-    [data-going] > & {
+    [data-going] & {
+      scale: 1;
       @starting-style {
         scale: 0.86;
       }
@@ -2206,7 +2209,6 @@ html.theme-fading *::after {
       position: absolute;
       inset: -17px;
       z-index: -1;
-      border-radius: var(--radius-pill);
       background: radial-gradient(closest-side, var(--pool-stops));
       opacity: 0;
     }

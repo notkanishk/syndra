@@ -86,7 +86,7 @@ beforeEach(() => {
   });
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.matches("[data-trail-room]")) return rect(0, 0, CARD.width + 2, CARD.height + 2);
-    if (this.matches("ol")) return rect(LIST.left, LIST.top, 430, 2 * STEP + 22.5);
+    if (this.matches("[data-trail]")) return rect(LIST.left, LIST.top, 430, 2 * STEP + 22.5);
     return rect(0, 0);
   });
   const of = (el: Element, value: number) => (el.matches("[data-trail-room]") ? value : 0);
@@ -313,7 +313,69 @@ describe("carried home", () => {
     expect(rule).toMatch(/transition: opacity var\(--duration-flash\) var\(--ease-flash\);/);
     expect(rule).toMatch(/&\[data-going\] \{\s*opacity: 1;\s*transition: opacity var\(--duration-arrive\) var\(--ease-settle\);/);
     expect(css).toMatch(/background: radial-gradient\(ellipse farthest-side at var\(--at\), var\(--pool-stops\)\);/);
-    expect(css).toMatch(/\[data-going\] > & \{\s*@starting-style \{\s*scale: 0\.86;/);
+    // Four quarters round the dot, each its own reach and its own far corner.
+    for (const [q, x, y, at] of [
+      ["tl", "right", "bottom", "100% 100%"],
+      ["tr", "left", "bottom", "0% 100%"],
+      ["bl", "right", "top", "100% 0%"],
+      ["br", "left", "top", "0% 0%"],
+    ]) {
+      const quarter = new RegExp(`& > \\[data-quarter="${q}"\\] \\{([^}]*)\\}`).exec(css)?.[1] ?? "";
+      expect(quarter, q).toMatch(new RegExp(`${x}: 0;\\s*${y}: 0;`));
+      expect(quarter, q).toMatch(/width: var\(--reach-(left|right)\);\s*height: var\(--reach-(up|down)\);/);
+      expect(quarter, q).toContain(`--at: ${at};`);
+    }
+  });
+
+  it("swells in from 86% on a real trail, where the moves wrap the pool: by its state, not by where it sits", () => {
+    motionInTests();
+    render(give());
+    const pool = light()!.querySelector(".trail-pool")!;
+    // Three steps: two moves, and the pool inside both.
+    expect(light()!.querySelectorAll(".trail-move")).toHaveLength(2);
+    expect(pool.closest(".trail-move")).not.toBeNull();
+    expect(pool.parentElement).not.toBe(light());
+    // So the rule that swells it reads its state through any depth: a descendant, never a child.
+    const rule = /\.trail-pool \{([\s\S]*?)\n  \}\n/.exec(css)?.[1] ?? "";
+    expect(rule).toMatch(/^\s*position: absolute;[\s\S]*?\n    scale: 0\.86;/);
+    expect(rule).toMatch(/\n    \[data-going\] & \{\s*scale: 1;\s*@starting-style \{\s*scale: 0\.86;/);
+    expect(rule).not.toMatch(/\[data-going\] > &/);
+    expect(rule).toMatch(/transition:\s*scale var\(--duration-arrive\) var\(--ease-settle\)/);
+  });
+
+  it("is beside its list, never in it: the list holds only its steps", () => {
+    render(give());
+    const list = screen.getByRole("list");
+    expect([...list.children].every((child) => child.tagName === "LI")).toBe(true);
+    const box = list.parentElement!;
+    expect(box).toHaveAttribute("data-trail");
+    expect(box).toHaveClass("relative");
+    // The lamp and its line come first, so the dots, later in the box, stand in front of the line.
+    expect([...box.children].map((c) => (c.matches("[data-trail-light]") ? "lamp" : c.matches("[data-trail-path]") ? "line" : c.tagName.toLowerCase()))).toEqual([
+      "lamp",
+      "line",
+      "ol",
+    ]);
+  });
+
+  it("walks a late read one beat at a time: a read that settles two steps never jumps them", () => {
+    motionInTests();
+    vi.useFakeTimers();
+    const view = render(lit([done("Recorded."), open("Not sent yet."), open("Not in yet."), open("Not in the add-on yet.")]));
+    tick(ARRIVE_MS + BEAT_MS + FLASH_MS);
+    expect(moves()).toBe(1);
+    view.rerender(lit([done("Recorded."), done("Sent."), done("In."), open("Not in the add-on yet.")]));
+    // It sets out at once, and the next move a beat later, never both together.
+    tick(1);
+    expect(moves()).toBe(2);
+    tick(BEAT_MS - 2);
+    expect(moves()).toBe(2);
+    tick(1);
+    expect(moves()).toBe(3);
+    // Each dot answers with the lamp: the one it was on at once, the next a beat later.
+    expect(answered()).toEqual([true, true, false, false]);
+    tick(LIGHT_LEAD_MS);
+    expect(answered()).toEqual([true, true, true, false]);
   });
 
   it("is not drawn under forced colours: no lamp, no line, no glow", () => {
@@ -482,9 +544,10 @@ describe("its place: inside the result's card (rule 1)", () => {
       />,
     );
     expect(container.querySelector("[data-trail-room]")).toHaveClass("isolate");
-    const list = container.querySelector("ol")!;
-    expect(list).toHaveClass("relative");
-    expect(list).not.toHaveClass("isolate");
+    const box = container.querySelector("[data-trail]")!;
+    expect(box).toHaveClass("relative");
+    expect(box).not.toHaveClass("isolate");
+    expect(container.querySelector("ol")).not.toHaveClass("isolate");
     // And a lit result holds no link: a violet way on would sit under 4.5:1 at the light's centre (contrast.test.ts).
     expect(container.querySelector("a")).toBeNull();
   });

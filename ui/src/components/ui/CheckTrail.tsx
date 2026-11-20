@@ -63,8 +63,8 @@ export function CheckTrail({
   // Where its walk ends: the first open step, or the last step once the change is home.
   const walk = useTrailWalk(lit, Boolean(light), first >= 0 ? first : checks.length - 1, first < 0, checks.map((check) => !check.ring));
   return (
-    <ol className={`flex flex-col ${lit ? "relative" : ""}`} aria-label={label ?? "Checks"}>
-      {lit && <TrailLamp walk={walk} steps={checks.length} />}
+    <Lit lit={lit} lamp={<TrailLamp walk={walk} steps={checks.length} />}>
+    <ol className="flex flex-col" aria-label={label ?? "Checks"}>
       {checks.map((check, i) => {
         const details = !compact || check.tone !== "healthy";
         return (
@@ -75,7 +75,7 @@ export function CheckTrail({
               <StatusDot
                 tone={check.tone}
                 ring={check.ring}
-                className={`mt-[8px] ${lit ? "light-lead relative" : ""} ${walk.answered.includes(i) ? "trail-answer" : ""}`}
+                className={`mt-[8px] ${lit ? "light-lead relative" : ""} ${lit && walk.answered.includes(i) ? "trail-answer" : ""}`}
               />
               {i < checks.length - 1 && <span aria-hidden className="mt-1.5 w-px flex-1 bg-line" />}
             </span>
@@ -101,6 +101,21 @@ export function CheckTrail({
         );
       })}
     </ol>
+    </Lit>
+  );
+}
+
+/**
+ * A lit trail's own box: the lamp and its line first (so the dots, later, stand in front of the line), then
+ * the list, which sits at the box's top left. A trail with no light is its list alone, as it always was.
+ */
+function Lit({ lit, lamp, children }: { lit: boolean; lamp: ReactNode; children: ReactNode }) {
+  if (!lit) return children;
+  return (
+    <div className="relative" data-trail>
+      {lamp}
+      {children}
+    </div>
   );
 }
 
@@ -135,26 +150,30 @@ interface TrailWalk {
  */
 function useTrailWalk(lit: boolean, on: boolean, end: number, home: boolean, read: boolean[]): TrailWalk {
   const still = stillMotion();
-  const [beat, setBeat] = useState(-1);
-  const [walked, setWalked] = useState(still);
-  // The walk reads where it ends as it goes, so only its own beats drive it.
-  const until = useRef(end);
+  // The beats. `reached` is the dot the lamp has come to; each time it comes to one short of the end it sets
+  // out for the next, and the next beat is a beat after that move set out. The first beat is after the swell.
+  // A read that moves the end on later sets the lamp out at once and walks on one beat at a time, never in a jump.
+  const [reached, setReached] = useState(-1);
+  const moves = still ? end : reached < 0 ? 0 : Math.min(reached + 1, end);
+  const setOut = useRef(0);
+  const before = useRef(moves);
   useEffect(() => {
-    until.current = end;
-  });
+    if (moves > before.current) setOut.current = Date.now();
+    before.current = moves;
+  }, [moves]);
   useEffect(() => {
-    if (!lit || walked) return;
-    if (beat >= until.current) return setWalked(true);
-    const next = setTimeout(() => setBeat((b) => b + 1), beat < 0 ? ARRIVE_MS : BEAT_MS);
+    if (!lit || still || reached >= end) return;
+    const wait = reached < 0 ? ARRIVE_MS : Math.max(0, setOut.current + BEAT_MS - Date.now());
+    const next = setTimeout(() => setReached((r) => r + 1), wait);
     return () => clearTimeout(next);
-  }, [lit, beat, walked]);
-  const moves = walked ? end : beat < 0 ? 0 : Math.min(beat + 1, end);
+  }, [lit, still, reached, end]);
+  const walked = still || reached >= end;
 
   // Each read step answers once, a beat behind the lamp reaching it.
-  const reached = walked ? end : beat;
+  const upTo = still ? end : reached;
   const [answered, setAnswered] = useState<number[]>([]);
   const dueKey = read
-    .map((r, i) => (r && i <= reached && !answered.includes(i) ? i : -1))
+    .map((r, i) => (r && i <= upTo && !answered.includes(i) ? i : -1))
     .filter((i) => i >= 0)
     .join(",");
   useEffect(() => {
@@ -200,11 +219,12 @@ function TrailLamp({ walk, steps }: { walk: TrailWalk; steps: number }) {
     null,
   );
   useLayoutEffect(() => {
+    // The trail's box (the lamp's parent), whose list sits at its top left.
     const list = self.current?.parentElement;
     if (!list) return;
     const room = list.closest<HTMLElement>("[data-trail-room]") ?? list;
     const measure = () => {
-      const dots = [...list.querySelectorAll<HTMLElement>(":scope > li")].map((li) => li.offsetTop + DOT_CENTRE);
+      const dots = [...list.querySelectorAll<HTMLElement>(":scope > ol > li")].map((li) => li.offsetTop + DOT_CENTRE);
       if (dots.length === 0) return;
       const a = list.getBoundingClientRect();
       const r = room.getBoundingClientRect();
