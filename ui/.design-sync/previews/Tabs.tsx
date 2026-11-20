@@ -30,14 +30,7 @@ export const WithCount = () => {
       value={tab}
       onSelect={setTab}
       options={[
-        {
-          value: "triage",
-          label: (
-            <>
-              Needs a decision <span style={{ fontWeight: 600, color: "var(--danger-text)" }}>7</span>
-            </>
-          ),
-        },
+        { value: "triage", label: "Needs a decision", count: 7 },
         { value: "reconciliation", label: "Side by side" },
       ]}
     />
