@@ -87,7 +87,7 @@ export function AnswerPanel({
   return (
     <section
       aria-label={panel.title}
-      className={`tint-in flex flex-col gap-4 rounded-panel border border-line bg-surface-1 px-5 py-[18px] tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-x-6`}
+      className={`panel tint-in flex flex-col gap-4 px-5 py-[18px] tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-x-6`}
     >
       <div className="flex min-w-0 flex-col gap-1.5 tablet:min-w-[240px] tablet:flex-[0_1_320px]">
         {(panel.eyebrow || toned) && (

@@ -22,6 +22,12 @@
  *   steady    an unchosen FilterPills or Tabs option whose `label-steady` is
  *             narrower than its words at the chosen weight, so choosing it would
  *             push its neighbours (20 Nov 2026). Read only: it measures, never clicks.
+ *   edge      something drawn like a card inside the page (a frame's radius or
+ *             more, a one-pixel border, a surface token's ground) that does not wear
+ *             the light under your hand (A-25 moment 2; owner, 20 Nov 2026: "this
+ *             element is not responding to the hover"). Its wearers are a button's
+ *             `rim` and the frame utilities `card` and `panel`; what is inside
+ *             `[data-no-hand]`, a dialog or a popover is out of it by design.
  *
  * Page-level horizontal scroll is reported too. `tablet` is the breakpoint below
  * which the seat wraps by design (D-1 §4 rule 9).
@@ -313,5 +319,55 @@ export function detect({ tablet = 720 } = {}) {
     if (have + 0.5 < need) steady.push(`"${txt(option)}" is ${have.toFixed(1)}px, ${need.toFixed(1)}px once chosen: choosing it moves its neighbours (${sel(option)})`);
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, pageScroll };
+  // ── edge ──
+  // A card by how it is drawn, not by its class: what grep cannot find (a frame typed by hand).
+  // The frame radii, the pill's and the surface grounds are read from the tokens themselves.
+  const edge = [];
+  const page = document.querySelector("main[data-hand]");
+  if (page) {
+    const token = (prop, value) => {
+      const probe = document.createElement("div");
+      probe.style[prop] = value;
+      document.body.appendChild(probe);
+      const got = getComputedStyle(probe)[prop];
+      probe.remove();
+      return got;
+    };
+    // A colour as sRGB and alpha, whatever syntax it is computed in (rgb, oklab, color-mix): painted
+    // onto one pixel and read back. A surface token at any strength is still that surface.
+    const ink = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    const paint = (colour) => {
+      ink.clearRect(0, 0, 1, 1);
+      ink.fillStyle = "rgba(0, 0, 0, 0)";
+      ink.fillStyle = colour;
+      ink.fillRect(0, 0, 1, 1);
+      return [...ink.getImageData(0, 0, 1, 1).data];
+    };
+    const grounds = ["--surface-0", "--surface-1", "--surface-2"].map((t) => paint(token("backgroundColor", `var(${t})`)));
+    const isGround = (colour) => {
+      const [r, g, b, a] = paint(colour);
+      return a > 0 && grounds.some(([R, G, B]) => Math.abs(r - R) <= 4 && Math.abs(g - G) <= 4 && Math.abs(b - B) <= 4);
+    };
+    const radius = Math.min(parseFloat(token("borderTopLeftRadius", "var(--radius-card)")), parseFloat(token("borderTopLeftRadius", "var(--radius-panel)")));
+    const pill = parseFloat(token("borderTopLeftRadius", "var(--radius-pill)"));
+    const CORNERS = ["borderTopLeftRadius", "borderTopRightRadius", "borderBottomRightRadius", "borderBottomLeftRadius"];
+    const SIDES = ["borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth"];
+    for (const el of page.querySelectorAll("*")) {
+      const cs = getComputedStyle(el);
+      // A frame's corners: as round as a card or a panel, never a pill (a pill is a control, not a card).
+      const round = Math.max(...CORNERS.map((c) => parseFloat(cs[c]) || 0));
+      if (round < radius || round >= pill) continue;
+      // A hairline all round: every side drawn, none heavier than a hairline.
+      if (!SIDES.every((side) => { const w = parseFloat(cs[side]); return w > 0 && w <= 1.5; })) continue;
+      // On a surface: a surface token at any alpha, or a drawn ground (a gradient) on a frame's shape.
+      const onSurface = isGround(cs.backgroundColor) || cs.backgroundImage !== "none";
+      if (!onSurface) continue;
+      if (el.matches(".rim, .card, .panel")) continue;
+      if (el.closest('[data-no-hand], [role="dialog"], [popover], .shadow-popover')) continue;
+      if (!vis(el)) continue;
+      edge.push(`"${txt(el)}" is drawn like a card and does not wear the edge (${sel(el)})`);
+    }
+  }
+
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, pageScroll };
 }

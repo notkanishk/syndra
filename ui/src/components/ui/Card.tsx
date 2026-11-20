@@ -28,6 +28,7 @@ export function Card({
 }) {
   return (
     <div
+      // The `card` frame carries the light under your hand (A-25 moment 2); a stale card is refused it.
       className={`card overflow-hidden ${className}`}
       data-stale={stale || undefined}
       data-recedes={stale === undefined ? undefined : ""}

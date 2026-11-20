@@ -99,7 +99,7 @@ Measured in the prototype, which has the same shell: the light is the same stren
 
 1. **The boundless glide** (built in the worktree; to be measured on staging), **with the rail's two repairs.** The repairs (moment 4) are faults in what is live today, so they do not wait for a light.
 2. The member's room.
-3. Light under your hand: the edge, on `Card` and on `Button` in one change, because they share one utility and one listener. Home and People first.
+3. Light under your hand: the edge, on every card frame and on `Button` in one change, because they share one rule and one listener. On every route (the owner, 20 Nov, on staging: "only home page shows the effect").
 4. The lamp breathes.
 5. Your place in the rail: the glide, with its light. After the lamp, because the rail's light is the lamp's, falling on your place.
 6. The trail lights.
@@ -203,6 +203,7 @@ In the prototype behind a switch (`html[data-btn]`), beside the card, at true si
 
 - **Frequency.** Constant, which allows colour only. Nothing in the page moves.
 - **Cost.** M: one utility, one listener, one class each on `Card` and three `Button` variants.
+- **As built** (20 Nov, after the owner's two staging rounds: "these dont show the effect. and only home page shows the effect", then "this element is not responding to the hover. please look into other such ui elements as well"). Worn by every `card` and `panel` frame (so a frame cannot be drawn without it: `Card`, the stat tiles, the person page's strips, Insights' panels, the calm line on Home), by the lane map (`rim rim-card`, on its own ground), and by `Button`'s accent, outline and ghost; on every route, by one block in `globals.css` and one listener. Excluded: a stale card, a first-day card, a placeholder (a frame whose content is still a skeleton), an error (`ErrorBoundary`), a Notice, Not open yet, a consent's body on a page, anything in a dialog or popover, danger, dangerConfirm, disabled and pending buttons, fields, the rail and the column headings. Home's all-clear panel keeps it: it is a card. The layout check's `edge` rule finds, in a real browser, anything drawn like a card that does not wear it.
 
 ### 3 · The lamp breathes
 

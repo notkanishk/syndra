@@ -188,6 +188,10 @@ describe("a person's network storage (A-10 Part 1)", () => {
     expect(screen.getByText(/Home folder and Folders below are what it said at/)).toBeInTheDocument();
     expect(screen.getByText(/Offline since .* · last read/)).toBeInTheDocument();
     expect(within(rowOf("Folders")).getByText("renders")).toBeInTheDocument();
+    // The card is stale (A-13 (d)): it recedes, its dots become rings, and the hand's light refuses it.
+    const card = screen.getByText("TrueNAS is offline").closest(".card")!;
+    expect(card).toHaveAttribute("data-stale");
+    expect(card.className).not.toMatch(/!border-line-strong|!bg-canvas|!shadow-none/);
   });
 
   it("offline with no last read: the Notice alone, and no numbers", () => {

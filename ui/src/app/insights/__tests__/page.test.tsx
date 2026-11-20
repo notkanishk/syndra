@@ -807,7 +807,7 @@ describe("the answers", () => {
     expect(panel).toHaveTextContent("The rest: 11 people would stay as they are.");
     // A warn answer is a Notice-toned line, not a tinted box.
     expect(panel.className).not.toContain("warn-soft");
-    expect(panel.className).toContain("bg-surface-1");
+    expect(panel).toHaveClass("panel"); // the frame, on --surface-1, wearing the edge
     expect(within(panel).getByText(/What if/).className).toContain("text-warn-text");
     expect(within(panel).getByRole("link", { name: /Change it on Lab Tech/ })).toHaveAttribute("href", "/bundles/b1");
   });

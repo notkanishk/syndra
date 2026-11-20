@@ -45,7 +45,7 @@ describe("the answer panel", () => {
   ] as const)("is one surface for a %s answer, told by a toned line and not a tinted box", (tone, text) => {
     render(<AnswerPanel panel={panel(tone)} />);
     const box = screen.getByRole("region", { name: "Title" });
-    expect(box.className).toContain("bg-surface-1");
+    expect(box).toHaveClass("panel"); // the frame, on --surface-1, wearing the edge
     expect(box.className).not.toMatch(/-soft/);
     expect(screen.getByText("Eyebrow").className).toContain(text);
     expect(box.querySelectorAll("[data-dot]").length).toBeGreaterThanOrEqual(2); // the line's dot, and the sentence's

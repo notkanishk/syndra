@@ -20,8 +20,10 @@ import { resolve } from "node:path";
  * that answer is missing.
  */
 
-const utility = (name: string) => {
-  const start = css.indexOf(`@utility ${name} {`);
+/** The edge under your hand (A-25 moment 2): one block, worn by every card frame. */
+const edgeBlock = () => utility("", "@layer components {", css.lastIndexOf("@layer components {", css.indexOf(":where(.rim, .card, .panel) {")));
+const utility = (name: string, opener = `@utility ${name} {`, start = css.indexOf(opener)) => {
+  if (start < 0) throw new Error(`not in the CSS: ${opener}`);
   let depth = 0;
   for (let i = css.indexOf("{", start); i < css.length; i += 1) {
     if (css[i] === "{") depth += 1;
@@ -85,7 +87,7 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
 
   it("falls to nothing on the eased curve, never a straight ramp to a rim (A-25 §2 rule 1, §3)", () => {
     // The stops, once: the strength, then 0.74, 0.44, 0.2 and 0.06 of it at 20, 42, 62 and 82%, then nothing.
-    const stops = /:where\(\.hour-light, \.lit-card\) \{\s*--pool-stops: ([^;]+);/.exec(css)?.[1] ?? "";
+    const stops = /:where\(\.hour-light, \.lit-card, \.rim, \.card, \.panel\) \{\s*--pool-c: var\(--accent\);\s*--pool-stops: ([^;]+);/.exec(css)?.[1] ?? "";
     // Split at the commas between stops, not those inside a stop's own brackets.
     const parts: string[] = [""];
     let depth = 0;
@@ -96,18 +98,20 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
     }
     for (const [i, part] of parts.entries()) parts[i] = part.trim().replace(/\s+/g, " ");
     expect(parts).toHaveLength(6);
-    expect(parts[0]).toBe("color-mix(in srgb, var(--accent) var(--pool-k), transparent)");
+    expect(parts[0]).toBe("color-mix(in srgb, var(--pool-c) var(--pool-k), transparent)");
     const eased: Array<[string, string]> = [["0.74", "20%"], ["0.44", "42%"], ["0.2", "62%"], ["0.06", "82%"]];
     for (const [i, [share, at]] of eased.entries()) {
-      expect(parts[i + 1]).toBe(`color-mix(in srgb, var(--accent) calc(var(--pool-k) * ${share}), transparent) ${at}`);
+      expect(parts[i + 1]).toBe(`color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * ${share}), transparent) ${at}`);
     }
     expect(parts[5]).toBe("transparent");
     // Every light's gradient draws those stops and nothing else: no ramp to `transparent N%`.
-    for (const name of ["hour-light", "lit-card"]) {
-      const body = utility(name);
+    for (const [name, body] of [["hour-light", utility("hour-light")], ["lit-card", utility("lit-card")], ["the edge", edgeBlock()]] as const) {
       const gradients = [...body.matchAll(/radial-gradient\(([^;]*)\);/g)].map((m) => m[1]);
       expect(gradients.length, name).toBeGreaterThan(0);
-      for (const g of gradients) expect(g, name).toMatch(/^ellipse [^,]+, var\(--pool-stops\)\)?$/);
+      for (const g of gradients) {
+        expect(g, name).toMatch(/^(ellipse|circle) .*, var\(--pool-stops\)\)?$/);
+        expect(g, name).not.toMatch(/color-mix|transparent|rgb|#/);
+      }
       expect(body, name).not.toMatch(/transparent \d+%/);
     }
   });

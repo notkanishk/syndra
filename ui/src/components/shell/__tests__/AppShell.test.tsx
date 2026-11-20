@@ -69,3 +69,16 @@ describe("AppShell scrolling", () => {
   });
 });
 
+
+describe("AppShell, the light under your hand (A-25 moment 2)", () => {
+  // Everywhere (owner on staging, 20 Nov: "only home page shows the effect"): the shell's main carries
+  // the scope on every route; what must not light opts out where it is drawn.
+  it("marks main on every route (the shell does not ask which)", () => {
+    const { container } = render(
+      <AppShell session={{ id: "u1", role: "admin" } as SessionUser}>
+        <p>page</p>
+      </AppShell>,
+    );
+    expect(container.querySelector("main")).toHaveAttribute("data-hand", "");
+  });
+});

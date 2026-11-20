@@ -34,7 +34,8 @@ export function useTintAfterSkeleton(loading: boolean): string {
 /** Convenience: a stack of card-sized skeletons. */
 export function SkeletonCardList({ count = 3 }: { count?: number }) {
   return (
-    <div className="space-y-3" aria-busy="true" aria-label="Loading this list">
+    // Placeholders are not answered by light (A-25 moment 2): nothing in them to act on yet.
+    <div className="space-y-3" aria-busy="true" aria-label="Loading this list" data-no-hand="">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="rounded-block border border-line p-4 space-y-2">
           <Skeleton className="h-5 w-1/3" />

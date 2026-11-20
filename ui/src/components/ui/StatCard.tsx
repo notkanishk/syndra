@@ -25,9 +25,10 @@ export function StatCard({
   tone?: "neutral" | "accent" | "warn" | "danger";
   /**
    * The list this number counts (proposed/StatCard-href.md): the whole card is
-   * the link, named by its label, with a 1px accent ring on hover and no arrow.
-   * Pressed, --tint-3 is a second background layer over the card's own surface,
-   * never in place of it (A-08 §5).
+   * the link, named by its label, and no arrow. Under the hand it wears the edge
+   * like any card (A-25 moment 2), never a flat ring all round. Pressed, --tint-3
+   * is a second background layer over the card's own surface, never in place of
+   * it (A-08 §5).
    */
   href?: string;
 }) {
@@ -47,13 +48,15 @@ export function StatCard({
       <p className="mt-1.5 measure text-small leading-[1.5] text-muted">{detail}</p>
     </>
   );
+  // A tile lights like any card, a link or not (A-25 moment 2: cards light, not only links): its
+  // `card` frame carries the edge.
   const frame = "card min-w-[260px] flex-1 px-5 py-4";
   return href ? (
     <AdvancedLink
       href={href}
       aria-label={label}
       data-stat-tile
-      className={`${frame} block text-inherit no-underline motion-tint hover:shadow-[0_0_0_1px_var(--accent-line)] active:[background-image:linear-gradient(var(--tint-3),var(--tint-3))]`}
+      className={`${frame} block text-inherit no-underline motion-tint active:[background-image:linear-gradient(var(--tint-3),var(--tint-3))]`}
     >
       {body}
     </AdvancedLink>

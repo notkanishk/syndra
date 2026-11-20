@@ -209,7 +209,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
   }
 
   return (
-    <Card id={`sys-${view.target}`} className={`scroll-mt-4 ${stale ? "!border-line-strong !bg-canvas !shadow-none motion-tint" : ""}`}>
+    <Card id={`sys-${view.target}`} stale={stale} className="scroll-mt-4">
       <CardTop target={view.target} name={label} status={<Status view={view} />} />
       <OfflineNotice view={view}>
         {view.last_known

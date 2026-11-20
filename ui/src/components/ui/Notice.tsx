@@ -102,6 +102,8 @@ export function Notice({
   const box = (
     <div
       role={blocking ? "alert" : "status"}
+      // A Notice is not answered by light (A-25 moment 2): its buttons keep their built hover only.
+      data-no-hand=""
       className={`flex items-start gap-3.5 rounded-panel border px-5 py-4 tablet:py-3.5 ${t.box} ${className}`}
     >
       <span
