@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setMediaQuery } from "@/test-utils/media";
@@ -75,5 +75,31 @@ describe("Insights Map and List switch", () => {
     query = "";
     rerender(<Mount />);
     expect(lanes(container).every((lane) => lane.hasAttribute("data-settled"))).toBe(true);
+  });
+});
+
+/**
+ * The toolbar's first row is the question, the lens pills and the view switch,
+ * whatever lens is chosen. A lens's own choice is a line beneath it: in the row,
+ * its arrival pushed the pills you had just clicked sideways (owner, 20 Nov 2026).
+ */
+describe("Insights toolbar", () => {
+  beforeEach(() => {
+    setMediaQuery("(max-width: 44.99rem)", false);
+    setMediaQuery("(max-width: 67.49rem)", false);
+  });
+
+  it.each([
+    ["lens=ending", () => screen.getByRole("radiogroup", { name: "How far ahead" })],
+    ["lens=group", () => screen.getByRole("combobox", { name: "Which group" })],
+    ["lens=group&group=team%3Alasers", () => screen.getByRole("textbox", { name: "Team name" })],
+  ])("keeps %s's choice out of the first row, on a line of its own beneath it", (q, choice) => {
+    query = q;
+    const { container } = render(<Mount />);
+    const row = container.querySelector<HTMLElement>("[data-toolbar]")!;
+    expect(within(row).getByRole("radiogroup", { name: "Lens" })).toBeInTheDocument();
+    expect(within(row).getByRole("radiogroup", { name: "View" })).toBeInTheDocument();
+    expect(row).not.toContainElement(choice());
+    expect(row.nextElementSibling).toContainElement(choice());
   });
 });

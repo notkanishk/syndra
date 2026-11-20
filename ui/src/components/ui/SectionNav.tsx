@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { Chip, Count, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { SteadyLabel } from "@/components/ui/SteadyLabel";
 import { GlideIndicator, glideTo, useGlideIndicator } from "@/lib/motion";
 
 /**
@@ -203,7 +204,7 @@ export function SectionPill<T extends NavSection>({
               }`}
             >
               {section.tone && <StatusDot tone={section.tone} />}
-              {section.label}
+              <SteadyLabel text={section.label} />
               {section.count !== undefined && (
                 <span className="font-medium text-faint">
                   <Count n={section.count} />

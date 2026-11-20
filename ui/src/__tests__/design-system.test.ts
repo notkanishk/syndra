@@ -616,16 +616,34 @@ describe("design system", () => {
     );
   });
 
-  // A transition on left, top, width or height lays the group out on every
-  // frame of the glide (D-1, owner 18 Nov 2026). Transform only, on settle.
-  it("glides a control's indicator by transform alone", () => {
+  // A transition on left or top moves the indicator by layout (D-1, owner 18
+  // Nov 2026). Its place is a transform; its size is width and height, which
+  // lay out the one out-of-flow element and nothing else. It is never drawn in
+  // parts and scaled, whose seams showed as two lines (20 Nov 2026).
+  it("glides a control's indicator by transform, sized by its own width and height", () => {
     const css = readFileSync(GLOBALS_CSS, "utf8");
     const glide = atRuleBody(css, "@utility indicator-glide");
     expect(glide, "globals.css must declare an indicator-glide utility").not.toBe("");
-    expect(/transition-property:\s*([^;]+);/.exec(glide)?.[1].trim()).toBe("transform");
+    expect(/transition-property:\s*([^;]+);/.exec(glide)?.[1].trim()).toBe("transform, width, height");
     expect(glide).not.toMatch(/transition:\s/);
     expect(glide).toContain("var(--duration-settle)");
     expect(glide).toContain("var(--ease-settle)");
+  });
+
+  // An option turning semibold widened and pushed its neighbours (owner, 20 Nov
+  // 2026). `label-steady` reserves the label's words at that weight, in a
+  // pseudo-element that takes no height, is never seen and is not read out.
+  it("reserves a label's selected width in an unseen, heightless copy of its words", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const steady = atRuleBody(css, "@utility label-steady");
+    expect(steady, "globals.css must declare a label-steady utility").not.toBe("");
+    expect(steady).toMatch(/flex-direction:\s*column/);
+    const after = steady.slice(steady.indexOf("&::after"));
+    expect(after).toMatch(/content:\s*attr\(data-label\)/);
+    expect(after).toMatch(/height:\s*0/);
+    expect(after).toMatch(/visibility:\s*hidden/);
+    expect(after).toMatch(/overflow:\s*hidden/);
+    expect(after).toMatch(/font-weight:\s*--theme\(--font-weight-semibold\)/);
   });
 
   // The section pill's selected fill vanished in light theme (staging, 18 Nov

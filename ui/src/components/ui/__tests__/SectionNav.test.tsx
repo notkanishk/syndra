@@ -129,7 +129,7 @@ describe("the floating pill", () => {
     expect(pill().querySelectorAll("[data-indicator]")).toHaveLength(1);
     const links = within(pill()).getAllByRole("link");
     expect(links.every((a) => !a.classList.contains(PILL_FILL))).toBe(true);
-    expect(pill().querySelector("[data-indicator] > *")).toHaveClass(PILL_FILL);
+    expect(pill().querySelector("[data-indicator]")).toHaveClass(PILL_FILL);
   });
 
   it("moves the fill, and turns the arrows, as the reader passes into the next section", () => {
