@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -46,8 +45,8 @@ func TestAnOutageLeavesTheRowToTheBackgroundDrainLive(t *testing.T) {
 	var id string
 	if err := pool.QueryRow(ctx, `
 		INSERT INTO propagation_outbox (op_type, user_id, payload_json, idempotency_key, initiated_by, source, target)
-		VALUES ('apply', 'u-defer-live', '{}', $1, 'tester', 'direct', $2) RETURNING id`,
-		"defer-live-"+time.Now().Format(time.RFC3339Nano), target).Scan(&id); err != nil {
+		VALUES ('apply', 'u-defer-live', '{}', gen_random_uuid(), 'tester', 'direct', $1) RETURNING id`,
+		target).Scan(&id); err != nil {
 		t.Fatalf("seed row: %v", err)
 	}
 	t.Cleanup(func() {
