@@ -63,9 +63,11 @@ type statsMeta struct {
 	// first midnight at or after it: nothing before was observed recorded.
 	Recording map[string]time.Time `json:"recording,omitempty"`
 	// LastSeen is, per share, the last collection that saw it record
-	// everyone: a sighting more than 2*STATS_COLLECT_EVERY after it breaks
-	// the chain.
-	LastSeen map[string]time.Time `json:"last_seen,omitempty"`
+	// everyone, and Every the STATS_COLLECT_EVERY it ran under: a sighting
+	// more than 3 x the larger of that and the current one after it breaks
+	// the chain, so changing the setting never does.
+	LastSeen map[string]time.Time     `json:"last_seen,omitempty"`
+	Every    map[string]time.Duration `json:"every,omitempty"`
 	// Before is, per share, the reason the days before Recording are gaps
 	// when it is not reasonNotYet: reasonNAS or reasonUnwatched.
 	Before map[string]string `json:"before,omitempty"`

@@ -245,7 +245,7 @@ type statsClock struct {
 	// statsMaxReplyBytes. A seam, so a test sees several pages.
 	pageBytes int
 	// every is STATS_COLLECT_EVERY: a share's chain of sightings breaks
-	// when two of them lie more than 2*every apart (coverSessions).
+	// when two of them lie more than 3*every apart (coverSessions).
 	every time.Duration
 }
 

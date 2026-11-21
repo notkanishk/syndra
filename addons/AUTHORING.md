@@ -2561,14 +2561,17 @@ has the full map.
   account's uid, never its name. A share whose auditing does not record
   everyone is a gap, never a zero. A share's day counts only inside an
   unbroken chain of collections that each saw it record everyone, begun at or
-  before that day's midnight. The chain breaks when a sighting comes more than
-  twice `STATS_COLLECT_EVERY` after the last, whatever the cause (the add-on
-  stopped, the NAS unreadable), and at once when auditing is seen narrowed or
-  the SMB accounts cannot be read; a collection that read the share settings
-  but not the log still counts as a sighting. The next collection that sees
-  everyone begins it again at its own time; the days before say "The NAS
-  could not be read", "Not counted: Syndra wasn't watching this share then",
-  or, after narrowing or on a first sighting, "Not counted: this share wasn't
+  before that day's midnight. One rule: the chain breaks only when the share
+  is seen narrowed or no longer enabled, or when a sighting comes more than
+  3 x `STATS_COLLECT_EVERY` (the larger of the setting then and now) after
+  the last, whatever kept the runs between from seeing it; a run that cannot
+  read the SMB accounts a narrowed share needs, or the bindings, fails like
+  any unread NAS, and one that read the share settings but not the log still
+  counts as a sighting. The next collection that sees everyone begins it
+  again at its own time; the days before say "The NAS could not be read"
+  (after a failed run), "Not counted: Syndra wasn't watching this share then"
+  (after no run), or, after narrowing, on a first sighting or on the first
+  run after an upgrade, "Not counted: this share wasn't
   yet seen recording everyone". The collector runs every
   `STATS_COLLECT_EVERY` (`PT1H`; `0` switches it off), reads only, and keeps
   its days in the add-on's bbolt store, in the container's `TZ`

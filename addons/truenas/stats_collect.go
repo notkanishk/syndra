@@ -25,9 +25,10 @@ import (
 //     pages of statsAuditPage rows, at most statsAuditPages of them. A
 //     session is a distinct `session` per account, share and day. Only a
 //     share whose auditing records everyone is counted, from the first day
-//     that began inside an unbroken chain of runs that each saw it do so
-//     (statsMeta.Recording, LastSeen; coverSessions); any other share or
-//     day is a gap.
+//     that began inside an unbroken chain of sightings of it doing so, a
+//     chain broken only by seeing it narrowed or gone, or by two sightings
+//     more than 3 x STATS_COLLECT_EVERY apart (statsMeta.Recording,
+//     LastSeen, Every; coverSessions); any other share or day is a gap.
 //     The days are re-read from the log until they are final, so a day the
 //     NAS was unreachable is filled once it answers. A run catching up
 //     first reads the oldest row the log keeps: a day it no longer keeps
@@ -71,13 +72,9 @@ func collectStats(ctx context.Context, s *server, every time.Duration) {
 func (s *server) collectStatsOnce() {
 	now := s.stats.clock()
 	snap, errAccounts := s.readSubjects()
-	bound, err := s.boundUIDs(snap.Subjects)
-	if err != nil {
-		log.Printf("[STATS] the bindings could not be read, nothing collected: %v", err)
-		return
-	}
+	bound, errBound := s.boundUIDs(snap.Subjects) // unread, the run fails like any other
 	shares, errShares := s.enabledShares()
-	failed := errors.Join(errAccounts, errShares)
+	failed := errors.Join(errAccounts, errBound, errShares)
 	s.collectSessions(now, snap, shares, bound, failed)
 	mounts, errMounts := s.datasetMounts()
 	s.collectUsage(now, snap, shares, mounts, bound, errors.Join(failed, errMounts))
@@ -201,9 +198,9 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	if failed == nil {
 		audits, failed = s.readShareAudit()
 	}
-	var counted, unknown map[string]bool
+	var counted map[string]bool
 	if failed == nil { // the settings were seen: the chain is judged now, whatever fails below
-		counted, unknown = s.coverSessions(&meta, audits, now)
+		counted, failed = s.coverSessions(&meta, audits, now)
 	}
 	if failed == nil && from < today { // catching up: is the log still there?
 		var oldest string
@@ -246,9 +243,7 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 		for _, sh := range shares {
 			if _, ok := gone[d]; !ok && !covered(sh.Name, d) && d < until {
 				why := reasonAudited
-				if unknown[sh.Name] {
-					why = reasonNAS
-				} else if counted[sh.Name] {
+				if counted[sh.Name] {
 					why = reasonNotYet
 					if i := slices.IndexFunc(gapReasons, func(r gapReason) bool { return r.text == meta.Before[sh.Name] }); i >= 0 {
 						why = gapReasons[i]
@@ -327,72 +322,60 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 
 // coverSessions judges, from this run's read of the share settings, each
 // share's chain of sightings into meta, and says which shares record
-// everyone (counted) and which could not be told (unknown).
+// everyone. A share whose lists narrow it is checked against every SMB
+// account; when they cannot be read it has no sighting this run, and the
+// error fails the run (failedRun), as any unread NAS does.
 //
-// A share whose lists narrow it is checked against every SMB account; when
-// they cannot be read, it is not counted, and its gap says the NAS could not
-// be read, never that auditing leaves someone out.
-//
-// One rule: coverage lasts across an unbroken chain of runs that each saw
-// the share record everyone (Recording the first, LastSeen the latest). It
-// breaks whenever a sighting comes more than 2*STATS_COLLECT_EVERY after the
-// last, whatever the cause (the add-on stopped, the NAS unreadable, failed
-// runs), and that run begins it again at its own time. A run that saw the
-// settings but failed after still counts as a sighting. Narrowing, or the
-// SMB accounts unread, ends it at once.
-func (s *server) coverSessions(meta *statsMeta, audits []shareAudit, now time.Time) (counted, unknown map[string]bool) {
-	counted, unknown = map[string]bool{}, map[string]bool{}
+// One rule: a share's coverage lasts across an unbroken chain of sightings
+// (Recording the first, LastSeen the latest), and breaks only when a share is
+// seen narrowed or no longer enabled, or when a sighting comes more than
+// 3 x STATS_COLLECT_EVERY (the larger of this run's and the last sighting's,
+// Every) after the last, whatever kept the runs between from seeing it.
+func (s *server) coverSessions(meta *statsMeta, audits []shareAudit, now time.Time) (map[string]bool, error) {
+	counted, unread := map[string]bool{}, map[string]bool{}
 	var smb []map[string]bool
 	var smbErr error
 	if slices.ContainsFunc(audits, func(a shareAudit) bool { return a.Enabled && a.narrowed() }) {
-		if smb, smbErr = s.smbMemberships(); smbErr != nil {
-			log.Printf("[STATS] %s: the SMB accounts could not be read, a share whose audit lists narrow it is not counted: %v", metricSessions, smbErr)
-		}
+		smb, smbErr = s.smbMemberships()
 	}
 	for _, a := range audits {
 		if a.Enabled && a.narrowed() && smbErr != nil {
-			unknown[a.Name] = true
+			unread[a.Name] = true // no sighting this run: the time rule decides
 			continue
 		}
 		counted[a.Name] = a.recordsEveryone(smb)
 	}
-	if meta.Recording == nil {
-		meta.Recording = map[string]time.Time{}
+	for _, m := range []*map[string]time.Time{&meta.Recording, &meta.LastSeen} {
+		if *m == nil {
+			*m = map[string]time.Time{}
+		}
 	}
-	if meta.LastSeen == nil {
-		meta.LastSeen = map[string]time.Time{}
+	if meta.Every == nil {
+		meta.Every = map[string]time.Duration{}
 	}
 	if meta.Before == nil {
 		meta.Before = map[string]string{}
 	}
-	// end ends a share's chain; why is the reason its days before the next
-	// one say, "" for reasonNotYet.
-	end := func(name, why string) {
+	end := func(name string) {
 		delete(meta.Recording, name)
 		delete(meta.LastSeen, name)
-		if why == "" {
-			delete(meta.Before, name)
-		} else {
-			meta.Before[name] = why
-		}
+		delete(meta.Every, name)
+		delete(meta.Before, name)
 	}
 	for name := range meta.Recording {
-		if _, seen := counted[name]; !seen && !unknown[name] { // no longer an enabled share
-			end(name, "")
-		}
-	}
-	for name := range unknown {
-		if _, held := meta.Recording[name]; held {
-			end(name, reasonNAS.text)
+		if _, seen := counted[name]; !seen && !unread[name] { // no longer an enabled share
+			end(name)
 		}
 	}
 	for name, ok := range counted {
 		if !ok {
-			end(name, "")
+			end(name)
 			continue
 		}
-		if _, held := meta.Recording[name]; !held || now.Sub(meta.LastSeen[name]) > 2*s.stats.every {
-			if held { // a gap in sightings: failed runs mean the NAS, none at all that nothing watched
+		last, sighted := meta.LastSeen[name]
+		if _, held := meta.Recording[name]; !held || !sighted || now.Sub(last) > 3*max(meta.Every[name], s.stats.every) {
+			delete(meta.Before, name) // a first sighting, or a store from before LastSeen: reasonNotYet
+			if held && sighted {      // a gap in sightings: failed runs mean the NAS, none at all that nothing watched
 				// ponytail: Failing is the run before this one, so a stop that followed a failed run reads as the NAS.
 				meta.Before[name] = reasonUnwatched.text
 				if meta.Failing {
@@ -401,9 +384,9 @@ func (s *server) coverSessions(meta *statsMeta, audits []shareAudit, now time.Ti
 			}
 			meta.Recording[name] = now
 		}
-		meta.LastSeen[name] = now
+		meta.LastSeen[name], meta.Every[name] = now, s.stats.every
 	}
-	return counted, unknown
+	return counted, smbErr
 }
 
 // collectUsage samples today's levels: per share, and in home folders. A
