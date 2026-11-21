@@ -429,7 +429,7 @@ Already in the product and already right: "Evening, Kanishk. Three things need y
 - **Light on a success outcome** beyond the trail. The lift and the bloom are built and enough.
 - **Shimmer, a moving gradient, a glow that follows the scroll.** CRAFT §10.
 - **A farewell at sign-out.** The door is its own screen and has its own light.
-- **Later, for consistency, not a moment (accepted, Q10):** `flash` is a rectangle of light (`globals.css:477`) and `lit-card`'s pool is cut by its card's top (`globals.css:1207-1224`). Both take the edgeless falloff in one small pass once the rest are judged.
+- **Q10, decided (owner, 21 Nov 2026): both kept as they were.** `flash` is a tint, not a light: a flat `--accent-soft` on the thing that changed, ending on its own ground ("okay with A"). A cue that points at one thing takes that thing's shape (RULES G32). The lit card keeps its pool centred on the card's top edge, cut there by its card, by the owner's choice: "for lit card the 'before' one looks more visually appealing". It is the one written exception to "no box cuts a light".
 
 ## 7 · No box cuts a light: the audit
 
@@ -492,7 +492,7 @@ Worktree `feat/addon-contract-a24-w4` at `7c487295`. Nothing in this table was m
 | 5 | The trail itself | `CheckTrail.tsx:31` | None: it has no overflow. | None. |
 | 6 | Go to's scrim | `Modal.tsx:371` (`fixed inset-0`) | The scrim is the window. A pool taller than twice its centre's height is cut at the window's top. | Sized by the window. |
 | 7 | The card | `Card.tsx:31`; the dot at `states/index.tsx:139`, inside `px-6` (`:133`) | The ember reaches 20px from the dot's centre, which is about 27px inside the card. Clear by 7px. | Keep the ember at 20px or under. |
-| Later | The lit card | `globals.css:1207-1230` | Its pool is centred on the card's top edge: cut at full strength by its own card, by design. | Q10's pass. |
+| Kept | The lit card | `globals.css` (`lit-card`) | Its pool is centred on the card's top edge: cut at full strength by its own card, by design. | Kept by the owner, 21 Nov 2026 (Q10). |
 
 ### 7.4 How the build guards it
 

@@ -478,9 +478,6 @@
     from {
       background-color: var(--accent-soft);
     }
-    to {
-      background-color: transparent;
-    }
   }
 
   /* A chosen chip rises 4px into its seat (`chip-in`, S15). Never a number:
@@ -1946,7 +1943,7 @@ html.theme-fading *::after {
 
 /* flash · 900ms, once — a value changed while you were on the page. Never on
    load: a page that flashes everything on arrival has told you nothing about
-   what moved. */
+   what moved. The row tints and returns; a tint has its thing's shape, a light has none. */
 @utility flash {
   animation: flash var(--duration-flash) var(--ease-flash) 1;
 }
