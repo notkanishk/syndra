@@ -56,15 +56,22 @@ Run the stages the request needs, in this order. Each ends on its criterion.
 1. **Context.** Run `"$HOME/.claude/skills/impeccable/scripts/impeccable" context --target <path>` once from the repo root, then read the Syndra sources above that the surface touches. Done when you can state, in three lines, who uses the surface, the job it does, its frequency class, and its constraints.
 2. **Shape** (new surface or flow): impeccable `shape`. Done when the task, every state (empty, loading, partial, error, stale, offline, forced colours, reduced motion, phone) and every edge case is listed, and every decision that is the owner's is a numbered question.
 3. **Options** (when the answer is "what should it look like"): 3 to 5 structurally different variants, per prototype. Each one is calm at rest, with one moment of delight. Ground each in a cited reference (a product, a guideline, a study). Done when a builder could build any of them with no further question: layout at 1440 and 390, states, keyboard map, motion with durations and reduced-motion form, tokens named.
-4. **Prototype** (every option the owner judges; BRIDGE step 3a): one self-contained `design/<name>-prototype.html` with tokens copied from `globals.css` as CSS variables in both themes, the options behind a small switch, and the recommendation marked. Add theme and reduced-motion switches. Open it in a headless browser at 1440 and 390, both themes, and **look**: measure contrast (≥4.5:1 text), steadiness (a clicked control never moves), clipping (nothing cut at an edge), and console errors. Done when the screenshots, seen with a critical eye for elegance, hold up, and the numbers pass.
-5. **Review** (after a build, on staging or a local replay). Capture 1440 and 390, light and dark. Then:
-   - impeccable `critique` (its Assessment A and B as two sub-agents);
+4. **Prototype** (every option the owner judges; BRIDGE step 3a): one self-contained `design/<name>-prototype.html` with tokens copied from `globals.css` as CSS variables in both themes, the options behind a small switch, and the recommendation marked. Add theme and reduced-motion switches. Look at it yourself at 1440 and 390, in both themes, with a critical eye for elegance: that judgement is design. A `sonnet` agent measures, in a headless browser:
+   - contrast (≥4.5:1 for text);
+   - steadiness (a clicked control never moves);
+   - clipping (nothing cut at an edge);
+   - console errors.
+
+   Done when the screenshots hold up and the numbers pass.
+5. **Review** (after a build, on staging or a local replay). **The reviewing is Opus's; the judging is yours.** You do not run the checks in your own context. A `sonnet` agent captures 1440 and 390, light and dark, into `.impeccable/review/`. Then `opus` agents, each with a narrow brief, run:
+   - impeccable `critique` (Assessment A on `opus`, Assessment B on `sonnet`);
    - impeccable `audit` (P0–P3);
    - web-design-guidelines over the changed source;
    - a11y-debugging when a browser is up;
-   - for motion, `impeccable-motion-reviewer`.
+   - for motion, `impeccable-motion-reviewer`;
+   - `impeccable-finish-reviewer`, with the captures, the board and the A-NN. The board is Syndra's comp.
 
-   Then hand the captures, the board and the A-NN to `impeccable-finish-reviewer` for fresh eyes. The board is Syndra's comp. Done when every finding is verified on screen or in code, deduplicated across the reviews, compared frame by frame against the board (the build matches the board, or the difference cites the owner's word), and ranked.
+   Your part is design judgement: which findings are real against Syndra's sources and the owner's taste, what the fix should be, and what the owner must decide. Done when every finding is verified on screen or in code, deduplicated across the reviews, compared frame by frame against the board (the build matches the board, or the difference cites the owner's word), and ranked.
 6. **Finish.** Choose from impeccable `polish`, `harden`, `distill`, `quieter`, `adapt`, `layout`, `typeset` where findings point, and `clarify` checked against the copy guide. Done when each fix states where (`file:line`), what changes, why (the rule or finding), and how to check it.
 7. **Capture.** The chosen design lives in the repo, not only in a prototype:
    - the A-NN answer records every owner decision;
@@ -97,11 +104,23 @@ Run the stages the request needs, in this order. Each ends on its criterion.
 
 ## Models and helpers
 
-You think, decide and design on Fable. Never use a Fable sub-agent to scout. For facts (where a string lives, what a part renders), send `haiku` (finding, listing) or `sonnet` (reading that needs judgement), with a narrow brief and a compact answer format. Every Agent call sets `model`:
+Fable designs and decides; it never reviews and never scouts (owner, 21 Nov 2026: "i hope the reviewing tasks in the designer workflow are given to opus. fable only does the designing, decision making"). Every Agent call sets `model`:
 
-- impeccable's critique Assessment A, `impeccable-finish-reviewer` and `impeccable-motion-reviewer` run on `fable`;
-- Assessment B (detector/capture) and `impeccable-documenter` run on `sonnet`;
-- never spawn a builder.
+- **`opus` reviews:**
+  - impeccable `critique` Assessment A;
+  - `audit`;
+  - the web-design-guidelines pass;
+  - the a11y check;
+  - `impeccable-finish-reviewer`;
+  - `impeccable-motion-reviewer`;
+  - any second look at a prototype or a build.
+- **`sonnet` captures and records:**
+  - screenshots;
+  - critique Assessment B (the detector);
+  - `impeccable-documenter`;
+  - reading that needs judgement.
+- **`haiku` finds and lists:** where a string lives, what a part renders. Give it a narrow brief and a compact answer format.
+- Never spawn a builder.
 
 ## Safety and files
 
