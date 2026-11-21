@@ -356,6 +356,97 @@ func TestAnUnreachableTargetRecordsTheOutage(t *testing.T) {
 	}
 }
 
+// An inventory that halted before reading says nothing it did not read: no
+// count, no lists, no date (holding is observed). Staging showed bound 0 with
+// seven bindings recorded, and read_at 0001-01-01, rendered "1 Jan 1". A read
+// that found nothing still says so: 0 and empty lists, with its time.
+func TestAHaltedInventoryCarriesNoCountListOrDateItDidNotRead(t *testing.T) {
+	keys := func(res AddonReconcileResult) map[string]json.RawMessage { return jsonKeys(t, res) }
+	stubAddonReconcile(t, &addonReconcileHarness{
+		read:     addons.SubjectsResult{Outcome: addons.OutcomeUnreached, Err: errors.New("connection refused")},
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte"}},
+	})
+	res, err := Inventory(context.Background(), "truenas", false)
+	if err != nil || !res.Halted {
+		t.Fatalf("want a halted inventory: %+v %v", res, err)
+	}
+	for k, v := range keys(res) {
+		if k == "bound" || k == "accounts" || k == "unmanaged" || k == "read_at" {
+			t.Errorf("a halted inventory carries %s=%s; it read nothing", k, v)
+		}
+	}
+
+	stubAddonReconcile(t, &addonReconcileHarness{read: currentRead()})
+	res, err = Inventory(context.Background(), "truenas", false)
+	if err != nil || res.Halted {
+		t.Fatalf("want a read inventory: %+v %v", res, err)
+	}
+	m := keys(res)
+	for k, want := range map[string]string{"bound": "0", "accounts": "[]", "unmanaged": "[]"} {
+		if string(m[k]) != want {
+			t.Errorf("a read that found nothing: %s=%s, want %s", k, m[k], want)
+		}
+	}
+	if _, ok := m["read_at"]; !ok {
+		t.Error("a read inventory says when it was read")
+	}
+}
+
+// jsonKeys is a result as the API sends it, by key: what is absent is absent.
+func jsonKeys(t *testing.T, res AddonReconcileResult) map[string]json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+// A reconcile pass that halted (halt()) counted nothing and concluded nothing:
+// no bound, no stale, no date, so the card never reads "0 people with an
+// account missing" off a pass that never looked.
+func TestAHaltedReconcileCarriesNoCountItDidNotTake(t *testing.T) {
+	stubAddonReconcile(t, &addonReconcileHarness{
+		read:     addons.SubjectsResult{Outcome: addons.OutcomeUnreached, Err: errors.New("connection refused")},
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte"}},
+	})
+	res, err := ReconcileAddon(context.Background(), "truenas")
+	if err != nil || !res.Halted {
+		t.Fatalf("want a halted pass: %+v %v", res, err)
+	}
+	for _, k := range []string{"bound", "stale", "unmanaged", "read_at"} {
+		if v, ok := jsonKeys(t, res)[k]; ok {
+			t.Errorf("a halted pass carries %s=%s; it counted nothing", k, v)
+		}
+	}
+}
+
+// Absence is concluded only from a whole read: a whole one that found nobody
+// missing sends stale [], a truncated one sends no stale at all, so "none
+// missing" and "not concluded" never look alike.
+func TestStaleIsEmptyOnAWholeReadAndAbsentOnATruncatedOne(t *testing.T) {
+	for _, truncated := range []bool{false, true} {
+		read := currentRead(addons.TargetAccount{Username: "root", AccountID: "0"})
+		read.Truncated = truncated
+		stubAddonReconcile(t, &addonReconcileHarness{read: read})
+		res, err := ReconcileAddon(context.Background(), "truenas")
+		if err != nil || res.Halted {
+			t.Fatalf("truncated=%v: want a pass: %+v %v", truncated, res, err)
+		}
+		got, ok := jsonKeys(t, res)["stale"]
+		switch {
+		case !truncated && string(got) != "[]":
+			t.Errorf("a whole read that found none missing: stale=%s, want []", got)
+		case truncated && ok:
+			t.Errorf("a truncated read concluded an absence: stale=%s", got)
+		}
+	}
+}
+
 // A truncated read still supports the inventory — everything in it was seen —
 // and the pass says the picture is incomplete rather than pretending otherwise.
 func TestATruncatedReadStillReportsWhatItSaw(t *testing.T) {

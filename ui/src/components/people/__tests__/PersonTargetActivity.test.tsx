@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PersonActivity } from "@/components/people/PersonActivity";
 import type { TargetActivity } from "@/lib/queries/useTargetActivity";
 
+/** The wait is said once in its own status region too; these read the line on screen. */
+const STATUS = '[role="status"]';
+
 const state = vi.hoisted(() => ({
   press: undefined as unknown as (() => Promise<void>) & { mock?: unknown },
   activity: null as TargetActivity | null,
@@ -250,7 +253,7 @@ describe("how old the target's log is", () => {
   it("says a log read moments ago with nothing kept is that, with the countdown, not a read that failed", async () => {
     state.activity = { target: "truenas", subject: "u1", readable: false, reason: "cooldown", retry_after: 20, detail: "" };
     renderTab();
-    await waitFor(() => expect(screen.getByText(/read moments ago; you can read again in 20 s/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/read moments ago; you can read again in 20 s/, { ignore: STATUS })).toBeTruthy());
     expect(screen.queryByText(/could not be read/)).toBeNull();
   });
 
@@ -261,7 +264,7 @@ describe("how old the target's log is", () => {
     renderTab().unmount();
     act(() => void vi.advanceTimersByTime(12_000));
     renderTab();
-    expect(screen.getByText(/you can read again in 18 s/)).toBeTruthy();
+    expect(screen.getByText(/you can read again in 18 s/, { ignore: STATUS })).toBeTruthy();
     expect((document.querySelector("[data-freshness-dot]") as HTMLElement).className).toContain("bg-warn");
   });
 });

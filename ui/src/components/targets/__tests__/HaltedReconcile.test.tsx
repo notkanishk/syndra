@@ -31,7 +31,6 @@ const pass = vi.hoisted(() => ({
   pending: false,
   data: {
     target: "truenas",
-    bound: 0,
     queued: 0,
     current: false,
     halted: true,

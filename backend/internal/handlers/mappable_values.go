@@ -23,7 +23,7 @@ type mappableValuesAnswer struct {
 	Label  string `json:"label"`
 	Single bool   `json:"single"`
 	addons.Values
-	ReadAt  time.Time `json:"read_at"`
+	ReadAt  time.Time `json:"read_at,omitzero"`
 	Current bool      `json:"current"`
 }
 

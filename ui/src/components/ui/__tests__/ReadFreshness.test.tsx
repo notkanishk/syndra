@@ -11,6 +11,9 @@ import {
   RetryWait,
 } from "@/components/ui/ReadFreshness";
 
+/** The wait is said once in its own status region too; these read the line on screen. */
+const STATUS = '[role="status"]';
+
 /**
  * §31 A — one answer to "how old is this", used everywhere state is read from a
  * target.
@@ -172,12 +175,12 @@ describe("how a copy is drawn", () => {
 
   it("never reads a since of 0 as the epoch: that is a query that has not answered", () => {
     render(<ReadFreshness state={{ readAt: ago(0.2), stale: { reason: "cooldown", retry_after: 10, since: 0 } }} subject="The list" onRefresh={() => {}} />);
-    expect(screen.getByText(/you can read again in 10 s/)).toBeInTheDocument();
+    expect(screen.getByText(/you can read again in 10 s/, { ignore: STATUS })).toBeInTheDocument();
   });
 
   it("counts a cooldown from when it arrived, not from when it was drawn", () => {
     render(<ReadFreshness state={{ readAt: ago(0.2), stale: { reason: "cooldown", retry_after: 10, since: Date.now() - 4000 } }} subject="The list" onRefresh={() => {}} />);
-    expect(screen.getByText(/you can read again in [56] s/)).toBeInTheDocument();
+    expect(screen.getByText(/you can read again in [56] s/, { ignore: STATUS })).toBeInTheDocument();
   });
 
   // At 390px the sentence wraps and the button drops to its own row: a zero-tall slot let its edge
@@ -220,5 +223,15 @@ describe("a wait that can be stopped (D-1 #11)", () => {
     expect(screen.queryByRole("button", { name: "Stop waiting" })).toBeNull();
     expect(container.querySelector("[data-card-row]")).toBeNull();
     expect(screen.getByRole("status")).toHaveTextContent(/^$/);
+  });
+});
+
+// Go's zero time is what a read that never happened marshals to. It is no copy, never a date: staging
+// showed "This is the last state seen, 1 Jan 1" for an add-on that was stopped.
+describe("a read with no moment", () => {
+  it.each(["0001-01-01T00:00:00Z", "1970-01-01T00:00:00Z", "not a time"])("%s is no earlier copy", (readAt) => {
+    render(<ReadFreshness state={{ readAt, current: false, stale: { reason: "unreachable" } }} subject="The account list" />);
+    expect(screen.getByText("Could not reach the connected system, and there is no earlier copy to show")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\b1 Jan\b|1970|last state seen/);
   });
 });

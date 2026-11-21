@@ -5,6 +5,18 @@ import React from "react";
 import { CountChip } from "@/components/ui/Badge";
 
 /**
+ * Moves focus to a region's heading (`${id}-heading`) when the control that held it leaves
+ * (AccountsNotRead), as GOV.UK Frontend's `setFocus` does: the heading is focusable only for that
+ * moment, and drops `tabindex` on blur, so it never becomes a tab stop or a click target.
+ */
+export function focusHeading(heading: HTMLElement | null) {
+  if (!heading) return;
+  heading.setAttribute("tabindex", "-1");
+  heading.addEventListener("blur", () => heading.removeAttribute("tabindex"), { once: true });
+  heading.focus();
+}
+
+/**
  * One region of the target page (design T1).
  *
  * The page carries eleven answers and used to carry them as eleven peers, in

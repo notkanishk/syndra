@@ -2,13 +2,13 @@
 
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 
-import { copyLine, cooldownLine, READ_AGAIN, READING, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
+import { copyLine, cooldownLine, FIRST_PART_READ, READ_AGAIN, READING, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { CardRow } from "@/components/ui/Card";
 import { Crossfade, LANDED_HOLD_MS, PRESS_FORGET_MS } from "@/lib/motion";
-import { formatClock, formatRelative } from "@/lib/format";
+import { formatClock, formatRelative, moment } from "@/lib/format";
 import { outcomeFromError } from "@/lib/outcome";
 import { cooldownOf, STALE, stamped, useCountdown, type Stale } from "@/lib/queries/fresh";
 
@@ -208,12 +208,37 @@ export const useReadAgainSince = () => useContext(ReadAgainContext)?.since;
  * Why the last "Read again" failed, when it was not the cooldown (the line says that one): in the
  * outcome every refusal wears, under the line, so a press that did nothing is never silent.
  */
-export function ReadAgainError({ error }: { error: unknown }) {
+export function ReadAgainError({ error, className = "px-5 pb-2" }: { error: unknown; className?: string }) {
   if (!error || cooldownOf(error)) return null;
   return (
-    <div className="px-5 pb-2">
+    <div className={className}>
       <ActionOutcome word="Not read" outcome={outcomeFromError(error)} />
     </div>
+  );
+}
+
+/**
+ * Read again, the one control: this strip's, and a line's that has no read to date (a halted
+ * inventory). While it reads, and while `cooldown` (the line said while it waits) counts, it is off
+ * and keeps focus. The wait is said once, in its own `role="status"` region, there empty from the
+ * start so the start is announced; the visible count ticks outside it (as RetryWait does).
+ */
+export function ReadAgainButton({ onClick, pending, cooldown, describedBy }: {
+  onClick: () => void;
+  pending: boolean;
+  cooldown?: string;
+  describedBy?: string;
+}) {
+  // The first words of a wait, held while it lasts, so the region does not speak every second.
+  const [said, setSaid] = useState<string>();
+  if (Boolean(cooldown) !== Boolean(said)) setSaid(cooldown);
+  return (
+    <>
+      <Button variant="outline" size="sm" className={READ_AGAIN_PILL} onClick={onClick} isPending={pending} disabled={Boolean(cooldown)} keepFocus aria-describedby={describedBy}>
+        {pending ? READING : READ_AGAIN}
+      </Button>
+      <span role="status" className="sr-only">{said ?? ""}</span>
+    </>
   );
 }
 
@@ -229,7 +254,7 @@ const UNNAMED_OPERATOR: Reader = { audience: "operator", person: "" };
  * to refresh to, since the target is the thing that is not answering.
  */
 export function ReadFreshness({
-  state,
+  state: given,
   subject = "This",
   onRefresh,
   refreshing = false,
@@ -247,6 +272,9 @@ export function ReadFreshness({
   refresh?: RefreshPress;
   className?: string;
 }) {
+  // A read with no moment is no copy (Go's zero time, 0001-01-01, from a read that never happened):
+  // every caller passes through here, so none of them ever says "last state seen, 1 Jan 1".
+  const state = { ...given, readAt: moment(given.readAt) ? given.readAt : undefined };
   // The age is a function of now, so it is computed on the client only — the
   // server and the browser do not share a clock, and a freshness label that
   // flickers on hydration is worse than one that appears a frame late.
@@ -315,7 +343,7 @@ export function ReadFreshness({
         // about what it saw and silent about the rest, and an operator who
         // reads it as "that is everything" concludes an absence from a list
         // that was cut off.
-        <span className="text-faint">· not the whole list, only the first part was read</span>
+        <span className="text-faint">· not the whole list, {FIRST_PART_READ}</span>
       )}
       {onRefresh && (reading === "stale" || aCopy) && (
         // It tints in where the line ends. Its slot is zero tall, so the button
@@ -327,18 +355,13 @@ export function ReadFreshness({
         // `before` box, a hit area with nothing painted, so no visible edge
         // reaches the cards below (A-08 §5).
         <span className="tint-in flex h-[var(--tap)] items-center desktop:h-0">
-          <Button
-            variant="outline"
-            size="sm"
-            className={READ_AGAIN_PILL}
+          <ReadAgainButton
             onClick={() => void press(onRefresh)}
-            isPending={refreshing || pressing}
-            disabled={cooling}
+            pending={refreshing || pressing}
+            cooldown={cooling ? cooldownLine(subject, left) : undefined}
             // The line beside it is the reason it waits.
-            aria-describedby={cooling ? lineId : undefined}
-          >
-            {refreshing || pressing ? READING : READ_AGAIN}
-          </Button>
+            describedBy={cooling ? lineId : undefined}
+          />
         </span>
       )}
     </div>

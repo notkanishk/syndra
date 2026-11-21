@@ -176,6 +176,8 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
 
   const answering = reading.tone === "healthy";
   const bound = inventory.data?.bound;
+  // A pass that stopped read nothing: its count is "Not read", never "Not yet" (it has answered before).
+  const unread = inventory.data?.halted;
   // The product and its version, whatever the operator named the system.
   const product = health.data?.product
     ? `${health.data.product} ${versionLabel(health.data.product, health.data.product_version)}`.trim()
@@ -205,7 +207,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
       });
   }
   const loading = Boolean(ask) && (health.isLoading || inventory.isLoading || findings.isLoading);
-  const unread = Boolean(ask) && (health.isError || inventory.isError || findings.isError);
+  const readFailed = Boolean(ask) && (health.isError || inventory.isError || findings.isError);
 
   return (
     <CardRow
@@ -226,7 +228,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
             </ArrowLink>
           ))}
           {needs.length === 0 && row.project !== null && (
-            <NeedsNote answering={answering} callable={row.callable} loading={loading} unread={unread} />
+            <NeedsNote answering={answering} callable={row.callable} loading={loading} readFailed={readFailed} />
           )}
         </span>
       }
@@ -274,12 +276,15 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
         )}
       </span>
 
-      {/* A count, and only when Syndra has one. A system that has never
-          answered shows a dash, never 0: that would be a claim about the
-          system rather than about Syndra's ignorance of it. Once it stops
-          answering, the last count stays and says so. */}
+      {/* A count, and only when Syndra has one, never 0 in its place: that
+          would be a claim about the system rather than about Syndra's
+          ignorance of it. A pass that stopped says "Not read"; a system not
+          read yet says "Not yet". Once it stops answering, the last count
+          stays and says so. */}
       <span data-figure className="flex flex-col gap-0.5 pt-px">
-        {bound === undefined ? (
+        {unread ? (
+          <span className="text-body text-faint">Not read</span>
+        ) : bound === undefined ? (
           <span className="text-body text-faint">Not yet</span>
         ) : (
           <>
@@ -302,17 +307,17 @@ function NeedsNote({
   answering,
   callable,
   loading,
-  unread,
+  readFailed,
 }: {
   answering: boolean;
   callable: boolean;
   loading: boolean;
-  unread: boolean;
+  readFailed: boolean;
 }) {
   if (!callable) return <span className="text-faint">Not yet</span>;
   if (!answering) return <span className="text-faint">Unknown until it answers</span>;
   if (loading) return <span className="text-faint">Reading…</span>;
-  if (unread) return <span className="text-faint">Not read just now</span>;
+  if (readFailed) return <span className="text-faint">Not read just now</span>;
   return (
     <span className="inline-flex items-center gap-2 text-muted">
       <StatusDot tone="healthy" />

@@ -2,9 +2,9 @@
 
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
-import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
-import { checkAgainNext, cooldownLine, retryingLine } from "@/components/results/copy";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { cooldownNext, describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
+import { checkAgainNext, cooldownLine, FIRST_PART_READ, retryingLine } from "@/components/results/copy";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { ArriveList, Crossfade, FOLD_MS, LeavingRow, TINT_MS, UnfoldOnArrival, Unfold, useExitPhase, useFlashOnChange, useLeavingRows } from "@/lib/motion";
 import { useLongWait } from "@/lib/useLongWait";
@@ -19,7 +19,7 @@ import { MergeFindings } from "@/components/targets/MergeFindings";
 import { OVERVIEW_LEDE, OVERVIEW_TITLE } from "@/components/usage/copy";
 import { StatsRetention } from "@/components/targets/StatsRetention";
 import { TargetStats } from "@/components/usage/TargetStats";
-import { Region } from "@/components/targets/Region";
+import { focusHeading, Region } from "@/components/targets/Region";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -38,7 +38,7 @@ import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
-import { blocksIrreversibleAction, ReadAgainError, ReadFreshness, RetryWait } from "@/components/ui/ReadFreshness";
+import { blocksIrreversibleAction, ReadAgainButton, ReadAgainError, ReadFreshness, RetryWait } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { AdvancedOnly } from "@/components/ui/AdvancedOnly";
 import { lifecycleWhy } from "@/lib/lifecycle-reason";
@@ -321,6 +321,7 @@ export function TargetOverview({ target }: { target: string }) {
           title={`Accounts on ${name}`}
           lede="Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action."
         >
+          <AccountsNotRead target={target} region="accounts" />
           <PeopleOnTarget target={target} stale={lastKnown} />
           <Inventory target={target} stale={lastKnown} />
           <DormantAccounts target={target} stale={lastKnown} />
@@ -662,7 +663,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
                 : `Nothing was learned about ${name}; try again once it is reachable.`}
             </span>
           ) : (
-            reconcileLine(result.bound, result.queued, result.stale?.length ?? 0, name)
+            reconcileLine(result.bound, result.queued, result.stale?.length, name)
           )}
         </Crossfade>
       </CardRow>
@@ -1375,6 +1376,54 @@ function Reading({
 }
 
 /**
+ * The Accounts region's one "could not be read": a pass that stopped read
+ * nothing, so the lists below have no count and no empty state, and this line
+ * says why once, above them all, with Read again on it (the strip's own
+ * control: a halted read has no freshness strip to carry it). Inside the
+ * add-on's cooldown the reason stays, since for an outdated add-on or a refused
+ * read it is the next step, and the count is said after it.
+ */
+function AccountsNotRead({ target, region }: { target: string; region: string }) {
+  const nameOf = useSystemNames();
+  const inventory = useTargetInventory(target);
+  const again = useTargetInventoryAgain(target);
+  const left = useCountdown(again.cooldown?.retry_after, again.cooldown?.since);
+  const lineId = useId();
+  // Set by a press, consumed once: a read that lands takes this line, and its focused button, away,
+  // so focus goes to the region's heading rather than to <body>. A press that fails clears it, so a
+  // later read that lands by itself never moves focus nobody asked to move.
+  const pressed = useRef(false);
+  const unread = inventory.data?.halted;
+  useEffect(() => {
+    if (unread || !pressed.current) return;
+    pressed.current = false;
+    if (document.activeElement === document.body) focusHeading(document.getElementById(`${region}-heading`));
+  }, [unread, region]);
+  if (!unread) return null;
+  const line = `${inventoryNotRead(nameOf(target), inventory.data?.detail, inventory.data?.reason)}${left > 0 ? ` ${cooldownNext(left)}` : ""}`;
+  return (
+    <div className="grid gap-1">
+      {/* The sentence and its button side by side, as ReadFreshness draws them (a button is never in prose). */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-warn-text">
+        <span id={lineId}>{line}</span>
+        <ReadAgainButton
+          onClick={() => {
+            pressed.current = true;
+            void again.press().catch(() => {
+              pressed.current = false;
+            });
+          }}
+          pending={again.pending}
+          cooldown={left > 0 ? line : undefined}
+          describedBy={lineId}
+        />
+      </div>
+      <ReadAgainError error={again.error} className="" />
+    </div>
+  );
+}
+
+/**
  * The unmanaged inventory (1.18/1.19).
  *
  * Never drift, and never rendered as drift: a real NAS holds `root`, service
@@ -1400,6 +1449,8 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
     { username: string; person: string; result: AdoptionResult } | null
   >(null);
 
+  // A pass that stopped read nothing: no list, no count, no freshness (AccountsNotRead says so).
+  const unread = inventory.data?.halted;
   // Refused inside the cooldown: only ever a press, since a load never sends fresh.
   const refused = again.cooldown;
   const read = {
@@ -1426,28 +1477,25 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
     <Card stale={stale || read.current === false} {...leaving.listProps}>
       <CardHeader
         title="Not created by Syndra"
-        count={inventory.data ? leaving.rows.length : undefined}
+        count={inventory.data && !unread ? leaving.rows.length : undefined}
         caption={`Accounts on ${name} that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.`}
       />
-      <div className="px-5 pb-2">
-        <ReadFreshness
-          subject="The account list"
-          state={read}
-          onRefresh={() => {
-            setResult(null);
-            return again.press();
-          }}
-          refreshing={again.pending}
-        />
-      </div>
-      <ReadAgainError error={again.error} />
-      {inventory.data?.halted && (
-        // A pass that stopped has an empty list it never measured; the add-on's words (or the reason's) say why instead.
-        <CardRow>
-          <span className="text-small text-warn-text">{inventoryNotRead(name, inventory.data.detail, inventory.data.reason)}</span>
-        </CardRow>
+      {/* A pass that read nothing has no freshness: the region's line above the cards says so, once. */}
+      {!unread && (
+        <div className="px-5 pb-2">
+          <ReadFreshness
+            subject="The account list"
+            state={read}
+            onRefresh={() => {
+              setResult(null);
+              return again.press();
+            }}
+            refreshing={again.pending}
+          />
+        </div>
       )}
-      {(!inventory.data && refused) || inventory.data?.halted ? null : (
+      <ReadAgainError error={again.error} />
+      {(!inventory.data && refused) || unread ? null : (
       <ListStates
         isLoading={inventory.isLoading}
         error={inventory.error}
@@ -1965,7 +2013,17 @@ function LifecycleControl({
 }
 
 /** The reconcile result in one line. Counts of people, singular and plural both right. */
-export function reconcileLine(bound: number, queued: number, missing: number, name: string): string {
+export function reconcileLine(bound: number | undefined, queued: number, missing: number | undefined, name: string): string {
   const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
-  return `${people(bound)} with a managed account · ${queued} ${queued === 1 ? "fix" : "fixes"} waiting for you to send · ${people(missing)} with an account missing from ${name}`;
+  // A count the pass did not take is never a 0. `stale` is absent only on a truncated read, which
+  // cannot tell a missing account from one past the cut, so it says so in the strip's own words.
+  return [
+    bound === undefined ? null : `${people(bound)} with a managed account`,
+    `${queued} ${queued === 1 ? "fix" : "fixes"} waiting for you to send`,
+    missing === undefined
+      ? `missing accounts not checked: ${FIRST_PART_READ}`
+      : `${people(missing)} with an account missing from ${name}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }

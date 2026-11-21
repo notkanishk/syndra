@@ -479,8 +479,12 @@ func main() {
 					continue
 				}
 				if res.Queued > 0 || len(res.Unmanaged) > 0 || res.Halted {
-					log.Printf("[ADDON-RECONCILE] %s bound=%d queued=%d unmanaged=%d halted=%v %s",
-						reg.Target, res.Bound, res.Queued, len(res.Unmanaged), res.Halted, res.Reason)
+					if res.Halted || res.Bound == nil { // a halted pass counted nothing, so it logs no count
+						log.Printf("[ADDON-RECONCILE] %s halted %s", reg.Target, res.Reason)
+					} else {
+						log.Printf("[ADDON-RECONCILE] %s bound=%d queued=%d unmanaged=%d %s",
+							reg.Target, *res.Bound, res.Queued, len(res.Unmanaged), res.Reason)
+					}
 				}
 			}
 			return nil

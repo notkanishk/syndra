@@ -74,7 +74,7 @@ type DormantReport struct {
 	// StateReadAt and Truncated for the same reason as everywhere else: an
 	// absence read out of a capped list is not an absence, and this surface's
 	// whole action is removing things on the strength of one.
-	StateReadAt time.Time        `json:"state_read_at"`
+	StateReadAt time.Time        `json:"state_read_at,omitzero"`
 	Truncated   bool             `json:"truncated"`
 	Accounts    []DormantAccount `json:"accounts"`
 }

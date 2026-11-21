@@ -11,6 +11,9 @@ import { DormantAccounts, sweepResult } from "@/components/targets/DormantAccoun
 import type { DormantReport, SweepResult } from "@/lib/queries/useDormant";
 import type { OneShotSecret } from "@/lib/secret";
 
+/** The wait is said once in its own status region too; these read the line on screen. */
+const STATUS = '[role="status"]';
+
 /**
  * §29 — the only bulk action in the product, and the two things that keep it
  * principled: it can only ever touch accounts that grant nobody anything, and
@@ -332,16 +335,16 @@ describe("inside the add-on's cooldown", () => {
     vi.useFakeTimers();
     state.error = cooling(2);
     renderDormant();
-    expect(screen.getByText(/can read again in 2 s/)).toBeInTheDocument();
+    expect(screen.getByText(/can read again in 2 s/, { ignore: STATUS })).toBeInTheDocument();
     expect(screen.queryByText(/nothing was changed/)).toBeNull();
     expect(screen.queryByText(/You can try again in/)).toBeNull();
     expect(screen.queryByText("Not read")).toBeNull();
     expect(screen.queryByText("This list could not be read")).toBeNull();
     expect(screen.queryByText("Nothing to tidy.")).toBeNull();
     const button = screen.getByRole("button", { name: "Read again" });
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
     act(() => void vi.advanceTimersByTime(2000));
-    expect(button).toBeEnabled();
+    expect(button).not.toHaveAttribute("aria-disabled");
     fireEvent.click(button);
     expect(state.refetch).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
@@ -383,7 +386,7 @@ describe("inside the add-on's cooldown", () => {
     state.error = cooling(30);
     state.errorAt = Date.now();
     view.rerender(tree());
-    expect(await screen.findByText(/can read again in/)).toBeInTheDocument();
+    expect(await screen.findByText(/can read again in/, { ignore: STATUS })).toBeInTheDocument();
     expect(screen.getByLabelText("Select former-member")).toBeChecked();
     expect(screen.queryByText("This list could not be read")).toBeNull();
   });
@@ -431,10 +434,12 @@ describe("a removed account leaves by fading and folding", () => {
     expect(screen.getByTestId("card-count").textContent).toContain("1");
   });
 
-  it("counts them, at zero too, when the list could not be read", () => {
+  // Staging, add-on stopped: a list that could not be read showed "No longer needed 0". A count is
+  // observed: unread is no count, never a zero (holding is observed).
+  it("shows no count when the list could not be read", () => {
     state.error = new Error("down");
     renderDormant();
-    expect(screen.getByTestId("card-count").textContent).toBe("0");
+    expect(screen.queryByTestId("card-count")).toBeNull();
   });
 
   it("does not offer a leaving row to be selected", () => {
@@ -446,3 +451,4 @@ describe("a removed account leaves by fading and folding", () => {
     expect(screen.getByLabelText("Select former-member").closest("[data-leaving]")).toHaveAttribute("inert");
   });
 });
+

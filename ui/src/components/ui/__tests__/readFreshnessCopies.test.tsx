@@ -8,6 +8,9 @@ import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { formatClock, formatRelative } from "@/lib/format";
 import { COOLDOWN_REFUSED, cooldownNext } from "@/lib/outcome";
 
+/** The wait is said once in its own status region too; these read the line on screen. */
+const STATUS = '[role="status"]';
+
 /**
  * What a card says when the add-on answered from a copy (feature freshness):
  * one sentence per reason, and the control that is the next step. Real clock
@@ -41,19 +44,19 @@ describe("a Read again inside the cooldown", () => {
     vi.useFakeTimers();
     const press = vi.fn();
     render(<ReadFreshness state={copy({ reason: "cooldown", retry_after: 3 })} subject={NAME} onRefresh={press} />);
-    const line = screen.getByText(cooldownLine(NAME, 3));
+    const line = screen.getByText(cooldownLine(NAME, 3), { ignore: STATUS });
     const button = screen.getByRole("button", { name: "Read again" });
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
     expect(button.getAttribute("aria-describedby")).toBe(line.id);
     fireEvent.click(button);
     expect(press).not.toHaveBeenCalled();
 
     act(() => void vi.advanceTimersByTime(1000));
-    expect(screen.getByText(cooldownLine(NAME, 2))).toBeInTheDocument();
+    expect(screen.getByText(cooldownLine(NAME, 2), { ignore: STATUS })).toBeInTheDocument();
     act(() => void vi.advanceTimersByTime(2000));
     expect(screen.queryByText(/moments ago/)).toBeNull();
     expect(screen.getByText(copyLine(NAME, formatRelative(at)))).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Read again" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Read again" })).not.toHaveAttribute("aria-disabled");
     fireEvent.click(screen.getByRole("button", { name: "Read again" }));
     expect(press).toHaveBeenCalledTimes(1);
   });
@@ -61,11 +64,11 @@ describe("a Read again inside the cooldown", () => {
   it("with nothing to show, still the cooldown line and never an error, then not-read-yet with the button", () => {
     vi.useFakeTimers();
     render(<ReadFreshness state={{ stale: { reason: "cooldown", retry_after: 1 } }} subject={NAME} onRefresh={() => {}} />);
-    expect(screen.getByText(cooldownLine(NAME, 1))).toBeInTheDocument();
+    expect(screen.getByText(cooldownLine(NAME, 1), { ignore: STATUS })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
     act(() => void vi.advanceTimersByTime(1000));
     expect(screen.getByText(`${NAME} has not been read yet`)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Read again" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Read again" })).not.toHaveAttribute("aria-disabled");
   });
 });
 

@@ -254,14 +254,16 @@ export interface BoundAccount {
 
 export interface TargetInventory {
   target: string;
-  bound: number;
+  /** Absent when the inventory halted before reading: unknown, never 0 (holding is observed). */
+  bound?: number;
   /**
    * The accounts Syndra manages. The other half of "whose accounts are on this
    * target" — the inventory answered only which ones it does NOT manage, and
    * those are not the ones an operator acts on.
    */
   accounts?: BoundAccount[];
-  unmanaged: UnmanagedAccount[];
+  /** Absent, like `bound`, `accounts` and `read_at`, when nothing was read. */
+  unmanaged?: UnmanagedAccount[];
   read_at?: string;
   current: boolean;
   truncated?: boolean;
@@ -547,7 +549,8 @@ export interface StaleBinding {
 
 export interface TargetReconcileResult {
   target: string;
-  bound: number;
+  /** Absent on a pass that halted before counting: unknown, never 0. */
+  bound?: number;
   queued: number;
   current: boolean;
   truncated?: boolean;
@@ -568,7 +571,8 @@ export interface TargetReconcileResult {
   unmanaged?: UnmanagedAccount[];
   /** Bindings whose account is no longer on the target. Never converged — the
    * plan for one says "create", and acting on it would recreate an account
-   * somebody deleted. */
+   * somebody deleted. Absent on a truncated read, which cannot conclude an
+   * absence; `[]` when a whole read found none. */
   stale?: StaleBinding[];
 }
 
@@ -625,17 +629,18 @@ export interface ReachPlace {
   access: "read" | "change";
 }
 
-/** What each of a system's own groups opens (A-02 §3). `read: false` is "not read yet". */
-export interface TargetReach {
-  read: boolean;
-  read_at?: string;
+/**
+ * What each of a system's own groups opens (A-02 §3). `read: false` is "not read yet", and carries
+ * no date; a read always carries one (as `last_known` and `MappableValues` do).
+ */
+export type TargetReach = ({ read: true; read_at: string } | { read: false; read_at?: never }) & {
   current?: boolean;
   /** Why this is the add-on's copy, when it is one (feature freshness). */
   stale?: Stale;
   /** Whole seconds, with `read: false`: read moments ago, and nothing kept to serve. */
   retry_after?: number;
   groups?: Record<string, ReachPlace[]>;
-}
+};
 
 /** "Read again" on what each group opens: the same GET, asking the target itself. */
 export const useTargetReachAgain = (target: string | undefined) =>

@@ -337,3 +337,14 @@ func TestWhatTheAddOnAlsoSaysIsCappedWhole(t *testing.T) {
 		t.Errorf("the long key's entry is not first: %.40q", got[0])
 	}
 }
+
+// Reach not read yet sends no read_at: Go's zero time is never a date ("1 Jan 1").
+func TestReachNotReadSendsNoReadTime(t *testing.T) {
+	raw, err := json.Marshal(Reach{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"read_at"`) {
+		t.Errorf("a reach never read carries a read time: %s", raw)
+	}
+}
