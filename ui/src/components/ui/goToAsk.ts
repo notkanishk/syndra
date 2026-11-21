@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { buildModel } from "@/components/insights/model";
@@ -57,15 +58,18 @@ export function useGoToAsk(text: string, users: UserProfile[] | undefined) {
       return id ? [people.get(id)?.name ?? model.nameOf(id)] : [];
     });
   }, [question, model, people]);
+  const client = useQueryClient();
   return {
-    /** The map is still being read: nothing is said yet. */
-    reading: on && !model && !topology.isError,
+    /** Nothing is said yet: the map, or the answer's own read, is still out. */
+    working: on && ((!model && !topology.isError) || answered.computing),
+    /** A read the answer needs failed: the map's, or the answer's own. */
+    failed: on && (topology.isError || (answered.status !== null && !answered.computing)),
+    /** Asks again for what failed, and only that. */
+    retry: () => void client.resetQueries({ predicate: (query) => query.state.status === "error" }),
     question,
     title,
     answer: answered.answer,
     named,
-    /** "Working it out." or "Couldn't load this answer.", from the map's own panel. */
-    status: answered.status,
     href: question ? insightsHref(question) : null,
   };
 }

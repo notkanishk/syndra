@@ -2148,6 +2148,13 @@ html.theme-fading *::after {
 @layer components {
   /* The window behind the pane, and the lamp's light on it (sized by the window, `goToLightBox`). */
   .go-to-scrim {
+    /* Where the pane floats: 96px down, as Go to is today; on a phone 12px, or under the notch (the app
+       draws edge to edge, `viewportFit: cover`). One value: the pane's list reads it too. */
+    --go-to-top: 96px;
+    padding-top: var(--go-to-top);
+    @media (width < theme(--breakpoint-tablet)) {
+      --go-to-top: max(12px, env(safe-area-inset-top));
+    }
     --light: var(--accent);
     --light-text: var(--accent-text);
     transition: --light var(--duration-tint) var(--ease-tint);
@@ -2192,7 +2199,6 @@ html.theme-fading *::after {
     --go-to-gap: 14px;
     --go-to-pad: 8px;
     --go-to-row: 42px;
-    --go-to-top: 96px;
     --go-to-lamp: calc(var(--go-to-gx) + var(--go-to-mark) / 2);
     --go-to-ax: calc(var(--go-to-gx) + var(--go-to-mark) + var(--go-to-gap));
     position: relative;
@@ -2220,7 +2226,6 @@ html.theme-fading *::after {
       --go-to-field: 62px;
       --go-to-mark: 28px;
       --go-to-row: 48px;
-      --go-to-top: 12px;
     }
     /* Where a pane cannot blur, or less transparency is asked for: the same pane, solid. */
     @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -2262,16 +2267,17 @@ html.theme-fading *::after {
     opacity: 0;
   }
   /* The lamp's answer to a scope: its light run once through the bar, a half circle behind the lamp and a
-     long half ellipse ahead of it on the six eased stops, sized to be spent inside the bar. 26%, for the
-     placeholder that sits in it. */
+     long half ellipse ahead of it on the six eased stops. Its box is the bar's: half the field's height
+     each way from the lamp, to the pane's right edge, so it is spent at the bar's edges and the pane never
+     cuts it (A-25 rule 1). 26%, for the placeholder that sits in it. */
   .go-to-beam {
-    --by: calc(var(--go-to-field) * 0.6);
+    --by: calc(var(--go-to-field) / 2);
     --pool-c: var(--light);
     --pool-k: 26%;
     position: absolute;
     left: calc(var(--go-to-lamp) - var(--by));
     top: calc(var(--go-to-field) / 2 - var(--by));
-    width: calc(var(--by) + (100% - var(--go-to-lamp)) / 0.82);
+    width: calc(var(--by) + 100% - var(--go-to-lamp));
     height: calc(var(--by) * 2);
     transform-origin: var(--by) 50%;
     opacity: 0;
@@ -2441,6 +2447,7 @@ html.theme-fading *::after {
     mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top, 0px), #000 calc(100% - var(--fade-end, 0px)), transparent);
   }
   .go-to-row {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -2451,9 +2458,31 @@ html.theme-fading *::after {
     &[aria-selected="true"] .go-to-name {
       color: var(--ink);
     }
-    /* A list row's hover (`hover-tint`), and the chosen row's own look wins over it: no fill. */
-    &[aria-selected="true"]:hover {
-      background-color: transparent;
+    /* No fill on the chosen row (it wears no `hover-tint`): a point of the lamp's light beside it, on the
+       lamp's own axis, level with its first line. */
+    &[aria-selected="true"]::before {
+      content: "";
+      position: absolute;
+      top: calc(var(--go-to-row) / 2 - 3px);
+      left: calc(var(--go-to-lamp) - var(--go-to-pad) - 3px);
+      width: 6px;
+      height: 6px;
+      border-radius: var(--radius-pill);
+      background: var(--light-text);
+      box-shadow: 0 0 10px 1px color-mix(in srgb, var(--light) 70%, transparent);
+      pointer-events: none;
+    }
+  }
+  /* What came of the typing when it is not a list (nothing by that name, a question being worked out):
+     on the list's axis, beside the list and never inside it. */
+  .go-to-say {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: -6px;
+    padding: 8px calc(14px + var(--go-to-pad)) 14px var(--go-to-ax);
+    &:has(+ .go-to-list:not([hidden])) {
+      padding-bottom: 4px;
     }
   }
   .go-to-name {
@@ -2464,17 +2493,6 @@ html.theme-fading *::after {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  .go-to-point {
-    position: absolute;
-    top: 0;
-    left: calc(var(--go-to-lamp) - 3px);
-    width: 6px;
-    height: 6px;
-    border-radius: var(--radius-pill);
-    background: var(--light-text);
-    box-shadow: 0 0 10px 1px color-mix(in srgb, var(--light) 70%, transparent);
-    pointer-events: none;
   }
   .go-to-link {
     color: var(--glass-link);
@@ -2489,12 +2507,6 @@ html.theme-fading *::after {
       animation: go-to-halo calc(var(--duration-tint) + var(--duration-flash)) var(--ease-tint) both;
     }
   }
-  /* Less motion: the lamp simply takes the colour, at once. */
-  @media (prefers-reduced-motion: reduce) {
-    .go-to-scrim {
-      transition: none;
-    }
-  }
   @media (forced-colors: active) {
     .go-to-scrim::before,
     .go-to-pane::before,
@@ -2502,7 +2514,7 @@ html.theme-fading *::after {
     .go-to-beam,
     .go-to-halo,
     .go-to-scope-light,
-    .go-to-point {
+    .go-to-row::before {
       display: none;
     }
     .go-to-row[aria-selected="true"] {

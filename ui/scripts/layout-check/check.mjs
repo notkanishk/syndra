@@ -216,8 +216,30 @@ for (const view of list(opt.views)) {
             if (!opened) findings.push(`${path} ${width} ${view} goto Go to did not open with its key`);
             else {
               await page.waitForTimeout(1100);
-              const found = await page.evaluate(detect, { tablet: 720 });
-              for (const line of found.goto) findings.push(`${path} ${width} ${view} goto ${line}`);
+              const goto = new Set((await page.evaluate(detect, { tablet: 720 })).goto);
+              // Then a scope, entered by its key: the gesture's lights are measured at their largest (each
+              // of its animations held at the frame where it reaches furthest), and again once it is done.
+              await page.keyboard.type("@");
+              await page.evaluate(() => {
+                for (const animation of document.querySelector(".go-to-pane")?.parentElement?.getAnimations({ subtree: true }) ?? []) {
+                  const frames = animation.effect.getKeyframes();
+                  // How far a frame reaches: its scale's area (one value scales both ways), plus a run's own reach in px.
+                  const reach = (frame) => {
+                    const scale = String(frame.scale ?? 1).split(" ").map(Number);
+                    return scale[0] * (scale[1] ?? scale[0]) + (parseFloat(frame["--reach"] ?? "0") || 0);
+                  };
+                  const furthest = frames.reduce((best, frame) => (reach(frame) > reach(best) ? frame : best), frames[0]);
+                  animation.pause();
+                  animation.currentTime = furthest.computedOffset * animation.effect.getComputedTiming().duration;
+                }
+              });
+              for (const line of (await page.evaluate(detect, { tablet: 720 })).goto) goto.add(`at its largest: ${line}`);
+              await page.evaluate(() => {
+                for (const animation of document.querySelector(".go-to-pane")?.parentElement?.getAnimations({ subtree: true }) ?? []) animation.finish();
+              });
+              for (const line of (await page.evaluate(detect, { tablet: 720 })).goto) goto.add(line);
+              for (const line of goto) findings.push(`${path} ${width} ${view} goto ${line}`);
+              await page.keyboard.press("Escape");
               await page.keyboard.press("Escape");
             }
           }

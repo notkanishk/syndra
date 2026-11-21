@@ -9,11 +9,11 @@ import { describe, expect, it, vi } from "vitest";
 import { Count } from "@/components/ui/Badge";
 import { StatCard } from "@/components/ui/StatCard";
 import { Relative } from "@/components/ui/Time";
-import { GoTo, GoToPanel } from "@/components/ui/GoTo";
+import { GoTo } from "@/components/ui/GoTo";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
-import { LATELY_SHOWN, goTo, keepLately, recallLately } from "@/lib/go-to";
+import { LATELY_SHOWN, goToRows, keepLately, recallLately } from "@/lib/go-to";
 import { ArriveList, Crossfade, TINT_MS, TIP_WARM_MS, notePage } from "@/lib/motion";
 import { ADVANCED_NAV, BASIC_NAV } from "@/lib/nav";
 import { NAME_CATALOG_KEY } from "@/lib/queries/useNameCatalog";
@@ -296,25 +296,24 @@ describe("Lately in Go to (§8 warm, Q13)", () => {
     here,
   });
 
-  it("lists the places opened, most recent first, above Pages, and never the place you are in", () => {
-    const groups = goTo(source(["/users/u1", "/governance/pending", "/projects/p1", "/users"], "/users"), "");
-    expect(groups.map((g) => g.group)).toEqual(["Lately", "Pages"]);
-    expect(groups[0].items.map((i) => i.name)).toEqual(["Becky Lynch", "Pending changes", "Laser cutting"]);
-    expect(groups[0].items.map((i) => i.kind)).toEqual(["Person", "Page", "Project"]);
-    // Its keys are its own, so a place in Lately and in Pages is never selected twice.
-    const keys = groups.flatMap((g) => g.items.map((i) => i.key));
-    expect(new Set(keys).size).toBe(keys.length);
+  it("lists the places opened, most recent first, and never the place you are in", () => {
+    const rows = goToRows(source(["/users/u1", "/governance/pending", "/projects/p1", "/users"], "/users"), "", null, true);
+    expect(rows.map((r) => r.name)).toEqual(["Becky Lynch", "Pending changes", "Laser cutting"]);
+    expect(rows.map((r) => r.kind)).toEqual(["Person", "Page", "Project"]);
+    expect(rows.every((r) => r.tag === "Lately")).toBe(true);
+    // Its keys are its own, so a place in Lately is never the same option as itself found by name.
+    expect(rows.every((r) => r.key.startsWith("lately:"))).toBe(true);
   });
 
   it("drops a place this session cannot open, and shows five at most", () => {
     const pages = ADVANCED_NAV.flatMap((entry) => (entry.kind === "leaf" ? [entry.href] : entry.children.map((c) => c.href)));
-    const groups = goTo(source(["/somewhere/gone", ...pages]), "");
-    expect(groups[0].items).toHaveLength(LATELY_SHOWN);
-    expect(groups[0].items.map((i) => i.href)).toEqual(pages.slice(0, LATELY_SHOWN));
+    const rows = goToRows(source(["/somewhere/gone", ...pages]), "", null, true);
+    expect(rows).toHaveLength(LATELY_SHOWN);
+    expect(rows.map((r) => r.href)).toEqual(pages.slice(0, LATELY_SHOWN));
   });
 
-  it("is gone the moment something is typed: the groups are A to Z again", () => {
-    expect(goTo(source(["/users/u1"]), "becky").map((g) => g.group)).toEqual(["People"]);
+  it("is gone the moment something is typed: the names are matched again", () => {
+    expect(goToRows(source(["/users/u1"]), "becky", null).map((r) => r.tag)).toEqual(["Person"]);
   });
 
   it("is kept on this device: a path to the front, once, and nothing else", () => {
@@ -325,29 +324,12 @@ describe("Lately in Go to (§8 warm, Q13)", () => {
     expect(window.localStorage.getItem("syndra:lately")).toBe('["/users","/users/u1"]');
   });
 
-  it("shows on the phone too, above the sheet's own list, and the sheet's list stays", () => {
-    keepLately("/users/u1");
-    const client = new QueryClient();
-    client.setQueryData(NAME_CATALOG_KEY, { users: [{ id: "u1", name: "Becky Lynch", email: "becky@example.org" }], projects: [], applications: [] });
-    render(
-      <QueryClientProvider client={client}>
-        <GoToPanel embedded nav={ADVANCED_NAV} onGo={() => {}} idle={<p>The sheet&apos;s pages</p>} />
-      </QueryClientProvider>,
-    );
-    expect(screen.getByText("Lately")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /Becky Lynch/ })).toBeInTheDocument();
-    // Only Lately: the sheet's own list is its Pages.
-    expect(screen.queryByText("Pages")).toBeNull();
-    expect(screen.getByText("The sheet's pages")).toBeInTheDocument();
-  });
-
   it("says one thing per row: a top-level page is a Page, with no 'A page' under it", () => {
-    const rows = goTo({ nav: ADVANCED_NAV, names: true, bundles: true, bundleList: [{ id: "b1", name: "Printing basics", roles: ["a", "b"] }] as never }, "");
-    const leaf = rows.flatMap((g) => g.items).find((item) => item.href === "/users")!;
+    const withBundle = { nav: ADVANCED_NAV, names: true, bundles: true, bundleList: [{ id: "b1", name: "Printing basics", roles: ["a", "b"] }] as never };
+    const leaf = goToRows(withBundle, "", "pages").find((item) => item.href === "/users")!;
     expect(leaf).toMatchObject({ kind: "Page", descriptor: "" });
-    const typed = goTo({ nav: ADVANCED_NAV, names: true, bundles: true, bundleList: [{ id: "b1", name: "Printing basics", roles: ["a", "b"] }] as never }, "printing");
-    expect(typed.flatMap((g) => g.items).find((item) => item.kind === "Bundle")?.descriptor).toBe("2 roles");
-    for (const item of goTo({ nav: ADVANCED_NAV }, "").flatMap((g) => g.items)) {
+    expect(goToRows(withBundle, "printing", null).find((item) => item.kind === "Bundle")?.descriptor).toBe("2 roles");
+    for (const item of goToRows({ nav: ADVANCED_NAV }, "", "pages")) {
       expect(item.descriptor, item.name).not.toMatch(/^An? (page|app|bundle)/);
     }
   });

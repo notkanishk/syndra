@@ -5,46 +5,23 @@ import { usePathname } from "next/navigation";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { SyndraMark } from "@/components/shell/SyndraMark";
-import { EmptyState } from "@/components/states";
 import { GO_TO_ASKS, QUESTION_START, useGoToAsk } from "@/components/ui/goToAsk";
-import { Input } from "@/components/ui/Input";
 import { Kbd } from "@/components/ui/Kbd";
 import { Modal } from "@/components/ui/Modal";
-import {
-  GO_TO_SCOPES,
-  flatItems,
-  goTo,
-  goToNamed,
-  goToRows,
-  offeredScope,
-  recallLately,
-  sigilScope,
-  type GoToItem,
-  type GoToRow,
-  type GoToScope,
-} from "@/lib/go-to";
+import { GO_TO_SCOPES, goToNamed, goToRows, offeredScope, recallLately, sigilScope, type GoToRow, type GoToScope } from "@/lib/go-to";
 import { ARRIVE_MS, FLASH_MS, SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
 import type { NavEntry } from "@/lib/nav";
 import { useIndicatorsRead } from "@/lib/queries/useIndicators";
 import { useNameCatalog } from "@/lib/queries/useNameCatalog";
 import { useUiView } from "@/lib/ui-view";
+import { useDebounce } from "@/lib/useDebounce";
 import { useIsPhone } from "@/lib/useViewport";
 
 /**
- * Go to: one way to reach anything in Syndra by typing its name
- * (proposed/GoTo.md, A-19 P4). Opens pages, never runs a verb; nothing is
- * pinned. With nothing typed it lists Lately, the last places opened on this
- * device, above Pages, or on the phone above the sheet's own list (A-24 §8, Q13);
- * sign-out forgets them. The word "Search" belongs to the per-page
- * search, so it is "Go to" here.
- *
- * It is opened by a key dozens of times a day, so it appears at once and leaves
- * at once (A-24 §8): a still Modal. Escape clears what is typed, then closes.
- * A place it opens does not arrive (Q14).
- *
- * As drawn (A-24 frame 22): the field row is the top of the panel, with no
- * heading over it and no box round it, and the panel is pinned at a fixed top
- * so it never jumps as the list grows and shrinks. Its name is the dialog's
+ * Go to: one way to reach anything in Syndra by typing its name (proposed/GoTo.md, A-19 P4), as chosen
+ * (A-26 §0). It opens pages and follows answers; it never runs a verb. It is opened by a key dozens of
+ * times a day, so it appears at once and leaves at once (A-24 §8): a still Modal, pinned at the top at
+ * every width, a phone's too, and the phone's sheet opens this same one. Its name is the dialog's
  * `aria-label`, since no title shows it.
  */
 type GoToProps = {
@@ -61,8 +38,8 @@ export const GO_TO_PLACEHOLDER = {
   advanced: "A person, a role, a page, or a question",
 } as const;
 
-/** What Esc does now, said beside its key: with words typed it clears them first. */
-const GO_TO_ESC = { typed: "clear, then close", empty: "close" } as const;
+/** A phone's field says less: the board's words (A-26 §0). */
+export const GO_TO_PHONE_PLACEHOLDER = { member: "A page", basic: "A name, or a page", advanced: "A name, or a question" } as const;
 
 export function GoTo({ open, onClose, nav }: GoToProps) {
   return (
@@ -72,12 +49,31 @@ export function GoTo({ open, onClose, nav }: GoToProps) {
   );
 }
 
-/** A phone's field says less: the board's words (A-26 §0). */
-export const GO_TO_PHONE_PLACEHOLDER = { member: "A page", basic: "A name, or a page", advanced: "A name, or a question" } as const;
-
 /** What leaving a scope by its pill says, and what the pill is (A-26 §0, item 6). */
 export const scopeLabel = (scope: GoToScope) =>
   `Looking only among ${GO_TO_SCOPES[scope].word.toLowerCase()}. Look everywhere again.`;
+
+/** The light behind Go to at its largest: as wide as a wide window, a little over half a laptop's height. */
+const GO_TO_LIGHT = { width: 1180, height: 620 };
+
+/**
+ * Where the light behind Go to sits, in the window (A-26, the lamp's light; A-25 §7): on the lamp, unless
+ * the lamp is too near an edge for a wide pool (a phone), then the window's middle; never more than twice
+ * its centre's distance from the nearest edge, so its closest-side pool is spent before every edge.
+ */
+export function goToLightBox(lamp: { x: number; y: number }, view: { width: number; height: number }) {
+  const x = Math.min(lamp.x, view.width - lamp.x) < 280 ? view.width / 2 : lamp.x;
+  const width = Math.max(0, Math.min(GO_TO_LIGHT.width, 2 * Math.min(x, view.width - x)));
+  const height = Math.max(0, Math.min(GO_TO_LIGHT.height, 2 * Math.min(lamp.y, view.height - lamp.y)));
+  return { x, y: lamp.y, width, height };
+}
+
+/**
+ * How far the lamp's halo flares, as a scale of its resting size. Capped so the flared halo is still spent
+ * inside the field (A-25 rule 1: no box ends a light): its resting radius is 0.92 of the mark, and the
+ * field's half-height is the room it has (34px over a 32px mark; 31px over 28px on a phone).
+ */
+export const GO_TO_FLARE = 1.15;
 
 type Thing = { type: "answer"; key: "answer" } | { type: "ask"; key: string; text: string } | ({ type: "row" } & GoToRow);
 
@@ -86,8 +82,9 @@ type Thing = { type: "answer"; key: "answer" } | { type: "ask"; key: string; tex
  * at rest (the last place). Typing grows one list beneath, best match first. A kind's word offers its
  * scope ("Tab  only people"); Tab, the offer, or `@` `#` `/` first enters it, and Backspace on an empty
  * field gives the typing back. Esc clears everything typed or chosen, then closes. In Advanced a question
- * is answered in place, from Insights' own reads, and `↵` or `⌘↵` follows it on the map. Entering a scope is
- * one gesture that starts at the lamp; nothing about the field or the typing ever waits for it.
+ * is answered in place, from Insights' own reads, once the typing has rested, and `↵` or `⌘↵` follows it
+ * on the map. Entering a scope is one gesture that starts at the lamp; nothing about the field or the
+ * typing ever waits for it.
  */
 export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
   const { audience, isOperator } = useUiView();
@@ -100,6 +97,8 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
   const [scope, setScope] = useState<GoToScope | null>(null);
   // What was typed to make the scope ("peo"), given back by Backspace on an empty field.
   const [madeFrom, setMadeFrom] = useState("");
+  // A scope was just left: said once to a screen reader, until the next thing is.
+  const [left, setLeft] = useState(false);
   const [more, setMore] = useState(false);
   const [active, setActive] = useState(0);
   const base = useId();
@@ -107,9 +106,14 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
   const names = audience !== "member";
 
   // A question is Advanced's: its answer is followed on Insights' map, which only Advanced has (A-26 §0a).
+  // It is asked once the typing has rested a settle, so no read goes out per key and the answer does not
+  // flicker through every prefix; until then the last answer stays.
   const asking = audience === "advanced" && !scope && QUESTION_START.test(query.trim());
-  const ask = useGoToAsk(asking ? query : "", catalog?.users);
-  const answered = asking && !!ask.answer;
+  const settled = useDebounce(asking ? query : "", SETTLE_MS);
+  const ask = useGoToAsk(settled, catalog?.users);
+  const answer = asking ? ask.answer?.panel : undefined;
+  const working = asking && !answer && (settled !== query || ask.working);
+  const failed = asking && !answer && !working && ask.failed;
   const rows = useMemo(() => {
     const source = {
       nav,
@@ -124,27 +128,51 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
       waiting: indicators?.pending_propagation,
     };
     // Under an answer, the places its question names; a question not yet answered lists none.
-    if (asking) return answered ? goToNamed(source, ask.named) : [];
+    if (asking) return answer ? goToNamed(source, ask.named) : [];
     return goToRows(source, query, scope, more);
-  }, [asking, answered, ask.named, nav, names, audience, catalog, bundles, lately, here, indicators?.pending_propagation, query, scope, more]);
+  }, [asking, answer, ask.named, nav, names, audience, catalog, bundles, lately, here, indicators?.pending_propagation, query, scope, more]);
   const things: Thing[] = [
-    ...(answered ? [{ type: "answer", key: "answer" } as const] : []),
-    ...(asking && !answered && !ask.reading && !ask.status ? GO_TO_ASKS.map((text) => ({ type: "ask", key: `ask:${text}`, text }) as const) : []),
+    ...(answer ? [{ type: "answer", key: "answer" } as const] : []),
+    ...(asking && !answer && !working && !failed ? GO_TO_ASKS.map((text) => ({ type: "ask", key: `ask:${text}`, text }) as const) : []),
     ...rows.map((row) => ({ type: "row", ...row }) as const),
   ];
   const current = things.length ? things[Math.min(active, things.length - 1)] : undefined;
   const offer = names && !scope && !asking ? offeredScope(query) : null;
   const optionId = (thing: Thing) => `${base}-${thing.key.replace(/[^\w-]/g, "_")}`;
+  const typed = query.trim() !== "";
+  const nothing = typed && !asking && !things.length;
+  const nothingSaid = `Nothing by that name${scope ? ` among ${GO_TO_SCOPES[scope].word.toLowerCase()}` : ""}.`;
 
   const root = useRef<HTMLDivElement | null>(null);
   const field = useRef<HTMLInputElement | null>(null);
   const list = useRef<HTMLDivElement | null>(null);
   const activeRef = useRef<HTMLElement | null>(null);
   const answerRef = useRef<HTMLAnchorElement | null>(null);
-  const point = useRef<HTMLSpanElement | null>(null);
   const halo = useRef<HTMLSpanElement | null>(null);
   const beam = useRef<HTMLSpanElement | null>(null);
   const wave = useRef<HTMLSpanElement | null>(null);
+
+  // The light behind the pane: placed on the lamp before the first paint, and again when the window changes.
+  useLayoutEffect(() => {
+    const scrim = root.current?.closest<HTMLElement>(".go-to-scrim");
+    const lamp = root.current?.querySelector("[data-lamp]");
+    if (!scrim || !lamp) return;
+    const place = () => {
+      const at = lamp.getBoundingClientRect();
+      const view = scrim.getBoundingClientRect();
+      const box = goToLightBox(
+        { x: at.left + at.width / 2 - view.left, y: at.top + at.height / 2 - view.top },
+        { width: scrim.clientWidth, height: scrim.clientHeight },
+      );
+      scrim.style.setProperty("--light-x", `${box.x}px`);
+      scrim.style.setProperty("--light-y", `${box.y}px`);
+      scrim.style.setProperty("--light-w", `${box.width}px`);
+      scrim.style.setProperty("--light-h", `${box.height}px`);
+    };
+    place();
+    addEventListener("resize", place);
+    return () => removeEventListener("resize", place);
+  }, []);
 
   // The scope is the lamp's colour: on the window, so the light behind turns with the lamp.
   useEffect(() => {
@@ -154,33 +182,32 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
     else delete scrim.dataset.scope;
   }, [scope]);
 
-  // The chosen row's point of light: placed beside it, one element that never resizes. The list softens
-  // at the end that has more.
-  useLayoutEffect(() => {
-    const row = activeRef.current;
-    const dot = point.current;
-    if (row && dot) dot.style.transform = `translateY(${row.offsetTop + (row.offsetHeight - dot.offsetHeight) / 2}px)`;
-    row?.scrollIntoView?.({ block: "nearest" });
+  // The chosen row stays in sight, and the list softens at the end that has more.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView?.({ block: "nearest" });
     soften(list.current);
   }, [current?.key, things.length]);
 
-  // The lamp opens once as an answer lands (D's), a settle after the typing has rested. Once a question.
+  // The lamp opens once as an answer lands (D's), a settle after it shows. Once a question.
   const landed = useRef("");
   useEffect(() => {
-    if (!ask.answer || ask.title === landed.current) return;
+    if (!answer || ask.title === landed.current) return;
     const timer = setTimeout(() => {
       landed.current = ask.title;
-      if (!stillMotion()) flare(halo.current, 1.34);
+      if (!stillMotion()) flare(halo.current);
     }, SETTLE_MS);
     return () => clearTimeout(timer);
-  }, [ask.answer, ask.title]);
+  }, [answer, ask.title]);
 
-  function enterScope(next: GoToScope, typed: string) {
+  function enterScope(next: GoToScope, typed: string, rest = "") {
     setScope(next);
     setMadeFrom(sigilScope(typed) ? "" : typed);
-    setQuery("");
+    setQuery(rest);
+    setLeft(false);
     setMore(false);
     setActive(0);
+    // The caret stays where it was: a tap on the offer must not leave the focus on a control that is gone.
+    field.current?.focus();
     // One gesture, and it starts at the lamp. Never on leaving.
     const pane = root.current?.closest<HTMLElement>(".go-to-pane") ?? null;
     if (!stillMotion()) entered({ pane, scrim: pane?.parentElement ?? null, halo: halo.current, beam: beam.current, wave: wave.current });
@@ -189,10 +216,13 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
     setScope(null);
     setQuery(giveBack ? madeFrom : "");
     setMadeFrom("");
+    setLeft(true);
     setActive(0);
     field.current?.focus();
   }
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    // An input method choosing its characters owns every key until it is done (229: Safari's last one).
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     const empty = event.currentTarget.value === "";
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -210,7 +240,7 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
       if (current.type === "ask") {
         setQuery(current.text);
         setActive(0);
-      } else if (current.type === "answer" || (answered && (event.metaKey || event.ctrlKey))) {
+      } else if (current.type === "answer" || (answer && (event.metaKey || event.ctrlKey))) {
         // The answer is followed by its own link, as a link is: ↵ on it, ⌘↵ from a row under it.
         answerRef.current?.click();
       } else activeRef.current?.click();
@@ -227,14 +257,30 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
       setQuery("");
       setScope(null);
       setMadeFrom("");
+      setLeft(Boolean(scope));
       setMore(false);
       setActive(0);
     }
   }
 
   const placeholder = scope ? GO_TO_SCOPES[scope].hint : phone ? GO_TO_PHONE_PLACEHOLDER[audience] : GO_TO_PLACEHOLDER[audience];
-  const answer = ask.answer?.panel;
-  const typed = query.trim() !== "";
+  // What a screen reader is told, in one place: where it is looking, and what came of the typing.
+  const said = asking
+    ? answer
+      ? answer.title
+      : working
+        ? "Working it out."
+        : failed
+          ? "Couldn't load this answer."
+          : ""
+    : nothing
+      ? nothingSaid
+      : scope
+        ? `Looking only among ${GO_TO_SCOPES[scope].word.toLowerCase()}.`
+        : left
+          ? "Looking everywhere again."
+          : "";
+  const rowClass = (thing: Thing) => `go-to-row${thing.key === current?.key ? "" : " hover-tint"}`;
 
   return (
     <div ref={root} className="contents">
@@ -260,7 +306,7 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
           autoFocus
           role="combobox"
           aria-label="Go to"
-          aria-expanded={things.length > 0 || Boolean(answer)}
+          aria-expanded={things.length > 0}
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={current ? optionId(current) : undefined}
@@ -273,8 +319,9 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
           onChange={(event) => {
             const value = event.target.value;
             const sigil = names && !scope ? sigilScope(value) : null;
-            // A scope's own key first becomes the scope, and is not kept as typing.
-            if (sigil) return enterScope(sigil, GO_TO_SCOPES[sigil].sigil);
+            // A scope's own key first becomes the scope and is not kept; what follows it (a paste of
+            // "@ada") is the typing inside it.
+            if (sigil) return enterScope(sigil, GO_TO_SCOPES[sigil].sigil, value.slice(1));
             setQuery(value);
             setActive(0);
             setMore(false);
@@ -291,17 +338,51 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
         )}
       </div>
 
+      {(asking && !answer) || nothing ? (
+        // What came of the typing, when it is not a list: beside the list, never in it (only options are).
+        <div className="go-to-say">
+          {nothing ? (
+            <>
+              <span className="font-display text-title text-ink">{nothingSaid}</span>
+              <span className="text-small text-muted">
+                {scope ? "Backspace looks everywhere." : "Try fewer letters, or the start of any word in the name."}
+              </span>
+            </>
+          ) : working ? (
+            <span className="font-display text-title text-ink">Working it out.</span>
+          ) : failed ? (
+            <>
+              <span className="font-display text-title text-ink">Couldn&apos;t load this answer.</span>
+              <span className="text-small text-muted">
+                <button type="button" className="go-to-link" onClick={ask.retry}>
+                  Try again
+                </button>
+                , or{" "}
+                <Link href={ask.href ?? "/insights"} className="go-to-link" onClick={onGo}>
+                  open Insights
+                </Link>
+                .
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="font-display text-title text-ink">That isn&apos;t a question Syndra can answer.</span>
+              <span className="text-small text-muted">She answers only what she can read exactly, and she never guesses. These she can:</span>
+            </>
+          )}
+        </div>
+      ) : null}
+
       <div
         ref={list}
         id={listId}
         role="listbox"
         aria-label="Where to go"
         className="go-to-list"
-        hidden={!things.length && !asking && !(typed && !things.length)}
+        hidden={!things.length}
         onScroll={(event) => soften(event.currentTarget)}
       >
-        {current && <span ref={point} aria-hidden className="go-to-point" />}
-        {asking && answer && ask.href && (
+        {answer && ask.href && (
           <Link
             id={optionId({ type: "answer", key: "answer" })}
             ref={(el) => {
@@ -313,7 +394,7 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
             aria-selected={current?.type === "answer"}
             tabIndex={-1}
             onClick={onGo}
-            className="go-to-row hover-tint flex-col items-start! gap-1 py-2.5"
+            className={`${rowClass({ type: "answer", key: "answer" })} flex-col items-start! gap-1 py-2.5`}
           >
             <span className="font-display text-title text-ink">{answer.title}</span>
             <span className="text-small text-muted">{answer.eyebrow}</span>
@@ -329,20 +410,6 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
             </span>
           </Link>
         )}
-        {asking && !answer && (
-          <div className="flex flex-col gap-0.5 py-2 pl-[calc(var(--go-to-ax)-var(--go-to-pad))] pr-3.5">
-            <span className="font-display text-title text-ink">
-              {ask.reading || ask.status?.lines[0]?.text === "Working it out."
-                ? "Working it out."
-                : ask.status
-                  ? "Couldn't load this answer."
-                  : "That isn't a question Syndra can answer."}
-            </span>
-            {!ask.reading && !ask.status && (
-              <span className="text-small text-muted">She answers only what she can read exactly, and she never guesses. These she can:</span>
-            )}
-          </div>
-        )}
         {things.map((thing) =>
           thing.type === "answer" ? null : thing.type === "ask" ? (
             <div
@@ -357,7 +424,7 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
                 setActive(0);
                 field.current?.focus();
               }}
-              className="go-to-row hover-tint cursor-pointer"
+              className={`${rowClass(thing)} cursor-pointer`}
             >
               <span className="go-to-name">{thing.text}…</span>
               <span className="flex-1" />
@@ -373,25 +440,19 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
               aria-selected={thing.key === current?.key}
               tabIndex={-1}
               onClick={onGo}
-              className="go-to-row hover-tint"
+              className={rowClass(thing)}
             >
               <span className="go-to-name">{thing.name}</span>
               <span className="min-w-0 flex-1 truncate text-small text-faint">{thing.descriptor}</span>
-              <span className="flex-none text-small text-faint">{thing.tag}</span>
+              {/* In a scope the pill already says what every row is. */}
+              {!scope && <span className="flex-none text-small text-faint">{thing.tag}</span>}
             </Link>
           ),
         )}
-        {typed && !asking && !things.length && (
-          <div className="flex flex-col gap-0.5 py-2 pl-[calc(var(--go-to-ax)-var(--go-to-pad))] pr-3.5">
-            <span className="font-display text-title text-ink">
-              Nothing by that name{scope ? ` among ${GO_TO_SCOPES[scope].word.toLowerCase()}` : ""}.
-            </span>
-            <span className="text-small text-muted">
-              {scope ? "Backspace looks everywhere." : "Try fewer letters, or the start of any word in the name."}
-            </span>
-          </div>
-        )}
       </div>
+      <p role="status" className="sr-only">
+        {said}
+      </p>
     </div>
   );
 }
@@ -407,9 +468,9 @@ function soften(list: HTMLElement | null) {
 const ease = (name: "--ease-flash" | "--ease-settle" | "--ease-press") =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "ease";
 
-/** The lamp's halo flares once: D's, a flash long. */
-function flare(halo: HTMLElement | null, to = 1.3) {
-  halo?.animate?.([{ opacity: 0.72, scale: 1 }, { opacity: 1, scale: to, offset: 0.25 }, { opacity: 0.72, scale: 1 }], {
+/** The lamp's halo flares once: D's, a flash long, and spent inside the field (`GO_TO_FLARE`). */
+function flare(halo: HTMLElement | null) {
+  halo?.animate?.([{ opacity: 0.72, scale: 1 }, { opacity: 1, scale: GO_TO_FLARE, offset: 0.25 }, { opacity: 0.72, scale: 1 }], {
     duration: FLASH_MS,
     easing: ease("--ease-flash"),
   });
@@ -443,168 +504,5 @@ function entered({ pane, scrim, halo, beam, wave }: Record<"pane" | "scrim" | "h
       { transform: "none" },
     ],
     total,
-  );
-}
-
-/**
- * The Input and its grouped list. Inside the dialog it is the whole surface;
- * inside the phone's Go to sheet (`embedded`) it sits above the page list,
- * which stays (as `idle`) until something is typed.
- */
-export function GoToPanel({
-  nav,
-  onGo,
-  embedded = false,
-  idle,
-}: {
-  nav: NavEntry[];
-  /** Called when a row is opened, so the host can close. */
-  onGo: () => void;
-  embedded?: boolean;
-  /** Embedded only: what the sheet shows while the Input is empty. */
-  idle?: React.ReactNode;
-}) {
-  const { audience } = useUiView();
-  const { catalog, bundles } = useNameCatalog();
-  const here = usePathname();
-  // Read once, as it opens: the places opened before this one.
-  const [lately] = useState(recallLately);
-  const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
-  const base = useId();
-  const listId = `${base}-list`;
-
-  const groups = useMemo(
-    () =>
-      goTo(
-        {
-          nav,
-          // A member's list is their own pages and nothing else; Basic has no Bundles page.
-          names: audience !== "member",
-          bundles: audience === "advanced",
-          people: catalog?.users,
-          projects: catalog?.projects,
-          apps: catalog?.applications,
-          bundleList: bundles,
-          lately,
-          here,
-        },
-        query,
-      ),
-    [nav, audience, catalog, bundles, query, lately, here],
-  );
-  const typed = query.trim() !== "";
-  const showIdle = embedded && !typed;
-  // The phone sheet's own list is its Pages: with nothing typed it keeps Lately above that list.
-  const shown = showIdle ? groups.filter(({ group }) => group === "Lately") : groups;
-  const items = flatItems(shown);
-  const current = items.length ? items[Math.min(active, items.length - 1)] : undefined;
-  const optionId = (item: GoToItem) => `${base}-${item.key.replace(/[^\w-]/g, "_")}`;
-
-  const activeRef = useRef<HTMLAnchorElement | null>(null);
-  useEffect(() => {
-    activeRef.current?.scrollIntoView?.({ block: "nearest" });
-  }, [current?.key]);
-
-  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      if (!items.length) return;
-      event.preventDefault();
-      const step = event.key === "ArrowDown" ? 1 : -1;
-      setActive((index) => (Math.min(index, items.length - 1) + step + items.length) % items.length);
-    } else if (event.key === "Enter" && current) {
-      event.preventDefault();
-      // Enter is a press on the selected link, so it navigates exactly as a click does.
-      activeRef.current?.click();
-    }
-  }
-
-  const field = (
-    <Input
-      type="search"
-      bare={!embedded}
-      // The whole row is the field: its inset is the input's own, so a press anywhere in the row lands in it.
-      className={embedded ? "" : "px-6 py-3.5"}
-      autoFocus={!embedded}
-      role="combobox"
-      aria-label={embedded ? "Go to by name" : "Go to"}
-      aria-expanded={items.length > 0}
-      aria-controls={listId}
-      aria-autocomplete="list"
-      aria-activedescendant={current ? optionId(current) : undefined}
-      autoComplete="off"
-      spellCheck={false}
-      placeholder={GO_TO_PLACEHOLDER[audience]}
-      value={query}
-      onChange={(event) => {
-        setQuery(event.target.value);
-        setActive(0);
-      }}
-      onKeyDown={onKeyDown}
-    />
-  );
-
-  return (
-    // The phone's sheet keeps its boxed field inside its own padding; the dialog is the board's panel:
-    // the field row, the list, the keys, edge to edge.
-    <div className={`flex flex-col ${embedded ? "gap-3" : ""}`}>
-      {embedded ? field : <div className="field-row sticky top-0 bg-surface-2">{field}</div>}
-
-      {(!showIdle || items.length > 0) && (
-        <div id={listId} role="listbox" aria-label="Where to go" className={`flex flex-col ${embedded ? "-mx-6" : "pb-1.5"}`}>
-          {shown.map(({ group, items: rows }) => (
-            <div key={group} role="group" aria-labelledby={`${base}-${group}`} className="flex flex-col">
-              <div id={`${base}-${group}`} className="px-6 pb-1 pt-3">
-                <span className="type-nav-group">{group}</span>
-              </div>
-              {rows.map((item) => {
-                const selected = item.key === current?.key;
-                return (
-                  <Link
-                    key={item.key}
-                    id={optionId(item)}
-                    ref={selected ? activeRef : undefined}
-                    href={item.href}
-                    replace={embedded}
-                    role="option"
-                    aria-selected={selected}
-                    tabIndex={-1}
-                    onClick={onGo}
-                    className={`motion-tint flex min-h-[var(--tap)] items-center gap-3 px-6 py-1.5 ${selected ? "bg-tint-2" : ""}`}
-                  >
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-body font-semibold text-ink">{item.name}</span>
-                      {item.descriptor && <span className="truncate text-small text-muted">{item.descriptor}</span>}
-                    </span>
-                    <span className="flex-none text-fine text-faint">{item.kind}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
-          {typed && groups.length === 0 && (
-            <div className="px-6">
-              <EmptyState title="Nothing by that name." />
-            </div>
-          )}
-        </div>
-      )}
-      {showIdle && idle}
-
-      {!embedded && (
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-divider px-6 py-2.5 text-fine text-faint">
-          <span className="inline-flex items-center gap-1">
-            <Kbd>↑</Kbd>
-            <Kbd>↓</Kbd> move
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Kbd>Enter</Kbd> open
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Kbd>Esc</Kbd> {query !== "" ? GO_TO_ESC.typed : GO_TO_ESC.empty}
-          </span>
-        </p>
-      )}
-    </div>
   );
 }

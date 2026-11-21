@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { goToLightBox } from "@/components/ui/Modal";
+import { goToLightBox } from "@/components/ui/GoTo";
 import { block, css } from "./cssTokens";
 
 // A-26, Go to as chosen (owner, 21 Nov 2026): its tokens, its one lamp colour, and its lights' limits.
@@ -44,7 +44,7 @@ describe("the glass, in both rooms", () => {
 describe("one lamp, one colour", () => {
   it("is a registered colour, so a scope's turn is a tint and not a snap; everything the lamp lights reads it", () => {
     expect(css).toMatch(/@property --light \{ syntax: "<color>"; inherits: true; initial-value: transparent; \}/);
-    expect(css).toMatch(/\.go-to-scrim \{\s*--light: var\(--accent\);[\s\S]*?transition: --light var\(--duration-tint\) var\(--ease-tint\);/);
+    expect(css).toMatch(/\n  \.go-to-scrim \{[\s\S]*?--light: var\(--accent\);[\s\S]*?transition: --light var\(--duration-tint\) var\(--ease-tint\);/);
     for (const part of [".go-to-scrim", ".go-to-halo", ".go-to-beam", ".go-to-scope-light", ".go-to-pane {"]) {
       const rule = css.slice(css.indexOf(`\n  ${part}`), css.indexOf("\n  }\n", css.indexOf(`\n  ${part}`)));
       expect(rule, part).toMatch(/--pool-c: var\(--light\);/);
@@ -53,7 +53,7 @@ describe("one lamp, one colour", () => {
 
   it("draws no light under forced colours", () => {
     expect(css).toMatch(
-      /@media \(forced-colors: active\) \{\s*\.go-to-scrim::before,\s*\.go-to-pane::before,\s*\.go-to-wave,\s*\.go-to-beam,\s*\.go-to-halo,\s*\.go-to-scope-light,\s*\.go-to-point \{\s*display: none;/,
+      /@media \(forced-colors: active\) \{\s*\.go-to-scrim::before,\s*\.go-to-pane::before,\s*\.go-to-wave,\s*\.go-to-beam,\s*\.go-to-halo,\s*\.go-to-scope-light,\s*\.go-to-row::before \{\s*display: none;/,
     );
   });
 
@@ -76,5 +76,22 @@ describe("the light behind, sized by the window (A-25 §7)", () => {
         for (let y = 0; y <= view.height; y += view.height / 8) expect(inside(goToLightBox({ x, y }, view), view)).toBe(true);
       }
     }
+  });
+});
+
+describe("where the pane floats, and where its point of light is", () => {
+  const scrim = /\n  \.go-to-scrim \{([\s\S]*?)\n    --light: var\(--accent\);/.exec(css)?.[1] ?? "";
+
+  it("floats 96px down, or on a phone 12px or under the notch, from one value the list reads too", () => {
+    expect(scrim).toMatch(/--go-to-top: 96px;\s*padding-top: var\(--go-to-top\);/);
+    expect(scrim).toMatch(/@media \(width < theme\(--breakpoint-tablet\)\) \{\s*--go-to-top: max\(12px, env\(safe-area-inset-top\)\);/);
+    expect(css).toMatch(/calc\(100dvh - var\(--go-to-top\)/);
+  });
+
+  it("draws the chosen row's point as that row's own, so it is wherever the row is", () => {
+    expect(css).toMatch(
+      /&\[aria-selected="true"\]::before \{\s*content: "";\s*position: absolute;\s*top: calc\(var\(--go-to-row\) \/ 2 - 3px\);\s*left: calc\(var\(--go-to-lamp\) - var\(--go-to-pad\) - 3px\);/,
+    );
+    expect(css).not.toMatch(/\.go-to-point/);
   });
 });

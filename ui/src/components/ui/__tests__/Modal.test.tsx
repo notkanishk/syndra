@@ -67,6 +67,17 @@ describe("Modal", () => {
     expect(field).toHaveFocus();
   });
 
+  it("leaves an Escape that ends an input method's composition to the method", () => {
+    const onClose = vi.fn();
+    render(
+      <Modal open={true} onClose={onClose}>
+        <input aria-label="Field" />
+      </Modal>,
+    );
+    fireEvent.keyDown(screen.getByLabelText("Field"), { key: "Escape", isComposing: true });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("does not dismiss on Escape when busy", () => {
     const onClose = vi.fn();
     render(

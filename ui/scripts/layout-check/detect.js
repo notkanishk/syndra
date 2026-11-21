@@ -38,9 +38,11 @@
  *             sits in: its four quarters must be spent inside the card's inner box. A dialog
  *             opens only from a click, so a replay sees one only where a page draws
  *             a trail open.
- *   goto      Go to's light (A-26) reaching past the window: its pool on the
- *             scrim must be spent inside every edge. The check opens Go to by its key
- *             on Home, at each width and view, and reads only this rule with it open.
+ *   goto      Go to's lights (A-26) reaching past what clips them: the pool behind the
+ *             pane past the window, and the halo, the beam and the scope's light past
+ *             the pane. The check opens Go to by its key on Home, at each width and
+ *             view, enters a scope by `@`, and reads only this rule: at rest, with the
+ *             gesture held at its largest, and once it is done.
  *   lamp      the mark's breathing glow (A-25 moment 3) reaching past a box that
  *             clips it (the rail's scroller, the phone's bar, the window): its pool
  *             must be spent inside every edge, read from the glow's own computed box.
@@ -522,6 +524,27 @@ export function detect({ tablet = 720 } = {}) {
       ["bottom", y + h / 2 - scrim.clientHeight],
     ].filter(([, by]) => by > 0.5);
     for (const [side, by] of past) goto.push(`Go to's light reaches ${by.toFixed(1)}px past the window's ${side}`);
+  }
+  // Inside the pane, each of the lamp's lights (its halo, flared or not; the beam through the bar; the
+  // scope pill's own light) is a pool spent at its own box's edge, and the pane clips: each box, as drawn
+  // now (transforms and all), must lie inside the pane's.
+  for (const pane of document.querySelectorAll(".go-to-pane")) {
+    const room = pane.getBoundingClientRect();
+    for (const light of pane.querySelectorAll(".go-to-halo, .go-to-beam, .go-to-scope-light")) {
+      if (getComputedStyle(light).display === "none") continue;
+      const r = light.getBoundingClientRect();
+      if (!(r.width >= 1 && r.height >= 1)) {
+        goto.push(`Go to's ${light.className} measures nothing`);
+        continue;
+      }
+      const past = [
+        ["left", room.left - r.left],
+        ["top", room.top - r.top],
+        ["right", r.right - room.right],
+        ["bottom", r.bottom - room.bottom],
+      ].filter(([, by]) => by > 0.5);
+      for (const [side, by] of past) goto.push(`Go to's ${light.className} reaches ${by.toFixed(1)}px past the pane's ${side}`);
+    }
   }
 
   return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pill, place, trail, goto, pageScroll };

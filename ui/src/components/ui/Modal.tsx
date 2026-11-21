@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { NameLinksContext } from "@/components/names/NameLink";
@@ -45,21 +45,6 @@ interface ModalProps {
   /** The dialog's name when it has no visible title (Go to); otherwise its ModalHeader names it. */
   label?: string;
   children: React.ReactNode;
-}
-
-/** The light behind Go to at its largest: as wide as a wide window, a little over half a laptop's height. */
-const GO_TO_LIGHT = { width: 1180, height: 620 };
-
-/**
- * Where the light behind Go to sits, in the window (A-26, the lamp's light; A-25 §7): on the lamp, unless
- * the lamp is too near an edge for a wide pool (a phone), then the window's middle; never more than twice
- * its centre's distance from the nearest edge, so its closest-side pool is spent before every edge.
- */
-export function goToLightBox(lamp: { x: number; y: number }, view: { width: number; height: number }) {
-  const x = Math.min(lamp.x, view.width - lamp.x) < 280 ? view.width / 2 : lamp.x;
-  const width = Math.max(0, Math.min(GO_TO_LIGHT.width, 2 * Math.min(x, view.width - x)));
-  const height = Math.max(0, Math.min(GO_TO_LIGHT.height, 2 * Math.min(lamp.y, view.height - lamp.y)));
-  return { x, y: lamp.y, width, height };
 }
 
 /**
@@ -200,7 +185,8 @@ export function useDialogFocusTrap(
       // An Escape something inside already used (a search clearing its words, A-24 §11.5) is spent.
       // Checked here rather than trusted to stopPropagation: the app's React root is the document
       // itself, so a stop there does not keep this listener on the same node from running.
-      if (event.key === "Escape" && !event.defaultPrevented && !busyRef.current) {
+      // An Escape that ends a composition (an input method choosing its characters) is the method's, not the dialog's.
+      if (event.key === "Escape" && !event.defaultPrevented && !event.isComposing && !busyRef.current) {
         event.preventDefault();
         // The dialog's Esc is the dialog's: a page behind it must not also act on it.
         event.stopPropagation();
@@ -368,28 +354,6 @@ export function Modal({
 
   useSheetLeave(scrimRef, draggedAway, open && !still);
 
-  // Go to's light: placed on the lamp before the first paint, and again when the window changes.
-  useLayoutEffect(() => {
-    const scrim = scrimRef.current;
-    const panel = panelRef.current;
-    if (!open || !glass || !scrim || !panel) return;
-    const place = () => {
-      const lamp = (panel.querySelector("[data-lamp]") ?? panel).getBoundingClientRect();
-      const view = scrim.getBoundingClientRect();
-      const box = goToLightBox(
-        { x: lamp.left + lamp.width / 2 - view.left, y: lamp.top + lamp.height / 2 - view.top },
-        { width: scrim.clientWidth, height: scrim.clientHeight },
-      );
-      scrim.style.setProperty("--light-x", `${box.x}px`);
-      scrim.style.setProperty("--light-y", `${box.y}px`);
-      scrim.style.setProperty("--light-w", `${box.width}px`);
-      scrim.style.setProperty("--light-h", `${box.height}px`);
-    };
-    place();
-    addEventListener("resize", place);
-    return () => removeEventListener("resize", place);
-  }, [open, glass]);
-
   const grabber = useSheetDrag({ panelRef, scrimRef, busy, onClose, draggedAway });
 
   if (open && nested && process.env.NODE_ENV !== "production") {
@@ -416,7 +380,7 @@ export function Modal({
       data-hand={glass ? "" : undefined}
       className={
         glass
-          ? "go-to-scrim fixed inset-0 z-(--layer-dialog) flex items-start justify-center bg-scrim px-2 pt-3 tablet:items-start tablet:px-4 tablet:pt-24"
+          ? "go-to-scrim fixed inset-0 z-(--layer-dialog) flex items-start justify-center bg-scrim px-2 tablet:px-4"
           : `${still ? "" : "settle-scrim"} fixed inset-0 z-(--layer-dialog) flex items-end justify-center bg-scrim tablet:px-4 ${place.scrim}`
       }
       onClick={(event) => {
