@@ -593,8 +593,10 @@ func TestLiveMigration101KindsEveryStoredGap(t *testing.T) {
 	if err := m.Migrate(100); err != nil {
 		t.Fatalf("000101 down: %v", err)
 	}
-	if err := m.Migrate(101); err != nil {
-		t.Fatalf("000101 up: %v", err)
+	// Back up through 101 to where the database was: StatsGaps reads the
+	// schema as it stands at the head (000103 added scope and subject).
+	if err := m.Migrate(uint(version)); err != nil {
+		t.Fatalf("000101 up (to %d): %v", version, err)
 	}
 	stored, err := StatsGaps(ctx, statsTarget, ago(400))
 	if err != nil {
