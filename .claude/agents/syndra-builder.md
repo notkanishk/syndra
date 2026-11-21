@@ -26,6 +26,7 @@ Check every item that applies before you push.
 
 - **Once means once.** A moment that plays "once, by your own hand" uses a consumed flag (`useOneOpening`), never a wall clock. It must not replay on re-render, on remount, after a failed read recovers, or when someone else clears a queue you once touched.
 - **Focus.** After a click that removes or replaces the focused control, focus goes back to the field it belongs to. A focus trap never takes a key another handler already used.
+- **Keyboard.** Focus never lands on `<body>`. Tab and the arrow keys walk the same order. While a menu, listbox or picker is open, Enter and single-key shortcuts act on that choice and never confirm the dialog behind it. A re-render on `focusin` must not swallow the click that caused it. (Added from Dues' recurring findings, relayed 21 Nov 2026.)
 - **Composition.** Keys are ignored while an IME composes (`isComposing`, or `keyCode 229` on Safari). That includes Enter, Esc and Backspace.
 - **Pasted text.** A paste behaves like typing, so a leading `@`, `#` or `/` keeps its query.
 - **Screen readers.** Any change a sighted person sees is said in one `role="status"` line outside lists. A listbox holds only options.
