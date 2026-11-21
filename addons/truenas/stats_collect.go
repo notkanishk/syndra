@@ -325,31 +325,30 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, m
 	}
 
 	// storage.used_bytes: every dataset a share reaches, nested ones
-	// included, by everyone in them; all of them read, or the share not
-	// sampled.
+	// included, by everyone in them (usageUnder, the count storage.status
+	// reads live). A share whose own dataset is unreadable is not sampled; one
+	// that is a plain folder, or has a nested dataset that could not be read,
+	// is sampled with a gap saying what was not counted.
 	used, usedUnbound := map[string][]StatPoint{}, map[string]bool{}
+	usedGaps := map[string]StatGap{}
 	var usedDims []map[string]string
 	for _, sh := range shares {
 		dims := map[string]string{"share": sh.Name}
 		usedDims = append(usedDims, dims)
-		datasets := datasetsUnder(mounts, sh.Path)
-		byUID := map[int64]int64{}
-		read := len(datasets) > 0
-		for _, dataset := range datasets {
-			t := table(dataset)
-			if t == nil {
-				read = false
-				break
-			}
-			for uid, u := range t {
-				byUID[uid] += u.UsedBytes
-			}
+		u := usageUnder(mounts, sh.Path, table)
+		if !u.Own {
+			used[sh.Name] = nil
+			usedGaps[sh.Name] = gapOf(c.stamp(today), c.stamp(nextDayKey(today)), dims, reasonFolder)
+			continue
 		}
-		if !read {
+		if u.Top == nil {
 			continue // not read: the share keeps today's last sample
 		}
+		if len(u.Unread) > 0 {
+			usedGaps[sh.Name] = gapOf(c.stamp(today), c.stamp(nextDayKey(today)), dims, reasonPartOf(u.Unread))
+		}
 		var total int64
-		for uid, v := range byUID {
+		for uid, v := range u.ByUID {
 			total += v
 			if v == 0 {
 				continue
@@ -398,16 +397,24 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, m
 	home = append(home, point("", nil, homeTotal))
 
 	s.putLevels(metricUsedBytes, metas[metricUsedBytes], now, usedDims, func(rec statDay) (statDay, bool) {
-		kept := rec.Points[:0]
+		kept := statDay{}
 		for _, p := range rec.Points {
 			if _, replaced := used[p.Dimensions["share"]]; !replaced {
-				kept = append(kept, p) // a share not read now keeps today's last sample
+				kept.Points = append(kept.Points, p) // a share not read now keeps today's last sample
 			}
 		}
-		for _, ps := range used {
-			kept = append(kept, ps...)
+		for _, g := range rec.Gaps {
+			if _, replaced := used[g.Dimensions["share"]]; !replaced {
+				kept.Gaps = append(kept.Gaps, g) // and its gap
+			}
 		}
-		return statDay{Points: kept}, len(used) == len(shares)
+		for name, ps := range used {
+			kept.Points = append(kept.Points, ps...)
+			if g, ok := usedGaps[name]; ok {
+				kept.Gaps = append(kept.Gaps, g)
+			}
+		}
+		return kept, len(used) == len(shares)
 	}, usedUnbound)
 	s.putLevels(metricHomeBytes, metas[metricHomeBytes], now, []map[string]string{nil}, func(rec statDay) (statDay, bool) {
 		if !homeRead {
@@ -442,9 +449,12 @@ func (s *server) putLevels(metric string, meta statsMeta, now time.Time, dims []
 	for d := from; d < today; d = nextDayKey(d) {
 		rec := stored[d]
 		for _, want := range dims {
-			sampled := false
+			sampled := false // a total, or a gap saying why there is none
 			for _, p := range rec.Points {
 				sampled = sampled || p.Subject == "" && sameDims(p.Dimensions, want)
+			}
+			for _, g := range rec.Gaps {
+				sampled = sampled || sameDims(g.Dimensions, want)
 			}
 			if !sampled {
 				rec.Gaps = append(rec.Gaps, gapOf(c.stamp(d), c.stamp(nextDayKey(d)), want, reasonDark))

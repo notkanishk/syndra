@@ -555,13 +555,13 @@ func TestLevelsArePerShareAndPerHome(t *testing.T) {
 	}
 }
 
-// Staging, 21 Nov 2026: a team folder that is its own dataset inside a share
-// read 67,036,288 bytes live while the share's collected total was the top
-// dataset's 33,344, and members had no per-person series. The collector now
-// counts by the live read's resolution: a share's level is every dataset it
-// reaches, each once; a home is its own dataset's.
-func TestCollectedLevelsAreWhatTheLiveReadSees(t *testing.T) {
-	s, nas, _ := statsServer(t)
+// nestedStatsServer is statsServer with the folders the live read resolves:
+// waddle and quack datasets of their own inside main, Rey's home a dataset of
+// its own, Seth's a plain folder in home_dir, and nobody with a row on main's
+// own dataset but its root.
+func nestedStatsServer(t *testing.T) (*server, *statsNAS, *time.Time) {
+	t.Helper()
+	s, nas, at := statsServer(t)
 	for k, v := range reachFake().answers {
 		nas.answers[k] = v // the folders, their ACLs and their datasets
 	}
@@ -577,6 +577,17 @@ func TestCollectedLevelsAreWhatTheLiveReadSees(t *testing.T) {
 	nas.answers["pool.dataset.get_quota tank/main/quack"] = `[{"id":3051,"used_bytes":5}]`
 	nas.answers["pool.dataset.get_quota tank/main/home_dir"] = `[{"id":3077,"used_bytes":400}]`
 	nas.answers["pool.dataset.get_quota tank/main/home_dir/rey_mysterio"] = `[{"id":3051,"used_bytes":2500,"quota":5000}]`
+
+	return s, nas, at
+}
+
+// Staging, 21 Nov 2026: a team folder that is its own dataset inside a share
+// read 67,036,288 bytes live while the share's collected total was the top
+// dataset's 33,344, and members had no per-person series. The collector now
+// counts by the live read's resolution: a share's level is every dataset it
+// reaches, each once; a home is its own dataset's.
+func TestCollectedLevelsAreWhatTheLiveReadSees(t *testing.T) {
+	s, _, _ := nestedStatsServer(t)
 	s.collectStatsOnce()
 
 	staff := []apiID{{raw: json.RawMessage("51")}}
@@ -619,6 +630,161 @@ func TestCollectedLevelsAreWhatTheLiveReadSees(t *testing.T) {
 	}
 	if v, _ := onDay(home, "2026-11-09", "", ""); v != 2500+400 {
 		t.Errorf("the home folders' total %d, want 2900 (his dataset and home_dir, once each)", v)
+	}
+}
+
+// One number per thing (design.md, "The storage numbers, reconciled"): at one
+// moment storage.status's share figure is storage.used_bytes's, and /homes'
+// used bytes are storage.home_bytes's, for a home that is a dataset of its own
+// (Rey's) and one that is a plain folder (Seth's). On staging, 21 Nov 2026, a
+// member with no row on a share's own dataset had no live figure but 67 MB
+// collected, and /homes said 0 B for a home its person page said 2.5 KB of.
+func TestLiveAndCollectedStorageAreOneNumber(t *testing.T) {
+	s, _, _ := nestedStatsServer(t)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-seth", Username: "seth_rollins", UID: 3077, UIDKind: uidKindAccount}); err != nil {
+		t.Fatal(err)
+	}
+	s.collectStatsOnce()
+	_, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
+	_, home, _ := allStats(t, s, metricHomeBytes, day0.Add(-time.Hour))
+	homes, err := s.readHomes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for uid, subject := range map[int64]string{3051: "sub-rey", 3077: "sub-seth"} {
+		meters, err := s.shareUsage(uid)
+		if err != nil {
+			t.Fatalf("%s: %v", subject, err)
+		}
+		live := map[string]int64{}
+		for _, m := range meters {
+			live[m.Label] = m.Used
+		}
+		for _, share := range []string{"main", "open", "scratch"} {
+			if got, _ := onDay(used, "2026-11-09", subject, share); got != live[share] {
+				t.Errorf("%s on %s: collected %d, live %d", subject, share, got, live[share])
+			}
+		}
+		if live["main"] == 0 {
+			t.Errorf("%s has no live figure on main: %v", subject, meters)
+		}
+		var homeLive int64 = -1
+		for _, h := range homes.Homes {
+			if h.Subject == subject {
+				homeLive = h.UsedBytes
+			}
+		}
+		if got, _ := onDay(home, "2026-11-09", subject, ""); got != homeLive || got == 0 {
+			t.Errorf("%s's home: collected %d, /homes %d", subject, got, homeLive)
+		}
+	}
+	// The limit stays the share's own dataset's, and a home's the parent's.
+	for _, h := range homes.Homes {
+		if h.Subject == "sub-rey" && h.QuotaBytes != 0 {
+			t.Errorf("Rey's home limit %d, want home_dir's (none): the write sets the parent's", h.QuotaBytes)
+		}
+	}
+}
+
+// A nested dataset that cannot be read (an encrypted one whose key is not
+// loaded refuses get_quota) leaves the share counted without it, with a gap
+// naming it: never the whole share unsampled, never that folder as zero.
+func TestAnUnreadableNestedDatasetIsAGapNotTheShare(t *testing.T) {
+	s, nas, at := nestedStatsServer(t)
+	if nas.refuse == nil {
+		nas.refuse = map[string]string{}
+	}
+	nas.refuse["pool.dataset.get_quota tank/main/quack"] = "[EFAULT] tank/main/quack is locked"
+	s.collectStatsOnce()
+	*at = day0.Add(24 * time.Hour) // the day closes: its gap is final, not "could not be read that day"
+	s.collectStatsOnce()
+	page, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
+	if v, _ := onDay(used, "2026-11-09", "", "main"); v != 33344+67036288+10+400+2500 {
+		t.Errorf("main's total %d, want every readable dataset in it", v)
+	}
+	if v, _ := onDay(used, "2026-11-09", "sub-rey", "main"); v != 67036288+2500 {
+		t.Errorf("Rey on main %d, want waddle and his home, quack left out", v)
+	}
+	var mainGaps []StatGap
+	for _, g := range page.Gaps {
+		if g.Dimensions["share"] == "main" {
+			mainGaps = append(mainGaps, g)
+		}
+	}
+	if len(mainGaps) == 0 || mainGaps[0].Start != "2026-11-09T00:00:00+05:30" {
+		t.Errorf("main's gaps %+v, want them from the first day", mainGaps)
+	}
+	for _, g := range mainGaps { // the closed day keeps its reason, not "could not be read that day"
+		if g.Kind() != kindUnread || !strings.Contains(g.Reason(), "quack") {
+			t.Errorf("main's gap %+v, want unread, naming quack", g)
+		}
+	}
+	meters, err := s.shareUsage(3051)
+	if err == nil || !strings.Contains(err.Error(), "main") {
+		t.Errorf("the live read passed a partial share off as whole: %v", err)
+	}
+	for _, m := range meters {
+		if m.Label == "main" && m.Used != 67036288+2500 {
+			t.Errorf("live main %d, want what was read, as collected", m.Used)
+		}
+	}
+}
+
+// A share that is a plain folder inside another share's dataset is not that
+// dataset: nothing of the parent is counted for it, live or collected, and it
+// is a gap saying the NAS does not count it on its own.
+func TestAPlainFolderShareNeverCountsItsParent(t *testing.T) {
+	s, nas, at := nestedStatsServer(t)
+	nas.shares = strings.TrimSuffix(statsShares, "]") +
+		`,{"name":"notes","path":"/mnt/tank/main/notes","enabled":true,"audit":{"enable":false,"watch_list":[],"ignore_list":[]}}]`
+	s.collectStatsOnce()
+	*at = day0.Add(24 * time.Hour)
+	s.collectStatsOnce()
+	page, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
+	for _, p := range used {
+		if p.Dimensions["share"] == "notes" {
+			t.Errorf("notes has a point %+v: a plain folder counted its parent dataset", p)
+		}
+	}
+	if v, _ := onDay(used, "2026-11-09", "", "main"); v != 33344+67036288+10+5+400+2500 {
+		t.Errorf("main's total %d, changed by a share inside it", v)
+	}
+	var gaps []StatGap
+	for _, g := range page.Gaps {
+		if g.Dimensions["share"] == "notes" {
+			gaps = append(gaps, g)
+		}
+	}
+	if len(gaps) == 0 || gaps[0].Start != "2026-11-09T00:00:00+05:30" {
+		t.Errorf("notes' gaps %+v, want them from the first day", gaps)
+	}
+	for _, g := range gaps { // the closed day keeps its reason, not "could not be read that day"
+		if g.Kind() != kindUnobserved || g.Reason() != reasonFolder.text {
+			t.Errorf("notes' gap %+v, want %q", g, reasonFolder.text)
+		}
+	}
+	meters, err := s.shareUsage(3051)
+	if err == nil || !strings.Contains(err.Error(), "notes") {
+		t.Errorf("the live read said notes was read: %v", err)
+	}
+	for _, m := range meters {
+		if m.Label == "notes" {
+			t.Errorf("live notes %+v: a plain folder counted its parent dataset", m)
+		}
+	}
+}
+
+// The folder boundary: /mnt/tank/share2 is beside /mnt/tank/share, not in it.
+func TestASharesDatasetsStopAtItsFolder(t *testing.T) {
+	mounts := map[string]string{"/mnt/tank/share": "tank/share", "/mnt/tank/share2": "tank/share2",
+		"/mnt/tank/share2/x": "tank/share2/x", "/mnt/tank/share/x": "tank/share/x"}
+	read := map[string]bool{}
+	u := usageUnder(mounts, "/mnt/tank/share", func(d string) map[int64]PlaceUsage {
+		read[d] = true
+		return map[int64]PlaceUsage{1: {UsedBytes: 1}}
+	})
+	if !read["tank/share"] || !read["tank/share/x"] || read["tank/share2"] || read["tank/share2/x"] || u.ByUID[1] != 2 {
+		t.Errorf("share read %v, counted %d: want share and share/x only", read, u.ByUID[1])
 	}
 }
 

@@ -96,10 +96,19 @@ var (
 	reasonAudited  = gapReason{"Auditing does not record everyone on this share", kindUnobserved}
 	reasonPurged   = gapReason{"The NAS no longer keeps its log of these days", kindDropped}
 	reasonOverfull = gapReason{"Too much activity to count", kindUnread}
+	// reasonFolder is a share that is a plain folder inside a dataset it shares with what lies beside
+	// it: the NAS counts space per dataset, so the folder's own cannot be told apart.
+	reasonFolder = gapReason{"The NAS does not count this share's space on its own", kindUnobserved}
 )
 
+// reasonPartOf is a share counted without the folders, inside it, that could not be read (an encrypted
+// one whose key is not loaded refuses the read): what was read is sent, and this says what it leaves out.
+func reasonPartOf(folders []string) gapReason {
+	return gapReason{"Not counted, could not be read: " + strings.Join(folders, ", "), kindUnread}
+}
+
 // gapReasons is every fixed reason: a gap stored before kinds existed takes its sentence's kind.
-var gapReasons = []gapReason{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonPurged, reasonOverfull}
+var gapReasons = []gapReason{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonPurged, reasonOverfull, reasonFolder}
 
 // gapOf is the one way a window not observed is made: from its reason, which carries its kind.
 func gapOf(start, end string, dims map[string]string, why gapReason) StatGap {

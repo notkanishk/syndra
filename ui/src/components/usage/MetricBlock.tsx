@@ -3,11 +3,12 @@
 import { useState, type ReactNode } from "react";
 
 import * as copy from "@/components/usage/copy";
+import { addDays } from "@/components/insights/days";
 import { Band, cellWords } from "@/components/usage/Band";
 import { AdvancedLink } from "@/components/ui/AdvancedLink";
 import { Crossfade } from "@/lib/motion";
 import type { StatsMetric, StatsSeries, UsageWindows } from "@/lib/queries/useStats";
-import { CAP, capText, change, dayWords, daysSince, formatValue, plot, seriesName, windowDays, type Plot } from "@/lib/usage";
+import { CAP, capText, change, dayWords, daysSince, formatValue, gapLines, plot, seriesName, windowDays, type Plot } from "@/lib/usage";
 
 /**
  * One metric, drawn from its descriptor and nothing else (A-23 §3): a section
@@ -116,7 +117,8 @@ function LabelRow({ label, said }: { label: string; said: string }) {
  * lists it with its reason). A `began` gap is before the record, not a gap.
  */
 function emptySaid(metric: StatsMetric, windows: UsageWindows): string {
-  if (metric.gaps.some((g) => g.kind !== "began" && g.end > windows.window_30d_from)) return copy.NOT_ALL_COUNTED;
+  const gaps = metric.gaps.filter((g) => g.kind !== "began");
+  if (gapLines(gaps, windows.window_30d_from, addDays(windows.today, 1)).length > 0) return copy.NOT_ALL_COUNTED;
   return metric.instrument === "counter" ? copy.NOTHING_COUNTED : copy.NO_RECENT_VALUE;
 }
 

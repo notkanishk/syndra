@@ -124,66 +124,53 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	}, http.StatusOK, nil
 }
 
-// shareUsage reports what one uid holds in the dataset behind each enabled
-// share. A quota table that cannot be read leaves that share out and makes the
-// whole an error, with the meters that were read: partial, and said to be.
+// shareUsage reports what one uid holds behind each enabled share: every
+// dataset the share reaches, nested ones included (usageUnder, the count
+// collectUsage samples), against the limit on the share's own dataset. A share
+// not wholly read (its dataset's table, or a nested one's, unreadable, or the
+// share a plain folder that cannot be counted by itself) makes the whole an
+// error, with the meters that were read: partial, and said to be.
 //
-// The dataset is DERIVED from the share's own path rather than configured. A
-// configured dataset would be a second definition of where a share lives, and
-// the two would disagree the first time somebody moved one — which is exactly
-// the failure this codebase keeps paying for. `/mnt/pool/dataset` is the
-// mountpoint convention TrueNAS uses for every dataset it creates.
+// Where a share lives is DERIVED from the NAS's own read of its path and the
+// datasets' mountpoints, never configured: a configured dataset would be a
+// second definition of where a share lives.
 //
 // Matched on UID and never on the name in the quota row: that name is null for
 // a uid the target can no longer resolve, and matching on it would silently
 // report nothing for the accounts most likely to matter.
 func (s *server) shareUsage(uid int64) ([]Meter, error) {
-	var shares []struct {
-		Name    string `json:"name"`
-		Path    string `json:"path"`
-		Enabled bool   `json:"enabled"`
-	}
-	if err := s.nas.call("sharing.smb.query",
-		[]any{[]any{}, map[string]any{"select": []string{"name", "path", "enabled"}}}, &shares); err != nil {
+	shares, err := s.enabledShares()
+	if err != nil {
 		return nil, err
 	}
-
+	mounts, err := s.datasetMounts()
+	if err != nil {
+		return nil, err
+	}
 	out := make([]Meter, 0, len(shares))
 	var unread []string
 	for _, sh := range shares {
-		if !sh.Enabled || !s.considers(sh.Name) {
-			continue
-		}
-		dataset := datasetOf(sh.Path)
-		if dataset == "" {
-			continue
-		}
-		var rows []struct {
-			ID        int64 `json:"id"`
-			UsedBytes int64 `json:"used_bytes"`
-			// shape-optional: TrueNAS omits `quota` entirely for a uid with no
-			// quota set, which is the common case and the one every account on
-			// the live target is in. Absent decodes to 0, and 0 is rendered as
-			// "no limit set" rather than as a full bar — see MyStorage.
-			QuotaBytes int64 `json:"quota"`
-		}
-		if err := s.nas.call("pool.dataset.get_quota", []any{dataset, "USER"}, &rows); err != nil {
+		u := usageUnder(mounts, sh.Path, s.userQuotas)
+		if u.Top == nil {
 			// One share's quota table being unreadable is not a reason to
 			// withhold the others, and not one to pass the rest off as all.
 			unread = append(unread, sh.Name)
 			continue
 		}
-		for _, row := range rows {
-			if row.ID != uid {
-				continue
-			}
-			m := Meter{Label: sh.Name, Used: row.UsedBytes, Unit: "bytes"}
-			if row.QuotaBytes > 0 {
-				m.Limit = &row.QuotaBytes
-			}
-			out = append(out, m)
-			break
+		if len(u.Unread) > 0 {
+			unread = append(unread, sh.Name)
 		}
+		used, held := u.ByUID[uid]
+		if !held {
+			continue
+		}
+		m := Meter{Label: sh.Name, Used: used, Unit: "bytes"}
+		// shape-optional: TrueNAS omits `quota` for a uid with no limit set,
+		// the common case. 0 is rendered as "no limit set" — see MyStorage.
+		if q := u.Top[uid].QuotaBytes; q > 0 {
+			m.Limit = &q
+		}
+		out = append(out, m)
 	}
 	if len(unread) > 0 {
 		return out, fmt.Errorf("the quota of %s could not be read", strings.Join(unread, ", "))

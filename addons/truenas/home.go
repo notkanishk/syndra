@@ -340,25 +340,38 @@ func (s *server) readHomes() (HomesResponse, error) {
 	if err != nil {
 		return HomesResponse{}, unreadable(err)
 	}
+	mounts, err := s.datasetMounts()
+	if err != nil {
+		return HomesResponse{}, err
+	}
 	out := HomesResponse{Homes: []HomeUsage{}, QuotaRead: true}
 	quotas := map[string]map[int64]PlaceUsage{}
-	for _, sub := range snap.Subjects {
-		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
-			continue
+	tableOf := func(dataset string) map[int64]PlaceUsage {
+		if dataset == "" {
+			return nil
 		}
-		h := HomeUsage{Username: sub.Username, AccountID: accountID(sub.UID), Subject: at.subjectOf[rowOf(&sub)], Home: sub.Home}
-		// The limit is a user quota on the dataset holding the home's parent,
-		// the same one convergeQuota sets.
-		dataset := datasetOf(path.Dir(sub.Home))
 		table, read := quotas[dataset]
 		if !read {
 			table = s.userQuotas(dataset)
 			quotas[dataset] = table
 		}
-		if table == nil {
+		return table
+	}
+	for _, sub := range snap.Subjects {
+		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
+			continue
+		}
+		h := HomeUsage{Username: sub.Username, AccountID: accountID(sub.UID), Subject: at.subjectOf[rowOf(&sub)], Home: sub.Home}
+		// The bytes are the folder's own dataset's, as the live read and
+		// storage.home_bytes resolve it (datasetAt): a home that is a dataset
+		// of its own holds them there, not in the parent. The limit is a user
+		// quota on the dataset holding the home's parent, the same one
+		// convergeQuota sets and reads back.
+		own, limits := tableOf(datasetAt(mounts, sub.Home)), tableOf(datasetOf(path.Dir(sub.Home)))
+		if own == nil || limits == nil {
 			out.QuotaRead = false
-		} else if u, ok := table[sub.UID]; ok {
-			h.UsedBytes, h.QuotaBytes = u.UsedBytes, u.QuotaBytes
+		} else {
+			h.UsedBytes, h.QuotaBytes = own[sub.UID].UsedBytes, limits[sub.UID].QuotaBytes
 		}
 		out.Homes = append(out.Homes, h)
 	}

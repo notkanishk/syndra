@@ -360,23 +360,58 @@ func datasetAt(mounts map[string]string, at string) string {
 	return ""
 }
 
-// datasetsUnder is every dataset a path reaches: the one holding it, as
-// datasetAt reads it, and each one mounted inside it at any depth. Their user
-// quota tables never overlap, since a dataset's userused leaves out its
-// children, so the bytes under the path are their sum. Nil when no dataset
-// holds the path.
-func datasetsUnder(mounts map[string]string, at string) []string {
-	top := datasetAt(mounts, at)
-	if top == "" {
-		return nil
+// spaceUnder is what each uid holds at or below a share's path: the sum over
+// the dataset mounted there and each one mounted inside it at any depth,
+// whose user quota tables never overlap (a dataset's userused leaves out its
+// children). It is the one count of a share, live (shareUsage) and collected
+// (collectUsage), so the two never disagree.
+type spaceUnder struct {
+	// Own is whether a dataset is mounted at the path itself. A share that is
+	// a plain folder holds its files in a dataset it shares with what lies
+	// beside it, whose table cannot say which bytes are the folder's: nothing
+	// of it is counted, never the parent whole.
+	Own bool
+	// Top is the table of the dataset mounted at the path, nil when it could
+	// not be read: the share's limits, and without it the share is not read.
+	Top map[int64]PlaceUsage
+	// ByUID is each uid's bytes over every dataset that was read, a uid with
+	// a row in any of them present even at 0.
+	ByUID map[int64]int64
+	// Unread is the folders, inside the path, of the nested datasets whose
+	// table could not be read (an encrypted one whose key is not loaded
+	// refuses the read): left out of ByUID, never counted as nothing.
+	Unread []string
+}
+
+// usageUnder counts a path through table, which reads one dataset's user
+// quota table (nil when it cannot be read).
+func usageUnder(mounts map[string]string, at string, table func(string) map[int64]PlaceUsage) spaceUnder {
+	top, own := mounts[at]
+	if !own {
+		return spaceUnder{}
 	}
-	out := []string{top}
-	for mp, name := range mounts {
-		if strings.HasPrefix(mp, at+"/") {
-			out = append(out, name)
+	out := spaceUnder{Own: true, Top: table(top)}
+	if out.Top == nil {
+		return out
+	}
+	out.ByUID = map[int64]int64{}
+	add := func(t map[int64]PlaceUsage) {
+		for uid, u := range t {
+			out.ByUID[uid] += u.UsedBytes
 		}
 	}
-	sort.Strings(out[1:])
+	add(out.Top)
+	for mp, name := range mounts {
+		if !strings.HasPrefix(mp, at+"/") { // the folder boundary: /mnt/tank/share2 is not in /mnt/tank/share
+			continue
+		}
+		if t := table(name); t != nil {
+			add(t)
+		} else {
+			out.Unread = append(out.Unread, strings.TrimPrefix(mp, at+"/"))
+		}
+	}
+	sort.Strings(out.Unread)
 	return out
 }
 
