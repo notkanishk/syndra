@@ -38,7 +38,7 @@ func TestEveryCheckCitesAGuideSection(t *testing.T) {
 			t.Errorf("%s cites the design, which the author does not have: %q", e.id, e.must)
 		}
 	}
-	for _, f := range []string{"kit.go", "reads.go", "mutate.go", "owner.go", "report.go"} {
+	for _, f := range []string{"kit.go", "reads.go", "mutate.go", "owner.go", "report.go", "outage.go"} {
 		src, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

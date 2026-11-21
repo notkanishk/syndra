@@ -138,8 +138,8 @@ func (a *Addon) reachableAndActive() *reply {
 	if refused := a.refuseUnlessActive(); refused != nil {
 		return refused
 	}
-	if a.cfg.Down != nil && a.cfg.Down() {
-		r := problem(503, "TARGET_UNREACHABLE", "The lending ledger cannot be reached; nothing was done.", nil)
+	if a.down() {
+		r := unreachable()
 		return &r
 	}
 	return nil
@@ -251,7 +251,7 @@ func (a *Addon) callState(r *http.Request, _ []byte) reply {
 // not, so nothing happened and the intent is dropped. Never while the target
 // cannot be read, and never while the call is still running.
 func (a *Addon) settle(callID string) {
-	if a.cfg.Down != nil && a.cfg.Down() {
+	if a.down() {
 		return
 	}
 	a.mu.Lock()

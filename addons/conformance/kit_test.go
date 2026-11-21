@@ -57,7 +57,15 @@ func serveRewritingHeaders(t *testing.T, secret string, hook func(r *http.Reques
 	for _, d := range defects {
 		set[d] = true
 	}
-	addon, err := reference.New(reference.Config{Target: "reference", Secret: []byte(secret), Features: features, Defects: set})
+	return serveAddon(t, reference.Config{Target: "reference", Secret: []byte(secret), Features: features, Defects: set}, hook, rewrite, header)
+}
+
+// serveAddon is serveRewritingHeaders for a reference configured whole (an
+// app that can be taken down).
+func serveAddon(t *testing.T, rc reference.Config, hook func(r *http.Request, body []byte, answered bool),
+	rewrite func(r *http.Request, reply []byte) []byte, header func(r *http.Request, h http.Header)) (string, func() []string) {
+	t.Helper()
+	addon, err := reference.New(rc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,6 +118,13 @@ func config(url string, mutate bool) Config {
 
 // testElevatedKey is the reference's account.purge credential: any value, which it never keeps.
 const testElevatedKey = "conformance-test-elevated-key"
+
+// withApp gives cfg the app hooks over down, as touch and rm do for the binary.
+func withApp(cfg Config, down *atomic.Bool) Config {
+	cfg.StopApp = func(context.Context) error { down.Store(true); return nil }
+	cfg.StartApp = func(context.Context) error { down.Store(false); return nil }
+	return cfg
+}
 
 func run(t *testing.T, cfg Config) *Report {
 	t.Helper()
@@ -165,8 +180,9 @@ const leftOne = `one disabled account "conformance-self-test" (account_id 1002) 
 // does not check yet. A check that quietly skipped against the reference
 // would be a check nobody runs, so the skips are pinned too.
 func TestTheCleanReferencePassesEveryCheck(t *testing.T) {
-	url, seen := serve(t, testSecret, nil)
-	r := run(t, config(url, true))
+	var down atomic.Bool
+	url, seen := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: down.Load}, nil, nil, nil)
+	r := run(t, withApp(config(url, true), &down))
 	for _, f := range failures(r) {
 		t.Errorf("%s failed against the clean reference: %v", f.ID, f.Detail)
 	}
@@ -177,7 +193,7 @@ func TestTheCleanReferencePassesEveryCheck(t *testing.T) {
 		}
 	}
 	want := []string{"subjects.paged", "replay.29d", "calls.unknown", "calls.recorded", "operations.physical", "calls.unsettled", "calls.serialised",
-		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable"}
+		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable", "outage.kept", "outage.restart"}
 	want = append(append(want, statsChecks...), "dangerous-scopes")
 	if !slices.Equal(skipped, want) {
 		t.Errorf("skipped %v, want exactly %v", skipped, want)

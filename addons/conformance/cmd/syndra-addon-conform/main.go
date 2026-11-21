@@ -4,6 +4,7 @@
 //
 //	syndra-addon-conform -url https://addon.example.org:8443 -target truenas -secret-file ./secret \
 //	                     [-subject conformance-<run>] [-email conformance-<run>@example.org] [-mutate [-mutate-settings]] [-json report.json]
+//	                     [-stop-app <command> -start-app <command> [-require-outage]] [-stop-addon <command> -start-addon <command>]
 //
 // Reads only unless -mutate: GET routes, /plan, and signed POST
 // /operations/{id} for each operation the registry gives effect: read. Exit 0: every MUST holds. 1: a MUST failed.
@@ -17,9 +18,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"syndra/addons/conformance"
 )
@@ -35,6 +38,14 @@ func main() {
 	flag.StringVar(&cfg.Item, "item", "", "with -mutate and feature calls, an item the kit may check out to its subject with a physical operation, and leave checked out")
 	flag.BoolVar(&cfg.MutateSettings, "mutate-settings", false, "with -mutate, also write the first target-wide setting's current value back")
 	elevatedFile := flag.String("elevated-key-file", "", "with -mutate, a file holding account.purge's elevated_key: the kit purges its own account once it is off and creates it again (identity.not-reused); without it nothing is deleted")
+	hook := func(name, usage string) *string {
+		return flag.String(name, "", usage+" (run by sh -c; it returns once the change has happened)")
+	}
+	stopApp := hook("stop-app", "a command that makes the app unreachable from the add-on, for the outage checks")
+	startApp := hook("start-app", "a command that makes the app reachable again")
+	stopAddon := hook("stop-addon", "a command that stops the add-on, its disk kept, for outage.restart")
+	startAddon := hook("start-addon", "a command that starts the add-on again")
+	flag.BoolVar(&cfg.RequireOutage, "require-outage", false, "fail, rather than skip as not checked, the outage checks when -stop-app or -start-app is missing (CI passes it)")
 	jsonOut := flag.String("json", "", "also write the report as JSON to this file; - writes JSON to stdout instead of text")
 	flag.Parse()
 
@@ -50,6 +61,9 @@ func main() {
 		}
 		cfg.ElevatedKey = strings.TrimSpace(string(key))
 	}
+
+	cfg.StopApp, cfg.StartApp, cfg.StopAddon, cfg.StartAddon = shell("-stop-app", *stopApp, hookTimeout), shell("-start-app", *startApp, hookTimeout),
+		shell("-stop-addon", *stopAddon, hookTimeout), shell("-start-addon", *startAddon, hookTimeout)
 
 	// The first SIGINT or SIGTERM stops the run between requests and lets it
 	// put back what it changed; the second gets the default: exit now.
@@ -83,6 +97,35 @@ func main() {
 		fail("refused: " + err.Error())
 	case report.Failed():
 		os.Exit(1)
+	}
+}
+
+// hookTimeout bounds each hook: one that hangs fails, and the kit goes on to
+// put back what it stopped.
+const hookTimeout = 2 * time.Minute
+
+// shell is the hook flag names: command run by sh -c, said and its output on
+// stderr, killed after timeout; nil when there is no command.
+func shell(flag, command string, timeout time.Duration) func(context.Context) error {
+	if strings.TrimSpace(command) == "" {
+		return nil
+	}
+	if noHooks != "" {
+		fail(flag + ": " + noHooks)
+	}
+	return func(ctx context.Context) error {
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		fmt.Fprintf(os.Stderr, "kit: running %s %s\n", flag, command)
+		cmd := exec.CommandContext(ctx, "sh", "-c", command)
+		cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
+		ownGroup(cmd)
+		cmd.WaitDelay = time.Second
+		err := cmd.Run()
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("%s did not return within %s: %w", flag, timeout, err)
+		}
+		return err
 	}
 }
 

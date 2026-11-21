@@ -119,9 +119,10 @@ type Config struct {
 	Secret   []byte
 	Features []string
 	Defects  map[Defect]bool
-	// Down is test-only: while it answers true the app cannot be read, so the
-	// add-on's own test can hold what a black-box kit cannot (freshness: the
-	// last value with stale unreachable, or 503 TARGET_UNREACHABLE).
+	// Down is test-only: while it answers true the app cannot be reached
+	// (/subjects answers its copy or 503, /plan and /apply 503
+	// TARGET_UNREACHABLE, /health reachable: false). The binary switches it by
+	// a file (REFERENCE_APP_DOWN_FILE), so the kit's -stop-app is touch.
 	Down func() bool
 	// LoseReply is test-only: answering true for a stage ("before" or
 	// "after" the loan is written), a checkout answers 500 and leaves its
@@ -134,6 +135,28 @@ type Config struct {
 var OptionalFeatures = []string{"freshness", "calls", "stats"}
 
 func (a *Addon) serves(feature string) bool { return slices.Contains(a.cfg.Features, feature) }
+
+// down says whether the app cannot be reached now (Config.Down).
+// ponytail: /values and the member operations still answer while it is down;
+// add the check there when an app's values or operations need it.
+func (a *Addon) down() bool { return a.cfg.Down != nil && a.cfg.Down() }
+
+// reach is one real call to the app, begun at at: it says whether the app
+// answered and, when it did, records it as last_read_at. /health makes its own,
+// so reachable is never what an older read found. The caller holds a.mu.
+func (a *Addon) reach(at string) bool {
+	if a.down() {
+		return false
+	}
+	a.readAt = at
+	return true
+}
+
+// unreachable is the reply of a request that could reach nothing: nothing was
+// sent, so Syndra may send it again after Retry-After.
+func unreachable() reply {
+	return problem(503, "TARGET_UNREACHABLE", "The app could not be reached; nothing was sent to it.", nil)
+}
 
 // Addon is the add-on: an in-memory target, the call store, the mutation log
 // and the lifecycle, behind one lock. Writes take the lock only around the
@@ -153,6 +176,7 @@ type Addon struct {
 	setting   map[string]string // the one setting: value, set_by, set_at
 	logHead   string
 	logCount  int
+	readAt    string             // health.last_read_at: when a read of the app last succeeded; "" before the first
 	fresh     freshState         // feature freshness: the mirror and the read in flight
 	loans     map[string]*loan   // feature calls: by item id
 	intents   map[string]*intent // feature calls: an open checkout, by subject
@@ -270,13 +294,16 @@ func (a *Addon) health(*http.Request, []byte) reply {
 	defer a.mu.Unlock()
 	busy := a.busy()
 	h := map[string]any{
-		"reachable": true, "product": "reference", "product_version": "1.0.0", "version_tested": true,
+		"reachable": a.reach(now()), "product": "reference", "product_version": "1.0.0", "version_tested": true,
 		"credential_expiry": "none", "circuit_open": false,
 		"lifecycle": a.lifecycle, "lifecycle_note": a.reason, "in_flight": busy, "drained": busy == 0,
 		"log_head": a.logHead, "log_records": a.logCount, "checked_at": now(),
 	}
 	if a.serves("freshness") {
 		h["target_reads"] = a.fresh.reads
+	}
+	if a.readAt != "" {
+		h["last_read_at"] = a.readAt
 	}
 	return ok(h)
 }
@@ -308,7 +335,10 @@ func (a *Addon) subjects(r *http.Request, _ []byte) reply {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return ok(map[string]any{"subjects": a.list(), "current": true, "taken_at": now(), "truncated": false, "conflicts": noConflicts})
+	if !a.reach(now()) {
+		return unreachable() // no copy is kept without freshness
+	}
+	return ok(map[string]any{"subjects": a.list(), "current": true, "taken_at": a.readAt, "truncated": false, "conflicts": noConflicts})
 }
 
 // list is every account as /subjects shows it, each with the subject its binding names it for;
@@ -396,6 +426,9 @@ func (a *Addon) plan(_ *http.Request, body []byte) reply {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if !a.reach(now()) {
+		return unreachable()
+	}
 	// A live read of the app, counted like every other; never through the
 	// mirror and never cooled down (design §4: /plan is outside freshness).
 	a.fresh.reads++
@@ -437,6 +470,9 @@ func (a *Addon) apply(_ *http.Request, body []byte) reply {
 	return a.once(req.CallID, "apply", identity, func() reply {
 		if refused := a.refuseUnlessActive(); refused != nil {
 			return *refused
+		}
+		if a.down() {
+			return unreachable() // not recorded (rule 2), so a re-send executes
 		}
 		if blank(req.Fingerprint) {
 			return problem(400, "FINGERPRINT_REQUIRED", "An apply must carry the plan's fingerprint.", nil)
