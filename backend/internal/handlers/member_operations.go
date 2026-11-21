@@ -263,7 +263,7 @@ func writeActionError(w http.ResponseWriter, err error) {
 	case errors.Is(err, addons.ErrInvalidParams):
 		jsonValidationErrorResponse(w, "That isn't something this action takes.", map[string]string{"params": err.Error()})
 	default:
-		writeCredentialError(w, err)
+		writeMemberRefusal(w, err, "ACTION_NOT_SENT")
 	}
 }
 

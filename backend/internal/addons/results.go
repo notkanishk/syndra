@@ -196,14 +196,14 @@ func ViewOf(target, op string, body []byte, c Clock) ReadView {
 	return ReadReply{Operation: op, Target: target, Schema: p.Result, Body: body, Outcome: OutcomeSucceeded, Clock: c}.View()
 }
 
-// answer is the reply's payload: `result`, the one key a read is answered
-// under. A reply without it (an old per-read key such as `storage` in its
-// place) carries no reading, and is refused, never guessed at.
 // Why is why the reply is not a reading (Unread); zero when it is one.
 func (r ReadReply) Why() Why {
 	return Unread(CallResponse{Outcome: r.Outcome, Status: r.Status, Err: r.Err, Code: r.Code, Body: r.Body, RetryAfter: r.RetryAfter})
 }
 
+// answer is the reply's payload: `result`, the one key a read is answered
+// under. A reply without it (an old per-read key such as `storage` in its
+// place) carries no reading, and is refused, never guessed at.
 func (r ReadReply) answer() (json.RawMessage, error) {
 	if r.Outcome != OutcomeSucceeded {
 		return nil, fmt.Errorf("read %s: %s: %w", r.Operation, r.Outcome, r.Err)

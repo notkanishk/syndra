@@ -623,6 +623,15 @@ func credentialRetry(resend bool, now time.Time) extcall.RetryState {
 }
 
 func writeCredentialError(w http.ResponseWriter, err error) {
+	writeMemberRefusal(w, err, "CREDENTIAL_NOT_SET")
+}
+
+// writeMemberRefusal answers a member's write Syndra refused before sending:
+// whose it is, too often, no such system, else Syndra's own fault, a 500 with
+// a reference under the caller's code (never a 502: the add-on was not asked).
+// The error text is Syndra's own; the add-on's body, where a submitted
+// password comes back, never reaches here.
+func writeMemberRefusal(w http.ResponseWriter, err error, code string) {
 	switch {
 	case errors.Is(err, addonop.ErrSubjectNotActor):
 		jsonErrorResponse(w, http.StatusForbidden, "NOT_YOURS", err.Error())
@@ -632,9 +641,6 @@ func writeCredentialError(w http.ResponseWriter, err error) {
 	case errors.Is(err, addons.ErrNotRegistered):
 		jsonErrorResponse(w, http.StatusNotFound, "TARGET_NOT_REGISTERED", err.Error())
 	default:
-		// The error text is Syndra's own. The add-on's response body is where a
-		// submitted password comes back, and it never reaches here.
-		jsonErrorResponse(w, http.StatusBadGateway, "CREDENTIAL_NOT_SET",
-			"That could not be applied. Nothing was changed.")
+		writeSanitised(w, http.StatusInternalServerError, code, err.Error())
 	}
 }

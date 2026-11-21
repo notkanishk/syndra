@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -57,6 +58,13 @@ func TestATargetSettingIsRelayedAndJudgedByTheTarget(t *testing.T) {
 	reached = false
 	if rr := putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`); rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("unreached: %d", rr.Code)
+	}
+	// Syndra's own record failing is a 500 with a reference, never 503
+	// NOTHING_SENT telling the operator to check the add-on's container.
+	answer = addons.CallResponse{Outcome: addons.OutcomeUnreached, Err: fmt.Errorf("%w: no record committed", addons.ErrOwnFault)}
+	if rr := putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`); rr.Code != http.StatusInternalServerError ||
+		!strings.Contains(rr.Body.String(), `"SETTING_NOT_SET"`) {
+		t.Fatalf("own fault: %d %s", rr.Code, rr.Body.String())
 	}
 
 	if rr := putTargetSetting(t, `{"value":"x","extra":1}`); rr.Code != http.StatusBadRequest {

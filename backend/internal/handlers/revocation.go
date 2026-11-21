@@ -127,9 +127,9 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 	// A retry may find its convergence already waiting (the first attempt
 	// queued it and failed later, at the rotation). Queuing another would be a
 	// second row for an operator to look at, for the same lock.
-	queued := false
+	var outboxID string
 	if retry {
-		queued, err = dbHasUnfinishedConvergence(r.Context(), subject, target)
+		outboxID, err = dbUnfinishedConvergence(r.Context(), subject, target)
 		if err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_CHECK_FAILED", err.Error())
 			return
@@ -139,7 +139,7 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 	// The convergence that carries the suspension to the target. Queued, like
 	// every other add-on row — the response says so rather than implying the
 	// account is already locked.
-	if !queued {
+	if outboxID == "" {
 		set, err := svcResolveEntitlementSet(r.Context(), subject, target)
 		if err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
@@ -149,11 +149,19 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 		// confer: EntitlementSet.WithdrawsOnly declares it, which is what lets
 		// the background runner drain the lock. Without it the disclosure below
 		// is a promise nothing keeps.
-		if _, _, err := dbRecordSystemConvergence(r.Context(), set.Convergence(target, subject, actor, "Their access was revoked.")); err != nil {
+		if _, outboxID, err = dbRecordSystemConvergence(r.Context(), set.Convergence(target, subject, actor, "Their access was revoked.")); err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_NOT_QUEUED",
 				"The suspension was recorded and the change to the target was not queued: "+err.Error())
 			return
 		}
+	}
+	// Recorded is the outbox row's time, not the allowance's: the row is the
+	// revocation the unconfirmed list shows and revocation.landed closes, so
+	// the reply, the list and the audit name one moment.
+	recordedAt, err := dbPropagationRecordedAt(r.Context(), outboxID)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_CHECK_FAILED", err.Error())
+		return
 	}
 
 	// The credential half. Its failure does not undo the suspension, and is
@@ -173,7 +181,7 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 	body := map[string]any{
 		"status":       "recorded",
 		"allowance_id": allowance.ID,
-		"recorded_at":  allowance.CreatedAt,
+		"recorded_at":  recordedAt,
 		"landed_at":    nil,
 		"rotated":      rotated,
 		"detail":       notYetLanded(r.Context(), target, system, rotated),

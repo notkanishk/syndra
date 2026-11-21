@@ -229,8 +229,10 @@ func writeOperationError(w http.ResponseWriter, err error, code, confirmation st
 		jsonErrorResponse(w, http.StatusNotFound, "TARGET_NOT_REGISTERED", err.Error())
 	case errors.As(err, new(*addons.ErrOperationUnavailable)):
 		jsonErrorResponse(w, http.StatusConflict, "OPERATION_UNAVAILABLE", err.Error())
+	case errors.Is(err, addons.ErrInvalidParams):
+		jsonValidationErrorResponse(w, "That isn't something this action takes.", map[string]string{"params": err.Error()})
 	default:
-		jsonErrorResponse(w, http.StatusInternalServerError, code, err.Error())
+		writeSanitised(w, http.StatusInternalServerError, code, err.Error())
 	}
 }
 

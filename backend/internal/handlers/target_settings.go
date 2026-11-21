@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"log"
 	"net/http"
 
@@ -37,6 +38,11 @@ func handlePutTargetSetting(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := resolveActor(r, "")
 	resp, _ := addonsPutSetting(r.Context(), target, name, req.Value, actor)
+	if errors.Is(resp.Err, addons.ErrOwnFault) {
+		// Syndra's own failure before sending: not the add-on's to be blamed for.
+		jsonErrorResponse(w, http.StatusInternalServerError, "SETTING_NOT_SET", resp.Err.Error())
+		return
+	}
 	// Unreached or indeterminate, said apart (design §13.4): a timeout or a
 	// 5xx is not "nothing was changed", the request went out and the answer
 	// was lost. An add-on answering that its app is down is unreached too.

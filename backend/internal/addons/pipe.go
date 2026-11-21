@@ -183,6 +183,11 @@ func (a *Addon) declares(feature string) error {
 	return nil
 }
 
+// ErrOwnFault is Syndra's own failure before anything was sent: its record did
+// not commit, or its body did not encode. Not the add-on's, so never unreached
+// and never "check its container": the handler answers 500 with a reference.
+var ErrOwnFault = errors.New("addon: Syndra's own failure, nothing sent")
+
 // operate is a Write that owns its record: begin the row and its audit line
 // (committed before anything is sent, and no row means no call), send with the
 // row's id as claim and idempotency key, then settle how it ended. A refusal
@@ -199,7 +204,7 @@ func (a *Addon) operate(ctx context.Context, p db.AddonOperationParams, s sendSp
 	id, err := dbBeginAddonOperation(ctx, p)
 	if err != nil {
 		// No record, no call: the record is the precondition, not a log of it.
-		err = fmt.Errorf("addon %s: no record committed, nothing sent: %w", p.Target, err)
+		err = fmt.Errorf("%w: addon %s: no record committed: %w", ErrOwnFault, p.Target, err)
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}, err
 	}
 	s.Write = true
@@ -207,7 +212,7 @@ func (a *Addon) operate(ctx context.Context, p db.AddonOperationParams, s sendSp
 	// The row's id is the call_id, in the body like every write's.
 	body, err := withJSONField(s.Body, "call_id", id)
 	if err != nil {
-		err = fmt.Errorf("addon %s: encode %s: %w", p.Target, p.Operation, err)
+		err = fmt.Errorf("%w: addon %s: encode %s: %w", ErrOwnFault, p.Target, p.Operation, err)
 		_ = dbSettleAddonOperation(ctx, id, db.AddonOpUnreached)
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}, err
 	}

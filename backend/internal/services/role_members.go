@@ -467,7 +467,7 @@ func GovernanceIndicators(ctx context.Context, actor string) (Indicators, error)
 	}
 	out.Drift = drift
 
-	revocations, err := svcCountUnconfirmedRevocations(ctx)
+	revocations, err := svcCountUnconfirmedRevocations(ctx, addons.HeldTargets())
 	if err != nil {
 		return Indicators{}, err
 	}

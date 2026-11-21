@@ -837,9 +837,11 @@ func SetLifecycle(ctx context.Context, target, state, reason, actor string) (map
 	resp, err := a.operate(ctx, db.AddonOperationParams{
 		Target: target, Operation: "lifecycle.set", ActorID: actor, SubjectID: target, About: state,
 	}, sendSpec{Method: http.MethodPost, Path: "/lifecycle", Body: body, SkipBreaker: true})
-	switch resp.Outcome {
-	case OutcomeSucceeded:
-	case OutcomeRejected:
+	switch {
+	case errors.Is(err, ErrOwnFault):
+		return nil, err
+	case resp.Outcome == OutcomeSucceeded:
+	case resp.Outcome == OutcomeRejected:
 		return nil, fmt.Errorf("addon %s: %w (%d): %v", target, ErrLifecycleRefused, resp.Status, resp.Err)
 	default:
 		// Unreached or indeterminate: the handler says which (design §13.4).

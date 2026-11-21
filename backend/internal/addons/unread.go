@@ -193,6 +193,19 @@ func Held(target string) (Why, bool) {
 	return Why{Reason: ReasonAddonUnreachable, Cause: st.Cause, RetryAfter: st.RetryAfter}, true
 }
 
+// HeldTargets is every registered target Held right now: the systems whose
+// queued revocations wait without escalating (db.CountUnconfirmedRevocations,
+// owner 28.3: only a revocation that can't reach its system is exempt).
+func HeldTargets() []string {
+	var out []string
+	for _, reg := range Registered() {
+		if _, held := Held(reg.Target); held {
+			out = append(out, reg.Target)
+		}
+	}
+	return out
+}
+
 // NotLandedError is a write that did not land: unreached (nothing went out) or
 // indeterminate (sent, answer lost), and why. What writeOutcome answers from.
 type NotLandedError struct {

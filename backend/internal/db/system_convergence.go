@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // A convergence nobody approved (design §4, §15; change `addon-platform` 7.9).
@@ -181,15 +183,27 @@ func RecordSystemConvergence(ctx context.Context, c SystemConvergence) (planID, 
 	return plan.ID, outboxID, nil
 }
 
-// HasUnfinishedConvergence reports whether a withdrawing convergence for this
-// person and target is still queued or in flight. A retried revocation asks
-// first: the drain re-reads live state, so the one already waiting carries the
-// same lock, and a second only adds a row to confirm.
-func HasUnfinishedConvergence(ctx context.Context, subjectID, target string) (bool, error) {
-	var exists bool
-	err := querier(ctx).QueryRow(ctx, `SELECT EXISTS (
-		SELECT 1 FROM propagation_outbox
+// UnfinishedConvergence is the id of a withdrawing convergence for this person
+// and target still queued or in flight, "" when there is none. A retried
+// revocation asks first: the drain re-reads live state, so the one already
+// waiting carries the same lock, and a second only adds a row to confirm.
+func UnfinishedConvergence(ctx context.Context, subjectID, target string) (string, error) {
+	var id string
+	err := querier(ctx).QueryRow(ctx, `SELECT id FROM propagation_outbox
 		 WHERE user_id = $1 AND target = $2 AND op_type = 'apply' AND withdraws_only
-		   AND status IN ('pending','in_flight'))`, subjectID, target).Scan(&exists)
-	return exists, err
+		   AND status IN ('pending','in_flight')
+		 ORDER BY created_at LIMIT 1`, subjectID, target).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
+// PropagationRecordedAt is when an outbox row was recorded: its creation. The
+// one "recorded" time of a revocation (design §13.4), the same the unconfirmed
+// list and the revocation.landed line carry.
+func PropagationRecordedAt(ctx context.Context, id string) (time.Time, error) {
+	var at time.Time
+	err := querier(ctx).QueryRow(ctx, `SELECT created_at FROM propagation_outbox WHERE id = $1`, id).Scan(&at)
+	return at.UTC(), err
 }

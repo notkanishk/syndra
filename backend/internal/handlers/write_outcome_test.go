@@ -230,3 +230,12 @@ func resolveUnboundAgainst(t *testing.T, o addons.Outcome) *httptest.ResponseRec
 	answerDispatch(o)
 	return resolveFinding(t, `{"resolution":"unbound","reason":"the account was removed on purpose"}`)
 }
+
+// Waiting does not update an add-on: an outdated one gets no Retry-After.
+func TestAnOutdatedAddonIsNotToldToRetryLater(t *testing.T) {
+	rr := httptest.NewRecorder()
+	writeOutcome(rr, &notLanded{System: "Ringside NAS", Outcome: addons.OutcomeUnreached, Why: addons.Why{Reason: addons.ReasonAddonOutdated}}, nil)
+	if rr.Code != http.StatusServiceUnavailable || rr.Header().Get("Retry-After") != "" {
+		t.Fatalf("got %d Retry-After %q", rr.Code, rr.Header().Get("Retry-After"))
+	}
+}

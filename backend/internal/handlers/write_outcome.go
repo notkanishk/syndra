@@ -64,7 +64,8 @@ func landed(o addons.Outcome) bool {
 func outcomeAnswer(n *notLanded, extra map[string]any) (status int, body any, retryAfter int) {
 	if n.Outcome == addons.OutcomeUnreached {
 		retryAfter = n.Why.RetryAfter
-		if retryAfter <= 0 {
+		// An outdated add-on is not fixed by waiting: no time to try again at.
+		if retryAfter <= 0 && n.Why.Reason != addons.ReasonAddonOutdated {
 			// The monitor's next probe: when Syndra next learns whether it answers.
 			retryAfter = int(addons.ProbeInterval().Seconds())
 		}

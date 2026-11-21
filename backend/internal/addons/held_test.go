@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+
+	"syndra/internal/db"
 )
 
 // holdDown makes the monitor hold target addon_unreachable (design §13.2:
@@ -77,5 +79,44 @@ func TestAPreviewOfAHeldSystemIsNotSent(t *testing.T) {
 	r := Preview(context.Background(), "inventory", "item.checkout", "s", "s", map[string]any{"item_id": "item-2207"})
 	if r.Outcome != OutcomeUnreached || hits.Load() != 0 || r.Why().Cause != CauseWrongHost {
 		t.Fatalf("outcome %s, %d requests, why %+v", r.Outcome, hits.Load(), r.Why())
+	}
+}
+
+// Owner 28.3: only a revocation that can't reach its system waits without
+// escalating. HeldTargets is that set: the held system, and not one whose
+// add-on answers its probe (its failing calls age like Zitadel's).
+func TestHeldTargetsIsOnlyTheSystemsHeldUnreachable(t *testing.T) {
+	recorder(t, http.StatusOK)
+	holdDown(t, "truenas")
+	if got := HeldTargets(); len(got) != 1 || got[0] != "truenas" {
+		t.Fatalf("held = %v, want [truenas]", got)
+	}
+	monitor.observe("truenas", probeAppOff, timeNow().UTC())
+	if got := HeldTargets(); len(got) != 0 {
+		t.Fatalf("an add-on that answers is not held: %v", got)
+	}
+}
+
+// Syndra's own database failing before the record is Syndra's fault, not an
+// unreachable add-on: ErrOwnFault, never a NotLandedError that says "check
+// its container".
+func TestARecordThatDidNotCommitIsSyndrasOwnFault(t *testing.T) {
+	_, calls := recorder(t, http.StatusOK)
+	saved := dbBeginAddonOperation
+	t.Cleanup(func() { dbBeginAddonOperation = saved })
+	dbBeginAddonOperation = func(context.Context, db.AddonOperationParams) (string, error) {
+		return "", errors.New("connection reset")
+	}
+	_, err := SetLifecycle(context.Background(), "truenas", "draining", "maintenance", "op-1")
+	var nl *NotLandedError
+	if !errors.Is(err, ErrOwnFault) || errors.As(err, &nl) {
+		t.Fatalf("lifecycle err = %v, want ErrOwnFault and no NotLandedError", err)
+	}
+	resp, _ := PutSetting(context.Background(), "truenas", "home_root", "/mnt/p/home", "op-1")
+	if !errors.Is(resp.Err, ErrOwnFault) {
+		t.Fatalf("setting err = %v, want ErrOwnFault", resp.Err)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("nothing may be sent without a record: %d calls", len(*calls))
 	}
 }

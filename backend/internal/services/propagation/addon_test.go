@@ -900,20 +900,13 @@ func TestACheckingTargetHaltsAsAddonUnreachable(t *testing.T) {
 // Design §13.4: a revocation is recorded at once and lands only on the
 // add-on's succeeded. With the add-on stopped it waits, queued, without limit
 // (never terminal, however many attempts it carries), and lands on the first
-// pass after the add-on answers; the audit log then holds both times.
+// pass after the add-on answers (its revocation.landed line is written with
+// markApplied: db's TestLiveALandedRevocationIsAuditedWithBothTimes).
 func TestARevocationWaitsForItsSystemAndLandsWhenItAnswers(t *testing.T) {
-	recorded := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
 	row := addonRow("o1")
-	row.Attempts, row.CreatedAt = maxRetries+3, recorded
+	row.Attempts = maxRetries + 3
 	h := stubAddonDrain(t, row)
 	h.intent.WithdrawsOnly = true
-	var audits []map[string]any
-	t.Cleanup(swap(&insertAudit, func(_ context.Context, _, _, action, _ string, d any) error {
-		if action == "revocation.landed" {
-			audits = append(audits, d.(map[string]any))
-		}
-		return nil
-	}))
 
 	// Stopped: the monitor holds it down, nothing is claimed or sent.
 	h.reachable = false
@@ -927,16 +920,13 @@ func TestARevocationWaitsForItsSystemAndLandsWhenItAnswers(t *testing.T) {
 	for range 5 {
 		DrainAddon(context.Background(), "truenas")
 	}
-	if len(h.failed) != 0 || len(h.applied) != 0 || len(audits) != 0 {
+	if len(h.failed) != 0 || len(h.applied) != 0 {
 		t.Fatalf("an outage made the revocation terminal or landed: failed %v applied %v", h.failed, h.applied)
 	}
 	// Back: the first pass lands it, and only now is it landed.
 	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded}
 	DrainAddon(context.Background(), "truenas")
-	if len(h.applied) != 1 || len(audits) != 1 {
-		t.Fatalf("want landed once, got applied %v audits %v", h.applied, audits)
-	}
-	if audits[0]["recorded_at"] != recorded || audits[0]["landed_at"] == nil {
-		t.Fatalf("the audit holds both times: %v", audits[0])
+	if len(h.applied) != 1 {
+		t.Fatalf("want landed once, got applied %v", h.applied)
 	}
 }

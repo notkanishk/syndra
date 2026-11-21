@@ -34,14 +34,25 @@ type revokeHarness struct {
 func stubRevocation(t *testing.T) *revokeHarness {
 	t.Helper()
 	h := &revokeHarness{}
-	create, record, dispatch, resolve, unfinished := dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementSet, dbHasUnfinishedConvergence
+	create, record, dispatch, resolve, unfinished, recordedAt := dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementSet, dbUnfinishedConvergence, dbPropagationRecordedAt
 	t.Cleanup(func() {
 		dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementSet = create, record, dispatch, resolve
-		dbHasUnfinishedConvergence = unfinished
+		dbUnfinishedConvergence, dbPropagationRecordedAt = unfinished, recordedAt
 	})
 	// What the outbox would say: a convergence queued earlier is still waiting.
-	dbHasUnfinishedConvergence = func(context.Context, string, string) (bool, error) {
-		return len(h.converged) > 0, nil
+	dbUnfinishedConvergence = func(context.Context, string, string) (string, error) {
+		if len(h.converged) > 0 {
+			return "outbox_1", nil
+		}
+		return "", nil
+	}
+	// The outbox row's creation: the one recorded time. The allowance's is
+	// an hour earlier, so a reply that read it would show.
+	dbPropagationRecordedAt = func(_ context.Context, id string) (time.Time, error) {
+		if id != "outbox_1" {
+			return time.Time{}, errors.New("no such row")
+		}
+		return time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC), nil
 	}
 
 	dbCreateAllowance = func(_ context.Context, a db.Allowance) (db.Allowance, error) {
@@ -49,7 +60,7 @@ func stubRevocation(t *testing.T) *revokeHarness {
 			return db.Allowance{}, h.createErr
 		}
 		a.ID = "allow_1"
-		a.CreatedAt = time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
+		a.CreatedAt = time.Date(2026, 11, 21, 8, 0, 0, 0, time.UTC)
 		h.allowances = append(h.allowances, a)
 		return a, nil
 	}
@@ -255,8 +266,14 @@ func TestADoubleRetryQueuesOneConvergence(t *testing.T) {
 	}
 
 	for i := 1; i <= 2; i++ {
-		if rr := revoke(`{"reason":"offboarding","confirmed":true}`); rr.Code != http.StatusAccepted {
+		rr := revoke(`{"reason":"offboarding","confirmed":true}`)
+		if rr.Code != http.StatusAccepted {
 			t.Fatalf("retry %d: want 202, got %d (%s)", i, rr.Code, rr.Body.String())
+		}
+		// Recorded is the outbox row's time on a retry too, never the zero
+		// time of an allowance read without its creation.
+		if !strings.Contains(rr.Body.String(), `"recorded_at":"2026-11-21T09:00:00Z"`) {
+			t.Errorf("retry %d: recorded_at is not the outbox row's: %s", i, rr.Body.String())
 		}
 	}
 	if len(h.converged) != 1 {
