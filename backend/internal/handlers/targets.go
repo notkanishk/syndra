@@ -205,8 +205,12 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 	// The page's poll reads the monitor's last probe, never the add-on: open
 	// tabs must not load it or move the monitor (design §13.2). Only "Check
 	// now" (?fresh=true, wantsFresh) reads live, and that read is not counted.
+	// A live answer says so (`live`): its reachable and detail are this read,
+	// while health and status stay the monitor's last probe, so the two may
+	// differ and the page can tell which is which.
+	live := wantsFresh(r)
 	health := addonsLastHealth(target)
-	if wantsFresh(r) {
+	if live {
 		health = addonsHealth(r.Context(), target)
 	}
 
@@ -235,6 +239,9 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 			"health":    addonsHealthOf(target),
 			"status":    liveStatus(target),
 		}
+		if live {
+			body["live"] = true
+		}
 		if anchored && anchor.Compromised() {
 			body["log_anchor"] = anchor
 		}
@@ -245,7 +252,7 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 	// Merged rather than nested under a second request, because the operator's
 	// question is one question: is this target all right.
 	merged := targetHealthWithAnchor{TargetHealth: health,
-		Health: addonsHealthOf(target), Status: liveStatus(target)}
+		Health: addonsHealthOf(target), Status: liveStatus(target), Live: live}
 	if anchored {
 		merged.LogAnchor = &anchor
 	}
@@ -263,6 +270,9 @@ type targetHealthWithAnchor struct {
 	Health addons.HealthState `json:"health"`
 	// Status is the same ranked reading the roster row shows, read now.
 	Status string `json:"status"`
+	// Live is a "Check now" answer: the reading above is a live read of the
+	// add-on, and Health and Status are still the monitor's.
+	Live bool `json:"live,omitempty"`
 }
 
 func describeTarget(ctx context.Context, reg addons.Registration, transport addons.TransportCredential) targetSummary {

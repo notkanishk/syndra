@@ -39,6 +39,7 @@ const state = {
   roster: [] as TargetSummary[],
   health: {} as TargetHealth,
   healthLoading: false,
+  healthError: null as unknown,
   findingsError: null as unknown,
   inventory: {} as TargetInventory,
   resolved: [] as Array<{ head: string; note: string }>,
@@ -92,7 +93,7 @@ vi.mock("@/lib/queries/useTargets", async () => {
     useTargetHealth: () => ({
       data: state.healthLoading ? undefined : state.health,
       isLoading: state.healthLoading,
-      error: null,
+      error: state.healthError,
     }),
     useMergeFindings: () => ({ data: undefined, isLoading: false, error: state.findingsError }),
     useUnconfirmedOperations: () => ({ data: [], isLoading: false, error: null }),
@@ -193,6 +194,7 @@ function renderTarget(view: "basic" | "advanced" = "advanced") {
 
 beforeEach(() => {
   state.healthLoading = false;
+  state.healthError = null;
   state.findingsError = null;
   state.settingsLoading = false;
   state.settingsError = null;
@@ -1517,3 +1519,18 @@ describe("every action in its seat (D-1)", () => {
 });
 
 vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);
+
+// Syndra's server failed the page's read: Try again asks the add-on live
+// (`?fresh=true`), never the copy that just failed (8b fix round 2).
+describe("health read failed", () => {
+  it("Try again reads the health live", async () => {
+    state.healthError = new Error("502");
+    state.healthLoading = true; // no data: the read failed before any came
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ reachable: true }), { status: 200 }));
+    renderTarget();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    const health = () => fetch.mock.calls.map((c) => String(c[0])).filter((url) => url.includes("/targets/truenas/health"));
+    await vi.waitFor(() => expect(health()).toEqual([expect.stringMatching(/\/targets\/truenas\/health\?fresh=true$/)]));
+    fetch.mockRestore();
+  });
+});

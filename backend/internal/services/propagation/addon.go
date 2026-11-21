@@ -79,8 +79,8 @@ func drainAddonPass(ctx context.Context, target string) (DrainResult, error) {
 	// a single call establishes — and an exhausted budget is terminal, so the
 	// rows an operator approved would be failed by the target being switched
 	// off rather than left queued for it coming back.
-	if st := addonState(target); !st.Answering() {
-		return unanswered(ctx, target, haltReason(st)), nil
+	if reason := haltReason(addonState(target)); reason != "" {
+		return unanswered(ctx, target, reason), nil
 	}
 
 	rows, err := claimPending(ctx, target, claimBatch)

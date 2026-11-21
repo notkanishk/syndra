@@ -51,7 +51,10 @@ vi.mock("@/lib/queries/useTargets", async () => {
       data: state.health,
       isLoading: state.healthLoading,
       error: state.healthError,
-      refetch: () => {
+    }),
+    // Try again reads live (`?fresh=true`): the page's own press, counted here.
+    useTargetHealthAgain: () => ({
+      press: async () => {
         state.refetched++;
       },
     }),

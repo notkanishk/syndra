@@ -78,6 +78,11 @@ const SignatureHeader = "X-Syndra-Addon-Signature"
 // against the backend that governs every other target.
 const maxResponseBytes = 1 << 20
 
+// maxRetryAfter is the longest Retry-After Syndra keeps, in seconds: an hour,
+// past the outbox's longest backoff step (30 min), so a sane add-on's word is
+// kept whole while a wrong one cannot hold a revocation for longer.
+const maxRetryAfter = 3600
+
 // CallRequest is one dispatch to an add-on.
 //
 // It does NOT carry the secret parameter list. That comes from the effective
@@ -176,7 +181,8 @@ type CallResponse struct {
 	StatsRefusal bool
 	// RetryAfter is the reply's Retry-After in seconds (RFC 9110 §10.2.3,
 	// delay-seconds only, as registry/errors.json has it): 0 when absent or
-	// not an integer. A cooldown's countdown (FRESH_READ_COOLDOWN, 429).
+	// not an integer, at most maxRetryAfter. A cooldown's countdown
+	// (FRESH_READ_COOLDOWN, 429).
 	RetryAfter int
 	// Refusal is what a refusal says beyond its code, for the person who
 	// asked: which parameter, which limit. Zero on a 2xx.
@@ -455,8 +461,14 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 	if out.Status < 200 || out.Status >= 300 {
 		out.Code, out.Refusal = refusalOf(respBody)
 	}
-	if secs, err := strconv.Atoi(httpResp.Header.Get("Retry-After")); err == nil && secs > 0 {
-		out.RetryAfter = secs
+	// Capped at an hour where it is read, so no caller can be handed more: the
+	// header is the add-on's to say (RFC 9110 §10.2.3 sets no upper bound) and
+	// the wait is Syndra's to keep. Uncapped, a huge value wraps
+	// time.Duration, parks a revocation for a year, or overflows the defer's
+	// make_interval and leaves its row in flight. A value past int64 is huge,
+	// not absent (strconv.ErrRange returns the bound).
+	if secs, err := strconv.ParseInt(httpResp.Header.Get("Retry-After"), 10, 64); (err == nil || errors.Is(err, strconv.ErrRange)) && secs > 0 {
+		out.RetryAfter = int(min(secs, maxRetryAfter))
 	}
 	out.Outcome, out.LifecycleRefusal, out.ShapeRefusal = classifyStatus(out.Status, out.Code)
 	switch {

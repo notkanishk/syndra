@@ -32,18 +32,23 @@ func SetAutoRetry(on bool) { autoRetry.Store(on) }
 func AutoRetry() bool { return autoRetry.Load() }
 
 // RowRetry is where an unresolved row stands, or nil when there is nothing to
-// say beyond its wait reason: never tried, being sent now, or held for the
-// operator (a row that waits is never retried on its own, so it is not
+// say beyond its wait reason: never given a next try, being sent now, or held
+// for the operator. A row deferred when nothing went out has a next try and
+// no attempt spent (db.DeferPropagation): it reads "try 1 of N", the same
+// rule as the count (db retryingRow) (a row that waits is never retried on its own, so it is not
 // "retrying" whatever its attempts say). With the background drain off, a
 // row Zitadel didn't take is waiting: only Send moves it.
 func RowRetry(row models.PendingPropagation) *extcall.RetryState {
-	if row.Status != "pending" || row.Attempts == 0 || row.NotBefore == nil {
+	if row.Status != "pending" || row.NotBefore == nil {
 		return nil
 	}
 	if row.WaitReason == db.WaitReasonRoleWaits || row.WaitReason == db.WaitReasonManual {
 		return nil
 	}
 	if !AutoRetry() {
+		if row.Attempts == 0 {
+			return nil // never tried, and nothing tries it: only its wait reason is true
+		}
 		return &extcall.RetryState{State: extcall.RetryWaiting, Try: row.Attempts, Of: RetryRule().Attempts}
 	}
 	s := RetryRule().Retrying(row.Attempts, row.NotBefore)

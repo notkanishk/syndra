@@ -3,6 +3,7 @@ package addons
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -173,5 +174,13 @@ func TestOnlyTheProbeMovesTheMonitor(t *testing.T) {
 	_ = ProbeAll(context.Background())
 	if st := HealthOf("truenas"); st.State != StateAddonUnreachable || LastHealth("truenas").Why.Cause != CauseNoAnswer {
 		t.Fatalf("the probe decides from checking and keeps its answer: %+v %+v", st, LastHealth("truenas"))
+	}
+}
+
+// A target not registered is never probed, so its last health says why, as a
+// live read does, rather than an unreached answer with no detail.
+func TestLastHealthOfAnUnregisteredTargetSaysItIsNotRegistered(t *testing.T) {
+	if h := LastHealth("no-such-target"); h.Outcome != OutcomeUnreached || !errors.Is(h.Err, ErrNotRegistered) {
+		t.Fatalf("LastHealth = %+v, want unreached with ErrNotRegistered", h)
 	}
 }

@@ -88,10 +88,10 @@ func DrainRevocations(ctx context.Context) (DrainResult, error) {
 	// deployments, and a NAS being off is not a reason to leave a door system's
 	// revocation queued.
 	for _, target := range addonDrainTargets() {
-		if st := addonState(target); !st.Answering() {
+		if reason := haltReason(addonState(target)); reason != "" {
 			// A target with nothing of its own queued was not skipped:
 			// unanswered says so, as the operator's pass does.
-			res.merge(target, unanswered(ctx, target, haltReason(st)))
+			res.merge(target, unanswered(ctx, target, reason))
 			continue
 		}
 		rows, err := claimRevocations(ctx, target, claimBatch)
@@ -120,12 +120,13 @@ func DrainRevocations(ctx context.Context) (DrainResult, error) {
 }
 
 // automatic sends one row on the runner's own initiative. A row tried before
-// (attempts > 0) is an automatic retry, and every one is audited with its try
-// number and how it went, so the history never loses one.
+// (attempts > 0), or one deferred when nothing went out (not_before set,
+// attempts still 0), is an automatic retry, and every one is audited with its
+// try number and how it went, so the history never loses one.
 func (res *DrainResult) automatic(ctx context.Context, row models.PendingPropagation, send func(context.Context, models.PendingPropagation) bool) bool {
 	before := *res
 	halt := send(ctx, row)
-	if row.Attempts > 0 {
+	if row.Attempts > 0 || row.NotBefore != nil {
 		auditRetry(ctx, row, retryOutcome(before, *res))
 	}
 	return halt

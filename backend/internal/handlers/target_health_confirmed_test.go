@@ -99,3 +99,35 @@ func TestThePagePollNeverReadsTheAddon(t *testing.T) {
 		t.Fatalf("want one live read, for Check now only; got %d", reads)
 	}
 }
+
+// A "Check now" answer says it is live, reachable or not, so a live reading
+// that differs from the monitor's can be told apart; a poll's never does.
+func TestALiveHealthReadSaysItIsLive(t *testing.T) {
+	live, last, healthOf, anchor := addonsHealth, addonsLastHealth, addonsHealthOf, dbGetLogAnchor
+	t.Cleanup(func() { addonsHealth, addonsLastHealth, addonsHealthOf, dbGetLogAnchor = live, last, healthOf, anchor })
+	dbGetLogAnchor = func(context.Context, string) (db.LogAnchor, bool, error) { return db.LogAnchor{}, false, nil }
+	addonsHealthOf = func(string) addons.HealthState { return addons.HealthState{State: addons.StateAddonUnreachable} }
+	addonsLastHealth = func(string) addons.TargetHealth { return addons.TargetHealth{Outcome: addons.OutcomeUnreached} }
+	for _, now := range []addons.TargetHealth{
+		{Reachable: true, Outcome: addons.OutcomeSucceeded},
+		{Outcome: addons.OutcomeUnreached, Err: errors.New("no route")},
+	} {
+		addonsHealth = func(context.Context, string) addons.TargetHealth { return now }
+		for url, want := range map[string]bool{"/api/v1/targets/truenas/health": false, "/api/v1/targets/truenas/health?fresh=true": true} {
+			r := httptest.NewRequest(http.MethodGet, url, nil)
+			r.SetPathValue("target", "truenas")
+			rr := httptest.NewRecorder()
+			handleTargetHealth(rr, r)
+			var body struct {
+				Live   bool               `json:"live"`
+				Health addons.HealthState `json:"health"`
+			}
+			if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if body.Live != want || body.Health.State != addons.StateAddonUnreachable {
+				t.Errorf("%s (reachable %v): live %v want %v, health %s: %s", url, now.Reachable, body.Live, want, body.Health.State, rr.Body.String())
+			}
+		}
+	}
+}

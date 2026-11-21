@@ -281,15 +281,24 @@ func unanswered(ctx context.Context, target, reason string) DrainResult {
 	return DrainResult{Halted: true, Reason: reason, Waiting: n}
 }
 
-// haltReason is an add-on pass's halt reason for a target that is not
-// answering: the monitor's state, and checking (no probe yet) is
+// haltReason is why an add-on pass does not send, "" when it may. A target
+// not answering halts on the monitor's state, and checking (no probe yet) is
 // addon_unreachable, Syndra holding no answer from the add-on (design §13.1),
-// so the halt is one the pages say rather than a word of its own.
+// so the halt is one the pages say rather than a word of its own. An answering
+// target an operator put in maintenance (draining, read_only) halts on that
+// switch: it would refuse every row, so sending each due row every pass only
+// moves them about. The rows wait unsent, no attempt spent, until it is made
+// active. An empty lifecycle is a contract-1 answer and is not a switch.
 func haltReason(st addons.HealthState) string {
-	if st.State == addons.StateChecking {
+	switch {
+	case st.State == addons.StateChecking:
 		return addons.ReasonAddonUnreachable
+	case !st.Answering():
+		return string(st.State)
+	case st.Lifecycle != "" && st.Lifecycle != "active":
+		return st.Lifecycle
 	}
-	return string(st.State)
+	return ""
 }
 
 // pruneAfterDrain is the retention work, run once per drain rather than once

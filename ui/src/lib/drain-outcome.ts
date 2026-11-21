@@ -79,7 +79,9 @@ export function describeDrain(
     const still = left ? `its ${left}` : "its changes";
     return {
       tone: "warning",
-      message: `${[went, ...rest].filter(Boolean).join(". ")}. ${stalled} didn't answer, so ${still} ${left === 1 ? "is" : "are"} still here.`,
+      message: `${[went, ...rest].filter(Boolean).join(". ")}. ${halted
+        .map((pass) => `${nameOf(pass.target)} ${maintenance(pass.reason) ?? "didn't answer"}`)
+        .join(" and ")}, so ${still} ${left === 1 ? "is" : "are"} still here.`,
       detail: haltDetail(result.reason, stalled, left || undefined),
     };
   }
@@ -102,6 +104,14 @@ export function describeDrain(
               : auto
                 ? "Nothing counts against the retry limit. Revocations, and changes Zitadel didn't take before, go again on their own once it answers; the rest wait for you to send."
                 : "Nothing counts against the retry limit. This Syndra server doesn't send anything again on its own, so everything waits for you to press Send once Zitadel answers.",
+        };
+      case "read_only":
+      case "draining":
+        return {
+          tone: "warning",
+          message: `${stalled ?? "The connected system"} ${maintenance(result.reason)}. Nothing was sent.`,
+          detail: MAINTENANCE_DETAIL,
+          next: MAINTENANCE_NEXT,
         };
       case "target_unreachable":
         return {
@@ -250,7 +260,24 @@ function haltDetail(reason: string | undefined, system: string | undefined, wait
       return `${system ?? "The connected system"} is not answering. ${its} still waiting for you to send, and nothing counts against the retry limit.`;
     case "drain_in_progress":
       return "Another send was already running for it.";
+    case "read_only":
+    case "draining":
+      return `${its} still waiting, and nothing counts against the retry limit. ${MAINTENANCE_NEXT}`;
     default:
       return "The rest of the queue went through.";
   }
 }
+
+/**
+ * A pass halted on the operator's maintenance switch (backend
+ * propagation.haltReason: the add-on's lifecycle), in the Maintenance card's
+ * words (TargetOverview stateLabel). undefined for any other reason.
+ */
+function maintenance(reason: string | undefined): string | undefined {
+  if (reason === "read_only") return "is set to read-only";
+  if (reason === "draining") return "is set to finish up";
+  return undefined;
+}
+
+const MAINTENANCE_DETAIL = "It refuses every change until it is active again, so Syndra holds them. Nothing counts against the retry limit.";
+const MAINTENANCE_NEXT = "Press Make active under Maintenance on its page, then send again.";

@@ -736,8 +736,14 @@ func probe(ctx context.Context, target string) {
 
 // LastHealth is the monitor's last probe of a target: what a page shows
 // between probes, so no page read reaches the add-on. Unreached with no error
-// before the first probe (HealthOf says checking).
-func LastHealth(target string) TargetHealth { return monitor.last(target) }
+// before the first probe (HealthOf says checking). A target not registered is
+// never probed, so it says why, as a live read (Health) does.
+func LastHealth(target string) TargetHealth {
+	if _, err := Get(target); err != nil {
+		return TargetHealth{Outcome: OutcomeUnreached, Err: err}
+	}
+	return monitor.last(target)
+}
 
 func readHealth(ctx context.Context, target string) TargetHealth {
 	a, err := Get(target)
