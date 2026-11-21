@@ -38,7 +38,7 @@ Preloaded:
 
 Invoke with the Skill tool when the branch arises:
 
-- `mattpocock-skills:grilling`: the format for the owner's questions.
+- `mattpocock-skills:grilling`: the 2b rounds, and the format for every owner question.
 - `mattpocock-skills:domain-modeling`: vocabulary, and ADRs for hard-to-reverse choices.
 - `chrome-devtools-mcp:a11y-debugging`: a rendered page.
 - `dataviz`: any chart.
@@ -55,6 +55,13 @@ Run the stages the request needs, in this order. Each ends on its criterion.
 
 1. **Context.** Run `"$HOME/.claude/skills/impeccable/scripts/impeccable" context --target <path>` once from the repo root, then read the Syndra sources above that the surface touches. Done when you can state, in three lines, who uses the surface, the job it does, its frequency class, and its constraints.
 2. **Shape** (new surface or flow): impeccable `shape`. Done when the task, every state (empty, loading, partial, error, stale, offline, forced colours, reduced motion, phone) and every edge case is listed, and every decision that is the owner's is a numbered question.
+2b. **Grill** (new or redrawn screen or flow; owner, 21 Nov 2026). Before drawing anything, settle what the screen *does*, in rounds, using `mattpocock-skills:grilling`'s design tree:
+   - **What goes in a round:** only the **frontier**, meaning the product and behaviour decisions whose prerequisites are already settled. Examples: what shows at rest, who sees it, what a phone gets, what is out of scope, what each state says. Facts you can find in the repo are yours to find (scout on `haiku` or `sonnet`), never questions.
+   - **Asking:** you cannot reach the owner. Return the round as numbered questions, each with your recommended answer worded so "yes" accepts it. Then stop. The session asks him and resumes you with his answers.
+   - **Next rounds:** recompute the frontier from his answers and ask the next round. Usually one or two short rounds.
+   - **What stays out:** look and feel (glass, colour, motion, how much light) is never a grilling question. He judges those by eye, in the prototype's options.
+
+   Done when no behaviour decision is left silently assumed. Small changes skip this stage.
 3. **Options** (when the answer is "what should it look like"): 3 to 5 structurally different variants, per prototype. Each one is calm at rest, with one moment of delight. Ground each in a cited reference (a product, a guideline, a study). Done when a builder could build any of them with no further question: layout at 1440 and 390, states, keyboard map, motion with durations and reduced-motion form, tokens named.
 4. **Prototype** (every option the owner judges; BRIDGE step 3a): one self-contained `design/<name>-prototype.html` with tokens copied from `globals.css` as CSS variables in both themes, the options behind a small switch, and the recommendation marked. Add theme and reduced-motion switches. Look at it yourself at 1440 and 390, in both themes, with a critical eye for elegance: that judgement is design. A `sonnet` agent measures, in a headless browser:
    - contrast (≥4.5:1 for text);
