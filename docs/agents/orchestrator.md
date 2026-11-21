@@ -90,3 +90,4 @@ New features (a new model, Code Mode, a saved workflow script for the build → 
   - Seven build-efficiency rules ("yes to all").
   - Show visual choices ("show me the options visually").
   - The build spec template and this playbook ("make a directive for yourself … transferable … you dont forget … easier to make changes").
+- 2026-11-21 — Builders wait on a completion notice or Monitor, never a `pgrep -f` poll loop (it matches itself; owner found 26 left running: "what are these then, if useless please cleanup").
