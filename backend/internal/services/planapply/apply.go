@@ -166,7 +166,7 @@ func Apply(ctx context.Context, req Request) (Result, error) {
 			// values a caller supplies are values a caller can supply
 			// inconsistently, and "this work is for the person the approval
 			// named" would then hold only where the caller made it hold.
-			outboxID, err := enqueue(ctx, tx, db.EntitlementApply{PlanSubjectID: s.ID})
+			outboxID, _, err := enqueue(ctx, tx, db.EntitlementApply{PlanSubjectID: s.ID})
 			if err != nil {
 				return fmt.Errorf("queue %s: %w", s.SubjectID, err)
 			}

@@ -73,3 +73,24 @@ func TestAValueThatCannotBeCheckedIsRefused(t *testing.T) {
 		t.Fatalf("want NotRead app_unreachable, got %v", err)
 	}
 }
+
+// A system that may not be asked, with no manifest, the monitor silent and
+// its breaker open, is answered as what opened the breaker with the time
+// left (WhyNoManifest); with the breaker closed, the add-on unreachable.
+func TestWhyNoManifestNamesAnOpenBreaker(t *testing.T) {
+	m := monitor
+	monitor = newHealthMonitor()
+	t.Cleanup(func() { monitor = m })
+	addonAnswering(t, "reach.json")
+	withBreaker(t, 1, time.Hour)
+
+	if got := WhyNoManifest("truenas"); got != (Why{Reason: ReasonAddonUnreachable}) {
+		t.Fatalf("closed breaker, silent monitor: got %+v", got)
+	}
+	a, _ := Get("truenas")
+	a.br.record(timeNow(), CallResponse{Outcome: OutcomeIndeterminate})
+	got := WhyNoManifest("truenas")
+	if got.Reason != ReasonAddonUnreachable || got.Cause != CauseTimeout || got.RetryAfter < 3500 {
+		t.Fatalf("open breaker: want its opener with the time left, got %+v", got)
+	}
+}

@@ -168,8 +168,8 @@ func TestOneAllowanceOfAKindIsInForce(t *testing.T) {
 		t.Fatal(err)
 	}
 	again, err := CreateAllowance(ctx, hold)
-	if !errors.Is(err, ErrAllowanceAlreadyInForce) || again.ID != first.ID {
-		t.Fatalf("a second identical hold must meet the first: %v %q", err, again.ID)
+	if !errors.Is(err, ErrAllowanceAlreadyInForce) || again.ID != first.ID || !again.CreatedAt.Equal(first.CreatedAt) {
+		t.Fatalf("a second identical hold must meet the first, with its creation: %v %q %v", err, again.ID, again.CreatedAt)
 	}
 
 	limit := Allowance{SubjectID: user, Target: "truenas", Field: "home_quota", Value: "53687091200",

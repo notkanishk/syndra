@@ -55,7 +55,7 @@ var (
 		if err != nil {
 			return err
 		}
-		_, _, err = db.RecordSystemConvergence(ctx, set.Convergence(target, subjectID, expiryActor, "A subtractive allowance lapsed"))
+		_, _, _, err = db.RecordSystemConvergence(ctx, set.Convergence(target, subjectID, expiryActor, "A subtractive allowance lapsed"))
 		return err
 	}
 )

@@ -827,6 +827,10 @@ func (w healthWire) view(target string, status int, c Clock) TargetHealth {
 	}
 }
 
+// ErrLifecycleRefused is the add-on answering a lifecycle change with no: it
+// did not change.
+var ErrLifecycleRefused = errors.New("lifecycle change refused")
+
 // SetLifecycle moves an add-on between active, draining and read-only at
 // runtime (design §18).
 //
@@ -855,11 +859,15 @@ func SetLifecycle(ctx context.Context, target, state, reason, actor string) (map
 	resp, err := a.operate(ctx, db.AddonOperationParams{
 		Target: target, Operation: "lifecycle.set", ActorID: actor, SubjectID: target, About: state,
 	}, sendSpec{Method: http.MethodPost, Path: "/lifecycle", Body: body, SkipBreaker: true})
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrOwnFault):
 		return nil, err
-	}
-	if resp.Outcome != OutcomeSucceeded {
-		return nil, fmt.Errorf("addon %s: lifecycle change refused (%d): %v", target, resp.Status, resp.Err)
+	case resp.Outcome == OutcomeSucceeded:
+	case resp.Outcome == OutcomeRejected:
+		return nil, fmt.Errorf("addon %s: %w (%d): %v", target, ErrLifecycleRefused, resp.Status, resp.Err)
+	default:
+		// Unreached or indeterminate: the handler says which (design §13.4).
+		return nil, &NotLandedError{Target: target, Outcome: resp.Outcome, Why: Unread(resp), Err: errors.Join(err, resp.Err)}
 	}
 	monitor.setLifecycle(target, state)
 	var out map[string]any
@@ -881,6 +889,10 @@ var ErrValueNotResolvable = errors.New("addon: the target does not recognise tha
 // It is told apart because the operator's step is not a correction of the
 // value — nothing they type can fix it.
 var ErrFieldNotListable = fmt.Errorf("%w: the target cannot list that field", ErrValueNotResolvable)
+
+// ErrRolesUnread is Syndra's own record of a target's field roles failing to
+// read: its fault, not the add-on's, said apart from NotRead.
+var ErrRolesUnread = errors.New("addon: Syndra's record of the target's fields could not be read")
 
 // ResolvesValue checks that a mapping value names something on the target.
 //
@@ -919,8 +931,11 @@ func ResolvesValue(ctx context.Context, target, field, value string) (Resolution
 		// A role map that cannot be read fails closed: an unlistable
 		// membership is never accepted as a limit.
 		roles, err := FieldRoles(ctx, target)
+		if errors.Is(err, ErrNoManifest) {
+			return Resolution{}, fmt.Errorf("%s's %s could not be checked: %w", target, field, NotRead{Why: WhyNoManifest(target)})
+		}
 		if err != nil {
-			return Resolution{}, fmt.Errorf("%s's %s could not be checked: %w", target, field, err)
+			return Resolution{}, fmt.Errorf("%s's %s could not be checked: %w: %w", target, field, ErrRolesUnread, err)
 		}
 		if roles[field] == RoleMembership {
 			return Resolution{}, fmt.Errorf("%w: %s can't list the values of %s, so a mapping can't name one", ErrFieldNotListable, target, field)

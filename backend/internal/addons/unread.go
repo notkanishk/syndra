@@ -28,6 +28,10 @@ type Why struct {
 	Detail string `json:"detail,omitempty"`
 	// RetryAfter is seconds: the breaker's time left, the add-on's Retry-After.
 	RetryAfter int `json:"retry_after,omitempty"`
+	// Unusable is app_unreachable from NO_CURRENT_READ or TARGET_UNREADABLE:
+	// the app answered its add-on with nothing it could use, which has its own
+	// fallback sentence (§13.1). Not on the wire; reason and cause are.
+	Unusable bool `json:"-"`
 }
 
 // Reasons (design §13.1, §13.3).
@@ -107,10 +111,6 @@ func Unread(r CallResponse) Why {
 		why.RetryAfter = seconds(open.RetryAfter)
 		return why
 	}
-	var held *heldError
-	if errors.As(r.Err, &held) {
-		return held.why
-	}
 	switch {
 	case r.ShapeRefusal:
 		return Why{Reason: ReasonAddonOutdated}
@@ -120,7 +120,8 @@ func Unread(r CallResponse) Why {
 		return Why{Reason: ReasonReadRefused, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter}
 	case r.Code == codeTargetUnreachable, r.Code == codeNoCurrentRead, r.Code == codeTargetUnreadable:
 		// Before 429: TARGET_UNREADABLE may come as one, and it is the app.
-		return Why{Reason: ReasonAppUnreachable, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter}
+		return Why{Reason: ReasonAppUnreachable, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter,
+			Unusable: r.Code != codeTargetUnreachable}
 	case r.Code == codeFreshReadCooldown, r.Status == 429:
 		return Why{Reason: ReasonCooldown, RetryAfter: max(1, r.RetryAfter)}
 	case r.Code != "":
@@ -145,7 +146,10 @@ func Unread(r CallResponse) Why {
 
 // unsent is a reply with no status: nothing came back.
 func unsent(r CallResponse) Why {
+	var held *HeldError
 	switch {
+	case errors.As(r.Err, &held):
+		return held.Why
 	case errors.Is(r.Err, ErrFeatureNotDeclared):
 		return Why{Reason: ReasonAddonOutdated}
 	case errors.Is(r.Err, ErrNoCallRecord), errors.Is(r.Err, ErrNoFingerprint), errors.Is(r.Err, ErrFreshOutOfScope),
@@ -169,3 +173,55 @@ func cutOff(err error) bool {
 }
 
 func seconds(d time.Duration) int { return int(math.Ceil(d.Seconds())) }
+
+// HeldError is a write Syndra refused undialed because the monitor holds its
+// system addon_unreachable (design §13.4): nothing went out. Why is the
+// monitor's, so the page names the same cause the roster does.
+type HeldError struct {
+	Target string
+	Why    Why
+}
+
+func (e *HeldError) Error() string {
+	return fmt.Sprintf("addon %s: held %s (%s), not dialed", e.Target, e.Why.Reason, e.Why.Cause)
+}
+
+// Held is Down filtered to addon_unreachable: a read or an interactive write
+// to target is refused at once, undialed (design §13.2, §13.4 "Halts"). App
+// down is not held: the add-on answers, and its own refusal says so. The
+// drain does not ask: it already claims no row of an unreachable system.
+func Held(target string) (Why, bool) {
+	why, down := HealthOf(target).Down()
+	if !down || why.Reason != ReasonAddonUnreachable {
+		return Why{}, false
+	}
+	return why, true
+}
+
+// HeldTargets is every registered target Held right now: the systems whose
+// queued revocations wait without escalating (db.CountUnconfirmedRevocations,
+// owner 28.3: only a revocation that can't reach its system is exempt).
+func HeldTargets() []string {
+	var out []string
+	for _, reg := range Registered() {
+		if _, held := Held(reg.Target); held {
+			out = append(out, reg.Target)
+		}
+	}
+	return out
+}
+
+// NotLandedError is a write that did not land: unreached (nothing went out) or
+// indeterminate (sent, answer lost), and why. What writeOutcome answers from.
+type NotLandedError struct {
+	Target  string
+	Outcome Outcome
+	Why     Why
+	Err     error
+}
+
+func (e *NotLandedError) Error() string {
+	return fmt.Sprintf("addon %s: %s (%s %s): %v", e.Target, e.Outcome, e.Why.Reason, e.Why.Cause, e.Err)
+}
+
+func (e *NotLandedError) Unwrap() error { return e.Err }

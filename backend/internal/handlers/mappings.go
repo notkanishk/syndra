@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -347,9 +348,23 @@ func resolveValue(ctx context.Context, target, field, value string, schema []add
 		return resolution, newNotListable(ctx, target, field, schema)
 	case errors.As(err, &nr):
 		return resolution, valueUnchecked(ctx, target, nr)
+	case errors.Is(err, addons.ErrRolesUnread):
+		system, _ := systemName(ctx, target)
+		return resolution, fieldsNotRead{err: err, sentence: "Not saved. Syndra couldn't read its record of " + system +
+			"'s fields. Try again; if it lasts, read Syndra's log."}
 	}
 	return resolution, err
 }
+
+// fieldsNotRead is Syndra's own record of a system's fields failing to read
+// (addons.ErrRolesUnread): its fault, a 500 in the operator's words.
+type fieldsNotRead struct {
+	err      error
+	sentence string
+}
+
+func (e fieldsNotRead) Error() string { return e.err.Error() }
+func (e fieldsNotRead) Unwrap() error { return e.err }
 
 // notChecked is a mapping or allowance refused because its value could not be
 // checked on the system (design §13.3, owner Q2: fail closed): never saved
@@ -396,7 +411,15 @@ func newNotListable(ctx context.Context, target, field string, schema []addons.E
 // add-on will not vouch for is refused in one shape wherever it is named.
 func writeValueRefusal(w http.ResponseWriter, err error) bool {
 	var unchecked notChecked
+	var unread fieldsNotRead
 	switch {
+	case errors.As(err, &unread):
+		// Syndra's own fault: the sentence and a reference, the chain only in
+		// the log.
+		ref := supportReference()
+		log.Printf("[HTTP] error status=500 ref=%s code=FIELDS_NOT_READ: %v", ref, unread.err)
+		jsonResponse(w, http.StatusInternalServerError, ErrorResponse{Error: "FIELDS_NOT_READ", Message: unread.sentence,
+			Details: map[string]string{"request_id": ref}})
 	case errors.As(err, &unchecked):
 		// 503, not 400: the request may be perfectly correct and the value
 		// could not be checked. Trying again once the system answers is the

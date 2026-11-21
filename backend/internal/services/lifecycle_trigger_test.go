@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -37,9 +38,9 @@ func stubTrigger(t *testing.T, f *resolverFixture, mapped map[string][]string) *
 	dbTargetsMappedToRole = func(_ context.Context, project, role string) ([]string, error) {
 		return h.mapped[project+"/"+role], h.targetErr
 	}
-	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, time.Time, error) {
 		h.queued = append(h.queued, c)
-		return "plan_1", "outbox_1", h.recordErr
+		return "plan_1", "outbox_1", time.Time{}, h.recordErr
 	}
 	return h
 }
@@ -301,9 +302,9 @@ func TestAssigningABundleQueuesTheStateAFTERTheAssignment(t *testing.T) {
 		}
 		return nil, nil
 	}
-	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, time.Time, error) {
 		queued = append(queued, c)
-		return "plan_1", "outbox_1", nil
+		return "plan_1", "outbox_1", time.Time{}, nil
 	}
 
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
@@ -366,9 +367,9 @@ func TestConvergeSubjectOn_ADepartureIsWithdrawOnly(t *testing.T) {
 		return EntitlementSet{Roles: truenasRoles, Lifecycle: LifecycleState{NotAMember: true}}, nil
 	}
 	var got db.SystemConvergence
-	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, time.Time, error) {
 		got = c
-		return "p", "o", nil
+		return "p", "o", time.Time{}, nil
 	}
 	if err := convergeOn(context.Background(), "zitadel:user_deactivated", "u1", "truenas"); err != nil {
 		t.Fatal(err)

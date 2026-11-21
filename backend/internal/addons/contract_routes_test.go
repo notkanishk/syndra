@@ -406,8 +406,23 @@ func TestResolvesValueRefusesUnlistableMembership(t *testing.T) {
 func TestResolvesValueFailsClosedWithoutTheRoleMap(t *testing.T) {
 	forgetRoles(t) // no role map for truenas: FieldRoles errs
 	addonServing(t, []byte(`{"field":"group","enumerable":false,"values":[]}`))
-	if res, err := ResolvesValue(context.Background(), "truenas", "group", "Hulk Hogan"); err == nil || res.Checked {
+	res, err := ResolvesValue(context.Background(), "truenas", "group", "Hulk Hogan")
+	if err == nil || res.Checked {
 		t.Errorf("an unlistable field with no role map was accepted: %+v %v", res, err)
+	}
+	// No accepted manifest is a system not yet read: NotRead with the one
+	// no-manifest why, so the page answers 503 and waits.
+	if nr := (NotRead{}); !errors.As(err, &nr) || nr.Why != WhyNoManifest("truenas") {
+		t.Errorf("no role map: want NotRead{WhyNoManifest}, got %v", err)
+	}
+	// Syndra's own record failing to read is its own fault, said apart.
+	orig := dbTargetFieldRoles
+	t.Cleanup(func() { dbTargetFieldRoles = orig })
+	dbTargetFieldRoles = func(context.Context, string) (db.FieldRoleMap, bool, error) {
+		return db.FieldRoleMap{}, false, errors.New("conn reset")
+	}
+	if _, err := ResolvesValue(context.Background(), "truenas", "group", "Hulk Hogan"); !errors.Is(err, ErrRolesUnread) || errors.As(err, new(NotRead)) {
+		t.Errorf("an unreadable role map: want ErrRolesUnread, got %v", err)
 	}
 }
 

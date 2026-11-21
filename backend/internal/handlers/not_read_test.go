@@ -60,12 +60,11 @@ func TestAValueOnASystemWithNoManifestIsNotSaved(t *testing.T) {
 // The add-on's own sentence goes first only where it is the one that knows
 // (§13.1): its app down, or its refusal. Elsewhere it is Syndra's.
 func TestTheAddonsSentenceGoesFirstOnlyWhereItKnows(t *testing.T) {
-	ctx := context.Background()
 	for reason, first := range map[string]bool{
 		addons.ReasonAppUnreachable: true, addons.ReasonReadRefused: true,
 		addons.ReasonAddonUnreachable: false, addons.ReasonCooldown: false, addons.ReasonAddonOutdated: false,
 	} {
-		got := notReadSentence(ctx, "truenas", addons.Why{Reason: reason, Detail: "The add-on's own words."})
+		got := whySentence("Ring Vault", "TrueNAS", addons.Why{Reason: reason, Detail: "The add-on's own words."}, false)
 		if (got == "The add-on's own words.") != first {
 			t.Errorf("%s: %q", reason, got)
 		}
@@ -81,7 +80,8 @@ func TestTheAppIsNamedFromTheAcceptedManifest(t *testing.T) {
 	addonsAcceptedShape = func(context.Context, string) (addons.Shape, error) {
 		return addons.Shape{Kind: "storage", Product: "TrueNAS SCALE"}, nil
 	}
-	got := notReadSentence(context.Background(), "truenas", addons.Why{Reason: addons.ReasonAppUnreachable})
+	_, product := systemAndProduct(context.Background(), "truenas")
+	got := whySentence("Ring Vault", product, addons.Why{Reason: addons.ReasonAppUnreachable}, false)
 	if got != "Ring Vault's add-on is running but can't reach TrueNAS SCALE. Check that TrueNAS SCALE is on." {
 		t.Errorf("%q", got)
 	}

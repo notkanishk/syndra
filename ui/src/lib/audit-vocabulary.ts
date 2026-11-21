@@ -144,6 +144,14 @@ export const AUDIT_ACTIONS: Record<
     template: "Sent a change for {} again on its own (an automatic retry)",
     passive: "A change to their access was sent again on its own (an automatic retry)",
   },
+  // A revocation reached its system (design §13.4): written with the row that
+  // settles it. Details carry the target, recorded_at and landed_at. Draft
+  // words; the final ones go through the copy guide with 8e.
+  "revocation.landed": {
+    verb: "Revoked access on a connected system: it is in force there now",
+    template: "Revoked access for {} on a connected system: it is in force there now",
+    passive: "Their revoked access is now in force on a connected system",
+  },
   "propagation.cancelled_unsent": {
     verb: "Cancelled a change that was waiting for you to send",
     template: "Cancelled a change that was waiting for you to send, for {}",

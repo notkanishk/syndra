@@ -24,6 +24,7 @@ func InstallForTesting(r Registration, m Manifest) (restore func()) {
 	a := &Addon{Registration: r, manifest: &m, ops: ops, fetchedAt: timeNow().UTC()}
 	a.attribution.Store(attributionSaid)
 	registryMu.Lock()
+	// Race-free only because no test that calls this runs in parallel.
 	saved, savedMonitor := registry, monitor
 	registry, monitor = map[string]*Addon{r.Target: a}, newHealthMonitor()
 	registryMu.Unlock()

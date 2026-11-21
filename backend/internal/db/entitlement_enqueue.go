@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -85,7 +86,7 @@ func validOutboxSource(s string) bool {
 // `op_type` is fixed at `apply`. An entitlement convergence is level-triggered
 // onto a resolved desired set — there is no add/revoke/replace distinction to
 // make, so there is no way to make it wrongly.
-func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementApply) (string, error) {
+func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementApply) (string, time.Time, error) {
 	source := p.Source
 	if source == "" {
 		source = "direct"
@@ -96,14 +97,14 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 		// gate exists to prevent, so it cannot be enqueued without one. Refused
 		// here rather than by the foreign key, whose violation message quotes
 		// the value that broke it.
-		return "", fmt.Errorf("%w: an entitlement apply must cite the plan subject that approved it", ErrInvalidEnqueue)
+		return "", time.Time{}, fmt.Errorf("%w: an entitlement apply must cite the plan subject that approved it", ErrInvalidEnqueue)
 	case !validOutboxSource(source):
-		return "", fmt.Errorf("%w: unknown source", ErrInvalidEnqueue)
+		return "", time.Time{}, fmt.Errorf("%w: unknown source", ErrInvalidEnqueue)
 	}
 
 	key, err := newOutboxIdempotencyKey()
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 
 	// The target is read FOR UPDATE, by this statement, and that is what makes
@@ -160,24 +161,25 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 		   AND p.applied_at IS NOT NULL
 		   AND p.target <> $3
 		ON CONFLICT (plan_subject_id) WHERE plan_subject_id IS NOT NULL DO NOTHING
-		RETURNING id, user_id, initiated_by, target`
+		RETURNING id, user_id, initiated_by, target, created_at`
 
 	var outboxID, subjectID, initiatedBy, target string
+	var createdAt time.Time
 	err = tx.QueryRow(ctx, insertOutbox, key, source, TargetZitadel, p.PlanSubjectID, nullIfEmpty(p.Reason)).
-		Scan(&outboxID, &subjectID, &initiatedBy, &target)
+		Scan(&outboxID, &subjectID, &initiatedBy, &target, &createdAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", explainEnqueueRefusal(ctx, tx, p.PlanSubjectID)
+		return "", time.Time{}, explainEnqueueRefusal(ctx, tx, p.PlanSubjectID)
 	}
 	if err != nil {
-		return "", fmt.Errorf("insert entitlement outbox row: %w", err)
+		return "", time.Time{}, fmt.Errorf("insert entitlement outbox row: %w", err)
 	}
 
 	const insertAudit = `INSERT INTO audit_logs
 		(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id) VALUES ($1,$2,$3,$4)`
 	if _, err := tx.Exec(ctx, insertAudit, initiatedBy, subjectID, "entitlement."+target+".enqueued", outboxID); err != nil {
-		return "", fmt.Errorf("insert entitlement audit row: %w", err)
+		return "", time.Time{}, fmt.Errorf("insert entitlement audit row: %w", err)
 	}
-	return outboxID, nil
+	return outboxID, createdAt.UTC(), nil
 }
 
 // approvalRef is the state of an approval the insert declined to act on.

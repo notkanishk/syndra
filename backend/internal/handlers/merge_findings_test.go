@@ -109,9 +109,9 @@ func stubFindings(t *testing.T, h *findingHarness) {
 		h.reservationsCleared = append(h.reservationsCleared, decision)
 		return nil
 	}
-	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, time.Time, error) {
 		h.converged = append(h.converged, c)
-		return "plan_1", "outbox_1", nil
+		return "plan_1", "outbox_1", time.Time{}, nil
 	}
 	dbCreateAllowance = func(_ context.Context, a db.Allowance) (db.Allowance, error) {
 		if h.allowErr != nil {
@@ -349,8 +349,8 @@ func TestUnbindingIsRefusedWhenTheAddOnDoesNotConfirm(t *testing.T) {
 	stubFindings(t, h)
 
 	rr := resolveFinding(t, `{"resolution":"unbound","reason":"the account was removed on purpose"}`)
-	if rr.Code != http.StatusBadGateway {
-		t.Fatalf("want 502, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusAccepted || !strings.Contains(rr.Body.String(), `"status":"unconfirmed"`) {
+		t.Fatalf("want 202 unconfirmed (design §13.4), got %d: %s", rr.Code, rr.Body.String())
 	}
 	if len(h.forgotten) != 0 {
 		t.Fatalf("this side must not forget what the add-on still holds: %v", h.forgotten)

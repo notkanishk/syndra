@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -175,9 +176,9 @@ func TestFollowRules_ConvergesWhatTheRulesReach(t *testing.T) {
 	t.Cleanup(func() { svcResolveEntitlements = origResolve })
 	svcResolveEntitlements = func(context.Context, string, string) (EntitlementSet, error) { return EntitlementSet{}, nil }
 	var queued []string
-	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, time.Time, error) {
 		queued = append(queued, c.Target+"/"+c.SubjectID)
-		return "", "", nil
+		return "", "", time.Time{}, nil
 	}
 	if _, err := followRules(context.Background(), db.EnqueueParams{UserID: "u1", ProjectID: "p", RoleKeys: []string{"a"}, OpType: "add", GrantedBy: "op"},
 		func() error {

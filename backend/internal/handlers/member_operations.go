@@ -96,7 +96,7 @@ func handleMemberAction(w http.ResponseWriter, r *http.Request) {
 	var unavailable *addons.ErrOperationUnavailable
 	switch {
 	case errors.As(err, &unavailable):
-		jsonErrorResponse(w, http.StatusConflict, "ACTION_UNAVAILABLE", "That can't be done on this system right now.")
+		jsonErrorResponse(w, http.StatusConflict, "ACTION_UNAVAILABLE", actionUnavailable)
 		return
 	case err != nil || op.Effect != addons.EffectPhysical || op.Scope != addons.ScopeMember:
 		jsonErrorResponse(w, http.StatusNotFound, "NO_SUCH_ACTION", "There is no such action on this system.")
@@ -121,10 +121,9 @@ func handleMemberAction(w http.ResponseWriter, r *http.Request) {
 	case view.Lifecycle == "draining" || view.Lifecycle == "read_only":
 		jsonErrorResponse(w, http.StatusConflict, "TARGET_PAUSED", "Changes on that system are paused. Nothing was done.")
 		return
-	case view.Health != addons.StateAnswering:
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREACHABLE", "That system is not answering right now. Nothing went out.")
-		return
 	}
+	// A system the monitor holds down is refused undialed by the preview and
+	// the dispatch themselves (addons.Held), answered as NOTHING_SENT.
 
 	opReq := addonop.Request{Target: target, Operation: name, ActorID: subject, SubjectID: subject,
 		Confirmed: req.Confirm, Params: req.Params, About: aboutOf(op, req.Params)}
@@ -167,23 +166,18 @@ func previewAction(w http.ResponseWriter, r *http.Request, req addonop.Request) 
 		writeRefusal(w, reply.Code, reply.Refusal)
 	default:
 		// A preview has no effect by contract, so a lost answer to one is
-		// still nothing done; the member can ask again.
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "PREVIEW_UNANSWERED",
-			"That system didn't answer. Nothing went out; try again.")
+		// still nothing done: unreached, whatever the pipe saw.
+		n := notLandedOf(r.Context(), req.Target, addons.OutcomeUnreached, reply.Why())
+		n.Member = true
+		writeOutcome(w, n, nil)
 	}
 }
 
 func confirmAction(w http.ResponseWriter, r *http.Request, req addonop.Request) {
-	res, err := svcDispatchOperation(r.Context(), req)
-	if err != nil && res.OperationID == "" {
+	res, err := dispatched(svcDispatchOperation(r.Context(), req))
+	if err != nil {
 		writeActionError(w, err)
 		return
-	}
-	if err != nil {
-		// Sent, and its outcome could not be written: as unknown as a lost
-		// answer, and answered as one.
-		log.Printf("[MY-ACTION] %v", err)
-		res.Outcome = addons.OutcomeIndeterminate
 	}
 	switch res.Outcome {
 	case addons.OutcomeSucceeded:
@@ -194,18 +188,19 @@ func confirmAction(w http.ResponseWriter, r *http.Request, req addonop.Request) 
 		jsonResponse(w, http.StatusOK, map[string]any{"state": state, "operation": res.OperationID, "view": res.View})
 	case addons.OutcomeRejected:
 		writeRefusal(w, res.Code, res.Refusal)
-	case addons.OutcomeUnreached:
+	default:
 		if res.Code == addons.CodeTargetChanged {
 			// Unreached like any other (nothing went out); it did answer, so it is not "not answering".
 			jsonErrorResponse(w, http.StatusServiceUnavailable, addons.CodeTargetChanged,
 				"That system changed while Syndra was reading it. Nothing went out. Try again.")
 			return
 		}
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREACHABLE", "That system is not answering right now. Nothing went out.")
-	default:
-		// 202 (RFC 9110 §15.3.3): accepted, and not known to be done. The
-		// page polls GET .../operations/{id}; nothing sends it again.
-		jsonResponse(w, http.StatusAccepted, map[string]any{"state": actionChecking, "operation": res.OperationID, "sent_at": time.Now().UTC()})
+		// Nothing went out, or 202 (RFC 9110 §15.3.3): accepted and not known
+		// to be done, which the page polls on GET .../operations/{id}; nothing
+		// sends it again (design §13.4).
+		n := notLandedOf(r.Context(), req.Target, res.Outcome, res.Why)
+		n.Member = true
+		writeOutcome(w, n, map[string]any{"operation": res.OperationID, "sent_at": time.Now().UTC()})
 	}
 }
 
@@ -245,6 +240,10 @@ func writeRefusal(w http.ResponseWriter, code string, ref addons.Refusal) {
 	jsonResponse(w, status, resp)
 }
 
+// actionUnavailable is ACTION_UNAVAILABLE's one sentence, whether the action
+// was gone when asked or when sent: the code the member UI knows.
+const actionUnavailable = "This isn't available on that system right now. Nothing was sent. Nothing for you to do."
+
 // writeActionError answers a refusal Syndra made itself, before sending.
 func writeActionError(w http.ResponseWriter, err error) {
 	var unsettled *addonop.UnsettledError
@@ -261,8 +260,20 @@ func writeActionError(w http.ResponseWriter, err error) {
 		jsonErrorResponse(w, http.StatusTooManyRequests, "TOO_MANY_ATTEMPTS", "You have done this a lot recently. Wait a few minutes and try again.")
 	case errors.Is(err, addons.ErrInvalidParams):
 		jsonValidationErrorResponse(w, "That isn't something this action takes.", map[string]string{"params": err.Error()})
+	// The caller's own request, refused before anything left: 4xx, never 500.
+	case errors.As(err, new(*addons.ErrOperationUnavailable)):
+		jsonErrorResponse(w, http.StatusConflict, "ACTION_UNAVAILABLE", actionUnavailable)
+	case errors.Is(err, addonop.ErrConfirmationRequired):
+		jsonErrorResponse(w, http.StatusUnprocessableEntity, "CONFIRMATION_REQUIRED",
+			"This acts on something real, so it needs your confirmation. Nothing was sent. Confirm to go ahead.")
+	case errors.Is(err, addonop.ErrPhysicalNotResent):
+		jsonErrorResponse(w, http.StatusConflict, "NOT_SENT_AGAIN",
+			"This acts on something real, so Syndra never sends it a second time. Nothing was sent. Start it again if you still want it.")
+	case errors.Is(err, addonop.ErrReadNotDispatched), errors.Is(err, addons.ErrNotPhysical):
+		jsonErrorResponse(w, http.StatusBadRequest, "NOT_AN_ACTION",
+			"That isn't an action you can take here. Nothing was sent. Nothing for you to do.")
 	default:
-		writeCredentialError(w, err)
+		writeMemberRefusal(w, err, "ACTION_NOT_SENT")
 	}
 }
 

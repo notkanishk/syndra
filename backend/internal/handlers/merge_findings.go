@@ -489,6 +489,9 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeResolutionError(w http.ResponseWriter, err error) {
+	if writeNotLanded(w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, db.ErrNoSuchMergeFinding):
 		jsonErrorResponse(w, http.StatusNotFound, "NO_SUCH_FINDING",
@@ -499,8 +502,6 @@ func writeResolutionError(w http.ResponseWriter, err error) {
 		jsonErrorResponse(w, http.StatusUnprocessableEntity, "RESOLUTION_NOT_EXPRESSIBLE", err.Error())
 	case errors.Is(err, db.ErrAllowanceUnbounded), errors.Is(err, db.ErrAllowanceInvalid):
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"resolution": "unbounded"})
-	case errors.Is(err, errReleaseNotConfirmed):
-		writeUpstream(w, err, "RELEASE_NOT_CONFIRMED")
 	case errors.Is(err, errReleaseRefused):
 		// The add-on's words: what it found, and Check again. Nothing was released.
 		jsonErrorResponse(w, http.StatusConflict, "RELEASE_REFUSED", strings.TrimPrefix(err.Error(), errReleaseRefused.Error()+": "))
@@ -508,8 +509,6 @@ func writeResolutionError(w http.ResponseWriter, err error) {
 		// The add-on judged it again and said no (a stale adoptable): its own
 		// sentence, which says what changed and to check again. Nothing changed.
 		jsonErrorResponse(w, http.StatusConflict, "ADOPTION_REFUSED", strings.TrimPrefix(err.Error(), errAdoptionRefused.Error()+": "))
-	case errors.Is(err, errAdoptionNotConfirmed):
-		writeUpstream(w, err, "ADOPTION_NOT_CONFIRMED")
 	case errors.Is(err, db.ErrMergeFindingDecided):
 		// 409, and it names who, what and WHY. The two answers here are
 		// opposites, so a second operator has to know that somebody chose — and
@@ -587,9 +586,6 @@ func resolutionFits(f db.MergeFinding, resolution string) error {
 	return nil
 }
 
-// errReleaseNotConfirmed is the add-on not confirming that it let go.
-var errReleaseNotConfirmed = errors.New("the target did not confirm the release")
-
 // errReleaseRefused is the add-on refusing the release: its binding names another
 // account than the one Syndra meant (the precondition), or another refusal in
 // its words. Nothing was released.
@@ -609,11 +605,11 @@ var errReleaseRefused = errors.New("the system refused the release")
 // §13.1.1) when it is known: a person released and bound again since names a
 // new account, which the add-on then refuses to drop (409, errReleaseRefused).
 func releaseOnTarget(ctx context.Context, target, subject, actor, accountID string) error {
-	res, err := svcDispatchOperation(ctx, addonop.Request{
+	res, err := dispatched(svcDispatchOperation(ctx, addonop.Request{
 		Target: target, Operation: "account.release",
 		ActorID: actor, SubjectID: subject, Confirmed: true, Params: releaseParams(accountID),
 		About: boundUsername(ctx, target, subject),
-	})
+	}))
 	if err != nil {
 		return fmt.Errorf("release %s on %s: %w", subject, target, err)
 	}
@@ -625,17 +621,14 @@ func releaseOnTarget(ctx context.Context, target, subject, actor, accountID stri
 		// it still binds the subject, and dropping this side's copy against an
 		// answer nobody received manufactures the split in the direction that
 		// hurts.
-		return fmt.Errorf("%w: %s answered %s", errReleaseNotConfirmed, target, res.Outcome)
+		return notLandedOf(ctx, target, res.Outcome, res.Why)
 	}
 	return nil
 }
 
 // errAdoptionRefused is the add-on refusing the adoption (a stale adoptable,
-// judged again when it ran); errAdoptionNotConfirmed is no answer either way.
-var (
-	errAdoptionRefused      = errors.New("the system refused the adoption")
-	errAdoptionNotConfirmed = errors.New("the system did not confirm the adoption")
-)
+// judged again when it ran). No answer either way is a notLanded.
+var errAdoptionRefused = errors.New("the system refused the adoption")
 
 // adoptOnTarget is "It's theirs: adopt it" on a binding conflict: the one
 // account.adopt (handleAdoptAccount's operation, the same policy, confirmation,
@@ -645,11 +638,11 @@ var (
 // another account. It answers the account_id the add-on bound.
 func adoptOnTarget(ctx context.Context, f db.MergeFinding, actor string) (string, error) {
 	holder := conflictOf(f)
-	res, err := svcDispatchOperation(ctx, addonop.Request{
+	res, err := dispatched(svcDispatchOperation(ctx, addonop.Request{
 		Target: f.Target, Operation: "account.adopt",
 		ActorID: actor, SubjectID: f.SubjectID, Confirmed: true,
 		Params: adoptParams(holder.Username, holder.AccountID), About: holder.Username,
-	})
+	}))
 	if err != nil {
 		return "", fmt.Errorf("adopt %s for %s on %s: %w", holder.Username, f.SubjectID, f.Target, err)
 	}
@@ -660,7 +653,8 @@ func adoptOnTarget(ctx context.Context, f db.MergeFinding, actor string) (string
 		// The add-on's own sentence: what changed, and Check again.
 		return "", fmt.Errorf("%w: %s", errAdoptionRefused, adoptionRefusal(res.Err))
 	default:
-		return "", fmt.Errorf("%w: %s answered %s", errAdoptionNotConfirmed, f.Target, res.Outcome)
+		// Unreached or indeterminate, said apart (writeOutcome).
+		return "", notLandedOf(ctx, f.Target, res.Outcome, res.Why)
 	}
 }
 
@@ -820,7 +814,7 @@ func performResolution(ctx context.Context, f db.MergeFinding, req resolveMergeF
 		if req.Resolution == db.ResolutionReprovisioned {
 			reason = "An operator asked for a deleted account to be provisioned again"
 		}
-		if _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(f.Target, f.SubjectID, actor, reason)); err != nil {
+		if _, _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(f.Target, f.SubjectID, actor, reason)); err != nil {
 			return fmt.Errorf("queue convergence for %s: %w", f.SubjectID, err)
 		}
 		return nil

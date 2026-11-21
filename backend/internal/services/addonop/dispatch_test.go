@@ -43,6 +43,9 @@ type harness struct {
 
 	verified []string
 
+	// held is the monitor holding the target addon_unreachable (addons.Held).
+	held *addons.Why
+
 	resp      addons.CallResponse
 	calls     []addons.CallRequest
 	settleErr error
@@ -67,7 +70,13 @@ func newHarness(t *testing.T) *harness {
 	}
 
 	sr, sv, sn, sb, sc, ss := resolveOperation, validateParams, operationRecord, beginOperation, callAddon, settleOperation
-	scr := countRecentOperations
+	scr, shu := countRecentOperations, heldUnreachable
+	heldUnreachable = func(string) (addons.Why, bool) {
+		if h.held == nil {
+			return addons.Why{}, false
+		}
+		return *h.held, true
+	}
 	countRecentOperations = func(_ context.Context, target, subject, operation string, _ time.Duration) (int, error) {
 		h.record("rate")
 		h.mu.Lock()
@@ -120,7 +129,7 @@ func newHarness(t *testing.T) *harness {
 	}
 	t.Cleanup(func() {
 		resolveOperation, validateParams, operationRecord, beginOperation, callAddon, settleOperation = sr, sv, sn, sb, sc, ss
-		countRecentOperations = scr
+		countRecentOperations, heldUnreachable = scr, shu
 	})
 	return h
 }
@@ -699,5 +708,36 @@ func TestAReadIsNeverDispatched(t *testing.T) {
 	}
 	if got := h.order(); got != "resolve" || len(h.begun) != 0 || len(h.calls) != 0 {
 		t.Fatalf("a read went past resolution: %q, begun %d, called %d", got, len(h.begun), len(h.calls))
+	}
+}
+
+// Design §13.4: a write to a system the monitor holds addon_unreachable is
+// refused at once, undialed: no record, no rate count against the member, no
+// call; the result carries the monitor's why for writeOutcome.
+func TestAHeldSystemIsRefusedUndialed(t *testing.T) {
+	h := newHarness(t)
+	h.held = &addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseNoAnswer, RetryAfter: 12}
+
+	res, err := Dispatch(context.Background(), passwordSet())
+	if err != nil {
+		t.Fatalf("a held system is an outcome, not an error: %v", err)
+	}
+	if got := h.order(); got != "resolve -> validate" {
+		t.Fatalf("protocol order = %q, want nothing recorded, counted or called", got)
+	}
+	if res.Outcome != addons.OutcomeUnreached || res.Why != *h.held || res.OperationID != "" {
+		t.Fatalf("result = %+v", res)
+	}
+}
+
+// A write that did not land carries why (addons.Unread), so the handler can
+// say who is down.
+func TestAResultCarriesWhyItDidNotLand(t *testing.T) {
+	h := newHarness(t)
+	h.resp = addons.CallResponse{Outcome: addons.OutcomeIndeterminate, Err: context.DeadlineExceeded}
+
+	res, _ := Dispatch(context.Background(), passwordSet())
+	if res.Why.Reason != addons.ReasonAddonUnreachable || res.Why.Cause != addons.CauseTimeout {
+		t.Fatalf("why = %+v", res.Why)
 	}
 }

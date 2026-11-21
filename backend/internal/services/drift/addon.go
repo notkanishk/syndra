@@ -602,7 +602,7 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		}
 		// Built from the set, so a departed person's disable is declared
 		// withdraw-only and the background runner sends it (EntitlementSet.WithdrawsOnly).
-		if _, _, err := recordConvergence(ctx, set.Convergence(target, out.Subject, reconcileActor, reason)); err != nil {
+		if _, _, _, err := recordConvergence(ctx, set.Convergence(target, out.Subject, reconcileActor, reason)); err != nil {
 			return queued, findings, fmt.Errorf("queue convergence for %s: %w", out.Subject, err)
 		}
 		queued++
@@ -910,7 +910,7 @@ func convergeUnbound(ctx context.Context, target string, bindings []db.TargetBin
 		if waiting {
 			continue
 		}
-		if _, _, err := recordConvergence(ctx, set.Convergence(target, id, reconcileActor, "Gets an account, for a role they hold.")); err != nil {
+		if _, _, _, err := recordConvergence(ctx, set.Convergence(target, id, reconcileActor, "Gets an account, for a role they hold.")); err != nil {
 			return queued, fmt.Errorf("queue convergence for %s: %w", id, err)
 		}
 		queued++

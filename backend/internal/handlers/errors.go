@@ -30,7 +30,7 @@ func upstreamSentenceFor(status int, code string) string {
 	switch code {
 	case "ZITADEL_ERROR", "SWEEP_ERROR":
 		who = "Zitadel"
-	case "RECONCILE_FAILED", "LIFECYCLE_NOT_SET", "RELEASE_NOT_CONFIRMED":
+	case "RECONCILE_FAILED":
 		who = "That system"
 	}
 	switch {

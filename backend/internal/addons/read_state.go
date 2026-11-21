@@ -132,20 +132,13 @@ func WhyNoManifest(target string) Why {
 	return Why{Reason: ReasonAddonUnreachable, Cause: st.Cause}
 }
 
-// heldError is a read not sent because the monitor holds the add-on
-// unreachable (design §13.2): no copy, answered without dialing.
-type heldError struct{ why Why }
-
-func (e *heldError) Error() string {
-	return fmt.Sprintf("addon: held %s (%s); not dialed", e.why.Reason, e.why.Cause)
-}
-
-// read is send for a read: while the monitor holds the add-on unreachable,
-// nothing is dialed and the reply is the monitor's why. The probe sends
-// through send itself, so it is the one read that still finds the add-on back.
+// read is send for a read: while the monitor holds the add-on unreachable
+// (Held), nothing is dialed and the reply is the monitor's why. The probe
+// sends through send itself, so it is the one read that still finds the add-on
+// back.
 func (a *Addon) read(ctx context.Context, s sendSpec) (CallResponse, error) {
-	if why, down := HealthOf(a.Registration.Target).Down(); down && why.Reason == ReasonAddonUnreachable {
-		err := &heldError{why: why}
+	if why, held := Held(a.Registration.Target); held {
+		err := &HeldError{Target: a.Registration.Target, Why: why}
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}, err
 	}
 	return a.send(ctx, s)
@@ -170,14 +163,13 @@ func whyOfUnreconciled(reason string) Why {
 	return Why{Reason: reason}
 }
 
-// notRead is why a read reply is not a reading: Unread of what came back, or
-// a fault when it answered and did not decode (err).
+// notRead is why a read reply is not a reading: its Why, or a fault when it
+// answered and did not decode (err).
 func (r ReadReply) notRead(err error) Why {
-	resp := CallResponse{Outcome: r.Outcome, Status: r.Status, Err: r.Err, Body: r.Body, Code: r.Code, RetryAfter: r.RetryAfter}
 	if r.Outcome == OutcomeSucceeded {
-		return unreadable(resp, err)
+		return unreadable(r.response(), err)
 	}
-	return Unread(resp)
+	return r.Why()
 }
 
 // observed is when a decoded result was read: its own Observation, or for a

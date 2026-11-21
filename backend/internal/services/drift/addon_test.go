@@ -160,9 +160,9 @@ func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 	resolveIntent = func(_ context.Context, subjectID, _ string) (services.EntitlementSet, error) {
 		return services.EntitlementSet{Roles: truenasRoles, Lifecycle: services.LifecycleState{Account: true, Channels: map[string]bool{"smb_enabled": true}}}, nil
 	}
-	recordConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+	recordConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, time.Time, error) {
 		h.converged = append(h.converged, c)
-		return "plan_1", "outbox_1", nil
+		return "plan_1", "outbox_1", time.Time{}, nil
 	}
 	markUnreconciled = func(_ context.Context, target, reason string) (db.TargetReconciliation, error) {
 		h.marked = append(h.marked, reason)

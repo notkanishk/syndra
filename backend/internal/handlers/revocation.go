@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -126,9 +127,10 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 	// A retry may find its convergence already waiting (the first attempt
 	// queued it and failed later, at the rotation). Queuing another would be a
 	// second row for an operator to look at, for the same lock.
-	queued := false
+	var outboxID string
+	var recordedAt time.Time
 	if retry {
-		queued, err = dbHasUnfinishedConvergence(r.Context(), subject, target)
+		outboxID, recordedAt, err = dbUnfinishedConvergence(r.Context(), subject, target)
 		if err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_CHECK_FAILED", err.Error())
 			return
@@ -138,7 +140,7 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 	// The convergence that carries the suspension to the target. Queued, like
 	// every other add-on row — the response says so rather than implying the
 	// account is already locked.
-	if !queued {
+	if outboxID == "" {
 		set, err := svcResolveEntitlementSet(r.Context(), subject, target)
 		if err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
@@ -148,55 +150,83 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 		// confer: EntitlementSet.WithdrawsOnly declares it, which is what lets
 		// the background runner drain the lock. Without it the disclosure below
 		// is a promise nothing keeps.
-		if _, _, err := dbRecordSystemConvergence(r.Context(), set.Convergence(target, subject, actor, "Their access was revoked.")); err != nil {
+		if _, outboxID, recordedAt, err = dbRecordSystemConvergence(r.Context(), set.Convergence(target, subject, actor, "Their access was revoked.")); err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_NOT_QUEUED",
 				"The suspension was recorded and the change to the target was not queued: "+err.Error())
 			return
 		}
 	}
+	// Recorded is the outbox row's time, not the allowance's: the row is the
+	// revocation the unconfirmed list shows and revocation.landed closes, so
+	// the reply, the list and the audit name one moment. It came back with the
+	// row, so nothing read after the commit can fail and skip the rotation.
 
 	// The credential half. Its failure does not undo the suspension, and is
 	// reported as the outstanding half rather than as a failed revocation —
 	// which would invite a retry that rotates twice.
-	res, rotateErr := svcDispatchOperation(r.Context(), addonop.Request{
+	res, rotateErr := dispatched(svcDispatchOperation(r.Context(), addonop.Request{
 		Target: target, Operation: "password.rotate",
 		ActorID: actor, SubjectID: subject, Confirmed: true,
-	})
-	if rotateErr != nil || res.Outcome != addons.OutcomeSucceeded {
-		// The copy is composed from what happened, never inherited from the
-		// success path. It used to fall back to `revokeCopy` whenever the
-		// dispatch returned no Go error — which is every case where the ADD-ON
-		// answered and said no — so an operator whose rotation was refused read
-		// "the credential has been replaced" beside `rotated: false`. The
-		// machine-readable fields were right and the sentence a human reads was
-		// the opposite, which is the worse half to get wrong.
-		jsonResponse(w, http.StatusAccepted, map[string]any{
-			"status":       "partially_revoked",
-			"allowance_id": allowance.ID,
-			"rotated":      false,
-			"detail":       partialRevokeCopy(res.Outcome, rotateErr, res.Err),
-			// Named so a surface can offer the one remaining action rather than
-			// the whole composition again.
-			"outstanding": "password.rotate",
-		})
-		return
-	}
+	}))
+	rotated := rotateErr == nil && res.Outcome == addons.OutcomeSucceeded
 
-	jsonResponse(w, http.StatusAccepted, map[string]any{
-		"status":       "revoked",
+	// Recorded and landed are two facts with two times (design §13.4). The
+	// deny is recorded now; it lands only when the add-on answers succeeded to
+	// the withdrawal, which the drain sends by itself, without limit. Never
+	// drawn as done before then.
+	system, _ := systemName(r.Context(), target)
+	body := map[string]any{
+		"status":       "recorded",
 		"allowance_id": allowance.ID,
-		"rotated":      true,
-		"operation":    res.OperationID,
-		// Queued, not applied. The lock reaches the target when the drain runs.
-		"queued": true,
-		// The other half of 9.18: this one DOES drain on its own. A revocation
-		// is retained access until it lands, so it must not wait for somebody
-		// to open the right page — and an operator who assumes it waits, like
-		// a grant does, would go looking for a button that should not exist.
-		"disclosure": "The credential is already replaced. The account lock drains on its own — " +
-			"revocations do not wait for an operator, because a queued one is access somebody still has.",
-		"detail": revokeCopy,
-	})
+		"recorded_at":  recordedAt,
+		"landed_at":    nil,
+		"rotated":      rotated,
+		"detail":       notYetLanded(r.Context(), target, system, rotated),
+	}
+	if rotated {
+		body["operation"] = res.OperationID
+	} else {
+		// Named so a surface can offer the one remaining action rather than
+		// the whole composition again, and said in the words of every write.
+		body["outstanding"] = "password.rotate"
+		body["rotation"] = rotationAnswer(r.Context(), target, system, res, rotateErr)
+	}
+	jsonResponse(w, http.StatusAccepted, body)
+}
+
+// notYetLanded is what a recorded revocation says until it lands: recorded,
+// not yet applied, why when the monitor holds the system down, that the
+// account still works meanwhile, and that Syndra applies it by itself.
+func notYetLanded(ctx context.Context, target, system string, rotated bool) string {
+	out := "Recorded. Not yet applied on " + system + "."
+	if why, held := addonsHeld(target); held {
+		_, product := systemAndProduct(ctx, target)
+		out = "Recorded. Not yet applied on " + system + ": " + whySentence(system, product, why, false)
+	}
+	out += " Until it is, the account there still works. Syndra applies it by itself when " + system + " answers."
+	if rotated {
+		out += " The credential is already replaced. Sessions already established end when they next reconnect — this system has no way to close one."
+	}
+	return out
+}
+
+// rotationAnswer is the credential half that did not land, each state with
+// its own next step: a refusal needs its reason dealt with; unreached and
+// indeterminate answer through writeOutcome, whose indeterminate says not to
+// send it again (a second rotation on an account that did rotate locks the
+// member out of it).
+func rotationAnswer(ctx context.Context, target, system string, res addonop.Result, dispatchErr error) any {
+	switch {
+	case dispatchErr != nil:
+		// Never sent (dispatched). The backend refused it before it left, so
+		// the reason is this deployment's own and is safe to show.
+		return map[string]any{"status": "not_sent", "detail": "The credential was not replaced: " + dispatchErr.Error()}
+	case res.Outcome == addons.OutcomeRejected:
+		return map[string]any{"status": "refused",
+			"detail": "The credential was not replaced: " + system + " refused: " + errText(res.Err) + " Replace it once that is resolved."}
+	}
+	_, answer, _ := outcomeAnswer(notLandedOf(ctx, target, res.Outcome, res.Why), map[string]any{"operation": res.OperationID})
+	return answer
 }
 
 // defaultRevocationReview is how long an unbounded suspension waits before it
@@ -205,33 +235,3 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 // Long enough not to nag, short enough that "we suspended them during the
 // investigation" does not become a permanent state nobody remembers taking.
 const defaultRevocationReview = 90 * 24 * time.Hour
-
-// partialRevokeCopy says what actually happened to the credential half.
-//
-// Three sentences for three genuinely different states, because the action an
-// operator takes next differs in each: a refusal needs the reason dealt with, an
-// unreached target needs retrying, and an unconfirmed one must not be retried
-// blind — a second rotation on a target that did rotate leaves the member locked
-// out of an account nobody can explain.
-//
-// The suspension is stated first in all three. It is the half that DID happen,
-// and burying it under the failure would read as "the revocation failed".
-func partialRevokeCopy(outcome addons.Outcome, dispatchErr, targetErr error) string {
-	const suspended = "New connections are refused now — that half is recorded and queued. "
-
-	switch {
-	case dispatchErr != nil:
-		// Never sent. The backend refused it before it left, so the reason is
-		// this deployment's own and is safe to show.
-		return suspended + "The credential was NOT replaced: " + dispatchErr.Error()
-	case outcome == addons.OutcomeRejected:
-		return suspended + "The credential was NOT replaced — the target refused: " + errText(targetErr) +
-			" Replace it once that is resolved."
-	case outcome == addons.OutcomeUnreached:
-		return suspended + "The credential was NOT replaced — the target could not be reached. Try the rotation again."
-	default:
-		// Indeterminate. The one case where retrying is the wrong reflex.
-		return suspended + "The target did not confirm whether the credential was replaced. " +
-			"Check the account before rotating again — a second rotation on an account that did rotate locks the member out of it."
-	}
-}

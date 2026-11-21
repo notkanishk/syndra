@@ -101,6 +101,12 @@ const NOTHING_WRITTEN = new Set([
   // by contract; the poll is a read; an unreadable earlier call refuses before
   // any record. A confirm whose answer was lost is a 202 "checking", never a 5xx.
   "PREVIEW_UNANSWERED", "ACTION_READ_FAILED", "CALL_UNSETTLED_UNKNOWN",
+  // Syndra's own failure before sending (addons.ErrOwnFault, handlers'
+  // writeMemberRefusal, writeOperationError): nothing dispatched. A call sent
+  // and its outcome not recorded never reaches them: it is 202 unconfirmed
+  // (handlers' dispatched). RELEASE_FAILED at 500 is the binding read before
+  // the release.
+  "ACTION_NOT_SENT", "SETTING_NOT_SET", "RELEASE_FAILED",
 ]);
 
 describe("every 5xx code in the handlers is decided", () => {
@@ -111,6 +117,7 @@ describe("every 5xx code in the handlers is decided", () => {
     const text = readFileSync(join(dir, f), "utf8");
     for (const m of text.matchAll(/writeUpstream(?:Status)?\([^"\n]*"([A-Z_]+)"\)/g)) codes.add(m[1]);
     for (const m of text.matchAll(/jsonErrorResponse\(w, http\.Status(?:BadGateway|ServiceUnavailable|InternalServerError),\s*"([A-Z_]+)"/g)) codes.add(m[1]);
+    for (const m of text.matchAll(/writeMemberRefusal\(w, err, "([A-Z_]+)"\)/g)) codes.add(m[1]);
   }
 
   it("finds the codes", () => {

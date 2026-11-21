@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -81,16 +82,16 @@ func install(t *testing.T, h *harness) {
 		h.citation = c
 		return h.plan, h.subjects, h.claimErr
 	}
-	enqueue = func(_ context.Context, _ pgx.Tx, p db.EntitlementApply) (string, error) {
+	enqueue = func(_ context.Context, _ pgx.Tx, p db.EntitlementApply) (string, time.Time, error) {
 		// The approval is all the gate passes, so the fake resolves the subject
 		// from it exactly as the real INSERT ... SELECT does.
 		subject := h.subjectOf(p.PlanSubjectID)
 		h.steps = append(h.steps, "enqueue:"+subject)
 		h.enqueued = append(h.enqueued, p)
 		if err := h.enqueueErr[subject]; err != nil {
-			return "", err
+			return "", time.Time{}, err
 		}
-		return "outbox-" + subject, nil
+		return "outbox-" + subject, time.Time{}, nil
 	}
 }
 

@@ -27,7 +27,7 @@ func resetGovernanceDeps(t *testing.T) {
 	// it, and left unstubbed it reaches a nil pool.
 	origRevocations := svcCountUnconfirmedRevocations
 	t.Cleanup(func() { svcCountUnconfirmedRevocations = origRevocations })
-	svcCountUnconfirmedRevocations = func(context.Context) (db.UnconfirmedRevocationSummary, error) {
+	svcCountUnconfirmedRevocations = func(context.Context, []string) (db.UnconfirmedRevocationSummary, error) {
 		return db.UnconfirmedRevocationSummary{}, nil
 	}
 	// And the holds-due count, for the same reason again: the indicators grew a

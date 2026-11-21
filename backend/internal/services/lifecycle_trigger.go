@@ -164,7 +164,7 @@ func convergeOn(ctx context.Context, actor, userID, target string) error {
 	if err != nil {
 		return fmt.Errorf("resolve %s on %s: %w", userID, target, err)
 	}
-	if _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(target, userID, actor, "Their roles changed.")); err != nil {
+	if _, _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(target, userID, actor, "Their roles changed.")); err != nil {
 		return fmt.Errorf("queue convergence for %s on %s: %w", userID, target, err)
 	}
 	return nil

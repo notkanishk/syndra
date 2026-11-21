@@ -218,6 +218,8 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			res.settleFailure(row.ID, "apply", err)
 			return false
 		}
+		// A revocation's revocation.landed line is written by markApplied, in
+		// the same statement (db.MarkPropagationApplied).
 		res.Applied++
 
 	case resp.LifecycleRefusal:
