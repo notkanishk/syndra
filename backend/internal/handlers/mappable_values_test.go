@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 )
@@ -35,27 +36,29 @@ func getMappableValues(t *testing.T, target, field string) (*httptest.ResponseRe
 	return rr, out
 }
 
-// Fresh, then the target goes quiet: the last answer is served and says so.
-// A target never read is said to be never read, not answered with nothing.
-func TestMappableValuesAreFreshThenLastKnownThenNeverRead(t *testing.T) {
+// Answered, then the target goes quiet: Syndra keeps no copy (design §13.3),
+// so the second answer is 503 TARGET_NOT_READ, never the last list again.
+func TestMappableValuesAreReadNowOrNotAtAll(t *testing.T) {
 	stubValuesSchema(t)
 	read := addonsReadValues
 	t.Cleanup(func() { addonsReadValues = read })
 
 	answering := true
+	at := time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
 	addonsReadValues = func(_ context.Context, _, field string) addons.Values {
 		if !answering {
-			return addons.Values{Outcome: addons.OutcomeUnreached}
+			return addons.Values{Read: addons.ReadOf(nil, addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseNoAnswer})}
 		}
-		return addons.Values{Outcome: addons.OutcomeSucceeded, Enumerable: true,
-			Values: []string{"true"}, Labels: map[string]string{"true": "Gives a home folder"}}
+		v := addons.Values{Read: addons.ReadOf(&addons.Observation{TakenAt: at, Current: true}, addons.Why{})}
+		v.Enumerable, v.Values, v.Labels = true, []string{"true"}, map[string]string{"true": "Gives a home folder"}
+		return v
 	}
 
 	rr, fresh := getMappableValues(t, "nas-a", "home")
-	if rr.Code != http.StatusOK || !fresh.Current || fresh.ReadAt.IsZero() || !fresh.Single || fresh.Label != "Gives a home folder" {
+	if rr.Code != http.StatusOK || fresh.Read.State != addons.ReadNow || !fresh.Read.TakenAt.Equal(at) || !fresh.Single || fresh.Label != "Gives a home folder" {
 		t.Fatalf("fresh: %d %+v", rr.Code, fresh)
 	}
-	if body := rr.Body.String(); !strings.Contains(body, `"values":["true"]`) || !strings.Contains(body, `"read_at":`) {
+	if body := rr.Body.String(); !strings.Contains(body, `"values":["true"]`) || !strings.Contains(body, `"read":{"state":"now"`) {
 		t.Errorf("the answer is one flat object: %s", body)
 	}
 	if fresh.Labels["true"] != "Gives a home folder" {
@@ -63,14 +66,9 @@ func TestMappableValuesAreFreshThenLastKnownThenNeverRead(t *testing.T) {
 	}
 
 	answering = false
-	rr, stale := getMappableValues(t, "nas-a", "home")
-	if rr.Code != http.StatusOK || stale.Current || !stale.ReadAt.Equal(fresh.ReadAt) || len(stale.Values.Values) != 1 {
-		t.Fatalf("stale: %d %+v", rr.Code, stale)
-	}
-
-	rr, _ = getMappableValues(t, "nas-b", "home")
-	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "VALUES_NEVER_READ") {
-		t.Fatalf("never read: %d %s", rr.Code, rr.Body.String())
+	rr, _ = getMappableValues(t, "nas-a", "home")
+	if rr.Code != http.StatusServiceUnavailable || !strings.Contains(rr.Body.String(), codeTargetNotRead) || strings.Contains(rr.Body.String(), `"values"`) {
+		t.Fatalf("quiet: want 503 TARGET_NOT_READ and no values, got %d %s", rr.Code, rr.Body.String())
 	}
 }
 

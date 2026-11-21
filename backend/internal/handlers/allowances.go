@@ -154,7 +154,7 @@ func handleAllowancesDueForReview(w http.ResponseWriter, r *http.Request) {
 // a trimmed copy and leaves the caller holding the original is how `group=x `
 // gets accepted and then matches nothing — see NormaliseTerm. The schema comes
 // back too, for the value half.
-func validateAllowanceStructure(target, field, value string) (string, string, []addons.EntitlementField, error) {
+func validateAllowanceStructure(ctx context.Context, target, field, value string) (string, string, []addons.EntitlementField, error) {
 	if strings.TrimSpace(target) == "" {
 		return "", "", nil, fmt.Errorf("%w: an allowance needs a target", db.ErrAllowanceInvalid)
 	}
@@ -165,9 +165,9 @@ func validateAllowanceStructure(target, field, value string) (string, string, []
 	case err != nil:
 		// Registered and silent. Nothing about the term can be checked against a
 		// manifest we do not have, and recording a denial nobody has verified is
-		// the failure this whole check exists for.
-		return "", "", nil, fmt.Errorf("%w: %s has not published a capability manifest yet, so its fields are unknown",
-			db.ErrAllowanceInvalid, target)
+		// the failure this whole check exists for: refused as a value that
+		// could not be checked is, through the mapping's one path (503).
+		return "", "", nil, valueUnchecked(ctx, target, addons.NotRead{Why: addons.WhyNoManifest(target)})
 	}
 	// Lifecycle fields are included rather than skipped: they are not bindable
 	// by a mapping and they are exactly what an operator suspension names.
@@ -184,7 +184,7 @@ func validateAllowanceStructure(target, field, value string) (string, string, []
 // a hold on a group the target does not list is refused like a mapping on one
 // (5.3e). Never call it under the access lock: it is a network call.
 func validateAllowanceAgainstTarget(ctx context.Context, target, field, value string) (string, string, error) {
-	field, value, schema, err := validateAllowanceStructure(target, field, value)
+	field, value, schema, err := validateAllowanceStructure(ctx, target, field, value)
 	if err != nil {
 		return "", "", err
 	}

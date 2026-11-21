@@ -45,10 +45,10 @@ func TestACopyIsDatedByItsAgeNotByTheAddonsClock(t *testing.T) {
 	}
 	age := func(r Reach) time.Duration {
 		t.Helper()
-		if !r.Read {
+		if r.Read.None() {
 			t.Fatalf("not read: %+v", r)
 		}
-		return now.Sub(r.ReadAt)
+		return now.Sub(readAt(r.Read))
 	}
 
 	// The add-on's clock 10 min ahead, the copy 3 min old by it: was "just now".
@@ -97,8 +97,8 @@ func TestALiveReadIsDatedWhenItWasAsked(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 		signedAddon(t, srv.URL, "a-test-secret")
-		if r := ReadReach(context.Background(), "truenas", false); !r.Read || !r.ReadAt.Equal(now) {
-			t.Errorf("skew %v: a live read dated %v, want now %v", skew, r.ReadAt, now)
+		if r := ReadReach(context.Background(), "truenas", false); r.Read.None() || !readAt(r.Read).Equal(now) {
+			t.Errorf("skew %v: a live read dated %v, want now %v", skew, readAt(r.Read), now)
 		}
 	}
 }
@@ -111,7 +111,7 @@ func TestAResultShapeIsDatedByItsAgeToo(t *testing.T) {
 		Clock: Clock{Date: now.Add(10 * time.Minute), Sent: now},
 		Body:  []byte(`{"result":{"records":[],"taken_at":"2026-11-10T09:07:00Z","current":true}}`)}
 	v := r.View()
-	if !v.Readable {
+	if v.Read.None() {
 		t.Fatalf("not readable: %+v", v)
 	}
 	if got := v.Result.(observed).observation().TakenAt; !got.Equal(now.Add(-3 * time.Minute)) {
@@ -145,8 +145,8 @@ func TestACopyDatesFromWhenTheRequestWasSent(t *testing.T) {
 		`","current":false,"stale":{"reason":"cooldown"},"groups":{},"everyone":[]}`,
 		func() { c.advance(5 * time.Second) })
 	r := ReadReach(context.Background(), "truenas", false)
-	if want := start.Add(-3 * time.Minute); !r.Read || !r.ReadAt.Equal(want) {
-		t.Errorf("copy dated %v, want %v (sent %v less its 3 min age)", r.ReadAt, want, start)
+	if want := start.Add(-3 * time.Minute); r.Read.None() || !readAt(r.Read).Equal(want) {
+		t.Errorf("copy dated %v, want %v (sent %v less its 3 min age)", readAt(r.Read), want, start)
 	}
 }
 
@@ -168,7 +168,7 @@ func TestARecordedReplyIsDatedByTheCallsAnswer(t *testing.T) {
 		t.Fatalf("%+v %v: the /calls answer's clock was dropped", s, err)
 	}
 	v := ViewOf("inventory", "item.checkout", s.Reply, s.Clock)
-	if !v.Readable {
+	if v.Read.None() {
 		t.Fatalf("not readable: %+v", v)
 	}
 	if got := v.Result.(observed).observation().TakenAt; !got.Equal(s.Clock.Sent.Add(-3 * time.Minute)) {

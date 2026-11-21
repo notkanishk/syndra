@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -71,21 +72,18 @@ type DormantAccount struct {
 // carries.
 type DormantReport struct {
 	Target string `json:"target"`
-	// StateReadAt and Truncated for the same reason as everywhere else: an
-	// absence read out of a capped list is not an absence, and this surface's
-	// whole action is removing things on the strength of one.
-	StateReadAt time.Time        `json:"state_read_at,omitzero"`
-	Truncated   bool             `json:"truncated"`
-	Accounts    []DormantAccount `json:"accounts"`
+	// Read and Truncated for the same reason as everywhere else: an absence
+	// read out of a capped list is not an absence, and this surface's whole
+	// action is removing things on the strength of one. Always now: a copy is
+	// never listed (owner Q1).
+	Read      addons.ReadState `json:"read"`
+	Truncated bool             `json:"truncated"`
+	Accounts  []DormantAccount `json:"accounts"`
 }
 
-// ReadCooledDown is a fresh read the target's add-on would not make yet,
-// inside its cooldown (feature freshness): RetryAfter seconds until it may.
-type ReadCooledDown struct{ RetryAfter int }
-
-func (e ReadCooledDown) Error() string {
-	return fmt.Sprintf("the target was read moments ago; it can be read again in %d s", e.RetryAfter)
-}
+// ErrReadTruncated is a dormant read the add-on answered and cut at its cap:
+// not refused, and not to be concluded from. It travels with the NotRead.
+var ErrReadTruncated = errors.New("the read stopped at the add-on's cap")
 
 // DormantAccounts lists the accounts on a target that nothing explains.
 //
@@ -95,8 +93,8 @@ func (e ReadCooledDown) Error() string {
 //
 // Always a fresh read (feature freshness): every row is a candidate for
 // removal, so only a read of the target now may list one, and the removal
-// re-reads the same way. Inside the add-on's cooldown it is refused with the
-// wait (ReadCooledDown), never answered from a copy (owner Q1).
+// re-reads the same way. Inside the add-on's cooldown it is NotRead cooldown
+// with the wait, never answered from a copy (owner Q1).
 func DormantAccounts(ctx context.Context, target string) (DormantReport, error) {
 	if target == db.TargetZitadel {
 		return DormantReport{}, fmt.Errorf("dormant accounts: %s holds no accounts of its own", target)
@@ -105,16 +103,24 @@ func DormantAccounts(ctx context.Context, target string) (DormantReport, error) 
 
 	read := dormantSubjects(ctx, target, true)
 	if wait, cooled := read.CooledDown(); cooled {
-		return DormantReport{}, fmt.Errorf("dormant accounts for %s: %w", target, ReadCooledDown{RetryAfter: max(1, wait)})
+		return DormantReport{}, fmt.Errorf("dormant accounts for %s: %w", target,
+			addons.NotRead{Why: addons.Why{Reason: addons.ReasonCooldown, RetryAfter: max(1, wait)}})
 	}
 	if !read.Usable() {
 		// Refused rather than answered with an empty list. Every row here is a
 		// candidate for removal, and concluding "this account has no reason to
-		// exist" from a read that did not happen — or that stopped at a cap — is
-		// the one conclusion this data cannot support.
-		return DormantReport{}, fmt.Errorf("dormant accounts for %s: %w", target, ErrTargetUnplannable)
+		// exist" from a read that did not happen, from a copy, or from one that
+		// stopped at a cap is the one conclusion this data cannot support.
+		why := read.Read().Why()
+		if why.Reason == "" {
+			// Current, and cut at the cap: answered, so read_refused by
+			// reason, with its own sentence (ErrReadTruncated).
+			return DormantReport{}, fmt.Errorf("dormant accounts for %s: %w: %w: %w", target, ErrTargetUnplannable, ErrReadTruncated,
+				addons.NotRead{Why: addons.Why{Reason: addons.ReasonReadRefused}})
+		}
+		return DormantReport{}, fmt.Errorf("dormant accounts for %s: %w: %w", target, ErrTargetUnplannable, addons.NotRead{Why: why})
 	}
-	report.StateReadAt, report.Truncated = read.TakenAt, read.Truncated
+	report.Read, report.Truncated = read.Read(), read.Truncated
 
 	// Whose each account is, by the add-on's attribution (design 7t D3): never
 	// the name Syndra's copy recorded, which a rename moves and a stranger can

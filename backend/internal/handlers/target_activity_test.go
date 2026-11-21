@@ -69,7 +69,7 @@ func TestTargetActivity_PassesSubjectAndSinceThrough(t *testing.T) {
 	var gotSubject, gotSince string
 	withActivity(t, func(_ context.Context, _, subject, _, since string, _ bool) addons.ActivityReport {
 		gotSubject, gotSince = subject, since
-		return addons.ActivityReport{Events: []addons.ActivityEvent{}, Outcome: addons.OutcomeSucceeded}
+		return addons.ActivityReport{Events: []addons.ActivityEvent{}, Outcome: addons.OutcomeSucceeded, Read: readNow()}
 	})
 
 	rr := activityRequest("?subject=u1&since=2026-08-01T00:00:00Z")
@@ -82,29 +82,23 @@ func TestTargetActivity_PassesSubjectAndSinceThrough(t *testing.T) {
 }
 
 // The distinction this surface exists for. "Nobody was watching" and "nothing
-// happened" are the same empty list otherwise, and they are opposite answers.
+// happened" are the same empty list otherwise, and they are opposite answers:
+// a log not read is 503 TARGET_NOT_READ with no events member at all.
 func TestTargetActivity_UnreadableIsNotEmpty(t *testing.T) {
 	withActivity(t, func(context.Context, string, string, string, string, bool) addons.ActivityReport {
-		return addons.ActivityReport{Outcome: addons.OutcomeUnreached, Err: errors.New("target unreachable")}
+		return addons.ActivityReport{Outcome: addons.OutcomeUnreached, Err: errors.New("target unreachable"),
+			Read: addons.ReadOf(nil, addons.Why{Reason: addons.ReasonAppUnreachable})}
 	})
 
 	rr := activityRequest("?subject=u1")
-	// 200, not an error: the add-on being down is the answer to the question,
-	// the same way the health surface answers it.
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	var body map[string]any
+	var body ErrorResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body["readable"] != false {
-		t.Fatalf("an unreachable target must say so, got %v", body["readable"])
+	if rr.Code != http.StatusServiceUnavailable || body.Error != codeTargetNotRead || body.Details["reason"] != addons.ReasonAppUnreachable {
+		t.Fatalf("an unread log must say so: %d %s", rr.Code, rr.Body.String())
 	}
-	if body["reason"] != "unreachable" {
-		t.Fatalf("expected reason=unreachable, got %v", body["reason"])
-	}
-	if _, present := body["events"]; present {
+	if strings.Contains(rr.Body.String(), "events") {
 		t.Fatal("an unreadable log must not carry an events list at all")
 	}
 }
@@ -118,50 +112,34 @@ func TestTargetActivity_NoBoundAccountIsNotAFailure(t *testing.T) {
 			Outcome: addons.OutcomeRejected,
 			Status:  http.StatusUnprocessableEntity,
 			Err:     errors.New("addon returned 422"),
+			Read:    addons.ReadOf(nil, addons.Why{Reason: addons.ReasonReadRefused}),
 		}
 	})
 
 	rr := activityRequest("?subject=u1")
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	var body map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if body["readable"] != false {
-		t.Fatalf("expected readable=false, got %v", body["readable"])
-	}
-	if body["reason"] != "no_account" {
-		t.Fatalf("expected reason=no_account, got %v", body["reason"])
-	}
-	if body["detail"] != "" {
-		t.Fatalf("no_account must carry no detail text, got %v", body["detail"])
+	if rr.Code != http.StatusOK || rr.Body.String() != `{"no_account":true,"subject":"u1","target":"truenas"}`+"\n" {
+		t.Fatalf("expected 200 no_account and nothing else, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
-// Every other failure keeps its own plain-language detail — never a raw
-// status number leaking to the client.
+// Every other failure is said in the operator's words, never a raw status.
 func TestTargetActivity_OtherFailuresGetPlainLanguageDetail(t *testing.T) {
 	withActivity(t, func(context.Context, string, string, string, string, bool) addons.ActivityReport {
 		return addons.ActivityReport{
 			Outcome: addons.OutcomeIndeterminate,
 			Status:  http.StatusInternalServerError,
 			Err:     errors.New("addon returned 500"),
+			Read:    addons.ReadOf(nil, addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseFault}),
 		}
 	})
 
 	rr := activityRequest("?subject=u1")
-	var body map[string]any
+	var body ErrorResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body["reason"] != "unreachable" {
-		t.Fatalf("expected reason=unreachable, got %v", body["reason"])
-	}
-	detail, _ := body["detail"].(string)
-	if detail == "" || strings.Contains(detail, "500") || strings.Contains(detail, "422") {
-		t.Fatalf("detail must be plain language with no raw status code, got %q", detail)
+	if body.Details["cause"] != addons.CauseFault || body.Message == "" || strings.Contains(body.Message, "500") {
+		t.Fatalf("the sentence must be plain language with no raw status code, got %+v", body)
 	}
 }
 
@@ -169,20 +147,19 @@ func TestTargetActivity_CarriesTheUncoveredResources(t *testing.T) {
 	taken := time.Date(2026, 8, 20, 10, 5, 0, 0, time.UTC)
 	withActivity(t, func(context.Context, string, string, string, string, bool) addons.ActivityReport {
 		return addons.ActivityReport{
-			Events:      []addons.ActivityEvent{{At: "2026-08-20T10:00:00Z", Event: "CONNECT", Resource: "lab", Success: true}},
-			Uncovered:   []string{"scratch"},
-			Truncated:   true,
-			Observation: &addons.Observation{TakenAt: taken, Current: true},
-			Outcome:     addons.OutcomeSucceeded,
+			Events:    []addons.ActivityEvent{{At: "2026-08-20T10:00:00Z", Event: "CONNECT", Resource: "lab", Success: true}},
+			Uncovered: []string{"scratch"},
+			Truncated: true,
+			Read:      addons.ReadOf(&addons.Observation{TakenAt: taken, Current: true}, addons.Why{}),
+			Outcome:   addons.OutcomeSucceeded,
 		}
 	})
 
 	rr := activityRequest("?subject=u1")
 	var body struct {
-		Readable  bool      `json:"readable"`
-		Uncovered []string  `json:"uncovered"`
-		Truncated bool      `json:"truncated"`
-		TakenAt   time.Time `json:"taken_at"`
+		Read      addons.ReadState `json:"read"`
+		Uncovered []string         `json:"uncovered"`
+		Truncated bool             `json:"truncated"`
 		Events    []struct {
 			Event    string `json:"event"`
 			Resource string `json:"resource"`
@@ -191,12 +168,12 @@ func TestTargetActivity_CarriesTheUncoveredResources(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !body.Readable || len(body.Events) != 1 || body.Events[0].Event != "CONNECT" || body.Events[0].Resource != "lab" {
+	if body.Read.State != addons.ReadNow || len(body.Events) != 1 || body.Events[0].Event != "CONNECT" || body.Events[0].Resource != "lab" {
 		t.Fatalf("unexpected body: %s", rr.Body.String())
 	}
 	// Without this an operator reads a short list as "quiet" when half the
 	// shares were never being watched.
-	if len(body.Uncovered) != 1 || body.Uncovered[0] != "scratch" || !body.Truncated || !body.TakenAt.Equal(taken) {
+	if len(body.Uncovered) != 1 || body.Uncovered[0] != "scratch" || !body.Truncated || !body.Read.TakenAt.Equal(taken) {
 		t.Fatalf("the uncovered resources, truncation and read time must travel: %s", rr.Body.String())
 	}
 }

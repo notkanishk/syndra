@@ -885,7 +885,7 @@ func adoptOwnLimit(ctx context.Context, f db.MergeFinding, req resolveMergeFindi
 	// Structure only: this runs under the access lock, and a limit is never
 	// enumerable, so asking /values would only let a slow add-on stall every
 	// grant for nothing.
-	field, value, _, err := validateAllowanceStructure(f.Target, f.Field, held[0])
+	field, value, _, err := validateAllowanceStructure(ctx, f.Target, f.Field, held[0])
 	if err != nil {
 		return err
 	}

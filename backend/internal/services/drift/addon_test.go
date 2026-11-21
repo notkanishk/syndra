@@ -367,13 +367,9 @@ func TestAHaltedInventoryCarriesNoCountListOrDateItDidNotRead(t *testing.T) {
 		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte"}},
 	})
 	res, err := Inventory(context.Background(), "truenas", false)
-	if err != nil || !res.Halted {
-		t.Fatalf("want a halted inventory: %+v %v", res, err)
-	}
-	for k, v := range keys(res) {
-		if k == "bound" || k == "accounts" || k == "unmanaged" || k == "read_at" {
-			t.Errorf("a halted inventory carries %s=%s; it read nothing", k, v)
-		}
+	var nr addons.NotRead
+	if !errors.As(err, &nr) || nr.Why.Reason != addons.ReasonAddonUnreachable {
+		t.Fatalf("want no copy, the add-on unreachable: %+v %v", res, err)
 	}
 
 	stubAddonReconcile(t, &addonReconcileHarness{read: currentRead()})
@@ -387,8 +383,8 @@ func TestAHaltedInventoryCarriesNoCountListOrDateItDidNotRead(t *testing.T) {
 			t.Errorf("a read that found nothing: %s=%s, want %s", k, m[k], want)
 		}
 	}
-	if _, ok := m["read_at"]; !ok {
-		t.Error("a read inventory says when it was read")
+	if !strings.Contains(string(m["read"]), `"taken_at"`) {
+		t.Errorf("a read inventory says when it was read: %s", m["read"])
 	}
 }
 
