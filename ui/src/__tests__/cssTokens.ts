@@ -57,3 +57,24 @@ export function ratio(text: RGBA, ground: RGBA): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/** The brace-matched text from `from` (an at-rule or selector prelude) to its closing brace. */
+export function braced(from: string): string {
+  const start = css.indexOf(from);
+  expect(start, `${from} not in globals.css`).toBeGreaterThan(-1);
+  let depth = 0;
+  for (let i = css.indexOf("{", start); i < css.length; i += 1) {
+    if (css[i] === "{") depth += 1;
+    else if (css[i] === "}" && --depth === 0) return css.slice(start, i + 1);
+  }
+  return "";
+}
+
+/** Each room's tokens with the colour ramp they point into. */
+export function themes(): Record<"dark" | "light", Record<string, string>> {
+  const ramp = block(":root {\n    --violet-600");
+  return {
+    dark: { ...ramp, ...block(':root,\n  [data-theme="dark"] {') },
+    light: { ...ramp, ...block('[data-theme="light"] {') },
+  };
+}
+

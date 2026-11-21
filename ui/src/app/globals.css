@@ -474,14 +474,9 @@
     }
   }
 
-  /* The wash is a pool, not a rectangle (A-25 Q10): its strength falls on the one light's stops, drawn
-     closest-side in the changed thing's own box, so it is spent inside it and no edge ends it. */
   @keyframes flash {
     from {
-      --flash-k: calc(var(--flash-reach) * var(--hour-weight));
-    }
-    to {
-      --flash-k: 0%;
+      background-color: var(--accent-soft);
     }
   }
 
@@ -1207,8 +1202,6 @@
    the wearer alone, not the rows inside it, and a button never takes its card's place. */
 @property --px { syntax: "<length-percentage>"; inherits: false; initial-value: 50%; }
 @property --py { syntax: "<length-percentage>"; inherits: false; initial-value: 50%; }
-/* `flash`'s strength: registered so it interpolates, and 0% (no light) at rest. */
-@property --flash-k { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
 
 /* The one light (A-25 §2 rule 1, §3): every pool falls to nothing on an eased curve, six stops,
    never a straight ramp to a rim. A light sets its strength (`--pool-k`), and its colour if it is not
@@ -1217,7 +1210,7 @@
    wins over it. Unlayered, it beat every layer whatever its specificity, and a filled button's edge
    lit in the accent on an accent fill (review, 20 Nov 2026). */
 @layer base {
-  :where(.hour-light, .lit-card, .flash, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light, .dot-glow, .go-to-scrim, .go-to-pane) {
+  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light, .dot-glow, .go-to-scrim, .go-to-pane) {
     --pool-c: var(--accent);
     --pool-stops: color-mix(in srgb, var(--pool-c) var(--pool-k), transparent),
       color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.74), transparent) 20%,
@@ -1334,8 +1327,8 @@
 /* A member's card on its first day (A-24 §3.3, Q6): the door's light on its top
    edge and a violet hairline, on the first visit after that access starts and
    never again. The same light as Home's head, under the same bounds: still, the
-   accent at the same weight per room, spent before the card's own edge (Q10: the pool's box sits inside
-   the card, so nothing cuts it), under 4.5:1 for nothing on it (the contrast test holds it), gone under forced colours. */
+   accent at the same weight per room, clipped by the card's own edge, under
+   4.5:1 for nothing on it (the contrast test holds it), gone under forced colours. */
 @utility lit-card {
   --lit-reach: 22%;
   position: relative;
@@ -1346,13 +1339,10 @@
   &::before {
     content: "";
     position: absolute;
-    inset-block-start: 0;
-    inset-inline-start: 0;
-    width: 70%;
-    height: min(100%, 120px);
+    inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: radial-gradient(ellipse closest-side, var(--pool-stops));
+    background: radial-gradient(ellipse 60% 90px at 18% 0, var(--pool-stops));
   }
   &::after {
     content: "";
@@ -1953,18 +1943,9 @@ html.theme-fading *::after {
 
 /* flash · 900ms, once — a value changed while you were on the page. Never on
    load: a page that flashes everything on arrival has told you nothing about
-   what moved. */
+   what moved. The row tints and returns; a tint has its thing's shape, a light has none. */
 @utility flash {
-  /* Q10: a pool of the accent drawn in the element's own box, closest-side, so it is spent inside it:
-     the element's background, so it is behind its words and moves nothing. */
-  --flash-reach: 18%;
-  --pool-k: var(--flash-k);
-  background-image: radial-gradient(ellipse closest-side, var(--pool-stops));
   animation: flash var(--duration-flash) var(--ease-flash) 1;
-  @media (forced-colors: active) {
-    background-image: none;
-    animation: none;
-  }
 }
 
 /* breathe · 2.4s — the only licensed loop, and it means "still happening".

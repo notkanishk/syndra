@@ -107,7 +107,7 @@ describe("the door's light crosses the greeting on Home (§3.2): a pool left to 
   });
 });
 
-describe("the lit card (§3.3): the same light, under the same bounds", () => {
+describe("the lit card (§3.3): the door's light on its top edge, cut by its card on purpose (Q10, owner 21 Nov 2026)", () => {
   const lit = utility("lit-card");
 
   it("is the accent and a hairline, still, clipped by its card, and gone under forced colours", () => {

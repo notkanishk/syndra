@@ -411,7 +411,7 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
           <section
             key={g.key}
             className={`flex flex-col gap-1 px-4 py-3 text-body ${index > 0 ? "border-t border-line" : ""} ${
-              g.fresh ? "flash bg-accent-soft" : ""
+              g.fresh ? "bg-accent-soft" : ""
             }`}
           >
             {g.fresh && <span className="type-label text-accent-text">New since you looked</span>}

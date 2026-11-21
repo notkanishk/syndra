@@ -40,9 +40,6 @@
  *             a trail open.
  *   ember     a clear queue's dot's resting glow (A-25 moment 7) reaching past the card it
  *             sits in, or any box that clips it: its pool must be spent inside every edge.
- *   older     the two older lights (A-25 Q10) spent before their boxes: a lit card's pool inside its
- *             card and every clip, and a `flash` a pool in its own box (not a flat wash) inside
- *             every clip.
  *   goto      Go to's lights (A-26) reaching past what clips them: the pool behind the
  *             pane past the window, and the halo, the beam and the scope's light past
  *             the pane. The check opens Go to by its key on Home, at each width and
@@ -466,45 +463,6 @@ export function detect({ tablet = 720 } = {}) {
     for (const [side, by] of past) ember.push(`the ember's light is cut ${by.toFixed(1)}px at its ${side} (${sel(dot)})`);
   }
 
-  // ── older ──
-  // The two older lights (A-25 Q10) take the edgeless falloff. A lit card's pool is a closest-side ellipse in
-  // its own box (the pseudo-element's computed place and size), which must sit inside the card's inner box,
-  // every box that clips it and the window's sides. A `flash` is the changed thing's own background drawn
-  // closest-side, so it is spent at its own box: that box must sit inside what clips it, and a flat wash
-  // (no closest-side pool) is a rectangle of light, a finding of its own.
-  const older = [];
-  const sides = (clip) => ({ l: Math.max(clip.l, 0), t: clip.t, r: Math.min(clip.r, innerWidth), b: clip.b });
-  for (const card of document.querySelectorAll(".lit-card")) {
-    if (!vis(card, true)) continue;
-    const pool = getComputedStyle(card, "::before");
-    if (pool.content === "none" || pool.display === "none") continue;
-    const w = parseFloat(pool.width);
-    const h = parseFloat(pool.height);
-    if (!(w >= 1 && h >= 1)) {
-      older.push(`the lit card's light measures nothing (${sel(card)})`);
-      continue;
-    }
-    const c = card.getBoundingClientRect();
-    const l = c.left + card.clientLeft + parseFloat(pool.left);
-    const t = c.top + card.clientTop + parseFloat(pool.top);
-    const clip = sides(clipRect(card, true));
-    const edge = {
-      l: Math.max(clip.l, c.left + card.clientLeft),
-      t: Math.max(clip.t, c.top + card.clientTop),
-      r: Math.min(clip.r, c.left + card.clientLeft + card.clientWidth),
-      b: Math.min(clip.b, c.top + card.clientTop + card.clientHeight),
-    };
-    for (const [side, by] of pastEdge({ l, t, r: l + w, b: t + h }, edge)) older.push(`the lit card's light is cut ${by.toFixed(1)}px at its ${side} (${sel(card)})`);
-  }
-  if (!matchMedia("(forced-colors: active)").matches) {
-    for (const el of document.querySelectorAll(".flash")) {
-      if (!vis(el, true)) continue;
-      if (!/radial-gradient\([^)]*closest-side/.test(getComputedStyle(el).backgroundImage)) older.push(`a flash that is not a pool spent in its own box (${sel(el)})`);
-      const r = el.getBoundingClientRect();
-      for (const [side, by] of pastEdge({ l: r.left, t: r.top, r: r.right, b: r.bottom }, sides(clipRect(el, true)))) older.push(`a flash's light is cut ${by.toFixed(1)}px at its ${side} (${sel(el)})`);
-    }
-  }
-
   // ── pill ──
   // The pill marks the row you are on, exactly; a row that is folded (or folding) has no pill at all,
   // so a pill left behind on the row that took its seat is a finding (review, 20 Nov 2026).
@@ -614,5 +572,5 @@ export function detect({ tablet = 720 } = {}) {
     }
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, ember, older, pill, place, trail, goto, pageScroll };
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, ember, pill, place, trail, goto, pageScroll };
 }
