@@ -96,10 +96,12 @@ var (
 	reasonBehind  = gapReason{"Too much activity to count yet", kindUnread}
 	reasonAudited = gapReason{"Auditing does not record everyone on this share", kindUnobserved}
 	// reasonNotYet is a share that records everyone now, but whose coverage began after the day's
-	// midnight: the chain of runs that saw it was broken (narrowed, unread, a failed run) or new.
-	reasonNotYet   = gapReason{"Not counted: this share wasn't yet seen recording everyone", kindUnobserved}
-	reasonPurged   = gapReason{"The NAS no longer keeps its log of these days", kindDropped}
-	reasonOverfull = gapReason{"Too much activity to count", kindUnread}
+	// midnight, after it was narrowed or when it was first seen. A chain broken by the NAS being
+	// unreadable says reasonNAS; one broken by no run at all (the add-on stopped) says reasonUnwatched.
+	reasonNotYet    = gapReason{"Not counted: this share wasn't yet seen recording everyone", kindUnobserved}
+	reasonUnwatched = gapReason{"Not counted: Syndra wasn't watching this share then", kindUnread}
+	reasonPurged    = gapReason{"The NAS no longer keeps its log of these days", kindDropped}
+	reasonOverfull  = gapReason{"Too much activity to count", kindUnread}
 	// reasonFolder is a share that is a plain folder inside a dataset it shares with what lies beside
 	// it: the NAS counts space per dataset, so the folder's own cannot be told apart.
 	reasonFolder = gapReason{"The NAS does not count this share's space on its own", kindUnobserved}
@@ -128,7 +130,7 @@ func foldersIn(share string, n int, suffix string) string {
 }
 
 // gapReasons is every fixed reason: a gap stored before kinds existed takes its sentence's kind.
-var gapReasons = []gapReason{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonNotYet, reasonPurged, reasonOverfull, reasonFolder, reasonLocked, reasonHomeLocked}
+var gapReasons = []gapReason{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonNotYet, reasonUnwatched, reasonPurged, reasonOverfull, reasonFolder, reasonLocked, reasonHomeLocked}
 
 // gapOf is the one way a window not observed is made: from its reason, which carries its kind.
 func gapOf(start, end string, dims map[string]string, why gapReason) StatGap {
@@ -242,6 +244,9 @@ type statsClock struct {
 	// pageBytes is the reply ceiling a page is cut under; 0 is
 	// statsMaxReplyBytes. A seam, so a test sees several pages.
 	pageBytes int
+	// every is STATS_COLLECT_EVERY: a share's chain of sightings breaks
+	// when two of them lie more than 2*every apart (coverSessions).
+	every time.Duration
 }
 
 func (c statsClock) loc() *time.Location {

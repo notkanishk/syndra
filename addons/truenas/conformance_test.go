@@ -78,8 +78,9 @@ func kitAddOn(t *testing.T, homeRoot string) string {
 	s.fresh.cooldown = time.Second
 	// One collection before the kit runs, and no collector after it
 	// (STATS_COLLECT_EVERY=0): its reads would move target_reads under the
-	// freshness checks.
-	s.stats = statsClock{zone: kolkata}
+	// freshness checks. every is the default interval, for the chain of
+	// sightings alone: nothing here runs the timer.
+	s.stats = statsClock{zone: kolkata, every: time.Hour}
 	recordingSince(t, s, map[string]time.Time{"main": time.Now().AddDate(0, 0, -2)}) // main seen recording everyone before today
 	s.collectStatsOnce()
 	if homeRoot != "" {
