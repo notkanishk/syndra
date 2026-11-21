@@ -87,7 +87,7 @@ describe("the hour's light (§3.1, Q2): the one exception, inside its bounds", (
 
   it("falls to nothing on the eased curve, never a straight ramp to a rim (A-25 §2 rule 1, §3)", () => {
     // The stops, once: the strength, then 0.74, 0.44, 0.2 and 0.06 of it at 20, 42, 62 and 82%, then nothing.
-    const stops = /:where\(\.hour-light, \.lit-card, \.rim, \.card, \.panel, \.syndra-mark, \.place-light, \.trail-light, \.dot-glow\) \{\s*--pool-c: var\(--accent\);\s*--pool-stops: ([^;]+);/.exec(css)?.[1] ?? "";
+    const stops = /:where\(\.hour-light, \.lit-card, \.rim, \.card, \.panel, \.syndra-mark, \.place-light, \.trail-light, \.dot-glow, \.go-to-scrim, \.go-to-pane\) \{\s*--pool-c: var\(--accent\);\s*--pool-stops: ([^;]+);/.exec(css)?.[1] ?? "";
     // Split at the commas between stops, not those inside a stop's own brackets.
     const parts: string[] = [""];
     let depth = 0;

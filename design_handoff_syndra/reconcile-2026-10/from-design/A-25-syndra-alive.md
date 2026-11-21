@@ -98,7 +98,7 @@ Measured in the prototype, which has the same shell: the light is the same stren
 | 3 | The lamp breathes | Ambient | The mark's glow breathes while the reading is live | S | accepted |
 | 4 | Your place in the rail | Frequent | The pill is carried to where you go, with a faint light under it | M | **settled: glide with light** |
 | 5 | The trail lights | Occasional | The lamp is carried down the trail, the line is lit where it is, and each step answers once | M | accepted, built, and **redrawn** after he saw it |
-| 6 | Go to is lit | Constant, by key | One breath of light behind Go to | S | accepted, as a week's trial |
+| 6 | Go to is lit | Constant, by key | One breath of light behind Go to | S | **superseded by A-26** (21 Nov): the breath is A-26's, built with Go to as chosen |
 | 7 | The ember | At rest | A clear queue's lime dot holds a low glow | S | accepted, last |
 
 **Build order,** one per release (CRAFT §8.8), each judged on staging before the next, and each measured against its row in §7.3 before it ships:
@@ -109,7 +109,7 @@ Measured in the prototype, which has the same shell: the light is the same stren
 4. The lamp breathes.
 5. Your place in the rail: the glide, with its light. After the lamp, because the rail's light is the lamp's, falling on your place.
 6. The trail lights: built (`b68d206d`), then redrawn and built as chosen, Carried (§10 Q5).
-7. Go to is lit (one week on staging, then the owner's word).
+7. ~~Go to is lit~~ **Superseded by A-26 (coordinator, 21 Nov 2026).** Not built on its own: its breath and its light behind the pane, sized by the window, are part of Go to as chosen (A-26 §0), built on `feat/addon-contract-a26-goto`. The held branch `feat/addon-contract-a25-goto` gave only its layout rule (`goto`), reshaped.
 8. The ember.
 9. The older lights (`flash`, the lit card), as one small pass.
 
@@ -375,6 +375,8 @@ Both are in the prototype behind a switch. They differ only in the curve of each
 - **Cost.** M: `TrailLight`'s schedule and shape, one keyframe, the line.
 
 ### 6 · Go to is lit
+
+**Superseded by A-26 (21 Nov 2026).** Kept as written for its reasoning; what is built is A-26 §0, where this breath is the lamp's on opening and the light behind turns with a scope.
 
 - **What.** Go to still appears at once, whole, caret ready (A-24 §8, built: `GoTo.tsx:52`, `still`). Behind it, one breath of light comes up and eases to rest, as if she had lifted the lamp to look.
 - **Why it gives soul.** Go to is the moment you call her. Today it is the one overlay with no character at all, by design. This gives it a presence that costs no time.

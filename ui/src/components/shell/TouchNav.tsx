@@ -10,7 +10,8 @@ import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
 import { Unfold } from "@/lib/motion";
 import { PlaceMarks, usePlace } from "@/components/shell/Place";
-import { GoToPanel } from "@/components/ui/GoTo";
+import { OPEN_GO_TO } from "@/components/shell/GoToHost";
+import { GO_TO_PHONE_PLACEHOLDER } from "@/components/ui/GoTo";
 import {
   leafMatches,
   memberNav,
@@ -18,7 +19,6 @@ import {
   operatorNav,
   targetNav,
   type IndicatorKey,
-  type NavEntry,
   type NavLeaf,
 } from "@/lib/nav";
 import { useIndicatorsRead } from "@/lib/queries/useIndicators";
@@ -104,7 +104,6 @@ export function TouchNav() {
         <TabBar destinations={destinations} pathname={pathname} counts={counts} />
       ) : (
         <SheetTrigger
-          nav={entries}
           destinations={destinations}
           sheetDestinations={sheetDestinations}
           open={sheetOpen}
@@ -218,7 +217,6 @@ function Tab({
  * operator who cannot tell from it where to go.
  */
 function SheetTrigger({
-  nav,
   destinations,
   sheetDestinations,
   open,
@@ -226,7 +224,6 @@ function SheetTrigger({
   pathname,
   counts,
 }: {
-  nav: NavEntry[];
   destinations: TouchDestination[];
   sheetDestinations: SheetDestination[];
   open: boolean;
@@ -277,7 +274,6 @@ function SheetTrigger({
 
       {open && (
         <NavSheet
-          nav={nav}
           destinations={sheetDestinations}
           pathname={pathname}
           counts={counts}
@@ -289,14 +285,11 @@ function SheetTrigger({
 }
 
 function NavSheet({
-  nav,
   destinations,
   pathname,
   counts,
   onClose,
 }: {
-  /** The pages Go to may list: the current view's tree. */
-  nav: NavEntry[];
   destinations: SheetDestination[];
   pathname: string;
   counts: Partial<Record<IndicatorKey, number>> | undefined;
@@ -351,6 +344,17 @@ function NavSheet({
 
   // Never busy: a nav sheet runs nothing, so nothing can make it undismissable.
   useDialogFocusTrap(panelRef, true, false, dismiss);
+
+  // One Go to (A-26 §0): the sheet's field is a door to it. The sheet goes back out of history as any
+  // dismissal does, and once it has left the page (so Go to is not opened over another dialog) the one
+  // pane opens at the top.
+  const goToNext = useRef(false);
+  useEffect(
+    () => () => {
+      if (goToNext.current) window.dispatchEvent(new Event(OPEN_GO_TO));
+    },
+    [],
+  );
 
   // Closing fades and sinks the sheet, then the scrim (S1), and the grabber drags it
   // (S3): the same pieces Modal's sheet is made of, not a second copy of them.
@@ -416,29 +420,33 @@ function NavSheet({
           </div>
         )}
 
-        {/* Go to (A-19 P4): the Input sits at the top in both views, and the
-            page list stays beneath it until something is typed. */}
-        <GoToPanel
-          embedded
-          nav={nav}
-          onGo={onClose}
-          idle={
-            /* No `gap`: each row carries its own 2px above it (`mt-0.5`), so a part
-                that folds takes its gap with it. */
-            <div className="-mt-0.5 flex flex-col">
-              {destinations.map((destination) => (
-                <SheetSection
-                  key={destination.href}
-                  destination={destination}
-                  pathname={pathname}
-                  counts={counts}
-                  onPick={onClose}
-                  advanced={audience === "advanced"}
-                />
-              ))}
-            </div>
-          }
-        />
+        {/* Go to (A-19 P4; one Go to, A-26 §0): what looks like its field at the top opens the one pane, and
+            the page list stays beneath. */}
+        <button
+          type="button"
+          onClick={() => {
+            goToNext.current = true;
+            dismiss();
+          }}
+          aria-label="Go to by name"
+          // Drawn as the field it stands for (`Input`'s box, its 15px included). type-scale-exempt
+          className="mb-3 block w-full rounded-inner border border-line-strong px-[15px] py-3 text-left text-[15px] text-faint motion-tint"
+        >
+          {GO_TO_PHONE_PLACEHOLDER[audience]}
+        </button>
+        {/* No `gap`: each row carries its own 2px above it (`mt-0.5`), so a part that folds takes its gap with it. */}
+        <div className="-mt-0.5 flex flex-col">
+          {destinations.map((destination) => (
+            <SheetSection
+              key={destination.href}
+              destination={destination}
+              pathname={pathname}
+              counts={counts}
+              onPick={onClose}
+              advanced={audience === "advanced"}
+            />
+          ))}
+        </div>
       </div>
     </div>
     </ToBody>

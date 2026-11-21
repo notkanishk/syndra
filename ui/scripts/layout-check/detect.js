@@ -40,6 +40,11 @@
  *             a trail open.
  *   ember     a clear queue's dot's resting glow (A-25 moment 7) reaching past the card it
  *             sits in, or any box that clips it: its pool must be spent inside every edge.
+ *   goto      Go to's lights (A-26) reaching past what clips them: the pool behind the
+ *             pane past the window, and the halo, the beam and the scope's light past
+ *             the pane. The check opens Go to by its key on Home, at each width and
+ *             view, enters a scope by `@`, and reads only this rule: at rest, with the
+ *             gesture held at its largest, and once it is done.
  *   lamp      the mark's breathing glow (A-25 moment 3) reaching past a box that
  *             clips it (the rail's scroller, the phone's bar, the window): its pool
  *             must be spent inside every edge, read from the glow's own computed box.
@@ -532,5 +537,40 @@ export function detect({ tablet = 720 } = {}) {
     for (const [side, by] of past) trail.push(`a change's light reaches ${by.toFixed(1)}px past its card's ${side} (${sel(room)})`);
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, ember, pill, place, trail, pageScroll };
+  // ── goto ──
+  // Go to's light (A-26, the lamp's light behind the pane) is a closest-side pool on its scrim, which is the window: its box must lie
+  // inside the window on every side, so no edge cuts it (the window's top, a phone's sides).
+  const goto = [];
+  for (const scrim of document.querySelectorAll(".go-to-scrim")) {
+    const pool = getComputedStyle(scrim, "::before");
+    if (pool.display === "none" || pool.content === "none") continue;
+    const w = parseFloat(pool.width);
+    const h = parseFloat(pool.height);
+    if (!(w >= 1 && h >= 1)) {
+      goto.push(`Go to's light measures nothing (${sel(scrim)})`);
+      continue;
+    }
+    const x = parseFloat(pool.left);
+    const y = parseFloat(pool.top);
+    const past = pastEdge({ l: x - w / 2, t: y - h / 2, r: x + w / 2, b: y + h / 2 }, { l: 0, t: 0, r: scrim.clientWidth, b: scrim.clientHeight });
+    for (const [side, by] of past) goto.push(`Go to's light reaches ${by.toFixed(1)}px past the window's ${side}`);
+  }
+  // Inside the pane, each of the lamp's lights (its halo, flared or not; the beam through the bar; the
+  // scope pill's own light) is a pool spent at its own box's edge, and the pane clips: each box, as drawn
+  // now (transforms and all), must lie inside the pane's.
+  for (const pane of document.querySelectorAll(".go-to-pane")) {
+    const room = pane.getBoundingClientRect();
+    for (const light of pane.querySelectorAll(".go-to-halo, .go-to-beam, .go-to-scope-light")) {
+      if (getComputedStyle(light).display === "none") continue;
+      const r = light.getBoundingClientRect();
+      if (!(r.width >= 1 && r.height >= 1)) {
+        goto.push(`Go to's ${light.className} measures nothing`);
+        continue;
+      }
+      const past = pastEdge({ l: r.left, t: r.top, r: r.right, b: r.bottom }, { l: room.left, t: room.top, r: room.right, b: room.bottom });
+      for (const [side, by] of past) goto.push(`Go to's ${light.className} reaches ${by.toFixed(1)}px past the pane's ${side}`);
+    }
+  }
+
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, ember, pill, place, trail, goto, pageScroll };
 }

@@ -9,8 +9,6 @@ import { useOneOpening } from "@/lib/useOneOpening";
 const MINE_WITHIN_MS = 30_000;
 
 export interface QueueCleared<T> {
-  /** Which clearing this is (1, 2, ...): a line that outlives one clearing is keyed by it. */
-  id: number;
   /** What was in the queue when it emptied: it is what fades. */
   items: T[];
   /** This operator's send emptied it: how many they sent, and when it had gone. */
@@ -69,7 +67,8 @@ export function useQueueCleared<T>(items: T[], ready: boolean, anyOwnAct = false
           : null;
     sending.current = null;
     setSeen([]);
-    setCleared({ id: ++clearings.current, items: seen, mine });
+    clearings.current += 1;
+    setCleared({ items: seen, mine });
   }
 
   // `mine` says whose it was and keeps the count; `glow` is the one opening it earns (`useOneOpening`).
@@ -79,6 +78,8 @@ export function useQueueCleared<T>(items: T[], ready: boolean, anyOwnAct = false
     cleared,
     glow,
     spend,
+    /** How many clearings so far: it holds when `cleared` empties (a view switch), so a key on it never refades a calm line. */
+    clearing: clearings.current,
     beginSend: (count: number) => {
       sending.current = { count, at: Date.now() };
     },

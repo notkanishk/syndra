@@ -402,7 +402,7 @@ Near-black with a green cast in the dark room, white cards on a lilac ground in 
 ### Named Rules
 **The Violet and Lime Rule.** Violet is what you can act on; lime is what needs nothing from you. A screen where the two are confused cannot tell you where to look.
 
-**The One Exception Rule.** Colour for atmosphere is allowed in one place only: the light from the door (`hour-light`, `lit-card`, `rim`, the lamp). Its bounds are in RULES ("Colour is semantic") and A-25 §2. Nothing else may add colour for atmosphere.
+**The Two Exceptions Rule.** Colour for atmosphere is allowed in two bounded places only. The first is the light from the door (`hour-light`, `lit-card`, `rim`, the lamp). The second is Go to's kind colours (A-26; owner, 21 Nov 2026): People, Pages and Roles take the accent turned +44, −46 and −100, worn only while a scope is on, by the pill, the lamp and the light behind the pane, never a state colour and never violet. Their bounds are in RULES ("Colour is semantic"), A-25 §2 and A-26 §0. Nothing else may add colour for atmosphere.
 
 **The No Alpha Rule.** To step text back, use `muted` or `faint`, or recede its ground. Never an opacity on text (RULES G13).
 
@@ -426,7 +426,7 @@ Near-black with a green cast in the dark room, white cards on a lilac ground in 
 - **Label** (600, 12.5px, 0.1em, uppercase): a column heading or a micro-label. The rail's group heading is the same at 0.13em.
 
 ### Named Rules
-**The Eight Steps Rule.** The scale is these eight sizes, each about 1.27 times the one below. Tailwind's own text steps are cleared, so there is no ninth. The steps do not grow with the window. (`globals.css` marks the scale "recommended, pending owner".)
+**The Eight Steps Rule.** The scale is these eight sizes, each about 1.27 times the one below. Tailwind's own text steps are cleared, so there is no ninth. The steps do not grow with the window. (Settled by the owner on 21 Nov 2026.)
 
 **The Floor Rule.** Nothing is set under 12.5px.
 

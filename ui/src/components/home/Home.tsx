@@ -255,7 +255,7 @@ export function Home({ session, door = false }: { session: SessionUser; door?: b
   });
   // Home emptied in front of the reader (A-24 §4.1): the all-clear lifts, and its dot blooms when it was
   // their own act (a write of theirs that landed in the last 30s). Home's work is one queue for this.
-  const { cleared, glow, spend } = useQueueCleared(calm ? NO_WORK : WORK, !loading && !error, true, advanced);
+  const { cleared, glow, spend, clearing } = useQueueCleared(calm ? NO_WORK : WORK, !loading && !error, true, advanced);
   // The list closes, the vivid ending, at most once a day on this device and only by their own hand.
   // Decided in render, so the title is never drawn one size and then another.
   // Lift, light and close are one opening of one clearing: spent by the all-clear's first mount, or by a read
@@ -388,8 +388,8 @@ export function Home({ session, door = false }: { session: SessionUser; door?: b
     <div className="flex flex-col gap-4">
       <div {...head} style={BELOW_HEADER}>
         {/* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind the head, its
-            place set by the part of the day on the greeting's own clock. The one written exception to
-            "colour is never decorative": Home's head only, never a status colour, off under forced colours. */}
+            place set by the part of the day on the greeting's own clock. The first of the two written exceptions
+            to "colour is never decorative" (RULES, colour): never a status colour, off under forced colours. */}
         {/* On the first arrival of a sign-in a pool crosses the greeting once and this one settles in (`door-cross`).
             Drawn in the shell's column, not here: the room's light, which no box of the page can cut (A-25 §3). */}
         <HourLight phase={phase} door={door} signedInAt={session.signedInAt} />
@@ -503,7 +503,7 @@ export function Home({ session, door = false }: { session: SessionUser; door?: b
         <Unfold open={swap.calmOpen} gap={16}>
         <div className="panel">
           <EmptyState
-            key={cleared?.id ?? 0}
+            key={clearing}
             resolved
             lift={opening.open}
             glow={glow}

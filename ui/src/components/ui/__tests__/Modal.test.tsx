@@ -53,6 +53,36 @@ describe("Modal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("leaves alone a Tab a field inside already used, as it does an Escape (A-26: Go to's Tab takes a scope)", () => {
+    render(
+      <Modal open={true} onClose={() => {}}>
+        <button type="button">First</button>
+        <input aria-label="Field" onKeyDown={(event) => event.key === "Tab" && event.preventDefault()} />
+      </Modal>,
+    );
+    const field = screen.getByLabelText("Field");
+    field.focus();
+    // The field is the last stop, so an unspent Tab would wrap to the first.
+    fireEvent.keyDown(field, { key: "Tab" });
+    expect(field).toHaveFocus();
+  });
+
+  it("leaves an Escape that ends an input method's composition to the method", () => {
+    const onClose = vi.fn();
+    render(
+      <Modal open={true} onClose={onClose}>
+        <input aria-label="Field" />
+      </Modal>,
+    );
+    fireEvent.keyDown(screen.getByLabelText("Field"), { key: "Escape", isComposing: true });
+    // Safari's: the composition's Escape says it is not composing, and its keyCode is 229.
+    fireEvent.keyDown(screen.getByLabelText("Field"), { key: "Escape", keyCode: 229 });
+    expect(onClose).not.toHaveBeenCalled();
+    // Any other Escape is still the dialog's.
+    fireEvent.keyDown(screen.getByLabelText("Field"), { key: "Escape", keyCode: 27 });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("does not dismiss on Escape when busy", () => {
     const onClose = vi.fn();
     render(

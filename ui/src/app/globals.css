@@ -7,10 +7,11 @@
  * components — and now the same hue. Violet carries both rooms; only its
  * weight changes with the ground.
  *
- * Colour is semantic, never decorative, with ONE written exception: the hour's
- * light behind Home's and My access's heads (`hour-light`, A-24 Q2, A-25 moment 1,
- * and the edge under your hand, `rim`, A-25 moment 2,
- * bounded where it is drawn).
+ * Colour is semantic, never decorative, with two written exceptions, each bounded
+ * where it is drawn (RULES, colour). The first is the hour's light behind Home's and
+ * My access's heads (`hour-light`, A-24 Q2, A-25 moment 1, and the edge under your
+ * hand, `rim`, A-25 moment 2). The second is Go to's kind colours (`--kind-*`, A-26),
+ * worn only while a scope is on, by its pill, its lamp and the light behind its pane.
  * Five roles:
  *
  *   accent      the primary action and the current selection, one per screen
@@ -131,8 +132,8 @@
    * `type-*` roles below read the display steps. The display steps take one
    * step down below the tablet breakpoint (the phone block in `@layer base`),
    * instead of growing with the window: a desktop no longer gets the largest
-   * size because it is wider than 1080. 12.5 is the floor (A-09). Q1 and Q3,
-   * recommended, pending owner: the scale is these eight numbers. */
+   * size because it is wider than 1080. 12.5 is the floor (A-09). Settled by
+   * the owner on 21 Nov 2026 (Q1 and Q3): the scale is these eight numbers. */
   /* Tailwind's own steps (text-xs … text-9xl) go: a namespace set to `initial` is
      cleared (Tailwind v4, "Using a custom theme"), so `text-sm` renders nothing
      rather than a ninth size beside the scale. */
@@ -163,7 +164,7 @@
   --control-md: 36px; /* a page header's and a dialog footer's button */
 
   /* The page: sentences 60ch, the page 1280, a field 400. The frame is centred
-     between the rail and the window's edge (Q2, recommended, pending owner),
+     between the rail and the window's edge (Q2, settled by the owner on 21 Nov 2026),
      and the top bar's row and the section band take the same frame through
      --page-x, so the breadcrumb stays over the title. 100cqw is the content
      column (AppShell makes it the size container). At 1440 the content is
@@ -207,7 +208,7 @@
    * an arbitrary step on a scale.
    *
    *   below 720px   phone   — single column, tab bar, dialogs become sheets
-   *   720–1080px    tablet  — rail returns collapsed to 64px, up to three
+   *   720–1080px    tablet  — rail returns at 252px, up to three
    *                           table columns, sheets become dialogs again.
    *                           Still touch: targets stay 44px.
    *   above 1080px  desktop — the product as it already is, unchanged
@@ -504,6 +505,36 @@
     }
   }
 
+  /* Go to's light as it opens (A-26, the lamp lifted to look; A-25 moment 6): up over a tint, then down to
+     rest over a flash, both on tint's curve. The step is a tint's share of the whole: 120 / 1020. */
+  @keyframes go-to-light {
+    from {
+      opacity: 0;
+    }
+    11.765% {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.6;
+    }
+  }
+
+  /* The lamp's own halo as Go to opens: it swells in with the light behind. */
+  @keyframes go-to-halo {
+    from {
+      opacity: 0;
+      scale: 0.76;
+    }
+    11.765% {
+      opacity: 1;
+      scale: 1;
+    }
+    to {
+      opacity: 0.72;
+      scale: 1;
+    }
+  }
+
   /* A read dot answering the trail's lamp (A-25 moment 5): its own glow opens once and is gone. The
      ember's light. */
   @keyframes answer {
@@ -576,10 +607,12 @@
       --touch-nav-height: calc(69px + env(safe-area-inset-bottom));
 
       /* A phone keeps the layout it had (D-1 §8): the density is for a window,
-         and a phone was already sized for a thumb. The display steps take their
-         one step down (a phone already had 26 for a page, 22 for a heading),
-         and every density token a phone reads holds the value it had before
-         D-1, so the shared parts read one token at every width and a phone
+         and a phone was already sized for a thumb. Only the display steps
+         (--text-display, --text-page) take one step down, to 28 and 26. The
+         card and empty-state title, --text-title, is a density token, not a
+         display step: it is 17 on a desktop and holds the 19 a phone had
+         before D-1 (the rule is "a phone keeps its layout", not "smaller").
+         Every density token a phone reads holds the value it had before D-1, so the shared parts read one token at every width and a phone
          never sees the desktop's numbers. `design-system.test.ts` holds these. */
       --text-display: 28px;
       --text-page: 26px;
@@ -644,13 +677,13 @@
        in light; these sit a little above. A label is as strong as faint text
        and reads as structure by its case and tracking, not by being fainter.
        Text drawn with its own alpha keeps the same floors: 0.56 dark, 0.66
-       light (checked by globals-contrast.test.ts). */
+       light (checked by contrast.test.ts). */
     --muted: rgba(243, 245, 239, 0.7);
     --faint: rgba(243, 245, 239, 0.56);
     --label: var(--faint);
 
-    /* Fill and text differ, and must: --violet-500 is the pill you press,
-       --violet-400 is the tone that stays legible as 13px text on #141612. */
+    /* Fill and text differ, and must: --violet-500 is the brand tone (`--accent`; a button fills with
+       `--accent-dense`), --violet-400 is the tone that stays legible as 13px text on #141612. */
     --accent: var(--violet-500);
     --accent-text: var(--violet-400);
     --accent-ink: var(--on-violet);
@@ -705,6 +738,8 @@
     --mark-glow: rgba(155, 123, 255, 0.6);
     /* The hour's light at full weight on the dark ground (A-24 Q2). */
     --hour-weight: 1;
+    /* How thick Go to's glass is (A-26): the pane is --surface-2 at this much over a blur. */
+    --glass: 78%;
 
     color-scheme: dark;
   }
@@ -781,6 +816,7 @@
     /* On paper the pool is a pale wash: three quarters of its dark weight, so no line in the head
        goes under 4.5:1 and the greeting keeps its contrast (A-24 frame 3, "under a quarter strength"). */
     --hour-weight: 0.75;
+    --glass: 84%;
 
     color-scheme: light;
   }
@@ -1153,8 +1189,8 @@
 
 /* The room knows the hour (A-24 §3.1, Q2): a still pool of violet light behind
    Home's head and My access's (A-25 moment 1), its place set by the part of the day
-   (`dayPhase`, the greeting's own clock). The ONE written exception to "colour is never
-   decorative" above, with its bounds: those two heads (and the door's light crossing into
+   (`dayPhase`, the greeting's own clock). The first of the two written exceptions to "colour
+   is never decorative" above (the other is Go to's kind colours), with its bounds: those two heads (and the door's light crossing into
    them, `door-cross`, once a sign-in, A-24 §3.2), and a member's card on its first day (`lit-card`, A-24
    §3.3); still (no loop, and no animation but the door's, once a sign-in, and the settle of a
    pool lit only after its read, `data-settle`); the accent,
@@ -1177,7 +1213,7 @@
    wins over it. Unlayered, it beat every layer whatever its specificity, and a filled button's edge
    lit in the accent on an accent fill (review, 20 Nov 2026). */
 @layer base {
-  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light, .dot-glow) {
+  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light, .dot-glow, .go-to-scrim, .go-to-pane) {
     --pool-c: var(--accent);
     --pool-stops: color-mix(in srgb, var(--pool-c) var(--pool-k), transparent),
       color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.74), transparent) 20%,
@@ -2083,6 +2119,441 @@ html.theme-fading *::after {
     .place-light,
     .place-pill {
       display: none;
+    }
+  }
+}
+
+/* ── Go to, as chosen (A-26 §0; owner, 21 Nov 2026) ─────────────────────────────────────────────────────
+   One glass pane pinned at the top, the lamp the field's first glyph, one list that grows beneath. A
+   scope (People, Roles, Pages) turns the lamp to that kind's colour, and everything it lights turns with
+   it: its halo, the pane's rim, and the light behind, because they read one registered colour, --light.
+
+   The kinds' colours are the accent turned on its own wheel (the owner: violet is Syndra's own, so no kind
+   takes it): People its warm neighbour (+44), Pages its cool one (-46), Roles the aqua beyond Pages (-100).
+   Never lime, amber or red: those say a state. Where a browser cannot turn a colour, each is the accent. */
+@property --light { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --reach { syntax: "<length>"; inherits: false; initial-value: 300px; }
+
+@layer base {
+  :root,
+  [data-theme] {
+    --kind-people: var(--accent);
+    --kind-people-text: var(--accent-text);
+    --kind-people-solid: var(--accent-dense);
+    --kind-roles: var(--accent);
+    --kind-roles-text: var(--accent-text);
+    --kind-roles-solid: var(--accent-dense);
+    --kind-pages: var(--accent);
+    --kind-pages-text: var(--accent-text);
+    --kind-pages-solid: var(--accent-dense);
+    /* Accent words on the glass sit a step nearer ink, so they hold 4.5:1 on it. */
+    --glass-link: color-mix(in srgb, var(--accent-text) 78%, var(--ink));
+  }
+  @supports (color: oklch(from red l c h)) {
+    :root,
+    [data-theme] {
+      --kind-people: oklch(from var(--accent) l c calc(h + 44));
+      --kind-people-text: oklch(from var(--accent-text) l c calc(h + 44));
+      --kind-people-solid: oklch(from var(--accent-dense) calc(l - 0.04) c calc(h + 44));
+      --kind-roles: oklch(from var(--accent) l c calc(h - 100));
+      --kind-roles-text: oklch(from var(--accent-text) l c calc(h - 100));
+      --kind-roles-solid: oklch(from var(--accent-dense) calc(l - 0.06) c calc(h - 100));
+      --kind-pages: oklch(from var(--accent) l c calc(h - 46));
+      --kind-pages-text: oklch(from var(--accent-text) l c calc(h - 46));
+      --kind-pages-solid: oklch(from var(--accent-dense) calc(l - 0.06) c calc(h - 46));
+    }
+    [data-theme="light"] {
+      --kind-pages-text: oklch(from var(--accent-text) calc(l - 0.05) c calc(h - 46));
+    }
+  }
+}
+
+@layer components {
+  /* The window behind the pane, and the lamp's light on it (sized by the window, `goToLightBox`). */
+  .go-to-scrim {
+    /* Where the pane floats: 96px down, as Go to is today; on a phone 12px, or under the notch (the app
+       draws edge to edge, `viewportFit: cover`). One value: the pane's list reads it too. */
+    --go-to-top: 96px;
+    padding-top: var(--go-to-top);
+    @media (width < theme(--breakpoint-tablet)) {
+      --go-to-top: max(12px, env(safe-area-inset-top));
+    }
+    --light: var(--accent);
+    --light-text: var(--accent-text);
+    transition: --light var(--duration-tint) var(--ease-tint);
+    --pool-c: var(--light);
+    --pool-k: calc(46% * var(--hour-weight));
+    &[data-scope="people"] {
+      --light: var(--kind-people);
+      --light-text: var(--kind-people-text);
+      --light-solid: var(--kind-people-solid);
+    }
+    &[data-scope="roles"] {
+      --light: var(--kind-roles);
+      --light-text: var(--kind-roles-text);
+      --light-solid: var(--kind-roles-solid);
+    }
+    &[data-scope="pages"] {
+      --light: var(--kind-pages);
+      --light-text: var(--kind-pages-text);
+      --light-solid: var(--kind-pages-solid);
+    }
+    &::before {
+      content: "";
+      position: absolute;
+      left: var(--light-x, 50%);
+      top: var(--light-y, 0px);
+      width: var(--light-w, 0px);
+      height: var(--light-h, 0px);
+      translate: -50% -50%;
+      z-index: -1;
+      pointer-events: none;
+      background: radial-gradient(closest-side, var(--pool-stops));
+      opacity: 0.6;
+    }
+  }
+
+  /* The pane: one glass surface, one inset hairline, its rim lit from the lamp. Its measures are one set:
+     --go-to-ax, the left axis, is the lamp's right edge and its gap: what you type and every row start on it. */
+  .go-to-pane {
+    --go-to-field: 68px;
+    --go-to-mark: 32px;
+    --go-to-gx: 20px;
+    --go-to-gap: 14px;
+    --go-to-pad: 8px;
+    --go-to-row: 42px;
+    --go-to-lamp: calc(var(--go-to-gx) + var(--go-to-mark) / 2);
+    --go-to-ax: calc(var(--go-to-gx) + var(--go-to-mark) + var(--go-to-gap));
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 660px;
+    /* The edge under your hand (A-25 moment 2, the same rule as a card's: the pane wears `rim`, and its
+       dialog opts into the hand): a card's reach and strength, in the lamp's colour, so in a scope it is
+       the scope's. At rest, and with the pointer away, it is calm. */
+    --rim-k: 50%;
+    --rim-r: 320px;
+    --pool-c: var(--light);
+    border-radius: 28px;
+    overflow: hidden;
+    transform-origin: 50% calc(var(--go-to-field) / 2);
+    background-color: color-mix(in srgb, var(--surface-2) var(--glass), transparent);
+    -webkit-backdrop-filter: blur(36px) saturate(170%);
+    backdrop-filter: blur(36px) saturate(170%);
+    box-shadow:
+      inset 0 0 0 1px var(--line-strong),
+      var(--shadow-dialog);
+    @media (width < theme(--breakpoint-tablet)) {
+      --go-to-field: 62px;
+      --go-to-mark: 28px;
+      --go-to-row: 48px;
+    }
+    /* Where a pane cannot blur, or less transparency is asked for: the same pane, solid. */
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      background-color: var(--surface-2);
+    }
+    @media (prefers-reduced-transparency: reduce) {
+      background-color: var(--surface-2);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+  /* The rim (A-25, the edge): the pane's own hairline, lit from the lamp and falling off along it. The
+     wave is the same hairline run once along the rim as a scope is entered. The mask gives the light its
+     shape; its own fall ends it. */
+  .go-to-pane::before,
+  .go-to-wave {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(
+      circle var(--reach) at var(--go-to-lamp) 0px,
+      color-mix(in srgb, var(--light) var(--rim-k, 62%), transparent),
+      color-mix(in srgb, var(--light) calc(var(--rim-k, 62%) * 0.36), transparent) 45%,
+      transparent
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+  }
+  .go-to-wave {
+    --rim-k: 90%;
+    opacity: 0;
+  }
+  /* The lamp's answer to a scope: its light run once through the bar, a half circle behind the lamp and a
+     long half ellipse ahead of it on the six eased stops. Its box is the bar's: half the field's height
+     each way from the lamp, to the pane's right edge, so it is spent at the bar's edges and the pane never
+     cuts it (A-25 rule 1). 26%, for the placeholder that sits in it. */
+  .go-to-beam {
+    --by: calc(var(--go-to-field) / 2);
+    --pool-c: var(--light);
+    --pool-k: 26%;
+    position: absolute;
+    left: calc(var(--go-to-lamp) - var(--by));
+    top: calc(var(--go-to-field) / 2 - var(--by));
+    width: calc(var(--by) + 100% - var(--go-to-lamp));
+    height: calc(var(--by) * 2);
+    transform-origin: var(--by) 50%;
+    opacity: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(100% 50% at 100% 50%, var(--pool-stops)) left / var(--by) 100% no-repeat,
+      radial-gradient(100% 50% at 0 50%, var(--pool-stops)) right / calc(100% - var(--by)) 100% no-repeat;
+  }
+
+  .go-to-field {
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--go-to-gap);
+    height: var(--go-to-field);
+    padding: 0 var(--go-to-gx);
+  }
+  /* What you type: the display face at 23px (19 on a phone). */
+  .go-to-input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    outline: none;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 23px;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    text-overflow: ellipsis;
+    color: var(--ink);
+    caret-color: var(--light-text);
+    &::placeholder {
+      color: var(--faint);
+      opacity: 1;
+    }
+    &::-webkit-search-cancel-button {
+      display: none;
+    }
+    @media (width < theme(--breakpoint-tablet)) {
+      font-size: 19px;
+    }
+  }
+  /* The lamp: the mark, the field's first glyph. In a scope it takes that scope's colour, and so does the
+     halo it throws. */
+  .go-to-lamp {
+    position: relative;
+    display: flex;
+    flex: none;
+    .syndra-mark-dot,
+    .syndra-mark-base,
+    .syndra-mark-arc {
+      transition-property: background-color, border-color, box-shadow;
+      transition-duration: var(--duration-tint);
+      transition-timing-function: var(--ease-tint);
+    }
+    [data-scope] & .syndra-mark {
+      --mark-dot: var(--light-text);
+      --mark-arc: var(--light-text);
+      --mark-base: color-mix(in srgb, var(--light) 26%, transparent);
+      --mark-glow: color-mix(in srgb, var(--light) 60%, transparent);
+    }
+  }
+  .go-to-halo {
+    position: absolute;
+    inset: calc(var(--go-to-mark) * -0.42);
+    z-index: -1;
+    border-radius: var(--radius-pill);
+    pointer-events: none;
+    --pool-c: var(--light);
+    --pool-k: 44%;
+    background: radial-gradient(closest-side, var(--pool-stops));
+    opacity: 0.72;
+  }
+  /* The scope, Arc's way: a small pill filled in the kind's colour with a soft light of the same colour
+     behind it. Always its kind in words; the colour is company. A press looks everywhere again. */
+  .go-to-scope {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    height: 26px;
+    padding: 0 11px;
+    border-radius: var(--radius-pill);
+    font-size: var(--text-small);
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--accent-ink);
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-radius: inherit;
+      background: var(--light-solid, var(--accent-dense));
+    }
+  }
+  .go-to-scope-light {
+    position: absolute;
+    inset: -15px -20px;
+    z-index: -2;
+    border-radius: var(--radius-pill);
+    pointer-events: none;
+    --pool-c: var(--light);
+    --pool-k: calc(50% * var(--hour-weight));
+    background: radial-gradient(closest-side, var(--pool-stops));
+  }
+  /* What Tab would do, said quietly at the bar's right while a kind's own word is typed. On a phone it is
+     the kind's own words in its colour, a tap's height. */
+  .go-to-offer {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 2px;
+    font-size: var(--text-small);
+    white-space: nowrap;
+    color: var(--muted);
+    /* A quiet hover, colour only: nothing in it moves. */
+    @media (hover: hover) {
+      &:hover {
+        color: var(--ink);
+      }
+    }
+    @media (width < theme(--breakpoint-tablet)) {
+      min-height: var(--tap);
+      font-weight: 600;
+      color: color-mix(in srgb, var(--offer-text, var(--accent-text)) 78%, var(--ink));
+    }
+    &[data-kind="people"] {
+      --offer-text: var(--kind-people-text);
+    }
+    &[data-kind="roles"] {
+      --offer-text: var(--kind-roles-text);
+    }
+    &[data-kind="pages"] {
+      --offer-text: var(--kind-pages-text);
+    }
+  }
+
+  /* What grows beneath: one list on the same glass, scrolling inside itself and softening at the end
+     that has more. No fill on the chosen row: a point of the lamp's light sits beside it. */
+  .go-to-list {
+    position: relative;
+    min-height: 0;
+    max-height: min(
+      calc(var(--go-to-row) * 8.5),
+      calc(100dvh - var(--go-to-top) - var(--go-to-field) - 104px)
+    );
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin-top: -6px;
+    padding: 0 var(--go-to-pad) 14px;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--fade-top, 0px),
+      #000 calc(100% - var(--fade-end, 0px)),
+      transparent
+    );
+    mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top, 0px), #000 calc(100% - var(--fade-end, 0px)), transparent);
+  }
+  .go-to-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: var(--go-to-row);
+    padding: 0 14px 0 calc(var(--go-to-ax) - var(--go-to-pad));
+    border-radius: var(--radius-nav);
+    color: var(--muted);
+    &[aria-selected="true"] .go-to-name {
+      color: var(--ink);
+    }
+    /* No fill on the chosen row (it wears no `hover-tint`): a point of the lamp's light beside it, on the
+       lamp's own axis, level with its first line. */
+    &[aria-selected="true"]::before {
+      content: "";
+      position: absolute;
+      top: calc(var(--go-to-row) / 2 - 3px);
+      left: calc(var(--go-to-lamp) - var(--go-to-pad) - 3px);
+      width: 6px;
+      height: 6px;
+      border-radius: var(--radius-pill);
+      background: var(--light-text);
+      box-shadow: 0 0 10px 1px color-mix(in srgb, var(--light) 70%, transparent);
+      pointer-events: none;
+    }
+  }
+  /* What came of the typing when it is not a list (nothing by that name, a question being worked out):
+     on the list's axis, beside the list and never inside it. */
+  .go-to-say {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: -6px;
+    padding: 8px calc(14px + var(--go-to-pad)) 14px var(--go-to-ax);
+    &:has(+ .go-to-list:not([hidden])) {
+      padding-bottom: 4px;
+    }
+  }
+  .go-to-name {
+    flex: 0 1 auto;
+    min-width: 0;
+    font-weight: 500;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .go-to-link {
+    color: var(--glass-link);
+    font-weight: 600;
+  }
+
+  @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
+    .go-to-scrim::before {
+      animation: go-to-light calc(var(--duration-tint) + var(--duration-flash)) var(--ease-tint) both;
+    }
+    .go-to-halo {
+      animation: go-to-halo calc(var(--duration-tint) + var(--duration-flash)) var(--ease-tint) both;
+    }
+  }
+  @media (forced-colors: active) {
+    .go-to-scrim::before,
+    .go-to-pane::before,
+    .go-to-wave,
+    .go-to-beam,
+    .go-to-halo,
+    .go-to-scope-light,
+    .go-to-row::before {
+      display: none;
+    }
+    .go-to-row[aria-selected="true"] {
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+      & * {
+        color: HighlightText;
+      }
+    }
+    .go-to-scope::before {
+      background: ButtonText;
+    }
+    .go-to-scope {
+      forced-color-adjust: none;
+      color: ButtonFace;
     }
   }
 }

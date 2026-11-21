@@ -338,6 +338,16 @@ describe("Home's all-clear, as an ending", () => {
     expect(line().querySelector(".ember")).not.toBeNull();
   });
 
+  it("a switch between Basic and Advanced while it stays clear keeps the same line: it does not fade in again", () => {
+    state.own = true;
+    const home = empty();
+    const first = line();
+    state.advanced = false;
+    home.reread();
+    later(TINT_MS);
+    expect(line()).toBe(first);
+  });
+
   it("closes again the next day", () => {
     state.own = true;
     const home = empty();

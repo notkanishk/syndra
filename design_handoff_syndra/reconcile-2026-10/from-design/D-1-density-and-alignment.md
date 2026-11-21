@@ -384,8 +384,8 @@ Set aside: a density switch for the reader (one density, chosen well, is the cal
 Each had a default the build spec used; the owner answered all eight on 18 Nov 2026.
 
 1. **How much tighter?** A (32 / 24 / 18), B (28 / 22 / 17) or C (24 / 20 / 16): part 1, frames A to C. **Decided (owner, 18 Nov 2026): B.**
-2. **A wide window:** a 1280 frame centred between the rail and the edge (part 3, frame 13), or left against the rail. **Decided (owner, 18 Nov 2026): centred.**
-3. **Three body sizes:** fold today's six (15, 14.5, 14, 13.5, 13, 12.5) into three (14, 13, 12.5) in a mechanical second pass. **Decided (owner, 18 Nov 2026): yes.**
+2. **A wide window:** a 1280 frame centred between the rail and the edge (part 3, frame 13), or left against the rail. **Decided (owner, 18 Nov 2026): centred.** Settled as shipped (owner, 21 Nov 2026).
+3. **Three body sizes:** fold today's six (15, 14.5, 14, 13.5, 13, 12.5) into three (14, 13, 12.5) in a mechanical second pass. **Decided (owner, 18 Nov 2026): yes.** The eight-step scale is settled as shipped (owner, 21 Nov 2026).
 4. **Name:** one more row of the settings card the TrueNAS page opens with ("Change name", like "Choose folder"), removing the Name region (part 2, frame 6); or its own region, tightened (frame 5). **Decided (owner, 18 Nov 2026): the row.** Built: Name is the first row of the settings card in every state, Change name opens the one rename dialog, and the Name region is gone.
 5. **"Nothing for you to do." in a table:** on every healthy row (part 2, frame 10), or silence for normal, with a step written only where there is one (frame 11; G17 and G12 against the next-step rule). **Decided (owner, 18 Nov 2026): silence.** Built for table rows only: a healthy row with nothing to do says only its state; every other row, outcome, notice and empty state still ends on a step or "Nothing for you to do." (copy guide, `next-step.test.tsx`).
 6. **Home:** the two groups stacked, blocks side by side where each has 600px (part 3, frames 15 and 16), or the two pinned columns kept. **Decided (owner, 18 Nov 2026): stacked.**
