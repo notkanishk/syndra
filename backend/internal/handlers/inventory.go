@@ -31,24 +31,15 @@ import (
 // handleTargetInventory lists what lives on the target that Syndra does not
 // manage.
 func handleTargetInventory(w http.ResponseWriter, r *http.Request) {
-	inv, err := svcTargetInventory(r.Context(), r.PathValue("target"), wantsFresh(r))
+	target := r.PathValue("target")
+	inv, err := svcTargetInventory(r.Context(), target, wantsFresh(r))
 	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "INVENTORY_ERROR", err.Error())
-		return
-	}
-	if inv.RetryAfter > 0 {
-		// "Read again" inside the add-on's cooldown, nothing kept to show:
-		// a countdown, not an outage (RFC 6585 §4), said as every cooldown
-		// refusal is (FRESH_READ_COOLDOWN).
-		writeCooledDown(w, inv.RetryAfter, "That target was read moments ago, so its accounts can be listed again in "+
-			strconv.Itoa(inv.RetryAfter)+" seconds.")
-		return
-	}
-	if inv.Halted {
-		// 503 rather than an empty list. An empty list is a statement that the
-		// target holds nothing else, and the whole point of this surface is that
-		// an operator acts on it.
-		jsonResponse(w, http.StatusServiceUnavailable, inv)
+		// No copy is 503 TARGET_NOT_READ rather than an empty list (design
+		// §13.3): an empty list says the target holds nothing else, and an
+		// operator acts on this surface.
+		if !writeIfNotRead(w, r, target, err) {
+			jsonErrorResponse(w, http.StatusInternalServerError, "INVENTORY_ERROR", err.Error())
+		}
 		return
 	}
 	jsonResponse(w, http.StatusOK, inv)
@@ -86,7 +77,7 @@ func handleAdoptAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := svcDispatchOperation(r.Context(), addonop.Request{
+	res, err := dispatched(svcDispatchOperation(r.Context(), addonop.Request{
 		Target:    target,
 		Operation: "account.adopt",
 		ActorID:   resolveActor(r, ""),
@@ -94,7 +85,7 @@ func handleAdoptAccount(w http.ResponseWriter, r *http.Request) {
 		Confirmed: req.Confirmed,
 		Params:    adoptParams(username, req.AccountID),
 		About:     username,
-	})
+	}))
 	if err != nil {
 		writeAdoptionError(w, err)
 		return
@@ -213,7 +204,8 @@ func writeAdoptionError(w http.ResponseWriter, err error) {
 		"Adopting an account hands its home directory, shares and group memberships to that person. Confirm to continue.")
 }
 
-// writeOperationError answers a dispatch that never reached an outcome.
+// writeOperationError answers a dispatch that sent nothing: one sent whose
+// outcome was not recorded is indeterminate (dispatched) and never comes here.
 //
 // The refusal an operator meets is the confirmation one, and it is the reason
 // this takes the sentence rather than composing one: "confirm to continue" with
@@ -288,7 +280,7 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	res, err := svcDispatchOperation(r.Context(), addonop.Request{
+	res, err := dispatched(svcDispatchOperation(r.Context(), addonop.Request{
 		Target:    target,
 		Operation: "account.release",
 		ActorID:   resolveActor(r, ""),
@@ -302,7 +294,7 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		// own report, still sends one.
 		Params: releaseParams(""),
 		About:  boundUsername(r.Context(), target, subject),
-	})
+	}))
 	if err != nil {
 		writeOperationError(w, err, "RELEASE_FAILED", releaseConfirmation)
 		return
@@ -458,19 +450,21 @@ func adoptionRefusal(err error) string {
 // A read, and only a read. The removal that follows runs through the ordinary
 // plan-then-apply path, so nothing here writes and nothing here queues.
 func handleDormantAccounts(w http.ResponseWriter, r *http.Request) {
-	report, err := svcDormantAccounts(r.Context(), r.PathValue("target"))
+	target := r.PathValue("target")
+	report, err := svcDormantAccounts(r.Context(), target)
 	if err != nil {
-		if cooled := (services.ReadCooledDown{}); errors.As(err, &cooled) {
-			writeCooledDown(w, cooled.RetryAfter, "That target was read moments ago, so its accounts can be listed again in "+
-				strconv.Itoa(cooled.RetryAfter)+" seconds.")
+		// 503 TARGET_NOT_READ, not an empty list, a cooldown included (design
+		// §13.3). Every row here is a candidate for removal, and an empty list
+		// is a statement that there are none — which a read that did not
+		// happen, or stopped at the add-on's cap, cannot support.
+		var nr addons.NotRead
+		if errors.Is(err, services.ErrReadTruncated) && errors.As(err, &nr) {
+			system, _ := systemName(r.Context(), target)
+			writeNotRead(w, system+"'s add-on listed only part of its accounts, so Syndra can't tell which are dormant. "+
+				"Read the add-on's log for its limit, then read again.", nr.Why)
 			return
 		}
-		if errors.Is(err, services.ErrTargetUnplannable) {
-			// 503, not an empty list. Every row here is a candidate for
-			// removal, and an empty list is a statement that there are none —
-			// which a read that did not happen cannot support.
-			jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREADABLE",
-				"That target could not be read, so nothing can be said about which of its accounts are dormant.")
+		if writeIfNotRead(w, r, target, err) {
 			return
 		}
 		jsonErrorResponse(w, http.StatusInternalServerError, "DORMANT_ERROR", err.Error())
@@ -535,18 +529,24 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 	// Re-read, and re-resolve. The list the operator ticked was true when they
 	// read it; this is the only thing that makes it true when it runs.
 	report, err := svcDormantAccounts(r.Context(), target)
-	if cooled := (services.ReadCooledDown{}); errors.As(err, &cooled) {
+	var nr addons.NotRead
+	if errors.As(err, &nr) && nr.Why.Reason == addons.ReasonCooldown {
 		// The list was read moments ago, inside the add-on's cooldown: the
 		// re-check cannot read the target yet, and nothing is removed on the
-		// strength of a copy (owner Q1). A countdown, then the same request.
-		writeCooledDown(w, cooled.RetryAfter, "That target was read moments ago, so nothing was removed. You can remove them in "+
-			strconv.Itoa(cooled.RetryAfter)+" seconds.")
+		// strength of a copy (owner Q1). A countdown, then the same request:
+		// the one 429 left (design §13.3).
+		writeCooledDown(w, nr.Why.RetryAfter, "That target was read moments ago, so nothing was removed. You can remove them in "+
+			strconv.Itoa(nr.Why.RetryAfter)+" seconds.")
+		return
+	}
+	if errors.As(err, &nr) {
+		// The re-check did not read the target, so nothing went out: its why.
+		writeOutcome(w, notLandedOf(r.Context(), target, addons.OutcomeUnreached, nr.Why), nil)
 		return
 	}
 	if err != nil {
-		// The re-check did not read the target, so nothing went out (no Why
-		// travels with the report's error yet: 8c's read reply carries it).
-		writeOutcome(w, notLandedOf(r.Context(), target, addons.OutcomeUnreached, addons.Why{}), nil)
+		// Syndra's own fault (its bindings), never the system's.
+		jsonErrorResponse(w, http.StatusInternalServerError, "DORMANT_ERROR", err.Error())
 		return
 	}
 	removable := map[string]string{} // account -> subject
@@ -571,12 +571,12 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 			})
 			continue
 		}
-		res, err := svcDispatchOperation(r.Context(), addonop.Request{
+		res, err := dispatched(svcDispatchOperation(r.Context(), addonop.Request{
 			Target: target, Operation: "account.purge",
 			ActorID: actor, SubjectID: subject, Confirmed: true,
 			Params: map[string]any{"elevated_key": req.ElevatedKey},
 			About:  name,
-		})
+		}))
 		switch {
 		case err != nil:
 			outcomes = append(outcomes, map[string]any{

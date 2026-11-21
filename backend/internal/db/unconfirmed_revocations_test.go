@@ -168,17 +168,3 @@ func TestTheAgeOnTheWireIsInTheUnitItsNameClaims(t *testing.T) {
 		t.Error("a two-hour-old queued row must still escalate against a one-hour threshold")
 	}
 }
-
-// Owner 28.3: the age escalation exempts only the systems held unreachable
-// now, never every add-on row. And a revocation's landing is audited where it
-// settles, for exactly the rows this surface counts (TestLive… prove both).
-func TestEscalationExemptsOnlyHeldSystemsAndLandingIsAuditedOnSettle(t *testing.T) {
-	count := between(t, readSource(t, "unconfirmed_revocations.go"), "func CountUnconfirmedRevocations", "return s, nil")
-	if !strings.Contains(count, "p.target <> ALL($1)") {
-		t.Error("the waiting age must exempt only the held targets passed in")
-	}
-	applied := between(t, readSource(t, "propagations.go"), "func MarkPropagationApplied", "// MarkPropagationConfirmed")
-	if !strings.Contains(applied, "`+withdrawal+`") || !strings.Contains(applied, `"revocation.landed"`) {
-		t.Error("MarkPropagationApplied must audit the landing of exactly the surface's withdrawals, in its own statement")
-	}
-}

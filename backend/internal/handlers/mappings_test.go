@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/auth"
@@ -102,9 +103,9 @@ func stubMappingApplyPath(t *testing.T, h *mappingHarness) {
 		h.claimed = append(h.claimed, c)
 		return db.Plan{ID: c.PlanID}, nil, h.claimErr
 	}
-	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, time.Time, error) {
 		h.converged = append(h.converged, c)
-		return "plan_1", "outbox_1", nil
+		return "plan_1", "outbox_1", time.Time{}, nil
 	}
 	dbUpdateRoleMappingValue = func(_ context.Context, id, value, actor string) error {
 		h.updated = append(h.updated, id+"="+value)
@@ -246,6 +247,24 @@ func TestAMappingAgainstASilentTargetIsUnavailableRatherThanInvalid(t *testing.T
 	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"group","value":"lab_makers"}`)
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("want 503, got %d (%s)", rr.Code, rr.Body.String())
+	}
+}
+
+// Syndra's own record of a system's fields failing to read is its fault: a
+// 500 in the operator's words with a reference and a next step, never the Go
+// error chain, raw ids or DB_ERROR.
+func TestAMappingWhoseFieldRecordWontReadSaysSoPlainly(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
+	stubNames(t)
+	dbTargetName = func(context.Context, string) (string, error) { return "Ringside NAS", nil }
+	h.valueErr = fmt.Errorf("truenas's group could not be checked: %w: conn reset by 192.0.2.9", addons.ErrRolesUnread)
+	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"group","value":"lab_makers"}`)
+	var out ErrorResponse
+	_ = json.Unmarshal(rr.Body.Bytes(), &out)
+	if rr.Code != http.StatusInternalServerError || out.Error == "DB_ERROR" || out.Details["request_id"] == "" ||
+		!strings.HasPrefix(out.Message, "Not saved. Syndra couldn't read its record of ") || !strings.Contains(out.Message, "Try again") ||
+		strings.Contains(rr.Body.String(), "truenas") || strings.Contains(rr.Body.String(), "conn reset") {
+		t.Fatalf("want a plain 500 sentence, got %d %s", rr.Code, rr.Body)
 	}
 }
 

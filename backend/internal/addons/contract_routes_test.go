@@ -308,11 +308,11 @@ func TestAnAbsentReplyFieldMakesTheReadUnusable(t *testing.T) {
 
 	for _, key := range []string{"taken_at", "current"} {
 		addonServing(t, edit("reach.json", drop(key)))
-		if r := ReadReach(context.Background(), "truenas", false); r.Read && r.Current {
+		if r := ReadReach(context.Background(), "truenas", false); r.Read.State == ReadNow {
 			t.Errorf("reach without %s reads as current: %+v", key, r)
 		}
 		addonServing(t, edit("homes.json", drop(key)))
-		if h := ReadHomes(context.Background(), "truenas", false); h.Read {
+		if h := ReadHomes(context.Background(), "truenas", false); !h.Read.None() {
 			t.Errorf("homes without %s reads as a reading: %+v", key, h)
 		}
 	}
@@ -331,11 +331,11 @@ func TestAnAddOnCannotSetTheBackendsOwnReadFlags(t *testing.T) {
 		t.Errorf("the add-on set usage_read through the view's own key: %+v", h)
 	}
 	addonServingStatus(t, http.StatusServiceUnavailable, []byte(`{"read":true,"read_at":"2026-11-10T09:30:00Z","current":true}`))
-	if r := ReadReach(context.Background(), "truenas", false); r.Read {
+	if r := ReadReach(context.Background(), "truenas", false); !r.Read.None() {
 		t.Errorf("a refusal claiming read reads as read: %+v", r)
 	}
 	addonServing(t, []byte(`{"read":true,"read_at":"2026-11-10T09:30:00Z","current":true}`))
-	if r := ReadReach(context.Background(), "truenas", false); r.Read {
+	if r := ReadReach(context.Background(), "truenas", false); !r.Read.None() {
 		t.Errorf("a reply with contract 1's read_at and the view's read reads as read: %+v", r)
 	}
 	// A place's addresses and roles are Syndra's to fill, from the connection
@@ -371,7 +371,7 @@ func TestValuesReplyLands(t *testing.T) {
 	if got.method != http.MethodGet || got.path != "/values/group" {
 		t.Fatalf("sent %s %s", got.method, got.path)
 	}
-	if v.Outcome != OutcomeSucceeded || !v.Enumerable || len(v.Values) != 2 || v.Labels["lab_makers"] != "Lab makers" ||
+	if v.Read.None() || !v.Enumerable || len(v.Values) != 2 || v.Labels["lab_makers"] != "Lab makers" ||
 		v.BuiltinCount != 34 || len(v.BuiltinExamples) != 2 {
 		t.Errorf("values did not land: %+v", v)
 	}
@@ -401,13 +401,38 @@ func TestResolvesValueRefusesUnlistableMembership(t *testing.T) {
 	}
 }
 
+// A role map that cannot be read fails closed: a field it cannot name is
+// never accepted as a limit on structure alone.
+func TestResolvesValueFailsClosedWithoutTheRoleMap(t *testing.T) {
+	forgetRoles(t) // no role map for truenas: FieldRoles errs
+	addonServing(t, []byte(`{"field":"group","enumerable":false,"values":[]}`))
+	res, err := ResolvesValue(context.Background(), "truenas", "group", "Hulk Hogan")
+	if err == nil || res.Checked {
+		t.Errorf("an unlistable field with no role map was accepted: %+v %v", res, err)
+	}
+	// No accepted manifest is a system not yet read: NotRead with the one
+	// no-manifest why, so the page answers 503 and waits.
+	if nr := (NotRead{}); !errors.As(err, &nr) || nr.Why != WhyNoManifest("truenas") {
+		t.Errorf("no role map: want NotRead{WhyNoManifest}, got %v", err)
+	}
+	// Syndra's own record failing to read is its own fault, said apart.
+	orig := dbTargetFieldRoles
+	t.Cleanup(func() { dbTargetFieldRoles = orig })
+	dbTargetFieldRoles = func(context.Context, string) (db.FieldRoleMap, bool, error) {
+		return db.FieldRoleMap{}, false, errors.New("conn reset")
+	}
+	if _, err := ResolvesValue(context.Background(), "truenas", "group", "Hulk Hogan"); !errors.Is(err, ErrRolesUnread) || errors.As(err, new(NotRead)) {
+		t.Errorf("an unreadable role map: want ErrRolesUnread, got %v", err)
+	}
+}
+
 func TestReachReplyLands(t *testing.T) {
 	got := addonAnswering(t, "reach.json")
 	r := ReadReach(context.Background(), "truenas", false)
 	if got.method != http.MethodGet || got.path != "/reach" {
 		t.Fatalf("sent %s %s", got.method, got.path)
 	}
-	if !r.Read || !r.Current || !r.ReadAt.Equal(ts(t, "2026-11-10T09:20:00Z")) {
+	if r.Read.None() || r.Read.State != ReadNow || !readAt(r.Read).Equal(ts(t, "2026-11-10T09:20:00Z")) {
 		t.Fatalf("reach header did not land: %+v", r)
 	}
 	p := r.Groups["fabrication"]
@@ -425,9 +450,9 @@ func TestReachReplyLands(t *testing.T) {
 
 func TestSettingsAndHomesRepliesLand(t *testing.T) {
 	got := addonAnswering(t, "settings.json")
-	s, ok := ReadSettings(context.Background(), "truenas")
-	if !ok || got.method != http.MethodGet || got.path != "/settings" || len(s) != 1 {
-		t.Fatalf("settings: ok %v, sent %s %s, %d", ok, got.method, got.path, len(s))
+	s, read := ReadSettings(context.Background(), "truenas")
+	if read.State != ReadNow || got.method != http.MethodGet || got.path != "/settings" || len(s) != 1 {
+		t.Fatalf("settings: read %+v, sent %s %s, %d", read, got.method, got.path, len(s))
 	}
 	if s[0].Name != "home_root" || s[0].Label == "" || s[0].Value != "/mnt/tank/homes" || s[0].SetBy == "" ||
 		s[0].SetAt == nil || !s[0].SetAt.Equal(ts(t, "2026-11-09T14:05:00Z")) || len(s[0].Values) != 2 ||
@@ -437,7 +462,7 @@ func TestSettingsAndHomesRepliesLand(t *testing.T) {
 
 	got = addonAnswering(t, "homes.json")
 	h := ReadHomes(context.Background(), "truenas", false)
-	if got.method != http.MethodGet || got.path != "/homes" || !h.Read || !h.UsageRead || len(h.Homes) != 1 {
+	if got.method != http.MethodGet || got.path != "/homes" || h.Read.None() || !h.UsageRead || len(h.Homes) != 1 {
 		t.Fatalf("homes: sent %s %s, %+v", got.method, got.path, h)
 	}
 	if u := h.Homes[0]; u.Username != "rey_mysterio" || u.AccountID != "3051" || u.Subject != "289471021834760193" || u.Home == "" || u.UsedBytes != 19756849561 || u.QuotaBytes != 53687091200 {

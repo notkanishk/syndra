@@ -178,19 +178,19 @@ type HeldError struct {
 }
 
 func (e *HeldError) Error() string {
-	return fmt.Sprintf("addon %s: held %s (%s), nothing sent", e.Target, e.Why.Reason, e.Why.Cause)
+	return fmt.Sprintf("addon %s: held %s (%s), not dialed", e.Target, e.Why.Reason, e.Why.Cause)
 }
 
-// Held says an interactive write to target is refused at once, undialed: the
-// monitor holds it addon_unreachable (design §13.4, "Halts"). App down is not
-// held: the add-on answers, and its own refusal says so. The drain does not
-// ask: it already claims no row of an unreachable system.
+// Held is Down filtered to addon_unreachable: a read or an interactive write
+// to target is refused at once, undialed (design §13.2, §13.4 "Halts"). App
+// down is not held: the add-on answers, and its own refusal says so. The
+// drain does not ask: it already claims no row of an unreachable system.
 func Held(target string) (Why, bool) {
-	st := HealthOf(target)
-	if st.State != StateAddonUnreachable {
+	why, down := HealthOf(target).Down()
+	if !down || why.Reason != ReasonAddonUnreachable {
 		return Why{}, false
 	}
-	return Why{Reason: ReasonAddonUnreachable, Cause: st.Cause, RetryAfter: st.RetryAfter}, true
+	return why, true
 }
 
 // HeldTargets is every registered target Held right now: the systems whose

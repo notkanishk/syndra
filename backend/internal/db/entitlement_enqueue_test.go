@@ -336,7 +336,7 @@ func TestAnEntitlementEnqueueRefusesAnUnqueueableRow(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := good
 			tc.mutate(&p)
-			_, err := EnqueueEntitlementApplyTx(context.Background(), nil, p)
+			_, _, err := EnqueueEntitlementApplyTx(context.Background(), nil, p)
 			if !errors.Is(err, ErrInvalidEnqueue) {
 				t.Fatalf("EnqueueEntitlementApplyTx = %v, want ErrInvalidEnqueue", err)
 			}

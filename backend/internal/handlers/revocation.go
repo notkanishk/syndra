@@ -128,8 +128,9 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 	// queued it and failed later, at the rotation). Queuing another would be a
 	// second row for an operator to look at, for the same lock.
 	var outboxID string
+	var recordedAt time.Time
 	if retry {
-		outboxID, err = dbUnfinishedConvergence(r.Context(), subject, target)
+		outboxID, recordedAt, err = dbUnfinishedConvergence(r.Context(), subject, target)
 		if err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_CHECK_FAILED", err.Error())
 			return
@@ -149,7 +150,7 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 		// confer: EntitlementSet.WithdrawsOnly declares it, which is what lets
 		// the background runner drain the lock. Without it the disclosure below
 		// is a promise nothing keeps.
-		if _, outboxID, err = dbRecordSystemConvergence(r.Context(), set.Convergence(target, subject, actor, "Their access was revoked.")); err != nil {
+		if _, outboxID, recordedAt, err = dbRecordSystemConvergence(r.Context(), set.Convergence(target, subject, actor, "Their access was revoked.")); err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_NOT_QUEUED",
 				"The suspension was recorded and the change to the target was not queued: "+err.Error())
 			return
@@ -157,20 +158,16 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 	}
 	// Recorded is the outbox row's time, not the allowance's: the row is the
 	// revocation the unconfirmed list shows and revocation.landed closes, so
-	// the reply, the list and the audit name one moment.
-	recordedAt, err := dbPropagationRecordedAt(r.Context(), outboxID)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_CHECK_FAILED", err.Error())
-		return
-	}
+	// the reply, the list and the audit name one moment. It came back with the
+	// row, so nothing read after the commit can fail and skip the rotation.
 
 	// The credential half. Its failure does not undo the suspension, and is
 	// reported as the outstanding half rather than as a failed revocation —
 	// which would invite a retry that rotates twice.
-	res, rotateErr := svcDispatchOperation(r.Context(), addonop.Request{
+	res, rotateErr := dispatched(svcDispatchOperation(r.Context(), addonop.Request{
 		Target: target, Operation: "password.rotate",
 		ActorID: actor, SubjectID: subject, Confirmed: true,
-	})
+	}))
 	rotated := rotateErr == nil && res.Outcome == addons.OutcomeSucceeded
 
 	// Recorded and landed are two facts with two times (design §13.4). The
@@ -203,8 +200,8 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 func notYetLanded(ctx context.Context, target, system string, rotated bool) string {
 	out := "Recorded. Not yet applied on " + system + "."
 	if why, held := addonsHeld(target); held {
-		n := notLandedOf(ctx, target, addons.OutcomeUnreached, why)
-		out = "Recorded. Not yet applied on " + system + ": " + whySentence(n)
+		_, product := systemAndProduct(ctx, target)
+		out = "Recorded. Not yet applied on " + system + ": " + whySentence(system, product, why, false)
 	}
 	out += " Until it is, the account there still works. Syndra applies it by itself when " + system + " answers."
 	if rotated {
@@ -220,13 +217,10 @@ func notYetLanded(ctx context.Context, target, system string, rotated bool) stri
 // member out of it).
 func rotationAnswer(ctx context.Context, target, system string, res addonop.Result, dispatchErr error) any {
 	switch {
-	case dispatchErr != nil && res.OperationID == "":
-		// Never sent. The backend refused it before it left, so the reason is
-		// this deployment's own and is safe to show.
-		return map[string]any{"status": "not_sent", "detail": "The credential was not replaced: " + dispatchErr.Error()}
 	case dispatchErr != nil:
-		// Sent, and its outcome not recorded: as unknown as a lost answer.
-		res.Outcome = addons.OutcomeIndeterminate
+		// Never sent (dispatched). The backend refused it before it left, so
+		// the reason is this deployment's own and is safe to show.
+		return map[string]any{"status": "not_sent", "detail": "The credential was not replaced: " + dispatchErr.Error()}
 	case res.Outcome == addons.OutcomeRejected:
 		return map[string]any{"status": "refused",
 			"detail": "The credential was not replaced: " + system + " refused: " + errText(res.Err) + " Replace it once that is resolved."}

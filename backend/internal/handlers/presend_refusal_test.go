@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"syndra/internal/services/addonop"
 	"testing"
 
 	"syndra/internal/addons"
@@ -37,6 +39,27 @@ func TestAPreSendRefusalIsSyndrasOwnAndNamedForItsWrite(t *testing.T) {
 		}
 		if strings.Contains(body, "connection reset") {
 			t.Errorf("%s: Syndra's own error text leaked: %s", c.name, body)
+		}
+	}
+}
+
+// A member action refused for the caller's own request (unavailable, not
+// confirmed, a resend, a read or a non-physical preview) is a 4xx with a true
+// sentence, never Syndra's 500.
+func TestAnActionRefusedForTheRequestIsTheCallers(t *testing.T) {
+	for err, want := range map[error]int{
+		&addons.ErrOperationUnavailable{Target: "truenas", ID: "door.open", Reason: "the door controller is offline"}: http.StatusConflict,
+		fmt.Errorf("%w: truenas/door.open", addonop.ErrConfirmationRequired):                                          http.StatusUnprocessableEntity,
+		fmt.Errorf("%w: truenas/door.open", addonop.ErrPhysicalNotResent):                                             http.StatusConflict,
+		fmt.Errorf("%w: truenas/storage.get", addonop.ErrReadNotDispatched):                                           http.StatusBadRequest,
+		fmt.Errorf("%w: truenas/password.set", addons.ErrNotPhysical):                                                 http.StatusBadRequest,
+	} {
+		rr := httptest.NewRecorder()
+		writeActionError(rr, err)
+		var out ErrorResponse
+		_ = json.Unmarshal(rr.Body.Bytes(), &out)
+		if rr.Code != want || !strings.Contains(out.Message, "Nothing was sent.") || strings.Contains(out.Message, "addonop") {
+			t.Errorf("%v: got %d %q, want %d and a sentence", err, rr.Code, out.Message, want)
 		}
 	}
 }

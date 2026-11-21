@@ -134,6 +134,7 @@ func TestAnUnreachableAddonRefusesRatherThanPlanningFromNothing(t *testing.T) {
 	stubDirectory(t, "charlotte@example.edu")
 	stub := &planStub{result: addons.PlanResult{
 		Outcome: addons.OutcomeUnreached, Err: errors.New("connection refused"),
+		Why: addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseNoAnswer},
 	}}
 	stub.install(t)
 
@@ -142,6 +143,11 @@ func TestAnUnreachableAddonRefusesRatherThanPlanningFromNothing(t *testing.T) {
 	})
 	if !errors.Is(err, ErrTargetUnplannable) {
 		t.Fatalf("want ErrTargetUnplannable, got %v", err)
+	}
+	// The handler answers 503 TARGET_NOT_READ from the why, so it travels.
+	var nr addons.NotRead
+	if !errors.As(err, &nr) || nr.Why != stub.result.Why {
+		t.Fatalf("want NotRead %+v, got %v", stub.result.Why, err)
 	}
 }
 

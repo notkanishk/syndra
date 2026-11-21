@@ -69,7 +69,7 @@ func TestUpstreamSentenceNamesWhatFailed(t *testing.T) {
 	}{
 		{http.StatusBadGateway, "ZITADEL_ERROR", "Zitadel gave an answer Syndra could not use."},
 		{http.StatusServiceUnavailable, "ZITADEL_ERROR", "Zitadel is not answering right now."},
-		{http.StatusServiceUnavailable, "ADDON_UNREACHABLE", "That system is not answering right now."},
+		{http.StatusServiceUnavailable, "RECONCILE_FAILED", "That system is not answering right now."},
 		{http.StatusBadGateway, "RECONCILE_FAILED", "That system gave an answer Syndra could not use."},
 		{http.StatusBadGateway, "DRAIN_ERROR", "A service Syndra depends on gave an answer Syndra could not use."},
 	} {

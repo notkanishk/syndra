@@ -174,16 +174,10 @@ func previewAction(w http.ResponseWriter, r *http.Request, req addonop.Request) 
 }
 
 func confirmAction(w http.ResponseWriter, r *http.Request, req addonop.Request) {
-	res, err := svcDispatchOperation(r.Context(), req)
-	if err != nil && res.OperationID == "" {
+	res, err := dispatched(svcDispatchOperation(r.Context(), req))
+	if err != nil {
 		writeActionError(w, err)
 		return
-	}
-	if err != nil {
-		// Sent, and its outcome could not be written: as unknown as a lost
-		// answer, and answered as one.
-		log.Printf("[MY-ACTION] %v", err)
-		res.Outcome = addons.OutcomeIndeterminate
 	}
 	switch res.Outcome {
 	case addons.OutcomeSucceeded:
@@ -262,6 +256,19 @@ func writeActionError(w http.ResponseWriter, err error) {
 		jsonErrorResponse(w, http.StatusTooManyRequests, "TOO_MANY_ATTEMPTS", "You have done this a lot recently. Wait a few minutes and try again.")
 	case errors.Is(err, addons.ErrInvalidParams):
 		jsonValidationErrorResponse(w, "That isn't something this action takes.", map[string]string{"params": err.Error()})
+	// The caller's own request, refused before anything left: 4xx, never 500.
+	case errors.As(err, new(*addons.ErrOperationUnavailable)):
+		jsonErrorResponse(w, http.StatusConflict, "OPERATION_UNAVAILABLE",
+			"This isn't available on that system right now. Nothing was sent. Nothing for you to do.")
+	case errors.Is(err, addonop.ErrConfirmationRequired):
+		jsonErrorResponse(w, http.StatusUnprocessableEntity, "CONFIRMATION_REQUIRED",
+			"This acts on something real, so it needs your confirmation. Nothing was sent. Confirm to go ahead.")
+	case errors.Is(err, addonop.ErrPhysicalNotResent):
+		jsonErrorResponse(w, http.StatusConflict, "NOT_SENT_AGAIN",
+			"This acts on something real, so Syndra never sends it a second time. Nothing was sent. Start it again if you still want it.")
+	case errors.Is(err, addonop.ErrReadNotDispatched), errors.Is(err, addons.ErrNotPhysical):
+		jsonErrorResponse(w, http.StatusBadRequest, "NOT_AN_ACTION",
+			"That isn't an action you can take here. Nothing was sent. Nothing for you to do.")
 	default:
 		writeMemberRefusal(w, err, "ACTION_NOT_SENT")
 	}

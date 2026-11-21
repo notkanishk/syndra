@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,22 +20,28 @@ func TestTargetReachIsAnAnswerEvenWhenNothingWasRead(t *testing.T) {
 
 	read := time.Date(2026, 10, 14, 9, 2, 0, 0, time.UTC)
 	addonsReadReach = func(context.Context, string, bool) addons.Reach {
-		return addons.Reach{Read: true, ReadAt: read, Current: false, Groups: map[string][]addons.Place{
+		return addons.Reach{Read: addons.ReadOf(&addons.Observation{TakenAt: read, Stale: &addons.Stale{Reason: "unreachable"}}, addons.Why{}), Groups: map[string][]addons.Place{
 			"community": {{Share: "main", Folder: "waddle_share", Access: "change"}},
 			"interns":   {},
 		}}
 	}
 	got := getTargetReach(t)
-	if !got.Read || got.Current || !got.ReadAt.Equal(read) || len(got.Groups["community"]) != 1 {
+	if got.Read.State != addons.ReadKept || got.Read.Reason != addons.ReasonAppUnreachable || !got.Read.TakenAt.Equal(read) || len(got.Groups["community"]) != 1 {
 		t.Fatalf("got %+v", got)
 	}
 	if opens, ok := got.Groups["interns"]; !ok || len(opens) != 0 {
 		t.Fatalf("a group that opens nothing must arrive as an empty list: %v %v", opens, ok)
 	}
 
-	addonsReadReach = func(context.Context, string, bool) addons.Reach { return addons.Reach{} }
-	if got := getTargetReach(t); got.Read {
-		t.Fatalf("nothing read, yet the answer says read: %+v", got)
+	addonsReadReach = func(context.Context, string, bool) addons.Reach {
+		return addons.Reach{Read: addons.ReadOf(nil, addons.Why{Reason: addons.ReasonAddonUnreachable})}
+	}
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/reach", nil)
+	r.SetPathValue("target", "truenas")
+	rr := httptest.NewRecorder()
+	handleTargetReach(rr, r)
+	if rr.Code != http.StatusServiceUnavailable || strings.Contains(rr.Body.String(), "groups") {
+		t.Fatalf("nothing read: want 503 and no groups, got %d %s", rr.Code, rr.Body)
 	}
 }
 

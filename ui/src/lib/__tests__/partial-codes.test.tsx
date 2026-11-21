@@ -102,8 +102,10 @@ const NOTHING_WRITTEN = new Set([
   // any record. A confirm whose answer was lost is a 202 "checking", never a 5xx.
   "PREVIEW_UNANSWERED", "ACTION_READ_FAILED", "CALL_UNSETTLED_UNKNOWN",
   // Syndra's own failure before sending (addons.ErrOwnFault, handlers'
-  // writeMemberRefusal, writeOperationError): no record committed, nothing
-  // dispatched. RELEASE_FAILED at 500 is the binding read before the release.
+  // writeMemberRefusal, writeOperationError): nothing dispatched. A call sent
+  // and its outcome not recorded never reaches them: it is 202 unconfirmed
+  // (handlers' dispatched). RELEASE_FAILED at 500 is the binding read before
+  // the release.
   "ACTION_NOT_SENT", "SETTING_NOT_SET", "RELEASE_FAILED",
 ]);
 

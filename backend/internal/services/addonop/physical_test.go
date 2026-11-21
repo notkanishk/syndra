@@ -111,7 +111,7 @@ func TestANoChangeReplyIsRecordedNoChange(t *testing.T) {
 	if res.Status != db.AddonOpNoChange || !res.NoChange || h.settled[0] != "rec-0001="+db.AddonOpNoChange {
 		t.Fatalf("recorded %v, result %+v", h.settled, res)
 	}
-	if res.View == nil || !res.View.Readable || res.View.Shape != "records" {
+	if res.View == nil || res.View.Read.None() || res.View.Shape != "records" {
 		t.Errorf("the record it returned is not shown: %+v", res.View)
 	}
 	if h.begun[0].About != "item-2207" {

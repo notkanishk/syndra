@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -118,9 +119,9 @@ func stubNoMappedTargets(t *testing.T) {
 	t.Cleanup(func() { dbTargetsMappedToRole, dbRecordSystemConvergence = origTargets, origRecord })
 
 	dbTargetsMappedToRole = func(context.Context, string, string) ([]string, error) { return nil, nil }
-	dbRecordSystemConvergence = func(context.Context, db.SystemConvergence) (string, string, error) {
+	dbRecordSystemConvergence = func(context.Context, db.SystemConvergence) (string, string, time.Time, error) {
 		t.Error("a role mapped to no target must queue no convergence")
-		return "", "", nil
+		return "", "", time.Time{}, nil
 	}
 }
 

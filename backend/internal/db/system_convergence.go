@@ -94,7 +94,10 @@ func systemRequestFingerprint(target, subject string) string {
 }
 
 // RecordSystemConvergence mints the approval, spends it, and queues the work, on
-// the caller's ambient transaction when there is one.
+// the caller's ambient transaction when there is one. recordedAt is the outbox
+// row's created_at, the one "recorded" time of a revocation (design §13.4) that
+// the unconfirmed list and the revocation.landed line carry: returned with the
+// row, so no read after the commit can fail.
 //
 // All three in one transaction because they are one decision. A plan without its
 // outbox row is an approval of work nobody queued; an outbox row whose plan was
@@ -107,21 +110,21 @@ func systemRequestFingerprint(target, subject string) string {
 // insert, because the claim predicate is where "one approval, one apply" and
 // "an approval is a person's" live. Minting a pre-claimed row would be a second
 // way to produce a claimed plan, and the second way is the one nobody checks.
-func RecordSystemConvergence(ctx context.Context, c SystemConvergence) (planID, outboxID string, err error) {
+func RecordSystemConvergence(ctx context.Context, c SystemConvergence) (planID, outboxID string, recordedAt time.Time, err error) {
 	switch {
 	case strings.TrimSpace(c.Target) == "" || c.Target == TargetZitadel:
-		return "", "", fmt.Errorf("%w: %q is not an add-on target", ErrNotASystemConvergence, c.Target)
+		return "", "", time.Time{}, fmt.Errorf("%w: %q is not an add-on target", ErrNotASystemConvergence, c.Target)
 	case strings.TrimSpace(c.SubjectID) == "":
-		return "", "", fmt.Errorf("%w: no subject", ErrNotASystemConvergence)
+		return "", "", time.Time{}, fmt.Errorf("%w: no subject", ErrNotASystemConvergence)
 	case strings.TrimSpace(c.Actor) == "":
-		return "", "", fmt.Errorf("%w: no actor — a convergence nobody can trace to a decision", ErrNotASystemConvergence)
+		return "", "", time.Time{}, fmt.Errorf("%w: no actor — a convergence nobody can trace to a decision", ErrNotASystemConvergence)
 	case c.Desired == nil:
-		return "", "", fmt.Errorf("%w: no resolved intent", ErrNotASystemConvergence)
+		return "", "", time.Time{}, fmt.Errorf("%w: no resolved intent", ErrNotASystemConvergence)
 	}
 
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
-		return "", "", err
+		return "", "", time.Time{}, err
 	}
 	if owned {
 		defer tx.Rollback(ctx) // no-op after a successful Commit
@@ -153,7 +156,7 @@ func RecordSystemConvergence(ctx context.Context, c SystemConvergence) (planID, 
 		}},
 	})
 	if err != nil {
-		return "", "", err
+		return "", "", time.Time{}, err
 	}
 
 	_, subjects, err := ClaimPlanTx(ctx, tx, PlanCitation{
@@ -161,49 +164,42 @@ func RecordSystemConvergence(ctx context.Context, c SystemConvergence) (planID, 
 		Actor: c.Actor, RequestFingerprint: requestFP,
 	})
 	if err != nil {
-		return "", "", fmt.Errorf("claim system convergence: %w", err)
+		return "", "", time.Time{}, fmt.Errorf("claim system convergence: %w", err)
 	}
 	if len(subjects) != 1 {
-		return "", "", fmt.Errorf("%w: the approval names %d subjects", ErrNotASystemConvergence, len(subjects))
+		return "", "", time.Time{}, fmt.Errorf("%w: the approval names %d subjects", ErrNotASystemConvergence, len(subjects))
 	}
 
-	outboxID, err = EnqueueEntitlementApplyTx(ctx, tx, EntitlementApply{
+	outboxID, recordedAt, err = EnqueueEntitlementApplyTx(ctx, tx, EntitlementApply{
 		PlanSubjectID: subjects[0].ID,
 		Reason:        c.Reason,
 	})
 	if err != nil {
-		return "", "", fmt.Errorf("queue system convergence: %w", err)
+		return "", "", time.Time{}, fmt.Errorf("queue system convergence: %w", err)
 	}
 
 	if owned {
 		if err := tx.Commit(ctx); err != nil {
-			return "", "", fmt.Errorf("commit system convergence: %w", err)
+			return "", "", time.Time{}, fmt.Errorf("commit system convergence: %w", err)
 		}
 	}
-	return plan.ID, outboxID, nil
+	return plan.ID, outboxID, recordedAt, nil
 }
 
-// UnfinishedConvergence is the id of a withdrawing convergence for this person
-// and target still queued or in flight, "" when there is none. A retried
-// revocation asks first: the drain re-reads live state, so the one already
-// waiting carries the same lock, and a second only adds a row to confirm.
-func UnfinishedConvergence(ctx context.Context, subjectID, target string) (string, error) {
+// UnfinishedConvergence is the id and created_at of a withdrawing convergence
+// for this person and target still queued or in flight, "" when there is none.
+// A retried revocation asks first: the drain re-reads live state, so the one
+// already waiting carries the same lock, and a second only adds a row to
+// confirm.
+func UnfinishedConvergence(ctx context.Context, subjectID, target string) (string, time.Time, error) {
 	var id string
-	err := querier(ctx).QueryRow(ctx, `SELECT id FROM propagation_outbox
+	var at time.Time
+	err := querier(ctx).QueryRow(ctx, `SELECT id, created_at FROM propagation_outbox
 		 WHERE user_id = $1 AND target = $2 AND op_type = 'apply' AND withdraws_only
 		   AND status IN ('pending','in_flight')
-		 ORDER BY created_at LIMIT 1`, subjectID, target).Scan(&id)
+		 ORDER BY created_at LIMIT 1`, subjectID, target).Scan(&id, &at)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil
+		return "", time.Time{}, nil
 	}
-	return id, err
-}
-
-// PropagationRecordedAt is when an outbox row was recorded: its creation. The
-// one "recorded" time of a revocation (design §13.4), the same the unconfirmed
-// list and the revocation.landed line carry.
-func PropagationRecordedAt(ctx context.Context, id string) (time.Time, error) {
-	var at time.Time
-	err := querier(ctx).QueryRow(ctx, `SELECT created_at FROM propagation_outbox WHERE id = $1`, id).Scan(&at)
-	return at.UTC(), err
+	return id, at.UTC(), err
 }

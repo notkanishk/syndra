@@ -109,9 +109,9 @@ func stubFindings(t *testing.T, h *findingHarness) {
 		h.reservationsCleared = append(h.reservationsCleared, decision)
 		return nil
 	}
-	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, time.Time, error) {
 		h.converged = append(h.converged, c)
-		return "plan_1", "outbox_1", nil
+		return "plan_1", "outbox_1", time.Time{}, nil
 	}
 	dbCreateAllowance = func(_ context.Context, a db.Allowance) (db.Allowance, error) {
 		if h.allowErr != nil {

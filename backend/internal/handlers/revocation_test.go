@@ -31,28 +31,25 @@ type revokeHarness struct {
 	rotateReason  error
 }
 
+// outboxRecordedAt is the outbox row's creation. The allowance's is an hour
+// earlier, so a reply that named it would show.
+var outboxRecordedAt = time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
+
 func stubRevocation(t *testing.T) *revokeHarness {
 	t.Helper()
 	h := &revokeHarness{}
-	create, record, dispatch, resolve, unfinished, recordedAt := dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementSet, dbUnfinishedConvergence, dbPropagationRecordedAt
+	create, record, dispatch, resolve, unfinished := dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementSet, dbUnfinishedConvergence
 	t.Cleanup(func() {
 		dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementSet = create, record, dispatch, resolve
-		dbUnfinishedConvergence, dbPropagationRecordedAt = unfinished, recordedAt
+		dbUnfinishedConvergence = unfinished
 	})
-	// What the outbox would say: a convergence queued earlier is still waiting.
-	dbUnfinishedConvergence = func(context.Context, string, string) (string, error) {
+	// What the outbox would say: a convergence queued earlier is still waiting,
+	// with the row's creation, the one recorded time.
+	dbUnfinishedConvergence = func(context.Context, string, string) (string, time.Time, error) {
 		if len(h.converged) > 0 {
-			return "outbox_1", nil
+			return "outbox_1", outboxRecordedAt, nil
 		}
-		return "", nil
-	}
-	// The outbox row's creation: the one recorded time. The allowance's is
-	// an hour earlier, so a reply that read it would show.
-	dbPropagationRecordedAt = func(_ context.Context, id string) (time.Time, error) {
-		if id != "outbox_1" {
-			return time.Time{}, errors.New("no such row")
-		}
-		return time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC), nil
+		return "", time.Time{}, nil
 	}
 
 	dbCreateAllowance = func(_ context.Context, a db.Allowance) (db.Allowance, error) {
@@ -64,9 +61,9 @@ func stubRevocation(t *testing.T) *revokeHarness {
 		h.allowances = append(h.allowances, a)
 		return a, nil
 	}
-	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, time.Time, error) {
 		h.converged = append(h.converged, c)
-		return "plan_1", "outbox_1", nil
+		return "plan_1", "outbox_1", outboxRecordedAt, nil
 	}
 	svcDispatchOperation = func(_ context.Context, req addonop.Request) (addonop.Result, error) {
 		h.dispatched = append(h.dispatched, req)
@@ -203,8 +200,8 @@ func TestARetryAfterAFailedConvergenceFinishesTheRevocation(t *testing.T) {
 	record := dbRecordSystemConvergence
 
 	// First attempt: the deny commits, then queuing the convergence fails.
-	dbRecordSystemConvergence = func(context.Context, db.SystemConvergence) (string, string, error) {
-		return "", "", errors.New("outbox unavailable")
+	dbRecordSystemConvergence = func(context.Context, db.SystemConvergence) (string, string, time.Time, error) {
+		return "", "", time.Time{}, errors.New("outbox unavailable")
 	}
 	rr := revoke(`{"reason":"offboarding","confirmed":true}`)
 	if rr.Code != http.StatusInternalServerError {
@@ -431,5 +428,16 @@ func TestARevocationDeniesTheAccountFieldByRole(t *testing.T) {
 	addonsFieldRoles = func(context.Context, string) (addons.Roles, error) { return nil, addons.ErrNoManifest }
 	if rr := revoke(`{"reason":"under investigation","confirmed":true}`); rr.Code != http.StatusConflict || len(h.allowances) != 0 {
 		t.Fatalf("no role map, no hold: %d %+v", rr.Code, h.allowances)
+	}
+}
+
+// The recorded time comes back with the record itself: no read after the
+// commit can fail, answer 500 and skip the rotation of a suspension already
+// queued.
+func TestTheRecordedTimeComesWithTheRecord(t *testing.T) {
+	h := stubRevocation(t)
+	rr := revoke(`{"reason":"under investigation","confirmed":true}`)
+	if rr.Code != http.StatusAccepted || len(h.dispatched) != 1 || !strings.Contains(rr.Body.String(), `"recorded_at":"2026-11-21T09:00:00Z"`) {
+		t.Fatalf("want 202 with the row's time and the rotation sent, got %d, %d sent, %s", rr.Code, len(h.dispatched), rr.Body)
 	}
 }

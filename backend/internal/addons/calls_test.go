@@ -231,7 +231,7 @@ func TestAPreviewCarriesNoCallIDAndLeavesNoRow(t *testing.T) {
 		t.Errorf("the preview carried a call_id: %s", body)
 	}
 	v := r.View()
-	if !v.Readable || v.Shape != "records" {
+	if v.Read.None() || v.Shape != "records" {
 		t.Errorf("the preview's record is not readable through the read path: %+v", v)
 	}
 }
@@ -303,7 +303,7 @@ func TestCallAnswerReadsTheThreeAnswersStrictly(t *testing.T) {
 		if err != nil || s.State != CallRecorded || s.Reply != nil {
 			t.Fatalf("%+v %v: a secret reply was kept", s, err)
 		}
-		if v := ViewOf("inventory", "item.checkout", []byte(`{"result":{"records":[],"taken_at":"2026-11-10T09:30:00Z","current":true}}`), Clock{}); v.Readable {
+		if v := ViewOf("inventory", "item.checkout", []byte(`{"result":{"records":[],"taken_at":"2026-11-10T09:30:00Z","current":true}}`), Clock{}); !v.Read.None() {
 			t.Errorf("a secret reply was shown: %+v", v)
 		}
 	})

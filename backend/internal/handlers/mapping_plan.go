@@ -303,7 +303,7 @@ func applyMappingChange(ctx context.Context, m db.RoleMapping, surface, actor, p
 			if err != nil {
 				return err
 			}
-			if _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(m.Target, id, actor, "A mapping for their role changed.")); err != nil {
+			if _, _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(m.Target, id, actor, "A mapping for their role changed.")); err != nil {
 				return err
 			}
 			converged++
@@ -441,7 +441,7 @@ func rollbackAndConverge(ctx context.Context, target string, version int, actor,
 			if err != nil {
 				return err
 			}
-			if _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(target, id, actor, fmt.Sprintf("Mapping set rolled back to v%d", version))); err != nil {
+			if _, _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(target, id, actor, fmt.Sprintf("Mapping set rolled back to v%d", version))); err != nil {
 				return err
 			}
 			converged++
@@ -760,7 +760,7 @@ func createMappingAndConverge(ctx context.Context, m db.RoleMapping, actor, plan
 			if err != nil {
 				return err
 			}
-			if _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(m.Target, id, actor, "A mapping for their role was added.")); err != nil {
+			if _, _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(m.Target, id, actor, "A mapping for their role was added.")); err != nil {
 				return err
 			}
 			converged++

@@ -26,7 +26,7 @@ func TestRetiringAFieldSupersedesTheRowsThatNameIt(t *testing.T) {
 		t.Helper()
 		subject = freshSubject(t, ctx)
 		t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, subject) })
-		_, id, err := RecordSystemConvergence(ctx, SystemConvergence{
+		_, id, _, err := RecordSystemConvergence(ctx, SystemConvergence{
 			Target: "truenas", SubjectID: subject, Actor: "system:reconcile", Reason: "test",
 			Desired: desired, WithdrawsOnly: withdraws,
 		})
@@ -69,7 +69,7 @@ func TestRetiringAFieldSupersedesTheRowsThatNameIt(t *testing.T) {
 
 	// The next sweep's lock, without the retired field, sends on its own: the
 	// superseded row holds nothing.
-	_, again, err := RecordSystemConvergence(ctx, SystemConvergence{
+	_, again, _, err := RecordSystemConvergence(ctx, SystemConvergence{
 		Target: "truenas", SubjectID: departed, Actor: "system:reconcile", Reason: "test",
 		Desired: map[string]json.RawMessage{"enabled": raw(`false`)}, WithdrawsOnly: true,
 	})

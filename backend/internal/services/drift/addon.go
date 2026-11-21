@@ -94,21 +94,12 @@ type AddonReconcileResult struct {
 	// [] when a whole read found none, so "none missing" and "not concluded"
 	// never look alike.
 	Stale []StaleBinding `json:"stale,omitzero"`
-	// ReadAt and Current describe the state read everything above came from.
-	// ReadAt is absent when nothing was read: the zero time is never a date.
-	ReadAt  time.Time `json:"read_at,omitzero"`
-	Current bool      `json:"current"`
+	// Read is the read everything above came from (design §13.3): now, the
+	// add-on's kept copy, or none. The one date is its taken_at.
+	Read addons.ReadState `json:"read"`
 	// Truncated says the read hit the add-on's cap, so the inventory is what was
 	// seen rather than everything there is.
 	Truncated bool `json:"truncated,omitempty"`
-	// ReadStale is why the read is not current, as the add-on said it
-	// (cached, cooldown, unreachable, ...): the inventory's "Read again" line.
-	ReadStale *addons.Stale `json:"read_stale,omitempty"`
-	// RetryAfter is a fresh read the add-on refused inside its cooldown, with
-	// nothing to serve or with its copy: halted, readable again in this many
-	// seconds (RFC 9110 §10.2.3). "Check now" waits them out and runs once
-	// more (the UI's one retry, 7l).
-	RetryAfter int `json:"retry_after,omitempty"`
 	// LogVerdict is what the add-on's mutation-log head said when compared
 	// against the anchor. Carried on the reconcile result because this is the
 	// pass that reads it, and because a finding that lives only in a log line is
@@ -143,14 +134,11 @@ func Inventory(ctx context.Context, target string, fresh bool) (AddonReconcileRe
 	res := AddonReconcileResult{Target: target}
 
 	read := addonSubjects(ctx, target, fresh)
-	// The one mapping (SubjectsResult.Halt) decides, cooldown included: an
-	// outdated add-on stays outdated inside its cooldown.
-	if reason, detail, halted := read.Halt(); halted {
-		res.Halted, res.Reason, res.Detail = true, reason, detail
-		if reason == db.UnreconciledStaleRead {
-			res.RetryAfter = read.RetryAfter // the cooldown's wait, and only its
-		}
-		return res, nil
+	// No copy is no inventory (design §13.3): the caller answers 503
+	// TARGET_NOT_READ, never an empty list or a count nobody made. An outdated
+	// add-on stays outdated inside its cooldown (SubjectsResult.Read).
+	if res.Read = read.Read(); res.Read.None() {
+		return AddonReconcileResult{}, addons.NotRead{Why: res.Read.Why()}
 	}
 	bindings, err := listBindings(ctx, target)
 	if err != nil {
@@ -170,14 +158,12 @@ func Inventory(ctx context.Context, target string, fresh bool) (AddonReconcileRe
 		res.Accounts = append(res.Accounts, BoundAccount{TargetBinding: b, Standing: standing[b.SubjectID]})
 	}
 	res.Unmanaged = unmanaged(read.Accounts)
-	res.ReadAt, res.Current, res.Truncated, res.ReadStale = read.TakenAt, read.Current, read.Truncated, read.Stale
-	if !read.Current {
-		// Shown, and labelled. An operator asking what else lives on the target
-		// during an outage is better served by a dated answer than by nothing —
-		// what they must not do is adopt from it, and the label is what stops
-		// them.
-		res.Reason = db.UnreconciledStaleRead
-	} else if read.Truncated {
+	res.Truncated = read.Truncated
+	// A kept copy is shown, dated by its read (state kept): an operator asking
+	// what else lives on the target during an outage is better served by a
+	// dated answer than by nothing, and adopts from it only once it is read
+	// again.
+	if read.Current && read.Truncated {
 		res.Reason = db.UnreconciledTruncated
 	}
 	return res, nil
@@ -249,16 +235,14 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	// what it says (an outdated add-on, a store it cannot read); a refusal
 	// inside the cooldown is its read_stale, with the wait.
 	wait, cooled := read.CooledDown()
+	res.Read = read.Read()
 	if reason, detail, halted := read.Halt(); halted {
 		res.Detail = detail
-		if reason == db.UnreconciledStaleRead {
-			res.RetryAfter = max(1, wait) // the cooldown's wait, and only its
-		}
 		return halt(ctx, res, reason, fmt.Sprintf("the target's read concludes nothing (%s): %v", reason, read.Err))
 	}
 	if cooled {
-		// Answered with its copy inside the cooldown.
-		res.RetryAfter = max(1, wait)
+		// Answered with its copy inside the cooldown: the wait is the read's.
+		res.Read.RetryAfter = max(1, wait)
 		return halt(ctx, res, db.UnreconciledStaleRead,
 			fmt.Sprintf("skipped: the target was read moments ago and can be read again in %d s", wait))
 	}
@@ -271,8 +255,6 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 		return halt(ctx, res, db.UnreconciledStaleRead,
 			"the target answered from its mirror, so nothing here describes the present")
 	}
-	res.ReadAt, res.Current = read.TakenAt, true
-
 	bindings, err := listBindings(ctx, target)
 	if err != nil {
 		return res, fmt.Errorf("read bindings for %s: %w", target, err)
@@ -620,7 +602,7 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		}
 		// Built from the set, so a departed person's disable is declared
 		// withdraw-only and the background runner sends it (EntitlementSet.WithdrawsOnly).
-		if _, _, err := recordConvergence(ctx, set.Convergence(target, out.Subject, reconcileActor, reason)); err != nil {
+		if _, _, _, err := recordConvergence(ctx, set.Convergence(target, out.Subject, reconcileActor, reason)); err != nil {
 			return queued, findings, fmt.Errorf("queue convergence for %s: %w", out.Subject, err)
 		}
 		queued++
@@ -928,7 +910,7 @@ func convergeUnbound(ctx context.Context, target string, bindings []db.TargetBin
 		if waiting {
 			continue
 		}
-		if _, _, err := recordConvergence(ctx, set.Convergence(target, id, reconcileActor, "Gets an account, for a role they hold.")); err != nil {
+		if _, _, _, err := recordConvergence(ctx, set.Convergence(target, id, reconcileActor, "Gets an account, for a role they hold.")); err != nil {
 			return queued, fmt.Errorf("queue convergence for %s: %w", id, err)
 		}
 		queued++

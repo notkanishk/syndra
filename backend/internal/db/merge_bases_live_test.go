@@ -55,7 +55,7 @@ func TestTheRowCopiesWithdrawsOnlyFromItsSnapshot(t *testing.T) {
 	for _, want := range []bool{true, false} {
 		subject := freshSubject(t, ctx)
 		t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, subject) })
-		_, outboxID, err := RecordSystemConvergence(ctx, SystemConvergence{
+		_, outboxID, _, err := RecordSystemConvergence(ctx, SystemConvergence{
 			Target: "truenas", SubjectID: subject, Actor: "system:reconcile", Reason: "test",
 			Desired: lock, WithdrawsOnly: want,
 		})

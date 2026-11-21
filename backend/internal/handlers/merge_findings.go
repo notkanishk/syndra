@@ -605,11 +605,11 @@ var errReleaseRefused = errors.New("the system refused the release")
 // §13.1.1) when it is known: a person released and bound again since names a
 // new account, which the add-on then refuses to drop (409, errReleaseRefused).
 func releaseOnTarget(ctx context.Context, target, subject, actor, accountID string) error {
-	res, err := svcDispatchOperation(ctx, addonop.Request{
+	res, err := dispatched(svcDispatchOperation(ctx, addonop.Request{
 		Target: target, Operation: "account.release",
 		ActorID: actor, SubjectID: subject, Confirmed: true, Params: releaseParams(accountID),
 		About: boundUsername(ctx, target, subject),
-	})
+	}))
 	if err != nil {
 		return fmt.Errorf("release %s on %s: %w", subject, target, err)
 	}
@@ -638,11 +638,11 @@ var errAdoptionRefused = errors.New("the system refused the adoption")
 // another account. It answers the account_id the add-on bound.
 func adoptOnTarget(ctx context.Context, f db.MergeFinding, actor string) (string, error) {
 	holder := conflictOf(f)
-	res, err := svcDispatchOperation(ctx, addonop.Request{
+	res, err := dispatched(svcDispatchOperation(ctx, addonop.Request{
 		Target: f.Target, Operation: "account.adopt",
 		ActorID: actor, SubjectID: f.SubjectID, Confirmed: true,
 		Params: adoptParams(holder.Username, holder.AccountID), About: holder.Username,
-	})
+	}))
 	if err != nil {
 		return "", fmt.Errorf("adopt %s for %s on %s: %w", holder.Username, f.SubjectID, f.Target, err)
 	}
@@ -814,7 +814,7 @@ func performResolution(ctx context.Context, f db.MergeFinding, req resolveMergeF
 		if req.Resolution == db.ResolutionReprovisioned {
 			reason = "An operator asked for a deleted account to be provisioned again"
 		}
-		if _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(f.Target, f.SubjectID, actor, reason)); err != nil {
+		if _, _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(f.Target, f.SubjectID, actor, reason)); err != nil {
 			return fmt.Errorf("queue convergence for %s: %w", f.SubjectID, err)
 		}
 		return nil
@@ -879,7 +879,7 @@ func adoptOwnLimit(ctx context.Context, f db.MergeFinding, req resolveMergeFindi
 	// Structure only: this runs under the access lock, and a limit is never
 	// enumerable, so asking /values would only let a slow add-on stall every
 	// grant for nothing.
-	field, value, _, err := validateAllowanceStructure(f.Target, f.Field, held[0])
+	field, value, _, err := validateAllowanceStructure(ctx, f.Target, f.Field, held[0])
 	if err != nil {
 		return err
 	}

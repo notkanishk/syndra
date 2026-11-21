@@ -141,6 +141,8 @@ type PlanResult struct {
 	// plan is a read and is not gated by lifecycle state on this add-on, so it
 	// is carried for completeness rather than expected.
 	LifecycleRefusal bool `json:"-"`
+	// Why is Unread of a plan that is not one: who is down, and why.
+	Why Why `json:"-"`
 }
 
 // planEnvelope is the wire body. There is no acknowledgement on it: contract 2
@@ -308,9 +310,9 @@ func planChunk(ctx context.Context, a *Addon, target string, subjects []PlanSubj
 		return PlanResult{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: encode plan: %w", target, err)}
 	}
 
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/plan", Body: body})
+	resp, err := a.read(ctx, sendSpec{Method: http.MethodPost, Path: "/plan", Body: body})
 	if err != nil {
-		return PlanResult{Outcome: OutcomeUnreached, Err: err}
+		return PlanResult{Outcome: OutcomeUnreached, Err: err, Why: Unread(resp)}
 	}
 
 	out := PlanResult{
@@ -353,6 +355,9 @@ func planChunk(ctx context.Context, a *Addon, target string, subjects []PlanSubj
 		}
 	}
 	if out.Outcome != OutcomeSucceeded {
+		failed := resp
+		failed.Outcome, failed.Err = out.Outcome, out.Err
+		out.Why = Unread(failed)
 		// The bodies are not logged. The request carries a resolved entitlement
 		// set — a person's access — and the response carries whatever the least
 		// trusted component chose to send back.
@@ -495,6 +500,23 @@ func (r SubjectsResult) reply() CallResponse {
 	return resp
 }
 
+// Read is this read's `read` (design §13.3): an outdated add-on has nothing
+// to give whatever it sent, a reply that is not one is Unread's, and a read is
+// now or the add-on's kept copy.
+func (r SubjectsResult) Read() ReadState {
+	switch {
+	case r.Outdated:
+		return ReadOf(nil, Why{Reason: ReasonAddonOutdated})
+	case r.Outcome != OutcomeSucceeded:
+		why := Unread(r.reply())
+		if why.Detail == "" {
+			why.Detail = r.Detail
+		}
+		return ReadOf(nil, why)
+	}
+	return ReadOf(&Observation{TakenAt: r.TakenAt, Current: r.Current, Stale: r.Stale}, Why{})
+}
+
 // Attribution says whether target's add-on is older than attribution (7t-3),
 // by the one test Subjects makes on its /subjects reply, remembered per
 // add-on: another read of the same add-on that cannot tell from its own rows
@@ -592,7 +614,7 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 	if err != nil {
 		return SubjectsResult{Outcome: OutcomeUnreached, Err: err}
 	}
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/subjects", Fresh: fresh})
+	resp, err := a.read(ctx, sendSpec{Method: http.MethodGet, Path: "/subjects", Fresh: fresh})
 	if err != nil {
 		return SubjectsResult{Outcome: OutcomeUnreached, Err: err}
 	}
@@ -868,26 +890,25 @@ var ErrValueNotResolvable = errors.New("addon: the target does not recognise tha
 // value — nothing they type can fix it.
 var ErrFieldNotListable = fmt.Errorf("%w: the target cannot list that field", ErrValueNotResolvable)
 
+// ErrRolesUnread is Syndra's own record of a target's field roles failing to
+// read: its fault, not the add-on's, said apart from NotRead.
+var ErrRolesUnread = errors.New("addon: Syndra's record of the target's fields could not be read")
+
 // ResolvesValue checks that a mapping value names something on the target.
 //
-// It FAILS OPEN on everything except a definite "no". A target that could not be
-// read, a limit the add-on cannot enumerate, an add-on that is not registered —
-// all of those are the absence of an answer, and refusing a mapping edit because
-// a NAS was rebooting would make an outage look like a validation failure. There
-// are two refusals, both the add-on's own answer: the value was not in the set
-// it returned (ErrValueNotResolvable), or the field is a membership it answered
-// is not enumerable (ErrFieldNotListable).
+// It FAILS CLOSED (design §13.3, owner Q2): a value the add-on could not be
+// asked about is refused with NotRead, never saved unchecked. Waiting is the
+// operator's next step, and the refusal says so. Two other refusals are the
+// add-on's own answer: the value was not in the set it returned
+// (ErrValueNotResolvable), or the field is a membership it answered is not
+// enumerable (ErrFieldNotListable).
 //
-// That asymmetry is the whole design of this check: it is a reference check, not
-// an authorisation one. Structure — is this a field the schema declares, is it a
-// lifecycle field — is Syndra's own and is enforced whatever the target says.
-// Resolution is what the check was able to establish.
+// Structure (is this a field the schema declares, a lifecycle field) is
+// Syndra's own and checked before this; resolution is the add-on's.
 //
-// `Checked` is the half that was missing and the half a surface most needs. The
-// function fails open on everything except a definite no, which is right — but
-// "the value is fine" and "nobody could be asked" both arrived as a nil error,
-// so a screen had no way to tell an operator which of the two it was showing
-// them. A check that did not run must not read as a check that passed.
+// `Checked` says the add-on enumerated the field: a limit it answered it can
+// serve and cannot bound (a quota) is accepted on structure alone, and a
+// surface can say so.
 type Resolution struct {
 	// The add-on answered and could enumerate this field.
 	Checked bool
@@ -898,33 +919,25 @@ type Resolution struct {
 }
 
 func ResolvesValue(ctx context.Context, target, field, value string) (Resolution, error) {
-	a, err := Get(target)
-	if err != nil {
-		return Resolution{}, nil
+	got := ReadValues(ctx, target, field)
+	if got.Read.None() {
+		return Resolution{}, fmt.Errorf("%s's %s could not be checked: %w", target, field, NotRead{Why: got.Read.Why()})
 	}
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/values/" + url.PathEscape(field)})
-	if err != nil {
-		return Resolution{}, nil
-	}
-	if resp.Outcome != OutcomeSucceeded {
-		// Includes a 404 for a field this add-on does not enumerate. Not an
-		// answer about the value.
-		return Resolution{}, nil
-	}
-
-	var decoded struct {
-		Values     []string `json:"values"`
-		Enumerable bool     `json:"enumerable"`
-	}
-	if err := DecodeReply(resp.Body, &decoded); err != nil {
-		return Resolution{}, nil
-	}
-	if !decoded.Enumerable {
+	if !got.Enumerable {
 		// A membership is a set Syndra manages, so it must be listable (guide,
 		// GET /values; SCIM, RFC 7644 §3.4.2): a mapping cannot name a value
 		// the add-on cannot list. The role is read from the persisted role
 		// map, since /values does not carry it.
-		if roles, err := FieldRoles(ctx, target); err == nil && roles[field] == RoleMembership {
+		// A role map that cannot be read fails closed: an unlistable
+		// membership is never accepted as a limit.
+		roles, err := FieldRoles(ctx, target)
+		if errors.Is(err, ErrNoManifest) {
+			return Resolution{}, fmt.Errorf("%s's %s could not be checked: %w", target, field, NotRead{Why: WhyNoManifest(target)})
+		}
+		if err != nil {
+			return Resolution{}, fmt.Errorf("%s's %s could not be checked: %w: %w", target, field, ErrRolesUnread, err)
+		}
+		if roles[field] == RoleMembership {
 			return Resolution{}, fmt.Errorf("%w: %s can't list the values of %s, so a mapping can't name one", ErrFieldNotListable, target, field)
 		}
 		// A limit the add-on can serve and cannot bound — a path, a quota.
@@ -932,8 +945,8 @@ func ResolvesValue(ctx context.Context, target, field, value string) (Resolution
 		return Resolution{}, nil
 	}
 
-	checked := Resolution{Checked: true, Known: decoded.Values}
-	for _, candidate := range decoded.Values {
+	checked := Resolution{Checked: true, Known: got.Values}
+	for _, candidate := range got.Values {
 		if candidate == value {
 			return checked, nil
 		}
@@ -975,16 +988,24 @@ type StorageStatus struct {
 	// reply (contract 2).
 	Standing *Standing `json:"standing,omitempty"`
 	// Observation is when the add-on read it, and whether this is that read or
-	// its copy (design §4); nil only on a status that was not read.
-	*Observation
+	// its copy (design §4); nil only on a status that was not read. Served as
+	// the view's `read` (ReadOf), the one date.
+	*Observation `json:"-"`
 
 	Outcome Outcome `json:"-"`
 	Err     error   `json:"-"`
 }
 
 // Values is what a target says one entitlement field's values may be, for a
-// picker. Outcome is not Succeeded when it couldn't say.
+// picker and for ResolvesValue. Read says whether it was answered: the add-on
+// keeps no copy of /values, so it is now or none.
 type Values struct {
+	valuesWire
+	Read ReadState `json:"read"`
+}
+
+// valuesWire is values.json as it travels: Read is never the add-on's to set.
+type valuesWire struct {
 	Values     []string          `json:"values"`
 	Labels     map[string]string `json:"labels,omitempty"`
 	Enumerable bool              `json:"enumerable"`
@@ -992,32 +1013,26 @@ type Values struct {
 	// list: "It lists 34 groups, all of them built in, like …".
 	BuiltinCount    int      `json:"builtin_count,omitempty"`
 	BuiltinExamples []string `json:"builtin_examples,omitempty"`
-
-	Outcome Outcome `json:"-"`
 }
 
 // ReadValues asks a target for one field's values.
 func ReadValues(ctx context.Context, target, field string) Values {
 	a, err := Get(target)
 	if err != nil {
-		return Values{Outcome: OutcomeUnreached}
+		return Values{Read: ReadOf(nil, Unread(CallResponse{Outcome: OutcomeUnreached, Err: err}))}
 	}
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/values/" + url.PathEscape(field)})
-	if err != nil {
-		return Values{Outcome: OutcomeUnreached}
-	}
+	resp, _ := a.read(ctx, sendSpec{Method: http.MethodGet, Path: "/values/" + url.PathEscape(field)})
 	if resp.Outcome != OutcomeSucceeded {
-		return Values{Outcome: resp.Outcome}
+		return Values{Read: ReadOf(nil, Unread(resp))}
 	}
-	var out Values
-	if err := DecodeReply(resp.Body, &out); err != nil {
-		return Values{Outcome: OutcomeIndeterminate}
+	var wire valuesWire
+	if err := DecodeReply(resp.Body, &wire); err != nil {
+		return Values{Read: ReadOf(nil, unreadable(resp, err))}
 	}
-	if out.Values == nil {
-		out.Values = []string{}
+	if wire.Values == nil {
+		wire.Values = []string{}
 	}
-	out.Outcome = OutcomeSucceeded
-	return out
+	return Values{valuesWire: wire, Read: ReadOf(answeredNow(resp.Clock), Why{})}
 }
 
 // TargetSetting is one system-wide choice a target's add-on keeps, such as
@@ -1033,20 +1048,27 @@ type TargetSetting struct {
 	ValuesRead bool              `json:"values_read"`
 }
 
-// ReadSettings asks a target for its settings. ok is false when it couldn't
-// say, which is not "it has none".
-func ReadSettings(ctx context.Context, target string) (settings []TargetSetting, ok bool) {
-	resp, ok := settingsCall(ctx, target, http.MethodGet, "/settings", nil)
-	if !ok || resp.Outcome != OutcomeSucceeded {
-		return nil, false
+// ReadSettings asks a target for its settings. The add-on keeps no copy of
+// them, so the read is now or none: never "it has none".
+func ReadSettings(ctx context.Context, target string) ([]TargetSetting, ReadState) {
+	a, err := Get(target)
+	if err != nil {
+		return nil, ReadOf(nil, Unread(CallResponse{Outcome: OutcomeUnreached, Err: err}))
+	}
+	resp, _ := a.read(ctx, sendSpec{Method: http.MethodGet, Path: "/settings"})
+	if resp.Outcome != OutcomeSucceeded {
+		return nil, ReadOf(nil, Unread(resp))
 	}
 	var out struct {
 		Settings []TargetSetting `json:"settings"`
 	}
 	if err := DecodeReply(resp.Body, &out); err != nil {
-		return nil, false
+		return nil, ReadOf(nil, unreadable(resp, err))
 	}
-	return out.Settings, true
+	if out.Settings == nil {
+		out.Settings = []TargetSetting{}
+	}
+	return out.Settings, ReadOf(answeredNow(resp.Clock), Why{})
 }
 
 // PutSetting asks a target to change one setting. The add-on is the judge of
@@ -1077,20 +1099,6 @@ func PutSetting(ctx context.Context, target, name, value, actor string) (CallRes
 	return resp, resp.Status != 0
 }
 
-// settingsCall is one authenticated read of a target's settings or homes
-// endpoints. Not being able to ask is `ok == false`, never "it has none".
-func settingsCall(ctx context.Context, target, method, path string, body []byte) (CallResponse, bool) {
-	a, err := Get(target)
-	if err != nil {
-		return CallResponse{Outcome: OutcomeUnreached}, false
-	}
-	resp, err := a.send(ctx, sendSpec{Method: method, Path: path, Body: body})
-	if err != nil {
-		return CallResponse{Outcome: OutcomeUnreached}, false
-	}
-	return resp, resp.Status != 0
-}
-
 // HomeUsage is one account's home folder on a target, as the target read it.
 type HomeUsage struct {
 	Username  string `json:"username"`
@@ -1108,24 +1116,14 @@ type HomeUsage struct {
 }
 
 // Homes is every home folder on a target: a view built from homesWire. Read
-// is the backend's own "the add-on answered", never the add-on's to set (task
-// 1.0: contract 1 decoded the reply into this type, so an add-on could send
-// "read": true).
+// is the backend's own account of the reply (design §13.3), never the
+// add-on's to set (task 1.0).
 type Homes struct {
-	Read bool `json:"read"`
-	// UsageRead is the add-on's quota_read: every quota table was read.
-	UsageRead bool        `json:"usage_read"`
-	Homes     []HomeUsage `json:"homes"`
-	// Observation is when the add-on read them, and whether this is that read
-	// or its copy; nil when Read is false.
-	*Observation
-	// RetryAfter is a fresh read refused inside the add-on's cooldown with
-	// nothing to serve (cooldownOf).
-	RetryAfter int `json:"retry_after,omitempty"`
-	// Reason is why no home is shown as anybody's although the add-on
-	// answered (Read false): addon_outdated, or whose they are could not be
-	// learned (Attribution).
-	Reason string `json:"-"`
+	Read ReadState `json:"read"`
+	// UsageRead is the add-on's quota_read: every quota table was read. Not
+	// served: a usage not read whole is absent from each row, never a state.
+	UsageRead bool        `json:"-"`
+	Homes     []HomeUsage `json:"homes,omitempty"`
 }
 
 // homesWire is profiles/storage/homes.json as it travels.
@@ -1142,52 +1140,44 @@ type homesWire struct {
 func ReadHomes(ctx context.Context, target string, fresh bool) Homes {
 	a, err := Get(target)
 	if err != nil {
-		return Homes{}
+		return Homes{Read: ReadOf(nil, Unread(CallResponse{Outcome: OutcomeUnreached, Err: err}))}
 	}
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/homes", Fresh: fresh})
-	if err != nil {
-		return Homes{}
-	}
+	resp, _ := a.read(ctx, sendSpec{Method: http.MethodGet, Path: "/homes", Fresh: fresh})
 	if resp.Outcome != OutcomeSucceeded {
-		return Homes{RetryAfter: cooldownOf(resp)}
+		return Homes{Read: ReadOf(nil, Unread(resp))}
 	}
 	var wire homesWire
-	if err := DecodeReply(resp.Body, &wire); err != nil || wire.Current == nil || staleInvariant(resp.Body) != nil {
+	if err := DecodeReply(resp.Body, &wire); err != nil {
+		return Homes{Read: ReadOf(nil, unreadable(resp, err))}
+	}
+	if err := staleInvariant(resp.Body); err != nil || wire.Current == nil {
 		// A reply that does not say whether its read is current, or says it
 		// two ways, is not one to show as a reading (design §2(b), §4).
-		return Homes{}
+		return Homes{Read: ReadOf(nil, unreadable(resp, errors.New("current is missing or contradicts stale")))}
 	}
 	at, ok := takenAt(target, wire.TakenAt, resp.Clock)
 	if !ok {
-		return Homes{}
+		return Homes{Read: ReadOf(nil, unreadable(resp, errors.New("taken_at does not read")))}
 	}
 	if _, why := Attribution(ctx, target); why != "" {
 		// Outdated: its rows carry no subject because it predates
 		// attribution, not because they are nobody's. Unknown: whose they
 		// are could not be learned. Either way, not a reading of anybody's
 		// home, and the reason says which.
-		return Homes{Reason: why}
+		return Homes{Read: ReadOf(nil, whyOfUnreconciled(why))}
 	}
 	// A reply that does not say the usage was read whole did not read it.
-	return Homes{Read: true, UsageRead: wire.QuotaRead != nil && *wire.QuotaRead, Homes: wire.Homes,
-		Observation: &Observation{TakenAt: at, Current: *wire.Current, Stale: wire.Stale}}
+	return Homes{UsageRead: wire.QuotaRead != nil && *wire.QuotaRead, Homes: wire.Homes,
+		Read: ReadOf(&Observation{TakenAt: at, Current: *wire.Current, Stale: wire.Stale}, Why{})}
 }
 
 // Reach is what each of a target's own groups opens, as the target last read
-// its folder permissions. Read false is "not read from the target yet": the
-// target hasn't managed a read since its add-on started, or the add-on can't be
-// reached, and there is no last read to show.
+// its folder permissions. Read none is "not read from the target": no data,
+// and no date.
 //
 // A view built from reachWire: Read is the backend's own, never the add-on's.
 type Reach struct {
-	Read    bool      `json:"read"`
-	ReadAt  time.Time `json:"read_at,omitzero"`
-	Current bool      `json:"current"`
-	// Stale is why it is not current, as the add-on said it.
-	Stale *Stale `json:"stale,omitempty"`
-	// RetryAfter is a fresh read refused inside the add-on's cooldown with
-	// nothing to serve (cooldownOf).
-	RetryAfter int `json:"retry_after,omitempty"`
+	Read ReadState `json:"read"`
 	// Groups is every group of the makerspace's own; an empty list is "opens
 	// nothing yet". Each list is what holding the group ADDS to what every
 	// account opens.
@@ -1200,24 +1190,24 @@ type Reach struct {
 func ReadReach(ctx context.Context, target string, fresh bool) Reach {
 	a, err := Get(target)
 	if err != nil {
-		return Reach{}
+		return Reach{Read: ReadOf(nil, Unread(CallResponse{Outcome: OutcomeUnreached, Err: err}))}
 	}
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/reach", Fresh: fresh})
-	if err != nil {
-		return Reach{}
-	}
+	resp, _ := a.read(ctx, sendSpec{Method: http.MethodGet, Path: "/reach", Fresh: fresh})
 	if resp.Outcome != OutcomeSucceeded {
-		return Reach{RetryAfter: cooldownOf(resp)}
+		return Reach{Read: ReadOf(nil, Unread(resp))}
 	}
 	var wire reachWire
-	if err := DecodeReply(resp.Body, &wire); err != nil || staleInvariant(resp.Body) != nil {
-		return Reach{}
+	if err := DecodeReply(resp.Body, &wire); err != nil {
+		return Reach{Read: ReadOf(nil, unreadable(resp, err))}
+	}
+	if err := staleInvariant(resp.Body); err != nil {
+		return Reach{Read: ReadOf(nil, unreadable(resp, err))}
 	}
 	at, ok := takenAt(target, wire.TakenAt, resp.Clock)
 	if !ok {
-		return Reach{}
+		return Reach{Read: ReadOf(nil, unreadable(resp, errors.New("taken_at does not read")))}
 	}
-	out := Reach{Read: true, ReadAt: at, Current: wire.Current != nil && *wire.Current, Stale: wire.Stale,
+	out := Reach{Read: ReadOf(&Observation{TakenAt: at, Current: wire.Current != nil && *wire.Current, Stale: wire.Stale}, Why{}),
 		Groups: map[string][]Place{}, Everyone: placesOf(wire.Everyone)}
 	for g, ps := range wire.Groups {
 		out.Groups[g] = placesOf(ps)
@@ -1348,6 +1338,9 @@ type ActivityReport struct {
 	// Observation is when the log was read; nil only on a report that was
 	// not read.
 	*Observation
+	// Read is the route's `read`, from Observation (ReadOf); a shape's
+	// result never carries it.
+	Read ReadState `json:"-"`
 
 	Outcome Outcome `json:"-"`
 	// Status is the add-on's raw HTTP status, carried so a caller can tell a
@@ -1355,9 +1348,6 @@ type ActivityReport struct {
 	// string-matching Err's text.
 	Status int   `json:"-"`
 	Err    error `json:"-"`
-	// RetryAfter is a fresh read refused inside the add-on's cooldown with
-	// nothing to serve (cooldownOf).
-	RetryAfter int `json:"-"`
 }
 
 // ActivityEvent is one entry from the target's audit log.
@@ -1404,10 +1394,11 @@ func (r ReadReply) Activity() ActivityReport {
 		err = r.decodeShape(activityNeed, raw, &out)
 	}
 	if err != nil {
-		out = ActivityReport{Status: r.Status, RetryAfter: r.RetryAfter}
+		out = ActivityReport{Status: r.Status, Read: ReadOf(nil, r.notRead(err))}
 		out.Outcome, out.Err = r.failed(err)
 		return out
 	}
+	out.Read = ReadOf(out.Observation, Why{})
 	// Never nil to a caller: a JSON `null` and an empty list render as
 	// different things, and "no events" is the answer this read most often
 	// gives.
@@ -1437,6 +1428,9 @@ type SystemReport struct {
 	// Degraded names the sources that could not be read. A partial answer that
 	// does not say which part is missing is a whole answer that is wrong.
 	Degraded []string `json:"degraded,omitempty"`
+	// Read is the route's `read`: health.get keeps no copy, so now or none.
+	// Never decoded: what the add-on sends is not its to set.
+	Read ReadState `json:"-"`
 
 	Outcome Outcome `json:"-"`
 	Err     error   `json:"-"`
@@ -1504,10 +1498,10 @@ func (r ReadReply) Health() SystemReport {
 		err = DecodeReply(raw, &out)
 	}
 	if err != nil {
-		out = SystemReport{}
+		out = SystemReport{Read: ReadOf(nil, r.notRead(err))}
 		out.Outcome, out.Err = r.failed(err)
 		return out
 	}
-	out.Outcome = OutcomeSucceeded
+	out.Outcome, out.Read = OutcomeSucceeded, ReadOf(answeredNow(r.Clock), Why{})
 	return out
 }

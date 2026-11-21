@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -139,6 +141,53 @@ func TestEveryWritePathSaysOneOfTwoThings(t *testing.T) {
 	}
 }
 
+// A call that was sent and whose outcome Syndra could not record
+// (addonop.Dispatch returns its OperationID with the error) is as unknown as
+// a lost answer: 202 unconfirmed on every dispatching path, never a refusal
+// or Syndra's 500 that invites a second send.
+func TestASentCallWithItsOutcomeUnrecordedIsUnconfirmed(t *testing.T) {
+	sentUnrecorded := func() {
+		svcDispatchOperation = func(context.Context, addonop.Request) (addonop.Result, error) {
+			return addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeSucceeded},
+				errors.New("addonop: operation op_1 was dispatched but its outcome was not recorded")
+		}
+	}
+	for name, run := range map[string]func(t *testing.T) *httptest.ResponseRecorder{
+		"adopt": func(t *testing.T) *httptest.ResponseRecorder {
+			stubAdopt(t, &adoptHarness{})
+			sentUnrecorded()
+			return adopt(t, `{"subject_id":"u1","confirmed":true}`)
+		},
+		"release": func(t *testing.T) *httptest.ResponseRecorder {
+			stubRelease(t, &releaseHarness{})
+			sentUnrecorded()
+			return release(t, `{"confirmed":true}`)
+		},
+		"password": func(t *testing.T) *httptest.ResponseRecorder {
+			stubMyStorage(t, &storageHarness{entitled: true, bound: true})
+			sentUnrecorded()
+			rr, _ := setCredential(t, `{"password":"`+memberSecret+`"}`)
+			return rr
+		},
+		"physical action": func(t *testing.T) *httptest.ResponseRecorder {
+			stubMemberAction(t)
+			sentUnrecorded()
+			rr, _ := act(t, "item.checkout", confirmBody)
+			return rr
+		},
+		"resolving a binding finding (release)": func(t *testing.T) *httptest.ResponseRecorder {
+			stubFindings(t, &findingHarness{finding: db.MergeFinding{ID: "f1", Target: "truenas", SubjectID: "sub-1", Outcome: "deleted_upstream"}})
+			sentUnrecorded()
+			return resolveFinding(t, `{"resolution":"unbound","reason":"the account was removed on purpose"}`)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			stubNames(t)
+			assertUnconfirmed(t, run(t))
+		})
+	}
+}
+
 // A preview has no effect, so a lost answer to one is nothing sent, never
 // "may have applied"; and a held system is refused with the monitor's why.
 func TestAPreviewThatDidNotLandIsNothingSent(t *testing.T) {
@@ -180,11 +229,11 @@ func TestAMemberIsNotToldWhichBoxIsDown(t *testing.T) {
 // naming the product it fronts.
 func TestAnAppOutageSaysTheAddOnsWordsFirst(t *testing.T) {
 	n := &notLanded{System: "Ringside NAS", Product: "TrueNAS", Why: addons.Why{Reason: addons.ReasonAppUnreachable}}
-	if got := whySentence(n); got != "Ringside NAS's add-on is running but can't reach TrueNAS. Check that TrueNAS is on." {
+	if got := whySentence(n.System, n.Product, n.Why, n.Member); got != "Ringside NAS's add-on is running but can't reach TrueNAS. Check that TrueNAS is on." {
 		t.Errorf("fallback: %q", got)
 	}
 	n.Why.Detail = "The NAS's API refused the session key"
-	if got := whySentence(n); got != "The NAS's API refused the session key." {
+	if got := whySentence(n.System, n.Product, n.Why, n.Member); got != "The NAS's API refused the session key." {
 		t.Errorf("add-on's words: %q", got)
 	}
 }
@@ -204,6 +253,23 @@ func TestADormantRemovalToAHeldSystemIsRefusedUndialed(t *testing.T) {
 	assertNothingSent(t, sweep(t, `{"accounts":["gone"],"elevated_key":"k","confirmed":true}`), addons.ReasonAddonUnreachable)
 	if read != 0 || len(h.purged) != 0 {
 		t.Fatalf("a held system is neither read nor sent to: read %d, purged %d", read, len(h.purged))
+	}
+}
+
+// A re-check that did not read says why it did not, the read's own why (8c's
+// NotRead), never an empty one; any other failure is Syndra's own, 500.
+func TestADormantRemovalsFailedReCheckCarriesItsWhy(t *testing.T) {
+	stubNames(t)
+	h := &sweepHarness{reportErr: fmt.Errorf("dormant: %w", addons.NotRead{Why: addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseWrongHost}})}
+	stubSweep(t, h)
+	rr := sweep(t, `{"accounts":["gone"],"elevated_key":"k","confirmed":true}`)
+	assertNothingSent(t, rr, addons.ReasonAddonUnreachable)
+	if !strings.Contains(rr.Body.String(), `"cause":"wrong_host"`) {
+		t.Errorf("the read's cause travels: %s", rr.Body)
+	}
+	h.reportErr = errors.New("read bindings: connection refused")
+	if rr := sweep(t, `{"accounts":["gone"],"elevated_key":"k","confirmed":true}`); rr.Code != http.StatusInternalServerError {
+		t.Errorf("Syndra's own fault is 500, got %d %s", rr.Code, rr.Body)
 	}
 }
 

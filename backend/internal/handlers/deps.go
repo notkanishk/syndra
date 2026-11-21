@@ -466,7 +466,6 @@ var (
 	// A retried revocation asks before queuing a second convergence.
 	dbUnfinishedConvergence = db.UnfinishedConvergence
 	// A revocation's one recorded time: its outbox row's.
-	dbPropagationRecordedAt = db.PropagationRecordedAt
 )
 
 // The unmanaged inventory and its one action (1.18/1.19, 6.8).

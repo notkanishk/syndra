@@ -94,13 +94,15 @@ func TestATargetSettingThatTimedOutMayHaveApplied(t *testing.T) {
 func TestTargetSettingsSayWhenTheyCouldntBeRead(t *testing.T) {
 	read := addonsReadSettings
 	t.Cleanup(func() { addonsReadSettings = read })
-	addonsReadSettings = func(context.Context, string) ([]addons.TargetSetting, bool) { return nil, false }
+	addonsReadSettings = func(context.Context, string) ([]addons.TargetSetting, addons.ReadState) {
+		return nil, addons.ReadOf(nil, addons.Why{Reason: addons.ReasonAppUnreachable})
+	}
 
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/settings", nil)
 	r.SetPathValue("target", "truenas")
 	rr := httptest.NewRecorder()
 	handleTargetSettings(rr, r)
-	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"read":false`) {
+	if rr.Code != http.StatusServiceUnavailable || !strings.Contains(rr.Body.String(), codeTargetNotRead) || strings.Contains(rr.Body.String(), "settings") {
 		t.Fatalf("got %d %s", rr.Code, rr.Body.String())
 	}
 }

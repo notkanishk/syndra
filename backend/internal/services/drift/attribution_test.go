@@ -3,6 +3,7 @@ package drift
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"syndra/internal/addons"
@@ -166,12 +167,10 @@ func TestAnOutdatedAddOnStopsThePassAsOutdated(t *testing.T) {
 	if len(h.findingsWritten) != 0 || len(res.Unmanaged) != 0 || len(h.planAsked) != 0 {
 		t.Fatalf("nothing may be concluded: findings %+v unmanaged %+v", h.findingsWritten, res.Unmanaged)
 	}
-	inv, err := Inventory(context.Background(), "truenas", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !inv.Halted || inv.Reason != db.UnreconciledAddonOutdated || len(inv.Unmanaged) != 0 {
-		t.Fatalf("the inventory too: %+v", inv)
+	_, err = Inventory(context.Background(), "truenas", false)
+	var nr addons.NotRead
+	if !errors.As(err, &nr) || nr.Why.Reason != addons.ReasonAddonOutdated {
+		t.Fatalf("the inventory too: no copy, addon_outdated: %v", err)
 	}
 }
 
@@ -189,18 +188,16 @@ func TestAnOutdatedAddOnStaysOutdatedInsideItsCooldown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Reason != db.UnreconciledAddonOutdated || res.RetryAfter != 0 || len(h.marked) != 1 || h.marked[0] != db.UnreconciledAddonOutdated {
+	if res.Reason != db.UnreconciledAddonOutdated || res.Read.RetryAfter != 0 || len(h.marked) != 1 || h.marked[0] != db.UnreconciledAddonOutdated {
 		t.Fatalf("want addon_outdated and no wait, got %+v marked %v", res, h.marked)
 	}
 	read.RetryAfter = retry // a cooldown refusal's wait, which Outdated outranks
 	h2 := &addonReconcileHarness{read: read}
 	stubAddonReconcile(t, h2)
-	inv, err := Inventory(context.Background(), "truenas", true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if inv.Reason != db.UnreconciledAddonOutdated || inv.RetryAfter != 0 {
-		t.Fatalf("the inventory too: %+v", inv)
+	_, err = Inventory(context.Background(), "truenas", true)
+	var nr addons.NotRead
+	if !errors.As(err, &nr) || nr.Why.Reason != addons.ReasonAddonOutdated || nr.Why.RetryAfter != 0 {
+		t.Fatalf("the inventory too: no copy, addon_outdated, no wait: %v", err)
 	}
 }
 
@@ -289,12 +286,10 @@ func TestAnUnreadableStoreIsARefusedReadNeverAnOutage(t *testing.T) {
 		t.Fatalf("the target's record must say read_refused: %v", h.marked)
 	}
 
-	inv, err := Inventory(context.Background(), "truenas", true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !inv.Halted || inv.Reason != db.UnreconciledReadRefused || inv.Detail != detail {
-		t.Fatalf("the inventory must say the same: %+v", inv)
+	_, err = Inventory(context.Background(), "truenas", true)
+	var nr addons.NotRead
+	if !errors.As(err, &nr) || nr.Why.Reason != addons.ReasonReadRefused || nr.Why.Detail != detail {
+		t.Fatalf("the inventory must say the same: %v", err)
 	}
 
 	// Every other failure is one of the two outages, never read_refused,

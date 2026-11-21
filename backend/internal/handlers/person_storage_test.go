@@ -35,7 +35,6 @@ type personStorageHarness struct {
 func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 	t.Helper()
 	stubMyStorage(t, &h.storageHarness)
-	lastStorage.Range(func(k, _ any) bool { lastStorage.Delete(k); return true })
 	prev := []any{addonsRegistered, dbTargetProjects, dbListRoleMappings, dbAllowancesInForce,
 		dbAllowancesForSubject, addonsReadReach, dbLastSucceededAddonOperation, addonsConnection}
 	t.Cleanup(func() {
@@ -108,7 +107,7 @@ func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 	}
 	dbAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) { return nil, nil }
 	addonsReadReach = func(context.Context, string, bool) addons.Reach {
-		return addons.Reach{Read: true, Groups: map[string][]addons.Place{
+		return addons.Reach{Read: readNow(), Groups: map[string][]addons.Place{
 			"fab_leads": {
 				{Share: "main", Folder: "projects/renders", Path: "/mnt/main/projects/renders", Access: "read"},
 				{Share: "main", Folder: "projects/renders", Path: "/mnt/main/projects/renders", Access: "change"},
@@ -171,41 +170,28 @@ func TestPersonTargets_TheMembersViewPlusTheOperatorsFacts(t *testing.T) {
 	}
 }
 
-func TestPersonTargets_OfflineShowsTheLastReadWithItsTime(t *testing.T) {
+// Syndra keeps no copy (design §13.3): with the add-on down the system's read
+// is none, and no storage or use is shown, however recently it answered.
+func TestPersonTargets_OfflineIsNotReadNeverTheLastRead(t *testing.T) {
 	h := &personStorageHarness{storageHarness: storageHarness{entitled: true, bound: true}}
 	stubPersonStorage(t, h)
-	getPersonTargets(t) // online: remembered
+	if view := getPersonTargets(t); view.Read == nil || view.Read.State != addons.ReadNow || view.Storage == nil {
+		t.Fatalf("online: read %+v storage %v", view.Read, view.Storage)
+	}
 
 	h.unreachable = true
 	view := getPersonTargets(t)
-	if view.Storage != nil || view.LastKnown == nil || view.LastKnown.ReadAt.IsZero() || len(view.LastKnown.Storage.Places) != 2 {
-		t.Fatalf("offline view: storage=%v last_known=%+v", view.Storage, view.LastKnown)
+	if view.Read == nil || view.Read.State != addons.ReadNone || view.Read.TakenAt != nil || view.Storage != nil {
+		t.Fatalf("offline: want read none and no storage, got read %+v storage %v", view.Read, view.Storage)
 	}
-	if view.Home == nil || view.Home.UsedBytes == nil || *view.Home.UsedBytes != 18*gb {
-		t.Errorf("the home use comes from the last read: %+v", view.Home)
-	}
-
-	// Never read: no last known, and no numbers.
-	lastStorage.Range(func(k, _ any) bool { lastStorage.Delete(k); return true })
-	view = getPersonTargets(t)
-	if view.LastKnown != nil || view.Home.UsedBytes != nil {
-		t.Errorf("with no last read: last_known=%+v used=%v", view.LastKnown, view.Home.UsedBytes)
-	}
-
-	// One slow answer is not offline: no last known is offered in its place.
-	h.unreachable, h.failRead = false, true
-	getPersonTargets(t)
-	h.failRead = false
-	getPersonTargets(t)
-	h.failRead = true
-	if view = getPersonTargets(t); view.LastKnown != nil || view.Storage != nil {
-		t.Errorf("a failed read while online: last_known=%+v", view.LastKnown)
+	if view.Home == nil || view.Home.UsedBytes != nil || view.Home.Home != "" {
+		t.Errorf("no use shown from a read that did not happen: %+v", view.Home)
 	}
 }
 
-// The last read is dated by the add-on's read, not by when the backend heard
-// of it: a copy read four minutes ago is remembered as four minutes old.
-func TestPersonTargets_TheLastReadKeepsTheAddOnsDate(t *testing.T) {
+// The add-on's kept copy is dated by the add-on's read, not by when the
+// backend heard of it: a copy read four minutes ago is four minutes old.
+func TestPersonTargets_AKeptCopyKeepsTheAddOnsDate(t *testing.T) {
 	h := &personStorageHarness{storageHarness: storageHarness{entitled: true, bound: true}}
 	stubPersonStorage(t, h)
 	fixture, err := os.ReadFile(filepath.Join("..", "..", "..", "addons", "contract", "v2", "fixtures", "operation_response_result.json"))
@@ -217,19 +203,12 @@ func TestPersonTargets_TheLastReadKeepsTheAddOnsDate(t *testing.T) {
     "current": true,`, `"taken_at": "`+read.Format(time.RFC3339)+`",
     "current": false, "stale": {"reason": "cached"},`, 1)
 	addonsRead = func(context.Context, string, string, string, string, map[string]any, bool) addons.ReadReply {
-		if h.unreachable {
-			return addons.ReadReply{Operation: "storage.status", Outcome: addons.OutcomeUnreached}
-		}
 		return addons.ReadReply{Operation: "storage.status", Schema: "profiles/storage/status.json",
 			Outcome: addons.OutcomeSucceeded, Status: 200, Body: []byte(body)}
 	}
-	if view := getPersonTargets(t); view.Storage == nil || view.Storage.Observation == nil || view.Storage.Current {
-		t.Fatalf("the cached read did not land with its date: %+v", view.Storage)
-	}
-
-	h.unreachable = true
-	if view := getPersonTargets(t); view.LastKnown == nil || !view.LastKnown.ReadAt.Equal(read) {
-		t.Errorf("last known = %+v, want dated %s, the add-on's read", view.LastKnown, read)
+	view := getPersonTargets(t)
+	if view.Storage == nil || view.Read == nil || view.Read.State != addons.ReadKept || !view.Read.TakenAt.Equal(read) {
+		t.Fatalf("the kept copy did not land with its date: read %+v storage %v", view.Read, view.Storage)
 	}
 }
 
