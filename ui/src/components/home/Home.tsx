@@ -31,6 +31,7 @@ import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests"
 import { useRequestDecisions } from "@/lib/request-decisions";
 import { isRefused, refusalCause } from "@/lib/wait-reason";
 import { recall, remember } from "@/lib/memory";
+import { useOneOpening } from "@/lib/useOneOpening";
 import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useDrainPropagations, useGaveUpPropagations, useMarkGaveUpSeen } from "@/lib/queries/usePropagation";
 import { useAutoRetry, useIndicatorsRead } from "@/lib/queries/useIndicators";
@@ -254,11 +255,13 @@ export function Home({ session, door = false }: { session: SessionUser; door?: b
   });
   // Home emptied in front of the reader (A-24 §4.1): the all-clear lifts, and its dot blooms when it was
   // their own act (a write of theirs that landed in the last 30s). Home's work is one queue for this.
-  const { cleared } = useQueueCleared(calm ? NO_WORK : WORK, !loading && !error, true, advanced);
-  const mine = Boolean(cleared?.mine);
+  const { cleared, glow, spend, clearing } = useQueueCleared(calm ? NO_WORK : WORK, !loading && !error, true, advanced);
   // The list closes, the vivid ending, at most once a day on this device and only by their own hand.
   // Decided in render, so the title is never drawn one size and then another.
-  const closes = cleared?.mine ? closesOnce(cleared.mine.at) : false;
+  // Lift, light and close are one opening of one clearing: spent by the all-clear's first mount, or by a read
+  // that fails, so a retry that lands brings the same line back at rest.
+  const opening = useOneOpening(cleared !== null, !loading && !error);
+  const closes = cleared?.mine && opening.open ? closesOnce(cleared.mine.at) : false;
   // A swap held for the pointer (S5) keeps the grid as it last was, and the
   // headline with it: what leaves is what was there.
   const held = useRef<{ grid: React.ReactNode; blocks: number }>({ grid: null, blocks: 0 });
@@ -500,9 +503,14 @@ export function Home({ session, door = false }: { session: SessionUser; door?: b
         <Unfold open={swap.calmOpen} gap={16}>
         <div className="panel">
           <EmptyState
+            key={clearing}
             resolved
-            lift={cleared !== null}
-            bloom={mine}
+            lift={opening.open}
+            glow={glow}
+            onOpened={() => {
+              opening.spend();
+              spend();
+            }}
             closes={closes}
             plate="shut"
             title="Nothing here needs you."

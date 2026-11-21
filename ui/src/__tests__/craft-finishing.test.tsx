@@ -190,7 +190,7 @@ describe("the list closes, and the plates (§4.1, §7, Q9)", () => {
       expect(plate).toHaveAttribute("aria-hidden");
       expect(plate.children).toHaveLength(3);
     }
-    const rule = css.slice(css.indexOf("@utility plate"), css.indexOf("/* The shared bloom"));
+    const rule = css.slice(css.indexOf("@utility plate"), css.indexOf("/* A dot's own light"));
     expect(rule).not.toMatch(/#[0-9a-f]{3,6}\b/i);
     expect(rule).toContain('&[data-plate="open"]');
     // At true size: 1px lines on whole pixels, and an 8px point centred on the floor.

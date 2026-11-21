@@ -13,13 +13,13 @@ import { motionInTests } from "@/test-utils/motion";
 // D-1 M3 and M6 on the findings list: the last finding leaves in order (its row fades and folds, the
 // count follows, then the all-clear opens), and a finding's Decide form is the row's own panel.
 
-const state = { findings: [] as MergeFinding[] };
+const state = { findings: [] as MergeFinding[], error: null as Error | null };
 
 vi.mock("@/lib/queries/useTargets", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useTargets")>("@/lib/queries/useTargets");
   return {
     ...actual,
-    useMergeFindings: () => ({ data: state.findings, isLoading: false, error: null, refetch: vi.fn() }),
+    useMergeFindings: () => ({ data: state.findings, isLoading: false, error: state.error, refetch: vi.fn() }),
     useResolveMergeFinding: () => ({
       // A saved decision, answered at once.
       mutate: (_input: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
@@ -97,7 +97,7 @@ describe("the last finding leaves in order (M3)", () => {
     const empty = screen.getByText("Nothing disputed.").closest('[role="status"]')!;
     expect(empty.className).toContain("lift-in");
     // The healthy dot is the "resolved" one; nobody decided anything, so it is steady.
-    expect(empty.querySelector(".bloom")).toBeNull();
+    expect(empty.querySelector(".ember-open")).toBeNull();
   });
 
   it("blooms when the reader's own decision was just saved", () => {
@@ -110,14 +110,37 @@ describe("the last finding leaves in order (M3)", () => {
     gapSettled(container.querySelector("[data-leaving]")!);
     const empty = screen.getByText("Nothing disputed.").closest('[role="status"]')!;
     expect(empty.className).toContain("lift-in");
-    expect(empty.querySelector(".bloom")).not.toBeNull();
+    expect(empty.querySelector(".ember-open")).not.toBeNull();
+  });
+
+  it("a read that fails and then lands brings the same all-clear back at rest: no second lift or light", () => {
+    const { rerender, container } = render(tree());
+    fireEvent.click(screen.getByRole("button", { name: "Decide" }));
+    fireEvent.change(screen.getByLabelText("Why"), { target: { value: "Checked it" } });
+    fireEvent.click(screen.getByRole("button", { name: "Keep Syndra's value" }));
+    state.findings = [];
+    rerender(tree());
+    gapSettled(container.querySelector("[data-leaving]")!);
+    let empty = screen.getByText("Nothing disputed.").closest('[role="status"]')!;
+    expect(empty.className).toContain("lift-in");
+    expect(empty.querySelector(".ember-open")).not.toBeNull();
+    // The refetch fails (react-query keeps the old, empty data), then the retry lands.
+    state.error = new Error("down");
+    rerender(tree());
+    expect(screen.queryByText("Nothing disputed.")).toBeNull();
+    state.error = null;
+    rerender(tree());
+    empty = screen.getByText("Nothing disputed.").closest('[role="status"]')!;
+    expect(empty.className).not.toContain("lift-in");
+    expect(empty.querySelector(".ember-open")).toBeNull();
+    expect(empty.querySelector(".ember")).not.toBeNull();
   });
 
   it("does not lift or bloom a list that was empty when it was first read", () => {
     state.findings = [];
     render(tree());
     const empty = screen.getByText("Nothing disputed.").closest('[role="status"]')!;
-    expect(empty.querySelector(".bloom")).toBeNull();
+    expect(empty.querySelector(".ember-open")).toBeNull();
     // It does not rise on a first paint either, nor open by Unfold: it is simply there.
     expect(empty.className).not.toContain("lift-in");
     // Not opened by Unfold either: it is the page's first paint, simply there.

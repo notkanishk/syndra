@@ -623,18 +623,18 @@ function Result({
   tone,
   title,
   body,
-  bloom = false,
+  glow = false,
   alert = false,
 }: {
   tone: "healthy" | "warn" | "danger";
   title: string;
   body?: string;
-  bloom?: boolean;
+  glow?: boolean;
   alert?: boolean;
 }) {
   return (
-    <div role={alert ? "alert" : "status"} className={`${bloom ? "lift-in " : ""}flex measure items-start gap-2.5`}>
-      <StatusDot tone={tone} bloom={bloom} className="mt-2" />
+    <div role={alert ? "alert" : "status"} className={`${glow ? "lift-in " : ""}isolate flex measure items-start gap-2.5`}>
+      <StatusDot tone={tone} glow={glow} className="mt-2" />
       <span className="flex min-w-0 flex-col gap-1">
         <span className="text-body font-semibold leading-[1.55] text-ink [text-wrap:pretty]">{title}</span>
         {body && <span className="text-body leading-[1.55] text-muted [text-wrap:pretty]">{body}</span>}

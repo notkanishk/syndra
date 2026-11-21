@@ -184,9 +184,9 @@ describe("groupPlan after Apply", () => {
   });
 
   it("blooms Done only when every written row reached Zitadel", () => {
-    expect(groupPlan(applied())![0].bloom).toBe(false);
+    expect(groupPlan(applied())![0].glow).toBe(false);
     const all = plan([row("Charlotte", { effect: "applied" }), row("Candice", { effect: "no_change", delivery: undefined })], { applied: true });
-    expect(groupPlan(all)![0].bloom).toBe(true);
+    expect(groupPlan(all)![0].glow).toBe(true);
   });
 });
 

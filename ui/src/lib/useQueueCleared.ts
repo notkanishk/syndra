@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 
-import { ownActWithin } from "@/lib/query-client";
+import { ownActAfter, ownActWithin } from "@/lib/query-client";
+import { useOneOpening } from "@/lib/useOneOpening";
 
 /** A send started this long ago, whose queue then empties, is this operator's. */
 const MINE_WITHIN_MS = 30_000;
@@ -22,7 +23,7 @@ export interface QueueCleared<T> {
  * click, not guessed: `beginSend` marks the start of this operator's send and
  * `failedSend` takes it back, so a queue that empties under someone else's
  * send, or a cancel, is never claimed as ours. Anything that empties it is
- * `cleared`; only `mine` earns the bloom and a count.
+ * `cleared`; only `mine` earns the count, and `glow` (the ember's one opening) while it is still the moment.
  *
  * A queue with no single "send" (the operator decides row by row) passes
  * `anyOwnAct`: then any write of the operator's own, landed in the last 30s,
@@ -39,12 +40,21 @@ export function useQueueCleared<T>(items: T[], ready: boolean, anyOwnAct = false
   const [cleared, setCleared] = useState<QueueCleared<T> | null>(null);
   const [scoped, setScoped] = useState(scope);
   const sending = useRef<{ count: number; at: number } | null>(null);
+  // When the queue last filled (or arrived): a write of theirs from before that is not what emptied it now.
+  const armed = useRef(0);
+  const clearings = useRef(0);
 
   if (scope !== scoped) {
     setScoped(scope);
     setSeen(items);
     if (cleared) setCleared(null);
+    armed.current = Date.now();
+    sending.current = null;
   } else if (ready && items.length > 0 && !sameItems(items, seen)) {
+    if (cleared || seen.length === 0) {
+      armed.current = Date.now();
+      sending.current = null;
+    }
     setSeen(items);
     if (cleared) setCleared(null);
   } else if (ready && items.length === 0 && seen.length > 0 && !cleared) {
@@ -52,16 +62,24 @@ export function useQueueCleared<T>(items: T[], ready: boolean, anyOwnAct = false
     const mine =
       started && Date.now() - started.at < MINE_WITHIN_MS
         ? { count: started.count, at: new Date().toISOString() }
-        : anyOwnAct && ownActWithin(MINE_WITHIN_MS)
+        : anyOwnAct && ownActWithin(MINE_WITHIN_MS) && ownActAfter(armed.current)
           ? { count: seen.length, at: new Date().toISOString() }
           : null;
     sending.current = null;
     setSeen([]);
+    clearings.current += 1;
     setCleared({ items: seen, mine });
   }
 
+  // `mine` says whose it was and keeps the count; `glow` is the one opening it earns (`useOneOpening`).
+  const { open: glow, spend } = useOneOpening(cleared?.mine != null, ready);
+
   return {
     cleared,
+    glow,
+    spend,
+    /** How many clearings so far: it holds when `cleared` empties (a view switch), so a key on it never refades a calm line. */
+    clearing: clearings.current,
     beginSend: (count: number) => {
       sending.current = { count, at: Date.now() };
     },

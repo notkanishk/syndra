@@ -38,6 +38,8 @@
  *             sits in: its four quarters must be spent inside the card's inner box. A dialog
  *             opens only from a click, so a replay sees one only where a page draws
  *             a trail open.
+ *   ember     a clear queue's dot's resting glow (A-25 moment 7) reaching past the card it
+ *             sits in, or any box that clips it: its pool must be spent inside every edge.
  *   goto      Go to's lights (A-26) reaching past what clips them: the pool behind the
  *             pane past the window, and the halo, the beam and the scope's light past
  *             the pane. The check opens Go to by its key on Home, at each width and
@@ -77,17 +79,41 @@ export function detect({ tablet = 720 } = {}) {
     return (pc ? pc + " > " : "") + s;
   };
   const txt = (el) => (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
-  const clipRect = (el) => {
-    let r = { l: -1e9, t: -1e9, r: 1e9, b: 1e9 };
+  // What clips `el`, per side. A scroller moves its content, so it clips only on the sides it cannot scroll
+  // past (its top at scrollTop 0, its foot at the end...) when `release` is set, and what lies beyond it
+  // clips the scroller, not the content, on the sides it releases (A-25 §2 rule 1).
+  const clipRect = (el, release = false) => {
+    const r = { l: -1e9, t: -1e9, r: 1e9, b: 1e9 };
+    const free = { l: false, t: false, r: false, b: false };
     for (let a = el; a && a !== document.body; a = a.parentElement) {
       const s = getComputedStyle(a);
-      if (s.overflowX !== "visible" || s.overflowY !== "visible") {
-        const b = a.getBoundingClientRect();
-        r = { l: Math.max(r.l, b.left), t: Math.max(r.t, b.top), r: Math.min(r.r, b.right), b: Math.min(r.b, b.bottom) };
-      }
+      if (s.overflowX === "visible" && s.overflowY === "visible") continue;
+      const b = a.getBoundingClientRect();
+      const scrolls = (v) => v === "auto" || v === "scroll";
+      const lets = release
+        ? {
+            l: scrolls(s.overflowX) && a.scrollLeft > 0,
+            t: scrolls(s.overflowY) && a.scrollTop > 0,
+            r: scrolls(s.overflowX) && a.scrollLeft + a.clientWidth < a.scrollWidth - 1,
+            b: scrolls(s.overflowY) && a.scrollTop + a.clientHeight < a.scrollHeight - 1,
+          }
+        : free;
+      if (!free.l && !lets.l) r.l = Math.max(r.l, b.left);
+      if (!free.t && !lets.t) r.t = Math.max(r.t, b.top);
+      if (!free.r && !lets.r) r.r = Math.min(r.r, b.right);
+      if (!free.b && !lets.b) r.b = Math.min(r.b, b.bottom);
+      for (const k of "ltrb") if (lets[k]) free[k] = true;
     }
     return r;
   };
+  // How far a light's box (`box`) lies past an edge (`edge`), side by side, more than half a pixel.
+  const pastEdge = (box, edge) =>
+    [
+      ["left", edge.l - box.l],
+      ["top", edge.t - box.t],
+      ["right", box.r - edge.r],
+      ["bottom", box.b - edge.b],
+    ].filter(([, by]) => by > 0.5);
   const textRects = (el, own) => {
     const out = [];
     const nodes = own ? [...el.childNodes].filter((n) => n.nodeType === 3) : [];
@@ -409,13 +435,32 @@ export function detect({ tablet = 720 } = {}) {
     const box = { l: m.left + parseFloat(glow.left), t: m.top + parseFloat(glow.top), r: m.right - parseFloat(glow.right), b: m.bottom - parseFloat(glow.bottom) };
     const clip = clipRect(mark);
     const edge = { l: Math.max(clip.l, 0), t: Math.max(clip.t, 0), r: Math.min(clip.r, innerWidth), b: Math.min(clip.b, innerHeight) };
-    const past = [
-      ["left", edge.l - box.l],
-      ["top", edge.t - box.t],
-      ["right", box.r - edge.r],
-      ["bottom", box.b - edge.b],
-    ].filter(([, by]) => by > 0.5);
+    const past = pastEdge(box, edge);
     for (const [side, by] of past) lamp.push(`the lamp's glow is cut ${by.toFixed(1)}px at its ${side} (${sel(mark)})`);
+  }
+
+  // ── ember ──
+  // A clear queue's dot (A-25 moment 7) holds a pool 17px out from the dot, spent at its own box's edge (20px
+  // from the dot's centre): that box, read from the pseudo-element's computed inset, must sit inside every box
+  // that clips it, the window, and the card it sits in (its inner box), so no edge ends the light.
+  const ember = [];
+  for (const dot of document.querySelectorAll("[data-ember]")) {
+    if (!vis(dot, true)) continue;
+    const glow = getComputedStyle(dot, "::before");
+    if (glow.content === "none" || glow.display === "none") continue;
+    const m = dot.getBoundingClientRect();
+    const box = { l: m.left + parseFloat(glow.left), t: m.top + parseFloat(glow.top), r: m.right - parseFloat(glow.right), b: m.bottom - parseFloat(glow.bottom) };
+    const clip = clipRect(dot, true);
+    const room = dot.closest(".card");
+    const rr = room ? room.getBoundingClientRect() : null;
+    const edge = {
+      l: Math.max(clip.l, 0, rr ? rr.left + room.clientLeft : 0),
+      t: Math.max(clip.t, rr ? rr.top + room.clientTop : -1e9),
+      r: Math.min(clip.r, innerWidth, rr ? rr.left + room.clientLeft + room.clientWidth : innerWidth),
+      b: Math.min(clip.b, rr ? rr.top + room.clientTop + room.clientHeight : 1e9),
+    };
+    const past = pastEdge(box, edge);
+    for (const [side, by] of past) ember.push(`the ember's light is cut ${by.toFixed(1)}px at its ${side} (${sel(dot)})`);
   }
 
   // ── pill ──
@@ -450,12 +495,7 @@ export function detect({ tablet = 720 } = {}) {
     const left = r.left + room.clientLeft;
     const top = r.top + room.clientTop - room.scrollTop;
     const inside = { l: left, t: top, r: left + room.clientWidth, b: top + room.scrollHeight };
-    const past = [
-      ["left", inside.l - p.left],
-      ["top", inside.t - p.top],
-      ["right", p.right - inside.r],
-      ["bottom", p.bottom - inside.b],
-    ].filter(([, by]) => by > 0.5);
+    const past = pastEdge({ l: p.left, t: p.top, r: p.right, b: p.bottom }, inside);
     for (const [side, by] of past) place.push(`your place's light reaches ${by.toFixed(1)}px past its room at the ${side} (${sel(room)})`);
   }
 
@@ -493,12 +533,7 @@ export function detect({ tablet = 720 } = {}) {
     const r = room.getBoundingClientRect();
     const left = r.left + room.clientLeft;
     const top = r.top + room.clientTop;
-    const past = [
-      ["left", left - p.left],
-      ["top", top - p.top],
-      ["right", p.right - (left + room.clientWidth)],
-      ["bottom", p.bottom - (top + room.clientHeight)],
-    ].filter(([, by]) => by > 0.5);
+    const past = pastEdge({ l: p.left, t: p.top, r: p.right, b: p.bottom }, { l: left, t: top, r: left + room.clientWidth, b: top + room.clientHeight });
     for (const [side, by] of past) trail.push(`a change's light reaches ${by.toFixed(1)}px past its card's ${side} (${sel(room)})`);
   }
 
@@ -517,12 +552,7 @@ export function detect({ tablet = 720 } = {}) {
     }
     const x = parseFloat(pool.left);
     const y = parseFloat(pool.top);
-    const past = [
-      ["left", -(x - w / 2)],
-      ["top", -(y - h / 2)],
-      ["right", x + w / 2 - scrim.clientWidth],
-      ["bottom", y + h / 2 - scrim.clientHeight],
-    ].filter(([, by]) => by > 0.5);
+    const past = pastEdge({ l: x - w / 2, t: y - h / 2, r: x + w / 2, b: y + h / 2 }, { l: 0, t: 0, r: scrim.clientWidth, b: scrim.clientHeight });
     for (const [side, by] of past) goto.push(`Go to's light reaches ${by.toFixed(1)}px past the window's ${side}`);
   }
   // Inside the pane, each of the lamp's lights (its halo, flared or not; the beam through the bar; the
@@ -537,15 +567,10 @@ export function detect({ tablet = 720 } = {}) {
         goto.push(`Go to's ${light.className} measures nothing`);
         continue;
       }
-      const past = [
-        ["left", room.left - r.left],
-        ["top", room.top - r.top],
-        ["right", r.right - room.right],
-        ["bottom", r.bottom - room.bottom],
-      ].filter(([, by]) => by > 0.5);
+      const past = pastEdge({ l: r.left, t: r.top, r: r.right, b: r.bottom }, { l: room.left, t: room.top, r: room.right, b: room.bottom });
       for (const [side, by] of past) goto.push(`Go to's ${light.className} reaches ${by.toFixed(1)}px past the pane's ${side}`);
     }
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pill, place, trail, goto, pageScroll };
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, ember, pill, place, trail, goto, pageScroll };
 }

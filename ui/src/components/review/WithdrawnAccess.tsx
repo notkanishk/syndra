@@ -120,7 +120,7 @@ export function WithdrawnAccess() {
   const conflicts = useStandingBindingConflicts(
     rows.filter((row) => row.spent && row.wait_reason === BINDING_CONFLICT).map((row) => row.target),
   );
-  const clearedByMe = useQueueCleared(rows, !query.isLoading && !query.error, true).cleared?.mine != null;
+  const { glow: clearedByMe, spend } = useQueueCleared(rows, !query.isLoading && !query.error, true);
   const [search, setSearch] = useState("");
   const [where, setWhere] = useState("");
   // Most recent first, as the board draws it: When descends (said so), newest first.
@@ -278,7 +278,8 @@ export function WithdrawnAccess() {
                   guidance="Every revocation has reached the system it was sent to."
                   resolved
                   lift={clearedByMe}
-                  bloom={clearedByMe}
+                  glow={clearedByMe}
+                  onOpened={spend}
                 />
               }
             >

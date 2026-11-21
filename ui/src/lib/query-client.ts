@@ -25,6 +25,11 @@ export function ownActWithin(ms: number): boolean {
   return lastOwnAct > 0 && Date.now() - lastOwnAct < ms;
 }
 
+/** Whether a write of the operator's own landed at or after `t` (a queue's last refill). */
+export function ownActAfter(t: number): boolean {
+  return lastOwnAct >= t;
+}
+
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
     mutationCache: new MutationCache({ onSuccess: () => void (lastOwnAct = Date.now()) }),

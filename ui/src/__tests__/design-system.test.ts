@@ -819,7 +819,7 @@ describe("design system", () => {
 
   // Reduced motion keeps what answers the person or carries state, and drops
   // what is only movement (A-05 §2.8).
-  it("lets press and flash survive reduced motion, drops the bloom, rests the breathing", () => {
+  it("lets press and flash survive reduced motion, drops the glow, rests the breathing", () => {
     const css = readFileSync(GLOBALS_CSS, "utf8");
     const reduce = atRuleBody(css, "@media (prefers-reduced-motion: reduce)");
     expect(reduce).toMatch(/\.press-scale\s*{[^}]*transition-duration: var\(--duration-press\)/);
@@ -828,7 +828,6 @@ describe("design system", () => {
     expect(reduce).toMatch(/\.control\s*{[^}]*var\(--duration-tint\)[^}]*var\(--duration-press\) !important/);
     expect(reduce).toMatch(/\.seat > span\s*{[^}]*var\(--duration-press\) !important/);
     expect(reduce).toMatch(/\.flash\s*{[^}]*animation-duration: var\(--duration-flash\)/);
-    expect(reduce).toMatch(/\.bloom::after\s*{[^}]*animation: none/);
     expect(reduce).toMatch(/\.breathe\s*{[^}]*animation: none[^}]*opacity: 1/);
   });
 

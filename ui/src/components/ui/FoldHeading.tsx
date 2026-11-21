@@ -19,7 +19,7 @@ export function FoldHeading({
   count,
   picked = false,
   dot,
-  bloom = false,
+  glow = false,
   note,
   href,
 }: {
@@ -29,8 +29,8 @@ export function FoldHeading({
   count: string;
   picked?: boolean;
   dot?: StatusTone;
-  /** The dot blooms once: only for something that just went well. */
-  bloom?: boolean;
+  /** The dot's light opens once: only for something that just went well. */
+  glow?: boolean;
   note?: string;
   /** The word is a link (NextStep): the chevron alone folds, so a link never sits inside a button. */
   href?: string;
@@ -68,8 +68,8 @@ export function FoldHeading({
         className="flex min-h-[var(--tap)] w-full items-center gap-3 px-3 py-2 text-left hover-tint"
       >
         <FoldChevron open={open} />
-        <span className="flex min-w-0 flex-1 items-center gap-2 text-body font-semibold">
-          {dot && <StatusDot tone={dot} bloom={bloom} />}
+        <span className="isolate flex min-w-0 flex-1 items-center gap-2 text-body font-semibold">
+          {dot && <StatusDot tone={dot} glow={glow} />}
           {title}
         </span>
         {tally}

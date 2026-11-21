@@ -75,7 +75,8 @@ export function CheckTrail({
               <StatusDot
                 tone={check.tone}
                 ring={check.ring}
-                className={`mt-[8px] ${lit ? "light-lead relative" : ""} ${lit && walk.answered.includes(i) ? "trail-answer" : ""}`}
+                glow={lit && walk.answered.includes(i)}
+                className={`mt-[8px] ${lit ? "light-lead relative" : ""}`}
               />
               {i < checks.length - 1 && <span aria-hidden className="mt-1.5 w-px flex-1 bg-line" />}
             </span>

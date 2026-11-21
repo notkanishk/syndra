@@ -85,7 +85,7 @@ describe("the first 100ms, in the future tense (A-19 P2)", () => {
     expect(seat.textContent).toBe(FORECAST.lift);
     expect(seat.querySelector(".breathe.bg-warn")).not.toBeNull();
     // Nothing has happened yet, so nothing celebrates or says it did.
-    expect(container.querySelector(".bloom")).toBeNull();
+    expect(container.querySelector(".dot-glow")).toBeNull();
     expect(seat.textContent).not.toMatch(/^Lifted/);
     // The seat is the forecast; the buttons went in the same frame.
     expect(screen.queryByRole("button", { name: /Lift the hold/ })).toBeNull();
@@ -103,8 +103,8 @@ describe("the first 100ms, in the future tense (A-19 P2)", () => {
     const seat = await screen.findByRole("status");
     expect(seat.textContent).toContain("Lifted");
     expect(seat.textContent).not.toContain(FORECAST.lift);
-    expect(seat.querySelector(".bloom")).not.toBeNull();
-    expect(container.querySelectorAll(".bloom")).toHaveLength(1);
+    expect(seat.querySelector(".dot-glow")).not.toBeNull();
+    expect(container.querySelectorAll(".dot-glow")).toHaveLength(1);
   });
 
   it("shows the honest error, not a rollback flash: forecast gone, error said, buttons back", async () => {
@@ -120,7 +120,7 @@ describe("the first 100ms, in the future tense (A-19 P2)", () => {
     expect(alert.textContent).toContain("Not lifted");
     expect(alert.textContent).toContain("Nothing was changed.");
     expect(screen.queryByRole("status")).toBeNull();
-    expect(container.querySelector(".bloom")).toBeNull();
+    expect(container.querySelector(".dot-glow")).toBeNull();
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 });

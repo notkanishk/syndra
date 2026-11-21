@@ -29,7 +29,7 @@ describe("S17 Refreshed", () => {
     expect(busy).toHaveAttribute("aria-busy", "true");
     // Never a time it hasn't read.
     expect(screen.getByText(/20 min ago/)).toBeInTheDocument();
-    expect(dot().className).not.toContain("bloom");
+    expect(dot().className).not.toContain("dot-glow");
 
     await act(async () => {
       d.resolve();
@@ -37,14 +37,14 @@ describe("S17 Refreshed", () => {
     });
     rerender(<ReadFreshness state={{ readAt: new Date().toISOString() }} onRefresh={() => d.promise} />);
     expect(screen.getByText(/was read just now/)).toBeInTheDocument();
-    expect(dot().className).toContain("bloom");
+    expect(dot().className).toContain("dot-glow");
   });
 
   it("a background read never blooms", () => {
     const { rerender } = render(<ReadFreshness state={{ readAt: ago(5) }} onRefresh={() => {}} />);
     rerender(<ReadFreshness state={{ readAt: new Date().toISOString() }} onRefresh={() => {}} />);
     expect(screen.getByText(/was read just now/)).toBeInTheDocument();
-    expect(dot().className).not.toContain("bloom");
+    expect(dot().className).not.toContain("dot-glow");
   });
 
   it("a refresh that fails to bring a new read does not leave the next background read to bloom", async () => {
@@ -58,7 +58,7 @@ describe("S17 Refreshed", () => {
       await new Promise((r) => setTimeout(r, 400));
     });
     rerender(<ReadFreshness state={{ readAt: new Date().toISOString() }} onRefresh={() => d.promise} />);
-    expect(dot().className).not.toContain("bloom");
+    expect(dot().className).not.toContain("dot-glow");
   });
 
   it("a read that lands still stale does not bloom: nothing went well", async () => {
@@ -66,7 +66,7 @@ describe("S17 Refreshed", () => {
     const { rerender } = render(<ReadFreshness state={{ readAt: ago(30) }} onRefresh={() => d.promise} />);
     fireEvent.click(screen.getByRole("button", { name: "Read again" }));
     rerender(<ReadFreshness state={{ readAt: ago(25) }} onRefresh={() => d.promise} />);
-    expect(dot().className).not.toContain("bloom");
+    expect(dot().className).not.toContain("dot-glow");
   });
 });
 
@@ -105,7 +105,7 @@ describe("S17 Refreshed, pressed from elsewhere", () => {
     });
     rerender(<Page readAt={new Date().toISOString()} run={() => d.promise} />);
 
-    expect(dot().className).toContain("bloom");
+    expect(dot().className).toContain("dot-glow");
     expect(screen.getByText(/was read just now/).closest(".tint-in")).not.toBeNull();
     // The old line is still there, fading out, until the new one has taken its place.
     expect(screen.getByText(/5 min ago/).closest(".tint-out")).not.toBeNull();
@@ -114,7 +114,7 @@ describe("S17 Refreshed, pressed from elsewhere", () => {
   it("a background read of the same page never blooms", () => {
     const { rerender } = render(<Page readAt={ago(5)} run={async () => {}} />);
     rerender(<Page readAt={new Date().toISOString()} run={async () => {}} />);
-    expect(dot().className).not.toContain("bloom");
+    expect(dot().className).not.toContain("dot-glow");
   });
 });
 

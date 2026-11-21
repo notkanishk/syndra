@@ -171,7 +171,7 @@ describe("a decided request names its person and its next step", () => {
     await approve();
     const seat = await decisionSeat();
     expect(seat.closest(".tint-in")).not.toBeNull();
-    expect(seat.querySelector(".bloom")).not.toBeNull();
+    expect(seat.querySelector(".dot-glow")).not.toBeNull();
     motionInTests(false);
   });
 

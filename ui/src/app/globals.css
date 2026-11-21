@@ -447,16 +447,12 @@
     }
   }
 
-  /* One ring of the dot's own colour opens 9px out from a 6px dot (scale 4
-     is 6px + 2 x 9px) and fades. The shared bloom effect (S4, S6, S13, S17, S18). */
-  @keyframes bloom {
+  /* The ember opens once (A-25 moment 7): from a fifth of its size at full strength to its rest, the
+     pool a clear queue's dot always holds. No overshoot. */
+  @keyframes ember {
     from {
-      opacity: 0.5;
-      transform: scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: scale(4);
+      opacity: 1;
+      scale: 0.2;
     }
   }
 
@@ -509,8 +505,6 @@
     }
   }
 
-  /* A read dot answering the trail's lamp (A-25 moment 5): its own glow opens once and is gone. The
-     ember's light, not `bloom`'s flat disc. */
   /* Go to's light as it opens (A-26, the lamp lifted to look; A-25 moment 6): up over a tint, then down to
      rest over a flash, both on tint's curve. The step is a tint's share of the whole: 120 / 1020. */
   @keyframes go-to-light {
@@ -541,6 +535,8 @@
     }
   }
 
+  /* A read dot answering the trail's lamp (A-25 moment 5): its own glow opens once and is gone. The
+     ember's light. */
   @keyframes answer {
     from {
       opacity: 0;
@@ -914,7 +910,7 @@
        above already does. The rest answer the person or carry state:
          press   a 3% scale under the finger; it travels nowhere.
          flash   colour only; the wash still says "this changed".
-         bloom   goes: it is the one thing that is only movement.
+         glow    goes: it is the one thing that is only movement (the ember rests, unopened).
          breathe rests at full strength rather than pulsing. */
     .press-scale {
       transition-duration: var(--duration-press) !important;
@@ -958,10 +954,6 @@
     .tint-out {
       animation-duration: var(--duration-tint) !important;
       animation-delay: 0s !important;
-    }
-    .bloom::after {
-      animation: none !important;
-      opacity: 0 !important;
     }
     .breathe {
       animation: none !important;
@@ -1221,7 +1213,7 @@
    wins over it. Unlayered, it beat every layer whatever its specificity, and a filled button's edge
    lit in the accent on an accent fill (review, 20 Nov 2026). */
 @layer base {
-  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light, .trail-answer, .go-to-scrim, .go-to-pane) {
+  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light, .dot-glow, .go-to-scrim, .go-to-pane) {
     --pool-c: var(--accent);
     --pool-stops: color-mix(in srgb, var(--pool-c) var(--pool-k), transparent),
       color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.74), transparent) 20%,
@@ -1471,21 +1463,44 @@
   }
 }
 
-/* The shared bloom: a 9px ring of the dot's own colour, on flash's duration
-   and curve, once. It is a pseudo-element that inherits the dot's fill, so it
-   needs no colour of its own. Reduced motion removes it (flash survives as
-   colour only). */
-@utility bloom {
+/* A dot's own light (A-25 moment 7, the ember): a pool of the dot's colour at 44% of the hour's weight, 17px
+   out from the 6px dot (20px from its centre, so it is spent inside any card the dot sits in), falling to
+   nothing on the one light's stops: it has no edge. Light is never in front of words: the pool is behind its
+   parent's content, so every caller isolates the line the dot sits in (`isolate`), and nothing here lifts it.
+   `ember` holds it at 0.8, at rest. `ember-open` opens it once, beside the state's lift-in. `glow-once` is
+   the same light for a change that went well (a copy, an outcome, a read, a read step the trail's lamp
+   reaches), opening once and gone. Reduced motion: the ember at rest, no opening, and no glow-once at all.
+   Forced colours: no light drawn. A stale card's ring never wears it. */
+@utility dot-glow {
   position: relative;
+  /* The dot's own colour, unless it names one (the mark's dot does). */
+  --pool-c: var(--dot-light, currentColor);
+  --pool-k: calc(44% * var(--hour-weight));
 
-  &::after {
+  &::before {
     content: "";
     position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: inherit;
+    inset: -17px;
+    z-index: -1;
     pointer-events: none;
-    animation: bloom var(--duration-flash) var(--ease-flash) 1 both;
+    background: radial-gradient(closest-side, var(--pool-stops));
+    opacity: 0;
+  }
+  &.ember::before {
+    opacity: 0.8;
+  }
+  @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
+    &.ember-open::before {
+      animation: ember var(--duration-flash) var(--ease-flash) both;
+    }
+    &.glow-once::before {
+      animation: answer var(--duration-flash) var(--ease-flash) both;
+    }
+  }
+  @media (forced-colors: active) {
+    &::before {
+      display: none;
+    }
   }
 }
 
@@ -1979,6 +1994,7 @@ html.theme-fading *::after {
   .syndra-mark {
     --mark-size: 22px;
     position: relative;
+    isolation: isolate;
     display: flex;
     flex: none;
     align-items: center;
@@ -2031,6 +2047,7 @@ html.theme-fading *::after {
   }
 
   .syndra-mark-dot {
+    --dot-light: var(--mark-dot);
     width: 35%;
     height: 35%;
     border-radius: var(--radius-pill);
@@ -2673,29 +2690,9 @@ html.theme-fading *::after {
       transparent
     );
   }
-  /* A read dot's answer as the lamp reaches it: its own lime glow (the ember's light, --healthy at 44%,
-     17px out from the 6px dot) opens once and is gone, under the words. Never on a ring. */
-  .trail-answer {
-    --pool-c: var(--healthy);
-    --pool-k: 44%;
-    &::after {
-      content: "";
-      position: absolute;
-      inset: -17px;
-      z-index: -1;
-      background: radial-gradient(closest-side, var(--pool-stops));
-      opacity: 0;
-    }
-  }
-  @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
-    .trail-answer::after {
-      animation: answer var(--duration-flash) var(--ease-flash) both;
-    }
-  }
   @media (forced-colors: active) {
     .trail-light,
-    .trail-path,
-    .trail-answer::after {
+    .trail-path {
       display: none;
     }
   }
@@ -2726,6 +2723,10 @@ html.theme-fading *::after {
   &[data-stale] [data-dot] {
     background-color: transparent;
     @apply dot-ring;
+  }
+  /* A ring is not a fresh read: it never wears a light, whatever a caller passed. */
+  &[data-stale] [data-dot]::before {
+    display: none;
   }
   &[data-recedes] {
     transition-property: background-color, border-color, box-shadow;
