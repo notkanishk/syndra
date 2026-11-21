@@ -3,9 +3,11 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,9 +60,10 @@ func TestTheInventoryPassesReadAgainThroughAndCountsDown(t *testing.T) {
 }
 
 // Owner Q1: a removal inside the cooldown is refused with the countdown, and
-// nothing is removed.
+// nothing is removed: the one 429 left. The list is a read, so inside the
+// cooldown it is 503 TARGET_NOT_READ cooldown like every read (design §13.3).
 func TestADormantRemovalInsideTheCooldownCountsDown(t *testing.T) {
-	h := &sweepHarness{reportErr: services.ReadCooledDown{RetryAfter: 12}}
+	h := &sweepHarness{reportErr: fmt.Errorf("dormant: %w", addons.NotRead{Why: addons.Why{Reason: addons.ReasonCooldown, RetryAfter: 12}})}
 	stubSweep(t, h)
 	rr := sweep(t, `{"accounts":["gone"],"elevated_key":"k","confirmed":true}`)
 	var body ErrorResponse
@@ -76,8 +79,27 @@ func TestADormantRemovalInsideTheCooldownCountsDown(t *testing.T) {
 	r.SetPathValue("target", "truenas")
 	list := httptest.NewRecorder()
 	handleDormantAccounts(list, r)
-	if list.Code != http.StatusTooManyRequests || list.Header().Get("Retry-After") != "12" {
-		t.Errorf("the list inside the cooldown: %d %q", list.Code, list.Header().Get("Retry-After"))
+	var listed ErrorResponse
+	_ = json.Unmarshal(list.Body.Bytes(), &listed)
+	if list.Code != http.StatusServiceUnavailable || list.Header().Get("Retry-After") != "12" ||
+		listed.Error != codeTargetNotRead || listed.Details["reason"] != addons.ReasonCooldown {
+		t.Errorf("the list inside the cooldown: want 503 TARGET_NOT_READ cooldown, got %d %q %s", list.Code, list.Header().Get("Retry-After"), list.Body)
+	}
+}
+
+// A dormant read cut at the add-on's cap was answered, not refused: its own
+// sentence, never "didn't serve this read".
+func TestATruncatedDormantReadSaysItWasCut(t *testing.T) {
+	stubSweep(t, &sweepHarness{reportErr: fmt.Errorf("dormant: %w: %w", services.ErrReadTruncated,
+		addons.NotRead{Why: addons.Why{Reason: addons.ReasonReadRefused}})})
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/accounts/dormant", nil)
+	r.SetPathValue("target", "truenas")
+	rr := httptest.NewRecorder()
+	handleDormantAccounts(rr, r)
+	var body ErrorResponse
+	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	if rr.Code != http.StatusServiceUnavailable || body.Error != codeTargetNotRead || !strings.Contains(body.Message, "only part of its accounts") {
+		t.Errorf("a truncated dormant read: %d %s", rr.Code, rr.Body)
 	}
 }
 

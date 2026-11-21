@@ -323,11 +323,7 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 		// No manifest: nothing can be asked, so the account's read is none,
 		// with the monitor's why (design §13.3), never a silent absence.
 		if view.Account != nil {
-			why, _ := state.Down()
-			if why.Reason == "" {
-				why = addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: state.Cause}
-			}
-			read := addons.ReadOf(nil, why)
+			read := addons.ReadOf(nil, addons.WhyNoManifest(target))
 			view.Read = &read
 		}
 		return view, set, nil
@@ -368,7 +364,9 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 			if op != storageStatusRead {
 				continue
 			}
-			if status := reply.Storage(); status.Outcome == addons.OutcomeSucceeded {
+			// A reply with no reading (no taken_at) is no copy: nothing of it
+			// is shown, whatever its outcome (design §13.3).
+			if status := reply.Storage(); status.Outcome == addons.OutcomeSucceeded && !read.Read.None() {
 				for i := range status.Places {
 					kinds.Address(view.Connection, &status.Places[i])
 				}

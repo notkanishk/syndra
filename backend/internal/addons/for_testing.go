@@ -16,20 +16,21 @@ import (
 // a test, as auth.SetKeysForTesting.
 
 // InstallForTesting registers r with m accepted, as Init and Refresh leave a
-// target whose add-on says whose accounts are whose, with a fresh breaker and
-// no credential cached. It replaces the whole registry; restore puts it back.
+// target whose add-on says whose accounts are whose, with a fresh breaker, a
+// fresh monitor and no credential cached. It replaces the whole registry;
+// restore puts it back.
 func InstallForTesting(r Registration, m Manifest) (restore func()) {
 	ops, _ := resolveOperations(m)
 	a := &Addon{Registration: r, manifest: &m, ops: ops, fetchedAt: timeNow().UTC()}
 	a.attribution.Store(attributionSaid)
 	registryMu.Lock()
-	saved := registry
-	registry = map[string]*Addon{r.Target: a}
+	saved, savedMonitor := registry, monitor
+	registry, monitor = map[string]*Addon{r.Target: a}, newHealthMonitor()
 	registryMu.Unlock()
 	forgetCredentials()
 	return func() {
 		registryMu.Lock()
-		registry = saved
+		registry, monitor = saved, savedMonitor
 		registryMu.Unlock()
 		forgetCredentials()
 	}

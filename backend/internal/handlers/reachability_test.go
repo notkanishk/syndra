@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -112,6 +113,31 @@ type way struct {
 	reason, cause string
 	kept          bool
 	serve         func(t *testing.T, secret string) string // the add-on's base URL
+	// noKey leaves Syndra without the add-on's secret on disk.
+	noKey bool
+	// after runs once the add-on is installed, before the route is asked.
+	after func(t *testing.T)
+	// skip says why a row is not this way's, by route.
+	skip map[string]string
+}
+
+// downThenUp is an add-on that answers an uncoded 500 until up is called,
+// then serves every read from its fixtures: what the route then gets is what
+// Syndra holds, not what the add-on would say.
+func downThenUp() (serve func(t *testing.T, secret string) string, up func()) {
+	var ok atomic.Bool
+	serve = func(t *testing.T, secret string) string {
+		ok.Store(false)
+		healthy := keptCopiesHandler(t, false)
+		return stubServer(t, secret, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !ok.Load() {
+				w.WriteHeader(500)
+				return
+			}
+			healthy.ServeHTTP(w, r)
+		})).URL
+	}
+	return serve, func() { ok.Store(true) }
 }
 
 func ways() []way {
@@ -137,7 +163,39 @@ func ways() []way {
 			return stubServer(t, secret, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(500) })).URL
 		}},
 		{name: "app down, copy kept", reason: addons.ReasonAppUnreachable, kept: true, serve: keptCopies},
+		{name: "no key", reason: addons.ReasonAddonUnreachable, cause: addons.CauseNoKey, noKey: true,
+			serve: func(t *testing.T, secret string) string { return stubServer(t, secret, http.NotFoundHandler()).URL }},
+		{name: "cooldown, nothing kept", reason: addons.ReasonCooldown, serve: func(t *testing.T, secret string) string {
+			return stubServer(t, secret, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/problem+json")
+				w.Header().Set("Retry-After", "9")
+				w.WriteHeader(http.StatusTooManyRequests)
+				fmt.Fprint(w, `{"type":"urn:syndra:addon:error:FRESH_READ_COOLDOWN","title":"Read moments ago","status":429,"code":"FRESH_READ_COOLDOWN","retry":"after"}`)
+			})).URL
+		}},
 	}
+	// Held: the monitor's probes missed, and the add-on is back before its
+	// next probe. A read is answered with the monitor's why, undialed; a live
+	// health read is the probe's own kind, which finds the add-on back.
+	heldServe, heldUp := downThenUp()
+	ws = append(ws, way{name: "held by the monitor", reason: addons.ReasonAddonUnreachable, cause: addons.CauseFault, serve: heldServe,
+		after: func(t *testing.T) {
+			for range 3 { // the monitor's failureThreshold, below the breaker's
+				_ = addons.ProbeAll(context.Background())
+			}
+			heldUp()
+		},
+		skip: map[string]string{"GET /api/v1/targets/{target}/health": "a live health read is the probe's kind: it dials, and answers"}})
+	// Open breaker: five reads failed, and the add-on is back inside the
+	// breaker's cooldown. Every call is refused undialed with what opened it.
+	openServe, openUp := downThenUp()
+	ws = append(ws, way{name: "breaker open", reason: addons.ReasonAddonUnreachable, cause: addons.CauseFault, serve: openServe,
+		after: func(t *testing.T) {
+			for range 5 { // breakerThreshold
+				_ = addons.Subjects(context.Background(), stubTarget, false)
+			}
+			openUp()
+		}})
 	// Each coded 503 registry/errors.json allows: the app's three are the
 	// app's outage, the rest the add-on answering about the request.
 	for code, reason := range map[string]string{
@@ -175,16 +233,26 @@ func TestEveryReadAnswersOneWay(t *testing.T) {
 				if w.kept && !row.keeps && row.keptSkip != "" {
 					t.Skip(row.keptSkip)
 				}
+				if why := w.skip[route]; why != "" {
+					t.Skip(why)
+				}
 				secret := "a-reachability-secret"
 				url := w.serve(t, secret)
 				keyFile := filepath.Join(t.TempDir(), "truenas.key")
-				if err := os.WriteFile(keyFile, []byte(secret), 0o600); err != nil {
-					t.Fatal(err)
+				reg := addons.Registration{Target: stubTarget, BaseURL: url, SecretPath: keyFile}
+				if !w.noKey {
+					if err := os.WriteFile(keyFile, []byte(secret), 0o600); err != nil {
+						t.Fatal(err)
+					}
+					reg.Secret = []byte(secret)
 				}
-				t.Cleanup(addons.InstallForTesting(addons.Registration{Target: stubTarget, BaseURL: url, Secret: []byte(secret), SecretPath: keyFile}, stubManifest(t)))
+				t.Cleanup(addons.InstallForTesting(reg, stubManifest(t)))
 				stubRouteRecords(t)
 				if row.setup != nil {
 					row.setup(t)
+				}
+				if w.after != nil {
+					w.after(t)
 				}
 				method, _, _ := strings.Cut(route, " ")
 				body := ""
@@ -229,6 +297,7 @@ func TestEveryReadAnswersOneWay(t *testing.T) {
 							t.Errorf("no copy carries the add-on's %s: %s", k, rr.Body)
 						}
 					}
+					noEmptyValue(t, "", read)
 				default:
 					assertNotRead(t, rr, got, w.reason, w.cause)
 				}
@@ -255,6 +324,33 @@ func assertNotRead(t *testing.T, rr *httptest.ResponseRecorder, got map[string]a
 	}
 	if m, _ := got["message"].(string); m == "" {
 		t.Error("no copy says why in a sentence")
+	}
+}
+
+// noEmptyValue walks a none `read`: a value not read is absent, never a 0,
+// an empty list or "" standing in for it.
+func noEmptyValue(t *testing.T, at string, v any) {
+	t.Helper()
+	switch x := v.(type) {
+	case map[string]any:
+		for k, c := range x {
+			noEmptyValue(t, at+"."+k, c)
+		}
+	case []any:
+		if len(x) == 0 {
+			t.Errorf("%s is an empty list", at)
+		}
+		for i, c := range x {
+			noEmptyValue(t, at+"["+strconv.Itoa(i)+"]", c)
+		}
+	case string:
+		if x == "" {
+			t.Errorf("%s is empty", at)
+		}
+	case float64:
+		if x == 0 {
+			t.Errorf("%s is 0", at)
+		}
 	}
 }
 
@@ -481,6 +577,13 @@ func problem503(code string) http.Handler {
 // answer TARGET_UNREACHABLE.
 func keptCopies(t *testing.T, secret string) string {
 	t.Helper()
+	return stubServer(t, secret, keptCopiesHandler(t, true)).URL
+}
+
+// keptCopiesHandler serves the fixtures: as kept copies with the app down
+// (kept), or as read now.
+func keptCopiesHandler(t *testing.T, stale bool) http.Handler {
+	t.Helper()
 	kept := func(name string, inResult bool) []byte {
 		var doc map[string]any
 		if err := json.Unmarshal(fixture(t, name), &doc); err != nil {
@@ -490,7 +593,9 @@ func keptCopies(t *testing.T, secret string) string {
 		if inResult {
 			r = doc["result"].(map[string]any)
 		}
-		r["current"], r["taken_at"], r["stale"] = false, keptAt.Format(time.RFC3339), map[string]any{"reason": "unreachable"}
+		if stale {
+			r["current"], r["taken_at"], r["stale"] = false, keptAt.Format(time.RFC3339), map[string]any{"reason": "unreachable"}
+		}
 		b, _ := json.Marshal(doc)
 		return b
 	}
@@ -502,14 +607,14 @@ func keptCopies(t *testing.T, secret string) string {
 		"/operations/activity.get":   kept("operation_response_activity_result.json", true),
 	}
 	down := problem503("TARGET_UNREACHABLE")
-	return stubServer(t, secret, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if body, ok := copies[r.URL.Path]; ok {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write(body)
 			return
 		}
 		down.ServeHTTP(w, r)
-	})).URL
+	})
 }
 
 // ---- Syndra's own records, which no row here is about ----

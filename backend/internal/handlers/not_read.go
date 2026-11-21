@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"syndra/internal/addons"
 )
@@ -50,11 +51,11 @@ func writeIfNotRead(w http.ResponseWriter, r *http.Request, target string, err e
 
 // notReadSentence is design §13.1's operator sentence for why, next step
 // included: which side is down, and what to do. The add-on's own sentence
-// comes first wherever it gave one (only it can see its app). Drafts; the
-// final words are the copy guide's (8e).
+// comes first only where it is the one that knows: its app down, or its
+// refusal (§13.1). Drafts; the final words are the copy guide's (8e).
 func notReadSentence(ctx context.Context, target string, why addons.Why) string {
 	system, _ := systemName(ctx, target)
-	if why.Detail != "" {
+	if why.Detail != "" && (why.Reason == addons.ReasonAppUnreachable || why.Reason == addons.ReasonReadRefused) {
 		return why.Detail
 	}
 	switch why.Reason {
@@ -65,9 +66,10 @@ func notReadSentence(ctx context.Context, target string, why addons.Why) string 
 		}
 		return s
 	case addons.ReasonAppUnreachable:
-		product := addonsLastHealth(target).Product
-		if product == "" {
-			product = system
+		// The accepted manifest's product, as a write's outcome names it.
+		product := system
+		if shape, err := addonsAcceptedShape(ctx, target); err == nil && strings.TrimSpace(shape.Product) != "" {
+			product = shape.Product
 		}
 		return system + "'s add-on is running but can't reach " + product + ". Check that " + product + " is on."
 	case addons.ReasonCooldown:

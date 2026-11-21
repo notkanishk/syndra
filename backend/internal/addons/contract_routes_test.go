@@ -401,6 +401,16 @@ func TestResolvesValueRefusesUnlistableMembership(t *testing.T) {
 	}
 }
 
+// A role map that cannot be read fails closed: a field it cannot name is
+// never accepted as a limit on structure alone.
+func TestResolvesValueFailsClosedWithoutTheRoleMap(t *testing.T) {
+	forgetRoles(t) // no role map for truenas: FieldRoles errs
+	addonServing(t, []byte(`{"field":"group","enumerable":false,"values":[]}`))
+	if res, err := ResolvesValue(context.Background(), "truenas", "group", "Hulk Hogan"); err == nil || res.Checked {
+		t.Errorf("an unlistable field with no role map was accepted: %+v %v", res, err)
+	}
+}
+
 func TestReachReplyLands(t *testing.T) {
 	got := addonAnswering(t, "reach.json")
 	r := ReadReach(context.Background(), "truenas", false)

@@ -113,6 +113,25 @@ func (st HealthState) Down() (Why, bool) {
 	return Why{}, false
 }
 
+// WhyNoManifest is why a system that may not be asked (no accepted manifest,
+// or its breaker open) has no read: the monitor's why while it holds the
+// system down, else what opened the breaker, else the add-on unreachable with
+// whatever cause the monitor last saw. The one fallback for every page that
+// may not ask.
+func WhyNoManifest(target string) Why {
+	st := HealthOf(target)
+	if why, down := st.Down(); down {
+		return why
+	}
+	if a, err := Get(target); err == nil {
+		if opener, left, open := a.br.opened(timeNow()); open {
+			opener.RetryAfter = seconds(left)
+			return opener
+		}
+	}
+	return Why{Reason: ReasonAddonUnreachable, Cause: st.Cause}
+}
+
 // heldError is a read not sent because the monitor holds the add-on
 // unreachable (design §13.2): no copy, answered without dialing.
 type heldError struct{ why Why }

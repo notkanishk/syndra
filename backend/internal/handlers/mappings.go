@@ -314,11 +314,7 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 		// Registered and never answered. Structure could still be checked
 		// against a manifest we do not have, which is to say it could not:
 		// refused, as a value that could not be checked is (resolveValue).
-		why, _ := addonsHealthOf(target).Down()
-		if why.Reason == "" {
-			why = addons.Why{Reason: addons.ReasonAddonUnreachable}
-		}
-		return "", "", addons.Resolution{}, valueUnchecked(ctx, target, addons.NotRead{Why: why})
+		return "", "", addons.Resolution{}, valueUnchecked(ctx, target, addons.NotRead{Why: addons.WhyNoManifest(target)})
 	}
 
 	// By role (design §3): `account` and `channel` are computed, never bound;

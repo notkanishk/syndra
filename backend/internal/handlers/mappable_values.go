@@ -26,11 +26,7 @@ func handleMappableValues(w http.ResponseWriter, r *http.Request) {
 	schema, err := addonsEntitlementSchema(target)
 	if err != nil {
 		// No manifest: what the system can do was never read.
-		why, _ := addonsHealthOf(target).Down()
-		if why.Reason == "" {
-			why = addons.Why{Reason: addons.ReasonAddonUnreachable}
-		}
-		writeUnread(w, r, target, why)
+		writeUnread(w, r, target, addons.WhyNoManifest(target))
 		return
 	}
 	var spec *addons.EntitlementField

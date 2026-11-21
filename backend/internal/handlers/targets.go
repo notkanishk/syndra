@@ -243,7 +243,7 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 		// add-on answers. Before the first probe there is no why yet.
 		why := health.Why
 		if why.Reason == "" {
-			why = addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: state.Cause}
+			why = addons.WhyNoManifest(target)
 		}
 		body := map[string]any{"target": target, "read": addons.ReadOf(nil, why), "health": state, "status": string(state.State)}
 		if live {
