@@ -80,6 +80,7 @@ func kitAddOn(t *testing.T, homeRoot string) string {
 	// (STATS_COLLECT_EVERY=0): its reads would move target_reads under the
 	// freshness checks.
 	s.stats = statsClock{zone: kolkata}
+	recordingSince(t, s, map[string]time.Time{"main": time.Now().AddDate(0, 0, -2)}) // main seen recording everyone before today
 	s.collectStatsOnce()
 	if homeRoot != "" {
 		if err := s.store.PutSetting(settingHomeRoot, Setting{Value: homeRoot, SetBy: "operator", SetAt: time.Now().UTC()}); err != nil {

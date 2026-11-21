@@ -120,7 +120,152 @@ func statsServer(t *testing.T) (*server, *statsNAS, *time.Time) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-rey", Username: "rey_old_name", UID: 3051, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
+	// main has been seen recording everyone since the log's oldest row: the
+	// tests of what is counted count from their first run.
+	recordingSince(t, s, map[string]time.Time{"main": time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)})
 	return s, nas, &at
+}
+
+// recordingSince stores, as a collection would have, from when each share
+// was seen recording everyone (statsMeta.Recording). nil stores none.
+func recordingSince(t *testing.T, s *server, since map[string]time.Time) {
+	t.Helper()
+	meta, _, err := s.store.StatsMeta(metricSessions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta.Recording = since
+	if err := s.store.PutStats(metricSessions, meta, nil, s.stats.oldest(s.stats.clock())); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// mainOn is main's total on a day, and the reason of main's gap over it.
+func mainOn(t *testing.T, s *server, day string) (int64, bool, string) {
+	t.Helper()
+	first, points, _ := allStats(t, s, metricSessions, day0.AddDate(0, 0, -7))
+	v, counted := onDay(points, day, "", "main")
+	var why string
+	for _, g := range first.Gaps {
+		start, _ := time.Parse(time.RFC3339, g.Start)
+		end, _ := time.Parse(time.RFC3339, g.End)
+		at := s.stats.midnight(day)
+		if g.Dimensions["share"] == "main" && !start.After(at) && end.After(at) {
+			why = g.Reason()
+		}
+	}
+	return v, counted, why
+}
+
+// A share is counted only from the first collection that saw its auditing
+// record everyone: the log cannot say whom it left out before. Observed live
+// on 21 Nov 2026: the owner widened main's watch list at 17:25Z, and the
+// next collection counted the whole day as recorded. The day it began on
+// stays a gap with the same reason; the next day is counted.
+func TestASharesDayIsCountedOnlyFromWhenItWasSeenRecordingEveryone(t *testing.T) {
+	s, nas, at := statsServer(t)
+	recordingSince(t, s, nil)
+	inBuiltin := `"groups":[41]`
+	nas.users = strings.Replace(statsUsers, `"groups":[]`, inBuiltin, 1) // Seth is not watched
+	nas.shares = strings.Replace(statsShares, `"audit":{"enable":true,"watch_list":[],"ignore_list":[]}`,
+		`"audit":{"enable":true,"watch_list":["builtin_users"],"ignore_list":[]}`, 1)
+	nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "before")
+	s.collectStatsOnce() // 9 Nov 10:00: main leaves Seth out
+	nas.users = strings.ReplaceAll(statsUsers, `"groups":[]`, inBuiltin)
+	*at = day0.Add(7 * time.Hour)
+	s.collectStatsOnce() // 17:00: now it records everyone
+	nas.connect(day0.Add(8*time.Hour), "rey_mysterio", "main", "after")
+	nas.connect(day0.Add(20*time.Hour), "rey_mysterio", "main", "next day")
+	*at = day0.Add(24 * time.Hour)
+	s.collectStatsOnce()
+	*at = day0.Add(48 * time.Hour)
+	s.collectStatsOnce()
+	if v, counted, why := mainOn(t, s, "2026-11-09"); counted || why != reasonAudited.text {
+		t.Errorf("9 Nov, the day main began recording everyone: counted %v (%d), gap %q; want a gap saying %q", counted, v, why, reasonAudited.text)
+	}
+	if v, _, why := mainOn(t, s, "2026-11-10"); v != 1 || why != "" {
+		t.Errorf("10 Nov, recorded in full: %d, gap %q; want 1 and no gap", v, why)
+	}
+}
+
+// After a restart the stored instant stands: the day it began on is still a
+// gap, and the add-on does not take its own start for a new one.
+func TestARestartKeepsWhenRecordingBegan(t *testing.T) {
+	s, nas, at := statsServer(t)
+	recordingSince(t, s, nil)
+	s.collectStatsOnce() // 9 Nov 10:00: main seen recording everyone
+	path := s.store.db.Path()
+	s.store.Close()
+	store, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	s.store = store
+	nas.connect(day0.Add(time.Hour), "rey_mysterio", "main", "s0")
+	nas.connect(day0.Add(20*time.Hour), "rey_mysterio", "main", "s1")
+	*at = day0.Add(24 * time.Hour)
+	s.collectStatsOnce()
+	meta, _, _ := s.store.StatsMeta(metricSessions)
+	if got := meta.Recording["main"]; !got.Equal(day0) {
+		t.Errorf("main recording since %v after a restart, want %v", got, day0)
+	}
+	*at = day0.Add(48 * time.Hour)
+	s.collectStatsOnce()
+	if _, counted, _ := mainOn(t, s, "2026-11-09"); counted {
+		t.Error("9 Nov counted after a restart: recording began at 10:00 that day")
+	}
+	if v, _, _ := mainOn(t, s, "2026-11-10"); v != 1 {
+		t.Errorf("10 Nov is %d, want 1", v)
+	}
+}
+
+// Narrowing a share's auditing ends its coverage when it is seen: widening
+// it again later that day begins it again then, so that day is a gap.
+func TestNarrowingAuditingEndsCoverage(t *testing.T) {
+	s, nas, at := statsServer(t)
+	s.collectStatsOnce() // 9 Nov: main recorded everyone all along
+	*at = day0.Add(24 * time.Hour)
+	narrowed := strings.Replace(statsShares, `"audit":{"enable":true,"watch_list":[],"ignore_list":[]}`,
+		`"audit":{"enable":true,"watch_list":["lab_makers"],"ignore_list":[]}`, 1)
+	nas.shares = narrowed
+	s.collectStatsOnce() // 10 Nov 10:00: narrowed
+	nas.shares = statsShares
+	*at = day0.Add(28 * time.Hour)
+	s.collectStatsOnce() // 14:00: everyone again
+	nas.connect(day0.Add(30*time.Hour), "rey_mysterio", "main", "s1")
+	nas.connect(day0.Add(40*time.Hour), "rey_mysterio", "main", "s2")
+	*at = day0.Add(48 * time.Hour)
+	s.collectStatsOnce()
+	*at = day0.Add(72 * time.Hour)
+	s.collectStatsOnce()
+	if v, counted, why := mainOn(t, s, "2026-11-10"); counted || why != reasonAudited.text {
+		t.Errorf("10 Nov, narrowed then widened: counted %v (%d), gap %q; want a gap saying %q", counted, v, why, reasonAudited.text)
+	}
+	if v, _, _ := mainOn(t, s, "2026-11-11"); v != 1 {
+		t.Errorf("11 Nov is %d, want 1", v)
+	}
+}
+
+// A store written before the add-on kept the instant has none: coverage
+// begins with this run, never before it, so the days it catches up are gaps.
+func TestNoStoredInstantIsNeverBackdated(t *testing.T) {
+	s, nas, at := statsServer(t)
+	meta, _, _ := s.store.StatsMeta(metricSessions)
+	meta.Recording, meta.Watermark, meta.HeldFrom = nil, "2026-11-08", "2026-11-01"
+	if err := s.store.PutStats(metricSessions, meta, nil, s.stats.oldest(*at)); err != nil {
+		t.Fatal(err)
+	}
+	nas.connect(day0.Add(-30*time.Hour), "rey_mysterio", "main", "s1") // 8 Nov
+	nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "s2")    // 9 Nov
+	s.collectStatsOnce()
+	*at = day0.Add(24 * time.Hour)
+	s.collectStatsOnce()
+	for _, day := range []string{"2026-11-08", "2026-11-09"} {
+		if v, counted, why := mainOn(t, s, day); counted || why != reasonAudited.text {
+			t.Errorf("%s with no instant stored: counted %v (%d), gap %q; want a gap saying %q", day, counted, v, why, reasonAudited.text)
+		}
+	}
 }
 
 type statsPage struct {

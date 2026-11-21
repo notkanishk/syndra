@@ -24,7 +24,9 @@ import (
 //     every successful CONNECT since the metric's watermark, ascending, in
 //     pages of statsAuditPage rows, at most statsAuditPages of them. A
 //     session is a distinct `session` per account, share and day. Only a
-//     share whose auditing records everyone is counted; any other is a gap.
+//     share whose auditing records everyone is counted, from the first day
+//     that began after a run saw it do so (statsMeta.Recording); any other
+//     share or day is a gap.
 //     The days are re-read from the log until they are final, so a day the
 //     NAS was unreachable is filled once it answers. A run catching up
 //     first reads the oldest row the log keeps: a day it no longer keeps
@@ -233,6 +235,29 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 		}
 		counted[a.Name] = a.recordsEveryone(smb)
 	}
+	// Coverage begins at the first run that saw a share record everyone,
+	// never before (the log cannot say who it left out until then), and ends
+	// at the first that did not. A share's day counts only when it began at
+	// or before the day's midnight, so the day it began on stays a gap.
+	// ponytail: a share not readable (unknown) loses its instant too: never
+	// backdate, at the cost of one more day's gap after a failed read.
+	if meta.Recording == nil {
+		meta.Recording = map[string]time.Time{}
+	}
+	for name := range meta.Recording {
+		if !counted[name] {
+			delete(meta.Recording, name)
+		}
+	}
+	for name, ok := range counted {
+		if _, held := meta.Recording[name]; ok && !held {
+			meta.Recording[name] = now
+		}
+	}
+	covered := func(share, day string) bool {
+		since, ok := meta.Recording[share]
+		return ok && !c.midnight(day).Before(since)
+	}
 	// until is the first day not counted: past the page bound, the last
 	// day read may be part-read, so it and every later day wait for the
 	// next run, as one gap.
@@ -252,7 +277,7 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 			rec.Gaps = []StatGap{gapOf(c.stamp(d), c.stamp(nextDayKey(d)), nil, why)}
 		}
 		for _, sh := range shares {
-			if _, ok := gone[d]; !ok && !counted[sh.Name] && d < until {
+			if _, ok := gone[d]; !ok && !covered(sh.Name, d) && d < until {
 				why := reasonAudited
 				if unknown[sh.Name] {
 					why = reasonNAS
@@ -273,7 +298,7 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	unbound := map[string][]string{} // day → account keys
 	for _, r := range rows {
 		share, day := r.share(shares), c.day(time.Unix(r.Timestamp, 0))
-		if r.Event != "CONNECT" || !r.Success || day < count || day >= until || share == "" || !counted[share] {
+		if r.Event != "CONNECT" || !r.Success || day < count || day >= until || share == "" || !covered(share, day) {
 			continue
 		}
 		uid, known := uidOf[r.Username]

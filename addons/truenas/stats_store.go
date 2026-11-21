@@ -57,6 +57,11 @@ type statsMeta struct {
 	// digest of a name the NAS no longer resolves. Never on the wire; only
 	// its count is.
 	Unbound map[string][]string `json:"unbound,omitempty"`
+	// Recording is, per share, the first instant a collection observed its
+	// auditing record everyone (storage.sessions only), dropped when a
+	// collection sees that stop. A day is counted only from its first
+	// midnight at or after it: nothing before was observed recorded.
+	Recording map[string]time.Time `json:"recording,omitempty"`
 }
 
 func statsBucket(tx *bolt.Tx, metric string) *bolt.Bucket {
