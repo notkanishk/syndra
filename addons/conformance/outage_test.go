@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -217,5 +219,135 @@ func TestWithoutHooksTheOutageChecksAreNotChecked(t *testing.T) {
 				t.Errorf("%s says %s %v without hooks, want skip: not checked", res.ID, res.Status, res.Detail)
 			}
 		}
+	}
+}
+
+// Once a stop is tried the matching start runs, whatever the stop did: a hook
+// that failed or hung half-way may have stopped the app, or the add-on,
+// anyway. The app is the reference's, off while its file exists, as the
+// binary's -stop-app "touch …; exit 1" leaves it.
+func TestAFailedStopStillStarts(t *testing.T) {
+	failed := func(context.Context) error { return errors.New("exit status 1") }
+	hung := func(ctx context.Context) error {
+		ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond) // the binary's hook timeout, shortened
+		defer cancel()
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	for name, fails := range map[string]func(context.Context) error{"failed": failed, "hung": hung} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			file := filepath.Join(t.TempDir(), "app-down")
+			isDown := func() bool { _, err := os.Stat(file); return err == nil }
+			url, _ := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: isDown}, nil, nil, nil)
+			cfg := config(url, false)
+			addonStarted := false
+			cfg.StopApp = func(ctx context.Context) error { _ = os.WriteFile(file, nil, 0o600); return fails(ctx) }
+			cfg.StartApp = func(context.Context) error { return os.Remove(file) }
+			cfg.StopAddon = fails
+			cfg.StartAddon = func(context.Context) error { addonStarted = true; return nil }
+			r, _ := Run(context.Background(), cfg)
+			if isDown() {
+				t.Error("the app-down file is still there: -start-app did not run after -stop-app failed")
+			}
+			if !addonStarted {
+				t.Error("-start-addon did not run after -stop-addon failed")
+			}
+			for _, id := range []string{"outage.health", "outage.restart"} {
+				if got := r.Status(id); got != "fail" {
+					t.Errorf("%s says %s after its stop failed, want fail", id, got)
+				}
+			}
+		})
+	}
+}
+
+// A cooldown longer than the kit waits skips freshness.unreachable, and only
+// it: the other outage checks run on plain reads, or fail under
+// -require-outage without the app hooks.
+func TestNoFreshReadSkipsOnlyFreshnessUnreachable(t *testing.T) {
+	for _, require := range []bool{false, true} {
+		t.Run(map[bool]string{false: "with hooks", true: "no hooks, -require-outage"}[require], func(t *testing.T) {
+			t.Parallel()
+			var down atomic.Bool
+			url, _ := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Features: []string{"freshness"}, Down: down.Load}, nil, nil, nil)
+			cfg := withApp(config(url, false), &down)
+			cfg.FreshWait = time.Nanosecond
+			if require {
+				cfg.StopApp, cfg.StartApp, cfg.RequireOutage = nil, nil, true
+			}
+			r, _ := Run(context.Background(), cfg)
+			if got := r.Status("freshness.unreachable"); got != "skip" {
+				t.Errorf("freshness.unreachable says %s, want skip", got)
+			}
+			want := map[bool]string{false: "pass", true: "fail"}[require]
+			for _, id := range []string{"outage.health", "outage.kept"} {
+				if got := r.Status(id); got != want {
+					t.Errorf("%s says %s, want %s", id, got, want)
+				}
+			}
+		})
+	}
+}
+
+// When the plan read just before the stop names an account the kit does not
+// own, the run halts there: the app is never stopped.
+func TestAHaltBeforeTheStopLeavesTheAppUp(t *testing.T) {
+	plans := func(seen []string) int { return len(slices.DeleteFunc(seen, func(s string) bool { return s != "POST /plan" })) }
+	// The first run finds which /plan is the one just before the stop.
+	var down atomic.Bool
+	url, seen := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: down.Load}, nil, nil, nil)
+	cfg := withApp(config(url, true), &down)
+	stopAt := 0
+	cfg.StopApp = func(context.Context) error { stopAt = plans(seen()); down.Store(true); return nil }
+	run(t, cfg)
+	if stopAt == 0 {
+		t.Fatal("the first run never stopped the app")
+	}
+
+	var n atomic.Int32
+	foreign := func(r *http.Request, reply []byte) []byte {
+		if r.URL.Path != "/plan" || int(n.Add(1)) != stopAt {
+			return reply
+		}
+		return edit(reply, func(m map[string]any) {
+			if outs, _ := m["outcomes"].([]any); len(outs) > 0 {
+				outs[0].(map[string]any)["account_id"] = "9999"
+			}
+		})
+	}
+	url, _ = serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: down.Load}, nil, foreign, nil)
+	cfg = withApp(config(url, true), &down)
+	stopped := false
+	cfg.StopApp = func(context.Context) error { stopped = true; return nil }
+	r, _ := Run(context.Background(), cfg)
+	if stopped {
+		t.Error("the app was stopped after the plan before the stop named an account the kit does not own")
+	}
+	if got := r.Status("bound-to-created"); got != "fail" {
+		t.Errorf("bound-to-created says %s, want fail", got)
+	}
+}
+
+// An add-on that dates its copy anew on a restart fails outage.restart.
+func TestARestartThatRedatesTheCopyFails(t *testing.T) {
+	var down, restarted atomic.Bool
+	redate := func(r *http.Request, reply []byte) []byte {
+		if !restarted.Load() || r.URL.Path != "/subjects" {
+			return reply
+		}
+		return edit(reply, func(m map[string]any) {
+			if m["current"] == false {
+				m["taken_at"] = time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
+			}
+		})
+	}
+	url, _ := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Features: []string{"freshness"}, Down: down.Load}, nil, redate, nil)
+	cfg := withApp(config(url, false), &down)
+	cfg.StopAddon = func(context.Context) error { return nil }
+	cfg.StartAddon = func(context.Context) error { restarted.Store(true); return nil }
+	r, _ := Run(context.Background(), cfg)
+	if got := r.Status("outage.restart"); got != "fail" {
+		t.Errorf("outage.restart says %s after a restart that dated the copy anew, want fail", got)
 	}
 }

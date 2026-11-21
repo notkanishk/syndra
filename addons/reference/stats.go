@@ -166,7 +166,7 @@ func (a *Addon) collect(at time.Time) {
 			st.buf[m["name"].(string)] = map[time.Time]statDay{}
 		}
 	}
-	if a.down() {
+	if !a.reach(now()) {
 		st.failing = true // nothing read, so nothing moves
 		return
 	}

@@ -2651,6 +2651,12 @@ happened:
 - `-stop-addon <command>` and `-start-addon <command>` stop your add-on and
   start it again, its disk kept.
 
+Once a stop has been tried, the kit runs the matching start, whether the
+stop failed, hung or the run was interrupted: a stop that failed half-way
+may have stopped something anyway. So each hook MUST be safe to run twice
+and safe to run when there is nothing to do (`rm -f`, not `rm`). Each hook
+is killed, with everything it started, after 2 minutes, and fails.
+
 With them it runs:
 
 - `outage.health`: with the app stopped, `/health` and `/capabilities`

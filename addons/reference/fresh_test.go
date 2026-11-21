@@ -335,3 +335,44 @@ func TestAWriteForgetsTheFailureToo(t *testing.T) {
 		t.Errorf("a read whose join a write forgot: %d %v, want a read of its own, current", rep.status, doc)
 	}
 }
+
+// health's reachable is the result of the last real read of the app, not the
+// app's switch, and every read that succeeds, /plan's too, moves
+// last_read_at.
+func TestReachableIsTheLastReadsResult(t *testing.T) {
+	var down atomic.Bool
+	a, err := New(Config{Target: "reference", Secret: []byte("s"), Down: down.Load})
+	if err != nil {
+		t.Fatal(err)
+	}
+	health := func() map[string]any {
+		var h map[string]any
+		_ = json.Unmarshal(a.health(nil, nil).body, &h)
+		return h
+	}
+	plan := func() reply {
+		return a.plan(nil, []byte(`{"contract_version":2,"subjects":[{"subject":"the-undertaker","email":"the-undertaker@example.org","desired":{}}]}`))
+	}
+
+	down.Store(true)
+	if h := health(); h["reachable"] != true {
+		t.Errorf("with no read yet /health answered reachable %v; nothing has failed", h["reachable"])
+	}
+	if rep := plan(); rep.status != 503 {
+		t.Fatalf("/plan with the app down answered %d", rep.status)
+	}
+	if h := health(); h["reachable"] != false || h["last_read_at"] != nil {
+		t.Errorf("after a failed /plan /health answered reachable %v, last_read_at %v; want false, none", h["reachable"], h["last_read_at"])
+	}
+	down.Store(false)
+	if rep := plan(); rep.status != 200 {
+		t.Fatalf("/plan with the app up answered %d: %s", rep.status, rep.body)
+	}
+	if h := health(); h["reachable"] != true || h["last_read_at"] == nil {
+		t.Errorf("after a /plan read the app /health answered reachable %v, last_read_at %v; want true and a date", h["reachable"], h["last_read_at"])
+	}
+	down.Store(true)
+	if h := health(); h["reachable"] != true {
+		t.Errorf("with the app just switched off and no read since, /health answered reachable %v; it says what the last read found", h["reachable"])
+	}
+}

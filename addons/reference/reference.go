@@ -141,6 +141,17 @@ func (a *Addon) serves(feature string) bool { return slices.Contains(a.cfg.Featu
 // add the check there when an app's values or operations need it.
 func (a *Addon) down() bool { return a.cfg.Down != nil && a.cfg.Down() }
 
+// reach is one real read of the app, begun at at: it says whether the app
+// answered, and records it, as health's reachable and, when it did,
+// last_read_at. The caller holds a.mu.
+func (a *Addon) reach(at string) bool {
+	a.appDown = a.down()
+	if !a.appDown {
+		a.readAt = at
+	}
+	return !a.appDown
+}
+
 // unreachable is the reply of a request that could reach nothing: nothing was
 // sent, so Syndra may send it again after Retry-After.
 func unreachable() reply {
@@ -166,6 +177,7 @@ type Addon struct {
 	logHead   string
 	logCount  int
 	readAt    string             // health.last_read_at: when a read of the app last succeeded; "" before the first
+	appDown   bool               // health.reachable, negated: the last read of the app failed (reach)
 	fresh     freshState         // feature freshness: the mirror and the read in flight
 	loans     map[string]*loan   // feature calls: by item id
 	intents   map[string]*intent // feature calls: an open checkout, by subject
@@ -283,7 +295,7 @@ func (a *Addon) health(*http.Request, []byte) reply {
 	defer a.mu.Unlock()
 	busy := a.busy()
 	h := map[string]any{
-		"reachable": !a.down(), "product": "reference", "product_version": "1.0.0", "version_tested": true,
+		"reachable": !a.appDown, "product": "reference", "product_version": "1.0.0", "version_tested": true,
 		"credential_expiry": "none", "circuit_open": false,
 		"lifecycle": a.lifecycle, "lifecycle_note": a.reason, "in_flight": busy, "drained": busy == 0,
 		"log_head": a.logHead, "log_records": a.logCount, "checked_at": now(),
@@ -322,12 +334,11 @@ func (a *Addon) subjects(r *http.Request, _ []byte) reply {
 	if a.serves("freshness") {
 		return a.freshSubjects(r.URL.Query().Get("fresh") == "true")
 	}
-	if a.down() {
-		return unreachable() // no copy is kept without freshness
-	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.readAt = now()
+	if !a.reach(now()) {
+		return unreachable() // no copy is kept without freshness
+	}
 	return ok(map[string]any{"subjects": a.list(), "current": true, "taken_at": a.readAt, "truncated": false, "conflicts": noConflicts})
 }
 
@@ -414,11 +425,11 @@ func (a *Addon) plan(_ *http.Request, body []byte) reply {
 	if n := len(req.Subjects); n > subjectsPerPlan {
 		return problem(422, "PLAN_TOO_LARGE", "Too many subjects for one plan.", map[string]any{"subjects": n, "limit": subjectsPerPlan})
 	}
-	if a.down() {
-		return unreachable()
-	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if !a.reach(now()) {
+		return unreachable()
+	}
 	// A live read of the app, counted like every other; never through the
 	// mirror and never cooled down (design §4: /plan is outside freshness).
 	a.fresh.reads++

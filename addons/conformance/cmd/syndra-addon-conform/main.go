@@ -22,6 +22,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"syndra/addons/conformance"
 )
@@ -61,7 +62,8 @@ func main() {
 		cfg.ElevatedKey = strings.TrimSpace(string(key))
 	}
 
-	cfg.StopApp, cfg.StartApp, cfg.StopAddon, cfg.StartAddon = shell(*stopApp), shell(*startApp), shell(*stopAddon), shell(*startAddon)
+	cfg.StopApp, cfg.StartApp, cfg.StopAddon, cfg.StartAddon = shell("-stop-app", *stopApp, hookTimeout), shell("-start-app", *startApp, hookTimeout),
+		shell("-stop-addon", *stopAddon, hookTimeout), shell("-start-addon", *startAddon, hookTimeout)
 
 	// The first SIGINT or SIGTERM stops the run between requests and lets it
 	// put back what it changed; the second gets the default: exit now.
@@ -98,16 +100,33 @@ func main() {
 	}
 }
 
-// shell is a hook that runs command by sh -c, its output on stderr; nil when
-// there is no command.
-func shell(command string) func(context.Context) error {
+// hookTimeout bounds each hook: one that hangs fails, and the kit goes on to
+// put back what it stopped.
+const hookTimeout = 2 * time.Minute
+
+// shell is the hook flag names: command run by sh -c, said and its output on
+// stderr, killed after timeout; nil when there is no command.
+func shell(flag, command string, timeout time.Duration) func(context.Context) error {
 	if strings.TrimSpace(command) == "" {
 		return nil
 	}
 	return func(ctx context.Context) error {
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		fmt.Fprintf(os.Stderr, "kit: running %s %s\n", flag, command)
 		cmd := exec.CommandContext(ctx, "sh", "-c", command)
 		cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
-		return cmd.Run()
+		// Its own process group, killed whole: a child the shell started
+		// never outlives the hook, and a terminal's Ctrl-C reaches the kit,
+		// which still puts back what it stopped, not the hook.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+		cmd.WaitDelay = time.Second
+		err := cmd.Run()
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("%s did not return within %s: %w", flag, timeout, err)
+		}
+		return err
 	}
 }
 

@@ -49,12 +49,12 @@ func (a *Addon) readApp() ([]subject, string, error) {
 	list, at := a.list(), now()
 	a.mu.Unlock()
 	time.Sleep(readDwell)
-	if a.down() {
+	a.mu.Lock()
+	up := a.reach(at)
+	a.mu.Unlock()
+	if !up {
 		return nil, "", errDown
 	}
-	a.mu.Lock()
-	a.readAt = at
-	a.mu.Unlock()
 	return list, at, nil
 }
 

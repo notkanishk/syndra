@@ -38,38 +38,42 @@ func (k *kit) notChecked(hooks string, require bool, ids ...string) {
 
 func (k *kit) appDown() {
 	health, kept, none, write, unreach := k.at("outage.health"), k.at("outage.kept"), k.at("outage.none"), k.at("outage.write"), k.at("freshness.unreachable")
+	// live: the kit can read the app now. With freshness that takes a fresh
+	// read, which freshness() rules out when target_reads cannot be read or
+	// the cooldown is longer than the kit waits, skipping
+	// freshness.unreachable; only it and the fresh reads hang on that.
+	live := !k.m.has("freshness") || len(unreach.skips) == 0
 	ids := []string{"outage.health", "outage.kept", "outage.none"}
 	if k.cfg.Mutate {
 		ids = append(ids, "outage.write")
 	}
-	fresh := k.m.has("freshness") && len(unreach.skips) == 0 // freshness() skipped it when it cannot wait the cooldown
-	if fresh {
+	if k.m.has("freshness") && live {
 		ids = append(ids, "freshness.unreachable")
 	}
 	if k.cfg.StopApp == nil || k.cfg.StartApp == nil {
 		k.notChecked("-stop-app and -start-app", k.cfg.RequireOutage, ids...)
 		return
 	}
-	if k.m.has("freshness") && !fresh {
-		for _, id := range ids {
-			k.at(id).skip("%s", unreach.skips[0])
-		}
-		return
-	}
 
-	// Before the stop: a read the add-on may keep, as a copy taken at copyAt.
-	before := k.readNow()
+	// stop reads the copy the add-on may keep, then stops the app. Once a
+	// stop is tried the app is put back, whatever the stop or the run did:
+	// a hook that failed half-way may have stopped it anyway.
 	copyAt := ""
-	if before.status == http.StatusOK {
-		copyAt = str(before.doc(), "taken_at")
-	}
 	tried, stopped := false, false
 	stop := func() bool {
+		if before := k.readNow(live); before.status == http.StatusOK {
+			copyAt = str(before.doc(), "taken_at")
+		}
 		tried = true
 		err := k.cfg.StopApp(k.ctx)
 		stopped = health.expect(err == nil, "-stop-app failed: %v", err)
 		return stopped
 	}
+	defer func() {
+		if tried {
+			k.appBack(health, stopped && k.ctx.Err() == nil, live)
+		}
+	}()
 	var applied *exchange
 	var callID string
 	var logBefore int64
@@ -87,6 +91,9 @@ func (k *kit) appDown() {
 			return &request{method: http.MethodPost, target: "/apply", schema: "apply_request.json",
 				body: k.applyBody(callID, str(plan, "fingerprint"), desired)}
 		})
+		if k.halting {
+			return // the plan named someone else's account: nothing more, the app untouched
+		}
 	}
 	if !tried {
 		stop()
@@ -109,9 +116,9 @@ func (k *kit) appDown() {
 	caps := k.send(request{method: http.MethodGet, target: "/capabilities"})
 	health.expect(caps.err == nil && caps.status == http.StatusOK, "GET /capabilities with the app stopped answered %d (%v); it still answers", caps.status, caps.err)
 
-	during := k.readNow()
-	k.outageRead(kept, none, during, copyAt, true)
-	if fresh {
+	during := k.readNow(live)
+	k.outageRead(kept, none, during, copyAt, live)
+	if k.m.has("freshness") && live {
 		if copyAt == "" {
 			unreach.skip("the read just before the stop answered nothing to keep")
 		} else if doc := k.ok(unreach, during, "subjects.json"); doc != nil {
@@ -123,7 +130,9 @@ func (k *kit) appDown() {
 	}
 	k.outageRead(kept, none, k.subjectsRead(false), copyAt, false)
 	if h1 := k.ok(health, k.send(request{method: http.MethodGet, target: "/health"}), "health.json"); h1 != nil {
-		health.expect(h1["reachable"] == false, "/health after a read failed with the app stopped answered reachable %v; reachable says whether a real call to the app just succeeded", h1["reachable"])
+		if live {
+			health.expect(h1["reachable"] == false, "/health after a read failed with the app stopped answered reachable %v; reachable says whether a real call to the app just succeeded", h1["reachable"])
+		}
 		if at := str(h0, "last_read_at"); at != "" {
 			health.expect(str(h1, "last_read_at") == at, "last_read_at moved from %s to %q while the app was stopped", at, str(h1, "last_read_at"))
 		}
@@ -134,13 +143,17 @@ func (k *kit) appDown() {
 			c.skip("%s", why)
 		}
 	}
+}
 
-	// Putting the app back is never cut short.
+// appBack puts the app back, never cut short. With the app stopped as asked
+// and the kit able to read it now, a read then answers current and /health
+// reachable.
+func (k *kit) appBack(health *check, judge, live bool) {
 	err := k.cfg.StartApp(context.WithoutCancel(k.ctx))
-	if !health.expect(err == nil, "-start-app failed: %v", err) {
+	if !health.expect(err == nil, "-start-app failed: %v", err) || !judge || !live {
 		return
 	}
-	if doc := k.ok(health, k.readNow(), "subjects.json"); doc != nil {
+	if doc := k.ok(health, k.readNow(live), "subjects.json"); doc != nil {
 		health.expect(doc["current"] == true, "a fresh read with the app back answered current %v, want true", doc["current"])
 	}
 	if h := k.ok(health, k.send(request{method: http.MethodGet, target: "/health"}), "health.json"); h != nil {
@@ -183,9 +196,10 @@ func (k *kit) outageRead(kept, none *check, ex *exchange, copyAt string, fresh b
 var problemMembers = []string{"type", "title", "status", "detail", "instance", "code", "retry"}
 
 // readNow is a read of the app now: fresh, past the cooldown, when the add-on
-// declares freshness; otherwise every /subjects is one.
-func (k *kit) readNow() *exchange {
-	if !k.m.has("freshness") {
+// declares freshness; otherwise every /subjects is one. Not live, the kit
+// cannot make a fresh read, and this is a plain one: what the add-on holds.
+func (k *kit) readNow(live bool) *exchange {
+	if !k.m.has("freshness") || !live {
 		return k.subjectsRead(false)
 	}
 	if d, why := k.cooldown(); why == "" {
@@ -204,10 +218,10 @@ func (k *kit) addonRestart() {
 		return
 	}
 	before := k.ok(c, k.subjectsRead(false), "subjects.json")
-	if err := k.cfg.StopAddon(k.ctx); !c.expect(err == nil, "-stop-addon failed: %v", err) {
-		return
-	}
-	if err := k.cfg.StartAddon(context.WithoutCancel(k.ctx)); !c.expect(err == nil, "-start-addon failed: %v", err) {
+	// Once a stop is tried the add-on is started again, failed or not.
+	err := k.cfg.StopAddon(k.ctx)
+	errStart := k.cfg.StartAddon(context.WithoutCancel(k.ctx))
+	if !c.expect(err == nil, "-stop-addon failed: %v", err) || !c.expect(errStart == nil, "-start-addon failed: %v", errStart) {
 		return
 	}
 	if after := k.ok(c, k.subjectsRead(false), "subjects.json"); after != nil && after["current"] == false {
