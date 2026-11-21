@@ -180,8 +180,8 @@ func TestASharesDayIsCountedOnlyFromWhenItWasSeenRecordingEveryone(t *testing.T)
 	s.collectStatsOnce()
 	*at = day0.Add(48 * time.Hour)
 	s.collectStatsOnce()
-	if v, counted, why := mainOn(t, s, "2026-11-09"); counted || why != reasonAudited.text {
-		t.Errorf("9 Nov, the day main began recording everyone: counted %v (%d), gap %q; want a gap saying %q", counted, v, why, reasonAudited.text)
+	if v, counted, why := mainOn(t, s, "2026-11-09"); counted || why != reasonNotYet.text {
+		t.Errorf("9 Nov, the day main began recording everyone: counted %v (%d), gap %q; want a gap saying %q", counted, v, why, reasonNotYet.text)
 	}
 	if v, _, why := mainOn(t, s, "2026-11-10"); v != 1 || why != "" {
 		t.Errorf("10 Nov, recorded in full: %d, gap %q; want 1 and no gap", v, why)
@@ -239,8 +239,8 @@ func TestNarrowingAuditingEndsCoverage(t *testing.T) {
 	s.collectStatsOnce()
 	*at = day0.Add(72 * time.Hour)
 	s.collectStatsOnce()
-	if v, counted, why := mainOn(t, s, "2026-11-10"); counted || why != reasonAudited.text {
-		t.Errorf("10 Nov, narrowed then widened: counted %v (%d), gap %q; want a gap saying %q", counted, v, why, reasonAudited.text)
+	if v, counted, why := mainOn(t, s, "2026-11-10"); counted || why != reasonNotYet.text {
+		t.Errorf("10 Nov, narrowed then widened: counted %v (%d), gap %q; want a gap saying %q", counted, v, why, reasonNotYet.text)
 	}
 	if v, _, _ := mainOn(t, s, "2026-11-11"); v != 1 {
 		t.Errorf("11 Nov is %d, want 1", v)
@@ -262,9 +262,55 @@ func TestNoStoredInstantIsNeverBackdated(t *testing.T) {
 	*at = day0.Add(24 * time.Hour)
 	s.collectStatsOnce()
 	for _, day := range []string{"2026-11-08", "2026-11-09"} {
-		if v, counted, why := mainOn(t, s, day); counted || why != reasonAudited.text {
-			t.Errorf("%s with no instant stored: counted %v (%d), gap %q; want a gap saying %q", day, counted, v, why, reasonAudited.text)
+		if v, counted, why := mainOn(t, s, day); counted || why != reasonNotYet.text {
+			t.Errorf("%s with no instant stored: counted %v (%d), gap %q; want a gap saying %q", day, counted, v, why, reasonNotYet.text)
 		}
+	}
+}
+
+// Coverage lasts only across an unbroken chain of runs that each saw main
+// record everyone. A run that could not read the SMB accounts, or failed
+// whole, ends it: the next run that sees everyone begins a new instant, so
+// the day of the break is a gap even on the recount from the watermark, and
+// the day after counts from the new instant.
+func TestABrokenChainOfRunsEndsCoverage(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		break_ func(*statsNAS, bool)
+	}{
+		{"the SMB accounts could not be read", func(n *statsNAS, on bool) { n.smbDown = on }},
+		{"the whole run failed", func(n *statsNAS, on bool) { n.mu.Lock(); n.down = on; n.mu.Unlock() }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, nas, at := statsServer(t)
+			recordingSince(t, s, map[string]time.Time{"main": day0.Add(-48 * time.Hour)})
+			inBuiltin := `"groups":[41]`
+			nas.users = strings.ReplaceAll(statsUsers, `"groups":[]`, inBuiltin) // everyone watched
+			nas.shares = strings.Replace(statsShares, `"audit":{"enable":true,"watch_list":[],"ignore_list":[]}`,
+				`"audit":{"enable":true,"watch_list":["builtin_users"],"ignore_list":[]}`, 1)
+			s.collectStatsOnce() // 9 Nov 10:00: the chain holds
+			nas.connect(day0.Add(2*time.Hour), "rey_mysterio", "main", "s1")
+			nas.connect(day0.Add(26*time.Hour), "rey_mysterio", "main", "s2")
+			tc.break_(nas, true)
+			*at = day0.Add(5 * time.Hour)
+			s.collectStatsOnce() // 15:00: the chain breaks
+			tc.break_(nas, false)
+			s.nas.mu.Lock()
+			s.nas.failures, s.nas.openUntil, s.nas.lastTry = 0, time.Time{}, time.Time{}
+			s.nas.mu.Unlock()
+			*at = day0.Add(8 * time.Hour)
+			s.collectStatsOnce() // 18:00: seen again, a new instant
+			*at = day0.Add(24 * time.Hour)
+			s.collectStatsOnce() // 10 Nov: 9 Nov recounted from the watermark
+			*at = day0.Add(48 * time.Hour)
+			s.collectStatsOnce()
+			if v, counted, why := mainOn(t, s, "2026-11-09"); counted || why != reasonNotYet.text {
+				t.Errorf("9 Nov, the chain broke: counted %v (%d), gap %q; want a gap saying %q", counted, v, why, reasonNotYet.text)
+			}
+			if v, _, why := mainOn(t, s, "2026-11-10"); v != 1 || why != "" {
+				t.Errorf("10 Nov, after the new instant: %d, gap %q; want 1 and no gap", v, why)
+			}
+		})
 	}
 }
 
@@ -460,8 +506,8 @@ func TestAShareRecordsEveryoneWhenItWatchesEverySMBAccount(t *testing.T) {
 
 // While the NAS cannot be read nothing moves: the watermark stays, the days
 // since the last read are one gap, a gauge's dark day becomes a final gap
-// once the NAS answers, and the sessions of the dark days are read from the
-// log then, filling the window.
+// once the NAS answers, and so do the sessions of the dark days: a failed run
+// broke the chain of runs that saw a share record everyone.
 func TestTheWatermarkIsHeldWhileTheNASIsDown(t *testing.T) {
 	s, nas, at := statsServer(t)
 	s.collectStatsOnce() // 9 Nov
@@ -497,8 +543,10 @@ func TestTheWatermarkIsHeldWhileTheNASIsDown(t *testing.T) {
 	if back.Watermark != "2026-11-11T00:00:00+05:30" || slices.ContainsFunc(back.Gaps, func(g StatGap) bool { return g.Reason() == reasonNAS.text }) {
 		t.Errorf("back up: watermark %s, gaps %+v; want the start of today and the failure gap withdrawn", back.Watermark, back.Gaps)
 	}
-	if v, _ := onDay(points, "2026-11-10", "sub-rey", "main"); v != 1 {
-		t.Errorf("the dark day's session was not read from the log once the NAS answered: %+v", points)
+	// The failed runs broke main's chain: the dark day is a gap, never
+	// counted from the log on a guess that auditing stayed whole.
+	if v, counted, why := mainOn(t, s, "2026-11-10"); counted || why != reasonNotYet.text {
+		t.Errorf("the dark day: counted %v (%d), gap %q; want a gap saying %q (%+v)", counted, v, why, reasonNotYet.text, points)
 	}
 	used, _, _ := allStats(t, s, metricUsedBytes, since)
 	if !slices.ContainsFunc(used.Gaps, func(g StatGap) bool {
@@ -1567,7 +1615,9 @@ func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
 
 // An outage longer than the NAS keeps its audit log: the days it purged,
 // and the day of the oldest row it kept (part-purged, perhaps), are a final
-// gap, never zeros; counting goes on from the day after.
+// gap, never zeros. The days after are gaps too: the failed runs broke the
+// chain that saw main record everyone, so it counts again from the run that
+// sees it next.
 func TestAnOutageLongerThanTheLogIsKeptIsAGapNotZeros(t *testing.T) {
 	s, nas, at := statsServer(t)
 	nas.connect(day0.Add(time.Hour), "rey_mysterio", "main", "before")
@@ -1610,8 +1660,8 @@ func TestAnOutageLongerThanTheLogIsKeptIsAGapNotZeros(t *testing.T) {
 		}
 	}
 	for _, day := range []string{"2026-11-16", "2026-11-18"} {
-		if v, _ := onDay(points, day, "sub-rey", "main"); v != 1 {
-			t.Errorf("%s counted %d after the boundary, want 1: %+v", day, v, points)
+		if v, counted, why := mainOn(t, s, day); counted || why != reasonNotYet.text {
+			t.Errorf("%s after the boundary: counted %v (%d), gap %q; want a gap saying %q", day, counted, v, why, reasonNotYet.text)
 		}
 	}
 }

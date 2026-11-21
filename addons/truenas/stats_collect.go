@@ -212,6 +212,7 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 		rows, capped, failed = s.auditConnects(c.midnight(count))
 	}
 	if failed != nil {
+		meta.Recording = nil // a run that saw nothing breaks every share's chain
 		s.failedRun(metricSessions, meta, now, failed)
 		return
 	}
@@ -235,9 +236,10 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 		}
 		counted[a.Name] = a.recordsEveryone(smb)
 	}
-	// Coverage begins at the first run that saw a share record everyone,
-	// never before (the log cannot say who it left out until then), and ends
-	// at the first that did not. A share's day counts only when it began at
+	// Coverage lasts only across an unbroken chain of runs that each saw a
+	// share record everyone: it begins at the first, never before (the log
+	// cannot say who it left out until then), and ends at the first run that
+	// did not see it (narrowed, the accounts unread, or the whole run failed). A share's day counts only when it began at
 	// or before the day's midnight, so the day it began on stays a gap.
 	// ponytail: a share not readable (unknown) loses its instant too: never
 	// backdate, at the cost of one more day's gap after a failed read.
@@ -281,6 +283,8 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 				why := reasonAudited
 				if unknown[sh.Name] {
 					why = reasonNAS
+				} else if counted[sh.Name] {
+					why = reasonNotYet
 				}
 				rec.Gaps = append(rec.Gaps, gapOf(c.stamp(d), c.stamp(nextDayKey(d)), map[string]string{"share": sh.Name}, why))
 			}

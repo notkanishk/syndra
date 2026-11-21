@@ -2559,8 +2559,12 @@ has the full map.
   `audit.query` per run), `storage.home_bytes` (home folder use, against
   `home_quota`) and `storage.used_bytes` (use per share), each owned by the
   account's uid, never its name. A share whose auditing does not record
-  everyone is a gap, never a zero, and so is every day before the first
-  midnight after a collection saw it record everyone. The collector runs every
+  everyone is a gap, never a zero. A share's day counts only inside an
+  unbroken chain of collections that each saw it record everyone, begun at or
+  before that day's midnight; a collection that sees auditing narrowed, cannot
+  read the SMB accounts, or fails whole ends the chain, and the next one that
+  sees everyone begins it again at its own time ("Not counted: this share
+  wasn't yet seen recording everyone" until then). The collector runs every
   `STATS_COLLECT_EVERY` (`PT1H`; `0` switches it off), reads only, and keeps
   its days in the add-on's bbolt store, in the container's `TZ`
   (`collectStats` in `addons/truenas/stats_collect.go`).

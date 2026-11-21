@@ -90,11 +90,14 @@ type gapReason struct {
 var (
 	// reasonBuffer is for days the buffer dropped to stay within its size or its P90D; days before
 	// the first collection were never held, and say so (beganGap).
-	reasonBuffer   = gapReason{"The add-on no longer holds these days", kindDropped}
-	reasonNAS      = gapReason{"The NAS could not be read", kindUnread}
-	reasonDark     = gapReason{"The NAS could not be read that day", kindUnread}
-	reasonBehind   = gapReason{"Too much activity to count yet", kindUnread}
-	reasonAudited  = gapReason{"Auditing does not record everyone on this share", kindUnobserved}
+	reasonBuffer  = gapReason{"The add-on no longer holds these days", kindDropped}
+	reasonNAS     = gapReason{"The NAS could not be read", kindUnread}
+	reasonDark    = gapReason{"The NAS could not be read that day", kindUnread}
+	reasonBehind  = gapReason{"Too much activity to count yet", kindUnread}
+	reasonAudited = gapReason{"Auditing does not record everyone on this share", kindUnobserved}
+	// reasonNotYet is a share that records everyone now, but whose coverage began after the day's
+	// midnight: the chain of runs that saw it was broken (narrowed, unread, a failed run) or new.
+	reasonNotYet   = gapReason{"Not counted: this share wasn't yet seen recording everyone", kindUnobserved}
 	reasonPurged   = gapReason{"The NAS no longer keeps its log of these days", kindDropped}
 	reasonOverfull = gapReason{"Too much activity to count", kindUnread}
 	// reasonFolder is a share that is a plain folder inside a dataset it shares with what lies beside
@@ -125,7 +128,7 @@ func foldersIn(share string, n int, suffix string) string {
 }
 
 // gapReasons is every fixed reason: a gap stored before kinds existed takes its sentence's kind.
-var gapReasons = []gapReason{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonPurged, reasonOverfull, reasonFolder, reasonLocked, reasonHomeLocked}
+var gapReasons = []gapReason{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonNotYet, reasonPurged, reasonOverfull, reasonFolder, reasonLocked, reasonHomeLocked}
 
 // gapOf is the one way a window not observed is made: from its reason, which carries its kind.
 func gapOf(start, end string, dims map[string]string, why gapReason) StatGap {
