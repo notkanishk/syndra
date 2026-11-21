@@ -2235,6 +2235,23 @@ per-person only) applied there.
   then fills after it returns, and that "Refresh" advances `taken_at` once
   and reports the cooldown the second time #ready-for-human
   - Found on staging (21 Nov 2026, during this check): a team folder that is its own dataset inside a share read 67,036,288 bytes live while the share's collected total was 33,344 (the top dataset only), so members had no per-person series; and a member's card said "Nothing counted" for a share they can open whose auditing is off. Both fixed in 6.10a and 6.10b; the check itself stays the owner's.
+  - [x] Staging prep (21 Nov 2026, the owner's "yes to all"):
+    `syndra-addon-call` also sends `account.adopt` of a `conformance-`
+    account with its `account_id`, and `account.release`, for any subject
+    that is not all digits (every person's is), so a test home can be linked
+    to `rey_student` and released again (`scripts/README.md` step 4c). The
+    body is read strictly, every key byte-equal and once, nothing else, and
+    the payload built from it; `account.purge` and every other write stay
+    refused (`TestCallSendsAdoptAndReleaseForATestSubject`,
+    `TestCallRefusalsSendNothing`, each guard mutation-checked)
+    *Review fix (21 Nov 2026):* Zitadel accepts custom user ids, so "not all
+    digits" was no proof a subject is not a person's. Now an allow-list:
+    adopt names exactly `rey_student`, release `rey_student` or a
+    `conformance-` subject, byte for byte, after refusing invalid UTF-8,
+    surrounding whitespace and control characters
+    (`TestCallSubjectAllowList`); `username` must match
+    `^conformance-[a-z0-9-]+$` and `account_id` `^[0-9]+$`; a body over
+    64 KiB is refused (`TestCallBodyCap`); each guard mutation-checked
 - [x] 6.10a The collector counts usage by the live read's resolution (`fix/addon-contract-stats-nested-gaps`, 21 Nov 2026): `usageUnder` (`addons/truenas/reach.go`, since 6.10c) is every dataset a share reaches, the one mounted at its path plus each mounted inside it, summed once each (a dataset's userused leaves out its children); a home is `datasetAt` of the home, as `storage.status` reads it; one `pool.dataset.query` per run, still reads only. Test: `TestCollectedLevelsAreWhatTheLiveReadSees` (collected equals `memberPlaces`, no double count, a per-person series where the top dataset has no row of theirs).
 - [x] 6.10b A gap on a share a person can open is on their page (same branch): `statsUsageFor` keeps a gap within one of their series or within a share their storage read reaches (`reachedShares`: the page's `storage.status`, else the last one remembered while the target is down), never one on a share they cannot open; the card says "Not everything could be counted in the last 30 days" in place of "Nothing counted" or "No value" when a gap falls in the window (copy guide 15). Tests: `TestAGapOnAShareTheyCanOpenIsOnTheirPage`, two in `UsageCard.test.tsx`.
 - [x] 6.10c One number per thing (fix round 1 of PR 246, 21 Nov 2026; design "The storage numbers, reconciled"): `storage.status` counts a share with the same `usageUnder` the collector samples (a member with no row on the share's own dataset has a figure live, as collected; the limit stays the share's own dataset's); `/homes` takes used bytes from the home's own dataset (`datasetAt`) and the limit from the parent, as `convergeQuota` writes it, so the admin homes page and `storage.home_bytes` agree. A nested dataset that cannot be read (locked, or its table unreadable) leaves its share counted without it, with an `unread` gap naming the folder ("Not counted, could not be read: …"); a share that is a plain folder inside a dataset is never counted as that dataset, it is an `unobserved` gap ("The NAS does not count this share's space on its own"), live it is a partial read. A closed day that carries a gap keeps it rather than adding "could not be read that day". The card's empty sentence reads gaps through `gapLines`, the fold's one window check. Tests: `TestLiveAndCollectedStorageAreOneNumber`, `TestAnUnreadableNestedDatasetIsAGapNotTheShare`, `TestAPlainFolderShareNeverCountsItsParent`, `TestASharesDatasetsStopAtItsFolder`.

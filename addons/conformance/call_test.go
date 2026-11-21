@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -18,7 +19,7 @@ import (
 // callServer is the reference over TLS, plus account.release (which the
 // reference does not serve) answered 200 only for a request whose signature
 // verifies under the derived key, so the release test proves the signing too.
-// It returns the URL and every body it saw for the release.
+// It returns the URL and every body it saw for a release or an adoption.
 func callServer(t *testing.T) (string, func() []map[string]any, func() []string) {
 	t.Helper()
 	addon, err := reference.New(reference.Config{Target: "reference", Secret: []byte(testSecret)})
@@ -34,7 +35,7 @@ func callServer(t *testing.T) (string, func() []map[string]any, func() []string)
 		mu.Lock()
 		seen = append(seen, r.Method+" "+r.URL.Path)
 		mu.Unlock()
-		if r.URL.Path != "/operations/account.release" {
+		if r.URL.Path != "/operations/account.release" && r.URL.Path != "/operations/account.adopt" {
 			h.ServeHTTP(w, r)
 			return
 		}
@@ -105,8 +106,10 @@ func TestCallRefusalsSendNothing(t *testing.T) {
 		"purge":                    {"POST", "/operations/account.purge", `{"subject":"conformance-x"}`},
 		"another operation":        {"POST", "/operations/password.set", `{"subject":"conformance-x"}`},
 		"release, a member":        {"POST", "/operations/account.release", `{"subject":"wwe-the-rock"}`},
-		"release, no subject":      {"POST", "/operations/account.release", `{}`},
+		"release, a numeric id":    {"POST", "/operations/account.release", `{"subject":"300000000000000001"}`},
 		"release, bare prefix":     {"POST", "/operations/account.release", `{"subject":"conformance-"}`},
+		"release, empty subject":   {"POST", "/operations/account.release", `{"subject":""}`},
+		"release, no subject":      {"POST", "/operations/account.release", `{}`},
 		"release, another op body": {"POST", "/operations/account.release", `{"subject":"conformance-x","operation":"account.purge"}`},
 		"settings, POST":           {"POST", "/settings/home_root", `{"value":""}`},
 		"settings, DELETE":         {"DELETE", "/settings/home_root", ``},
@@ -132,10 +135,47 @@ func TestCallRefusalsSendNothing(t *testing.T) {
 		"setting, folded value":    {"PUT", "/settings/home_root", `{"value":"","\u017ealue":"x"}`},
 		"setting, capital Value":   {"PUT", "/settings/home_root", `{"Value":""}`},
 		"setting, no body":         {"PUT", "/settings/home_root", ``},
+		"setting, no value":        {"PUT", "/settings/home_root", `{}`},
 		"setting, value not text":  {"PUT", "/settings/home_root", `{"value":1}`},
 		"setting, trailing":        {"PUT", "/settings/home_root", `{"value":""}x`},
 		"setting read by name":     {"GET", "/settings/home_root", ``},
 		"read with a body":         {"GET", "/health", `{}`},
+		"adopt, a member":          {"POST", "/operations/account.adopt", `{"subject":"300000000000000001","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, a ring name":       {"POST", "/operations/account.adopt", `{"subject":"wwe-the-rock","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, the kit's subject": {"POST", "/operations/account.adopt", `{"subject":"conformance-wwe-rey","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, trailing space":    {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance- ","account_id":"200007"}}`},
+		"adopt, spaced username":   {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1 ","account_id":"200007"}}`},
+		"adopt, capital username":  {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-Home","account_id":"200007"}}`},
+		"adopt, id not digits":     {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"abc"}}`},
+		"adopt, id padded":         {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":" 200007 "}}`},
+		"adopt, id trailing space": {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"200007 "}}`},
+		"adopt, id Unicode digits": {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"\u0661\u0662\u0663"}}`},
+		"adopt, empty subject":     {"POST", "/operations/account.adopt", `{"subject":"","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, member's account":  {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"rey","account_id":"200007"}}`},
+		"adopt, bare prefix":       {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-","account_id":"200007"}}`},
+		"adopt, no account_id":     {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1"}}`},
+		"adopt, empty account_id":  {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":""}}`},
+		"adopt, numeric id":        {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":200007}}`},
+		"adopt, no params":         {"POST", "/operations/account.adopt", `{"subject":"rey_student"}`},
+		"adopt, null params":       {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":null}`},
+		"adopt, subject not text":  {"POST", "/operations/account.adopt", `{"subject":7,"params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, extra field":       {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"200007"},"actor":"x"}`},
+		"adopt, extra param":       {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"200007","home":"/x"}}`},
+		"adopt, another op":        {"POST", "/operations/account.adopt", `{"subject":"rey_student","operation":"account.purge","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, duplicate subject": {"POST", "/operations/account.adopt", `{"subject":"rey_student","subject":"300000000000000001","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, duplicate param":   {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","username":"rey","account_id":"200007"}}`},
+		"adopt, folded param":      {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","USERNAME":"rey","account_id":"200007"}}`},
+		"adopt, trailing junk":     {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"200007"}} x`},
+		"adopt, read":              {"GET", "/operations/account.adopt", ``},
+		"adopt, PUT":               {"PUT", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, near path":         {"POST", "/operations/account.adopt/", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"purge, a test subject":    {"POST", "/operations/account.purge", `{"subject":"rey_student"}`},
+		"create":                   {"POST", "/operations/account.create", `{"subject":"rey_student"}`},
+		"apply":                    {"POST", "/apply", `{"subject":"rey_student"}`},
+		"plan":                     {"POST", "/plan", `{}`},
+		"calls":                    {"GET", "/calls", ``},
+		"stats":                    {"GET", "/stats", ``},
+		"setting, over 64 KiB":     {"PUT", "/settings/home_root", `{"value":"` + strings.Repeat("a", 64<<10) + `"}`},
 	} {
 		if status, _, err := Call(context.Background(), callCfg(url), c.method, c.path, []byte(c.body)); err == nil || status != 0 {
 			t.Errorf("%s: sent, answered %d, err %v", name, status, err)
@@ -143,6 +183,39 @@ func TestCallRefusalsSendNothing(t *testing.T) {
 	}
 	if s := seen(); len(s) != 0 {
 		t.Fatalf("a refused call reached the add-on: %v", s)
+	}
+}
+
+// A release or an adoption goes out for an allow-listed subject (adopt:
+// rey_student; release: rey_student or a conformance- subject), built from the
+// typed values alone.
+func TestCallSendsAdoptAndReleaseForATestSubject(t *testing.T) {
+	for name, c := range map[string]struct {
+		path, body string
+		want       map[string]any
+	}{
+		"adopt": {"/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-20261114123616","account_id":"200007"}}`,
+			map[string]any{"subject": "rey_student", "operation": "account.adopt",
+				"params": map[string]any{"username": "conformance-home-20261114123616", "account_id": "200007"}}},
+		"release, a ring name": {"/operations/account.release", `{"subject":"rey_student"}`,
+			map[string]any{"subject": "rey_student", "operation": "account.release", "params": map[string]any{}}},
+		"release, the kit's": {"/operations/account.release", `{"subject":"conformance-wwe-rey"}`,
+			map[string]any{"subject": "conformance-wwe-rey", "operation": "account.release", "params": map[string]any{}}},
+	} {
+		url, sent, _ := callServer(t)
+		if status, reply, err := Call(context.Background(), callCfg(url), "POST", c.path, []byte(c.body)); err != nil || status != 200 {
+			t.Fatalf("%s: answered %d %s, %v", name, status, reply, err)
+		}
+		got := sent()
+		if len(got) != 1 {
+			t.Fatalf("%s: the add-on saw %v", name, got)
+		}
+		for _, k := range []string{"contract_version", "call_id", "actor"} {
+			delete(got[0], k)
+		}
+		if !reflect.DeepEqual(got[0], c.want) {
+			t.Errorf("%s: sent %v, want %v", name, got[0], c.want)
+		}
 	}
 }
 
@@ -176,5 +249,68 @@ func TestCallNeverPrintsTheSecret(t *testing.T) {
 	_, _, err := Call(context.Background(), CallConfig{URL: "https://127.0.0.1:1", Target: "reference", Secret: []byte(testSecret)}, "GET", "/health", nil)
 	if err == nil || strings.Contains(err.Error(), testSecret) {
 		t.Fatalf("want a connection error without the secret, got %v", err)
+	}
+}
+
+// Subjects are an allow-list compared byte for byte: anything near an allowed
+// one (whitespace, a control character, Unicode digits, bad UTF-8) is refused,
+// and so is any subject that is not on the list, however unlike a member's.
+func TestCallSubjectAllowList(t *testing.T) {
+	for _, s := range []string{
+		"", " rey_student", "rey_student ", "rey_student\n", "rey_student\t", "\u00a0rey_student",
+		"rey_student\u0000", "conformance-x\u0000", "conformance-x\n", "conformance-x ", " conformance-x",
+		"conformance-a\u0085b", "conformance-\xff", "rey_student\xff",
+		"\u0661\u0662\u0663", "\uff11\uff12\uff13", "123", "wwe-the-rock", "Rey_student", "conformance-",
+	} {
+		for _, kit := range []bool{false, true} {
+			if testSubject("x", s, kit) == nil {
+				t.Errorf("%s (release %v): allowed", s, kit)
+			}
+		}
+	}
+	if testSubject("x", "conformance-x", false) == nil {
+		t.Error("adopt allowed a conformance- subject")
+	}
+	for _, kit := range []bool{false, true} {
+		if err := testSubject("x", "rey_student", kit); err != nil {
+			t.Errorf("rey_student (release %v): %v", kit, err)
+		}
+	}
+	if err := testSubject("x", "conformance-20261114123616", true); err != nil {
+		t.Errorf("a kit subject: %v", err)
+	}
+	// The same through the wire: a NUL, a newline, a space or Unicode digits
+	// in the JSON never reach the add-on.
+	url, _, seen := callServer(t)
+	for _, s := range []string{`rey_student\u0000`, `rey_student\n`, `rey_student `, `conformance-x\n`, `\u0661\u0662\u0663`, `\uff11\uff12\uff13`} {
+		for _, path := range []string{"/operations/account.release", "/operations/account.adopt"} {
+			body := `{"subject":"` + s + `"}`
+			if path == "/operations/account.adopt" {
+				body = `{"subject":"` + s + `","params":{"username":"conformance-home-1","account_id":"200007"}}`
+			}
+			if status, _, err := Call(context.Background(), callCfg(url), "POST", path, []byte(body)); err == nil || status != 0 {
+				t.Errorf("%s %s: sent, answered %d", path, s, status)
+			}
+		}
+	}
+	if s := seen(); len(s) != 0 {
+		t.Fatalf("a refused subject reached the add-on: %v", s)
+	}
+}
+
+// A body at the cap is sent (whatever the add-on answers); one byte over is
+// refused unsent.
+func TestCallBodyCap(t *testing.T) {
+	url, _, seen := callServer(t)
+	at := `{"value":"` + strings.Repeat("a", maxCallBody-len(`{"value":""}`)) + `"}`
+	if status, _, err := Call(context.Background(), callCfg(url), "PUT", "/settings/home_root", []byte(at)); err != nil || status/100 == 0 {
+		t.Fatalf("a body of exactly %d bytes: %d %v", len(at), status, err)
+	}
+	over := at[:9] + "a" + at[9:]
+	if status, _, err := Call(context.Background(), callCfg(url), "PUT", "/settings/home_root", []byte(over)); err == nil || status != 0 {
+		t.Fatalf("a body of %d bytes was sent: %d", len(over), status)
+	}
+	if s := seen(); len(s) != 1 {
+		t.Fatalf("the add-on saw %v", s)
 	}
 }
