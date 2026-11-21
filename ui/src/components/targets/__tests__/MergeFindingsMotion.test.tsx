@@ -97,7 +97,7 @@ describe("the last finding leaves in order (M3)", () => {
     const empty = screen.getByText("Nothing disputed.").closest('[role="status"]')!;
     expect(empty.className).toContain("lift-in");
     // The healthy dot is the "resolved" one; nobody decided anything, so it is steady.
-    expect(empty.querySelector(".bloom")).toBeNull();
+    expect(empty.querySelector(".ember-open")).toBeNull();
   });
 
   it("blooms when the reader's own decision was just saved", () => {
@@ -110,14 +110,14 @@ describe("the last finding leaves in order (M3)", () => {
     gapSettled(container.querySelector("[data-leaving]")!);
     const empty = screen.getByText("Nothing disputed.").closest('[role="status"]')!;
     expect(empty.className).toContain("lift-in");
-    expect(empty.querySelector(".bloom")).not.toBeNull();
+    expect(empty.querySelector(".ember-open")).not.toBeNull();
   });
 
   it("does not lift or bloom a list that was empty when it was first read", () => {
     state.findings = [];
     render(tree());
     const empty = screen.getByText("Nothing disputed.").closest('[role="status"]')!;
-    expect(empty.querySelector(".bloom")).toBeNull();
+    expect(empty.querySelector(".ember-open")).toBeNull();
     // It does not rise on a first paint either, nor open by Unfold: it is simply there.
     expect(empty.className).not.toContain("lift-in");
     // Not opened by Unfold either: it is the page's first paint, simply there.

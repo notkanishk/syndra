@@ -38,6 +38,8 @@
  *             sits in: its four quarters must be spent inside the card's inner box. A dialog
  *             opens only from a click, so a replay sees one only where a page draws
  *             a trail open.
+ *   ember     a clear queue's dot's resting glow (A-25 moment 7) reaching past the card it
+ *             sits in, or any box that clips it: its pool must be spent inside every edge.
  *   lamp      the mark's breathing glow (A-25 moment 3) reaching past a box that
  *             clips it (the rail's scroller, the phone's bar, the window): its pool
  *             must be spent inside every edge, read from the glow's own computed box.
@@ -413,6 +415,50 @@ export function detect({ tablet = 720 } = {}) {
     for (const [side, by] of past) lamp.push(`the lamp's glow is cut ${by.toFixed(1)}px at its ${side} (${sel(mark)})`);
   }
 
+  // ── ember ──
+  // A clear queue's dot (A-25 moment 7) holds a pool 17px out from the dot, spent at its own box's edge (20px
+  // from the dot's centre): that box, read from the pseudo-element's computed inset, must sit inside every box
+  // that clips it, the window, and the card it sits in (its inner box), so no edge ends the light.
+  const ember = [];
+  for (const dot of document.querySelectorAll("[data-ember]")) {
+    if (!vis(dot, true)) continue;
+    const glow = getComputedStyle(dot, "::before");
+    if (glow.content === "none" || glow.display === "none") continue;
+    const m = dot.getBoundingClientRect();
+    const box = { l: m.left + parseFloat(glow.left), t: m.top + parseFloat(glow.top), r: m.right - parseFloat(glow.right), b: m.bottom - parseFloat(glow.bottom) };
+    // A box that scrolls moves its content, so on that axis it is the end of the line: what clips beyond it
+    // clips the scroller, not the light (the shell's column is the window's height, its scroller inside it).
+    // Before it, only `hidden` and `clip` end the light.
+    const clip = { l: -1e9, t: -1e9, r: 1e9, b: 1e9 };
+    let doneX = false;
+    let doneY = false;
+    for (let a = dot; a && a !== document.body; a = a.parentElement) {
+      const o = getComputedStyle(a);
+      const b = a.getBoundingClientRect();
+      const cutX = !doneX && (o.overflowX === "hidden" || o.overflowX === "clip");
+      const cutY = !doneY && (o.overflowY === "hidden" || o.overflowY === "clip");
+      if (cutX) (clip.l = Math.max(clip.l, b.left)), (clip.r = Math.min(clip.r, b.right));
+      if (cutY) (clip.t = Math.max(clip.t, b.top)), (clip.b = Math.min(clip.b, b.bottom));
+      if (o.overflowX === "auto" || o.overflowX === "scroll") doneX = true;
+      if (o.overflowY === "auto" || o.overflowY === "scroll") doneY = true;
+    }
+    const room = dot.closest(".card");
+    const rr = room ? room.getBoundingClientRect() : null;
+    const edge = {
+      l: Math.max(clip.l, 0, rr ? rr.left + room.clientLeft : 0),
+      t: Math.max(clip.t, rr ? rr.top + room.clientTop : -1e9),
+      r: Math.min(clip.r, innerWidth, rr ? rr.left + room.clientLeft + room.clientWidth : innerWidth),
+      b: Math.min(clip.b, rr ? rr.top + room.clientTop + room.clientHeight : 1e9),
+    };
+    const past = [
+      ["left", edge.l - box.l],
+      ["top", edge.t - box.t],
+      ["right", box.r - edge.r],
+      ["bottom", box.b - edge.b],
+    ].filter(([, by]) => by > 0.5);
+    for (const [side, by] of past) ember.push(`the ember's light is cut ${by.toFixed(1)}px at its ${side} (${sel(dot)})`);
+  }
+
   // ── pill ──
   // The pill marks the row you are on, exactly; a row that is folded (or folding) has no pill at all,
   // so a pill left behind on the row that took its seat is a finding (review, 20 Nov 2026).
@@ -497,5 +543,5 @@ export function detect({ tablet = 720 } = {}) {
     for (const [side, by] of past) trail.push(`a change's light reaches ${by.toFixed(1)}px past its card's ${side} (${sel(room)})`);
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pill, place, trail, pageScroll };
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, ember, pill, place, trail, pageScroll };
 }

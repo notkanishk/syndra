@@ -23,7 +23,7 @@ describe("StatusSeat", () => {
     expect(dot.className).toContain("bg-healthy");
     expect(dot.className).toContain("motion-tint");
     // This is a change someone else made, or a read: never a bloom.
-    expect(container.querySelector(".bloom")).toBeNull();
+    expect(container.querySelector(".dot-glow")).toBeNull();
     expect(screen.getByText("Waiting on a decision").closest(".tint-out")).not.toBeNull();
     expect(screen.getByText("Approved").closest(".tint-in")).not.toBeNull();
 

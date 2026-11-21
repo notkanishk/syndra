@@ -150,6 +150,7 @@ export type StatusTone = keyof typeof STATUS_TONE;
 export function StatusDot({
   tone,
   bloom = false,
+  ember = false,
   ring = false,
   fill,
   className = "",
@@ -158,8 +159,13 @@ export function StatusDot({
   tone: StatusTone;
   /** A token expression that replaces the fill: Insights' pins are shades of the accent no tone names. */
   fill?: string;
-  /** One ring of the dot's own colour, once: only for something that just went well because of the reader (A-05). */
+  /** The dot's own light opens once, then is gone: only for something that just went well because of the reader (A-05). */
   bloom?: boolean;
+  /**
+   * The dot of a clear queue holds a low, edgeless glow at rest (A-25 moment 7); `bloom` with it opens the
+   * glow once, by the reader's own hand. Never on a ring, which says this is not a fresh read.
+   */
+  ember?: boolean;
   /**
    * Not a fresh read (A-13 §1.4): a 1.5px ring in the tone's own colour, no
    * fill. The colour still says what the system said; the ring says it is not
@@ -172,6 +178,7 @@ export function StatusDot({
   [attribute: `data-${string}`]: string | undefined;
 }) {
   const t = STATUS_TONE[tone];
+  const glow = ring ? "" : ember ? `dot-glow ember ${bloom ? "ember-open" : ""}` : bloom ? "dot-glow glow-once" : "";
   // The ring is the tone's colour (`edge`) drawn as an inset shadow, not a border: a dot filling from its
   // ring tints both ways at once (`motion-tint`), so it never empties between them (A-25 moment 5).
   return (
@@ -180,8 +187,9 @@ export function StatusDot({
       aria-hidden
       data-dot
       data-ring={ring ? "" : undefined}
+      data-ember={ember && !ring ? "" : undefined}
       style={fill ? { background: fill } : undefined}
-      className={`size-1.5 shrink-0 rounded-pill motion-tint ${t.edge} ${ring ? "dot-ring" : t.dot} ${bloom ? "bloom" : ""} ${className}`}
+      className={`size-1.5 shrink-0 rounded-pill motion-tint ${t.edge} ${ring ? "dot-ring" : t.dot} ${glow} ${className}`}
     />
   );
 }

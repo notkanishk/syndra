@@ -153,7 +153,7 @@ describe("the last item leaves in order (M3)", () => {
     // Opened with its card, not ahead of it: the card is inside the Unfold.
     expect(empty.closest(".card")!.closest(".unfold")).not.toBeNull();
     // Nobody decided anything: the dot is steady.
-    expect(empty.querySelector(".bloom")).toBeNull();
+    expect(empty.querySelector(".ember-open")).toBeNull();
   });
 
   it("blooms when the reader's own decision emptied it", () => {
@@ -167,7 +167,7 @@ describe("the last item leaves in order (M3)", () => {
     gapSettled(container.querySelector("[data-leaving]")!);
     const empty = screen.getByText("Nothing is waiting on you.").closest('[role="status"]')!;
     expect(empty.className).toContain("lift-in");
-    expect(empty.querySelector(".bloom")).not.toBeNull();
+    expect(empty.querySelector(".ember-open")).not.toBeNull();
   });
 
   it("lets the anchor's finding leave with its Notice, drawn while the count holds", () => {

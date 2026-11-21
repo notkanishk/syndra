@@ -36,11 +36,11 @@ describe("ActionOutcome", () => {
     const { container, rerender } = render(
       <ActionOutcome placement="seat" word="Approved" outcome={{ kind: "applied", message: "Done" }} />,
     );
-    expect(container.querySelector(".bloom")).not.toBeNull();
+    expect(container.querySelector(".dot-glow")).not.toBeNull();
     rerender(<ActionOutcome placement="seat" word="Approved" outcome={queued} />);
-    expect(container.querySelector(".bloom")).toBeNull();
+    expect(container.querySelector(".dot-glow")).toBeNull();
     rerender(<ActionOutcome placement="seat" word="Not approved" outcome={{ kind: "failed", message: "Nope" }} />);
-    expect(container.querySelector(".bloom")).toBeNull();
+    expect(container.querySelector(".dot-glow")).toBeNull();
   });
 
   it("seat: a refusal shows its message, as an alert", () => {
@@ -85,7 +85,7 @@ describe("block form with a word", () => {
     const { container } = render(<ActionOutcome word="Given" outcome={done} />);
     const dot = container.querySelector(".bg-healthy");
     expect(dot).not.toBeNull();
-    expect(dot!.className).toContain("bloom");
+    expect(dot!.className).toContain("dot-glow");
     expect(screen.getByRole("status").className).toContain("lift-in");
   });
 
@@ -93,7 +93,7 @@ describe("block form with a word", () => {
     const { container } = render(<ActionOutcome word="Given" outcome={queued} />);
     const dot = container.querySelector(".bg-warn");
     expect(dot).not.toBeNull();
-    expect(dot!.className).not.toContain("bloom");
+    expect(dot!.className).not.toContain("dot-glow");
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute(
       "href",
       "/governance/pending",
@@ -106,7 +106,7 @@ describe("block form with a word", () => {
       <ActionOutcome word="Asked" outcome={{ kind: "no_change", message: "Makerspace staff decide" }} />,
     );
     expect(container.querySelector(".bg-faint")).not.toBeNull();
-    expect(container.querySelector(".bloom")).toBeNull();
+    expect(container.querySelector(".dot-glow")).toBeNull();
     expect(screen.getByText("Asked")).toBeInTheDocument();
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
   });
@@ -121,7 +121,7 @@ describe("block form with a word", () => {
     const alert = screen.getByRole("alert");
     expect(alert.className).not.toContain("lift-in");
     expect(container.querySelector(".bg-danger")).not.toBeNull();
-    expect(container.querySelector(".bloom")).toBeNull();
+    expect(container.querySelector(".dot-glow")).toBeNull();
     expect(alert).toHaveTextContent("Zitadel did not answer. Nothing was changed.");
     expect(screen.getByText("req-1")).toBeInTheDocument();
   });

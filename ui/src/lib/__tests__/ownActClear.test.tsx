@@ -45,11 +45,11 @@ describe("an all-clear blooms only after the operator's own act", () => {
 describe("EmptyState's bloom", () => {
   it("draws the bloom and the lift only when asked, and the plain arrival otherwise", () => {
     const own = render(<EmptyState resolved lift bloom title="Done." />);
-    expect(own.container.querySelector(".bloom")).toBeTruthy();
+    expect(own.container.querySelector(".ember-open")).toBeTruthy();
     expect(own.container.querySelector(".lift-in")).toBeTruthy();
     own.unmount();
     const plain = render(<EmptyState resolved title="Done." />);
-    expect(plain.container.querySelector(".bloom")).toBeNull();
+    expect(plain.container.querySelector(".ember-open")).toBeNull();
     expect(plain.container.querySelector(".lift-in")).toBeNull();
   });
 });

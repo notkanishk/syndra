@@ -44,11 +44,11 @@ describe("a value somebody has to transport", () => {
     render(<CopyableValue value="smb://fileserver-01/studio" label="Share path" />);
 
     const button = await screen.findByRole("button", { name: "Copy share path" });
-    expect(button.querySelector(".bloom")).toBeNull();
+    expect(button.querySelector(".dot-glow")).toBeNull();
     fireEvent.click(button);
     await waitFor(() => expect(screen.getByRole("button", { name: "Copied share path" })).toBeTruthy());
     const done = screen.getByRole("button", { name: "Copied share path" });
-    expect(done.querySelector(".bloom.bg-healthy")).not.toBeNull();
+    expect(done.querySelector(".dot-glow.bg-healthy")).not.toBeNull();
     expect(done).toHaveTextContent("Copied");
   });
 
@@ -75,7 +75,7 @@ describe("a value somebody has to transport", () => {
       act(() => void vi.advanceTimersByTime(900));
       expect(copy).toHaveClass("opacity-100");
       expect(copied).toHaveClass("opacity-0");
-      expect(button.querySelector(".bloom")).toBeNull();
+      expect(button.querySelector(".dot-glow")).toBeNull();
     } finally {
       vi.useRealTimers();
     }

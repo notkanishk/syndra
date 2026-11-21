@@ -44,13 +44,13 @@ describe("CommandBlock's copy button", () => {
     });
     expect(done).toHaveClass("opacity-100");
     expect(idle).toHaveClass("opacity-0");
-    expect(done.querySelector(".bloom.bg-healthy")).not.toBeNull();
+    expect(done.querySelector(".dot-glow.bg-healthy")).not.toBeNull();
 
     act(() => void vi.advanceTimersByTime(COPIED_MS - 1));
     expect(done).toHaveClass("opacity-100");
     act(() => void vi.advanceTimersByTime(1));
     expect(idle).toHaveClass("opacity-100");
-    expect(done.querySelector(".bloom")).toBeNull();
+    expect(done.querySelector(".dot-glow")).toBeNull();
   });
 
   it("says Selected without a bloom where the browser cannot copy", () => {
@@ -58,7 +58,7 @@ describe("CommandBlock's copy button", () => {
     render(<CommandBlock command="docker compose restart api" />);
     fireEvent.click(screen.getByRole("button", { name: /Select command/ }));
     expect(screen.getByText("Selected")).toHaveClass("opacity-100");
-    expect(screen.getByText("Selected").querySelector(".bloom")).toBeNull();
+    expect(screen.getByText("Selected").querySelector(".dot-glow")).toBeNull();
   });
 });
 
@@ -81,7 +81,7 @@ describe("CopyableValue, inline", () => {
       fireEvent.click(button);
     });
     expect(screen.getByText("Copied").className).toContain("tint-in");
-    expect(screen.getByText("Copied").querySelector(".bloom")).not.toBeNull();
+    expect(screen.getByText("Copied").querySelector(".dot-glow")).not.toBeNull();
     expect(screen.getByText("366421618001445894")).toHaveClass("opacity-0");
 
     act(() => void vi.advanceTimersByTime(COPIED_MS));

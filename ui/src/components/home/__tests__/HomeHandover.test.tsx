@@ -275,14 +275,14 @@ describe("Home's all-clear, as an ending", () => {
     state.governance = quiet();
     mount();
     expect(line()).toHaveClass("tint-in");
-    expect(line().querySelector(".bloom")).toBeNull();
+    expect(line().querySelector(".ember-open")).toBeNull();
     expect(line().querySelector("[data-close-line]")).toBeNull();
   });
 
   it("emptied by a read, not by the reader: it lifts, and neither blooms nor closes", () => {
     empty();
     expect(line()).toHaveClass("lift-in");
-    expect(line().querySelector(".bloom")).toBeNull();
+    expect(line().querySelector(".ember-open")).toBeNull();
     expect(line().querySelector("[data-close-line]")).toBeNull();
   });
 
@@ -293,14 +293,14 @@ describe("Home's all-clear, as an ending", () => {
     home.reread();
     later(TINT_MS);
     expect(line()).not.toHaveClass("lift-in");
-    expect(line().querySelector(".bloom")).toBeNull();
+    expect(line().querySelector(".ember-open")).toBeNull();
     expect(line().querySelector("[data-close-line]")).toBeNull();
   });
 
   it("emptied by the reader's own act: it blooms, the list closes, and only the first time today", () => {
     state.own = true;
     const home = empty();
-    expect(line().querySelector(".bloom")).not.toBeNull();
+    expect(line().querySelector(".ember-open")).not.toBeNull();
     expect(line().querySelector("[data-close-line]")).toHaveClass("close-line");
     expect(screen.getByText("Nothing here needs you.")).toHaveClass("type-section-title");
 
@@ -311,7 +311,7 @@ describe("Home's all-clear, as an ending", () => {
     state.governance = quiet();
     home.reread();
     later(TINT_MS);
-    expect(line().querySelector(".bloom")).not.toBeNull();
+    expect(line().querySelector(".ember-open")).not.toBeNull();
     expect(line().querySelector("[data-close-line]")).toBeNull();
   });
 

@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
  * `welcome` lights the dot once, at the session's first paint (A-18 idea 6):
  * the login's orb carried on, because you came through the door. The tab
  * remembers it has done so, so navigating or remounting never replays it, and
- * reduced motion removes the bloom itself (`bloom` in globals.css).
+ * reduced motion removes the glow itself (`dot-glow` in globals.css).
  */
 export const WELCOMED = "syndra:mark-welcomed";
 
@@ -67,7 +67,7 @@ export function SyndraMark({
       <span className="syndra-mark-base" />
       <span className="syndra-mark-arc" />
       {/* Breathe is the one loop, and it means still happening: Zitadel not answering is. */}
-      <span className={`syndra-mark-dot${bloom ? " bloom" : ""}${room === "waiting" ? " breathe" : ""}`} />
+      <span className={`syndra-mark-dot${bloom ? " dot-glow glow-once" : ""}${room === "waiting" ? " breathe" : ""}`} />
     </span>
   );
 }

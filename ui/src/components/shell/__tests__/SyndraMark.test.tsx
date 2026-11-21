@@ -11,19 +11,19 @@ beforeEach(() => window.sessionStorage.clear());
 describe("the mark's welcome", () => {
   it("lights once at the session's first paint, and never again on a remount", () => {
     const first = render(<SyndraMark welcome />);
-    expect(dot(first.container)).toHaveClass("bloom");
+    expect(dot(first.container)).toHaveClass("glow-once");
     first.unmount();
     const second = render(<SyndraMark welcome />);
-    expect(dot(second.container)).not.toHaveClass("bloom");
+    expect(dot(second.container)).not.toHaveClass("glow-once");
   });
 
   it("lights again after sign-out clears the memory", () => {
     render(<SyndraMark welcome />).unmount();
     window.sessionStorage.removeItem(WELCOMED);
-    expect(dot(render(<SyndraMark welcome />).container)).toHaveClass("bloom");
+    expect(dot(render(<SyndraMark welcome />).container)).toHaveClass("glow-once");
   });
 
   it("is still unless asked (the favicon drawing, the login orb)", () => {
-    expect(dot(render(<SyndraMark />).container)).not.toHaveClass("bloom");
+    expect(dot(render(<SyndraMark />).container)).not.toHaveClass("glow-once");
   });
 });

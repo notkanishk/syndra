@@ -73,7 +73,7 @@ describe("Everything sent (S13), with the page still", () => {
 
     expect(screen.getByText(LINE)).toBeInTheDocument();
     expect(screen.getByText("3 changes sent at 11:20. Nothing is waiting for you.")).toBeInTheDocument();
-    expect(screen.getByText(LINE).previousElementSibling).toHaveClass("bloom");
+    expect(screen.getByText(LINE).previousElementSibling).toHaveClass("ember-open");
     expect(screen.getByText(LINE).closest("[role=status]")).not.toBeNull();
     expect(sendButton()).toBeNull();
     vi.useRealTimers();
@@ -84,7 +84,7 @@ describe("Everything sent (S13), with the page still", () => {
     pending.data = [];
     view.rerender(tree());
     expect(screen.getByText(LINE)).toBeInTheDocument();
-    expect(screen.getByText(LINE).previousElementSibling).not.toHaveClass("bloom");
+    expect(screen.getByText(LINE).previousElementSibling).not.toHaveClass("ember-open");
     expect(screen.getByText("Nothing is waiting for you to send.")).toBeInTheDocument();
     expect(screen.queryByText(/sent at/)).not.toBeInTheDocument();
   });

@@ -113,7 +113,7 @@ export function EmptyState({
   guidance?: string;
   action?: { label: string; href: string } | { label: string; onClick: () => void };
   resolved?: boolean;
-  /** The reader's own act just emptied it (S13): the lime dot blooms once. */
+  /** The reader's own act just emptied it (S13): the lime dot's ember opens once (A-25 moment 7); at rest it only holds its glow. */
   bloom?: boolean;
   /** The list just emptied in front of the reader: the line rises into its place. */
   lift?: boolean;
@@ -134,9 +134,9 @@ export function EmptyState({
     >
       {closes && <span aria-hidden data-close-line className="close-line" />}
       <div className="flex min-w-0 flex-1 flex-col justify-center gap-2.5">
-      <div className="flex items-center gap-2.5">
+      <div className="isolate flex items-center gap-2.5">
         {resolved && (
-          <StatusDot tone="healthy" bloom={bloom} />
+          <StatusDot tone="healthy" ember bloom={bloom} />
         )}
         <div className={closes ? "type-section-title" : "type-empty-title"}>{title}</div>
       </div>
