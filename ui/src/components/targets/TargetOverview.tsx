@@ -4,7 +4,7 @@ import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
 import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
 import { checkAgainNext, cooldownLine, retryingLine } from "@/components/results/copy";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { ArriveList, Crossfade, FOLD_MS, LeavingRow, TINT_MS, UnfoldOnArrival, Unfold, useExitPhase, useFlashOnChange, useLeavingRows } from "@/lib/motion";
 import { useLongWait } from "@/lib/useLongWait";
@@ -1379,20 +1379,42 @@ function Reading({
  * The Accounts region's one "could not be read": a pass that stopped read
  * nothing, so the lists below have no count and no empty state, and this line
  * says why once, above them all, with Read again on it (the strip's own
- * control: a halted read has no freshness strip to carry it).
+ * control: a halted read has no freshness strip to carry it). Inside the
+ * add-on's cooldown the line counts down in its place, as the strip's does.
  */
 function AccountsNotRead({ target }: { target: string }) {
   const nameOf = useSystemNames();
   const inventory = useTargetInventory(target);
   const again = useTargetInventoryAgain(target);
+  const left = useCountdown(again.cooldown?.retry_after, again.cooldown?.since);
+  const lineId = useId();
+  const line = useRef<HTMLDivElement>(null);
+  // The region's heading, taken at the press: a read that lands takes this line, and its focused
+  // button, away, so focus goes to the heading rather than to <body>. Consumed once.
+  const heading = useRef<HTMLElement | null>(null);
   const unread = inventory.data?.halted;
+  useEffect(() => {
+    if (unread || !heading.current) return;
+    if (document.activeElement === document.body) heading.current.focus();
+    heading.current = null;
+  }, [unread]);
   if (!unread) return null;
   return (
-    <div className="grid gap-1">
+    <div ref={line} className="grid gap-1">
       {/* The sentence and its button side by side, as ReadFreshness draws them (a button is never in prose). */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-warn-text">
-        <span>{inventoryNotRead(nameOf(target), inventory.data?.detail, inventory.data?.reason)}</span>
-        <ReadAgainButton onClick={() => void again.press().catch(() => {})} pending={again.pending} />
+        <span id={lineId}>
+          {left > 0 ? cooldownLine("The account list", left) : inventoryNotRead(nameOf(target), inventory.data?.detail, inventory.data?.reason)}
+        </span>
+        <ReadAgainButton
+          onClick={() => {
+            heading.current = line.current?.closest("section")?.querySelector("h2") ?? null;
+            void again.press().catch(() => {});
+          }}
+          pending={again.pending}
+          disabled={left > 0}
+          describedBy={lineId}
+        />
       </div>
       <ReadAgainError error={again.error} className="" />
     </div>
@@ -1991,12 +2013,14 @@ function LifecycleControl({
 /** The reconcile result in one line. Counts of people, singular and plural both right. */
 export function reconcileLine(bound: number | undefined, queued: number, missing: number | undefined, name: string): string {
   const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
-  // A count the pass did not take is no clause, never a 0: `stale` is absent on a truncated read,
-  // which cannot tell a missing account from one past the cut.
+  // A count the pass did not take is never a 0. `stale` is absent only on a truncated read, which
+  // cannot tell a missing account from one past the cut, so it says so in the strip's own words.
   return [
     bound === undefined ? null : `${people(bound)} with a managed account`,
     `${queued} ${queued === 1 ? "fix" : "fixes"} waiting for you to send`,
-    missing === undefined ? null : `${people(missing)} with an account missing from ${name}`,
+    missing === undefined
+      ? "missing accounts not checked: only the first part of the list was read"
+      : `${people(missing)} with an account missing from ${name}`,
   ]
     .filter(Boolean)
     .join(" · ");

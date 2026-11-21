@@ -126,6 +126,9 @@ describe("formatShortDate", () => {
       expect(said).toBe("—");
     }
     expect(moment("2026-08-02T12:00:00Z")).not.toBeNull();
+    // Everything at or before the epoch is blanked, as ReadFreshness does; the moment after it is not.
+    expect(moment("1970-01-01T00:00:00Z")).toBeNull();
+    expect(moment("1970-01-01T00:00:01Z")).not.toBeNull();
   });
 
   it("carries the year into a feed stamp too", () => {

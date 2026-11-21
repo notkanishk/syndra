@@ -663,7 +663,7 @@ export interface MappableValues {
   enumerable: boolean;
   builtin_count?: number;
   builtin_examples?: string[];
-  read_at?: string;
+  read_at: string;
   current: boolean;
 }
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -76,5 +77,35 @@ func TestAZeroReadTimeIsNeverSent(t *testing.T) {
 		if got, ok := keysOf(t, raw)["read_at"]; ok {
 			t.Errorf("%s: read_at=%s for a read never taken", name, got)
 		}
+	}
+}
+
+// A remembered storage read is always dated, even when the add-on's taken_at
+// was the zero time: the person's page says "last read" and a clock after it.
+func TestARememberedStorageReadIsAlwaysDated(t *testing.T) {
+	rememberStorage("truenas", "sub-undertaker", addons.StorageStatus{Observation: &addons.Observation{}})
+	t.Cleanup(func() { lastStorage.Delete("truenas\x00sub-undertaker") })
+	if got := recalledStorage("truenas", "sub-undertaker"); got == nil || got.ReadAt.IsZero() {
+		t.Fatalf("recalled %+v, want a read dated when it arrived", got)
+	}
+}
+
+// The other side of the halted body: a whole read that found nothing sends
+// its zeros, because they were counted. Absent means unread, never empty.
+func TestAWholeEmptyReadSendsItsZeros(t *testing.T) {
+	read := drift.AddonReconcileResult{Target: "truenas", Bound: new(0), Unmanaged: []drift.UnmanagedAccount{},
+		Stale: []drift.StaleBinding{}, ReadAt: time.Now(), Current: true}
+	raw, err := json.Marshal(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := keysOf(t, raw)
+	for k, want := range map[string]string{"bound": "0", "unmanaged": "[]", "stale": "[]"} {
+		if string(m[k]) != want {
+			t.Errorf("%s=%s, want %s: a count taken is sent, 0 included", k, m[k], want)
+		}
+	}
+	if _, ok := m["read_at"]; !ok {
+		t.Error("a whole read is dated")
 	}
 }

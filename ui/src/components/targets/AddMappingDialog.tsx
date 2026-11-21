@@ -14,7 +14,7 @@ import { ApiError } from "@/lib/api-client";
 import { fieldsByRole, mappingFields, membershipNoun } from "@/lib/fields";
 import { schemaReason } from "@/components/states/SchemaState";
 import { useFieldSchema, useFieldSchemaState, useSystemNames } from "@/lib/queries/useFieldSchema";
-import { formatClock, formatList, moment } from "@/lib/format";
+import { formatClock, formatList } from "@/lib/format";
 import { useCreateMapping, useMappings } from "@/lib/queries/useMappings";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import {
@@ -120,8 +120,6 @@ export function RoleMappingDialog({
   const ops = opsFor(current, choice, fields);
 
   const list = values.data;
-  // When the list was read, or null when no time came with it: a clock is never "—" mid-sentence.
-  const at = moment(list?.read_at) && formatClock(list?.read_at);
   const neverRead = values.error instanceof ApiError && values.error.code === "VALUES_NEVER_READ";
   const noGroups = Boolean(list && list.values.length === 0);
   // A membership the system cannot list at all: Syndra can't check or manage a
@@ -236,14 +234,14 @@ export function RoleMappingDialog({
                       offered.
                     </>
                   ) : (
-                    `The list ${name} gave${at ? ` at ${at}` : " last"}.`
+                    `The list ${name} gave at ${formatClock(list.read_at)}.`
                   )}
                 </FieldHint>
                 {value && <OpensLine name={name} places={reach.data?.read ? reach.data.groups?.[value] : undefined} />}
                 {!list.current && (
-                  <Notice tone="warn" title={at ? `This list is from ${at}.` : `This list is ${name}'s last.`} next={`Preview as usual. If you doubt a ${noun} still exists, check it on ${name} first.`}>
+                  <Notice tone="warn" title={`This list is from ${formatClock(list.read_at)}.`} next={`Preview as usual. If you doubt a ${noun} still exists, check it on ${name} first.`}>
                     Syndra can&apos;t read {name}&apos;s {noun}s right now. You can still preview. A {noun} deleted since{" "}
-                    {at ?? "then"} fails when the mapping is applied, and the failure is reported.
+                    {formatClock(list.read_at)} fails when the mapping is applied, and the failure is reported.
                   </Notice>
                 )}
               </>

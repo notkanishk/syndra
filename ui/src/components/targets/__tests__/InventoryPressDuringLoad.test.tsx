@@ -107,3 +107,85 @@ describe("a press during the account list's first load", () => {
     expect(screen.queryByText("Nothing outside Syndra.")).toBeNull();
   });
 });
+
+describe("Read again on the region's line", () => {
+  const halted = () =>
+    new Response(JSON.stringify({ target: "truenas", current: false, halted: true, reason: "target_unreachable" }), { status: 503 });
+  const renderPage = () =>
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <TargetOverview target="truenas" />
+      </QueryClientProvider>,
+    );
+
+  it("counts down inside the add-on's cooldown, with the button waiting on that line", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).includes("fresh=true")
+          ? Promise.resolve(new Response(JSON.stringify({ error: "FRESH_READ_COOLDOWN", message: "wait", retry_after: 30 }), { status: 429 }))
+          : String(input).includes("/inventory")
+            ? Promise.resolve(halted())
+            : new Promise<Response>(() => {}),
+      ),
+    );
+    renderPage();
+    const line = await screen.findByText(/^The account list could not be read\./);
+    fireEvent.click(within(line.parentElement!).getByRole("button", { name: "Read again" }));
+    const countdown = await screen.findByText(/^The account list was read moments ago; you can read again in \d+ s$/);
+    const button = within(countdown.parentElement!).getByRole("button", { name: "Read again" });
+    expect(button).toBeDisabled();
+    expect(button.getAttribute("aria-describedby")).toBe(countdown.id);
+  });
+
+  it("hands focus to the region's heading when a read lands and takes the line away", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).includes("fresh=true")
+          ? Promise.resolve(
+              new Response(
+                JSON.stringify({ target: "truenas", bound: 0, accounts: [], unmanaged: [], read_at: new Date().toISOString(), current: true }),
+              ),
+            )
+          : String(input).includes("/inventory")
+            ? Promise.resolve(halted())
+            : new Promise<Response>(() => {}),
+      ),
+    );
+    renderPage();
+    const line = await screen.findByText(/^The account list could not be read\./);
+    const button = within(line.parentElement!).getByRole("button", { name: "Read again" });
+    button.focus();
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.queryByText(/^The account list could not be read\./)).toBeNull());
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.id).toBe("accounts-heading");
+  });
+});
+
+describe("a whole account list that holds nothing", () => {
+  it("counts 0 on the card, a count that was taken", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).includes("/inventory")
+          ? Promise.resolve(
+              new Response(
+                JSON.stringify({ target: "truenas", bound: 0, accounts: [], unmanaged: [], read_at: new Date().toISOString(), current: true }),
+              ),
+            )
+          : new Promise<Response>(() => {}),
+      ),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <TargetOverview target="truenas" />
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Nothing outside Syndra.");
+    // The card's header: its title and, beside it, its count.
+    const header = screen.getByText("Not created by Syndra").parentElement!;
+    expect(within(header).getByTestId("card-count").textContent).toBe("0");
+  });
+});

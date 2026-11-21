@@ -65,9 +65,10 @@ export function askLengthForOperator(
 }
 
 /**
- * The moment an ISO time names, or null when it names none: absent, unparseable, or Go's zero time
- * (0001-01-01, the `time.Time` of a read that never happened). Every formatter below goes through
- * here, so none of them ever says "1 Jan 1"; a caller that must render nothing tests this first.
+ * The moment an ISO time names, or null when it names none: absent, unparseable, or at or before the
+ * Unix epoch, which holds Go's zero time (0001-01-01, the `time.Time` of a read that never happened)
+ * and a JavaScript 0. Syndra dates nothing that early, so every formatter below goes through here and
+ * none of them ever says "1 Jan 1" or "1 Jan 1970".
  */
 export function moment(iso: string | null | undefined): Date | null {
   const date = iso ? new Date(iso) : null;

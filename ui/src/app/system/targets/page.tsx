@@ -177,7 +177,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
   const answering = reading.tone === "healthy";
   const bound = inventory.data?.bound;
   // A pass that stopped read nothing: its count is "Not read", never "Not yet" (it has answered before).
-  const halted = inventory.data?.halted;
+  const unread = inventory.data?.halted;
   // The product and its version, whatever the operator named the system.
   const product = health.data?.product
     ? `${health.data.product} ${versionLabel(health.data.product, health.data.product_version)}`.trim()
@@ -207,7 +207,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
       });
   }
   const loading = Boolean(ask) && (health.isLoading || inventory.isLoading || findings.isLoading);
-  const unread = Boolean(ask) && (health.isError || inventory.isError || findings.isError);
+  const readFailed = Boolean(ask) && (health.isError || inventory.isError || findings.isError);
 
   return (
     <CardRow
@@ -228,7 +228,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
             </ArrowLink>
           ))}
           {needs.length === 0 && row.project !== null && (
-            <NeedsNote answering={answering} callable={row.callable} loading={loading} unread={unread} />
+            <NeedsNote answering={answering} callable={row.callable} loading={loading} unread={readFailed} />
           )}
         </span>
       }
@@ -282,7 +282,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           read yet says "Not yet". Once it stops answering, the last count
           stays and says so. */}
       <span data-figure className="flex flex-col gap-0.5 pt-px">
-        {halted ? (
+        {unread ? (
           <span className="text-body text-faint">Not read</span>
         ) : bound === undefined ? (
           <span className="text-body text-faint">Not yet</span>
