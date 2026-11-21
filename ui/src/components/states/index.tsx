@@ -105,6 +105,7 @@ export function EmptyState({
   action,
   resolved = false,
   glow = false,
+  onGlow,
   lift = false,
   closes = false,
   plate,
@@ -115,6 +116,8 @@ export function EmptyState({
   resolved?: boolean;
   /** The reader's own act just emptied it (S13): the lime dot's ember opens once (A-25 moment 7); at rest it only holds its glow. */
   glow?: boolean;
+  /** Said once, at the line's first mount, when it opened its light: the opening is spent (`useOneOpening`). */
+  onGlow?: () => void;
   /** The list just emptied in front of the reader: the line rises into its place. */
   lift?: boolean;
   /**
@@ -127,16 +130,23 @@ export function EmptyState({
   /** Its drawing (A-24 §7, Q9): shut for a queue that is clear, open for a list just beginning. */
   plate?: PlateKind;
 }) {
+  // What the line is first given is what it does: a re-render never replays or cuts short its opening.
+  const [opens] = useState(glow);
+  const [lifts] = useState(lift);
+  useEffect(() => {
+    if (opens) onGlow?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- spent once, at the first mount
+  }, []);
   return (
     <div
       role="status"
-      className={`${lift ? "lift-in" : "tint-in"} relative flex items-center gap-6 px-6 py-(--empty-y) tablet:px-(--card-x)`}
+      className={`${lifts ? "lift-in" : "tint-in"} relative flex items-center gap-6 px-6 py-(--empty-y) tablet:px-(--card-x)`}
     >
       {closes && <span aria-hidden data-close-line className="close-line" />}
       <div className="flex min-w-0 flex-1 flex-col justify-center gap-2.5">
       <div className="isolate flex items-center gap-2.5">
         {resolved && (
-          <StatusDot tone="healthy" ember glow={glow} />
+          <StatusDot tone="healthy" ember glow={opens} />
         )}
         <div className={closes ? "type-section-title" : "type-empty-title"}>{title}</div>
       </div>

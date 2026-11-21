@@ -31,16 +31,21 @@ export function AllClear({
   guidance,
   emptied,
   byReader,
+  onOpened,
   inCard = false,
 }: {
   title: string;
   guidance: string;
   emptied: boolean;
   byReader: boolean;
+  /** Said once when the line first mounted opened: the clearing's one opening is spent. */
+  onOpened?: () => void;
   /** The caller opens a card around it (AllClearCard), so the line need not open its own space. */
   inCard?: boolean;
 }) {
-  const line = <EmptyState resolved lift={emptied} glow={emptied && byReader} title={title} guidance={guidance} />;
+  // What it is first given is what it does: spending the opening must not unfold it away after the fact.
+  const [opens] = useState(emptied);
+  const line = <EmptyState resolved lift={emptied} glow={emptied && byReader} onGlow={onOpened} title={title} guidance={guidance} />;
   // Its space is opened by the card around it when it sits in one (AllClearCard); alone, here.
-  return emptied && !inCard ? <UnfoldOnArrival>{line}</UnfoldOnArrival> : line;
+  return opens && !inCard ? <UnfoldOnArrival>{line}</UnfoldOnArrival> : line;
 }

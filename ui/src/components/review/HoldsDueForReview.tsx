@@ -39,7 +39,7 @@ export function HoldsDueForReview() {
   const rows = due.data?.due_for_review ?? [];
   // S5: a hold that leaves the list on a later read (lifted, kept or ended elsewhere) fades where
   // it was and closes its gap after, and not under the pointer.
-  const clearedByMe = useQueueCleared(rows, !due.isLoading && !due.error, true).glow;
+  const { glow: clearedByMe, spend } = useQueueCleared(rows, !due.isLoading && !due.error, true);
   const leaving = useLeavingRows(rows, (hold) => hold.id, !due.isLoading && !due.error);
 
   return (
@@ -71,6 +71,7 @@ export function HoldsDueForReview() {
               resolved
               lift={clearedByMe}
               glow={clearedByMe}
+              onGlow={spend}
               title="No hold is due for review."
               guidance="A hold appears here on the review date the person who placed it chose. Until then it stays in force without asking."
             />

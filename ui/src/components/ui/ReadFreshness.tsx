@@ -284,7 +284,7 @@ export function ReadFreshness({
   const cannotReach = why === STALE.unreachable && Boolean(state.readAt);
   const lineId = useId();
 
-  const blooming = landed !== null && landed === (state.readAt ?? null) && (reading === "live" || reading === "ageing");
+  const glowing = landed !== null && landed === (state.readAt ?? null) && (reading === "live" || reading === "ageing");
 
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-fine ${className}`}>
@@ -296,9 +296,9 @@ export function ReadFreshness({
           the target could not confirm it. */}
       {/* The dot and the sentence wrap as one, so a long sentence never leaves the dot alone on its line. */}
       <span className="isolate flex min-w-0 items-start gap-2">
-      <StatusDot data-freshness-dot="" tone={tone.dot.tone} ring={tone.dot.ring} glow={blooming} className="mt-[0.5em]" />
+      <StatusDot data-freshness-dot="" tone={tone.dot.tone} ring={tone.dot.ring} glow={glowing} className="mt-[0.5em]" />
       {/* The new line crossfades in over the old one when a read the reader asked for lands (S17). */}
-      <Crossfade id={blooming ? `landed:${landed}` : "read"}>
+      <Crossfade id={glowing ? `landed:${landed}` : "read"}>
         <span id={lineId} className={tone.text}>
           {cooling
             ? cooldownLine(subject, left)

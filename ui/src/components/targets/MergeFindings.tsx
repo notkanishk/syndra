@@ -5,6 +5,7 @@ import { Term } from "@/components/ui/Term";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Crossfade, LeavingRow, Unfold, useLeavingRows } from "@/lib/motion";
 import { AllClear, useEmptied } from "@/components/targets/AllClear";
+import { useOneOpening } from "@/lib/useOneOpening";
 import {
   CHECKED_UPDATING,
   CONFLICT_NEXT_FALLBACK,
@@ -101,7 +102,10 @@ export function MergeFindings({
   const rows = leaving.rows;
   const known = findings.data !== undefined;
   const drawn = known ? rows.length : undefined;
-  const emptied = useEmptied(drawn);
+  // Emptied in front of the reader, and spent once seen: a read that fails and recovers brings the same
+  // all-clear back, not a second opening.
+  const opening = useOneOpening(useEmptied(drawn), !findings.isLoading && !findings.error);
+  const emptied = opening.open;
   // The findings this reader decided (saved), by id. The all-clear blooms only when what is leaving is
   // theirs: nobody else's act, and no clock, decides it.
   const mine = useRef(new Set<string>());
@@ -149,6 +153,7 @@ export function MergeFindings({
             guidance={`Every account Syndra manages on ${name} matches what Syndra expects, or differs in a way Syndra could explain.`}
             emptied={emptied}
             byReader={byReader}
+            onOpened={opening.spend}
           />
         }
       >

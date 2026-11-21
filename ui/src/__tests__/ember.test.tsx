@@ -55,6 +55,14 @@ describe("the ember at rest", () => {
     expect(dot).not.toHaveAttribute("data-ember");
   });
 
+  it("is worn only by a healthy dot: nothing amber, red or neutral glows (A-25 rule 5)", () => {
+    for (const tone of ["warn", "danger", "neutral", "accent"] as const) {
+      const { container } = render(<StatusDot tone={tone} ember glow />);
+      expect(container.querySelector("[data-dot]")!.className).not.toMatch(/dot-glow|ember/);
+    }
+    expect(render(<StatusDot tone="healthy" glow />).container.querySelector("[data-dot]")).toHaveClass("glow-once");
+  });
+
   it("leaves the dot readable in both themes, bare and over its pool at its strongest (the hour's weight takes the light room's down)", () => {
     for (const [theme, prelude] of [
       ["dark", ':root,\n  [data-theme="dark"] {'],
@@ -93,10 +101,12 @@ describe("the ember opening", () => {
     const first = view.container.querySelector("[data-dot]");
     view.rerender(<EmptyState resolved lift glow title="Done." guidance="Nothing for you to do." />);
     expect(view.container.querySelector("[data-dot]")).toBe(first);
-    view.rerender(<EmptyState resolved lift title="Done." guidance="Nothing for you to do." />);
+    // What the line is first given is what it does: dropping the prop mid-opening neither cuts it short nor
+    // swaps the line's animation (the same node, the same classes).
+    view.rerender(<EmptyState resolved title="Done." guidance="Nothing for you to do." />);
     expect(view.container.querySelector("[data-dot]")).toBe(first);
-    expect(first).not.toHaveClass("ember-open");
-    expect(first).toHaveClass("ember");
+    expect(first).toHaveClass("ember", "ember-open");
+    expect(view.container.querySelector("[role=status]")).toHaveClass("lift-in");
   });
 
   it("goes from scale 0.2 and opacity 1 to its rest over flash's duration on flash's curve, once, with no overshoot", () => {

@@ -41,8 +41,8 @@ export interface PlanGroup {
   /** "1 person" / "4 people", in the plan's own noun. */
   count: string;
   dot?: StatusTone;
-  /** Done's dot blooms once when every written row reached Zitadel. */
-  bloom?: boolean;
+  /** Done's dot glows once when every written row reached Zitadel. */
+  glow?: boolean;
   /** After Apply, the wait fold's heading is the link to Pending changes. */
   link?: boolean;
   /** The faint line under the heading: why they wait, or when Syndra tries again. */
@@ -188,7 +188,7 @@ export function groupPlan(
     };
     switch (key) {
       case "go":
-        if (plan.applied) Object.assign(group, { dot: "healthy", bloom: reached });
+        if (plan.applied) Object.assign(group, { dot: "healthy", glow: reached });
         break;
       case "wait":
         Object.assign(group, plan.applied ? { link: true } : { dot: "warn" }, { note: causeLine(rows) });

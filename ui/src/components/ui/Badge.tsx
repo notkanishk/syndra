@@ -178,7 +178,8 @@ export function StatusDot({
   [attribute: `data-${string}`]: string | undefined;
 }) {
   const t = STATUS_TONE[tone];
-  const light = ring ? "" : ember ? `dot-glow ember ${glow ? "ember-open" : ""}` : glow ? "dot-glow glow-once" : "";
+  // Only a healthy dot wears light (A-25 rule 5): lime is the room at rest, and nothing amber or red glows.
+  const light = ring || tone !== "healthy" ? "" : ember ? `dot-glow ember ${glow ? "ember-open" : ""}` : glow ? "dot-glow glow-once" : "";
   // The ring is the tone's colour (`edge`) drawn as an inset shadow, not a border: a dot filling from its
   // ring tints both ways at once (`motion-tint`), so it never empties between them (A-25 moment 5).
   return (

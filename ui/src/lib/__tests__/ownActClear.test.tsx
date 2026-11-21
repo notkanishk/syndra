@@ -30,26 +30,71 @@ describe("an all-clear blooms only after the operator's own act", () => {
     expect(result.current.glow).toBe(true);
   });
 
-  it("opens the ember in the moment of the clearing only: a later remount of the same clearing is not a second opening", async () => {
+  // The real path: an all-clear that mounts when the page says so (a leaving row can hold it for seconds),
+  // an error in its place while a read fails, and the all-clear again when the retry lands.
+  type Props = { rows: typeof A[]; ready: boolean; show: boolean };
+  const Page = ({ rows, ready, show }: Props) => {
+    const { glow, spend } = useQueueCleared(rows, ready, true);
+    if (!ready) return createElement("p", null, "The read failed");
+    if (rows.length > 0) return createElement("p", null, "The list");
+    if (!show) return createElement("p", null, "Still leaving");
+    return createElement(EmptyState, { resolved: true, lift: glow, glow, onGlow: spend, title: "Done." });
+  };
+  const own = async () => {
     const qc = makeQueryClient();
-    const wrapper = ({ children }: { children: ReactNode }) =>
-      createElement(QueryClientProvider, { client: qc }, children);
-    const { result, rerender } = renderHook(({ rows }) => useQueueCleared(rows, true, true), {
-      initialProps: { rows: [A] },
-      wrapper,
-    });
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client: qc }, children);
+    const view = render(createElement(Page, { rows: [A], ready: true, show: true }), { wrapper });
     await act(async () => {
       await qc.getMutationCache().build(qc, { mutationFn: async () => "ok" }).execute(undefined);
     });
-    rerender({ rows: [] });
-    expect(result.current.glow).toBe(true);
-    // A read fails and then a good one lands, seconds later: the empty state remounts. The clearing is still
-    // theirs (the count and the time), but the light has had its one opening.
+    const again = (props: Props) => view.rerender(createElement(Page, props));
+    return { view, again };
+  };
+  const dot = (c: HTMLElement) => c.querySelector("[data-dot]");
+
+  it("(a) a slow leave: the all-clear that mounts seconds after the clearing still lifts and opens, once", async () => {
+    const { view, again } = await own();
+    again({ rows: [], ready: true, show: false });
     act(() => void vi.advanceTimersByTime(5_000));
-    rerender({ rows: [] });
-    expect(result.current.cleared?.mine).not.toBeNull();
-    expect(result.current.glow).toBe(false);
+    again({ rows: [], ready: true, show: true });
+    expect(dot(view.container)).toHaveClass("ember-open");
+    expect(view.container.querySelector("[role=status]")).toHaveClass("lift-in");
   });
+
+  it("(b) clear, then a read that fails, then one that lands: the same all-clear comes back, with no second opening", async () => {
+    const { view, again } = await own();
+    again({ rows: [], ready: true, show: true });
+    expect(dot(view.container)).toHaveClass("ember-open");
+    again({ rows: [], ready: false, show: true });
+    expect(dot(view.container)).toBeNull();
+    again({ rows: [], ready: true, show: true });
+    expect(dot(view.container)).toHaveClass("ember");
+    expect(dot(view.container)).not.toHaveClass("ember-open");
+    expect(view.container.querySelector("[role=status]")).not.toHaveClass("lift-in");
+  });
+
+  it("(b') a read that fails before the all-clear ever mounted spends the opening too", async () => {
+    const { view, again } = await own();
+    again({ rows: [], ready: true, show: false });
+    again({ rows: [], ready: false, show: false });
+    again({ rows: [], ready: true, show: true });
+    expect(dot(view.container)).not.toHaveClass("ember-open");
+    expect(view.container.querySelector("[role=status]")).not.toHaveClass("lift-in");
+  });
+
+  it("(c) a re-render or a remount after the opening does not replay it, and the opening is not cut short", async () => {
+    const { view, again } = await own();
+    again({ rows: [], ready: true, show: true });
+    const first = dot(view.container);
+    again({ rows: [], ready: true, show: true });
+    again({ rows: [], ready: true, show: true });
+    expect(dot(view.container)).toBe(first);
+    expect(first).toHaveClass("ember-open");
+    again({ rows: [], ready: true, show: false });
+    again({ rows: [], ready: true, show: true });
+    expect(dot(view.container)).not.toHaveClass("ember-open");
+  });
+
 
   it("does not claim one that empties on a read nobody caused, or that arrived empty", () => {
     vi.setSystemTime(new Date(2030, 0, 1)); // later than any write another test made
