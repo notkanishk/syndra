@@ -96,7 +96,7 @@ func handleMemberAction(w http.ResponseWriter, r *http.Request) {
 	var unavailable *addons.ErrOperationUnavailable
 	switch {
 	case errors.As(err, &unavailable):
-		jsonErrorResponse(w, http.StatusConflict, "ACTION_UNAVAILABLE", "That can't be done on this system right now.")
+		jsonErrorResponse(w, http.StatusConflict, "ACTION_UNAVAILABLE", actionUnavailable)
 		return
 	case err != nil || op.Effect != addons.EffectPhysical || op.Scope != addons.ScopeMember:
 		jsonErrorResponse(w, http.StatusNotFound, "NO_SUCH_ACTION", "There is no such action on this system.")
@@ -240,6 +240,10 @@ func writeRefusal(w http.ResponseWriter, code string, ref addons.Refusal) {
 	jsonResponse(w, status, resp)
 }
 
+// actionUnavailable is ACTION_UNAVAILABLE's one sentence, whether the action
+// was gone when asked or when sent: the code the member UI knows.
+const actionUnavailable = "This isn't available on that system right now. Nothing was sent. Nothing for you to do."
+
 // writeActionError answers a refusal Syndra made itself, before sending.
 func writeActionError(w http.ResponseWriter, err error) {
 	var unsettled *addonop.UnsettledError
@@ -258,8 +262,7 @@ func writeActionError(w http.ResponseWriter, err error) {
 		jsonValidationErrorResponse(w, "That isn't something this action takes.", map[string]string{"params": err.Error()})
 	// The caller's own request, refused before anything left: 4xx, never 500.
 	case errors.As(err, new(*addons.ErrOperationUnavailable)):
-		jsonErrorResponse(w, http.StatusConflict, "OPERATION_UNAVAILABLE",
-			"This isn't available on that system right now. Nothing was sent. Nothing for you to do.")
+		jsonErrorResponse(w, http.StatusConflict, "ACTION_UNAVAILABLE", actionUnavailable)
 	case errors.Is(err, addonop.ErrConfirmationRequired):
 		jsonErrorResponse(w, http.StatusUnprocessableEntity, "CONFIRMATION_REQUIRED",
 			"This acts on something real, so it needs your confirmation. Nothing was sent. Confirm to go ahead.")

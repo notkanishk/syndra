@@ -86,8 +86,12 @@ func systemAndProduct(ctx context.Context, target string) (system, product strin
 // that knows: its app down, or its refusal. Drafts; the final words are the
 // copy guide's (8e).
 func whySentence(system, product string, why addons.Why, member bool) string {
-	if member {
+	if member && why.Unreachable() {
 		return system + " isn't answering right now."
+	}
+	if member && (why.Reason == addons.ReasonReadRefused || why.Reason == addons.ReasonAddonOutdated) {
+		// Not an outage, and not the member's to fix or wait out.
+		return system + " can't do this right now. Ask makerspace staff."
 	}
 	if why.Reason == addons.ReasonAppUnreachable || why.Reason == addons.ReasonReadRefused {
 		if d := strings.TrimSpace(why.Detail); d != "" {
@@ -117,6 +121,9 @@ func whySentence(system, product string, why addons.Why, member bool) string {
 		}
 		return s
 	case addons.ReasonAppUnreachable:
+		if why.Unusable {
+			return product + " didn't give its add-on an answer it could use. Check " + product + ", then read again."
+		}
 		return system + "'s add-on is running but can't reach " + product + ". Check that " + product + " is on."
 	case addons.ReasonCooldown:
 		return system + " was read moments ago. Read it again in " + strconv.Itoa(max(1, why.RetryAfter)) + " s."

@@ -54,10 +54,19 @@ func notLandedOf(ctx context.Context, target string, outcome addons.Outcome, why
 // could not record (addonop.Dispatch leaves the row dispatching) is as unknown
 // as a lost answer: indeterminate, never a refusal or a 500 that invites a
 // second send.
+//
+// Unreached stays unreached: the transport says nothing went out, and an
+// unrecorded settle does not change that. Its row stays dispatching, which is
+// safe: it is listed as unresolved and settled like any other (GET
+// /calls/{call_id}; one never claimed reads as nothing sent), and a physical
+// one holds CALL_UNSETTLED until then, so it leans to asking, never to a
+// second send.
 func dispatched(res addonop.Result, err error) (addonop.Result, error) {
 	if err != nil && res.OperationID != "" {
 		log.Printf("[ADDON-OP] %v", err)
-		res.Outcome = addons.OutcomeIndeterminate
+		if res.Outcome != addons.OutcomeUnreached {
+			res.Outcome = addons.OutcomeIndeterminate
+		}
 		return res, nil
 	}
 	return res, err
@@ -113,7 +122,12 @@ func writeNotLanded(w http.ResponseWriter, err error) bool {
 }
 
 // nothingSent is NOTHING_SENT's sentence: what happened, who is down
-// (whySentence), and the next step.
+// (whySentence), and the next step. Only an outage is waited out; the other
+// reasons carry their own next step (§13.1).
 func nothingSent(n *notLanded) string {
-	return "Nothing went out. " + whySentence(n.System, n.Product, n.Why, n.Member) + " Try again when " + n.System + " answers."
+	s := "Nothing went out. " + whySentence(n.System, n.Product, n.Why, n.Member)
+	if n.Why.Unreachable() {
+		s += " Try again when " + n.System + " answers."
+	}
+	return s
 }

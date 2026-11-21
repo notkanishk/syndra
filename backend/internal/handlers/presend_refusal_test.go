@@ -58,6 +58,9 @@ func TestAnActionRefusedForTheRequestIsTheCallers(t *testing.T) {
 		writeActionError(rr, err)
 		var out ErrorResponse
 		_ = json.Unmarshal(rr.Body.Bytes(), &out)
+		if _, gone := err.(*addons.ErrOperationUnavailable); gone && out.Error != "ACTION_UNAVAILABLE" {
+			t.Errorf("one code for an action that is not available, the one the member UI knows: %q", out.Error)
+		}
 		if rr.Code != want || !strings.Contains(out.Message, "Nothing was sent.") || strings.Contains(out.Message, "addonop") {
 			t.Errorf("%v: got %d %q, want %d and a sentence", err, rr.Code, out.Message, want)
 		}

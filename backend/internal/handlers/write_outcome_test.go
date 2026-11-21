@@ -145,13 +145,14 @@ func TestEveryWritePathSaysOneOfTwoThings(t *testing.T) {
 // (addonop.Dispatch returns its OperationID with the error) is as unknown as
 // a lost answer: 202 unconfirmed on every dispatching path, never a refusal
 // or Syndra's 500 that invites a second send.
-func TestASentCallWithItsOutcomeUnrecordedIsUnconfirmed(t *testing.T) {
-	sentUnrecorded := func() {
-		svcDispatchOperation = func(context.Context, addonop.Request) (addonop.Result, error) {
-			return addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeSucceeded},
-				errors.New("addonop: operation op_1 was dispatched but its outcome was not recorded")
-		}
+func sentUnrecorded() {
+	svcDispatchOperation = func(context.Context, addonop.Request) (addonop.Result, error) {
+		return addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeSucceeded},
+			errors.New("addonop: operation op_1 was dispatched but its outcome was not recorded")
 	}
+}
+
+func TestASentCallWithItsOutcomeUnrecordedIsUnconfirmed(t *testing.T) {
 	for name, run := range map[string]func(t *testing.T) *httptest.ResponseRecorder{
 		"adopt": func(t *testing.T) *httptest.ResponseRecorder {
 			stubAdopt(t, &adoptHarness{})
@@ -180,11 +181,42 @@ func TestASentCallWithItsOutcomeUnrecordedIsUnconfirmed(t *testing.T) {
 			sentUnrecorded()
 			return resolveFinding(t, `{"resolution":"unbound","reason":"the account was removed on purpose"}`)
 		},
+		"resolving a binding finding (adopt)": func(t *testing.T) *httptest.ResponseRecorder {
+			stubConflictActions(t, bindingConflict("f1", "sub-1", numberHeldAdoptable))
+			sentUnrecorded()
+			return resolveFinding(t, `{"resolution":"adopted","reason":"it is theirs"}`)
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			stubNames(t)
 			assertUnconfirmed(t, run(t))
 		})
+	}
+}
+
+// The two paths whose reply lists the write inside a larger one say it the
+// same way: the dormant removal's account and the revocation's rotation.
+func TestASentCallWithItsOutcomeUnrecordedIsUnconfirmedInsideALargerReply(t *testing.T) {
+	stubNames(t)
+	stubSweep(t, &sweepHarness{report: services.DormantReport{Accounts: []services.DormantAccount{{Account: "gone", SubjectID: "u1"}}}})
+	sentUnrecorded()
+	if body := sweep(t, `{"accounts":["gone"],"elevated_key":"k","confirmed":true}`).Body.String(); !strings.Contains(body, `"outcome":"unconfirmed"`) {
+		t.Errorf("dormant removal: %s", body)
+	}
+
+	stubRevocation(t)
+	sentUnrecorded()
+	if body := revoke(`{"reason":"offboarding","confirmed":true}`).Body.String(); !strings.Contains(body, `"status":"unconfirmed"`) {
+		t.Errorf("rotation: %s", body)
+	}
+}
+
+// Nothing went out is nothing went out, even when Syndra could not record it:
+// an unreached outcome is never turned into "may have been applied".
+func TestAnUnreachedCallWithItsOutcomeUnrecordedStaysUnreached(t *testing.T) {
+	res, err := dispatched(addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeUnreached}, errors.New("not recorded"))
+	if err != nil || res.Outcome != addons.OutcomeUnreached {
+		t.Fatalf("got %v %v", res.Outcome, err)
 	}
 }
 
@@ -238,6 +270,56 @@ func TestAnAppOutageSaysTheAddOnsWordsFirst(t *testing.T) {
 	}
 }
 
+// Every reason against design §13.1's table, operator and member. The app's
+// two unusable answers come through addons.Unread, the one mapping.
+func TestEveryReasonSaysItsSection13Sentence(t *testing.T) {
+	unusable := addons.Unread(addons.CallResponse{Outcome: addons.OutcomeRejected, Status: 503, Code: "NO_CURRENT_READ"})
+	unreadable := addons.Unread(addons.CallResponse{Outcome: addons.OutcomeRejected, Status: 503, Code: "TARGET_UNREADABLE"})
+	for _, c := range []struct {
+		name     string
+		why      addons.Why
+		operator string
+		member   string
+	}{
+		{"no_answer", addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseNoAnswer},
+			"Syndra can't reach Ringside NAS's add-on. Check that its container is running. Syndra keeps trying.", "Ringside NAS isn't answering right now."},
+		{"wrong_host", addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseWrongHost},
+			"Something answered at Ringside NAS's add-on address, but it isn't the add-on registered here. Check the address and the shared secret, then restart the add-on.", "Ringside NAS isn't answering right now."},
+		{"timeout", addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseTimeout},
+			"Ringside NAS's add-on started answering and stopped. Syndra keeps trying. If it lasts, read the add-on's log.", "Ringside NAS isn't answering right now."},
+		{"fault", addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseFault},
+			"Ringside NAS's add-on answered with an error it didn't explain. Read the add-on's log.", "Ringside NAS isn't answering right now."},
+		{"breaker", addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseNoAnswer, RetryAfter: 9},
+			"Syndra can't reach Ringside NAS's add-on. Check that its container is running. Syndra keeps trying. Syndra tries again in 9 s.", "Ringside NAS isn't answering right now."},
+		{"no_key", addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseNoKey},
+			"Syndra can't load Ringside NAS's shared secret. Check Syndra's secret file.", "Ringside NAS isn't answering right now."},
+		{"app", addons.Why{Reason: addons.ReasonAppUnreachable},
+			"Ringside NAS's add-on is running but can't reach TrueNAS. Check that TrueNAS is on.", "Ringside NAS isn't answering right now."},
+		{"NO_CURRENT_READ", unusable,
+			"TrueNAS didn't give its add-on an answer it could use. Check TrueNAS, then read again.", "Ringside NAS isn't answering right now."},
+		{"TARGET_UNREADABLE", unreadable,
+			"TrueNAS didn't give its add-on an answer it could use. Check TrueNAS, then read again.", "Ringside NAS isn't answering right now."},
+		{"read_refused", addons.Why{Reason: addons.ReasonReadRefused},
+			"Ringside NAS's add-on didn't take this. Read the add-on's log.", "Ringside NAS can't do this right now. Ask makerspace staff."},
+		{"addon_outdated", addons.Why{Reason: addons.ReasonAddonOutdated},
+			"Ringside NAS's add-on doesn't offer this. Update the add-on.", "Ringside NAS can't do this right now. Ask makerspace staff."},
+		{"cooldown", addons.Why{Reason: addons.ReasonCooldown, RetryAfter: 5},
+			"Ringside NAS was read moments ago. Read it again in 5 s.", "Ringside NAS was read moments ago. Read it again in 5 s."},
+	} {
+		if got := whySentence("Ringside NAS", "TrueNAS", c.why, false); got != c.operator {
+			t.Errorf("%s operator: %q", c.name, got)
+		}
+		n := &notLanded{System: "Ringside NAS", Product: "TrueNAS", Outcome: addons.OutcomeUnreached, Why: c.why, Member: true}
+		got := nothingSent(n)
+		if got != "Nothing went out. "+c.member+map[bool]string{true: " Try again when Ringside NAS answers.", false: ""}[c.why.Unreachable()] {
+			t.Errorf("%s member: %q", c.name, got)
+		}
+		if !c.why.Unreachable() && strings.Contains(got, "Try again when") {
+			t.Errorf("%s is not an outage, so it is not waited out: %q", c.name, got)
+		}
+	}
+}
+
 // The dormant removal is refused at once when the monitor holds the system
 // down: no re-read, nothing dispatched.
 func TestADormantRemovalToAHeldSystemIsRefusedUndialed(t *testing.T) {
@@ -270,6 +352,18 @@ func TestADormantRemovalsFailedReCheckCarriesItsWhy(t *testing.T) {
 	h.reportErr = errors.New("read bindings: connection refused")
 	if rr := sweep(t, `{"accounts":["gone"],"elevated_key":"k","confirmed":true}`); rr.Code != http.StatusInternalServerError {
 		t.Errorf("Syndra's own fault is 500, got %d %s", rr.Code, rr.Body)
+	}
+}
+
+// A re-check cut at the add-on's cap says so, in the list's own sentence,
+// never read_refused's generic one.
+func TestADormantRemovalsTruncatedReCheckSaysItWasCut(t *testing.T) {
+	stubNames(t)
+	stubSweep(t, &sweepHarness{reportErr: fmt.Errorf("dormant: %w: %w", services.ErrReadTruncated, addons.NotRead{Why: addons.Why{Reason: addons.ReasonReadRefused}})})
+	rr := sweep(t, `{"accounts":["gone"],"elevated_key":"k","confirmed":true}`)
+	if body := rr.Body.String(); rr.Code != http.StatusServiceUnavailable || !strings.Contains(body, "NOTHING_SENT") ||
+		!strings.Contains(body, "listed only part of its accounts") || strings.Contains(body, "didn't take this") {
+		t.Fatalf("got %d %s", rr.Code, body)
 	}
 }
 

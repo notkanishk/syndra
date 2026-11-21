@@ -447,6 +447,14 @@ func adoptionRefusal(err error) string {
 // handleDormantAccounts lists the accounts on a target whose reason for
 // existing has gone (9.11/9.12).
 //
+// truncatedSentence is a dormant read cut at the add-on's cap, for the list
+// and for the removal's re-check (8c).
+func truncatedSentence(ctx context.Context, target string) string {
+	system, _ := systemName(ctx, target)
+	return system + "'s add-on listed only part of its accounts, so Syndra can't tell which are dormant. " +
+		"Read the add-on's log for its limit, then read again."
+}
+
 // A read, and only a read. The removal that follows runs through the ordinary
 // plan-then-apply path, so nothing here writes and nothing here queues.
 func handleDormantAccounts(w http.ResponseWriter, r *http.Request) {
@@ -459,9 +467,7 @@ func handleDormantAccounts(w http.ResponseWriter, r *http.Request) {
 		// happen, or stopped at the add-on's cap, cannot support.
 		var nr addons.NotRead
 		if errors.Is(err, services.ErrReadTruncated) && errors.As(err, &nr) {
-			system, _ := systemName(r.Context(), target)
-			writeNotRead(w, system+"'s add-on listed only part of its accounts, so Syndra can't tell which are dormant. "+
-				"Read the add-on's log for its limit, then read again.", nr.Why)
+			writeNotRead(w, truncatedSentence(r.Context(), target), nr.Why)
 			return
 		}
 		if writeIfNotRead(w, r, target, err) {
@@ -537,6 +543,12 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 		// the one 429 left (design §13.3).
 		writeCooledDown(w, nr.Why.RetryAfter, "That target was read moments ago, so nothing was removed. You can remove them in "+
 			strconv.Itoa(nr.Why.RetryAfter)+" seconds.")
+		return
+	}
+	if errors.Is(err, services.ErrReadTruncated) && errors.As(err, &nr) {
+		// Cut at the add-on's cap: the list's own sentence, not read_refused's.
+		body, retry := unavailable("NOTHING_SENT", "Nothing went out. "+truncatedSentence(r.Context(), target), nr.Why)
+		writeAnswer(w, http.StatusServiceUnavailable, body, retry)
 		return
 	}
 	if errors.As(err, &nr) {

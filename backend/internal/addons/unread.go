@@ -28,6 +28,10 @@ type Why struct {
 	Detail string `json:"detail,omitempty"`
 	// RetryAfter is seconds: the breaker's time left, the add-on's Retry-After.
 	RetryAfter int `json:"retry_after,omitempty"`
+	// Unusable is app_unreachable from NO_CURRENT_READ or TARGET_UNREADABLE:
+	// the app answered its add-on with nothing it could use, which has its own
+	// fallback sentence (§13.1). Not on the wire; reason and cause are.
+	Unusable bool `json:"-"`
 }
 
 // Reasons (design §13.1, §13.3).
@@ -116,7 +120,8 @@ func Unread(r CallResponse) Why {
 		return Why{Reason: ReasonReadRefused, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter}
 	case r.Code == codeTargetUnreachable, r.Code == codeNoCurrentRead, r.Code == codeTargetUnreadable:
 		// Before 429: TARGET_UNREADABLE may come as one, and it is the app.
-		return Why{Reason: ReasonAppUnreachable, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter}
+		return Why{Reason: ReasonAppUnreachable, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter,
+			Unusable: r.Code != codeTargetUnreachable}
 	case r.Code == codeFreshReadCooldown, r.Status == 429:
 		return Why{Reason: ReasonCooldown, RetryAfter: max(1, r.RetryAfter)}
 	case r.Code != "":
