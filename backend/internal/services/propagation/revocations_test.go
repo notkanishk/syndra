@@ -326,3 +326,13 @@ func TestAddonPassesHaltOnTheMaintenanceSwitch(t *testing.T) {
 		}
 	}
 }
+
+// A lifecycle word Syndra does not know halts as read_only, as the add-on
+// reads one: the reason is a word the pages say, not the add-on's own.
+func TestAnUnknownLifecycleHaltsAsReadOnly(t *testing.T) {
+	for in, want := range map[string]string{"": "", "active": "", "draining": "draining", "read_only": "read_only", "readonly": "read_only"} {
+		if got := haltReason(addons.HealthState{State: addons.StateAnswering, Lifecycle: in}); got != want {
+			t.Errorf("haltReason(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

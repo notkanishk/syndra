@@ -133,6 +133,16 @@ describe("a send with more than one connected system", () => {
     expect(alone.next).toMatch(/Make active under Maintenance/);
   });
 
+  // 8b fix round 3: revocations go again on their own once the switch is
+  // active, so "send again" is said only of what the reader must send.
+  it("the step back from maintenance leaves revocations to the background drain", () => {
+    const halt = result({ halted: true, reason: "read_only", halted_target: "truenas" });
+    expect(named(halt, true).next).toBe(
+      "Press Make active under Maintenance on its page. Revocations then go on their own; send the rest again.",
+    );
+    expect(named(halt, false).next).toBe("Press Make active under Maintenance on its page, then send again.");
+  });
+
   // Browser pass, 8 Nov: TrueNAS switched off with nothing of its own queued.
   // The send now reports its pass as not halted, and the outcome is one true
   // card: sent, nothing waiting, no system named as skipped.

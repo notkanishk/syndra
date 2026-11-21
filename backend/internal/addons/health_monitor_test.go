@@ -184,3 +184,27 @@ func TestLastHealthOfAnUnregisteredTargetSaysItIsNotRegistered(t *testing.T) {
 		t.Fatalf("LastHealth = %+v, want unreached with ErrNotRegistered", h)
 	}
 }
+
+// An answered lifecycle switch is in force at once: a Send right after "Make
+// active" reads the monitor (the drain's addonState is HealthOf), and must not
+// halt on the read_only the last probe saw. The card reads LastHealth.
+func TestAnAnsweredLifecycleSwitchMovesTheMonitorAtOnce(t *testing.T) {
+	m := monitor
+	monitor = newHealthMonitor()
+	t.Cleanup(func() { monitor = m })
+	recorder(t, http.StatusOK)
+	traceEvents(t, &[]string{})
+	readOnly := probeOK
+	readOnly.Lifecycle = "read_only"
+	monitor.observe("truenas", readOnly, t0)
+
+	if _, err := SetLifecycle(context.Background(), "truenas", "active", "done", "op-1"); err != nil {
+		t.Fatal(err)
+	}
+	if st := HealthOf("truenas"); st.Lifecycle != "active" || !st.Answering() {
+		t.Fatalf("the drain would still halt for maintenance: %+v", st)
+	}
+	if h := LastHealth("truenas"); h.Lifecycle != "active" {
+		t.Fatalf("the Maintenance card would show %q", h.Lifecycle)
+	}
+}

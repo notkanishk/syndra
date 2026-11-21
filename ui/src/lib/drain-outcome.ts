@@ -82,7 +82,7 @@ export function describeDrain(
       message: `${[went, ...rest].filter(Boolean).join(". ")}. ${halted
         .map((pass) => `${nameOf(pass.target)} ${maintenance(pass.reason) ?? "didn't answer"}`)
         .join(" and ")}, so ${still} ${left === 1 ? "is" : "are"} still here.`,
-      detail: haltDetail(result.reason, stalled, left || undefined),
+      detail: haltDetail(result.reason, stalled, left || undefined, auto),
     };
   }
 
@@ -111,7 +111,7 @@ export function describeDrain(
           tone: "warning",
           message: `${stalled ?? "The connected system"} ${maintenance(result.reason)}. Nothing was sent.`,
           detail: MAINTENANCE_DETAIL,
-          next: MAINTENANCE_NEXT,
+          next: maintenanceNext(auto),
         };
       case "target_unreachable":
         return {
@@ -251,7 +251,7 @@ export function drainWord(result: DrainResult | undefined, total?: number): stri
  * different when other passes DID work: the operator is not being told the
  * send failed, they are being told which part of it is still outstanding.
  */
-function haltDetail(reason: string | undefined, system: string | undefined, waiting?: number): string {
+function haltDetail(reason: string | undefined, system: string | undefined, waiting: number | undefined, auto: AutoRetry): string {
   const its = waiting === undefined ? "Its changes are" : waiting === 1 ? "Its 1 change is" : `Its ${waiting} changes are`;
   switch (reason) {
     case "zitadel_offline":
@@ -262,7 +262,7 @@ function haltDetail(reason: string | undefined, system: string | undefined, wait
       return "Another send was already running for it.";
     case "read_only":
     case "draining":
-      return `${its} still waiting, and nothing counts against the retry limit. ${MAINTENANCE_NEXT}`;
+      return `${its} still waiting, and nothing counts against the retry limit. ${maintenanceNext(auto)}`;
     default:
       return "The rest of the queue went through.";
   }
@@ -280,4 +280,12 @@ function maintenance(reason: string | undefined): string | undefined {
 }
 
 const MAINTENANCE_DETAIL = "It refuses every change until it is active again, so Syndra holds them. Nothing counts against the retry limit.";
-const MAINTENANCE_NEXT = "Press Make active under Maintenance on its page, then send again.";
+/**
+ * The step back from maintenance. With the background drain on, revocations
+ * go again on their own once it is active, so only the rest are the reader's
+ * to send; with it off or unknown, sending again covers everything.
+ */
+const maintenanceNext = (auto: AutoRetry): string =>
+  auto
+    ? "Press Make active under Maintenance on its page. Revocations then go on their own; send the rest again."
+    : "Press Make active under Maintenance on its page, then send again.";

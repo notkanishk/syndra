@@ -93,7 +93,9 @@ func newHealthMonitor() *healthMonitor {
 	return &healthMonitor{records: map[string]*healthRecord{}, startedAt: time.Now().UTC()}
 }
 
-// monitor is fed by the probe alone (probe, from ProbeAll).
+// monitor is fed by the probe (probe, from ProbeAll) and by one write:
+// SetLifecycle's answered switch (setLifecycle), so the switch is in force at
+// once rather than after the next probe.
 var monitor = newHealthMonitor()
 
 // observe folds one probe into the target's state. A probe answered with
@@ -151,6 +153,18 @@ func (m *healthMonitor) observe(target string, h TargetHealth, at time.Time) {
 	// One line per change, OpenTelemetry's error.type the cause.
 	log.Printf("[ADDON-HEALTH] %s: %s -> %s error.type=%s", target, r.state, next, errorType)
 	r.state, r.cause = next, cause
+}
+
+// setLifecycle records a lifecycle the add-on has just accepted. Without it a
+// Send right after "Make active" still halted on the old state, for up to one
+// probe interval. Reach is the probe's alone, so only the lifecycle moves, and
+// a target never probed has nothing to correct.
+func (m *healthMonitor) setLifecycle(target, state string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if r := m.records[target]; r != nil {
+		r.lifecycle, r.last.Lifecycle = state, state
+	}
 }
 
 // missOf is a failed probe's state and cause.

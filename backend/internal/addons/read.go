@@ -839,6 +839,7 @@ func SetLifecycle(ctx context.Context, target, state, reason, actor string) (map
 	if resp.Outcome != OutcomeSucceeded {
 		return nil, fmt.Errorf("addon %s: lifecycle change refused (%d): %v", target, resp.Status, resp.Err)
 	}
+	monitor.setLifecycle(target, state)
 	var out map[string]any
 	if err := DecodeReply(resp.Body, &out); err != nil {
 		return nil, fmt.Errorf("addon %s: decode lifecycle: %w", target, err)
