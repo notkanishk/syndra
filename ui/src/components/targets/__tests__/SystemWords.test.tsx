@@ -62,6 +62,11 @@ describe("counts of people", () => {
     );
   });
 
+  it("drop a count the pass did not take, never saying 0 for it", () => {
+    // A truncated read sends no `stale`: it cannot tell a missing account from one past the cut.
+    expect(reconcileLine(4, 1, undefined, "TrueNAS")).toBe("4 people with a managed account · 1 fix waiting for you to send");
+  });
+
   it("never count people as accounts, users, members or holders", () => {
     expect(reconcileLine(5, 0, 2, "TrueNAS")).not.toMatch(/\d (accounts|users|members|holders)\b/);
   });

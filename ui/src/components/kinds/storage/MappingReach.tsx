@@ -4,7 +4,7 @@ import { Fragment } from "react";
 
 import { StatusDot } from "@/components/ui/Badge";
 import { Relative } from "@/components/ui/Time";
-import { formatClock } from "@/lib/format";
+import { formatClock, moment } from "@/lib/format";
 import { limitWords } from "@/lib/role-mapping-plan";
 import type { ReachPlace, TargetReach } from "@/lib/queries/useTargets";
 
@@ -34,7 +34,8 @@ export function OpensNote({ name, reach }: { name: string; reach: TargetReach | 
     <span className="inline-flex items-baseline gap-1.5 text-warn-text">
       <StatusDot tone="warn" ring className="self-center" />
       <span>
-        What each group opens, as last read from {name}&apos;s folder permissions at {formatClock(reach.read_at)}
+        What each group opens, as last read from {name}&apos;s folder permissions
+        {moment(reach.read_at) && ` at ${formatClock(reach.read_at)}`}
       </span>
     </span>
   );

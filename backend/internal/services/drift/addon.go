@@ -89,8 +89,11 @@ type AddonReconcileResult struct {
 	// Stale are bindings whose account is no longer on the target. Reported and
 	// NOT queued: the plan for one of these says "create", and a sweep that
 	// acted on it would recreate an account somebody deleted. Which way to
-	// resolve it — re-provision or unbind — is an operator's decision.
-	Stale []StaleBinding `json:"stale,omitempty"`
+	// resolve it — re-provision or unbind — is an operator's decision. Absent
+	// when the read was truncated (no absence is concluded from a cut list);
+	// [] when a whole read found none, so "none missing" and "not concluded"
+	// never look alike.
+	Stale []StaleBinding `json:"stale,omitzero"`
 	// ReadAt and Current describe the state read everything above came from.
 	// ReadAt is absent when nothing was read: the zero time is never a date.
 	ReadAt  time.Time `json:"read_at,omitzero"`
@@ -326,6 +329,8 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 		// the cut. Absence is only ever concluded from a whole read; those
 		// bindings are neither converged nor reported this pass.
 		stale = nil
+	} else if stale == nil {
+		stale = []StaleBinding{} // a whole read concluded: none missing
 	}
 	res.Stale = stale
 

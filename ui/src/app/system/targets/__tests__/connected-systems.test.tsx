@@ -156,6 +156,14 @@ describe("connected systems", () => {
     expect(screen.getAllByText("Not yet").length).toBeGreaterThan(0);
   });
 
+  it("says Not read, never Not yet, when the system answered and the pass stopped", () => {
+    state.targets = [target()];
+    state.inventory = { current: false, halted: true, reason: "target_unreachable" };
+    render(<ConnectedSystemsPage />);
+    expect(screen.getAllByText("Not read").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Not yet")).toBeNull();
+  });
+
   describe("Needs you", () => {
     it("links each thing that is waiting to the part of the system's page that handles it", () => {
       state.targets = [target()];

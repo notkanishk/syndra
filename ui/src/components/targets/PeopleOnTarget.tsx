@@ -58,6 +58,9 @@ const COLS: Columns = [
 export function PeopleOnTarget({ target, stale = false }: { target: string; stale?: boolean }) {
   const nameOf = useSystemNames();
   const inventory = useTargetInventory(target);
+  // A pass that stopped read nothing: no count and no empty state, both on this one signal (the
+  // Accounts region says it was not read, once, above the cards).
+  const unread = inventory.data?.halted;
   const homes = useTargetHomes(target);
   const names = useShownNames();
   const accounts = sortByName(inventory.data?.accounts ?? [], (a) => names.user(a.subject_id), (a) => a.subject_id);
@@ -98,7 +101,7 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
     <Card stale={stale || inventory.data?.current === false} {...leaving.listProps}>
       <CardHeader
         title="Accounts Syndra manages"
-        count={inventory.data?.bound}
+        count={unread ? undefined : inventory.data?.bound}
         note="Put what a role gives them on hold, or revoke it"
       />
       {homes.data && !homes.data.read && homes.data.reason && (
@@ -115,8 +118,7 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
         onRetry={() => inventory.refetch()}
         errorTitle="The account list could not be read"
         empty={
-          // A halted read has no list to be empty: the account list's own line says it was not read.
-          inventory.data?.halted ? null : (
+          unread ? null : (
             <EmptyState
               title="Nobody yet."
               guidance={`No role is mapped to ${name} yet, or the changes that would create accounts are still waiting for you to send from Pending changes.`}

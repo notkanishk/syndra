@@ -7,7 +7,10 @@ import {
   formatShortDate,
   lengthWords,
   formatWhen,
+  formatClock,
+  formatRelative,
   humanizeKey,
+  moment,
   personLine,
   roleLabel,
   versionLabel,
@@ -114,6 +117,15 @@ describe("formatShortDate", () => {
   it("stays a dash for nothing", () => {
     expect(formatShortDate(null, now)).toBe("—");
     expect(formatShortDate("not a date", now)).toBe("—");
+  });
+
+  it("never dates Go's zero time, the read_at of a read that never happened", () => {
+    const zero = "0001-01-01T00:00:00Z";
+    expect(moment(zero)).toBeNull();
+    for (const said of [formatShortDate(zero, now), formatClock(zero), formatWhen(zero, now), formatRelative(zero, now)]) {
+      expect(said).toBe("—");
+    }
+    expect(moment("2026-08-02T12:00:00Z")).not.toBeNull();
   });
 
   it("carries the year into a feed stamp too", () => {

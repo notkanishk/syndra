@@ -38,7 +38,7 @@ import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
-import { blocksIrreversibleAction, ReadAgainError, ReadFreshness, RetryWait } from "@/components/ui/ReadFreshness";
+import { blocksIrreversibleAction, ReadAgainButton, ReadAgainError, ReadFreshness, RetryWait } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { AdvancedOnly } from "@/components/ui/AdvancedOnly";
 import { lifecycleWhy } from "@/lib/lifecycle-reason";
@@ -321,6 +321,7 @@ export function TargetOverview({ target }: { target: string }) {
           title={`Accounts on ${name}`}
           lede="Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action."
         >
+          <AccountsNotRead target={target} />
           <PeopleOnTarget target={target} stale={lastKnown} />
           <Inventory target={target} stale={lastKnown} />
           <DormantAccounts target={target} stale={lastKnown} />
@@ -662,7 +663,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
                 : `Nothing was learned about ${name}; try again once it is reachable.`}
             </span>
           ) : (
-            reconcileLine(result.bound, result.queued, result.stale?.length ?? 0, name)
+            reconcileLine(result.bound, result.queued, result.stale?.length, name)
           )}
         </Crossfade>
       </CardRow>
@@ -1375,6 +1376,30 @@ function Reading({
 }
 
 /**
+ * The Accounts region's one "could not be read": a pass that stopped read
+ * nothing, so the lists below have no count and no empty state, and this line
+ * says why once, above them all, with Read again on it (the strip's own
+ * control: a halted read has no freshness strip to carry it).
+ */
+function AccountsNotRead({ target }: { target: string }) {
+  const nameOf = useSystemNames();
+  const inventory = useTargetInventory(target);
+  const again = useTargetInventoryAgain(target);
+  const unread = inventory.data?.halted;
+  if (!unread) return null;
+  return (
+    <div className="grid gap-1">
+      {/* The sentence and its button side by side, as ReadFreshness draws them (a button is never in prose). */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-warn-text">
+        <span>{inventoryNotRead(nameOf(target), inventory.data?.detail, inventory.data?.reason)}</span>
+        <ReadAgainButton onClick={() => void again.press().catch(() => {})} pending={again.pending} />
+      </div>
+      <ReadAgainError error={again.error} className="" />
+    </div>
+  );
+}
+
+/**
  * The unmanaged inventory (1.18/1.19).
  *
  * Never drift, and never rendered as drift: a real NAS holds `root`, service
@@ -1400,6 +1425,8 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
     { username: string; person: string; result: AdoptionResult } | null
   >(null);
 
+  // A pass that stopped read nothing: no list, no count, no freshness (AccountsNotRead says so).
+  const unread = inventory.data?.halted;
   // Refused inside the cooldown: only ever a press, since a load never sends fresh.
   const refused = again.cooldown;
   const read = {
@@ -1426,11 +1453,11 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
     <Card stale={stale || read.current === false} {...leaving.listProps}>
       <CardHeader
         title="Not created by Syndra"
-        count={inventory.data?.unmanaged ? leaving.rows.length : undefined}
+        count={inventory.data && !unread ? leaving.rows.length : undefined}
         caption={`Accounts on ${name} that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.`}
       />
-      {/* A pass that read nothing has no freshness: the halted line below says so, once. */}
-      {!inventory.data?.halted && (
+      {/* A pass that read nothing has no freshness: the region's line above the cards says so, once. */}
+      {!unread && (
         <div className="px-5 pb-2">
           <ReadFreshness
             subject="The account list"
@@ -1444,13 +1471,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
         </div>
       )}
       <ReadAgainError error={again.error} />
-      {inventory.data?.halted && (
-        // A pass that stopped has an empty list it never measured; the add-on's words (or the reason's) say why instead.
-        <CardRow>
-          <span className="text-small text-warn-text">{inventoryNotRead(name, inventory.data.detail, inventory.data.reason)}</span>
-        </CardRow>
-      )}
-      {(!inventory.data && refused) || inventory.data?.halted ? null : (
+      {(!inventory.data && refused) || unread ? null : (
       <ListStates
         isLoading={inventory.isLoading}
         error={inventory.error}
@@ -1968,7 +1989,15 @@ function LifecycleControl({
 }
 
 /** The reconcile result in one line. Counts of people, singular and plural both right. */
-export function reconcileLine(bound: number, queued: number, missing: number, name: string): string {
+export function reconcileLine(bound: number | undefined, queued: number, missing: number | undefined, name: string): string {
   const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
-  return `${people(bound)} with a managed account · ${queued} ${queued === 1 ? "fix" : "fixes"} waiting for you to send · ${people(missing)} with an account missing from ${name}`;
+  // A count the pass did not take is no clause, never a 0: `stale` is absent on a truncated read,
+  // which cannot tell a missing account from one past the cut.
+  return [
+    bound === undefined ? null : `${people(bound)} with a managed account`,
+    `${queued} ${queued === 1 ? "fix" : "fixes"} waiting for you to send`,
+    missing === undefined ? null : `${people(missing)} with an account missing from ${name}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }

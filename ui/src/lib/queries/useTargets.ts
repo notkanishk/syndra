@@ -549,7 +549,8 @@ export interface StaleBinding {
 
 export interface TargetReconcileResult {
   target: string;
-  bound: number;
+  /** Absent on a pass that halted before counting: unknown, never 0. */
+  bound?: number;
   queued: number;
   current: boolean;
   truncated?: boolean;
@@ -570,7 +571,8 @@ export interface TargetReconcileResult {
   unmanaged?: UnmanagedAccount[];
   /** Bindings whose account is no longer on the target. Never converged — the
    * plan for one says "create", and acting on it would recreate an account
-   * somebody deleted. */
+   * somebody deleted. Absent on a truncated read, which cannot conclude an
+   * absence; `[]` when a whole read found none. */
   stale?: StaleBinding[];
 }
 
@@ -661,7 +663,7 @@ export interface MappableValues {
   enumerable: boolean;
   builtin_count?: number;
   builtin_examples?: string[];
-  read_at: string;
+  read_at?: string;
   current: boolean;
 }
 

@@ -1147,7 +1147,7 @@ func ReadHomes(ctx context.Context, target string, fresh bool) Homes {
 // A view built from reachWire: Read is the backend's own, never the add-on's.
 type Reach struct {
 	Read    bool      `json:"read"`
-	ReadAt  time.Time `json:"read_at,omitempty"`
+	ReadAt  time.Time `json:"read_at,omitzero"`
 	Current bool      `json:"current"`
 	// Stale is why it is not current, as the add-on said it.
 	Stale *Stale `json:"stale,omitempty"`

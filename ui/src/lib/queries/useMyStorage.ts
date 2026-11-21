@@ -253,7 +253,7 @@ export interface PersonTargetView extends MyTargetView {
   home?: AccountHome;
   holds: PersonHold[];
   /** The last successful read, while the system is offline. */
-  last_known?: { storage: NonNullable<MyTargetView["storage"]>; read_at: string };
+  last_known?: { storage: NonNullable<MyTargetView["storage"]>; read_at?: string };
   /** Why nobody can have an account there yet. */
   setup?: "no_project" | "no_mapping";
   /** What an account still to be made will open. */

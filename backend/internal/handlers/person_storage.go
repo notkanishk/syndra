@@ -60,7 +60,7 @@ type personHold struct {
 
 type lastKnownStorage struct {
 	Storage addons.StorageStatus `json:"storage"`
-	ReadAt  time.Time            `json:"read_at"`
+	ReadAt  time.Time            `json:"read_at,omitzero"`
 }
 
 // adoptionWindow is how close an account.adopt must sit before the binding it

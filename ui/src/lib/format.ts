@@ -65,14 +65,23 @@ export function askLengthForOperator(
 }
 
 /**
+ * The moment an ISO time names, or null when it names none: absent, unparseable, or Go's zero time
+ * (0001-01-01, the `time.Time` of a read that never happened). Every formatter below goes through
+ * here, so none of them ever says "1 Jan 1"; a caller that must render nothing tests this first.
+ */
+export function moment(iso: string | null | undefined): Date | null {
+  const date = iso ? new Date(iso) : null;
+  return date && date.getTime() > 0 ? date : null;
+}
+
+/**
  * "4h ago" / "2d ago" — the relative stamp list rows use. Deliberately coarse:
  * on a work queue the difference between 4 and 5 hours changes nothing, and a
  * precise timestamp invites reading it as an SLA.
  */
 export function formatRelative(iso: string | null | undefined, now: Date = new Date()): string {
-  if (!iso) return "—";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "—";
+  const then = moment(iso)?.getTime();
+  if (then === undefined) return "—";
 
   const seconds = Math.max(0, Math.round((now.getTime() - then) / 1000));
   if (seconds < 60) return "just now";
@@ -90,9 +99,8 @@ export function formatRelative(iso: string | null | undefined, now: Date = new D
  * day, then the date, "2 Oct", with the year only when it isn't this year.
  */
 export function formatSignIn(iso: string | null | undefined, now: Date = new Date()): string {
-  if (!iso) return "—";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "—";
+  const then = moment(iso)?.getTime();
+  if (then === undefined) return "—";
   return now.getTime() - then < 24 * 60 * 60 * 1000 ? formatRelative(iso, now) : formatShortDate(iso, now);
 }
 
@@ -101,9 +109,8 @@ export function formatSignIn(iso: string | null | undefined, now: Date = new Dat
  * is the date, the year only when it isn't this year.
  */
 export function formatAgoShort(iso: string | null | undefined, now: Date = new Date()): string {
-  if (!iso) return "";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
+  const then = moment(iso)?.getTime();
+  if (then === undefined) return "";
   const minutes = Math.max(0, Math.round((now.getTime() - then) / 60_000));
   if (minutes < 1) return "just now";
   if (minutes < 60) return `${minutes}m ago`;
@@ -134,9 +141,8 @@ export function formatShortDate(
   iso: string | null | undefined,
   now: Date = new Date(),
 ): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
+  const date = moment(iso);
+  if (!date) return "—";
   return date.toLocaleDateString(displayLocale(), {
     ...inZone(),
     day: "numeric",
@@ -151,9 +157,8 @@ export function formatShortDate(
  * and afternoon in an audit trail.
  */
 export function formatClock(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
+  const date = moment(iso);
+  if (!date) return "—";
   return date.toLocaleTimeString(displayLocale(), { ...inZone(), hour: "2-digit", minute: "2-digit", hour12: false }) + zoneTag();
 }
 
@@ -163,9 +168,8 @@ export function formatClock(iso: string | null | undefined): string {
  * today, which is a false statement about when something happened.
  */
 export function formatWhen(iso: string | null | undefined, now: Date = new Date()): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
+  const date = moment(iso);
+  if (!date) return "—";
   const clock = formatClock(iso);
   return isSameDay(date, now) ? clock : `${formatShortDate(iso, now)} ${clock}`;
 }
@@ -175,9 +179,8 @@ export function formatWhen(iso: string | null | undefined, now: Date = new Date(
  * middle of a sentence (A-09 §4, A-13 §4).
  */
 export function formatAt(iso: string | null | undefined, now: Date = new Date()): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
+  const date = moment(iso);
+  if (!date) return "";
   const clock = formatClock(iso);
   return isSameDay(date, now)
     ? `at ${clock} today`
@@ -186,9 +189,8 @@ export function formatAt(iso: string | null | undefined, now: Date = new Date())
 
 /** "09:41:02": seconds only where the gap between two sends is the point (A-13 §4). */
 export function formatClockSeconds(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
+  const date = moment(iso);
+  if (!date) return "—";
   return (
     date.toLocaleTimeString(displayLocale(), { ...inZone(), hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) +
     zoneTag()

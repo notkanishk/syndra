@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
@@ -49,7 +49,7 @@ describe("a stopped pass, as the API answers it", () => {
       vi.fn((input: RequestInfo | URL) =>
         String(input).endsWith("/inventory")
           ? Promise.resolve(
-              new Response(JSON.stringify({ target: "truenas", bound: 0, unmanaged: [], current: false, halted: true, reason: "read_refused", detail }), { status: 503 }),
+              new Response(JSON.stringify({ target: "truenas", current: false, halted: true, reason: "read_refused", detail }), { status: 503 }),
             )
           : new Promise<Response>(() => {}),
       ),
@@ -61,6 +61,29 @@ describe("a stopped pass, as the API answers it", () => {
     );
     expect(await screen.findByText(`The account list could not be read. ${detail}`)).toBeInTheDocument();
     expect(screen.queryByText("Nothing outside Syndra.")).toBeNull();
+  });
+
+  it("says it once for the whole Accounts region, with Read again on the line, which reads afresh", async () => {
+    const fetched = vi.fn((input: RequestInfo | URL) =>
+      String(input).includes("/inventory")
+        ? Promise.resolve(
+            new Response(JSON.stringify({ target: "truenas", current: false, halted: true, reason: "target_unreachable" }), { status: 503 }),
+          )
+        : new Promise<Response>(() => {}),
+    );
+    vi.stubGlobal("fetch", fetched);
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <TargetOverview target="truenas" />
+      </QueryClientProvider>,
+    );
+    const line = await screen.findByText(/^The account list could not be read\./);
+    expect(screen.getAllByText(/The account list could not be read/)).toHaveLength(1);
+    // Above both cards, not inside one: the region's line, before "Not created by Syndra".
+    const card = screen.getByText("Not created by Syndra");
+    expect(line.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(within(line.parentElement!).getByRole("button", { name: "Read again" }));
+    await waitFor(() => expect(fetched.mock.calls.some(([u]) => String(u).includes("fresh=true"))).toBe(true));
   });
 });
 

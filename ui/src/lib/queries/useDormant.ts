@@ -41,7 +41,7 @@ export interface DormantAccount {
 
 export interface DormantReport {
   target: string;
-  state_read_at: string;
+  state_read_at?: string;
   truncated: boolean;
   accounts: DormantAccount[];
 }

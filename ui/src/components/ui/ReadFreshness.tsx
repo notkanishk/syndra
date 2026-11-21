@@ -8,7 +8,7 @@ import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { CardRow } from "@/components/ui/Card";
 import { Crossfade, LANDED_HOLD_MS, PRESS_FORGET_MS } from "@/lib/motion";
-import { formatClock, formatRelative } from "@/lib/format";
+import { formatClock, formatRelative, moment } from "@/lib/format";
 import { outcomeFromError } from "@/lib/outcome";
 import { cooldownOf, STALE, stamped, useCountdown, type Stale } from "@/lib/queries/fresh";
 
@@ -56,11 +56,6 @@ export interface ReadState {
  */
 export function readStateOfQuery(q: { dataUpdatedAt: number; isError: boolean }): ReadState {
   return { readAt: q.dataUpdatedAt ? new Date(q.dataUpdatedAt).toISOString() : null, current: !q.isError };
-}
-
-/** When a read happened, or undefined when it never did: a zero or unparseable time is never a date. */
-function readMoment(iso: string | null | undefined): string | undefined {
-  return iso && Date.parse(iso) > 0 ? iso : undefined;
 }
 
 /** The read state of an add-on's answer that carries its own (`taken_at`, `current`, `stale`). */
@@ -213,12 +208,26 @@ export const useReadAgainSince = () => useContext(ReadAgainContext)?.since;
  * Why the last "Read again" failed, when it was not the cooldown (the line says that one): in the
  * outcome every refusal wears, under the line, so a press that did nothing is never silent.
  */
-export function ReadAgainError({ error }: { error: unknown }) {
+export function ReadAgainError({ error, className = "px-5 pb-2" }: { error: unknown; className?: string }) {
   if (!error || cooldownOf(error)) return null;
   return (
-    <div className="px-5 pb-2">
+    <div className={className}>
       <ActionOutcome word="Not read" outcome={outcomeFromError(error)} />
     </div>
+  );
+}
+
+/** Read again, the one control: this strip's, and a line's that has no read to date (a halted inventory). */
+export function ReadAgainButton({ onClick, pending, disabled, describedBy }: {
+  onClick: () => void;
+  pending: boolean;
+  disabled?: boolean;
+  describedBy?: string;
+}) {
+  return (
+    <Button variant="outline" size="sm" className={READ_AGAIN_PILL} onClick={onClick} isPending={pending} disabled={disabled} aria-describedby={describedBy}>
+      {pending ? READING : READ_AGAIN}
+    </Button>
   );
 }
 
@@ -254,7 +263,7 @@ export function ReadFreshness({
 }) {
   // A read with no moment is no copy (Go's zero time, 0001-01-01, from a read that never happened):
   // every caller passes through here, so none of them ever says "last state seen, 1 Jan 1".
-  const state = { ...given, readAt: readMoment(given.readAt) };
+  const state = { ...given, readAt: moment(given.readAt) ? given.readAt : undefined };
   // The age is a function of now, so it is computed on the client only — the
   // server and the browser do not share a clock, and a freshness label that
   // flickers on hydration is worse than one that appears a frame late.
@@ -335,18 +344,13 @@ export function ReadFreshness({
         // `before` box, a hit area with nothing painted, so no visible edge
         // reaches the cards below (A-08 §5).
         <span className="tint-in flex h-[var(--tap)] items-center desktop:h-0">
-          <Button
-            variant="outline"
-            size="sm"
-            className={READ_AGAIN_PILL}
+          <ReadAgainButton
             onClick={() => void press(onRefresh)}
-            isPending={refreshing || pressing}
+            pending={refreshing || pressing}
             disabled={cooling}
             // The line beside it is the reason it waits.
-            aria-describedby={cooling ? lineId : undefined}
-          >
-            {refreshing || pressing ? READING : READ_AGAIN}
-          </Button>
+            describedBy={cooling ? lineId : undefined}
+          />
         </span>
       )}
     </div>

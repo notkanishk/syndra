@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,5 +171,16 @@ func TestADormantAccountIsTheOneTheAddOnAttributes(t *testing.T) {
 	}
 	if len(report.Accounts) != 1 || report.Accounts[0].Account != "seth.r" || report.Accounts[0].SubjectID != "u2" {
 		t.Fatalf("want only seth's own account, under its name now, got %+v", report.Accounts)
+	}
+}
+
+// A listing with no read behind it sends no state_read_at: Go's zero time is never a date.
+func TestADormantReportWithNoReadSendsNoReadTime(t *testing.T) {
+	raw, err := json.Marshal(DormantReport{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"state_read_at"`) {
+		t.Errorf("a report never read carries a read time: %s", raw)
 	}
 }
