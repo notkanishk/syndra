@@ -120,4 +120,15 @@ describe("why a system could not be checked", () => {
     expect(await screen.findByText("It could not be checked, and Syndra has no words for why.")).toBeTruthy();
     expect(screen.queryByText("some_new_reason")).toBeNull();
   });
+
+  // The caveat once sat inline in the sentence and its box overlapped the name and the time.
+  it("puts the caveat on its own block, not inside the sentence", async () => {
+    renderHome();
+
+    const caveat = await screen.findByText(/Nothing found on it means nothing was looked at/i);
+    expect(caveat.tagName).toBe("DIV");
+    expect(caveat.className).toContain("mt-1");
+    expect(caveat.closest("strong")).toBeNull();
+    expect(caveat.parentElement?.querySelector("strong")?.contains(caveat)).toBe(false);
+  });
 });
