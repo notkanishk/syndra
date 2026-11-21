@@ -53,6 +53,9 @@ type statsUsage struct {
 	Window30dFrom string            `json:"window_30d_from,omitempty"`
 	Window12mFrom string            `json:"window_12m_from,omitempty"`
 	Metrics       []statsMetricView `json:"metrics,omitempty"`
+	// Why is the monitor's why while the system is down: the reason a day
+	// after a watermark is not counted yet. Absent while it answers.
+	Why *addons.Why `json:"why,omitempty"`
 }
 
 // statsMetricView is one metric: its descriptor, through when Syndra holds it
@@ -300,19 +303,19 @@ func statsUsageFor(ctx context.Context, target, subject string, memberView bool,
 	}
 	// One rule, the add-on's own: counters, then levels, each in manifest order (A-23), not alphabetical.
 	addons.SortMetrics(target, out.Metrics, func(m statsMetricView) addons.Metric { return m.Metric })
+	// "Not counted since {watermark}" says why from the monitor, now; nothing
+	// about a failed collection is stored (design §13.3).
+	if why, down := addonsHealthOf(target).Down(); down {
+		out.Why = &why
+	}
 	return out, nil
 }
 
 // reachedShares is each share a person's places are in, as the share
 // dimension the storage profile's metrics break down by: from the storage read
-// on the same page, or the last one remembered while the target is down. Nil
-// when neither is known, and then a gap is kept on their own series only.
-func reachedShares(target, subject string, storage *addons.StorageStatus) []map[string]string {
-	if storage == nil {
-		if known := recalledStorage(target, subject); known != nil {
-			storage = &known.Storage
-		}
-	}
+// on the same page. Nil when it was not read (Syndra keeps no copy, design
+// §13.3), and then a gap is kept on their own series only.
+func reachedShares(storage *addons.StorageStatus) []map[string]string {
 	if storage == nil {
 		return nil
 	}
@@ -355,7 +358,7 @@ func dimsText(dims map[string]string) string {
 // never the add-on, so a target that is down still shows its history.
 // Best-effort: a page that cannot read it says less rather than failing.
 func personalUsage(ctx context.Context, target, subject string, memberView bool, storage *addons.StorageStatus) *statsUsage {
-	usage, err := statsUsageFor(ctx, target, subject, memberView, reachedShares(target, subject, storage), clock.Now())
+	usage, err := statsUsageFor(ctx, target, subject, memberView, reachedShares(storage), clock.Now())
 	if err != nil {
 		log.Printf("[STATS] could not read %s's usage on %s: %v (non-fatal)", subject, target, err)
 		return nil

@@ -201,15 +201,15 @@ func TestAReplyBreakingTheStaleInvariantIsNotAReading(t *testing.T) {
 			t.Errorf("subjects, %s: usable", name)
 		}
 		addonServing(t, withJSON(t, contractFixture(t, "reach.json"), edit))
-		if r := ReadReach(context.Background(), "truenas", false); r.Read {
+		if r := ReadReach(context.Background(), "truenas", false); !r.Read.None() {
 			t.Errorf("reach, %s: read", name)
 		}
 		addonServing(t, withJSON(t, contractFixture(t, "homes.json"), edit))
-		if h := ReadHomes(context.Background(), "truenas", false); h.Read {
+		if h := ReadHomes(context.Background(), "truenas", false); !h.Read.None() {
 			t.Errorf("homes, %s: read", name)
 		}
 		addonServing(t, withJSON(t, contractFixture(t, "operation_response_result.json"), func(d map[string]any) { edit(d["result"].(map[string]any)) }))
-		if v := Read(context.Background(), "truenas", "storage.status", "s", "s", nil, false).View(); v.Readable {
+		if v := Read(context.Background(), "truenas", "storage.status", "s", "s", nil, false).View(); !v.Read.None() {
 			t.Errorf("storage.status, %s: readable", name)
 		}
 	}
@@ -225,16 +225,16 @@ func TestACooldownWithNothingToServeReachesEveryView(t *testing.T) {
 	addonServingStatus(t, http.StatusTooManyRequests, contractFixture(t, "error_fresh_read_cooldown.json"))
 	declare(t, "freshness")
 	// No Retry-After header from this server: still a cooldown, at least 1 s.
-	if r := ReadReach(context.Background(), "truenas", true); r.RetryAfter != 1 || r.Read {
+	if r := ReadReach(context.Background(), "truenas", true); r.Read.RetryAfter != 1 || !r.Read.None() {
 		t.Errorf("reach: %+v", r)
 	}
-	if h := ReadHomes(context.Background(), "truenas", true); h.RetryAfter != 1 || h.Read {
+	if h := ReadHomes(context.Background(), "truenas", true); h.Read.RetryAfter != 1 || !h.Read.None() {
 		t.Errorf("homes: %+v", h)
 	}
-	if v := Read(context.Background(), "truenas", "storage.status", "s", "s", nil, true).View(); v.RetryAfter != 1 || v.Readable {
+	if v := Read(context.Background(), "truenas", "storage.status", "s", "s", nil, true).View(); v.Read.RetryAfter != 1 || !v.Read.None() {
 		t.Errorf("read view: %+v", v)
 	}
-	if a := Activity(context.Background(), "truenas", "s", "s", "", true); a.RetryAfter != 1 {
+	if a := Activity(context.Background(), "truenas", "s", "s", "", true); a.Read.RetryAfter != 1 {
 		t.Errorf("activity: %+v", a)
 	}
 	// Any other refusal is not a cooldown.

@@ -232,7 +232,7 @@ func reconcileTruenas(t *testing.T) *httptest.ResponseRecorder {
 	t.Cleanup(func() { addonsGet, svcReconcileAddon = get, rec })
 	addonsGet = func(string) (*addons.Addon, error) { return &addons.Addon{}, nil }
 	svcReconcileAddon = func(_ context.Context, target string) (drift.AddonReconcileResult, error) {
-		return drift.AddonReconcileResult{Target: target, Current: true}, nil
+		return drift.AddonReconcileResult{Target: target, Read: readNow()}, nil
 	}
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/reconcile", nil)

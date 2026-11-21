@@ -58,7 +58,9 @@ func handleRehearseEntitlements(w http.ResponseWriter, r *http.Request) {
 		Target: target, SubjectIDs: req.SubjectIDs, Actor: actor,
 	})
 	if err != nil {
-		writeEntitlementError(w, err)
+		if !writeIfNotRead(w, r, target, err) {
+			writeEntitlementError(w, err)
+		}
 		return
 	}
 
@@ -205,10 +207,6 @@ func writeEntitlementError(w http.ResponseWriter, err error) {
 		jsonErrorResponse(w, http.StatusBadRequest, "TARGET_NOT_AN_ADDON", err.Error())
 	case errors.Is(err, services.ErrNoSubjects):
 		jsonValidationErrorResponse(w, "Nothing to converge", map[string]string{"subject_ids": "required"})
-	case errors.Is(err, services.ErrTargetUnplannable):
-		// 503, not 500: the backend is fine and the operator's request was fine.
-		// Retrying later is the action, and it is the only one.
-		writeUpstreamStatus(w, http.StatusServiceUnavailable, err, "ADDON_UNREACHABLE")
 	case errors.Is(err, planapply.ErrPlanRequired):
 		missingPlanCitation(w)
 	case errors.Is(err, db.ErrTargetNotActive):

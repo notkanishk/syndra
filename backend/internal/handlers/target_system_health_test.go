@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"syndra/internal/addons"
@@ -47,8 +48,8 @@ func decodeBody(t *testing.T, rr *httptest.ResponseRecorder) map[string]any {
 func TestSystemHealth_CarriesWhatTheTargetReported(t *testing.T) {
 	withSystemHealth(t, func(context.Context, string, string) addons.SystemReport {
 		return addons.SystemReport{
-			Outcome: addons.OutcomeSucceeded,
-			System:  &addons.SystemInfo{Hostname: "truenas", Version: "25.10.5"},
+			Outcome: addons.OutcomeSucceeded, Read: readNow(),
+			System: &addons.SystemInfo{Hostname: "truenas", Version: "25.10.5"},
 			Alerts: []addons.TargetAlert{{
 				Level: "WARNING", Class: "SMARTUncorrectedErrors",
 				Text: "1 uncorrectable errors reported for sde.",
@@ -63,8 +64,8 @@ func TestSystemHealth_CarriesWhatTheTargetReported(t *testing.T) {
 		t.Fatalf("want 200, got %d", rr.Code)
 	}
 	body := decodeBody(t, rr)
-	if body["readable"] != true {
-		t.Fatalf("a target that answered is readable: %v", body["readable"])
+	if body["read"].(map[string]any)["state"] != addons.ReadNow {
+		t.Fatalf("a target that answered is read now: %v", body["read"])
 	}
 	if len(body["alerts"].([]any)) != 1 {
 		t.Fatalf("alerts: %v", body["alerts"])
@@ -72,30 +73,26 @@ func TestSystemHealth_CarriesWhatTheTargetReported(t *testing.T) {
 }
 
 // The distinction the whole surface exists for. A target that could not be
-// asked and a target with nothing wrong are opposite facts, and a 502 would
-// make the page render as an error rather than as an unanswered question.
+// asked and a target with nothing wrong are opposite facts: 503
+// TARGET_NOT_READ with no data member (design §13.3), never an empty list.
 func TestSystemHealth_UnreadableIsNotHealthy(t *testing.T) {
 	withSystemHealth(t, func(context.Context, string, string) addons.SystemReport {
-		return addons.SystemReport{Outcome: addons.OutcomeUnreached, Err: errors.New("addon truenas: dial tcp: no route to host")}
+		return addons.SystemReport{Outcome: addons.OutcomeUnreached, Err: errors.New("addon truenas: dial tcp: no route to host"),
+			Read: addons.ReadOf(nil, addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseNoAnswer})}
 	})
 
 	rr := systemHealthRequest()
-	if rr.Code != http.StatusOK {
-		t.Fatalf("want 200 so the page can say what happened, got %d", rr.Code)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", rr.Code)
 	}
 	body := decodeBody(t, rr)
-	if body["readable"] != false {
-		t.Fatal("an unreached target must not read as readable")
-	}
-	// Not an empty list of alerts and not an empty list of pools: absent. An
-	// empty list is a claim that the target reported nothing wrong.
-	for _, key := range []string{"alerts", "pools", "services", "system"} {
+	for _, key := range []string{"alerts", "pools", "services", "system", "read"} {
 		if _, present := body[key]; present {
 			t.Fatalf("%q must be absent when nothing was read, got %v", key, body[key])
 		}
 	}
-	if body["detail"] == "" || body["detail"] == nil {
-		t.Fatal("an operator is owed the reason")
+	if m, _ := body["message"].(string); m == "" || strings.Contains(m, "dial tcp") {
+		t.Fatalf("an operator is owed the reason, in words: %q", m)
 	}
 }
 
@@ -105,35 +102,16 @@ func TestSystemHealth_UnreadableIsNotHealthy(t *testing.T) {
 func TestSystemHealth_NamesTheSourcesThatFailed(t *testing.T) {
 	withSystemHealth(t, func(context.Context, string, string) addons.SystemReport {
 		return addons.SystemReport{
-			Outcome:  addons.OutcomeSucceeded,
+			Outcome: addons.OutcomeSucceeded, Read: readNow(),
 			Pools:    []addons.PoolStatus{{Name: "tank", Status: "ONLINE", Healthy: true}},
 			Degraded: []string{"alerts"},
 		}
 	})
 
-	body := decodeBody(t, systemHealthRequest())
+	rr := systemHealthRequest()
+	body := decodeBody(t, rr)
 	degraded, ok := body["degraded"].([]any)
-	if !ok || len(degraded) != 1 || degraded[0] != "alerts" {
+	if !ok || len(degraded) != 1 || degraded[0] != "alerts" || rr.Code != http.StatusOK {
 		t.Fatalf("the failed source must be named: %v", body["degraded"])
-	}
-	if body["readable"] != true {
-		t.Fatal("three sources answered, so the read is readable and partial")
-	}
-}
-
-// The target's own error text is a classification and a code by the time it
-// reaches here, and `detail` must not become the place that guarantee leaks.
-func TestSystemHealth_DetailIsTheBackendsSentence(t *testing.T) {
-	withSystemHealth(t, func(context.Context, string, string) addons.SystemReport {
-		return addons.SystemReport{Outcome: addons.OutcomeIndeterminate, Err: nil}
-	})
-
-	body := decodeBody(t, systemHealthRequest())
-	if body["readable"] != false {
-		t.Fatal("indeterminate is not readable")
-	}
-	// A nil error must not render as "<nil>" or panic the handler.
-	if detail, _ := body["detail"].(string); detail == "<nil>" {
-		t.Fatalf("a missing reason must not be printed as a Go nil: %q", detail)
 	}
 }

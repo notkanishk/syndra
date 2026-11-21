@@ -59,14 +59,14 @@ type EntitlementRehearsal struct {
 // EntitlementPlan is a rehearsal and, once recorded, its citation.
 type EntitlementPlan struct {
 	BulkPlan
-	// Provisional says the add-on answered from its mirror because the target
-	// was unreachable. The surface must say so and must never present these rows
-	// as applied.
-	Provisional bool `json:"provisional"`
-	// StateReadAt dates the read the outcomes were computed from. Rendered
-	// beside a provisional plan, because "computed against last-known state"
-	// with no number attached is a label an operator cannot act on.
-	StateReadAt time.Time `json:"state_read_at"`
+	// Read is the read the outcomes were computed from (design §13.3): now,
+	// or the add-on's kept copy, dated by its taken_at. A kept copy makes the
+	// plan provisional: the surface must say so, with the date, and must never
+	// present these rows as applied.
+	Read addons.ReadState `json:"read"`
+	// Provisional and StateReadAt are Read as the plan store records them.
+	Provisional bool      `json:"-"`
+	StateReadAt time.Time `json:"-"`
 	// Truncated says the add-on's read hit its cap, which is why some rows came
 	// back blocked without anything being wrong with the subject.
 	Truncated bool `json:"truncated,omitempty"`
@@ -125,11 +125,14 @@ func RehearseEntitlements(ctx context.Context, req EntitlementRehearsal) (Entitl
 
 	answer := addonsPlan(ctx, req.Target, subjects)
 	if answer.Outcome != addons.OutcomeSucceeded {
-		return EntitlementPlan{}, fmt.Errorf("%w: %v", ErrTargetUnplannable, answer.Err)
+		// No state to plan against: the handler answers 503 TARGET_NOT_READ
+		// with the why (design §13.3).
+		return EntitlementPlan{}, fmt.Errorf("%w: %w", ErrTargetUnplannable, addons.NotRead{Why: answer.Why})
 	}
 
 	plan := EntitlementPlan{
 		BulkPlan:    BulkPlan{Op: EntitlementOp},
+		Read:        addons.ReadOf(&addons.Observation{TakenAt: answer.TakenAt, Current: answer.Current}, addons.Why{}),
 		Provisional: !answer.Current,
 		StateReadAt: answer.TakenAt,
 		Truncated:   answer.Truncated,

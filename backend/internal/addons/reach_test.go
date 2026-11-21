@@ -26,7 +26,7 @@ func TestReadReachDecodesTheAnswerAndSaysWhenNothingWasRead(t *testing.T) {
 	withBreaker(t, 1000, time.Minute)
 
 	got := ReadReach(context.Background(), "truenas", false)
-	if !got.Read || !got.Current || got.ReadAt.IsZero() {
+	if got.Read.None() || got.Read.State != ReadNow || readAt(got.Read).IsZero() {
 		t.Fatalf("got %+v", got)
 	}
 	if p := got.Groups["community"]; len(p) != 1 || p[0].Folder != "waddle_share" || p[0].Access != "change" {
@@ -37,10 +37,10 @@ func TestReadReachDecodesTheAnswerAndSaysWhenNothingWasRead(t *testing.T) {
 	}
 
 	status, body = http.StatusServiceUnavailable, `{"error":"NO_CURRENT_READ"}`
-	if got := ReadReach(context.Background(), "truenas", false); got.Read {
+	if got := ReadReach(context.Background(), "truenas", false); !got.Read.None() {
 		t.Fatalf("a refusal read as an answer: %+v", got)
 	}
-	if got := ReadReach(context.Background(), "nobody", false); got.Read {
+	if got := ReadReach(context.Background(), "nobody", false); !got.Read.None() {
 		t.Fatalf("an unregistered target read as an answer: %+v", got)
 	}
 }

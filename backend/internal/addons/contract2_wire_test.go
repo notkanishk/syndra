@@ -175,7 +175,7 @@ func TestTheNewBackendAgainstAContractOneAddOn(t *testing.T) {
 	// re-read too; on a core route it stays a refusal.
 	addonServingStatus(t, http.StatusNotFound, []byte(`{"type":"urn:syndra:addon:error:UNKNOWN_ROUTE","title":"Unknown route","status":404,"code":"UNKNOWN_ROUTE","retry":"never"}`))
 	before := reread.Load()
-	if r := ReadReach(context.Background(), "truenas", false); r.Read || reread.Load() != before+1 {
+	if r := ReadReach(context.Background(), "truenas", false); !r.Read.None() || reread.Load() != before+1 {
 		t.Errorf("a 404 on /reach did not re-read the manifest: %+v (%d)", r, reread.Load()-before)
 	}
 	if out := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "s", CallID: "c", Fingerprint: "f", Desired: fixtureDesired}); out.Outcome != OutcomeRejected {
@@ -291,7 +291,7 @@ func TestEveryReplyDecodesIntoAWireTypeOfContractFields(t *testing.T) {
 		{reachWire{}, "profiles/storage/reach.json", nil},
 		{homesWire{}, "profiles/storage/homes.json", nil},
 		{HomeUsage{}, "profiles/storage/homes.json", []string{"properties", "homes", "items"}},
-		{Values{}, "values.json", nil},
+		{valuesWire{}, "values.json", nil},
 		{TargetSetting{}, "setting.json", nil},
 		{Standing{}, "common/standing.json", nil},
 		{placeWire{}, "profiles/storage/reach.json", []string{"$defs", "Place"}},
@@ -397,13 +397,13 @@ func TestAnUndeclaredFeatureIsNeverCalled(t *testing.T) {
 	began, _ := stubOperationRecord(t, nil)
 
 	ctx := context.Background()
-	if r := ReadReach(ctx, "truenas", false); r.Read {
+	if r := ReadReach(ctx, "truenas", false); !r.Read.None() {
 		t.Error("an undeclared storage.reach was read")
 	}
-	if h := ReadHomes(ctx, "truenas", false); h.Read {
+	if h := ReadHomes(ctx, "truenas", false); !h.Read.None() {
 		t.Error("an undeclared storage.homes was read")
 	}
-	if _, ok := ReadSettings(ctx, "truenas"); ok {
+	if _, read := ReadSettings(ctx, "truenas"); !read.None() {
 		t.Error("undeclared settings were read")
 	}
 	if resp, _ := PutSetting(ctx, "truenas", "home_root", "/mnt/x", "op"); !errors.Is(resp.Err, ErrFeatureNotDeclared) {

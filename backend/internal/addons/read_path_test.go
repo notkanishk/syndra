@@ -79,7 +79,7 @@ func TestAnOperatorsReadOfHoldingsWritesNoRow(t *testing.T) {
 	}
 	v := reply.View()
 	recs, ok := v.Result.(*Records)
-	if !v.Readable || v.Shape != "records" || !ok || len(recs.Records) != 2 || recs.TakenAt.IsZero() || !recs.Current {
+	if v.Read.None() || v.Shape != "records" || !ok || len(recs.Records) != 2 || recs.TakenAt.IsZero() || !recs.Current {
 		t.Fatalf("the holdings did not land: %+v", v)
 	}
 	if r := recs.Records[0]; r.ID != "item-2207" || r.Label == "" || r.Category != "tools" || r.Due == nil || r.Since == nil || r.Standing == nil {
@@ -129,7 +129,7 @@ func TestAReadNeedsNoFeature(t *testing.T) {
 	a.ops, _ = resolveOperations(m)
 	registryMu.Unlock()
 
-	if v := Read(context.Background(), "truenas", "holdings.list", "s", "s", nil, false).View(); !v.Readable || got.path != "/operations/holdings.list" {
+	if v := Read(context.Background(), "truenas", "holdings.list", "s", "s", nil, false).View(); v.Read.None() || got.path != "/operations/holdings.list" {
 		t.Fatalf("holdings.list from an add-on declaring operations alone: %+v, sent %s", v, got.path)
 	}
 	if reads := MemberReads("truenas"); !slices.Contains(reads, "holdings.list") {
@@ -166,7 +166,7 @@ func TestAReplyUnderAnOldPerReadKeyIsNotAReading(t *testing.T) {
 		if got, err := tc.outcome(reply); got != OutcomeIndeterminate || err == nil || !strings.Contains(err.Error(), `no "result"`) {
 			t.Errorf("%s under %q alone: %s %v, want indeterminate: the reply carries no result", tc.op, tc.old, got, err)
 		}
-		if v := reply.View(); v.Readable {
+		if v := reply.View(); !v.Read.None() {
 			t.Errorf("%s under %q alone is readable: %+v", tc.op, tc.old, v)
 		}
 	}
@@ -219,7 +219,7 @@ func TestAResultMissingWhatItsSchemaRequiresIsNotAReading(t *testing.T) {
 			}
 			underManifest(t, manifest)
 			reply := Read(context.Background(), "truenas", tc.op, "s", "s", nil, false)
-			if v := reply.View(); v.Readable {
+			if v := reply.View(); !v.Read.None() {
 				t.Errorf("read as a reading: %+v", v)
 			}
 			switch tc.op {
@@ -254,7 +254,7 @@ func TestTheTrueNASAddOnLandsInTheReader(t *testing.T) {
 	}
 	v := reply.View()
 	status, ok := v.Result.(*StorageResult)
-	if !v.Readable || v.Shape != "status" || !ok || len(status.Meters) != 1 || !status.QuotaRead || len(v.AlsoSays) != 0 {
+	if v.Read.None() || v.Shape != "status" || !ok || len(status.Meters) != 1 || !status.QuotaRead || len(v.AlsoSays) != 0 {
 		t.Fatalf("the status did not land: %+v", v)
 	}
 	if m := status.Meters[0]; m.Label != "makers" || m.Used != 19756849561 || m.Limit == nil || *m.Limit != 53687091200 || m.Unit != "bytes" {
@@ -310,7 +310,7 @@ func TestAnUnreadQuotaReachesThePageAsUnread(t *testing.T) {
 	}
 	v := reply.View()
 	got, _ := json.Marshal(v)
-	if !v.Readable || !strings.Contains(string(got), `"quota_read":false`) || !strings.Contains(string(got), `"label":"makers"`) {
+	if v.Read.None() || !strings.Contains(string(got), `"quota_read":false`) || !strings.Contains(string(got), `"label":"makers"`) {
 		t.Errorf("reads: %s, want quota_read false beside the meter that was read", got)
 	}
 
