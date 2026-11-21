@@ -185,8 +185,9 @@ export function useDialogFocusTrap(
       // An Escape something inside already used (a search clearing its words, A-24 §11.5) is spent.
       // Checked here rather than trusted to stopPropagation: the app's React root is the document
       // itself, so a stop there does not keep this listener on the same node from running.
-      // An Escape that ends a composition (an input method choosing its characters) is the method's, not the dialog's.
-      if (event.key === "Escape" && !event.defaultPrevented && !event.isComposing && !busyRef.current) {
+      // An Escape that ends a composition (an input method choosing its characters) is the method's, not the
+      // dialog's. Safari sends that Escape with `isComposing` false and keyCode 229.
+      if (event.key === "Escape" && !event.defaultPrevented && !event.isComposing && event.keyCode !== 229 && !busyRef.current) {
         event.preventDefault();
         // The dialog's Esc is the dialog's: a page behind it must not also act on it.
         event.stopPropagation();

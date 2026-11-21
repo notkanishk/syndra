@@ -3507,6 +3507,15 @@ end to end) found no missing function; three regressions with one root cause
         - On this build, measured in Chrome with the gesture held at its largest, everything is inside the pane: the halo 4.1px in from the left and 2.1px from the top, the beam exactly at the pane's edges, and the scope's light 6px from the top.
         - A real click on the offer left the focus in the field, and the next keys typed into the scope.
       - **Replay** of that tape into this build (420 page runs): 0 findings, apart from the six Trends findings at 390, which PR #234 fixes.
+    - *Go to, second check (Opus, of the review round).*
+      - (1) **An answer to the question no longer in the field is never followed.** While the typing has not settled (`stale`), the last answer stays where it was, quieted (`opacity-60`, `aria-disabled`), so nothing flickers per key. ↵, ⌘↵ and a press all go nowhere, and the status line says "Working it out." instead of its title.
+      - (2) **Safari's composition Escape** (`isComposing` false, keyCode 229) is left to the input method by the Modal, as `isComposing` already was. Any other Escape still closes the dialog.
+      - (3) **"Try again" asks again only for the answer's own failed reads:** the map, Insights', and a person's access. Nothing else in the app is reset.
+      - (4) **Known iOS limitation, not fixed.** Go to opens after the tap that asked for it: after the phone sheet's history close, or after a state change from the top bar's button. iOS opens the keyboard only for a focus made inside the tap, so on an iPhone the field is focused but the keyboard waits for a tap on it. The usual trick is focusing a stand-in input inside the tap and handing the focus over. It would not survive the sheet's own focus restore on close, so it is not a small change.
+      - **Mutation-checked, each red:**
+        - the stale answer followed by Enter (1), said as the answer (1), not quieted (1), followed by a press (1);
+        - Safari's 229 Escape closing the dialog (1), and Escape never closing (4);
+        - Try again resetting every failed read (1).
       - **Mutation-checked, each red:**
         - offer tap dropping focus (1); IME guard gone (1), and 229 not read (1); the Modal closing on a composing Esc (2);
         - a pasted sigil's words lost (1); no debounce (1); Basic asking (2);

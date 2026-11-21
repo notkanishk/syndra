@@ -28,6 +28,9 @@ export function insightsHref(q: Question): string {
  * (`suggest`, `useAnswer`): one source, so Go to's answer and the map's are the same answer. Only a
  * question that names things on the map is asked; nothing is guessed. `text` empty: nothing is read.
  */
+/** A read an answer is made from: the map (`topology`), Insights' own, or a person's access (a path, a comparison). */
+const answerRead = (key: readonly unknown[]) => key[0] === "topology" || key[0] === "insights" || (key[0] === "users" && key[1] === "access");
+
 export function useGoToAsk(text: string, users: UserProfile[] | undefined) {
   const on = text.trim() !== "";
   const topology = useTopology(on);
@@ -64,8 +67,8 @@ export function useGoToAsk(text: string, users: UserProfile[] | undefined) {
     working: on && ((!model && !topology.isError) || answered.computing),
     /** A read the answer needs failed: the map's, or the answer's own. */
     failed: on && (topology.isError || (answered.status !== null && !answered.computing)),
-    /** Asks again for what failed, and only that. */
-    retry: () => void client.resetQueries({ predicate: (query) => query.state.status === "error" }),
+    /** Asks again for what failed among the answer's own reads (the map, Insights', a person's access), and only that. */
+    retry: () => void client.resetQueries({ predicate: (query) => query.state.status === "error" && answerRead(query.queryKey) }),
     question,
     title,
     answer: answered.answer,

@@ -107,12 +107,14 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
 
   // A question is Advanced's: its answer is followed on Insights' map, which only Advanced has (A-26 §0a).
   // It is asked once the typing has rested a settle, so no read goes out per key and the answer does not
-  // flicker through every prefix; until then the last answer stays.
+  // flicker through every prefix. Until then the last answer stays, quieted and not to be followed: it
+  // answers a question no longer in the field (`stale`).
   const asking = audience === "advanced" && !scope && QUESTION_START.test(query.trim());
   const settled = useDebounce(asking ? query : "", SETTLE_MS);
   const ask = useGoToAsk(settled, catalog?.users);
   const answer = asking ? ask.answer?.panel : undefined;
-  const working = asking && !answer && (settled !== query || ask.working);
+  const stale = asking && settled !== query;
+  const working = asking && !answer && (stale || ask.working);
   const failed = asking && !answer && !working && ask.failed;
   const rows = useMemo(() => {
     const source = {
@@ -241,8 +243,9 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
         setQuery(current.text);
         setActive(0);
       } else if (current.type === "answer" || (answer && (event.metaKey || event.ctrlKey))) {
-        // The answer is followed by its own link, as a link is: ↵ on it, ⌘↵ from a row under it.
-        answerRef.current?.click();
+        // The answer is followed by its own link, as a link is: ↵ on it, ⌘↵ from a row under it. Never one
+        // that answers what was typed before.
+        if (!stale) answerRef.current?.click();
       } else activeRef.current?.click();
     } else if (event.key === "Tab" && !event.shiftKey && offer) {
       // Tab is taken only while a scope is offered; otherwise it is the browser's.
@@ -266,9 +269,9 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
   const placeholder = scope ? GO_TO_SCOPES[scope].hint : phone ? GO_TO_PHONE_PLACEHOLDER[audience] : GO_TO_PLACEHOLDER[audience];
   // What a screen reader is told, in one place: where it is looking, and what came of the typing.
   const said = asking
-    ? answer
+    ? answer && !stale
       ? answer.title
-      : working
+      : working || stale
         ? "Working it out."
         : failed
           ? "Couldn't load this answer."
@@ -392,9 +395,10 @@ export function GoToPane({ nav, onGo }: { nav: NavEntry[]; onGo: () => void }) {
             href={ask.href}
             role="option"
             aria-selected={current?.type === "answer"}
+            aria-disabled={stale || undefined}
             tabIndex={-1}
-            onClick={onGo}
-            className={`${rowClass({ type: "answer", key: "answer" })} flex-col items-start! gap-1 py-2.5`}
+            onClick={(event) => (stale ? event.preventDefault() : onGo())}
+            className={`${rowClass({ type: "answer", key: "answer" })} flex-col items-start! gap-1 py-2.5 ${stale ? "opacity-60" : ""}`}
           >
             <span className="font-display text-title text-ink">{answer.title}</span>
             <span className="text-small text-muted">{answer.eyebrow}</span>

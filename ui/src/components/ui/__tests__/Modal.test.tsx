@@ -75,7 +75,12 @@ describe("Modal", () => {
       </Modal>,
     );
     fireEvent.keyDown(screen.getByLabelText("Field"), { key: "Escape", isComposing: true });
+    // Safari's: the composition's Escape says it is not composing, and its keyCode is 229.
+    fireEvent.keyDown(screen.getByLabelText("Field"), { key: "Escape", keyCode: 229 });
     expect(onClose).not.toHaveBeenCalled();
+    // Any other Escape is still the dialog's.
+    fireEvent.keyDown(screen.getByLabelText("Field"), { key: "Escape", keyCode: 27 });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("does not dismiss on Escape when busy", () => {

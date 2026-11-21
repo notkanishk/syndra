@@ -433,6 +433,39 @@ describe("a question, in Advanced (A-26 §0, §0a)", () => {
     fetched.mockRestore();
   });
 
+  it("never follows an answer to a question no longer in the field: it waits, quieted, until the new one settles", async () => {
+    const onClose = vi.fn();
+    const { client } = renderIn(<GoTo open onClose={onClose} nav={ADVANCED_NAV} />);
+    client.setQueryDefaults(["topology"], { staleTime: Infinity });
+    client.setQueryDefaults(["insights"], { staleTime: Infinity });
+    client.setQueryData(["topology", "graph"], topology);
+    client.setQueryData(["insights", "who", "role:p1:trained", null], [{ user_id: "u2", name: "Primo Colon", how: [] }]);
+    type("who has trained");
+    const answer = await screen.findByRole("option", { name: /Follow it on the map/ });
+    const click = vi.fn((event: Event) => event.preventDefault());
+    answer.addEventListener("click", click);
+    // Another question, and Enter at once: the old answer is still on the glass, and is not followed.
+    type("who has print lab");
+    expect(answer).toHaveAttribute("aria-disabled", "true");
+    expect(answer).toHaveClass("opacity-60");
+    press("Enter");
+    press("Enter", { metaKey: true });
+    expect(click).not.toHaveBeenCalled();
+    // Nor by a press: it goes nowhere and Go to stays.
+    expect(fireEvent.click(answer)).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+    click.mockClear();
+    expect(screen.getByRole("status")).toHaveTextContent("Working it out.");
+    // Back to the question it answers: once settled, it is followed again.
+    type("who has trained");
+    await act(() => new Promise((done) => setTimeout(done, SETTLE_MS + 50)));
+    const settledAnswer = screen.getByRole("option", { name: /Follow it on the map/ });
+    expect(settledAnswer).not.toHaveAttribute("aria-disabled");
+    settledAnswer.addEventListener("click", click);
+    press("Enter");
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
   it("says when an answer could not be read, and what to do: try again, or open Insights", async () => {
     const { client } = renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
     client.setQueryDefaults(["topology"], { staleTime: Infinity });
@@ -443,10 +476,13 @@ describe("a question, in Advanced (A-26 §0, §0a)", () => {
     await screen.findByRole("button", { name: "Try again" }, { timeout: 3000 });
     expect(screen.getByRole("status")).toHaveTextContent("Couldn't load this answer.");
     expect(screen.getByRole("link", { name: "open Insights" })).toHaveAttribute("href", expect.stringMatching(/^\/insights\?.*q=who/));
+    // A read elsewhere in the app that failed is not Go to's to ask again.
+    await client.fetchQuery({ queryKey: ["elsewhere"], queryFn: () => Promise.reject(new Error("down")), retry: false }).catch(() => {});
     const calls = fetched.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await act(() => new Promise((done) => setTimeout(done, 50)));
     expect(fetched.mock.calls.length).toBeGreaterThan(calls);
+    expect(client.getQueryState(["elsewhere"])?.status).toBe("error");
     fetched.mockRestore();
   });
 });
