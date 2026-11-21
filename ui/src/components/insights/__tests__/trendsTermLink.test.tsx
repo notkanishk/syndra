@@ -75,6 +75,29 @@ describe("Ending soon", () => {
     expect(rows).toEqual(["Wood shop25", "Laser room12"]);
   });
 
+  it("holds its name to what is left of the number seats, so a long name wraps and never pushes them", async () => {
+    query = "tab=trends";
+    respond.mockResolvedValue({
+      ...trends("Monsoon 2026"),
+      ending_soon: [{ project_id: "p1", project_name: "The Undertaker's Casket Workshop and Finishing Bay", d14: 12, d30: 345 }],
+    });
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Mount />
+      </QueryClientProvider>,
+    );
+    const name = await screen.findByText(/Casket Workshop/);
+    const row = name.closest('[role="row"]')!;
+    // The name's track may shrink to 0 (minmax(0,1fr)) and wrap; the numbers sit in the seat token,
+    // which a phone narrows. The heading row is the same grid, so a heading can never drift off its cell.
+    expect(row.className).toContain("grid-cols-[minmax(0,1fr)_var(--seat-number)_var(--seat-number)]");
+    const head = screen.getAllByRole("row").find((r) => r !== row && r.className.includes("--seat-number"))!;
+    // Same grid; only the type step differs (a label head, small rows).
+    expect(head.className.replace(/ type-label$/, "")).toBe(row.className.replace(/ text-small$/, ""));
+    expect(name.className).toMatch(/min-w-0/);
+    expect(name.className).toMatch(/break-words/);
+  });
+
   it("opens Expiring access in the same window from each number", async () => {
     query = "tab=trends";
     respond.mockResolvedValue({
