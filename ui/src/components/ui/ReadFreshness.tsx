@@ -58,6 +58,11 @@ export function readStateOfQuery(q: { dataUpdatedAt: number; isError: boolean })
   return { readAt: q.dataUpdatedAt ? new Date(q.dataUpdatedAt).toISOString() : null, current: !q.isError };
 }
 
+/** When a read happened, or undefined when it never did: a zero or unparseable time is never a date. */
+function readMoment(iso: string | null | undefined): string | undefined {
+  return iso && Date.parse(iso) > 0 ? iso : undefined;
+}
+
 /** The read state of an add-on's answer that carries its own (`taken_at`, `current`, `stale`). */
 export function observed(o: { taken_at: string; current: boolean; stale?: Stale; truncated?: boolean }, since?: number): ReadState {
   return { readAt: o.taken_at, current: o.current, stale: stamped(o.stale, since), truncated: o.truncated };
@@ -229,7 +234,7 @@ const UNNAMED_OPERATOR: Reader = { audience: "operator", person: "" };
  * to refresh to, since the target is the thing that is not answering.
  */
 export function ReadFreshness({
-  state,
+  state: given,
   subject = "This",
   onRefresh,
   refreshing = false,
@@ -247,6 +252,9 @@ export function ReadFreshness({
   refresh?: RefreshPress;
   className?: string;
 }) {
+  // A read with no moment is no copy (Go's zero time, 0001-01-01, from a read that never happened):
+  // every caller passes through here, so none of them ever says "last state seen, 1 Jan 1".
+  const state = { ...given, readAt: readMoment(given.readAt) };
   // The age is a function of now, so it is computed on the client only — the
   // server and the browser do not share a clock, and a freshness label that
   // flickers on hydration is worse than one that appears a frame late.

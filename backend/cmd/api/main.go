@@ -479,8 +479,12 @@ func main() {
 					continue
 				}
 				if res.Queued > 0 || len(res.Unmanaged) > 0 || res.Halted {
-					log.Printf("[ADDON-RECONCILE] %s bound=%d queued=%d unmanaged=%d halted=%v %s",
-						reg.Target, res.Bound, res.Queued, len(res.Unmanaged), res.Halted, res.Reason)
+					bound := "unread" // a halted pass counted nothing
+					if res.Bound != nil {
+						bound = strconv.Itoa(*res.Bound)
+					}
+					log.Printf("[ADDON-RECONCILE] %s bound=%s queued=%d unmanaged=%d halted=%v %s",
+						reg.Target, bound, res.Queued, len(res.Unmanaged), res.Halted, res.Reason)
 				}
 			}
 			return nil

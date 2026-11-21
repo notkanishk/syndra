@@ -222,3 +222,13 @@ describe("a wait that can be stopped (D-1 #11)", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/^$/);
   });
 });
+
+// Go's zero time is what a read that never happened marshals to. It is no copy, never a date: staging
+// showed "This is the last state seen, 1 Jan 1" for an add-on that was stopped.
+describe("a read with no moment", () => {
+  it.each(["0001-01-01T00:00:00Z", "1970-01-01T00:00:00Z", "not a time"])("%s is no earlier copy", (readAt) => {
+    render(<ReadFreshness state={{ readAt, current: false, stale: { reason: "unreachable" } }} subject="The account list" />);
+    expect(screen.getByText("Could not reach the connected system, and there is no earlier copy to show")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\b1 Jan\b|1970|last state seen/);
+  });
+});

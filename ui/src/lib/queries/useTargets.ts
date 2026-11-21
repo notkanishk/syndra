@@ -254,14 +254,16 @@ export interface BoundAccount {
 
 export interface TargetInventory {
   target: string;
-  bound: number;
+  /** Absent when the inventory halted before reading: unknown, never 0 (holding is observed). */
+  bound?: number;
   /**
    * The accounts Syndra manages. The other half of "whose accounts are on this
    * target" — the inventory answered only which ones it does NOT manage, and
    * those are not the ones an operator acts on.
    */
   accounts?: BoundAccount[];
-  unmanaged: UnmanagedAccount[];
+  /** Absent, like `bound`, `accounts` and `read_at`, when nothing was read. */
+  unmanaged?: UnmanagedAccount[];
   read_at?: string;
   current: boolean;
   truncated?: boolean;

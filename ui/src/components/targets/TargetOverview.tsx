@@ -1426,20 +1426,23 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
     <Card stale={stale || read.current === false} {...leaving.listProps}>
       <CardHeader
         title="Not created by Syndra"
-        count={inventory.data ? leaving.rows.length : undefined}
+        count={inventory.data?.unmanaged ? leaving.rows.length : undefined}
         caption={`Accounts on ${name} that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.`}
       />
-      <div className="px-5 pb-2">
-        <ReadFreshness
-          subject="The account list"
-          state={read}
-          onRefresh={() => {
-            setResult(null);
-            return again.press();
-          }}
-          refreshing={again.pending}
-        />
-      </div>
+      {/* A pass that read nothing has no freshness: the halted line below says so, once. */}
+      {!inventory.data?.halted && (
+        <div className="px-5 pb-2">
+          <ReadFreshness
+            subject="The account list"
+            state={read}
+            onRefresh={() => {
+              setResult(null);
+              return again.press();
+            }}
+            refreshing={again.pending}
+          />
+        </div>
+      )}
       <ReadAgainError error={again.error} />
       {inventory.data?.halted && (
         // A pass that stopped has an empty list it never measured; the add-on's words (or the reason's) say why instead.

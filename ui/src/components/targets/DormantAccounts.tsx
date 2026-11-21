@@ -133,7 +133,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
     <Card stale={stale} {...leaving.listProps}>
       <CardHeader
         title="No longer needed"
-        count={leaving.rows.length}
+        count={dormant.data ? leaving.rows.length : undefined}
         caption="Accounts Syndra created that no active role needs any more"
       />
 

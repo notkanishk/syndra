@@ -431,10 +431,12 @@ describe("a removed account leaves by fading and folding", () => {
     expect(screen.getByTestId("card-count").textContent).toContain("1");
   });
 
-  it("counts them, at zero too, when the list could not be read", () => {
+  // Staging, add-on stopped: a list that could not be read showed "No longer needed 0". A count is
+  // observed: unread is no count, never a zero (holding is observed).
+  it("shows no count when the list could not be read", () => {
     state.error = new Error("down");
     renderDormant();
-    expect(screen.getByTestId("card-count").textContent).toBe("0");
+    expect(screen.queryByTestId("card-count")).toBeNull();
   });
 
   it("does not offer a leaving row to be selected", () => {
@@ -446,3 +448,4 @@ describe("a removed account leaves by fading and folding", () => {
     expect(screen.getByLabelText("Select former-member").closest("[data-leaving]")).toHaveAttribute("inert");
   });
 });
+

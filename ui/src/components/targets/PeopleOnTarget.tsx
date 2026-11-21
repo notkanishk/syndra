@@ -115,10 +115,13 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
         onRetry={() => inventory.refetch()}
         errorTitle="The account list could not be read"
         empty={
-          <EmptyState
-            title="Nobody yet."
-            guidance={`No role is mapped to ${name} yet, or the changes that would create accounts are still waiting for you to send from Pending changes.`}
-          />
+          // A halted read has no list to be empty: the account list's own line says it was not read.
+          inventory.data?.halted ? null : (
+            <EmptyState
+              title="Nobody yet."
+              guidance={`No role is mapped to ${name} yet, or the changes that would create accounts are still waiting for you to send from Pending changes.`}
+            />
+          )
         }
       >
         <>

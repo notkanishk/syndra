@@ -63,16 +63,19 @@ type BoundAccount struct {
 type AddonReconcileResult struct {
 	Target string `json:"target"`
 	// Bound is how many subjects the backend has a recorded account for. The
-	// denominator for everything else here.
-	Bound int `json:"bound"`
-	// Unmanaged is the inventory — reported, not triaged.
-	Unmanaged []UnmanagedAccount `json:"unmanaged"`
+	// denominator for everything else here. Absent, never 0, on a pass that
+	// halted before reading them: a zero nobody counted is a false statement
+	// that nobody holds an account (holding is observed).
+	Bound *int `json:"bound,omitzero"`
+	// Unmanaged is the inventory — reported, not triaged. Absent when nothing
+	// was read; an empty list only when the target was read and holds none.
+	Unmanaged []UnmanagedAccount `json:"unmanaged,omitzero"`
 	// Accounts is the other half of "whose accounts are on this target", and it
 	// was missing: the inventory answered only which accounts Syndra does NOT
 	// manage, so the ones it does had no surface at all — and they are the ones
 	// an operator acts on. Read on the INVENTORY path only, because a reconcile
 	// pass is a background sweep whose result nobody reads as a list.
-	Accounts []BoundAccount `json:"accounts,omitempty"`
+	Accounts []BoundAccount `json:"accounts,omitzero"`
 	// Queued counts the convergences this pass enqueued. Never "fixed": they
 	// wait for the drain like every other add-on row.
 	Queued int `json:"queued"`
@@ -89,7 +92,8 @@ type AddonReconcileResult struct {
 	// resolve it — re-provision or unbind — is an operator's decision.
 	Stale []StaleBinding `json:"stale,omitempty"`
 	// ReadAt and Current describe the state read everything above came from.
-	ReadAt  time.Time `json:"read_at"`
+	// ReadAt is absent when nothing was read: the zero time is never a date.
+	ReadAt  time.Time `json:"read_at,omitzero"`
 	Current bool      `json:"current"`
 	// Truncated says the read hit the add-on's cap, so the inventory is what was
 	// seen rather than everything there is.
@@ -149,7 +153,7 @@ func Inventory(ctx context.Context, target string, fresh bool) (AddonReconcileRe
 	if err != nil {
 		return res, fmt.Errorf("read bindings for %s: %w", target, err)
 	}
-	res.Bound = len(bindings)
+	res.Bound = new(len(bindings))
 	// Each recorded binding's account is the row the add-on attributes to its
 	// subject (design 7t D3), never one matched here by name or number.
 	standing := map[string]*addons.Standing{}
@@ -158,6 +162,7 @@ func Inventory(ctx context.Context, target string, fresh bool) (AddonReconcileRe
 			standing[a.Subject] = a.Standing
 		}
 	}
+	res.Accounts = make([]BoundAccount, 0, len(bindings)) // read: [] means none, not unknown
 	for _, b := range bindings {
 		res.Accounts = append(res.Accounts, BoundAccount{TargetBinding: b, Standing: standing[b.SubjectID]})
 	}
@@ -269,7 +274,7 @@ func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReco
 	if err != nil {
 		return res, fmt.Errorf("read bindings for %s: %w", target, err)
 	}
-	res.Bound = len(bindings)
+	res.Bound = new(len(bindings))
 
 	// The inventory concludes from accounts actually SEEN, which is why a
 	// truncated read does not invalidate it: everything reported here is on the
