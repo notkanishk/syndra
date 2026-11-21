@@ -275,7 +275,7 @@ export default function PendingChangesPage() {
               rules={rules.data}
               onFolded={() => setFolded(true)}
             />
-            {folded && <EverythingSent mine={cleared.mine} glow={glow} onGlow={spend} />}
+            {folded && <EverythingSent mine={cleared.mine} glow={glow} onOpened={spend} />}
           </>
         ) : (
           <div {...leaving.listProps}>
@@ -567,13 +567,13 @@ function ClearedGroups({
  * The queue has emptied (S13). One line says so; a queue someone else sent (or
  * that was cancelled away) says it without a count or a time it cannot know.
  */
-function EverythingSent({ mine, glow, onGlow }: { mine: { count: number; at: string } | null; glow: boolean; onGlow: () => void }) {
+function EverythingSent({ mine, glow, onOpened }: { mine: { count: number; at: string } | null; glow: boolean; onOpened: () => void }) {
   return (
     <EmptyState
       resolved
       lift
       glow={glow}
-      onGlow={onGlow}
+      onOpened={onOpened}
       title="Everything has reached Zitadel."
       action={{ label: "Change history", href: "/operations/cascades" }}
       guidance={

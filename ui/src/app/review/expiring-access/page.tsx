@@ -374,7 +374,7 @@ export default function ExpiringAccessPage() {
                 resolved
                 lift={clearedByMe}
                 glow={clearedByMe}
-                onGlow={spend}
+                onOpened={spend}
               />
             }
           >

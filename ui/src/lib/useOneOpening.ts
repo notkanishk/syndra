@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useRef } from "react";
 
 /**
  * A clearing earns one opening of the all-clear's light and lift (A-25 moment 7), and no clock decides it.
@@ -16,8 +16,6 @@ export function useOneOpening(earned: boolean, ready: boolean) {
   const spent = useRef(false);
   if (!earned) spent.current = false;
   else if (!ready) spent.current = true;
-  const spend = useCallback(() => {
-    spent.current = true;
-  }, []);
-  return { open: earned && !spent.current, spend };
+  // `spend` is a new function each render; nothing depends on its identity.
+  return { open: earned && !spent.current, spend: () => void (spent.current = true) };
 }

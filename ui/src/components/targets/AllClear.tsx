@@ -45,7 +45,7 @@ export function AllClear({
 }) {
   // What it is first given is what it does: spending the opening must not unfold it away after the fact.
   const [opens] = useState(emptied);
-  const line = <EmptyState resolved lift={emptied} glow={emptied && byReader} onGlow={onOpened} title={title} guidance={guidance} />;
+  const line = <EmptyState resolved lift={emptied} glow={emptied && byReader} onOpened={onOpened} title={title} guidance={guidance} />;
   // Its space is opened by the card around it when it sits in one (AllClearCard); alone, here.
   return opens && !inCard ? <UnfoldOnArrival>{line}</UnfoldOnArrival> : line;
 }

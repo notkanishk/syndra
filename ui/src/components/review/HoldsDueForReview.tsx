@@ -71,7 +71,7 @@ export function HoldsDueForReview() {
               resolved
               lift={clearedByMe}
               glow={clearedByMe}
-              onGlow={spend}
+              onOpened={spend}
               title="No hold is due for review."
               guidance="A hold appears here on the review date the person who placed it chose. Until then it stays in force without asking."
             />

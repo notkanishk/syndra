@@ -25,6 +25,8 @@ const state = vi.hoisted(() => ({
   governance: {} as Record<string, unknown>,
   // Whether the queue's first read is still out.
   loading: false,
+  // Whether the queue's read is failing.
+  failed: false,
 }));
 
 const quiet = () => ({
@@ -43,7 +45,7 @@ vi.mock("@/lib/queries/useServiceAccounts", () => ({
   serviceAccountHref: (id: string) => `/system/service-accounts/${id}`,
 }));
 vi.mock("@/lib/queries/useGovernance", () => ({
-  useGovernanceSummary: () => ({ data: state.loading ? undefined : state.governance, isLoading: state.loading, error: null, refetch: vi.fn() }),
+  useGovernanceSummary: () => ({ data: state.loading ? undefined : state.governance, isLoading: state.loading, error: state.failed ? new Error("down") : null, refetch: vi.fn() }),
 }));
 vi.mock("@/lib/queries/useRequests", () => ({
   useRequestsAdmin: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
@@ -88,6 +90,7 @@ vi.mock("@/lib/queries/useTerms", () => ({ useTerms: () => ({ data: state.terms 
 vi.mock("@/lib/query-client", async (original) => ({
   ...(await original<typeof import("@/lib/query-client")>()),
   ownActWithin: () => state.own,
+  ownActAfter: () => state.own,
 }));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alreadyHeld: () => false, ApproveButton: ({ onClick }: { onClick: () => void }) => <button type="button" onClick={onClick}>Approve</button> }));
@@ -138,6 +141,7 @@ beforeEach(() => {
   state.own = false;
   state.terms = [];
   state.loading = false;
+  state.failed = false;
   // The day's close is kept on this device: every test starts with none.
   window.localStorage.clear();
   state.governance = drifting();
@@ -313,6 +317,25 @@ describe("Home's all-clear, as an ending", () => {
     later(TINT_MS);
     expect(line().querySelector(".ember-open")).not.toBeNull();
     expect(line().querySelector("[data-close-line]")).toBeNull();
+  });
+
+  it("a read that fails and then lands brings the same all-clear back at rest: no second lift, light or close", () => {
+    state.own = true;
+    const home = empty();
+    expect(line()).toHaveClass("lift-in");
+    expect(line().querySelector(".ember-open")).not.toBeNull();
+    expect(line().querySelector("[data-close-line]")).not.toBeNull();
+    state.failed = true;
+    home.reread();
+    later(TINT_MS);
+    state.failed = false;
+    home.reread();
+    later(TINT_MS);
+    expect(line()).not.toHaveClass("lift-in");
+    expect(line().querySelector(".ember-open")).toBeNull();
+    expect(line().querySelector("[data-close-line]")).toBeNull();
+    // The line is the same all-clear, at rest: the dot still holds its ember.
+    expect(line().querySelector(".ember")).not.toBeNull();
   });
 
   it("closes again the next day", () => {

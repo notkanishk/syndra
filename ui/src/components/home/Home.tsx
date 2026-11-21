@@ -31,6 +31,7 @@ import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests"
 import { useRequestDecisions } from "@/lib/request-decisions";
 import { isRefused, refusalCause } from "@/lib/wait-reason";
 import { recall, remember } from "@/lib/memory";
+import { useOneOpening } from "@/lib/useOneOpening";
 import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useDrainPropagations, useGaveUpPropagations, useMarkGaveUpSeen } from "@/lib/queries/usePropagation";
 import { useAutoRetry, useIndicatorsRead } from "@/lib/queries/useIndicators";
@@ -257,7 +258,10 @@ export function Home({ session, door = false }: { session: SessionUser; door?: b
   const { cleared, glow, spend } = useQueueCleared(calm ? NO_WORK : WORK, !loading && !error, true, advanced);
   // The list closes, the vivid ending, at most once a day on this device and only by their own hand.
   // Decided in render, so the title is never drawn one size and then another.
-  const closes = cleared?.mine ? closesOnce(cleared.mine.at) : false;
+  // Lift, light and close are one opening of one clearing: spent by the all-clear's first mount, or by a read
+  // that fails, so a retry that lands brings the same line back at rest.
+  const opening = useOneOpening(cleared !== null, !loading && !error);
+  const closes = cleared?.mine && opening.open ? closesOnce(cleared.mine.at) : false;
   // A swap held for the pointer (S5) keeps the grid as it last was, and the
   // headline with it: what leaves is what was there.
   const held = useRef<{ grid: React.ReactNode; blocks: number }>({ grid: null, blocks: 0 });
@@ -499,10 +503,14 @@ export function Home({ session, door = false }: { session: SessionUser; door?: b
         <Unfold open={swap.calmOpen} gap={16}>
         <div className="panel">
           <EmptyState
+            key={cleared?.id ?? 0}
             resolved
-            lift={cleared !== null}
+            lift={opening.open}
             glow={glow}
-            onGlow={spend}
+            onOpened={() => {
+              opening.spend();
+              spend();
+            }}
             closes={closes}
             plate="shut"
             title="Nothing here needs you."

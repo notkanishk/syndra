@@ -2,13 +2,15 @@
 
 import { useRef, useState } from "react";
 
-import { ownActWithin } from "@/lib/query-client";
+import { ownActAfter, ownActWithin } from "@/lib/query-client";
 import { useOneOpening } from "@/lib/useOneOpening";
 
 /** A send started this long ago, whose queue then empties, is this operator's. */
 const MINE_WITHIN_MS = 30_000;
 
 export interface QueueCleared<T> {
+  /** Which clearing this is (1, 2, ...): a line that outlives one clearing is keyed by it. */
+  id: number;
   /** What was in the queue when it emptied: it is what fades. */
   items: T[];
   /** This operator's send emptied it: how many they sent, and when it had gone. */
@@ -40,12 +42,21 @@ export function useQueueCleared<T>(items: T[], ready: boolean, anyOwnAct = false
   const [cleared, setCleared] = useState<QueueCleared<T> | null>(null);
   const [scoped, setScoped] = useState(scope);
   const sending = useRef<{ count: number; at: number } | null>(null);
+  // When the queue last filled (or arrived): a write of theirs from before that is not what emptied it now.
+  const armed = useRef(0);
+  const clearings = useRef(0);
 
   if (scope !== scoped) {
     setScoped(scope);
     setSeen(items);
     if (cleared) setCleared(null);
+    armed.current = Date.now();
+    sending.current = null;
   } else if (ready && items.length > 0 && !sameItems(items, seen)) {
+    if (cleared || seen.length === 0) {
+      armed.current = Date.now();
+      sending.current = null;
+    }
     setSeen(items);
     if (cleared) setCleared(null);
   } else if (ready && items.length === 0 && seen.length > 0 && !cleared) {
@@ -53,12 +64,12 @@ export function useQueueCleared<T>(items: T[], ready: boolean, anyOwnAct = false
     const mine =
       started && Date.now() - started.at < MINE_WITHIN_MS
         ? { count: started.count, at: new Date().toISOString() }
-        : anyOwnAct && ownActWithin(MINE_WITHIN_MS)
+        : anyOwnAct && ownActWithin(MINE_WITHIN_MS) && ownActAfter(armed.current)
           ? { count: seen.length, at: new Date().toISOString() }
           : null;
     sending.current = null;
     setSeen([]);
-    setCleared({ items: seen, mine });
+    setCleared({ id: ++clearings.current, items: seen, mine });
   }
 
   // `mine` says whose it was and keeps the count; `glow` is the one opening it earns (`useOneOpening`).

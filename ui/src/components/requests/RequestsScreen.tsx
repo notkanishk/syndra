@@ -345,7 +345,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
               // The all-clear rises and blooms only after this operator's own act.
               lift={clearedByMe && !needle && status === "pending"}
               glow={clearedByMe && !needle && status === "pending"}
-              onGlow={spend}
+              onOpened={spend}
               guidance={
                 needle
                   ? "Try part of a name, or a role."

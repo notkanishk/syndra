@@ -279,7 +279,7 @@ export function WithdrawnAccess() {
                   resolved
                   lift={clearedByMe}
                   glow={clearedByMe}
-                  onGlow={spend}
+                  onOpened={spend}
                 />
               }
             >

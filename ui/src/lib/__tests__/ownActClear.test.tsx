@@ -38,7 +38,7 @@ describe("an all-clear blooms only after the operator's own act", () => {
     if (!ready) return createElement("p", null, "The read failed");
     if (rows.length > 0) return createElement("p", null, "The list");
     if (!show) return createElement("p", null, "Still leaving");
-    return createElement(EmptyState, { resolved: true, lift: glow, glow, onGlow: spend, title: "Done." });
+    return createElement(EmptyState, { resolved: true, lift: glow, glow, onOpened: spend, title: "Done." });
   };
   const own = async () => {
     const qc = makeQueryClient();
@@ -95,6 +95,30 @@ describe("an all-clear blooms only after the operator's own act", () => {
     expect(dot(view.container)).not.toHaveClass("ember-open");
   });
 
+
+  it("does not claim a queue someone else emptied after it refilled, on the strength of a write from before the refill", async () => {
+    const qc = makeQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: qc }, children);
+    const { result, rerender } = renderHook(({ rows }) => useQueueCleared(rows, true, true), {
+      initialProps: { rows: [A] },
+      wrapper,
+    });
+    act(() => void vi.advanceTimersByTime(1));
+    await act(async () => {
+      await qc.getMutationCache().build(qc, { mutationFn: async () => "ok" }).execute(undefined);
+    });
+    rerender({ rows: [] });
+    expect(result.current.cleared?.mine).not.toBeNull();
+    // It refills, and within the 30s someone else clears it: their write was before the refill.
+    act(() => void vi.advanceTimersByTime(1_000));
+    rerender({ rows: [{ id: "b" }] });
+    expect(result.current.cleared).toBeNull();
+    act(() => void vi.advanceTimersByTime(1_000));
+    rerender({ rows: [] });
+    expect(result.current.cleared?.mine).toBeNull();
+    expect(result.current.glow).toBe(false);
+  });
 
   it("does not claim one that empties on a read nobody caused, or that arrived empty", () => {
     vi.setSystemTime(new Date(2030, 0, 1)); // later than any write another test made

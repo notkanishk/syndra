@@ -460,7 +460,7 @@ export function UnexplainedAccess() {
               plate="shut"
               lift={clearedByMe}
               glow={clearedByMe}
-              onGlow={spend}
+              onOpened={spend}
             />
           )}
         </Card>
