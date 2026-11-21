@@ -2053,6 +2053,254 @@ its four features are additive and nothing in 0–5 depends on them, so major
 `subjects.paged` is deferred past all seven until a target needs it
 (decision 27).
 
+## 13. Reachability: two outages, one reading, one reply
+
+Owner, 21 Nov 2026: "reachability to add-on and how to handle it should be
+standard part of contract 2". The contract covered one outage, the app's (§4
+`stale`, §6 `health.reachable`), and was silent on the add-on's own; the code
+filled the gap nine ways. This section is the one rule. It serves three
+standing rules: a value not read is absent, never zero; every number shown is
+observed; every outcome ends with a next step or "nothing for you to do".
+
+### 13.1 Vocabulary: who is not answering
+
+Two outages, never one word:
+
+- **Add-on unreachable** (`addon_unreachable`): Syndra holds no usable answer
+  from the add-on. Only Syndra can know this.
+- **App unreachable** (`app_unreachable`): the add-on answered, and says it
+  cannot read its app. Only the add-on can know this (§0: Syndra never calls
+  an app), so its sentence (`detail`, `stale.note`) is shown first and Syndra's
+  is the fallback.
+
+This is a second axis beside §4's outcome classes, which stand:
+`unreached`/`indeterminate` answer "did it go out", the class answers "who is
+down". `target_unreachable` (one word for seven causes) is retired, and
+`SubjectsResult.Halt()` becomes the one mapping for every reply
+(`addons.Unread(reply) -> {reason, cause}`).
+
+| What the pipe saw | Class | `cause` | Operator's sentence (drafts; final words through the copy guide) |
+|---|---|---|---|
+| dial failure: refused, no route, name not found, dial or handshake timeout | add-on | `no_answer` | "Syndra can't reach {system}'s add-on. Check that its container is running. Syndra keeps trying." |
+| pinned key mismatch, TLS certificate error | add-on | `wrong_host` | "Something answered at {system}'s add-on address, but it isn't the add-on registered here. Check the address and the shared secret, then restart the add-on." |
+| timeout, reset or cut-off reply after the request went out | add-on | `timeout` | "{system}'s add-on started answering and stopped. Syndra keeps trying. If it lasts, read the add-on's log." |
+| a 5xx with no registered code, an undecodable body | add-on | `fault` | "{system}'s add-on answered with an error it didn't explain. Read the add-on's log." |
+| breaker open | add-on | the cause that opened it | that cause's sentence, then "Syndra tries again in {n} s." |
+| `TARGET_UNREACHABLE`; `health.reachable: false`; `stale.reason: unreachable` | app | — | the add-on's sentence, else "{system}'s add-on is running but can't reach {product}. Check that {product} is on." |
+| `NO_CURRENT_READ`, `TARGET_UNREADABLE` | app | — | the add-on's sentence, else "{product} didn't give its add-on an answer it could use. Check {product}, then read again." |
+
+A member reads one sentence for both classes, because which box is down is
+not theirs to fix: "{system} can't be read right now. Nothing for you to do."
+Not outages, and unchanged: `read_refused` (`STORE_UNREADABLE`), `cooldown`,
+`addon_outdated` (§9.4b). Removed while unreleased: the stale reasons
+`draining` and `never_read` (no emitter; "never read" has no copy, so it is
+the no-copy error) and `REACH_NEVER_READ` (folded into `NO_CURRENT_READ`, now
+"the add-on holds nothing to serve").
+
+### 13.2 "Reachable": one meaning, one owner
+
+**Reachable** means: the add-on answered Syndra's last probe, and its
+`health.reachable` was true. The health monitor owns it and nothing else
+computes it. `monitor.State(target)` answers
+`{state: answering | app_unreachable | addon_unreachable | checking, cause, since, checked_at, retry_after}`;
+`since` is absent when the outage was already there at the first probe (not
+observed, so not stated).
+
+- Probe: `GET /health` every 30 s, targets in parallel, 5 s each. A failed
+  probe is `addon_unreachable` with its cause; an answered one with
+  `reachable: false` is `app_unreachable`. No longer one "miss".
+- Hysteresis by a Kubernetes probe's defaults (`failureThreshold: 3`,
+  `successThreshold: 1`). From `checking` the first probe decides either way,
+  as Envoy's active health checking does for a new host.
+- The breaker (5 failures, 30 s, half-open; Nygard, *Release It!*) stays
+  transport protection, not a second opinion: an open breaker is a cause the
+  monitor reports, and it remembers the cause that opened it.
+- Readers, all of the same value: the drain's pre-flight (replacing its own
+  live probe), the member view (replacing `view.Reachable` and `health: ""`),
+  the roster (replacing `cannot_connect/offline/waiting_to_retry`), and page
+  reads, which no longer issue a health read per load and, while the state is
+  `addon_unreachable`, answer "no copy" from the monitor without dialing.
+- **A restart does not forget.** The first `ProbeAll` runs before the
+  listener serves, so `checking` is seen only for a target registered since.
+  Nothing is persisted.
+- Each state change is logged once, OpenTelemetry's `error.type` the cause.
+
+### 13.3 One reply for every read
+
+Every backend route that answers from an add-on (survey §3, rows 1–5, 8–13,
+15–16) carries one member, `read`, and no route carries `read: false`,
+`readable`, `halted`-as-data, `read_at` or `last_known`:
+
+| Case | Status | Body |
+|---|---|---|
+| **Read now** | 200 | the data, `read: {state: "now", taken_at}` |
+| **Kept copy** | 200 | the data, `read: {state: "kept", taken_at, reason, cause?, detail?, retry_after?}` |
+| **No copy** | 503 + `Retry-After` | the existing envelope (`jsonErrorResponse`; the backend's own API is not problem+json, and one envelope is the rule): `{error: "TARGET_NOT_READ", message, details: {reason, cause}, retry_after}`. **No data member at all.** |
+
+- The statuses are HTTP's own: a stale answer served while the origin cannot
+  be reached is a 200 (RFC 9111 §4.2.4; RFC 5861 `stale-if-error`); nothing to
+  serve is 503 with `Retry-After` (RFC 9110 §15.6.4, §10.2.3).
+- `reason` ∈ `cached | cooldown | app_unreachable` for a kept copy;
+  `addon_unreachable | app_unreachable | read_refused | addon_outdated` for no
+  copy. `message` is §13.1's sentence, next step included.
+- **One code.** `TARGET_NOT_READ` replaces `ADDON_UNREACHABLE`,
+  `VALUES_NEVER_READ` (409), `TARGET_CAPABILITIES_UNKNOWN`, the backend's own
+  uses of `TARGET_UNREACHABLE` and `TARGET_UNREADABLE` on reads, and the 503
+  inventory body. `TARGET_UNREACHABLE` is then the add-on's wire code only.
+- **One date.** A kept copy is dated by `taken_at` through `ahead` (RFC 9111
+  §4.2.3 age, §4) and by nothing else. A zero or missing `taken_at` is not a
+  reading: the reply is "no copy".
+- **One keeper: the add-on** (owner Q1). Syndra keeps no copy of a read
+  (`lastStorage` and `lastMappableValues` go). With the app down, everyone
+  who may see the read, members included, gets the add-on's kept copy with
+  its date; with the add-on down, nobody gets one. Syndra's own records
+  (bindings, queued changes, statistics by their watermark) are not copies:
+  they stand outside `read` and are read whatever the add-on says.
+- A reply about several systems (`/me/targets`, `/users/{id}/targets`) is
+  200 with a `read` per system; one with no copy has
+  `read: {state: "none", reason, cause, retry_after}` and no data members.
+- A cooldown with a copy is a kept copy (`reason: cooldown`). 429
+  `FRESH_READ_COOLDOWN` (RFC 6585 §4) stays only where a copy may not be
+  served: the dormant removal (owner Q1).
+- A read a write depends on fails closed (owner Q2): a mapping or allowance
+  whose value `ResolvesValue` could not check is not saved ("Not saved.
+  Syndra couldn't check this value on {system}. Try again when it answers.").
+
+### 13.4 Writes and revocation
+
+**Two words, on every write path, from §4's classes** (one helper,
+`writeOutcome`; adopt, release, lifecycle, settings, password, physical
+actions and the revocation's rotation all answer through it):
+
+| Outcome | Status | Says |
+|---|---|---|
+| `unreached` | 503 `NOTHING_SENT` + `Retry-After`, `details: {reason, cause}` | "Nothing went out." + §13.1's sentence + "Try again when {system} answers", or "Syndra sends it by itself" when it is queued |
+| `indeterminate` | 202 `{status: "unconfirmed"}` (RFC 9110 §15.3.3) | "This may have been applied. Syndra is checking; don't send it again." It settles through `GET /calls/{call_id}` (§5) and the row stays for a person if it cannot |
+
+**What queues and what halts.**
+
+- *Queues* (outbox; Syndra sends it later by itself): entitlement applies,
+  withdrawals, revocations. The drain reads the monitor and claims no row of
+  an unreachable system. A row answered with a reachability cause **spends no
+  attempt**: nothing went out, so an outage never makes a row "out of
+  retries". Shape refusals spend attempts as today.
+- *Halts* (refused now, the person presses again; never queued): adopt,
+  release, a setting, lifecycle, the dormant removal, "Check now", a password
+  (a secret is never queued) and every physical action (decision 18). To a
+  system held `addon_unreachable` it is `NOTHING_SENT` at once, undialed.
+
+**Revocation.** *Recorded* and *landed* are two facts with two times.
+
+- *Recorded*: the deny is stored and the Zitadel grant removed, at once,
+  needing no add-on and no manifest in memory (§3, persisted role map).
+- *Landed*, per system: the add-on answered `succeeded` to the withdrawal.
+  Nothing else counts, and a queued row is never drawn as done.
+- Between the two the person is told, on the reply and on the row
+  (Unfinished revocations, Withdrawn access): "Recorded. Not yet applied on
+  {system}: {§13.1's sentence}. Until it is, the account there still works.
+  Syndra applies it by itself when {system} answers." The row carries its
+  age and leaves when it lands; the audit log holds both times.
+- A revocation waits without limit and without escalation (owner Q3).
+
+### 13.5 Transport hygiene
+
+- **Timeouts.** The add-on client sets `net.Dialer.Timeout = 3 s` and
+  `TLSHandshakeTimeout = 5 s` (constants beside `callTimeout`, which stays
+  30 s for the whole call). A dead address costs 3 s, not 30, and is surely
+  `unreached`.
+- **No search-domain fall-through.** A stopped container's name leaves
+  Docker's DNS, and the resolver then tries the host's search domains, so a
+  bare `truenas-addon` can resolve to another machine. The client resolves
+  the registered host as an **absolute name**: its `DialContext` appends the
+  root dot (RFC 1034 §3.1; resolv.conf(5): an absolute name is never tried
+  with the search list) unless the host is an IP literal. The URL, `Host` and
+  SNI are unchanged, and no operator has to remember a dot or a
+  `dns_search`. The pinned key stays the backstop; a hit on it is
+  `wrong_host`, said to the operator. *Inferred from Docker's resolver, not
+  run:* 8g proves it on staging (stop the add-on, expect `no_answer`).
+- **No retry in the transport** (`addonAttempts = 1` stays): a retry is the
+  drain's or the person's, who know whether the call is safe to repeat.
+
+### 13.6 UI: one state, one helper
+
+`Read<T>` (`ui/src/lib/queries/read.ts`) is the only way a component meets an
+add-on read:
+
+```ts
+type Read<T> =
+  | { state: "pending" }
+  | { state: "now";  data: T; takenAt: string }
+  | { state: "kept"; data: T; takenAt: string; why: Why }
+  | { state: "none"; why: Why };            // no data to reach for
+```
+
+`readOf` builds it from a 200's `read`, a per-system `read` or a 503
+`TARGET_NOT_READ`, and every add-on query hook returns it, so there is no raw
+path beside it. A count, a list or a date exists only under `data`, which
+TypeScript does not offer in `none`: printing a 0, an empty state or a date
+from a non-read no longer compiles. `ReadFreshness`, `ListStates` and the
+count props take a `Read`; in `none` they draw §13.1's sentence with its next
+step and no count. `readInventory` and the scattered
+`read`/`readable`/`halted` checks go. The member state machine asks
+`state === "none"` first, so nobody is told to set a password on a system
+that cannot be read. A guard test fails on an add-on hook not returning `Read`.
+
+### 13.7 Conformance
+
+**The kit stops the app.** `--stop-app` and `--start-app` take a command
+each (the reference's fake app is switched by a file, so the hooks are `touch`
+and `rm`). CI requires them; against a real system a missing hook reports "not
+checked", never "pass". `freshness.unreachable` stops being a permanent skip.
+
+- `outage.health`: with the app stopped `/health` and the manifest still
+  answer, `reachable` is `false` after one fresh read and `last_read_at` does
+  not move; restarted, `reachable: true` and a fresh read is `current: true`.
+  The first kit check of what `health.reachable` means.
+- `outage.kept` / `outage.none`: a read with a copy answers it
+  (`current: false`, `stale.reason: unreachable`, the copy's own `taken_at`);
+  one without answers 503 `TARGET_UNREACHABLE` or `NO_CURRENT_READ`, the body
+  the RFC 9457 problem and nothing else.
+- `outage.write`: an apply answers `TARGET_UNREACHABLE` with `Retry-After`,
+  and `GET /calls/{id}` shows nothing recorded.
+- `outage.restart` (`--stop-addon`, `--start-addon`): the `/subjects` mirror
+  answers as `cached` with its original `taken_at`, and a call made before the
+  stop still answers on `GET /calls/{id}` (at most once, §5).
+- One walker, `noFalseZero`, on every reply of the run: a `0`, an empty list,
+  `""` or a zero date in a no-copy reply fails; so does a zero `taken_at`
+  anywhere, and `current: false` without `stale`.
+
+**The backend's half** cannot be the kit's (the kit is a client of a running
+add-on). One table test drives every route of §13.3 and §13.4 against a stub
+add-on in each state of §13.1 (closed port, blackhole, wrong key, hang,
+uncoded 500, each coded 503) and asserts status, code, class and
+`noFalseZero`. It reads the router, so a route without a row fails.
+
+### 13.8 Migration: slice 8, on `feat/addon-contract`
+
+| # | Ships | Depends on |
+|---|---|---|
+| 8a | Contract files and guide: `stale.json` enum, `REACH_NEVER_READ` out, `NO_CURRENT_READ` reworded, the guide's "When Syndra cannot reach you" and the outage hooks; `CHANGELOG.md` | — |
+| 8b | Backend transport and monitor: timeouts, absolute name, `addons.Unread`, the two classes, startup probe, parallel probes, drain and member view on the monitor, no attempt spent | 8a |
+| 8c | Backend reads: `read` on every route, 503 `TARGET_NOT_READ`, the two Syndra-held copies deleted, fail-closed `ResolvesValue`, the table test | 8b |
+| 8d | Backend writes: `writeOutcome`, `NOTHING_SENT`, recorded and landed on revocations | 8b |
+| 8e | UI: `Read<T>`, `readOf`, every consumer of survey §5, copy | 8c, 8d |
+| 8f | Kit and reference add-on: hooks, `outage.*`, `noFalseZero` | 8a |
+| 8g | TrueNAS add-on conforms; staging run with the add-on stopped, then the app unreachable | all |
+| 8h | The owner's open questions of the 21 Nov grill round, recorded with their answers (decision 28) | 8g |
+
+What breaks (contract 2 is unreleased, so nothing is kept for old callers):
+every 200 with `read: false` or `readable: false`; the 503 inventory body read
+as data; `read_at` (now `taken_at`); `last_known` and the backend-kept
+mappable values; the codes `ADDON_UNREACHABLE`, `VALUES_NEVER_READ`,
+`TARGET_CAPABILITIES_UNKNOWN`, `TARGET_UNCONFIRMED`, `PREVIEW_UNANSWERED`, and
+`TARGET_UNREACHABLE`/`TARGET_UNREADABLE` as backend codes; adopt and release
+answering 202 when nothing went out; a mapping saved unchecked; an outbox row
+"out of retries" because a system was down; the roster's
+`cannot_connect/offline/waiting_to_retry` and the member view's `reachable`.
+
+Stored reconciliation rows keep `target_unreachable` and draw a neutral "It
+could not be read when Syndra last tried": their class was never recorded.
+
 ## Owner decisions
 
 Each is genuinely the owner's; the recommendation is mine. Decisions 1–10
@@ -2261,3 +2509,11 @@ Raised by the second review (10 Nov 2026), open:
     and a snapshot cursor means mirror generations in the TrueNAS add-on
     for no reader today. `/stats` pages from the start with a keyset
     cursor, which needs no snapshot. **Accepted 10 Nov 2026.**
+28. **Reachability (§13, slice 8).** Six decisions, answered
+    **Owner, 21 Nov 2026: "yes to all"**:
+    1. With the add-on down, pages say "not read" and keep no last-known copy; Syndra's in-memory copies are removed.
+    2. A mapping or allowance whose value can't be checked is refused, not saved unchecked.
+    3. A revocation that can't reach the system waits with no limit and no escalation, under Unfinished revocations, with its age and "the account there still works".
+    4. Members get one sentence for both outages; operators see which side is down.
+    5. Unreachable after 3 missed probes (about 90 s), recovered on 1 success.
+    6. CI runs the stop-app checks against the reference add-on; on real TrueNAS they may be skipped and reported as "not checked".

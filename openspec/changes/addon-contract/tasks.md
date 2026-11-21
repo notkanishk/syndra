@@ -3750,3 +3750,57 @@ end to end) found no missing function; three regressions with one root cause
   - **Guard: not shipped. Why the check missed it, and why no committed tape.** These were not merge regressions: PR 219's gate and every PR after it replayed staging's data as it stood, and those shapes weren't there. A committed tape would carry them into CI. One was built from a staging tape: ring names, made-up ids, and a check that no word of any name survived. Replayed, it reproduced all 19 findings on d121f973 and 0 on the fix. Review withdrew it before commit. To keep lists in order and joins intact it kept each name's alphabetical rank, the length of each part of a name, digits and timestamps. With the member roster, that re-identifies people, and their roles and holds, in a public repo. A tape made safe enough to publish has to be written, not derived: ring-name people built to the API's types, with these shapes (an unassigned account with a seat button, a person with storage folders and a hold row, a reading with a note). That is a separate piece of work. `ready-for-human`: the owner decides whether it is worth one. Until then the gate stays manual, and the README now says a pass holds only for the data recorded.
   - **Measured:** a fresh staging tape (96 answers) replayed into a production build of this branch gives 420 page runs, 0 findings and 0 reads missing. Recording it from staging (d121f973) gave the 19.
 - [x] **Trends at 390, 21 Nov 2026 (layout check on staging, 6 findings in the number columns).** Ending soon gave a project's name 66px on a phone (`1fr` beside two 110px seats). Now the name's track is `minmax(0,1fr)` and wraps, and the numbers sit in `--seat-number`, which a phone narrows to 4.75rem, the width "30 DAYS ↑" needs (globals.css, the phone block); from tablet it is the 110px seat as before. The heading row and the data rows share one grid (`ENDING_ROW`), and a test holds them equal. A fact's number no longer shrinks (`shrink-0`). Replay of a fresh staging tape: 420 page runs, 0 findings (6 before).
+
+## 8. Reachability (owner, 21 Nov 2026)
+
+Verbatim: "reachability to add-on and how to handle it should be standard part
+of contract 2". Design §13. Survey: `reachability-survey.md` (21 Nov 2026), its
+§7 ranks the 15 inconsistencies this slice closes. All on `feat/addon-contract`;
+nothing merges to main alone. Each PR: elegant, standard, careful; one source,
+one path; mutation-check every guard; Opus review after.
+
+- [ ] 8a The contract says it (files and guide only, no code). `ready-for-agent`
+  - `schema/common/stale.json`: `reason` is `cached | cooldown | unreachable`; `draining` and `never_read` removed, fixtures updated.
+  - `registry/errors.json`: `REACH_NEVER_READ` removed; `NO_CURRENT_READ` means "the add-on holds nothing to serve"; `TARGET_UNREACHABLE` says it is the add-on's wire code only.
+  - `addons/AUTHORING.md`: a section "When Syndra cannot reach you" (what Syndra does, that nothing is asked of the add-on but to come back with its mirror and call records); the two no-copy codes and nothing else; the `--stop-app`/`--start-app`/`--stop-addon`/`--start-addon` hooks; `health.reachable` as the kit now checks it.
+  - `CHANGELOG.md` entry; design §4's `stale` line and §6's health paragraph point at §13.
+- [ ] 8b Transport and monitor (backend; design §13.1, §13.2, §13.5). `ready-for-agent`
+  - `credentials.go`: `net.Dialer{Timeout: 3s}`, `TLSHandshakeTimeout: 5s`, constants in `deps.go`. Test: a blackholed address is `unreached` inside 4 s.
+  - The dial resolves the registered host as an absolute name (root dot appended in `DialContext` unless an IP literal); URL, `Host` and SNI unchanged. Test: the resolver is asked for `name.`, an IP literal is untouched, the signed request is byte-identical.
+  - `addons.Unread(reply) -> {reason, cause}` is the one mapping (`SubjectsResult.Halt()` calls it): the table of §13.1, one test row per cause, `wrong_host` from `pinMismatchError`. `target_unreachable` no longer produced.
+  - The breaker remembers the cause that opened it; `ErrCircuitOpen` carries it and the time left.
+  - Monitor: `State(target)` with `answering | app_unreachable | addon_unreachable | checking`, `cause`, `since` (absent when not observed), `checked_at`, `retry_after`; first probe decides from `checking`; three misses, one success; probes in parallel, 5 s each; one log line per change with `error.type`.
+  - `main.go`: one `ProbeAll` before the listener serves.
+  - Readers moved onto it: `propagation.addonReachable`, `describeTargetFor` (`view.Reachable`, `health: ""`, the per-load `Health` read), `statusOf`.
+  - Drain: a row answered with a reachability cause spends no attempt; a shape refusal still does. Test: ten passes against a closed port leave `attempts` at 0 and the row queued.
+- [ ] 8c One reply for every read (backend; design §13.3). `ready-for-agent`
+  - `read: {state, taken_at, reason, cause, detail, retry_after}` written by one function; every route of survey §3 rows 1–5, 8–13, 15–16 answers through it. No copy is 503 `TARGET_NOT_READ` + `Retry-After` in the existing envelope with `details: {reason, cause}`, and no data member.
+  - Gone: `read`/`readable`/`usage_read`-as-state booleans, the 503 inventory body, `read_at`, `last_known`, `lastStorage`, `lastMappableValues`, and the codes `ADDON_UNREACHABLE`, `VALUES_NEVER_READ`, `TARGET_CAPABILITIES_UNKNOWN`.
+  - `drift.Inventory` reads bindings before it can return; Syndra's own records stand outside `read`.
+  - While the monitor holds `addon_unreachable`, a read answers no copy without dialing.
+  - `ResolvesValue` returns the unread reason; mappings and allowances refuse to save unchecked (`errMappingTargetSilent` becomes the one path).
+  - Usage cards: "not counted since {watermark}" takes its why from the monitor; nothing new is stored.
+  - `reachability_test.go`: every such route (read from the router; a route without a row fails) against a stub add-on in each state of §13.1; asserts status, code, class and `noFalseZero`. Mutation-check: restore one `omitempty`-less `time.Time`, red.
+- [ ] 8d Writes say one of two things (backend; design §13.4). `ready-for-agent`
+  - `writeOutcome`: `unreached` is 503 `NOTHING_SENT` + `Retry-After`; `indeterminate` is 202 `unconfirmed`. Adopt, release, lifecycle, settings, member password, member actions and the revocation's rotation answer through it. Gone: `TARGET_UNCONFIRMED`, `PREVIEW_UNANSWERED`, the `writeUpstream` 502 on these paths, the merged adopt/release sentence.
+  - An interactive write to an `addon_unreachable` system is refused without dialing.
+  - Revocation: `recorded_at` and per-system `landed_at` on the reply and the unfinished-revocations read; landed only on the add-on's `succeeded`. Audit carries both times.
+  - Tests: each path against unreached and indeterminate; a revocation with the add-on stopped is recorded, queued, never terminal, and lands on the first pass after it returns.
+- [ ] 8e The UI reads one state (design §13.6; copy through `plain-language-copy`). `ready-for-agent`
+  - `lib/queries/read.ts`: `Read<T>`, `Why`, `readOf`; every add-on hook returns it. `readInventory` deleted.
+  - `ReadFreshness`, `ListStates`, `SectionNav`/`FilterBar` counts and `Card` take a `Read`; `none` draws the sentence and its next step, no count, no empty state, no date.
+  - Consumers, each from the survey's §5 table: `TargetOverview` (Accounts chip, inventory card, header read line), `PeopleOnTarget`, the roster rows, `MappingManagement`, `AddMappingDialog`, `HomeLocation`, `PersonActivity`, `DormantAccounts`, `ConvergeEntitlements`, `PersonStorage`/`PersonSystems`, `MyStorage`/`state.ts` (`none` before `needs-password`), Home's unreconciled list (`whyNotChecked` per class).
+  - Writes: one toast/inline pair for `NOTHING_SENT` and `unconfirmed`; Unfinished revocations and Withdrawn access show recorded, not yet applied, the age, and that the account still works.
+  - Copy guide: a section for the sentences of §13.1 (operator, member), each ending in a next step or "Nothing for you to do"; guard test.
+  - Guards, mutation-checked: an add-on hook not returning `Read` fails; a fixture of each no-copy reply rendered on every consumer shows no "0", no empty state, no date (`getByText` over the three).
+  - Layout check: these pages make no new read, so the recorded tape replays; say so in the PR.
+- [ ] 8f The kit takes things down (kit + reference add-on; design §13.7). `ready-for-agent`
+  - `--stop-app`, `--start-app`, `--stop-addon`, `--start-addon` (a command each; a missing hook reports "not checked"; `--require-outage` makes that a failure, and CI passes it).
+  - Reference add-on: `REFERENCE_APP_DOWN_FILE` switches `Config.Down` at run time (test binary only).
+  - Checks `outage.health`, `outage.kept`, `outage.none`, `outage.write`, `outage.restart`; `freshness.unreachable` is no longer skipped.
+  - `noFalseZero` walker on every reply of a run. Mutation-check against the reference: an empty `subjects: []` in a 503, a zero `taken_at`, `current: false` without `stale`, each red.
+- [ ] 8g TrueNAS add-on conforms, then staging. `ready-for-human` (staging deploy needs the owner's OK: same real NAS; the add-on there is `read_only`)
+  - `reach.go`: `REACH_NEVER_READ` becomes `NO_CURRENT_READ`; no `draining`/`never_read`; kit green with the app hooks against a stub NAS.
+  - Staging, by hand: stop the add-on container and expect `no_answer` on the roster inside 90 s (not `wrong_host`: this is the proof of the absolute-name rule, which is inferred from Docker's resolver), no page with a 0, an empty state or a date; start it and expect `answering` on the next probe. Then point the add-on at a dead NAS address and expect `app_unreachable` with kept copies dated.
+  - Layout check against staging in both outage states.
+- [ ] 8h (owner's, after 8g) Open questions of the 21 Nov grill round, recorded here with their answers; any "no" reopens the slice it names. `ready-for-human`
