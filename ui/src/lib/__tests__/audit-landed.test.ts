@@ -37,6 +37,7 @@ describe("an automatic retry, worded by how it went", () => {
       for (const words of [said.verb, said.template, said.passive]) {
         expect(words).toContain(nameOf(target));
         expect(words).toMatch(/nothing went out, and no try was spent\. Syndra sends it by itself/);
+        expect(words).not.toMatch(/on its own/);
         expect(words).not.toMatch(/answering|\bSent\b|sent again/i);
       }
     }

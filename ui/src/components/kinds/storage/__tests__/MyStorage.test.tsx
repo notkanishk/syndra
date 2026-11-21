@@ -689,6 +689,14 @@ describe("how old the storage read is", () => {
     expect(screen.getByText(/TrueNAS was read 2 min ago/)).toBeTruthy();
   });
 
+  // An own read with no data draws its reason with no age (Reads), so the strip must still date the card.
+  it("dates a kept copy whose own read has no data", () => {
+    const none: ReadView = { operation: "storage.status", shape: "", read: { state: "none", why: { reason: "app_unreachable" } } };
+    state.targets = [view({ read: { state: "kept", takenAt: twoMinAgo, why: { reason: "cached" }, data: { storage: STORE, reads: [none] } } })];
+    renderStorage();
+    expect(screen.getByText(/TrueNAS was read 2 min ago/)).toBeTruthy();
+  });
+
   it("says a read moments ago with nothing kept is that, and the button waits", () => {
     state.targets = [view(copy(undefined, 20))];
     renderStorage();

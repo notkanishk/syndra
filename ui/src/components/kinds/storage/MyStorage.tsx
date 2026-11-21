@@ -100,7 +100,7 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
   // The add-on's kept copy (design §13.3): the card recedes, as an operator's does, and is dated.
   // Its storage.status line below dates it when the reply carries one; otherwise the strip does.
   const kept = view.read?.state === "kept";
-  const datedBelow = view.read?.state === "kept" && (view.read.data.reads ?? []).some((r) => OWN_READS.includes(r.operation) && saysAge(r));
+  const datedBelow = view.read?.state === "kept" && (view.read.data.reads ?? []).some((r) => OWN_READS.includes(r.operation) && !notRead(r.read) && saysAge(r));
 
   return (
     <Card stale={kept}>

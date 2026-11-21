@@ -298,8 +298,8 @@ const REVOCATION_LANDED = "revocation.landed";
  */
 function notSentWords(system: string) {
   return {
-    verb: `Kept a change for ${system} for later on its own: nothing went out, and no try was spent. Syndra sends it by itself`,
-    template: `Kept a change for {} on ${system} for later on its own: nothing went out, and no try was spent. Syndra sends it by itself`,
+    verb: `Kept a change for ${system} for later: nothing went out, and no try was spent. Syndra sends it by itself`,
+    template: `Kept a change for {} on ${system} for later: nothing went out, and no try was spent. Syndra sends it by itself`,
     passive: `A change to their access on ${system} was kept for later: nothing went out, and no try was spent. Syndra sends it by itself`,
     destructive: false,
   };

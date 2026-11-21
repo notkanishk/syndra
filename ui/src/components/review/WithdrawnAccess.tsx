@@ -493,8 +493,8 @@ export function notYetAppliedLine(row: Pick<UnconfirmedRevocation, "target" | "r
   const at = formatShortDate(row.recorded_at ?? row.created_at);
   if (row.target === "zitadel") return `Recorded ${at}. Not yet applied in Zitadel; until it is, they keep the role there. Syndra applies it by itself.`;
   // While the monitor holds the system down, §13.1's sentence says why it hasn't landed (design §13.4).
-  // The why's own sentence ends in the next step: said once.
-  if (why) return `Recorded ${at}. Not yet applied on ${system}: ${whyLine(why, system, OPERATOR)} Until it is applied, the account there still works.`;
+  // Each cause names its own fix; the one shared next step follows it, said once.
+  if (why) return `Recorded ${at}. Not yet applied on ${system}: ${whyLine(why, system, OPERATOR)} Until it is applied, the account there still works. Syndra applies it by itself once ${system} answers.`;
   return `Recorded ${at}. Not yet applied on ${system}; until it is, the account there still works. Syndra applies it by itself when ${system} answers.`;
 }
 

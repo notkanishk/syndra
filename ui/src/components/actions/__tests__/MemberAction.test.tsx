@@ -323,16 +323,19 @@ describe("each refusal says what is true and its one step", () => {
 });
 
 describe("a confirm whose answer is lost", () => {
-  async function toChecking(states: Array<unknown | Error>) {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+  // `steady`: the clock moves only when the test moves it (real time must never fire the 5 s poll).
+  async function toChecking(states: Array<unknown | Error>, steady = false) {
+    if (!steady) vi.useFakeTimers({ shouldAdvanceTime: true });
     server({
       [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }, { status: "unconfirmed", operation: OP, sent_at: "2026-11-12T09:00:03Z", detail: "This may have been applied. Syndra is checking; don't send it again." }],
       [`GET ${GET}`]: states,
     });
     renderCard();
     await toPreview();
+    if (steady) vi.useFakeTimers(); // after the preview, so only the poll runs on the frozen clock
     press(copy.CONFIRM_BUTTON);
-    await screen.findByText(`${copy.CHECKING}.`);
+    if (steady) await act(() => vi.advanceTimersByTimeAsync(0));
+    else await screen.findByText(`${copy.CHECKING}.`);
   }
   const polls = () => sent("GET", GET).length;
   const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
@@ -342,15 +345,15 @@ describe("a confirm whose answer is lost", () => {
       { operation: OP, sent_at: "x", state: "checking" },
       { operation: OP, sent_at: "x", state: "checking" },
       { operation: OP, sent_at: "x", state: "done", view: record() },
-    ]);
+    ], true);
     expect(screen.getByText(copy.CHECKING_NEXT)).toBeInTheDocument();
-    await waitFor(() => expect(polls()).toBe(1));
+    expect(polls()).toBe(1);
     await wait(4000);
     expect(polls()).toBe(1);
     await wait(1100);
     expect(polls()).toBe(2);
     await wait(5100);
-    await screen.findByText("Done");
+    expect(screen.getByText("Done")).toBeInTheDocument();
     expect(screen.getByText("Spool holder")).toBeInTheDocument();
     const settledAt = polls();
     await wait(30_000);
@@ -400,7 +403,7 @@ describe("a confirm whose answer is lost", () => {
   });
 
   it("closing the dialog leaves the row checking, and the action off", async () => {
-    await toChecking([{ operation: OP, sent_at: "x", state: "checking" }]);
+    await toChecking([{ operation: OP, sent_at: "x", state: "checking" }], true);
     press("Close");
     expect(screen.getByText(`${copy.CHECKING}.`)).toBeInTheDocument();
     // The list has not caught up yet; the page's own poll is enough to keep the action off.

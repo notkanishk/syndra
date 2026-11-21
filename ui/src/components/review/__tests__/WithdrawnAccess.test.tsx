@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WithdrawnAccess } from "@/components/review/WithdrawnAccess";
+import { WithdrawnAccess, notYetAppliedLine } from "@/components/review/WithdrawnAccess";
 
 /**
  * route-revocations.dc.html: a meta line, search and Filters, a read line with a chip per
@@ -136,9 +136,15 @@ describe("a revocation recorded and not yet applied", () => {
     await renderPage();
     expect(
       await screen.findByText(
-        /^Recorded 20 Nov\. Not yet applied on .+: Syndra can't reach .+'s add-on\. Check that its container is running\. Syndra keeps trying\. Until it is applied, the account there still works\.$/,
+        /^Recorded 20 Nov\. Not yet applied on .+: Syndra can't reach .+'s add-on\. Check that its container is running\. Syndra keeps trying\. Until it is applied, the account there still works\. Syndra applies it by itself once .+ answers\.$/,
       ),
     ).toBeInTheDocument();
+  });
+
+  it("ends a cause that names its own fix with the one shared next step", () => {
+    const line = notYetAppliedLine({ target: "truenas", recorded_at: "2026-11-20T09:00:00Z", created_at: "" }, "TrueNAS", { reason: "app_unreachable" });
+    expect(line).toMatch(/Check that .+ is on\. Until it is applied, the account there still works\. Syndra applies it by itself once TrueNAS answers\.$/);
+    expect(line.match(/Syndra applies it by itself/g)).toHaveLength(1);
   });
 
   it("says the role is kept in Zitadel until it lands", async () => {
