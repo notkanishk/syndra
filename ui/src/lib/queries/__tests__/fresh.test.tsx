@@ -16,7 +16,7 @@ import { useMyStorage, useMyStorageAgain } from "@/lib/queries/useMyStorage";
  * the NAS every 30 seconds for everyone with a page open.
  */
 
-const offline = { target: "truenas", name: "TrueNAS", entitled: true, reachable: false, health: "offline", credential: { set: false } };
+const offline = { target: "truenas", name: "TrueNAS", entitled: true, health: "addon_unreachable", credential: { set: false }, read: { state: "none", reason: "addon_unreachable", cause: "no_answer" } };
 let urls: string[] = [];
 let answer: (url: string) => Response;
 const json = (body: unknown, init?: ResponseInit) => new Response(JSON.stringify(body), { status: 200, ...init });
@@ -81,7 +81,9 @@ describe("what sends fresh", () => {
       await again.result.current.press();
     });
     expect(urls).toEqual(["/api/proxy/me/targets?fresh=true"]);
-    expect(client.getQueryData(["me", "targets"])).toEqual({ targets: [{ ...offline, name: "Read again" }] });
+    // The answer is the card's now, its add-on part read as a Read (`readOf`).
+    const cached = client.getQueryData<{ targets: Array<{ name: string; read?: { state: string } }> }>(["me", "targets"]);
+    expect(cached?.targets.map((t) => [t.name, t.read?.state])).toEqual([["Read again", "none"]]);
     expect(mine.result.current.fetchStatus).toBe("idle");
   });
 

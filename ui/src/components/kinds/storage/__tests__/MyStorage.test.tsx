@@ -4,10 +4,11 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
+import { ApiError } from "@/lib/api-client";
 import { StoragePage as MySystems } from "@/components/kinds/storage/StoragePage";
 import { deviceFrom } from "@/components/kinds/storage/device";
 import { homeBytes, sessions, windows } from "@/components/usage/__tests__/fixtures";
-import type { CredentialAnswer, MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
+import type { CredentialAnswer, MyTargetView, ReadView, StoragePlace, StorageStatus } from "@/lib/queries/useMyStorage";
 import type { OneShotSecret } from "@/lib/secret";
 import type { RetryState } from "@/lib/retry";
 
@@ -75,7 +76,18 @@ const WADDLE = place({ path: "main/waddle_share", usage: { used_bytes: 46 * 2 **
 // Usage on a read-only place is drawn nowhere, even if one arrived.
 const QUACK = place({ path: "main/quack_share", access: "read", usage: { used_bytes: 5 * 2 ** 30 }, roles: [{ project_id: "p1", role_key: "fab_lead" }] });
 
-function view(over: Partial<MyTargetView> = {}): MyTargetView {
+/** What the add-on said, as the card reads it: only under a read that has data (design §13.6). */
+const STORE: StorageStatus = { usable: true, needs_password: false, places: [HOME, WADDLE, QUACK], places_readable: true };
+const NOW = "2026-11-10T09:30:00Z";
+/** The add-on cannot be reached: Syndra holds nothing for anyone (design §13.3). */
+const NONE = { state: "none" as const, why: { reason: "addon_unreachable", cause: "no_answer" } };
+
+type Over = Partial<MyTargetView> & { storage?: StorageStatus; reads?: ReadView[] };
+
+/** A view, its add-on part a read now unless `read` is given; `storage: undefined` is a read that did not tell it. */
+function view(over: Over = {}): MyTargetView {
+  const { storage: given, reads, ...rest } = over;
+  const storage = "storage" in over ? given : STORE;
   return {
     target: "truenas",
     name: "TrueNAS",
@@ -84,19 +96,13 @@ function view(over: Partial<MyTargetView> = {}): MyTargetView {
     entitled: true,
     account: { username: "charlotte" },
     credential: { set: true, last_changed_at: "2026-09-20T10:00:00Z" },
-    reachable: true,
-    health: "online",
+    health: "answering",
     checked_at: new Date().toISOString(),
     lifecycle: "active",
     connection: { protocol: "smb", host: HOST },
     roles: [{ project_id: "p1", role_key: "fab_lead" }],
-    storage: {
-      usable: true,
-      needs_password: false,
-      places: [HOME, WADDLE, QUACK],
-      places_readable: true,
-    },
-    ...over,
+    read: { state: "now", takenAt: NOW, data: { storage, reads } },
+    ...rest,
   };
 }
 
@@ -138,7 +144,7 @@ describe("the three states", () => {
     state.targets = [
       view({
         credential: { set: false },
-        storage: { ...view().storage!, usable: false, needs_password: true },
+        storage: { ...STORE, usable: false, needs_password: true },
       }),
     ];
     renderStorage();
@@ -169,7 +175,7 @@ describe("usage", () => {
   it("says why a place is not counted when the NAS is why, never nothing saved", () => {
     const notes = place({ path: "notes", not_counted: "folder" });
     const vault = place({ path: "main/vault", not_counted: "locked" });
-    state.targets = [view({ storage: { ...view().storage!, places: [notes, vault] } })];
+    state.targets = [view({ storage: { ...STORE, places: [notes, vault] } })];
     renderStorage();
     expect(screen.getByText("Not counted on its own")).toBeTruthy();
     expect(screen.getByText("Not counted: this folder is encrypted and locked. Ask makerspace staff to unlock it.")).toBeTruthy();
@@ -226,7 +232,7 @@ describe("usage", () => {
 
   it("says no limit set rather than drawing a full bar", () => {
     state.targets = [
-      view({ storage: { ...view().storage!, places: [place({ path: "main/waddle_share", usage: { used_bytes: 2 ** 30 } })] } }),
+      view({ storage: { ...STORE, places: [place({ path: "main/waddle_share", usage: { used_bytes: 2 ** 30 } })] } }),
     ];
     renderStorage();
     expect(screen.getByText("1.0 GiB used · no limit set")).toBeTruthy();
@@ -235,7 +241,7 @@ describe("usage", () => {
 
 describe("usage the target could not read", () => {
   it("says so, in a member's words, rather than leaving usage lines out as if nothing were used", () => {
-    state.targets = [view({ storage: { ...view().storage!, quota_read: false } })];
+    state.targets = [view({ storage: { ...STORE, quota_read: false } })];
     renderStorage();
     expect(screen.getByText("Some usage could not be read from TrueNAS.")).toBeTruthy();
     expect(screen.getByText(/ask makerspace staff/)).toBeTruthy();
@@ -244,28 +250,28 @@ describe("usage the target could not read", () => {
 
   it("says all of it could not be read when no place carries usage", () => {
     const bare = [HOME, WADDLE].map(({ usage: _u, ...p }) => p);
-    state.targets = [view({ storage: { ...view().storage!, places: bare, quota_read: false } })];
+    state.targets = [view({ storage: { ...STORE, places: bare, quota_read: false } })];
     renderStorage();
     expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeTruthy();
   });
 
   it("says all of it could not be read when only a read-only place carries usage, which is drawn nowhere", () => {
     const bare = [HOME, WADDLE].map(({ usage: _u, ...p }) => p);
-    state.targets = [view({ storage: { ...view().storage!, places: [...bare, QUACK], quota_read: false } })];
+    state.targets = [view({ storage: { ...STORE, places: [...bare, QUACK], quota_read: false } })];
     renderStorage();
     expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeTruthy();
     expect(screen.queryByText(/Some usage could not be read/)).toBeNull();
   });
 
-  it("says all of it could not be read while offline, when no usage line is drawn", () => {
-    state.targets = [view({ health: "offline", storage: { ...view().storage!, quota_read: false } })];
+  it("says all of it could not be read when no usage line is drawn", () => {
+    state.targets = [view({ storage: { ...STORE, places: [], quota_read: false } })];
     renderStorage();
     expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeTruthy();
   });
 
   it("says nothing when it was read (quota_read true) or the target does not say", () => {
     for (const quota_read of [true, undefined]) {
-      state.targets = [view({ storage: { ...view().storage!, quota_read } })];
+      state.targets = [view({ storage: { ...STORE, quota_read } })];
       const { unmount } = renderStorage();
       expect(screen.queryByText(/usage could not be read/i)).toBeNull();
       unmount();
@@ -295,7 +301,7 @@ describe("Q-02 states", () => {
     state.targets = [
       view({
         restored_at: "2026-10-12T10:00:00Z",
-        storage: { ...view().storage!, usable: false, needs_new_password: true },
+        storage: { ...STORE, usable: false, needs_new_password: true },
       }),
     ];
     renderStorage();
@@ -306,7 +312,7 @@ describe("Q-02 states", () => {
   });
 
   it("a role that opens nothing: says so, names the role, offers no guide", () => {
-    state.targets = [view({ storage: { ...view().storage!, places: [] } })];
+    state.targets = [view({ storage: { ...STORE, places: [] } })];
     renderStorage();
     expect(screen.getByText("Your account is ready, but no folder is open to you yet")).toBeTruthy();
     expect(screen.getByText(/Your Fabrication lead role reaches TrueNAS, but no folder there is open to it/)).toBeTruthy();
@@ -320,7 +326,7 @@ describe("Q-02 states", () => {
   });
 
   it("an account the target never answered for is unread, not ready", () => {
-    state.targets = [view({ storage: undefined, health: "unknown" })];
+    state.targets = [view({ storage: undefined, health: "checking" })];
     renderStorage();
     expect(screen.getByText("Couldn't check your account just now")).toBeTruthy();
     expect(screen.queryByText("Your account is ready")).toBeNull();
@@ -329,7 +335,7 @@ describe("Q-02 states", () => {
   });
 
   it("folders that couldn't be read are said to be unread, never empty", () => {
-    state.targets = [view({ storage: { ...view().storage!, places: [], places_readable: false } })];
+    state.targets = [view({ storage: { ...STORE, places: [], places_readable: false } })];
     renderStorage();
     expect(screen.getByText(/couldn't say which folders are open to you just now/)).toBeTruthy();
     expect(screen.queryByText(/no folder is open to you yet/)).toBeNull();
@@ -337,28 +343,35 @@ describe("Q-02 states", () => {
 });
 
 describe("when changes can't happen", () => {
-  it("offline: the Notice comes first, usage is unavailable, and there is no form or guide", () => {
-    state.targets = [view({ health: "offline", reachable: false, reachable_since: "2026-10-14T09:40:00Z" })];
-    renderStorage();
-    expect(screen.getByRole("alert").textContent).toContain("TrueNAS is offline");
-    expect(screen.getByText(/^Offline since/)).toBeTruthy();
-    expect(screen.getAllByText("Usage unavailable while offline").length).toBeGreaterThan(0);
-    expect(screen.queryByText(/Nothing saved here yet|GiB/)).toBeNull();
+  it("not answering: one sentence and its step, and no form, guide, folder, usage or date", () => {
+    state.targets = [view({ health: "addon_unreachable", since: "2026-10-14T09:40:00Z", read: NONE })];
+    const { container } = renderStorage();
+    expect(screen.getByText("Couldn't check your account just now")).toBeTruthy();
+    // One sentence for both outages: which box is down is not the member's to fix (design §13.1).
+    expect(screen.getByText("TrueNAS can't be read right now. Nothing for you to do.")).toBeTruthy();
+    expect(screen.getByText(/^Not answering since/)).toBeTruthy();
+    expect(container.textContent).not.toMatch(/add-on|GiB|Nothing saved here yet|No folder is open/);
     expect(passwordField()).toBeNull();
-    expect(screen.getByText(/can't change your password while TrueNAS is offline/)).toBeTruthy();
+    expect(screen.queryByText(/Set a password/)).toBeNull();
     expect(screen.queryByRole("button", { name: /How to connect/ })).toBeNull();
   });
 
-  it("can't tell yet: no status at all rather than a guess", () => {
-    state.targets = [view({ health: "unknown" })];
+  it("the app down reads the same to a member as the add-on down", () => {
+    state.targets = [view({ health: "app_unreachable", read: { state: "none", why: { reason: "app_unreachable" } } })];
     renderStorage();
-    expect(screen.queryByText(/^Online|^Answering|^Offline/)).toBeNull();
+    expect(screen.getByText("TrueNAS can't be read right now. Nothing for you to do.")).toBeTruthy();
+  });
+
+  it("can't tell yet: no status at all rather than a guess", () => {
+    state.targets = [view({ health: "checking" })];
+    renderStorage();
+    expect(screen.queryByText(/^Online|^Answering|^Offline|^Not answering/)).toBeNull();
   });
 
   it("paused: access first, then the pause, and no form, first password included", () => {
     for (const lifecycle of ["draining", "read_only"] as const) {
       state.targets = [
-        view({ lifecycle, credential: { set: false }, storage: { ...view().storage!, needs_password: true, usable: false } }),
+        view({ lifecycle, credential: { set: false }, storage: { ...STORE, needs_password: true, usable: false } }),
       ];
       const { unmount, container } = renderStorage();
       expect(passwordField()).toBeNull();
@@ -460,7 +473,7 @@ describe("the connection guide", () => {
 
 describe("what the page hands to the mutation", () => {
   it("sends the password in a box that empties on read", () => {
-    state.targets = [view({ credential: { set: false }, storage: { ...view().storage!, needs_password: true, usable: false } })];
+    state.targets = [view({ credential: { set: false }, storage: { ...STORE, needs_password: true, usable: false } })];
     renderStorage();
     fireEvent.change(passwordField()!, { target: { value: "correct horse" } });
     fireEvent.click(screen.getByRole("button", { name: "Set password" }));
@@ -475,7 +488,7 @@ describe("what the page hands to the mutation", () => {
 describe("a folder over its limit", () => {
   it("says it's full, and that opening and deleting still work", () => {
     state.targets = [
-      view({ storage: { ...view().storage!, places: [place({ path: "main/home_dir/charlotte", home: true, usage: { used_bytes: 34 * 2 ** 30, quota_bytes: 20 * 2 ** 30 } })] } }),
+      view({ storage: { ...STORE, places: [place({ path: "main/home_dir/charlotte", home: true, usage: { used_bytes: 34 * 2 ** 30, quota_bytes: 20 * 2 ** 30 } })] } }),
     ];
     renderStorage();
     expect(screen.getByText(/^Full\. You can open and delete files here, but not save new ones until you're under 20\.0 GiB\.$/)).toBeTruthy();
@@ -516,7 +529,7 @@ describe("a password change nobody has confirmed", () => {
 
   it("unanswered twice: the amber line, the form open, no Changed and no stale last-changed", () => {
     state.targets = [ready()];
-    state.credential = { isPending: false, data: { status: "indeterminate" }, error: null };
+    state.credential = { isPending: false, data: { status: "unconfirmed" }, error: null };
     renderStorage();
     fireEvent.change(passwordField()!, { target: { value: "correct horse" } });
     expect(screen.getByText("Not confirmed yet")).toBeTruthy();
@@ -544,7 +557,7 @@ describe("a password change nobody has confirmed", () => {
     state.targets = [ready()];
     state.credential = {
       isPending: false,
-      data: { status: "indeterminate", retry: { state: "waiting", try: 2, of: 2 } },
+      data: { status: "unconfirmed", retry: { state: "waiting", try: 2, of: 2 } },
       error: null,
     };
     renderStorage();
@@ -573,6 +586,20 @@ describe("a password change nobody has confirmed", () => {
     expect(screen.queryByText("Not confirmed yet")).toBeNull();
   });
 
+  it("nothing went out (503 NOTHING_SENT) is Not sent, in the backend's sentence, ending on its step", () => {
+    state.targets = [ready()];
+    state.credential = {
+      isPending: false,
+      data: undefined,
+      error: new ApiError(503, { error: "NOTHING_SENT", message: "Nothing went out. TrueNAS isn't answering right now. Try again when TrueNAS answers." }),
+    };
+    renderStorage();
+    expect(screen.getByText("Not sent")).toBeTruthy();
+    expect(screen.getByText(/Nothing went out\. TrueNAS isn't answering right now\. Try again when TrueNAS answers\./)).toBeTruthy();
+    expect(screen.queryByText("Not changed")).toBeNull();
+    expect(screen.queryByText(/quote the reference/)).toBeNull();
+  });
+
   it("back later: one line above an open form, until the next confirmed change", () => {
     state.targets = [view({ ...ready(), password_change: { state: "unconfirmed", at: new Date().toISOString() } })];
     renderStorage();
@@ -582,24 +609,23 @@ describe("a password change nobody has confirmed", () => {
     expect(screen.queryByText(/Last changed/)).toBeNull();
   });
 
-  it("back while offline: the blocked sentence and the line are one, and the form waits", () => {
+  it("back while it isn't answering: the blocked sentence and the line are one, and the form waits", () => {
     state.targets = [
-      view({ ...ready(), health: "offline", reachable: false, password_change: { state: "unconfirmed", at: "2026-11-02T18:05:00Z" } }),
+      view({ ...ready(), health: "addon_unreachable", password_change: { state: "unconfirmed", at: "2026-11-02T18:05:00Z" } }),
     ];
     renderStorage();
     expect(screen.getByText(/^Your password change on 2 Nov( 2026)? at \d\d:\d\d may not have reached TrueNAS\.$/)).toBeTruthy();
-    expect(screen.getByText(/You can set it again here once TrueNAS is back/)).toBeTruthy();
+    expect(screen.getByText(/You can set it again here once TrueNAS answers/)).toBeTruthy();
     expect(passwordField()).toBeNull();
-    expect(screen.queryByText(/You can't change your password while TrueNAS is offline/)).toBeNull();
+    expect(screen.queryByText(/You can't change your password while TrueNAS isn't answering/)).toBeNull();
   });
 });
 
 describe("reads beside the storage card", () => {
-  const read = (operation: string) => ({
+  const read = (operation: string): ReadView => ({
     operation,
-    shape: "records" as const,
-    readable: true,
-    result: { records: [{ id: "a", label: `From ${operation}` }], taken_at: "2026-11-10T09:30:00Z", current: true },
+    shape: "records",
+    read: { state: "now", takenAt: NOW, data: { records: [{ id: "a", label: `From ${operation}` }] } },
   });
 
   it("skips the read it draws itself from view.storage and draws any other", () => {
@@ -613,18 +639,18 @@ describe("reads beside the storage card", () => {
 // Feature freshness: the card's storage.status is its own read, drawn by this
 // kind, and its age (with Read again, from the page's one hook) stays in the core.
 describe("how old the storage read is", () => {
-  const copy = (stale: unknown, retry_after?: number): Partial<MyTargetView> => ({
-    reads: [
-      retry_after
-        ? { operation: "storage.status", shape: "status", readable: false, retry_after }
-        : {
-            operation: "storage.status",
-            shape: "status",
-            readable: true,
-            result: { usable: true, standing: { usable: true, waiting_on: "none" }, meters: [], taken_at: new Date(Date.now() - 2 * 60_000).toISOString(), current: false, stale: stale as never },
-          },
-    ],
-  });
+  const twoMinAgo = new Date(Date.now() - 2 * 60_000).toISOString();
+  /** The add-on's kept copy of storage.status, with its reason; a wait with nothing kept is none. */
+  const copy = (reason: string | undefined, retryAfter?: number): Over => {
+    if (retryAfter) return { read: { state: "none", why: { reason: "cooldown", retryAfter } } };
+    const why = { reason: reason ?? "cached" };
+    const status: ReadView = {
+      operation: "storage.status",
+      shape: "status",
+      read: { state: "kept", takenAt: twoMinAgo, why, data: { usable: true, standing: { usable: true, waiting_on: "none" }, meters: [] } },
+    };
+    return { read: { state: "kept", takenAt: twoMinAgo, why, data: { storage: STORE, reads: [status] } } };
+  };
   const stubFetch = () => {
     const urls: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -635,7 +661,7 @@ describe("how old the storage read is", () => {
   };
 
   it("dates a copy, and Read again asks /me/targets for a fresh read exactly once", async () => {
-    state.targets = [view(copy({ reason: "cached" }))];
+    state.targets = [view(copy("cached"))];
     const urls = stubFetch();
     renderStorage();
     expect(screen.getByText(/TrueNAS was read 2 min ago/)).toBeTruthy();
@@ -654,7 +680,7 @@ describe("how old the storage read is", () => {
   });
 
   it("tells a member the system cannot be reached, with the step, and no button", () => {
-    state.targets = [view(copy({ reason: "unreachable" }))];
+    state.targets = [view(copy("app_unreachable"))];
     renderStorage();
     expect(screen.getByText(/TrueNAS can't be reached right now; this is what it said at .*ask makerspace staff\./)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Read again" })).toBeNull();

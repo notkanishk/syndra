@@ -14,22 +14,25 @@ describe("one word per state", () => {
     targetReading({
       status,
       name: "TrueNAS",
-      health: { status: "online", recent } as never,
+      health: { state: status ?? "answering", recent } as never,
     }).word;
 
   it("a connected system says only the table's words", () => {
     const words = new Set<string>(Object.values(SYSTEM_WORDS));
-    for (const status of ["offline", "waiting_to_retry", undefined] as const) {
+    for (const status of ["addon_unreachable", "app_unreachable", "answering", undefined] as const) {
       expect(words.has(system(status))).toBe(true);
     }
   });
 
-  it("answering, offline and waiting to retry are the same words Zitadel uses", () => {
+  // Design §13.1: the add-on down and its app down are two words, never one; answering and not
+  // answering are the words Zitadel uses.
+  it("names the add-on's outage apart from the system's, in the table's words", () => {
     expect(system(undefined)).toBe(SYSTEM_WORDS.answering);
     expect(zitadelReading({ status: "ok", misses: 0 }).word).toBe(SYSTEM_WORDS.answering);
-    expect(system("offline")).toBe(SYSTEM_WORDS.offline);
-    expect(zitadelReading({ status: "error", misses: 3 }).word).toBe(SYSTEM_WORDS.offline);
-    expect(system("waiting_to_retry")).toBe(SYSTEM_WORDS.waitingToRetry);
+    expect(system("app_unreachable")).toBe(SYSTEM_WORDS.notAnswering);
+    expect(zitadelReading({ status: "error", misses: 1 }).word).toBe(SYSTEM_WORDS.notAnswering);
+    expect(system("addon_unreachable")).toBe(SYSTEM_WORDS.addonNotAnswering);
+    expect(system("addon_unreachable")).not.toBe(system("app_unreachable"));
   });
 
   it("Zitadel: Answering, Not answering for one or two missed checks, Offline for three, Not connected when never set up", () => {

@@ -68,6 +68,8 @@ export const UNAVAILABLE = "Syndra couldn't read these numbers just now. Reload 
 export const OVERVIEW_TITLE = "What has been used here";
 export const OVERVIEW_LEDE = "Totals for everyone who used it, over the last 30 days and the last 12 months. One person's numbers are on their page.";
 export const lastCounted = (age: string) => `Last counted ${age}`;
+/** A system down while its usage is counted: nothing after the last final day is counted yet, and why, with its step (design §13.1). */
+export const notCountedSince = (day: string | null, why: string) => `${day ? `Not counted since ${day}` : NOT_COUNTED}. ${why}`;
 /** The totals card's step and its one link to Insights, Usage (the pattern Insights' own end row uses); a kind may give its own words for the step (`kinds/limits.ts` usageStep). */
 export const OVERVIEW_NEXT = `${NOTHING_TO_DO} Who used what is in Insights.`;
 export const OVERVIEW_NEXT_LINK = "Open Usage";

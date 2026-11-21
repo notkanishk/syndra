@@ -113,10 +113,12 @@ export function describeDrain(
           detail: MAINTENANCE_DETAIL,
           next: maintenanceNext(auto),
         };
-      case "target_unreachable":
+      // Design §13.1: who is not answering, the add-on or the system behind it, never one word.
+      case "addon_unreachable":
+      case "app_unreachable":
         return {
           tone: "error",
-          message: `${stalled ?? "The connected system"} is not answering. Nothing was sent.`,
+          message: `${notAnswering(result.reason, stalled)} Nothing was sent.`,
           detail:
             "Syndra checked once before sending anything, so nothing counts against the retry limit. Everything is still waiting for you to send.",
         };
@@ -251,13 +253,20 @@ export function drainWord(result: DrainResult | undefined, total?: number): stri
  * different when other passes DID work: the operator is not being told the
  * send failed, they are being told which part of it is still outstanding.
  */
+/** Which side is down, named (design §13.1): the add-on itself, or the system its add-on can't reach. */
+function notAnswering(reason: string, system: string | undefined): string {
+  const name = system ?? "The connected system";
+  return reason === "addon_unreachable" ? `${name}'s add-on isn't answering.` : `${name}'s add-on is running but can't reach ${system ?? "it"}.`;
+}
+
 function haltDetail(reason: string | undefined, system: string | undefined, waiting: number | undefined, auto: AutoRetry): string {
   const its = waiting === undefined ? "Its changes are" : waiting === 1 ? "Its 1 change is" : `Its ${waiting} changes are`;
   switch (reason) {
     case "zitadel_offline":
       return `Zitadel is not answering. ${its} still waiting for you to send, in order; the rest went through.`;
-    case "target_unreachable":
-      return `${system ?? "The connected system"} is not answering. ${its} still waiting for you to send, and nothing counts against the retry limit.`;
+    case "addon_unreachable":
+    case "app_unreachable":
+      return `${notAnswering(reason, system)} ${its} still waiting for you to send, and nothing counts against the retry limit.`;
     case "drain_in_progress":
       return "Another send was already running for it.";
     case "read_only":

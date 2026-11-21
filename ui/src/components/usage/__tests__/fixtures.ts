@@ -1,5 +1,5 @@
 import { addDays, today } from "@/components/insights/days";
-import type { MyTargetView } from "@/lib/queries/useMyStorage";
+import type { MyTargetView, StorageStatus } from "@/lib/queries/useMyStorage";
 import type { StatsGap, StatsMetric, TargetStats, UsageWindows } from "@/lib/queries/useStats";
 
 /** Statistics fixtures: ring names and example.org only. Days are relative to today, in the makerspace's zone. */
@@ -51,6 +51,9 @@ export const sessions = (over: Partial<StatsMetric> = {}): StatsMetric => ({
 /** Three unobserved days inside the ring series' window (start 8 days ago, end 5 days ago exclusive). */
 export const GAP: StatsGap = { start: ago(8), end: ago(5), dimensions: { area: "ring" }, kind: "unobserved", reason: "Auditing is off in this area" };
 
+/** The add-on's storage status as a read now (design §13.6): only under `read.data`. */
+export const readNow = (storage: StorageStatus) => ({ state: "now" as const, takenAt: new Date().toISOString(), data: { storage } });
+
 export const view = (usage: MyTargetView["usage"], over: Partial<MyTargetView> = {}): MyTargetView => ({
   target: "gym",
   name: "Training hall",
@@ -58,8 +61,7 @@ export const view = (usage: MyTargetView["usage"], over: Partial<MyTargetView> =
   account: { username: "rey_mysterio" },
   kind: "inventory",
   credential: { set: false },
-  reachable: true,
-  health: "online",
+  health: "answering",
   usage,
   ...over,
 });

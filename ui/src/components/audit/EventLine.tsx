@@ -255,7 +255,7 @@ export function EventSentence({ entry }: { entry: AuditEntry }) {
 }
 
 function Sentence({ entry }: { entry: AuditEntry }) {
-  const { verb, template, destructive } = describeAction(entry.action, useSystemNames());
+  const { verb, template, destructive } = describeAction(entry.action, useSystemNames(), entry.details as Record<string, unknown> | undefined);
   const tone = destructive ? "font-semibold text-danger-text" : undefined;
 
   if (isPasswordSend(entry)) return <SendSentence entry={entry} />;

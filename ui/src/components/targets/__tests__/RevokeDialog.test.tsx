@@ -122,52 +122,58 @@ describe("revoking access on a target", () => {
     expect(screen.queryByText(/sends it from Pending changes/i)).toBeNull();
   });
 
-  it("says the same thing about how it lands before and after confirming", () => {
-    state.result = {
-      status: "revoked",
-      allowance_id: "a1",
-      rotated: true,
-      queued: true,
-      disclosure:
-        "The credential is already replaced. The account lock drains on its own — revocations do not wait for an operator, because a queued one is access somebody still has.",
-      detail: "New connections are refused now and the credential has been replaced.",
-    };
-    renderRevoke();
-
+  const confirm = () => {
     fireEvent.change(screen.getByLabelText("Why"), { target: { value: "offboarding" } });
     fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
       target: { value: "Charlotte Flair" },
     });
     fireEvent.click(screen.getByRole("button", { name: /revoke access for Charlotte Flair/i }));
-
-    // The result screen's own disclosure — drains on its own, no operator
-    // action needed — must not have been contradicted by the form it replaced.
-    expect(screen.getByText(/drains on its own/i)).toBeInTheDocument();
-    // A-24 §13: the lock is queued, so it is On its way, never Revoked, while it is.
-    expect(screen.getByText("On its way")).toBeInTheDocument();
-    expect(screen.queryByText("Revoked")).toBeNull();
+  };
+  const recorded = (over: Partial<RevocationResult>): RevocationResult => ({
+    status: "recorded",
+    allowance_id: "a1",
+    recorded_at: "2026-11-21T10:00:00Z",
+    landed_at: null,
+    rotated: true,
+    operation: "op-1",
+    detail:
+      "Recorded. Not yet applied on TrueNAS. Until it is, the account there still works. Syndra applies it by itself when TrueNAS answers. The credential is already replaced. Sessions already established end when they next reconnect — this system has no way to close one.",
+    ...over,
   });
 
-  // Half of it going through is its own outcome, and the surface names which
-  // half is outstanding rather than reporting a failure.
-  it("reports a partial revocation as a partial one", () => {
-    state.result = {
-      status: "partially_revoked",
-      allowance_id: "a1",
-      rotated: false,
-      detail: "New connections are refused now — that half is recorded and queued.",
-      outstanding: "password.rotate",
-    };
+  // Design §13.4: recorded and landed are two facts. The reply is never drawn as done, and it says
+  // the account there still works until the add-on answers that it applied it.
+  it("says Recorded and that the account still works until it lands, never Revoked or Partly done", () => {
+    state.result = recorded({});
     renderRevoke();
+    confirm();
+    expect(screen.getByText("Recorded")).toBeInTheDocument();
+    expect(screen.getByText(/Until it is, the account there still works/)).toBeInTheDocument();
+    expect(screen.queryByText("Revoked")).toBeNull();
+    expect(screen.queryByText(/Partly done/)).toBeNull();
+    // Syndra applies it by itself: no Send step is offered.
+    expect(screen.queryByText(/Waiting for you to send/)).toBeNull();
+  });
 
-    fireEvent.change(screen.getByLabelText("Why"), { target: { value: "offboarding" } });
-    fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
-      target: { value: "Charlotte Flair" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /revoke access for Charlotte Flair/i }));
-
-    expect(screen.getByText(/Partly done/i)).toBeInTheDocument();
-    expect(screen.getByText(/Still outstanding: password.rotate/)).toBeInTheDocument();
+  // The credential half that did not land is named with its own next step, never as a failed revocation.
+  it.each([
+    [
+      "refused",
+      { status: "refused" as const, detail: "The credential was not replaced: TrueNAS refused: account locked. Replace it once that is resolved." },
+      /Replace it once that is resolved/,
+    ],
+    ["unconfirmed", { status: "unconfirmed" as const, detail: "This may have been applied." }, /may have been replaced\. Syndra is checking; don't send it again\./],
+    [
+      "nothing sent",
+      { error: "NOTHING_SENT", message: "Nothing went out. Syndra can't reach TrueNAS's add-on. Check that its container is running. Syndra keeps trying. Try again when TrueNAS answers." },
+      /Try again when TrueNAS answers/,
+    ],
+  ])("names a credential half that %s, with its own step", (_name, rotation, step) => {
+    state.result = recorded({ rotated: false, operation: undefined, outstanding: "password.rotate", rotation, detail: "Recorded. Not yet applied on TrueNAS. Until it is, the account there still works. Syndra applies it by itself when TrueNAS answers." });
+    renderRevoke();
+    confirm();
+    expect(screen.getByText("Recorded")).toBeInTheDocument();
+    expect(screen.getByText(step)).toBeInTheDocument();
     // The sheet is its result: form, list and Keep it are gone, one Close remains.
     expect(screen.queryByLabelText("Why")).toBeNull();
     expect(screen.queryByText("What happens")).toBeNull();

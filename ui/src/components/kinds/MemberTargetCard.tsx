@@ -7,10 +7,8 @@ import { StorageMemberCard } from "@/components/kinds/storage/MyStorage";
 import { ViewUsage } from "@/components/usage/UsageCard";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
-import { Notice } from "@/components/ui/Notice";
+import { NotReadLine } from "@/components/ui/ReadFreshness";
 import { StandingLine } from "@/components/ui/StandingLine";
-import { formatClock } from "@/lib/format";
-import { Unfold } from "@/lib/motion";
 import { NOTHING_TO_DO } from "@/lib/outcome";
 import type { MyTargetView } from "@/lib/queries/useMyStorage";
 
@@ -51,24 +49,12 @@ const SYNDRA_MAKES_IT = `${NOTHING_TO_DO} Syndra makes it.`;
 
 export function CoreMemberCard({ view, untitled = false }: CardProps) {
   const name = view.name;
-  const offline = view.health === "offline";
+  const addon = view.read && view.read.state !== "none" ? view.read.data : undefined;
   return (
     <Card>
       {!untitled && <CardHeader title={name} />}
-      {/* Every kind has an offline, so the core card says it the way the
-          storage card does: what is safe, and that the page catches up. */}
-      <Unfold open={offline}>
-        <Notice
-          tone="warn"
-          title={`${name} is offline`}
-          live
-          className="mx-5 mt-[18px]"
-          nothingToDo={`This page updates on its own when ${name} returns.`}
-        >
-          It stopped answering{view.reachable_since ? ` at ${formatClock(view.reachable_since)}` : ""}. Your
-          account and access are safe.
-        </Notice>
-      </Unfold>
+      {/* A system that can't be read says why, once, in the member's one sentence (design §13.1). */}
+      {view.read?.state === "none" && <NotReadLine why={view.read.why} system={name} reader={MEMBER} className="mx-5 mt-[18px]" />}
       <CardRow first className="flex-wrap">
         {view.account ? (
           <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-small">{view.account.username}</span>
@@ -78,15 +64,15 @@ export function CoreMemberCard({ view, untitled = false }: CardProps) {
           </span>
         )}
         <span className="flex-1" />
-        {view.standing ? (
-          <StandingLine standing={view.standing} system={name} audience="member" />
+        {addon?.standing ? (
+          <StandingLine standing={addon.standing} system={name} audience="member" />
         ) : !view.entitled ? (
           <ArrowLink href="/requests?ask">Ask for access in Requests</ArrowLink>
         ) : (
           <span className="text-small text-muted">{view.account ? NOTHING_TO_DO : SYNDRA_MAKES_IT}</span>
         )}
       </CardRow>
-      <Reads reads={view.reads} name={name} reader={MEMBER} />
+      <Reads reads={addon?.reads} name={name} reader={MEMBER} />
       <MemberActions view={view} />
     </Card>
   );

@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
+import { ApiError } from "@/lib/api-client";
 
 /**
  * "Check now" inside the add-on's cooldown (7l): the skipped pass carries
@@ -43,12 +44,21 @@ vi.mock("@/lib/queries/useTargets", async () => {
     useAdoptAccount: inert,
     useReconcileTarget: () => {
       const [data, setData] = React.useState<object | undefined>(undefined);
+      const [error, setError] = React.useState<unknown>(null);
       return {
         ...inert(),
         data,
-        mutate: (_: unknown, opts?: { onSuccess?: (r: object) => void }) => {
+        error,
+        mutate: (_: unknown, opts?: { onSuccess?: (r: object) => void; onError?: (e: unknown) => void }) => {
           const answer = passes.answers[Math.min(passes.sent, passes.answers.length - 1)];
           passes.sent++;
+          if (answer instanceof Error) {
+            setData(undefined);
+            setError(answer);
+            opts?.onError?.(answer);
+            return;
+          }
+          setError(null);
           setData(answer);
           opts?.onSuccess?.(answer);
         },
@@ -81,8 +91,19 @@ function renderTarget() {
   );
 }
 
-const skipped = (wait: number) => ({ target: "truenas", bound: 0, queued: 0, current: false, halted: true, reason: "read_stale", retry_after: wait });
-const ran = { target: "truenas", bound: 3, queued: 0, current: true };
+// A pass skipped inside the cooldown is answered from the add-on's kept copy, its wait in `read` (design §13.3).
+const skipped = (wait: number) => ({
+  target: "truenas",
+  bound: 0,
+  queued: 0,
+  halted: true,
+  reason: "read_stale",
+  read: { state: "kept", taken_at: new Date().toISOString(), reason: "cooldown", retry_after: wait },
+});
+const ran = { target: "truenas", bound: 3, queued: 0, read: { state: "now", taken_at: new Date().toISOString() } };
+// With nothing kept, the cooldown is a 503 TARGET_NOT_READ `cooldown`: it waits the same way.
+const refused = (wait: number) =>
+  new ApiError(503, { error: "TARGET_NOT_READ", message: `TrueNAS was read moments ago. Read it again in ${wait} s.`, details: { reason: "cooldown" }, retry_after: wait });
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -122,6 +143,17 @@ describe("Check now inside the add-on's cooldown", () => {
     expect(passes.sent).toBe(2);
     expect(screen.queryByText(/trying again by itself/)).toBeNull();
     expect(screen.queryByText(/stopped before it concluded anything/i)).toBeNull();
+  });
+
+  it("waits out a cooldown with nothing kept (503) the same way, and never says it as a failure", () => {
+    passes.answers = [refused(5), ran];
+    renderTarget();
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    expect(screen.getByText(/was read moments ago; trying again by itself in 5 s$/, { selector: ".text-warn-text" })).toBeInTheDocument();
+    expect(screen.queryByText(/ask the person who runs the Syndra server/)).toBeNull();
+    act(() => void vi.advanceTimersByTime(5000));
+    expect(passes.sent).toBe(2);
+    expect(screen.queryByText(/trying again by itself/)).toBeNull();
   });
 
   it("retries once only: a second skip says when to press again, never the pass's raw reason", () => {

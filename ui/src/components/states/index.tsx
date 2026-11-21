@@ -15,6 +15,7 @@ import { Notice } from "@/components/ui/Notice";
 import { NOTHING_CHANGED, failureMessage, zitadelFailed, mayHaveGoneThrough, nextStep, partialSentence, sentence } from "@/lib/outcome";
 import { SKELETON_DELAY_MS, TINT_MS, stillMotion } from "@/lib/motion";
 import { useUiView } from "@/lib/ui-view";
+import type { Read } from "@/lib/queries/read";
 
 /**
  * Four states, every list view. Not three — degraded is real and specific and
@@ -299,7 +300,8 @@ function NeverRead() {
  * that is actually a failed request is the most expensive lie a list can tell.
  */
 export function ListStates({
-  isLoading,
+  read,
+  isLoading: loading,
   error,
   isEmpty,
   onRetry,
@@ -310,7 +312,13 @@ export function ListStates({
   head,
   children,
 }: {
-  isLoading: boolean;
+  /**
+   * The list's add-on read (design §13.6), when it is one: pending is the skeleton, and `none` is
+   * no rows and no empty state at all. A list that was not read is not an empty list; the card's
+   * own `ReadFreshness` says why, once.
+   */
+  read?: Read<unknown>;
+  isLoading?: boolean;
   error: unknown;
   isEmpty: boolean;
   onRetry?: () => void;
@@ -323,6 +331,8 @@ export function ListStates({
   head?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  // A read Syndra itself failed to make has no answer either: that is the error, not a skeleton.
+  const isLoading = Boolean(loading) || (read?.state === "pending" && !error);
   // S7: when the read lands, a skeleton that was on screen fades first (tint),
   // and only then do the rows arrive. They never crossfade. A read that landed
   // inside the delay never showed one, so there is nothing to fade.
@@ -357,6 +367,7 @@ export function ListStates({
   if (fading) return <div className="tint-out pointer-events-none">{skeleton ?? <RowSkeleton />}</div>;
   // Never read (N23): no skeleton, no empty state, no rows.
   if (isNeverRead(error)) return <NeverRead />;
+  if (read?.state === "none") return null;
   if (error) return <ErrorState title={errorTitle} error={error} onRetry={onRetry} fine={fine} bare />;
   if (isEmpty) return <>{empty}</>;
   // `arrive`, applied at the one place every list in the product already

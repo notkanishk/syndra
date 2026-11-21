@@ -4,9 +4,8 @@ import { Fragment } from "react";
 
 import { StatusDot } from "@/components/ui/Badge";
 import { Relative } from "@/components/ui/Time";
-import { formatClock } from "@/lib/format";
 import { limitWords } from "@/lib/role-mapping-plan";
-import type { ReachPlace, TargetReach } from "@/lib/queries/useTargets";
+import type { ReachPlace } from "@/lib/queries/useTargets";
 
 /**
  * What a storage system's groups open, on the mappings screen and under the
@@ -19,24 +18,16 @@ export const HOMES_STAY = " New home folders stop; the ones already made stay, w
 
 /**
  * The freshness of what each group opens, said once in the card header
- * (A-02 §3). The mappings themselves are Syndra's own record and need none, so
- * the card never recedes; when the read is the last one, only this note turns
- * amber with a ring (A-13 §2).
+ * (A-02 §3), for a read taken now. A kept copy or a read with nothing to give
+ * is said by the card's one read line instead (`ReadFreshness`), with its way
+ * to read again: the mappings themselves are Syndra's own record, so the card
+ * never recedes.
  */
-export function OpensNote({ name, reach }: { name: string; reach: TargetReach | undefined }) {
-  if (!reach) return null;
-  if (!reach.read) return <>What each group opens: not read from {name} yet</>;
-  return reach.current ? (
+export function OpensNote({ name, takenAt }: { name: string; takenAt: string }) {
+  return (
     <>
-      What each group opens, read from {name}&apos;s folder permissions <Relative iso={reach.read_at} />
+      What each group opens, read from {name}&apos;s folder permissions <Relative iso={takenAt} />
     </>
-  ) : (
-    <span className="inline-flex items-baseline gap-1.5 text-warn-text">
-      <StatusDot tone="warn" ring className="self-center" />
-      <span>
-        What each group opens, as last read from {name}&apos;s folder permissions at {formatClock(reach.read_at)}
-      </span>
-    </span>
   );
 }
 

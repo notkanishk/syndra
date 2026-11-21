@@ -9,6 +9,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MEMBER } from "@/components/results/copy";
+import { ReadFreshness, useReadAgainPress } from "@/components/ui/ReadFreshness";
 import { Reads } from "@/components/results/ReadResult";
 import { UsageUnread } from "@/components/results/StatusMeters";
 import { Card } from "@/components/ui/Card";
@@ -21,10 +22,11 @@ import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
 import type { GuideFolder } from "@/components/kinds/storage/ConnectionGuide";
 import { deviceFrom, type Device } from "@/components/kinds/storage/device";
-import { OWN_READS, PASSWORD_STEP, drawnUsage, isHold, stateOf, usageShown, type State } from "@/components/kinds/storage/state";
-import { describeFailure, sentence } from "@/lib/outcome";
+import { OWN_READS, PASSWORD_STEP, drawnUsage, isHold, stateOf, storageOf, usageShown, type State } from "@/components/kinds/storage/state";
+import { describeFailure, isNothingSent, nothingSentOutcome, NOTHING_SENT_WORD, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
 import { formatAt, formatBytes, formatClock, formatList, formatShortDate } from "@/lib/format";
+import { down } from "@/components/kinds/storage/state";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import { useLongWait } from "@/lib/useLongWait";
 import {
@@ -79,20 +81,21 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
   const label = view.name;
   const state = stateOf(view);
   const roleName = useRoleName();
-  const offline = view.health === "offline";
+  const again = useReadAgainPress();
   const isPaused = paused(view);
   const passwordStep = PASSWORD_STEP.has(state);
   const hasAccount = state !== "none" && state !== "held" && state !== "waiting";
+  const storage = storageOf(view);
   // The password can't be taken while the system can't take it. The form is
   // replaced by a sentence, never disabled (owner, 9 Oct).
-  const passwordBlocked = offline || isPaused;
+  const passwordBlocked = down(view) || isPaused;
 
   const reached = state === "none" || state === "held" ? -1 : state === "waiting" ? 0 : passwordStep ? 1 : 2;
   const roles = (view.roles ?? []).map(roleName);
   const [headline, body, aside] = copyFor(state, label, view);
   const notice = pausedNotice(view, label);
   // The usage Folders draws, place by place: what the unread-usage notice below stands beside.
-  const drawn = hasAccount && view.storage?.places_readable ? (view.storage.places ?? []).map((p) => drawnUsage(p, offline)) : [];
+  const drawn = hasAccount && storage?.places_readable ? (storage.places ?? []).map(drawnUsage) : [];
 
   return (
     <Card>
@@ -104,20 +107,14 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
         <Steps reached={reached} state={state} />
       </div>
 
-      <Unfold open={Boolean(offline)}>
-        <Notice tone="warn" title={`${label} is offline`} blocking live className="mx-5 mt-[18px]" nothingToDo={`This page updates on its own when ${label} returns.`}>
-          It stopped answering{view.reachable_since ? ` at ${formatClock(view.reachable_since)}` : ""}, so your
-          folders won&apos;t open until it&apos;s back. Your account, files and access are safe, and this page
-          updates on its own when {label} returns.
-        </Notice>
-      </Unfold>
-
       <div className="flex flex-col gap-2 px-5 pb-[22px] pt-[18px]">
         <h2 className="font-display text-heading font-semibold tracking-[-0.01em] [text-wrap:pretty]">
           {headline}
         </h2>
         <p className="measure text-body leading-[1.55] text-muted [text-wrap:pretty]">{body}</p>
         {aside && <span className="text-small text-faint">{aside}</span>}
+        {/* Why it couldn't be read, in the member's one sentence (design §13.1), with Read again; a cooldown counts down. */}
+        {view.read?.state === "none" && <ReadFreshness read={view.read} system={label} reader={MEMBER} onRefresh={again} />}
         {state === "none" && (
           <ArrowLink href="/requests?ask" className="mt-1 self-start">
             Ask for access in Requests
@@ -157,6 +154,8 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
             </div>
           </div>
 
+          {/* Nothing read: the line above says why once; no folders, no addresses, no usage. */}
+          {view.read?.state !== "none" && (
           <Folders
             view={view}
             state={state}
@@ -165,6 +164,7 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
             roles={roles}
             passwordBlocked={passwordBlocked}
           />
+          )}
 
           <Unfold open={Boolean(notice)}>
             {notice && (
@@ -197,12 +197,12 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
           <Withheld items={(view.suspended ?? []).filter((s) => !isHold(view, s))} schemaOf={() => view.entitlement_schema} />
         </div>
       )}
-      {view.storage?.quota_read === false && (
+      {storage?.quota_read === false && (
         <div className="row-divider px-5 py-4">
           <UsageUnread name={label} some={usageShown(drawn)} reader={MEMBER} />
         </div>
       )}
-      <Reads reads={view.reads} skip={OWN_READS} name={label} reader={MEMBER} />
+      {view.read && view.read.state !== "none" && <Reads reads={view.read.data.reads} skip={OWN_READS} name={label} reader={MEMBER} />}
     </Card>
   );
 }
@@ -273,17 +273,18 @@ function copyFor(state: State, label: string, view: MyTargetView): [string, stri
         "",
       ];
     case "unread":
+      // One sentence for both outages (design §13.1): which box is down is not the member's to fix.
       return [
         "Couldn't check your account just now",
-        `${label} didn't answer when this page asked, so it can't say whether your account works. Your access hasn't changed; this page reads it again on your next visit.`,
+        view.read?.state === "none"
+          ? "Your access hasn't changed."
+          : `${label} didn't say whether your account works. Your access hasn't changed; this page reads it again on your next visit.`,
         "",
       ];
     case "ready":
       return [
         "Your account is ready",
-        view.health === "offline"
-          ? `Once ${label} is back, sign in as usual. Nothing needs doing on your side.`
-          : (view.suspended ?? []).length > 0
+        (view.suspended ?? []).length > 0
             ? `${ready} Some of your access is held back for now, with the reason beside it.`
             : ready,
         "",
@@ -318,22 +319,22 @@ function pausedNotice(view: MyTargetView, label: string): { title: string; body:
 }
 
 function blockedSentence(view: MyTargetView, label: string) {
-  if (view.health === "offline") {
-    return `You can't change your password while ${label} is offline. Your current one works again as soon as it's back.`;
+  if (down(view)) {
+    return `You can't change your password while ${label} isn't answering. Your current one keeps working, and you can change it once ${label} answers.`;
   }
   return "You can't change your password while account changes are paused. Your current one keeps working, and you can change it once the pause lifts.";
 }
 
 /** The form's place while it can't be used: one sentence, or, with a change in doubt, the two as one line (A-13 §4). */
 function Blocked({ view, label }: { view: MyTargetView; label: string }) {
-  if (view.password_change) return <UnconfirmedChange view={view} label={label} offline />;
+  if (view.password_change) return <UnconfirmedChange view={view} label={label} blocked />;
   return <span className="measure text-body leading-[1.55] text-ink">{blockedSentence(view, label)}</span>;
 }
 
 /** The status beside the system's name: what the monitor can stand behind, and nothing when it can't tell. */
 function SystemStatus({ view, state }: { view: MyTargetView; state: State }) {
-  if (state === "none" || !view.health || view.health === "unknown") return null;
-  const offline = view.health === "offline";
+  if (state === "none" || view.health === "checking") return null;
+  const offline = down(view);
   const held = state === "held";
   const checked = view.checked_at ? (
     <>
@@ -345,7 +346,8 @@ function SystemStatus({ view, state }: { view: MyTargetView; state: State }) {
     <span role="status" className={`tint-in inline-flex items-center gap-2 text-small leading-[1.4] motion-tint ${offline ? "text-warn-text" : "text-muted"}`}>
       <StatusDot tone={offline ? "warn" : held ? "neutral" : "healthy"} />
       {offline ? (
-        <>{SYSTEM_WORDS.offline}{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}</>
+        // One word for both outages to a member (design §13.1).
+        <>{SYSTEM_WORDS.notAnswering}{view.since ? ` since ${formatClock(view.since)}` : ""}</>
       ) : held ? (
         <>{SYSTEM_WORDS.answering} · your account is on hold</>
       ) : state === "waiting" || state === "unread" || PASSWORD_STEP.has(state) ? (
@@ -399,8 +401,7 @@ function Folders({
   const [device, setDevice] = useState<Device>("mac");
   useEffect(() => setDevice(deviceFrom(navigator.userAgent)), []);
 
-  const storage = view.storage;
-  const offline = view.health === "offline";
+  const storage = storageOf(view);
   const locked = PASSWORD_STEP.has(state);
   const withheld = (view.suspended ?? []).filter((s) => !isHold(view, s));
   const host = view.connection?.host;
@@ -415,7 +416,7 @@ function Folders({
       smb: p.smb_address!,
       unc: p.unc_address!,
     }));
-  const guide = !offline && !!host && guideFolders.length > 0;
+  const guide = !!host && guideFolders.length > 0;
 
   return (
     <div className="row-divider flex flex-col gap-3.5 px-5 pb-5 pt-[18px]">
@@ -454,7 +455,6 @@ function Folders({
               <PlaceBlock
                 key={place.path}
                 place={place}
-                offline={offline}
                 showAddresses={!!host}
                 homeKept={!!place.home && !!view.home_kept}
                 roleName={roleName}
@@ -494,14 +494,12 @@ const placeName = (place: StoragePlace) => (place.home ? "Your home folder" : na
 
 function PlaceBlock({
   place,
-  offline,
   showAddresses,
   homeKept,
   roleName,
   month,
 }: {
   place: StoragePlace;
-  offline: boolean;
   showAddresses: boolean;
   homeKept: boolean;
   roleName: (r: RoleSource) => string;
@@ -518,15 +516,14 @@ function PlaceBlock({
         ? `From your ${formatList(roles)} ${roles.length === 1 ? "role" : "roles"}`
         : "";
 
-  const usage = drawnUsage(place, offline);
+  const usage = drawnUsage(place);
   const quota = usage?.quota_bytes ?? 0;
   // At or over its limit TrueNAS refuses new writes and keeps every file, so
   // the member can still open and delete (a limit set below what they hold).
   const over = Boolean(usage && quota > 0 && usage.used_bytes >= quota);
   let use: string | null = null;
   if (can) {
-    if (offline) use = "Usage unavailable while offline";
-    else if (usage) {
+    if (usage) {
       use = !usage.used_bytes
         ? "Nothing saved here yet"
         : quota > 0
@@ -535,7 +532,7 @@ function PlaceBlock({
     } else if (place.not_counted) use = PLACE_NOT_COUNTED[place.not_counted] ?? null;
   }
   // The meter draws when there is a limit to read against; how much is left is said under it (A-24 Q18).
-  const metered = can && usage && quota > 0 && !offline ? usage : null;
+  const metered = can && usage && quota > 0 ? usage : null;
   const room = metered ? roomLine(metered.used_bytes, quota) : null;
 
   return (
@@ -552,7 +549,7 @@ function PlaceBlock({
         </span>
         {use && <span className="ml-auto text-small text-muted">{use}</span>}
       </div>
-      {can && over && !offline && (
+      {can && over && (
         <span className="measure text-body leading-[1.55] text-warn-text [text-wrap:pretty]">
           Full. You can open and delete files here, but not save new ones until you&apos;re under {formatBytes(quota)}.
         </span>
@@ -602,16 +599,16 @@ export const SLOW_ANSWER_MS = 4000;
 /**
  * Step 3: back later, the change still unconfirmed. One line above the form,
  * amber dot, no box, true either way; it clears itself on the next confirmed
- * change. While the system is offline it is also the blocked sentence.
+ * change. While the system isn't answering it is also the blocked sentence.
  */
-function UnconfirmedChange({ view, label, offline }: { view: MyTargetView; label: string; offline?: boolean }) {
+function UnconfirmedChange({ view, label, blocked }: { view: MyTargetView; label: string; blocked?: boolean }) {
   return (
     <Result
       tone="warn"
       title={`Your password change ${formatAt(view.password_change?.at)} may not have reached ${label}.`}
       body={
-        offline
-          ? `You can set it again here once ${label} is back. If your new password doesn't work then, your old one still does.`
+        blocked
+          ? `You can set it again here once ${label} answers. If your new password doesn't work then, your old one still does.`
           : "If your new password doesn't work, your old one still does. Set it again below to be sure."
       }
     />
@@ -660,8 +657,8 @@ function PasswordForm({
   const set = useSetStorageCredential(view.target, setRetrying);
   const status = set.data?.status;
   const changed = status === "set";
-  const noAnswer = status === "indeterminate";
-  const refused = status === "rejected" || status === "unreached";
+  const noAnswer = status === "unconfirmed";
+  const refused = status === "rejected";
   // Step 3's line, until this visit's own answer speaks for the change.
   const returned = Boolean(view.password_change) && !set.data && !set.isPending;
   const slow = useLongWait(set.isPending, SLOW_ANSWER_MS);
@@ -749,10 +746,7 @@ function PasswordForm({
           word="Not changed"
           outcome={{
             kind: "failed",
-            message:
-              status === "rejected"
-                ? `${label} refused the change. Nothing was changed.`
-                : `The change didn't reach ${label}. Nothing was changed.`,
+            message: `${label} refused the change. Nothing was changed.`,
           }}
         />
       )}
@@ -771,11 +765,16 @@ function PasswordForm({
         )}
       </p>
       {set.error && (
-        <ActionOutcome
-          placement="inline"
-          word="Not changed"
-          outcome={{ kind: "failed", message: sentence(describeFailure(set.error)) }}
-        />
+        // Nothing went out (503 NOTHING_SENT, design §13.4): the backend's sentence ends on its step.
+        isNothingSent(set.error) ? (
+          <ActionOutcome placement="inline" word={NOTHING_SENT_WORD} outcome={nothingSentOutcome(set.error)} />
+        ) : (
+          <ActionOutcome
+            placement="inline"
+            word="Not changed"
+            outcome={{ kind: "failed", message: sentence(describeFailure(set.error)) }}
+          />
+        )
       )}
     </form>
   );

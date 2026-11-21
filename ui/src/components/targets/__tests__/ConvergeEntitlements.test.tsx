@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConvergeEntitlements } from "@/components/targets/ConvergeEntitlements";
 import { motionInTests } from "@/test-utils/motion";
 import type { EntitlementApplyResult, EntitlementPlan } from "@/lib/queries/useEntitlements";
+import { readOf } from "@/lib/queries/read";
 
 /**
  * §23 — plan, then apply, on the one endpoint whose plan can be computed
@@ -30,8 +31,7 @@ const state: {
       { user_id: "u2", name: "Seth", effect: "no_change", detail: "Already correct." },
     ],
     summary: { total: 2, apply: 1, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
-    provisional: false,
-    state_read_at: new Date(Date.now() - 2 * 60_000).toISOString(),
+    read: { state: "now", taken_at: new Date(Date.now() - 2 * 60_000).toISOString() },
   },
   applied: {
     plan_id: "plan_1",
@@ -49,7 +49,7 @@ vi.mock("@/lib/queries/useEntitlements", async () => {
   );
   return {
     ...actual,
-    useRehearseEntitlements: () => ({ mutateAsync: async () => state.plan }),
+    useRehearseEntitlements: () => ({ mutateAsync: async () => readOf(state.plan.read, state.plan) }),
     useApplyEntitlements: () => ({
       mutateAsync: async (input: { planId: string; subjectIds: string[] }) => {
         state.applyCalls.push(input);
@@ -75,7 +75,7 @@ function renderConverge() {
 
 beforeEach(() => {
   state.applyCalls = [];
-  state.plan = { ...state.plan, provisional: false, truncated: false };
+  state.plan = { ...state.plan, read: { state: "now", taken_at: new Date(Date.now() - 2 * 60_000).toISOString() }, truncated: false };
 });
 
 describe("converging a cohort", () => {
@@ -136,23 +136,31 @@ describe("converging a cohort", () => {
 
   // Labelled with the AGE, not merely with the word: "computed against
   // last-known state" with no number is a label nobody can act on.
-  it("labels a provisional plan with how old the state it saw is", async () => {
+  it("labels a plan computed against a kept copy with how old the copy is", async () => {
     state.plan = {
       ...state.plan,
-      provisional: true,
-      state_read_at: new Date(Date.now() - 14 * 60_000).toISOString(),
+      read: { state: "kept", reason: "cached", taken_at: new Date(Date.now() - 14 * 60_000).toISOString() },
     };
     renderConverge();
 
-    await waitFor(() => expect(screen.getByText(/last state seen/i)).toBeInTheDocument());
-    expect(screen.getByText(/14 min ago/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/was read 14 min ago/i)).toBeInTheDocument());
+  });
+
+  // Design §13.3: nothing to compute against is the why, never an empty plan.
+  it("says why when there is nothing to compute the plan against, with no plan and no count", async () => {
+    state.plan = { ...state.plan, read: { state: "none", reason: "addon_unreachable", cause: "no_answer" } };
+    renderConverge();
+
+    await waitFor(() => expect(screen.getByText(/Syndra can't reach .*'s add-on\. Check that its container is running/)).toBeInTheDocument());
+    expect(screen.queryByText(/Already correct/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/What this preview is based on/)).not.toBeInTheDocument();
   });
 
   // Unlike adoption, a provisional plan is still applicable: applying joins a
   // queue an operator can inspect, while adopting binds an identity. §31 A is
   // explicit that these two must not be unified.
   it("still lets a provisional plan be applied", async () => {
-    state.plan = { ...state.plan, provisional: true };
+    state.plan = { ...state.plan, read: { state: "kept", reason: "app_unreachable", taken_at: new Date(Date.now() - 14 * 60_000).toISOString() } };
     renderConverge();
     await waitFor(() => expect(screen.getByText(/Already correct/)).toBeInTheDocument());
 

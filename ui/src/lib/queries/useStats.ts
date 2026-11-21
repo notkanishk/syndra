@@ -97,6 +97,8 @@ export interface UsageWindows {
   kept_from?: string;
   window_30d_from: string;
   window_12m_from: string;
+  /** The monitor's why while the system is down (design §13.1): why a day after the watermark is not counted yet. Absent while it answers. */
+  why?: { reason: string; cause?: string; detail?: string; retry_after?: number };
 }
 
 /** Absent: Syndra could not read its own store just now. */

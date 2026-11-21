@@ -1098,7 +1098,8 @@
    under the finger. Destructive buttons behave identically — muscle memory
    must not depend on what a button does. */
 @utility press-scale {
-  &:active:not(:disabled) {
+  /* Off is off whichever way it is off: `aria-disabled` (keepFocus) does not press either. */
+  &:active:not(:disabled):not([aria-disabled="true"]) {
     transform: scale(0.97);
   }
 }

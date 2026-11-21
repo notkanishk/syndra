@@ -23,7 +23,7 @@ import {
   stillReported,
   stopTrackingConsequence,
 } from "@/components/targets/bindingConflict";
-import { inventoryNotRead, whyNotChecked } from "@/lib/format";
+import { whyNotChecked } from "@/lib/format";
 import { BINDING_CONFLICT, DECIDE_IT, LOOKING_UP_NEXT, PLAN_STALE, TARGET_REFUSED, decideAt, decideStep, planStaleStep, refusalCause, stoppedLine } from "@/lib/wait-reason";
 
 /**
@@ -71,21 +71,11 @@ describe("the binding conflict's copy guide rows", () => {
       stoppedLine(S, { ...row, wait_reason: "refused:not_found" }).replace(refusalCause("refused:not_found"), "{cause in words}"),
       stoppedLine(S, { ...row, wait_reason: PLAN_STALE }),
       stoppedLine(S, { ...row, wait_reason: "halted:x" }),
-      inventoryNotRead(S, undefined, "target_unreachable"),
       whyNotChecked("a_reason_nobody_worded"),
       whyNotChecked("a_reason_nobody_worded", S),
     ];
-    const missing = said.filter((line) => !section.includes(line.replace("The account list could not be read. ", "").replace(" Read again once that is fixed.", "")) );
+    const missing = said.filter((line) => !section.includes(line));
     expect(missing, "design.md §16 does not carry these words").toEqual([]);
-  });
-
-  it("quotes the inventory's stop with its whole lead and tail", () => {
-    expect(inventoryNotRead(S, undefined, "target_unreachable")).toBe(
-      "The account list could not be read. {system} did not answer when Syndra last tried. Read again once that is fixed.",
-    );
-    expect(section).toContain("The account list could not be read.");
-    expect(section).toContain("Read again once that is fixed.");
-    expect(section).toContain("{system} did not answer when Syndra last tried.");
   });
 
   it("words a binding conflict's row as the refusal it is, and sends it to Waiting on you while the conflict stands", () => {
@@ -164,7 +154,6 @@ describe("the binding conflict's copy guide rows", () => {
 
   it("never echoes a reason's code", () => {
     expect(whyNotChecked("some_new_reason")).not.toContain("some_new_reason");
-    expect(inventoryNotRead(S, undefined, "some_new_reason")).not.toContain("some_new_reason");
   });
 
   it("says Stop tracking, the system page's own words for account.release", () => {

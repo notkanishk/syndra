@@ -6,10 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TargetOverview } from "@/components/targets/TargetOverview";
 
 /**
- * "Read again" pressed while the page's first load is still on its way, with the real hooks.
- * Cancelling a load that has no copy leaves the query idle with nothing and no error, so when the
- * read it was replaced by failed, the list drew "Nothing outside Syndra." about an account list
- * nobody had seen.
+ * The Accounts region's line, with the real hooks and the API's own shapes: a read with nothing to
+ * give is a 503 TARGET_NOT_READ (design §13.3), never a body read as a list, and Read again on the
+ * line reads afresh, waits out a cooldown with focus kept, and hands focus on only when it lands.
  */
 
 vi.mock("@/lib/queries/useTargetSystemHealth", () => ({
@@ -19,12 +18,13 @@ vi.mock("@/lib/queries/useTargets", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useTargets")>("@/lib/queries/useTargets");
   const idle = () => ({ data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() });
   const inert = () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, error: null, data: undefined, reset: vi.fn() });
+  const health = actual.healthReplyOf({ read: { state: "now", taken_at: new Date().toISOString() }, reachable: true, lifecycle: "active" });
   return {
     ...actual,
     useTargets: () => ({ ...idle(), data: [] }),
     useUnconfirmedOperations: () => ({ data: [], isLoading: false, error: null }),
     useMergeFindings: () => ({ ...idle(), data: [] }),
-    useTargetHealth: () => ({ ...idle(), data: { reachable: true, lifecycle: "active" } }),
+    useTargetHealth: () => ({ ...idle(), data: health }),
     useResolveLogFinding: inert,
     useReconcileTarget: inert,
     useSetLifecycle: inert,
@@ -39,96 +39,80 @@ vi.mock("@/components/targets/MergeFindings", () => ({ MergeFindings: () => null
 
 afterEach(() => vi.unstubAllGlobals());
 
-// The real shape: a stopped pass answers 503 with the inventory as its body (handlers/inventory.go),
-// through the real reader, so the card's words come from what the API sends and not from a mock.
-describe("a stopped pass, as the API answers it", () => {
-  it("shows the add-on's sentence from the 503 body, and never the empty list", async () => {
+const ADDON_DOWN = "Syndra can't reach TrueNAS's add-on. Check that its container is running. Syndra keeps trying.";
+const notRead = (reason = "addon_unreachable", message = ADDON_DOWN, wait = 30) =>
+  new Response(JSON.stringify({ error: "TARGET_NOT_READ", message, details: { reason, cause: "no_answer" } }), {
+    status: 503,
+    headers: { "Retry-After": String(wait) },
+  });
+const listed = () =>
+  new Response(JSON.stringify({ target: "truenas", bound: 0, accounts: [], unmanaged: [], read: { state: "now", taken_at: new Date().toISOString() } }));
+const never = () => new Promise<Response>(() => {});
+
+function renderPage(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+  return render(
+    <QueryClientProvider client={client}>
+      <TargetOverview target="truenas" />
+    </QueryClientProvider>,
+  );
+}
+
+describe("an account list with nothing to give, as the API answers it", () => {
+  it("says the backend's sentence once, above both cards, and never the empty list", async () => {
     const detail = "Syndra's records of who has which account on TrueNAS can't be read. Check the add-on's storage, then try again.";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((input: RequestInfo | URL) =>
-        String(input).endsWith("/inventory")
-          ? Promise.resolve(
-              new Response(JSON.stringify({ target: "truenas", current: false, halted: true, reason: "read_refused", detail }), { status: 503 }),
-            )
-          : new Promise<Response>(() => {}),
-      ),
-    );
-    render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <TargetOverview target="truenas" />
-      </QueryClientProvider>,
-    );
-    expect(await screen.findByText(`The account list could not be read. ${detail}`)).toBeInTheDocument();
-    expect(screen.queryByText("Nothing outside Syndra.")).toBeNull();
-  });
-
-  it("says it once for the whole Accounts region, with Read again on the line, which reads afresh", async () => {
-    const fetched = vi.fn((input: RequestInfo | URL) =>
-      String(input).includes("/inventory")
-        ? Promise.resolve(
-            new Response(JSON.stringify({ target: "truenas", current: false, halted: true, reason: "target_unreachable" }), { status: 503 }),
-          )
-        : new Promise<Response>(() => {}),
-    );
-    vi.stubGlobal("fetch", fetched);
-    render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <TargetOverview target="truenas" />
-      </QueryClientProvider>,
-    );
-    const line = await screen.findByText(/^The account list could not be read\./);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => (String(input).endsWith("/inventory") ? Promise.resolve(notRead("read_refused", detail)) : never())));
+    renderPage();
+    const line = await screen.findByText(`The account list could not be read. ${detail}`);
     expect(screen.getAllByText(/The account list could not be read/)).toHaveLength(1);
-    // Above both cards, not inside one: the region's line, before "Not created by Syndra".
-    const card = screen.getByText("Not created by Syndra");
-    expect(line.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(within(line.parentElement!).getByRole("button", { name: "Read again" }));
-    await waitFor(() => expect(fetched.mock.calls.some(([u]) => String(u).includes("fresh=true"))).toBe(true));
-  });
-});
-
-describe("a press during the account list's first load", () => {
-  it("shows why the fresh read failed, and never the empty list", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((input: RequestInfo | URL) =>
-        String(input).includes("fresh=true")
-          ? Promise.resolve(new Response(JSON.stringify({ error: "TARGET_UNREACHABLE", message: "TrueNAS did not answer" }), { status: 503 }))
-          : new Promise<Response>(() => {}),
-      ),
-    );
-    render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <TargetOverview target="truenas" />
-      </QueryClientProvider>,
-    );
-    fireEvent.click(await screen.findByRole("button", { name: "Read again" }));
-    expect(await screen.findByText("Not read")).toBeInTheDocument();
     expect(screen.queryByText("Nothing outside Syndra.")).toBeNull();
+    // Above both cards, not inside one: the region's line, before "Not created by Syndra".
+    expect(line.compareDocumentPosition(screen.getByText("Not created by Syndra")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("draws neither an empty list nor Read again while the first load is on its way", () => {
+    vi.stubGlobal("fetch", vi.fn(never));
+    renderPage();
+    expect(screen.queryByText("Nothing outside Syndra.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Read again" })).toBeNull();
   });
 });
 
 describe("Read again on the region's line", () => {
-  const halted = () =>
-    new Response(JSON.stringify({ target: "truenas", current: false, halted: true, reason: "target_unreachable" }), { status: 503 });
-  const renderPage = () =>
-    render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <TargetOverview target="truenas" />
-      </QueryClientProvider>,
+  it("says Reading while it reads, then reads afresh", async () => {
+    let answer: (r: Response) => void = () => {};
+    const fetched = vi.fn((input: RequestInfo | URL) =>
+      String(input).includes("fresh=true")
+        ? new Promise<Response>((resolve) => (answer = resolve))
+        : String(input).includes("/inventory")
+          ? Promise.resolve(notRead())
+          : never(),
     );
+    vi.stubGlobal("fetch", fetched);
+    renderPage();
+    const line = await screen.findByText(/^The account list could not be read\./);
+    fireEvent.click(within(line.parentElement!).getByRole("button", { name: "Read again" }));
+    expect(await within(line.parentElement!).findByRole("button", { name: "Reading" })).toHaveAttribute("aria-disabled", "true");
+    expect(fetched.mock.calls.some(([u]) => String(u).includes("fresh=true"))).toBe(true);
+    answer(notRead());
+    expect(await within(line.parentElement!).findByRole("button", { name: "Read again" })).toBeInTheDocument();
+  });
 
-  it("keeps the reason inside the add-on's cooldown, counts down after it, and keeps focus on the waiting button", async () => {
+  it("keeps its status region quiet while nothing waits", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => (String(input).includes("/inventory") ? Promise.resolve(notRead()) : never())));
+    renderPage();
+    const line = await screen.findByText(/^The account list could not be read\./);
+    expect(within(line.parentElement!).getByRole("status").textContent).toBe("");
+  });
+
+  it("inside the cooldown says the one wait wording, keeps focus on the waiting button, and says the wait once", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) =>
         String(input).includes("fresh=true")
-          ? Promise.resolve(new Response(JSON.stringify({ error: "FRESH_READ_COOLDOWN", message: "wait", retry_after: 30 }), { status: 429 }))
+          ? Promise.resolve(notRead("cooldown", "TrueNAS was read moments ago. Read it again in 30 s.", 30))
           : String(input).includes("/inventory")
-            ? Promise.resolve(
-                new Response(JSON.stringify({ target: "truenas", current: false, halted: true, reason: "addon_outdated" }), { status: 503 }),
-              )
-            : new Promise<Response>(() => {}),
+            ? Promise.resolve(notRead())
+            : never(),
       ),
     );
     renderPage();
@@ -136,18 +120,15 @@ describe("Read again on the region's line", () => {
     const button = within(line.parentElement!).getByRole("button", { name: "Read again" });
     button.focus();
     fireEvent.click(button);
-    // The reason is the next step (update the add-on), so it stays; the count is said after it.
-    const said = await screen.findAllByText(/Update the add-on from the same release as Syndra\. .*You can try again in \d+ s\.$/);
+    const said = await screen.findAllByText(/^Truenas was read moments ago; you can read again in \d+ s$/i);
     const countdown = said.find((el) => el.id)!;
-    expect(screen.queryByText(/was read moments ago/)).toBeNull();
     const waiting = within(countdown.parentElement!).getByRole("button", { name: "Read again" });
     expect(waiting.getAttribute("aria-describedby")).toBe(countdown.id);
     // Off without leaving the tab order: focus stays where the press was.
     expect(waiting).toHaveAttribute("aria-disabled", "true");
     expect(waiting).not.toBeDisabled();
     expect(document.activeElement).toBe(waiting);
-    // The wait is announced, once, in its own status region.
-    expect(within(countdown.parentElement!).getByRole("status").textContent).toMatch(/You can try again in \d+ s\.$/);
+    expect(within(countdown.parentElement!).getByRole("status").textContent).toMatch(/you can read again in \d+ s$/);
   });
 
   it("leaves focus alone when a press failed and a later read lands by itself", async () => {
@@ -156,25 +137,42 @@ describe("Read again on the region's line", () => {
       "fetch",
       vi.fn((input: RequestInfo | URL) =>
         String(input).includes("fresh=true")
-          ? Promise.resolve(new Response(JSON.stringify({ error: "TARGET_UNREACHABLE", message: "TrueNAS did not answer" }), { status: 503 }))
+          ? Promise.resolve(new Response(JSON.stringify({ error: "INVENTORY_ERROR", message: "Syndra's server had a problem." }), { status: 500 }))
           : String(input).includes("/inventory")
-            ? Promise.resolve(
-                answered
-                  ? new Response(JSON.stringify({ target: "truenas", bound: 0, accounts: [], unmanaged: [], read_at: new Date().toISOString(), current: true }))
-                  : halted(),
-              )
-            : new Promise<Response>(() => {}),
+            ? Promise.resolve(answered ? listed() : notRead())
+            : never(),
       ),
     );
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={client}>
-        <TargetOverview target="truenas" />
-      </QueryClientProvider>,
-    );
+    renderPage(client);
     const line = await screen.findByText(/^The account list could not be read\./);
     fireEvent.click(within(line.parentElement!).getByRole("button", { name: "Read again" }));
     await screen.findByText("Not read");
+    answered = true;
+    await client.refetchQueries({ queryKey: ["targets", "truenas", "inventory"] });
+    await waitFor(() => expect(screen.queryByText(/^The account list could not be read\./)).toBeNull());
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  // A press that settles with nothing again (a none, not a failure) spends the focus intent too.
+  it("leaves focus alone when a press came back with nothing and a later read lands by itself", async () => {
+    let answered = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).includes("fresh=true")
+          ? Promise.resolve(notRead())
+          : String(input).includes("/inventory")
+            ? Promise.resolve(answered ? listed() : notRead())
+            : never(),
+      ),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderPage(client);
+    const line = await screen.findByText(/^The account list could not be read\./);
+    fireEvent.click(within(line.parentElement!).getByRole("button", { name: "Read again" }));
+    await waitFor(() => expect(within(screen.getByText(/^The account list could not be read\./).parentElement!).getByRole("button", { name: "Read again" })).toBeInTheDocument());
+    (document.activeElement as HTMLElement | null)?.blur();
     answered = true;
     await client.refetchQueries({ queryKey: ["targets", "truenas", "inventory"] });
     await waitFor(() => expect(screen.queryByText(/^The account list could not be read\./)).toBeNull());
@@ -185,15 +183,7 @@ describe("Read again on the region's line", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) =>
-        String(input).includes("fresh=true")
-          ? Promise.resolve(
-              new Response(
-                JSON.stringify({ target: "truenas", bound: 0, accounts: [], unmanaged: [], read_at: new Date().toISOString(), current: true }),
-              ),
-            )
-          : String(input).includes("/inventory")
-            ? Promise.resolve(halted())
-            : new Promise<Response>(() => {}),
+        String(input).includes("fresh=true") ? Promise.resolve(listed()) : String(input).includes("/inventory") ? Promise.resolve(notRead()) : never(),
       ),
     );
     renderPage();
@@ -202,7 +192,6 @@ describe("Read again on the region's line", () => {
     button.focus();
     fireEvent.click(button);
     await waitFor(() => expect(screen.queryByText(/^The account list could not be read\./)).toBeNull());
-    expect(document.activeElement).not.toBe(document.body);
     const heading = document.getElementById("accounts-heading")!;
     expect(document.activeElement).toBe(heading);
     // Focusable for that moment only (GOV.UK Frontend's setFocus): never a tab stop at rest.
@@ -214,25 +203,9 @@ describe("Read again on the region's line", () => {
 
 describe("a whole account list that holds nothing", () => {
   it("counts 0 on the card, a count that was taken", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((input: RequestInfo | URL) =>
-        String(input).includes("/inventory")
-          ? Promise.resolve(
-              new Response(
-                JSON.stringify({ target: "truenas", bound: 0, accounts: [], unmanaged: [], read_at: new Date().toISOString(), current: true }),
-              ),
-            )
-          : new Promise<Response>(() => {}),
-      ),
-    );
-    render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <TargetOverview target="truenas" />
-      </QueryClientProvider>,
-    );
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => (String(input).includes("/inventory") ? Promise.resolve(listed()) : never())));
+    renderPage();
     await screen.findByText("Nothing outside Syndra.");
-    // The card's header: its title and, beside it, its count.
     const header = screen.getByText("Not created by Syndra").parentElement!;
     expect(within(header).getByTestId("card-count").textContent).toBe("0");
   });

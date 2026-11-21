@@ -20,6 +20,9 @@ type DrainResult struct {
 	Applied  int `json:"applied"`
 	Failed   int `json:"failed"`
 	Requeued int `json:"requeued"`
+	// Deferred counts the requeued rows for which nothing went out (deferUnsent):
+	// no try was spent, so their audit line says so instead of a try number.
+	Deferred int `json:"-"`
 	// Abandoned counts rows that stopped being this drain's to settle while
 	// their dispatch was out — today, because the target was deregistered
 	// underneath them. Its own counter because it is neither of the others: the

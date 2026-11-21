@@ -2,8 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { request } from "@/lib/api-client";
-import { useReadAgain, type Stale } from "@/lib/queries/fresh";
+import { useReadAgain } from "@/lib/queries/fresh";
+import { readFrom, type WireRead } from "@/lib/queries/read";
+
+/** The activity log as a `Read`; "no account here" is a reading, not a failure. */
+const readActivity = (path: string) => readFrom<TargetActivity>(path, { answeredBare: (b) => b.no_account === true });
 
 /**
  * What a target's OWN audit log holds for one person.
@@ -21,28 +24,20 @@ import { useReadAgain, type Stale } from "@/lib/queries/fresh";
 export interface TargetActivity {
   target: string;
   subject: string;
-  readable: boolean;
-  /** Absent entirely when `readable` is false — never an empty list standing in. */
-  events?: TargetActivityEvent[];
+  /** Absent with `no_account`, the one reply that is a fact and not a read. */
+  read?: WireRead;
   /**
-   * Present only when `readable` is false. `no_account` is a positive fact —
-   * this person has nothing bound on the target — and must read as neutral,
-   * never as an error; `unreachable` is everything else that stopped the read
-   * (the target down, a bad response), and keeps the warning tone.
+   * This person has nothing bound on the target: a positive fact, read as
+   * neutral, never as an error, and never as a read that failed.
    */
-  reason?: "no_account" | "unreachable" | "cooldown";
-  /** Whole seconds, with `reason: cooldown`: the log was read moments ago and nothing was kept to serve. */
-  retry_after?: number;
-  /** When the log was read, and whether this is that read or its copy (feature freshness). */
-  taken_at?: string;
-  current?: boolean;
-  stale?: Stale;
+  no_account?: boolean;
+  events?: TargetActivityEvent[];
   /**
    * Resources (shares) that were not recording this person. Without it a short
    * list reads as a quiet week when half the shares were never being watched.
    */
   uncovered?: string[];
-  detail?: string;
+  truncated?: boolean;
 }
 
 export interface TargetActivityEvent {
@@ -77,12 +72,12 @@ const activityPath = (target: string | null, subject: string) =>
 
 /** "Read again" on the log: the same GET, asking the target itself. */
 export const useTargetActivityAgain = (target: string | null, subject: string) =>
-  useReadAgain<TargetActivity>(["target-activity", target, subject], activityPath(target, subject));
+  useReadAgain(["target-activity", target, subject], activityPath(target, subject), readActivity);
 
 export function useTargetActivity(target: string | null, subject: string, enabled = true) {
   return useQuery({
     queryKey: ["target-activity", target, subject],
-    queryFn: () => request<TargetActivity>(activityPath(target, subject)),
+    queryFn: () => readActivity(activityPath(target, subject)),
     enabled: Boolean(target) && Boolean(subject) && enabled,
     // The target's log, not Syndra's record of it: it moves without Syndra
     // doing anything, so a long stale time would show a quiet screen for a busy

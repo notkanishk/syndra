@@ -5,7 +5,9 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
-import type { TargetHealth, TargetInventory, TargetSummary } from "@/lib/queries/useTargets";
+import { ApiError } from "@/lib/api-client";
+import type { TargetHealthWire, TargetInventory, TargetSummary } from "@/lib/queries/useTargets";
+import { asRead, NONE, readNow } from "@/test-utils/wire";
 import type { TargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 
 /**
@@ -26,19 +28,20 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 
 const state = {
   roster: [] as TargetSummary[],
-  health: {} as TargetHealth | undefined,
+  health: {} as TargetHealthWire | undefined,
   healthLoading: false,
   healthError: null as Error | null,
-  inventory: {} as TargetInventory,
-  system: undefined as TargetSystemHealth | undefined,
+  inventory: {} as Omit<TargetInventory, "read">,
+  system: undefined as Omit<TargetSystemHealth, "read"> | undefined,
   systemLoading: false,
   lifecycleCalls: [] as Array<{ state: string; reason: string }>,
   lifecycleError: null as Error | null,
   refetched: 0,
+  again: { pending: false, error: null as unknown, errorAt: undefined as number | undefined },
 };
 
 vi.mock("@/lib/queries/useTargetSystemHealth", () => ({
-  useTargetSystemHealth: () => ({ data: state.system, isLoading: state.systemLoading, isError: false }),
+  useTargetSystemHealth: () => ({ data: state.system && asRead(state.system), isLoading: state.systemLoading, isError: false }),
 }));
 
 vi.mock("@/lib/queries/useTargets", async () => {
@@ -48,17 +51,18 @@ vi.mock("@/lib/queries/useTargets", async () => {
     ...actual,
     useTargets: () => ({ data: state.roster, isLoading: false, error: null }),
     useTargetHealth: () => ({
-      data: state.health,
+      data: state.health && actual.healthReplyOf({ read: readNow(), ...state.health }),
       isLoading: state.healthLoading,
       error: state.healthError,
     }),
     // Try again reads live (`?fresh=true`): the page's own press, counted here.
     useTargetHealthAgain: () => ({
+      ...state.again,
       press: async () => {
         state.refetched++;
       },
     }),
-    useTargetInventory: () => ({ data: state.inventory, isLoading: false, error: null, refetch: vi.fn() }),
+    useTargetInventory: () => ({ data: asRead(state.inventory), isLoading: false, error: null, refetch: vi.fn() }),
     useMergeFindings: () => ({ data: [], isLoading: false, error: null }),
     useSetLifecycle: () => ({
       mutate: (input: { state: string; reason: string }) => state.lifecycleCalls.push(input),
@@ -66,8 +70,8 @@ vi.mock("@/lib/queries/useTargets", async () => {
       isPending: false,
       error: state.lifecycleError,
     }),
-    useTargetHomes: () => ({ data: { read: true, usage_read: true, accounts: [] }, isLoading: false, error: null }),
-    useTargetSettings: () => ({ data: { read: true, settings: [] }, isLoading: false, error: null, refetch: vi.fn() }),
+    useTargetHomes: () => ({ data: asRead({ accounts: [] }), isLoading: false, error: null }),
+    useTargetSettings: () => ({ data: asRead({ settings: [] }), isLoading: false, error: null, refetch: vi.fn() }),
     useReconcileTarget: inert,
     useReleaseBinding: inert,
     useAdoptAccount: inert,
@@ -97,7 +101,7 @@ function renderTarget() {
   );
 }
 
-function ready(health: Partial<TargetHealth> = {}) {
+function ready(health: Partial<TargetHealthWire> = {}) {
   state.roster = [
     {
       target: "truenas",
@@ -111,15 +115,16 @@ function ready(health: Partial<TargetHealth> = {}) {
       project: { id: "p1", name: "Network storage" },
     },
   ];
-  state.health = { reachable: true, lifecycle: "active", status: "answering", ...health } as TargetHealth;
-  state.inventory = { target: "truenas", bound: 48, unmanaged: [], current: true };
+  state.health = { reachable: true, lifecycle: "active", status: "answering", ...health };
+  state.inventory = { target: "truenas", bound: 48, unmanaged: [] };
 }
 
 beforeEach(() => {
-  state.health = {} as TargetHealth;
+  state.health = {};
   state.healthLoading = false;
   state.healthError = null;
   state.system = undefined;
+  state.again = { pending: false, error: null, errorAt: undefined };
   state.systemLoading = false;
   state.lifecycleCalls = [];
   state.lifecycleError = null;
@@ -129,7 +134,7 @@ beforeEach(() => {
 
 describe("the jump chips", () => {
   it("are one link per region, with what each holds, in the board's order", () => {
-    state.health = { reachable: true, lifecycle: "active", status: "answering", log_anchor: undefined } as TargetHealth;
+    state.health = { reachable: true, lifecycle: "active", status: "answering", log_anchor: undefined };
     renderTarget();
 
     const nav = screen.getByRole("navigation", { name: "Regions of this page" });
@@ -159,7 +164,7 @@ describe("the jump chips", () => {
   });
 
   it("leave out a count that has not been read", () => {
-    state.inventory = { target: "truenas", unmanaged: [], current: true } as unknown as TargetInventory;
+    state.inventory = { target: "truenas", unmanaged: [] } as unknown as TargetInventory;
     renderTarget();
 
     const accounts = within(screen.getByRole("navigation", { name: "Regions of this page" })).getByRole("link", {
@@ -173,7 +178,6 @@ describe("whether changes can land", () => {
   it("is two cards, what Syndra can reach and what TrueNAS reports, then Maintenance", () => {
     state.system = {
       target: "truenas",
-      readable: true,
       system: { hostname: "nas-01", version: "25.10.5" },
       alerts: [],
       pools: [],
@@ -215,8 +219,8 @@ describe("the states between answering and offline", () => {
 
   it("answering after a missed check is still Answering, with a faint line and the check pips", () => {
     ready({
-      health: { status: "online", recent: ["answered", "answered", "missed"], missed_since: "2026-10-20T09:40:00Z" },
-    } as Partial<TargetHealth>);
+      health: { state: "answering", recent: ["answered", "answered", "missed"], missed_since: "2026-10-20T09:40:00Z" },
+    });
     renderTarget();
 
     expect(within(reach()).getByText("Answering")).toBeInTheDocument();
@@ -225,34 +229,72 @@ describe("the states between answering and offline", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("offline is one amber Notice, and the word Offline with its pips in the card", () => {
+  it("the add-on down is one amber Notice, and its own word with its pips in the card", () => {
     ready({
-      status: "offline",
-      reachable: false,
-      health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: "2026-10-20T08:33:00Z" },
-    } as Partial<TargetHealth>);
+      read: NONE,
+      status: "addon_unreachable",
+      health: { state: "addon_unreachable", cause: "no_answer", recent: ["missed", "missed", "missed"], since: "2026-10-20T08:33:00Z" },
+    });
     renderTarget();
 
-    expect(screen.getByText("TrueNAS isn't answering.")).toBeInTheDocument();
-    expect(within(reach()).getByText("Offline")).toBeInTheDocument();
+    expect(screen.getByText("TrueNAS's add-on isn't answering.")).toBeInTheDocument();
+    expect(within(reach()).getByText("Add-on not answering")).toBeInTheDocument();
     expect(screen.getAllByRole("img", { name: /Last 3 checks: missed, missed, missed/ })).toHaveLength(1);
-    expect(screen.getAllByText(/Look at TrueNAS\./).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Check that its container is running\./).length).toBeGreaterThan(0);
   });
 
   it("checking after a restart says so, and offers no pips of answers", () => {
-    ready({ status: "checking", health: { status: "unknown", recent: [] } } as Partial<TargetHealth>);
+    ready({ status: "checking", health: { state: "checking", recent: [] } });
     renderTarget();
 
     expect(within(reach()).getByText("Checking")).toBeInTheDocument();
     expect(within(reach()).getByRole("img", { name: "Last 3 checks: no check yet, no check yet, no check yet" })).toBeInTheDocument();
   });
 
-  it("the breaker is Waiting to retry, never Paused", () => {
-    ready({ status: "waiting_to_retry", circuit_open: true } as Partial<TargetHealth>);
+  // An open breaker is a cause of the add-on's outage (design §13.2): said with when Syndra tries again.
+  it("an open breaker says when Syndra tries again, never Paused", () => {
+    ready({ read: NONE, status: "addon_unreachable", health: { state: "addon_unreachable", cause: "timeout", retry_after: 25, recent: ["answered", "missed", "missed"] } });
     renderTarget();
 
-    expect(within(reach()).getByText("Waiting to retry")).toBeInTheDocument();
+    expect(screen.getAllByText(/Syndra tries again in 25 s\./).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Paused/)).toBeNull();
+  });
+
+  // "Try again" says what it is doing (8b fix round 3): reading, a wait Syndra put on it, and a
+  // failure of Syndra's own told apart from the add-on's.
+  describe("Try again", () => {
+    const down = () =>
+      ready({ read: NONE, status: "addon_unreachable", health: { state: "addon_unreachable", cause: "no_answer", recent: ["missed", "missed", "missed"] } });
+    const said = () => within(screen.getByRole("button", { name: /Try again|Reading/ }).closest("div")!).getByRole("status");
+
+    it("says it is reading while it reads, and stays where it was pressed", () => {
+      down();
+      state.again = { pending: true, error: null, errorAt: undefined };
+      renderTarget();
+      expect(screen.getByRole("button", { name: "Reading" })).toHaveAttribute("aria-disabled", "true");
+      expect(said()).toHaveTextContent("Reading TrueNAS now.");
+    });
+
+    it("says Syndra's own failure as Syndra's, never the add-on's", () => {
+      down();
+      state.again = { pending: false, error: new ApiError(500, { error: "INTERNAL", message: "Syndra's server had a problem." }), errorAt: Date.now() };
+      renderTarget();
+      expect(said()).toHaveTextContent(/^Syndra's server had a problem\. This says nothing about TrueNAS itself\. Try again in a minute\./);
+    });
+
+    it("waits out a 429 with its count, the button off until it ends", () => {
+      down();
+      state.again = { pending: false, error: new ApiError(429, { error: "RATE_LIMITED", message: "Too many", retry_after: 20 }), errorAt: Date.now() };
+      renderTarget();
+      expect(said()).toHaveTextContent(/^Syndra is being asked too often\. You can try again in 20 s\.$/);
+      expect(screen.getByRole("button", { name: "Try again" })).toHaveAttribute("aria-disabled", "true");
+    });
+
+    it("is quiet before it is pressed", () => {
+      down();
+      renderTarget();
+      expect(said()).toHaveTextContent(/^$/);
+    });
   });
 
   it("a page that could not be read says Syndra's own server failed, and tries again", () => {
@@ -388,7 +430,6 @@ describe("the page in plain words (route-system-targets-id)", () => {
   it("quotes the device's words as the device's, with when it raised them", () => {
     state.system = {
       target: "truenas",
-      readable: true,
       alerts: [
         {
           level: "WARNING",

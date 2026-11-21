@@ -20,7 +20,9 @@ import { formatShortDate } from "@/lib/format";
 import { glideTo } from "@/lib/motion";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetHomes, useTargetInventory, type AccountHome, type BoundAccount } from "@/lib/queries/useTargets";
-import { HomeLine, HomesReason, LimitDialog, limitVerb } from "@/components/kinds/storage/HomeLimit";
+import { HomeLine, LimitDialog, limitVerb } from "@/components/kinds/storage/HomeLimit";
+import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { ofRead, readOfQuery } from "@/lib/queries/read";
 import { sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 
@@ -58,13 +60,13 @@ const COLS: Columns = [
 export function PeopleOnTarget({ target, stale = false }: { target: string; stale?: boolean }) {
   const nameOf = useSystemNames();
   const inventory = useTargetInventory(target);
-  // A pass that stopped read nothing: no count and no empty state, both on this one signal (the
-  // Accounts region says it was not read, once, above the cards).
-  const unread = inventory.data?.halted;
-  const homes = useTargetHomes(target);
+  // A read with nothing to give has no count, no list and no empty state (design §13.6): the
+  // Accounts region says why, once, above the cards.
+  const read = readOfQuery(inventory);
+  const homes = readOfQuery(useTargetHomes(target));
   const names = useShownNames();
-  const accounts = sortByName(inventory.data?.accounts ?? [], (a) => names.user(a.subject_id), (a) => a.subject_id);
-  const homeOf = new Map((homes.data?.accounts ?? []).map((h) => [h.subject_id, h]));
+  const accounts = sortByName(ofRead(read, (d) => d.accounts) ?? [], (a) => names.user(a.subject_id), (a) => a.subject_id);
+  const homeOf = new Map((ofRead(homes, (d) => d.accounts) ?? []).map((h) => [h.subject_id, h]));
   const name = nameOf(target);
   const paging = usePaging(undefined, undefined, "people");
   // S5: somebody whose access has been revoked leaves on the next read, fading where they were and
@@ -84,7 +86,7 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
   const landed = useRef(false);
   const { all: showAll } = paging;
   useEffect(() => {
-    const list = inventory.data?.accounts ?? [];
+    const list = (inventory.data && ofRead(inventory.data, (d) => d.accounts)) ?? [];
     if (landed.current || inventory.isLoading || list.length === 0) return;
     const person = new URLSearchParams(window.location.search).get("person");
     landed.current = true;
@@ -98,32 +100,30 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
   }, [inventory.isLoading, inventory.data, paging.limit, showAll]);
 
   return (
-    <Card stale={stale || inventory.data?.current === false} {...leaving.listProps}>
+    <Card stale={stale || read.state === "kept"} {...leaving.listProps}>
       <CardHeader
         title="Accounts Syndra manages"
-        count={unread ? undefined : inventory.data?.bound}
+        count={ofRead(read, (d) => d.bound)}
         note="Put what a role gives them on hold, or revoke it"
       />
-      {homes.data && !homes.data.read && homes.data.reason && (
-        // Whose each one is could not be said: the reason in words (the
-        // storage kind's own line), never shown empty as though nobody's.
+      {hasLimit && read.state !== "none" && homes.state === "none" && (
+        // A system with home folders whose accounts were read and whose homes were not: why, in
+        // §13.1's words, never homes shown empty as though nobody had one.
         <CardRow>
-          <HomesReason reason={homes.data.reason} />
+          <ReadFreshness read={homes} system={name} />
         </CardRow>
       )}
       <ListStates
-        isLoading={inventory.isLoading}
+        read={read}
         error={inventory.error}
         isEmpty={leaving.rows.length === 0}
         onRetry={() => inventory.refetch()}
         errorTitle="The account list could not be read"
         empty={
-          unread ? null : (
-            <EmptyState
-              title="Nobody yet."
-              guidance={`No role is mapped to ${name} yet, or the changes that would create accounts are still waiting for you to send from Pending changes.`}
-            />
-          )
+          <EmptyState
+            title="Nobody yet."
+            guidance={`No role is mapped to ${name} yet, or the changes that would create accounts are still waiting for you to send from Pending changes.`}
+          />
         }
       >
         <>

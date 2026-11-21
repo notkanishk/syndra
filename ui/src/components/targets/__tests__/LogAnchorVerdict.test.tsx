@@ -54,7 +54,7 @@ vi.mock("@/lib/queries/useTargets", () => {
     useUnconfirmedOperations: () => ({ data: [], isLoading: false, error: null }),
     useMergeFindings: () => ({ ...idle(), data: [] }),
     useTargetHealthAgain: () => ({ press: async () => {} }),
-    useTargetHealth: () => ({ ...idle(), data: { log_anchor: currentAnchor } }),
+    useTargetHealth: () => ({ ...idle(), data: { log_anchor: currentAnchor, addon: { state: "now", data: {}, takenAt: new Date().toISOString() } } }),
     useTargetInventory: idle,
     useTargetInventoryAgain: () => ({ press: async () => {}, pending: false, error: null }),
     useResolveLogFinding: inert,

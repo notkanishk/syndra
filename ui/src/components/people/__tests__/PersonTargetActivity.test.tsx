@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonActivity } from "@/components/people/PersonActivity";
 import type { TargetActivity } from "@/lib/queries/useTargetActivity";
+import { readOf } from "@/lib/queries/read";
 
 /** The wait is said once in its own status region too; these read the line on screen. */
 const STATUS = '[role="status"]';
@@ -25,7 +26,16 @@ vi.mock("@/lib/queries/useTargets", () => ({
 }));
 
 vi.mock("@/lib/queries/useTargetActivity", () => ({
-  useTargetActivity: () => ({ data: state.activity, isLoading: false, isError: false, dataUpdatedAt: state.arrived }),
+  // As the hook answers: "no account here" a reading now, anything else a Read of its `read`.
+  useTargetActivity: () => ({
+    data: !state.activity
+      ? undefined
+      : state.activity.no_account
+        ? { state: "now", data: state.activity, takenAt: new Date().toISOString() }
+        : readOf(state.activity.read, state.activity, state.arrived || Date.now()),
+    isLoading: false,
+    isError: false,
+  }),
   useTargetActivityAgain: () => ({ press: state.press, pending: false, error: null }),
 }));
 
@@ -57,7 +67,7 @@ afterEach(() => vi.useRealTimers());
  */
 describe("the target's own log, beside Syndra's", () => {
   it("says which source it is reading", async () => {
-    state.activity = { target: "truenas", subject: "u1", readable: true, events: [] };
+    state.activity = { target: "truenas", subject: "u1", read: { state: "now", taken_at: new Date().toISOString() }, events: [] };
     renderTab();
 
     await waitFor(() =>
@@ -67,18 +77,11 @@ describe("the target's own log, beside Syndra's", () => {
 
   // The distinction the card exists for. An unreadable log and a quiet one are
   // the same empty list otherwise, and they are opposite answers.
-  it("refuses to render an unreadable log as no activity", async () => {
-    state.activity = {
-      target: "truenas",
-      subject: "u1",
-      readable: false,
-      detail: "target unreachable",
-    };
+  it("refuses to render an unreadable log as no activity, and says why", async () => {
+    state.activity = { target: "truenas", subject: "u1", read: { state: "none", reason: "addon_unreachable", cause: "no_answer" } };
     renderTab();
 
-    await waitFor(() =>
-      expect(screen.getByText(/not a claim that nothing\s+happened/i)).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(/Syndra can't reach .*'s add-on\. Check that its container is running/)).toBeTruthy());
     expect(screen.queryByText(/No recorded activity/i)).toBeNull();
   });
 
@@ -86,37 +89,23 @@ describe("the target's own log, beside Syndra's", () => {
   // target — not a failed read, and must never read as an error the way
   // `unreachable` does.
   it("reads a missing account as neutral, not as a failed read", async () => {
-    state.activity = {
-      target: "truenas",
-      subject: "u1",
-      readable: false,
-      reason: "no_account",
-      detail: "",
-    };
+    state.activity = { target: "truenas", subject: "u1", no_account: true };
     renderTab();
 
     await waitFor(() =>
       expect(screen.getByText(/has no account for this person/i)).toBeTruthy(),
     );
-    expect(screen.queryByText(/not a claim that nothing\s+happened/i)).toBeNull();
+    expect(document.querySelector("[data-not-read]")).toBeNull();
+    expect(screen.queryByText(/No recorded activity/i)).toBeNull();
   });
 
-  // Every other failure keeps the warning tone and its own detail — never a
-  // raw status code, which the backend already keeps out of `detail`.
-  it("keeps the warning tone and detail for an unreachable target", async () => {
-    state.activity = {
-      target: "truenas",
-      subject: "u1",
-      readable: false,
-      reason: "unreachable",
-      detail: "the add-on did not answer",
-    };
+  // The app down: the add-on's own sentence first (design §13.1), in the warning tone.
+  it("says the add-on's own words when its system is down", async () => {
+    state.activity = { target: "truenas", subject: "u1", read: { state: "none", reason: "app_unreachable", detail: "TrueNAS is not answering its add-on" } };
     renderTab();
 
-    await waitFor(() =>
-      expect(screen.getByText(/not a claim that nothing\s+happened/i)).toBeTruthy(),
-    );
-    expect(screen.getByText(/the add-on did not answer/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("TrueNAS is not answering its add-on.")).toBeInTheDocument());
+    expect(screen.getByText("TrueNAS is not answering its add-on.").className).toContain("text-warn-text");
   });
 
   // A short list on a target that was watching only half the shares is not a quiet
@@ -125,7 +114,7 @@ describe("the target's own log, beside Syndra's", () => {
     state.activity = {
       target: "truenas",
       subject: "u1",
-      readable: true,
+      read: { state: "now", taken_at: new Date().toISOString() },
       events: [],
       uncovered: ["scratch"],
     };
@@ -143,7 +132,7 @@ describe("the target's own log, beside Syndra's", () => {
   // Shares are a storage word. A door or a printer has places, not shares.
   it("says places, not shares, for a kind that is not storage, naming the person and what to do", async () => {
     state.kind = "access";
-    state.activity = { target: "truenas", subject: "u1", readable: true, events: [], uncovered: ["side door", "Front door"] };
+    state.activity = { target: "truenas", subject: "u1", read: { state: "now", taken_at: new Date().toISOString() }, events: [], uncovered: ["side door", "Front door"] };
     renderTab();
 
     await waitFor(() =>
@@ -159,7 +148,7 @@ describe("the target's own log, beside Syndra's", () => {
     state.activity = {
       target: "truenas",
       subject: "u1",
-      readable: true,
+      read: { state: "now", taken_at: new Date().toISOString() },
       events: [
         { at: "2026-08-20T10:00:00Z", event: "CONNECT", resource: "lab", success: true },
         { at: "2026-08-20T11:00:00Z", event: "CONNECT", resource: "vault", success: false },
@@ -185,7 +174,7 @@ describe("a refusal an operator can act on", () => {
     state.activity = {
       target: "truenas",
       subject: "u1",
-      readable: true,
+      read: { state: "now", taken_at: new Date().toISOString() },
       events: [
         {
           at: "2026-08-23T10:45:31Z",
@@ -211,7 +200,7 @@ describe("a refusal an operator can act on", () => {
     state.activity = {
       target: "truenas",
       subject: "u1",
-      readable: true,
+      read: { state: "now", taken_at: new Date().toISOString() },
       events: [
         { at: "2026-08-23T10:45:31Z", event: "AUTHENTICATION", success: false, address: "192.0.2.77", detail: "NT_STATUS_NO_SUCH_USER" },
         { at: "2026-08-23T10:45:32Z", event: "AUTHENTICATION", success: false, address: "192.0.2.72", detail: "NT_STATUS_NO_SUCH_USER" },
@@ -227,7 +216,7 @@ describe("a refusal an operator can act on", () => {
     state.activity = {
       target: "truenas",
       subject: "u1",
-      readable: true,
+      read: { state: "now", taken_at: new Date().toISOString() },
       events: [{ at: "2026-08-23T10:45:31Z", event: "CONNECT", resource: "main", success: true }],
     };
     renderTab();
@@ -243,7 +232,7 @@ describe("how old the target's log is", () => {
   const took = new Date(Date.now() - 4 * 60_000).toISOString();
 
   it("dates a copy of it and reads it again from the log itself", async () => {
-    state.activity = { target: "truenas", subject: "u1", readable: true, events: [], taken_at: took, current: false, stale: { reason: "cached" } };
+    state.activity = { target: "truenas", subject: "u1", read: { state: "kept", reason: "cached", taken_at: took }, events: [] };
     renderTab();
     await waitFor(() => expect(screen.getByText(/was read 4 min ago/)).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Read again" }));
@@ -251,7 +240,7 @@ describe("how old the target's log is", () => {
   });
 
   it("says a log read moments ago with nothing kept is that, with the countdown, not a read that failed", async () => {
-    state.activity = { target: "truenas", subject: "u1", readable: false, reason: "cooldown", retry_after: 20, detail: "" };
+    state.activity = { target: "truenas", subject: "u1", read: { state: "none", reason: "cooldown", retry_after: 20 } };
     renderTab();
     await waitFor(() => expect(screen.getByText(/read moments ago; you can read again in 20 s/, { ignore: STATUS })).toBeTruthy());
     expect(screen.queryByText(/could not be read/)).toBeNull();
@@ -260,7 +249,7 @@ describe("how old the target's log is", () => {
   it("draws a cooldown carried with the copy amber, and counts it from when the copy arrived across a remount", () => {
     vi.useFakeTimers();
     state.arrived = Date.now();
-    state.activity = { target: "truenas", subject: "u1", readable: true, events: [], taken_at: took, current: false, stale: { reason: "cooldown", retry_after: 30 } };
+    state.activity = { target: "truenas", subject: "u1", read: { state: "kept", reason: "cooldown", retry_after: 30, taken_at: took }, events: [] };
     renderTab().unmount();
     act(() => void vi.advanceTimersByTime(12_000));
     renderTab();

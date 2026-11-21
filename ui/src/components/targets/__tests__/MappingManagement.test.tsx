@@ -9,6 +9,7 @@ import { MappingManagement } from "@/components/targets/MappingManagement";
 import { ApiError } from "@/lib/api-client";
 import type { MappingHistory, RoleMapping } from "@/lib/queries/useMappings";
 import type { TargetReach } from "@/lib/queries/useTargets";
+import { readOf, type WireRead } from "@/lib/queries/read";
 
 /** The wait is said once in its own status region too; these read the line on screen. */
 const STATUS = '[role="status"]';
@@ -69,23 +70,23 @@ const state: {
 const reach = { data: undefined as TargetReach | undefined, arrived: 0, press: (async () => {}) as () => Promise<void> };
 
 const homeSettings = {
-  data: { read: true, settings: [{ name: "home_root", label: "Where home folders go", value: "", values: [], values_read: true }] } as {
-    read: boolean;
+  data: { read: { state: "now", taken_at: new Date().toISOString() }, settings: [{ name: "home_root", label: "Where home folders go", value: "", values: [], values_read: true }] } as {
+    read: WireRead;
     settings: Array<{ name: string; label: string; value: string; values: string[]; labels?: Record<string, string>; values_read: boolean }>;
   },
 };
 
 vi.mock("@/lib/queries/useTargets", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useTargets")>()),
-  useTargetSettings: () => ({ data: homeSettings.data, isLoading: false, error: null, refetch: () => {} }),
+  useTargetSettings: () => ({ data: readOf(homeSettings.data.read, homeSettings.data), isLoading: false, error: null, refetch: () => {} }),
   useTargets: () => ({ data: [{ target: "truenas", project: { id: "pLab", name: "Laser Lab" } }], isLoading: false, error: null }),
   useMappableValues: () => ({
-    data: { field: "group", label: "Group", single: false, values: ["lab_makers", "lab_x"], enumerable: true, read_at: new Date().toISOString(), current: true },
+    data: readOf({ state: "now", taken_at: new Date().toISOString() }, { field: "group", label: "Group", single: false, values: ["lab_makers", "lab_x"], enumerable: true }),
     error: null,
     isLoading: false,
     refetch: () => {},
   }),
-  useTargetReach: () => ({ data: reach.data, isLoading: false, error: null, dataUpdatedAt: reach.arrived }),
+  useTargetReach: () => ({ data: reach.data && readOf(reach.data.read, reach.data, reach.arrived || Date.now()), isLoading: false, error: null }),
   useTargetReachAgain: () => ({ press: reach.press, pending: false, error: null }),
 }));
 
@@ -389,7 +390,7 @@ describe("changing what a role reaches · the consequence no count implies", () 
  * asked" both arrived as a plain success, so the screen could not tell an
  * operator which of the two it was showing them.
  */
-describe("a value the target could not be asked about", () => {
+describe("a value the target cannot list", () => {
   it("says the check did not run, and why the edit was allowed through anyway", async () => {
     state.rehearsalExtras = { value_checked: false };
     renderMappings();
@@ -398,8 +399,8 @@ describe("a value the target could not be asked about", () => {
     fireEvent.change(screen.getByLabelText("Group on TrueNAS"), { target: { value: "lab_x" } });
     fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
-    await waitFor(() => expect(screen.getByText(/could not be reached, so/)).toBeTruthy());
-    expect(screen.getByText(/an outage does not look like your mistake/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/doesn't list its groups, so/)).toBeTruthy());
+    expect(screen.getByText(/because nothing could check it/)).toBeTruthy();
     // And it says where the consequence lands instead of here.
     expect(screen.getByText(/waits in Pending changes until somebody fixes it/)).toBeTruthy();
   });
@@ -413,7 +414,7 @@ describe("a value the target could not be asked about", () => {
     fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     await waitFor(() => expect(screen.getByText(/owns stays with it/)).toBeTruthy());
-    expect(screen.queryByText(/could not be reached, so/)).toBeNull();
+    expect(screen.queryByText(/doesn't list its groups, so/)).toBeNull();
   });
 });
 
@@ -480,9 +481,7 @@ describe("what each group opens", () => {
   it("lists the places under the row, or says it opens nothing", () => {
     state.holders = ["u1", "u2"];
     reach.data = {
-      read: true,
-      current: true,
-      read_at: new Date().toISOString(),
+      read: { state: "now", taken_at: new Date().toISOString() },
       groups: { lab_makers: [{ share: "main", folder: "waddle_share", path: "/mnt/p/main/waddle_share", access: "change" }] },
     };
     const { unmount } = renderMappings();
@@ -491,16 +490,16 @@ describe("what each group opens", () => {
     expect(screen.getByText(/read from TrueNAS's folder permissions/)).toBeInTheDocument();
     unmount();
 
-    reach.data = { read: true, current: false, read_at: "2026-10-14T09:02:00Z", groups: { lab_makers: [] } };
+    reach.data = { read: { state: "kept", reason: "cached", taken_at: new Date(Date.now() - 3 * 60_000).toISOString() }, groups: { lab_makers: [] } };
     renderMappings();
     expect(screen.getByText(/Opens nothing yet\. No folder on TrueNAS gives lab_makers anything/)).toBeInTheDocument();
-    expect(screen.getByText(/as last read from TrueNAS's folder permissions at/)).toBeInTheDocument();
+    expect(screen.getByText("What each group opens was read 3 min ago")).toBeInTheDocument();
   });
 
   // Feature freshness: a copy, or a read moments ago, has the one Read again.
   it("offers Read again on a copy, and counts down a read that was refused with nothing kept", () => {
     reach.press = vi.fn(async () => {});
-    reach.data = { read: true, current: false, read_at: new Date(Date.now() - 3 * 60_000).toISOString(), stale: { reason: "cached" }, groups: { lab_makers: [] } };
+    reach.data = { read: { state: "kept", reason: "cached", taken_at: new Date(Date.now() - 3 * 60_000).toISOString() }, groups: { lab_makers: [] } };
     const { unmount } = renderMappings();
     expect(screen.getByText("What each group opens was read 3 min ago")).toBeInTheDocument();
     // One freshness line, from one source: the header does not say it a second, different way.
@@ -510,9 +509,9 @@ describe("what each group opens", () => {
     expect(reach.press).toHaveBeenCalledTimes(1);
     unmount();
 
-    reach.data = { read: false, current: false, retry_after: 20 };
+    reach.data = { read: { state: "none", reason: "cooldown", retry_after: 20 } };
     renderMappings();
-    expect(screen.getByText("What each group opens was read moments ago; you can read again in 20 s", { ignore: STATUS })).toBeInTheDocument();
+    expect(screen.getByText("TrueNAS was read moments ago; you can read again in 20 s", { ignore: STATUS })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Read again" })).toHaveAttribute("aria-disabled", "true");
     reach.data = undefined;
   });
@@ -522,26 +521,28 @@ describe("what each group opens", () => {
     vi.useFakeTimers();
     const dot = () => document.querySelector("[data-freshness-dot]") as HTMLElement;
     reach.arrived = Date.now();
-    reach.data = { read: true, current: false, read_at: new Date(Date.now() - 3 * 60_000).toISOString(), stale: { reason: "cooldown", retry_after: 30 }, groups: { lab_makers: [] } };
+    reach.data = { read: { state: "kept", reason: "cooldown", retry_after: 30, taken_at: new Date(Date.now() - 3 * 60_000).toISOString() }, groups: { lab_makers: [] } };
     renderMappings().unmount();
     act(() => void vi.advanceTimersByTime(12_000));
     const copy = renderMappings();
     expect(screen.getByText(/you can read again in 18 s/, { ignore: STATUS })).toBeInTheDocument();
     expect(dot().className).toContain("bg-warn");
     copy.unmount();
-    reach.data = { read: false, current: false, retry_after: 30 };
+    reach.data = { read: { state: "none", reason: "cooldown", retry_after: 30 } };
     renderMappings();
-    expect(dot().className).toContain("bg-warn");
+    // Nothing read: the amber ring a reading that is neither healthy nor broken wears.
+    expect(dot().className).toMatch(/warn/);
     reach.data = undefined;
     reach.arrived = 0;
     vi.useRealTimers();
   });
 
-  it("says nothing was read rather than drawing nothing", () => {
-    reach.data = { read: false };
+  it("says why nothing was read rather than drawing nothing", () => {
+    reach.data = { read: { state: "none", reason: "addon_unreachable", cause: "no_answer" } };
     renderMappings();
-    expect(screen.getByText("What each group opens: not read from TrueNAS yet")).toBeInTheDocument();
+    expect(screen.getByText(/Syndra can't reach TrueNAS's add-on\. Check that its container is running/)).toBeInTheDocument();
     expect(screen.queryByText(/Opens nothing/)).toBeNull();
+    expect(screen.queryByText(/folder permissions/)).toBeNull();
     reach.data = undefined;
   });
 });
@@ -557,7 +558,7 @@ describe("a role's home line", () => {
       { ...mapping, id: "m3", field: "home_quota", value: "21474836480" },
     ];
     homeSettings.data = {
-      read: true,
+      read: { state: "now", taken_at: new Date().toISOString() },
       settings: [
         {
           name: "home_root",

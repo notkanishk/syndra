@@ -5,7 +5,8 @@ import type { ReactNode } from "react";
 
 import { Reads } from "@/components/results/ReadResult";
 import { UsageUnread } from "@/components/results/StatusMeters";
-import { OWN_READS, usageShown } from "@/components/kinds/storage/state";
+import { OWN_READS, down, storageOf, usageShown } from "@/components/kinds/storage/state";
+import { NotReadLine } from "@/components/ui/ReadFreshness";
 import { STORAGE_LABEL, isStorage } from "@/lib/nav";
 import { UserName } from "@/components/names/UserName";
 import {
@@ -25,12 +26,12 @@ import { StatusDot } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { NextStep } from "@/components/ui/NextStep";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
-import { formatClock, formatList, formatRelative, formatShortDate } from "@/lib/format";
+import { formatList, formatShortDate } from "@/lib/format";
 import { Meter } from "@/components/ui/Meter";
 import { HomeMonth } from "@/components/usage/UsageCard";
 import { drawsHome } from "@/components/kinds/storage/limits";
 import { Tinted } from "@/lib/motion";
-import type { PersonTargetView, RoleSource, StoragePlace } from "@/lib/queries/useMyStorage";
+import type { PersonTargetView, RoleSource, StorageStatus, StoragePlace } from "@/lib/queries/useMyStorage";
 import { sortByName } from "@/lib/sort";
 import { useIsAdvanced } from "@/lib/ui-view";
 
@@ -72,11 +73,10 @@ export function PersonStorage({ userId, name }: { userId: string; name: string }
 function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: string; name: string }) {
   const label = view.name;
   const roleNames = useRoleNames();
-  const offline = view.health === "offline";
-  const storage = view.storage ?? view.last_known?.storage;
-  // Stale (A-13 d): a card drawn from the last read recedes to the page; its
-  // text stays at full strength.
-  const stale = offline && !view.storage && Boolean(view.last_known);
+  const storage = storageOf(view);
+  // Stale (A-13 d): a card drawn from the add-on's kept copy recedes to the page; its
+  // text stays at full strength. Syndra keeps no copy of its own (design §13.3).
+  const stale = view.read?.state === "kept";
   const page = `/system/targets/${view.target}?person=${encodeURIComponent(userId)}#accounts`;
   const onPage = <ArrowLink href={page}>Set on {label}&apos;s page</ArrowLink>;
   const onMappings = <ArrowLink href={`/system/targets/${view.target}/mappings`}>Set in {label}&apos;s mappings</ArrowLink>;
@@ -147,8 +147,8 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
   } else {
     const readable = Boolean(storage);
     const noAnswer = "didn't answer when this page asked. This page reads it again on your next visit.";
-    // Offline with no last read: the Notice alone, and these two rows aren't drawn.
-    const drawRead = !(offline && !readable);
+    // Nothing read: the why is said once above the body (OfflineNotice or NotReadLine), and these two rows aren't drawn.
+    const drawRead = Boolean(view.read) && view.read?.state !== "none";
     const folders = (storage?.places ?? []).filter((p) => !p.home);
     if (drawRead && readable && drawsHome(view)) drawn = [view.home?.used_bytes];
     body = (
@@ -212,23 +212,25 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
     <Card id={`sys-${view.target}`} stale={stale} className="scroll-mt-4">
       <CardTop target={view.target} name={label} status={<Status view={view} />} />
       <OfflineNotice view={view}>
-        {view.last_known
-          ? `Home folder and Folders below are what it said at ${formatClock(view.last_known.read_at)}, ${formatRelative(view.last_known.read_at)}. `
-          : ""}
-        {name}&apos;s access hasn&apos;t changed, and their folders open again when it&apos;s back.
+        {name}&apos;s access hasn&apos;t changed, and their folders open again when it answers.
       </OfflineNotice>
+      {view.read?.state === "none" && !down(view) && (
+        <NotReadLine why={view.read.why} system={label} reader={{ audience: "operator", person: name }} className="px-5 pb-3" />
+      )}
       {body}
-      {view.storage?.quota_read === false && (
+      {storage?.quota_read === false && (
         <div className="row-divider px-5 py-4">
           <UsageUnread name={label} some={usageShown(drawn)} reader={{ audience: "operator", person: name }} />
         </div>
       )}
-      <Reads reads={view.reads} skip={OWN_READS} name={label} reader={{ audience: "operator", person: name }} />
+      {view.read && view.read.state !== "none" && (
+        <Reads reads={view.read.data.reads} skip={OWN_READS} name={label} reader={{ audience: "operator", person: name }} />
+      )}
     </Card>
   );
 }
 
-function PasswordRow({ view, name, storage }: { view: PersonTargetView; name: string; storage: PersonTargetView["storage"] }) {
+function PasswordRow({ view, name, storage }: { view: PersonTargetView; name: string; storage: StorageStatus | undefined }) {
   const label = view.name;
   const own = `on their ${STORAGE_LABEL} page`;
   if (storage?.needs_new_password) {

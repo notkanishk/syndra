@@ -34,14 +34,16 @@ export function stateOf(view: MyTargetView): State {
     return suspended.some((s) => isHold(view, s)) ? "held" : "none";
   }
   if (!view.account) return "waiting";
-  const storage = view.storage;
+  // Asked first (design §13.6): a system that cannot be read says so, and nobody
+  // is told to set a password on it (the form would be refused, nothing sent).
+  if (!view.read || view.read.state === "none") return "unread";
+  const storage = view.read.data.storage;
   if (storage?.needs_new_password) return "restored";
   if (view.credential.needs_re_enrolment) return "reenrol";
   if (storage?.needs_password || (!storage && !view.credential.set)) return "needs-password";
   if (storage?.places_readable && (storage.places ?? []).length === 0) return "opens-nothing";
-  // The target's own answer about this account is missing: a read that failed,
-  // not an account that is fine. Offline is its own sentence ("ready", below).
-  if (!storage && view.health !== "offline") return "unread";
+  // The read answered without the storage status: what the account opens was not told.
+  if (!storage) return "unread";
   if (!view.connection) return "nohost";
   return "ready";
 }
@@ -60,12 +62,15 @@ export function needsPassword(view: MyTargetView): boolean {
   return isStorage(view) && PASSWORD_STEP.has(stateOf(view));
 }
 
-/**
- * The usage a member's card draws for one place: only a place they can change,
- * and nothing while the system is offline (the card says so instead).
- */
-export function drawnUsage(place: StoragePlace, offline: boolean): StoragePlace["usage"] {
-  return place.access === "change" && !offline ? place.usage : undefined;
+/** The monitor holds the system down (either outage, design §13.2): nothing can be sent to it now. */
+export const down = (view: MyTargetView) => view.health === "addon_unreachable" || view.health === "app_unreachable";
+
+/** The add-on's storage status, only under a read that has data (design §13.6). */
+export const storageOf = (view: MyTargetView) => (view.read && view.read.state !== "none" ? view.read.data.storage : undefined);
+
+/** The usage a member's card draws for one place: only a place they can change. */
+export function drawnUsage(place: StoragePlace): StoragePlace["usage"] {
+  return place.access === "change" ? place.usage : undefined;
 }
 
 /**

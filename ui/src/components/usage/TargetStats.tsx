@@ -15,7 +15,8 @@ import { useTargetStats } from "@/lib/queries/useStats";
  * statistics" when the feature is absent, which is not the same sentence as
  * "no data".
  */
-export function TargetStats({ target, kind }: { target: string; kind?: string }) {
+/** `name`: the system's name, which words why the newest days are not counted while it is down. */
+export function TargetStats({ target, kind, name }: { target: string; kind?: string; name?: string }) {
   const stats = useTargetStats(target);
 
   if (stats.isLoading) {
@@ -44,5 +45,5 @@ export function TargetStats({ target, kind }: { target: string; kind?: string })
       </Card>
     );
   }
-  return <UsageCard label={copy.OVERVIEW_TITLE} metrics={usage.metrics} windows={usage} target={target} step={usageStep(kind)} />;
+  return <UsageCard label={copy.OVERVIEW_TITLE} metrics={usage.metrics} windows={usage} target={target} step={usageStep(kind)} system={name} />;
 }

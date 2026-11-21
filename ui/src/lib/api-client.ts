@@ -12,8 +12,11 @@
 import type { QueuedChange } from "@/lib/cancel-confirm";
 import { SESSION_ENDED } from "@/lib/login-error";
 
-/** The backend's code for a read refused inside the add-on's cooldown (429). */
+/** The backend's code for a removal refused inside the add-on's cooldown (429): the one 429 left (design §13.3). */
 export const FRESH_READ_COOLDOWN = "FRESH_READ_COOLDOWN";
+
+/** A write where nothing went out (503 + Retry-After, design §13.4). */
+export const NOTHING_SENT = "NOTHING_SENT";
 
 const API_BASE = "/api/proxy";
 
@@ -23,7 +26,7 @@ export interface ApiErrorBody {
   details?: Record<string, string>;
   /** WOULD_CANCEL_QUEUED: what the action would have cancelled. */
   cancels?: QueuedChange[];
-  /** FRESH_READ_COOLDOWN: whole seconds until the target may be read again. */
+  /** Whole seconds until it is worth asking again (FRESH_READ_COOLDOWN, TARGET_NOT_READ, NOTHING_SENT). */
   retry_after?: number;
 }
 
@@ -56,7 +59,7 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details?: Record<string, string>;
-  /** A 429's wait in whole seconds (its body's `retry_after`, else the Retry-After header). */
+  /** The wait in whole seconds: the body's `retry_after`, else the Retry-After header. */
   readonly retryAfter?: number;
   /** The request's method, so a failed write is told apart from a failed read. */
   readonly method?: string;
@@ -226,10 +229,11 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
     // shows them; its retry names exactly the ids it showed (`cancel_ids`), and if
     // more was queued meanwhile the backend refuses again with the longer list.
     const refusal = parsed as ApiErrorBody;
+    // Retry-After (RFC 9110 §10.2.3) in delay-seconds, read once for every refusal that carries it.
+    const header = Number.parseInt(res.headers.get("Retry-After") ?? "", 10);
     // A read refused inside the add-on's cooldown (429). The body is the standard error envelope
     // for every read, the inventory's included. Without its code (a proxy's own 429) it is not a cooldown.
     if (res.status === 429) {
-      const header = Number.parseInt(res.headers.get("Retry-After") ?? "", 10);
       const wait = typeof refusal?.retry_after === "number" ? refusal.retry_after : header;
       if (wait > 0 && refusal?.error === FRESH_READ_COOLDOWN) {
         const { message } = typeof parsed === "object" && parsed !== null ? refusal : ({} as ApiErrorBody);
@@ -239,7 +243,12 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
     if (res.status === 409 && refusal?.error === "WOULD_CANCEL_QUEUED" && refusal.cancels?.length) {
       throw new WouldCancelQueued(refusal.cancels, method, path);
     }
-    throw new ApiError(res.status, parsed as ApiErrorBody | string, method);
+    const withWait =
+      // A system that did not answer (503 TARGET_NOT_READ, NOTHING_SENT): when it is worth asking again.
+      res.status === 503 && typeof parsed === "object" && parsed !== null && refusal.retry_after === undefined && header > 0
+        ? { ...refusal, retry_after: header }
+        : (parsed as ApiErrorBody | string);
+    throw new ApiError(res.status, withWait, method);
   }
 
   return parsed as T;

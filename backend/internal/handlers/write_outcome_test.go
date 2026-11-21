@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"os"
 	"context"
 	"encoding/json"
 	"errors"
@@ -397,5 +398,53 @@ func TestAnOutdatedAddonIsNotToldToRetryLater(t *testing.T) {
 	writeOutcome(rr, &notLanded{System: "Ringside NAS", Outcome: addons.OutcomeUnreached, Why: addons.Why{Reason: addons.ReasonAddonOutdated}}, nil)
 	if rr.Code != http.StatusServiceUnavailable || rr.Header().Get("Retry-After") != "" {
 		t.Fatalf("got %d Retry-After %q", rr.Code, rr.Header().Get("Retry-After"))
+	}
+}
+
+// The copy guide's section 19 is the one source of §13.1's words: every
+// operator and member-write row of its table is what whySentence and
+// nothingSent say. The UI's whyLine is held to the same table
+// (whyCopyGuide.test.ts), so the two ends cannot drift apart.
+func TestTheCopyGuideSaysEverySection13Sentence(t *testing.T) {
+	raw, err := os.ReadFile("../../../openspec/changes/plain-language-copy/design.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	guide := string(raw)
+	section := guide[strings.Index(guide, "## 19. When a system is not answering"):]
+	fill := strings.NewReplacer("{system}", "Ringside NAS", "{product}", "TrueNAS", "{n}", "9")
+	checked := 0
+	for _, line := range strings.Split(section, "\n") {
+		if !strings.HasPrefix(line, "| operator |") && !strings.HasPrefix(line, "| member write |") {
+			continue
+		}
+		cells := strings.Split(line, "|")
+		reader, cause, wait, says := strings.TrimSpace(cells[1]), strings.TrimSpace(cells[3]), strings.TrimSpace(cells[4]), fill.Replace(strings.TrimSpace(cells[5]))
+		for _, reason := range strings.Split(strings.TrimSpace(cells[2]), ", ") {
+			why := addons.Why{Reason: reason}
+			switch cause {
+			case "—":
+			case "unusable":
+				why = addons.Unread(addons.CallResponse{Outcome: addons.OutcomeRejected, Status: 503, Code: "NO_CURRENT_READ"})
+			default:
+				why.Cause = cause
+			}
+			if wait != "—" {
+				why.RetryAfter = 9
+			}
+			var got string
+			if reader == "operator" {
+				got = whySentence("Ringside NAS", "TrueNAS", why, false)
+			} else {
+				got = nothingSent(&notLanded{System: "Ringside NAS", Product: "TrueNAS", Outcome: addons.OutcomeUnreached, Why: why, Member: true})
+			}
+			if got != says {
+				t.Errorf("%s %s %s: the guide says %q, the backend %q", reader, reason, cause, says, got)
+			}
+			checked++
+		}
+	}
+	if checked < 10 {
+		t.Fatalf("read only %d rows of the guide's table", checked)
 	}
 }

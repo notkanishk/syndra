@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { asRead } from "@/test-utils/wire";
 
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import type { Standing } from "@/lib/queries/useTargets";
@@ -32,11 +33,11 @@ vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
 
 // A read is one object until it is read again, as the query cache's is; a list
 // that is a new array of new rows on every render would be a read on every render.
-const read: { count: number; data?: { bound: number; accounts: ReturnType<typeof account>[] } } = { count: -1 };
+const read: { count: number; data?: ReturnType<typeof asRead> } = { count: -1 };
 function inventory() {
   if (read.count !== state.count) {
     read.count = state.count;
-    read.data = { bound: state.count, accounts: Array.from({ length: state.count }, (_, i) => account(i)) };
+    read.data = asRead({ bound: state.count, accounts: Array.from({ length: state.count }, (_, i) => account(i)) });
   }
   return read.data;
 }
@@ -48,7 +49,7 @@ vi.mock("@/lib/queries/useTargets", () => ({
     error: null,
     refetch: () => {},
   }),
-  useTargetHomes: () => ({ data: { accounts: [] }, isLoading: false, error: null }),
+  useTargetHomes: () => ({ data: asRead({ accounts: [] }), isLoading: false, error: null }),
 }));
 vi.mock("@/components/names", () => ({
   UserName: ({ id }: { id: string }) => <span>{id.startsWith("u1") ? "Charlotte Flair" : "Sami Zayn"}</span>,

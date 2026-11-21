@@ -3,11 +3,10 @@
 import { ActivityList } from "@/components/results/ActivityList";
 import { RecordsList } from "@/components/results/RecordsList";
 import { StatusMeters } from "@/components/results/StatusMeters";
-import { ALSO_SAYS, noMoreLines, notReadableBody, notReadableNext, notReadableTitle, type Reader } from "@/components/results/copy";
-import { Notice } from "@/components/ui/Notice";
-import { observed, ReadFreshness, useReadAgainPress, useReadAgainSince, type ReadState } from "@/components/ui/ReadFreshness";
+import { ALSO_SAYS, noMoreLines, type Reader } from "@/components/results/copy";
+import { ReadFreshness, useReadAgainPress } from "@/components/ui/ReadFreshness";
 import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDetail";
-import { STALE } from "@/lib/queries/fresh";
+import type { Read } from "@/lib/queries/read";
 import type { ActivityResult, ReadView, RecordsResult, StatusResult } from "@/lib/queries/useMyStorage";
 
 /** What the add-on adds that Syndra does not know is shown, not trusted: the backend already caps it, and this is the second cap. */
@@ -26,22 +25,24 @@ export interface ReadProps {
  * core does not know is shown exactly as it came, behind Technical detail.
  */
 export function ReadResult({ read, name, reader }: { read: ReadView } & ReadProps) {
-  const { result } = read;
+  const r = read.read;
+  // A read with nothing to give says why and its next step, once (design §13.1): never a list, a meter or a date.
+  if (r.state !== "now" && r.state !== "kept") {
+    return (
+      <div className="flex flex-col gap-3 [overflow-wrap:anywhere]" data-read={read.operation}>
+        <ReadLine read={read} name={name} reader={reader} />
+      </div>
+    );
+  }
+  const result = r.data;
   return (
     <div className="flex flex-col gap-3 [overflow-wrap:anywhere]" data-read={read.operation}>
-      {read.retry_after ? (
-        // Read moments ago and nothing kept to show: the cooldown line, never an error.
-        <ReadLine read={read} name={name} reader={reader} />
-      ) : !read.readable || result === undefined ? (
-        <Notice tone="warn" title={notReadableTitle(name)} next={notReadableNext(reader)}>
-          {notReadableBody(name)}
-        </Notice>
-      ) : read.shape === "records" ? (
-        <RecordsList result={result as RecordsResult} name={name} reader={reader} />
+      {read.shape === "records" ? (
+        <RecordsList result={result as RecordsResult} read={r} name={name} reader={reader} />
       ) : read.shape === "status" ? (
-        <StatusMeters result={result as StatusResult} name={name} reader={reader} />
+        <StatusMeters result={result as StatusResult} read={r} name={name} reader={reader} />
       ) : read.shape === "activity" ? (
-        <ActivityList result={result as ActivityResult} name={name} reader={reader} />
+        <ActivityList result={result as ActivityResult} read={r} name={name} reader={reader} />
       ) : (
         <TechnicalDetail>
           <TechnicalPayload>{typeof result === "string" ? result : JSON.stringify(result)}</TechnicalPayload>
@@ -52,21 +53,19 @@ export function ReadResult({ read, name, reader }: { read: ReadView } & ReadProp
   );
 }
 
-/** What one read says about its own age: its answer's, or the cooldown it ran into with nothing to show. */
-function readStateOf(read: ReadView, since?: number): ReadState | null {
-  if (read.retry_after) return { stale: { reason: STALE.cooldown, retry_after: read.retry_after, since } };
-  const { result } = read;
-  return read.readable && result && typeof result !== "string" ? observed(result, since) : null;
-}
-
 /**
- * The freshness line of one read, drawn alone: with its "Read again" when it is
- * a copy. For a read a kind draws itself, and for one refused inside the cooldown.
+ * The freshness line of one read, drawn alone: its age with "Read again" when it
+ * is a copy, or why it has nothing (design §13.1). For a read a kind draws itself,
+ * and for one that has no data.
  */
 export function ReadLine({ read, name, reader }: { read: ReadView } & ReadProps) {
+  return <FreshnessOf read={read.read} name={name} reader={reader} />;
+}
+
+/** One read's line, under the page's Read again: the one way a result renderer says its age or its why. */
+export function FreshnessOf({ read, name, reader }: { read: Read<unknown> } & ReadProps) {
   const again = useReadAgainPress();
-  const state = readStateOf(read, useReadAgainSince());
-  return state && <ReadFreshness state={state} subject={name} reader={reader} onRefresh={again} />;
+  return <ReadFreshness read={read} subject={name} system={name} reader={reader} onRefresh={again} />;
 }
 
 /**
@@ -80,7 +79,8 @@ export function Reads({ reads, skip = [], ...props }: { reads?: ReadView[]; skip
     <>
       {(reads ?? []).map((read) =>
         skip.includes(read.operation) ? (
-          readStateOf(read) && (
+          // A raw answer (a string) has no age to say; any other read does, or its why.
+          !(read.read.state !== "none" && typeof read.read.data === "string") && (
             <div key={read.operation} className="row-divider px-5 py-3">
               <ReadLine read={read} {...props} />
             </div>

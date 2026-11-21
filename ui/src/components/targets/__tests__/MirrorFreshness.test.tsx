@@ -19,12 +19,14 @@ import { TargetOverview } from "@/components/targets/TargetOverview";
 const FOUR_HOURS_AGO = new Date(Date.now() - 4 * 60 * 60_000).toISOString();
 
 let currentHealth: Record<string, unknown> = {};
+const NOW = () => ({ state: "now", taken_at: new Date().toISOString() });
 
 vi.mock("@/lib/queries/useTargetSystemHealth", () => ({
   useTargetSystemHealth: () => ({ data: undefined, isLoading: false, error: null }),
 }));
 
-vi.mock("@/lib/queries/useTargets", () => {
+vi.mock("@/lib/queries/useTargets", async () => {
+  const { healthReplyOf } = await vi.importActual<typeof import("@/lib/queries/useTargets")>("@/lib/queries/useTargets");
   const idle = () => ({
     data: undefined,
     isLoading: false,
@@ -45,7 +47,7 @@ vi.mock("@/lib/queries/useTargets", () => {
     useUnconfirmedOperations: () => ({ data: [], isLoading: false, error: null }),
     useMergeFindings: () => ({ ...idle(), data: [] }),
     useTargetHealthAgain: () => ({ press: async () => {} }),
-    useTargetHealth: () => ({ ...idle(), data: currentHealth }),
+    useTargetHealth: () => ({ ...idle(), data: healthReplyOf(currentHealth) }),
     useTargetInventory: idle,
     useTargetInventoryAgain: () => ({ press: async () => {}, pending: false, error: null }),
     useResolveLogFinding: inert,
@@ -73,6 +75,7 @@ function renderTarget() {
 describe("how old the add-on's mirror is", () => {
   it("is not raised at all while the target is answering", () => {
     currentHealth = {
+      read: NOW(),
       reachable: true,
       product: "truenas_scale",
       product_version: "TrueNAS-25.10.5",
@@ -90,31 +93,17 @@ describe("how old the add-on's mirror is", () => {
     expect(screen.queryByText(/reload the page to read it again/)).toBeNull();
   });
 
-  it("says what is on screen is a copy, and how old, once the target goes quiet", () => {
+  // Design §13.3: with the add-on down there is no copy, so nothing on the page is dated by one.
+  it("dates nothing once the add-on goes quiet, and says why", () => {
     currentHealth = {
-      reachable: false,
-      detail: "the target could not be read",
-      snapshot_taken_at: FOUR_HOURS_AGO,
-      status: "offline",
-      health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: FOUR_HOURS_AGO },
+      read: { state: "none", reason: "addon_unreachable", cause: "no_answer" },
+      status: "addon_unreachable",
+      health: { state: "addon_unreachable", cause: "no_answer", recent: ["missed", "missed", "missed"], since: FOUR_HOURS_AGO },
     };
     renderTarget();
 
-    expect(screen.getByText(/This is the last state seen/)).toBeInTheDocument();
-    // `provisional`, never `stale`: a copy is a copy at any age, and the
-    // ten-minute threshold belongs to the adoption gate.
-    expect(screen.queryByText(/too old to act on/)).toBeNull();
-  });
-
-  it("does not imply an earlier copy exists when none does", () => {
-    currentHealth = {
-      reachable: false,
-      detail: "the target could not be read",
-      status: "offline",
-      health: { status: "offline", recent: ["missed", "missed", "missed"] },
-    };
-    renderTarget();
-
-    expect(screen.getByText(/no earlier copy to show/)).toBeInTheDocument();
+    expect(screen.queryByText(/last state seen|no earlier copy/)).toBeNull();
+    expect(screen.queryByText(/was read/)).toBeNull();
+    expect(screen.getAllByText(/Syndra can't reach Truenas's add-on/i).length).toBeGreaterThan(0);
   });
 });

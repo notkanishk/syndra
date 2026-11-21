@@ -60,6 +60,12 @@ func RowRetry(row models.PendingPropagation) *extcall.RetryState {
 // already happened.
 func auditRetry(ctx context.Context, row models.PendingPropagation, outcome string) {
 	details := RetryRule().AuditMark(row.Attempts + 1)
+	if outcome == outcomeNotSent {
+		// Nothing went out, so no try was spent: the line says how many are spent
+		// so far, never "try 1" again each time the row is deferred.
+		delete(details, "try")
+		details["tries_spent"] = row.Attempts
+	}
 	details["outcome"] = outcome
 	details["target"] = row.Target
 	details["op_type"] = row.OpType
@@ -70,6 +76,10 @@ func auditRetry(ctx context.Context, row models.PendingPropagation, outcome stri
 	}
 }
 
+// outcomeNotSent is an automatic try where nothing went out (the system was
+// not answering): the row was deferred, no attempt spent.
+const outcomeNotSent = "not_sent"
+
 // retryOutcome reads what one row's processing did from the counters it moved.
 func retryOutcome(before, after DrainResult) string {
 	switch {
@@ -79,6 +89,8 @@ func retryOutcome(before, after DrainResult) string {
 		return "gave_up"
 	case after.Failed > before.Failed:
 		return "failed"
+	case after.Deferred > before.Deferred:
+		return outcomeNotSent
 	case after.Requeued > before.Requeued:
 		return "retrying"
 	default:

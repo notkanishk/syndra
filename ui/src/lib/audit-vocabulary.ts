@@ -138,19 +138,19 @@ export const AUDIT_ACTIONS: Record<
   // on the superseded outbox row, which no read returns yet.
   // The background drain sent again, on its own, a change Zitadel didn't take
   // (the one retry model, owner 5 Nov 2026). One row per automatic try; its
-  // details carry retried_by "automatic", try n of N, and how it went.
+  // details carry retried_by "automatic", try n of N, and how it went; a try where nothing went
+  // out (outcome not_sent) spends none and carries tries_spent instead of a try number.
   "propagation.retried": {
     verb: "Sent a change again on its own (an automatic retry)",
     template: "Sent a change for {} again on its own (an automatic retry)",
     passive: "A change to their access was sent again on its own (an automatic retry)",
   },
-  // A revocation reached its system (design §13.4): written with the row that
-  // settles it. Details carry the target, recorded_at and landed_at. Draft
-  // words; the final ones go through the copy guide with 8e.
+  // A withdrawal reached its system (design §13.4). A row whose details name the system is worded
+  // by it (landedWords below); these are the words for one that names none.
   "revocation.landed": {
-    verb: "Revoked access on a connected system: it is in force there now",
-    template: "Revoked access for {} on a connected system: it is in force there now",
-    passive: "Their revoked access is now in force on a connected system",
+    verb: "A revocation reached a connected system: it is in force there now",
+    template: "A revocation for {} reached a connected system: it is in force there now",
+    passive: "A revocation of their access reached a connected system: it is in force there now",
   },
   "propagation.cancelled_unsent": {
     verb: "Cancelled a change that was waiting for you to send",
@@ -224,7 +224,10 @@ export function describeAction(
   action: string,
   /** The roster's name for a system (useSystemNames): the one path for names. */
   nameOf: (target: string) => string,
+  /** The row's details, for the one action whose words depend on them (`revocation.landed`). */
+  details?: Record<string, unknown>,
 ): { verb: string; template?: string; passive?: string; destructive: boolean } {
+  if (action === REVOCATION_LANDED && typeof details?.target === "string" && details.target) return landedWords(details.target, nameOf);
   const known = AUDIT_ACTIONS[action];
   if (known) {
     return {
@@ -277,6 +280,32 @@ export function describeAction(
     };
   }
   return { verb: action, destructive: /revoke|delete|remove/i.test(action) };
+}
+
+/**
+ * A withdrawal reached its system (design §13.4): written with the row that settles it, whose
+ * details carry the system, `recorded_at` and `landed_at`. Not "Revoked access": the row may be an
+ * entitlement replace that only took something away, so it says "a revocation reached", the
+ * list's own word. Zitadel's is a role that no longer signs them in; an add-on's names its system.
+ */
+const REVOCATION_LANDED = "revocation.landed";
+
+function landedWords(target: string, nameOf: (target: string) => string) {
+  if (target === "zitadel") {
+    return {
+      verb: "A revocation reached Zitadel: the role no longer signs them in",
+      template: "A revocation for {} reached Zitadel: the role no longer signs them in",
+      passive: "A revocation of their role reached Zitadel: it no longer signs them in",
+      destructive: false,
+    };
+  }
+  const system = nameOf(target);
+  return {
+    verb: `A revocation reached ${system}: it is in force there now`,
+    template: `A revocation for {} reached ${system}: it is in force there now`,
+    passive: `A revocation of their access reached ${system}: it is in force there now`,
+    destructive: false,
+  };
 }
 
 /**

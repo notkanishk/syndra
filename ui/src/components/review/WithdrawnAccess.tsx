@@ -63,6 +63,8 @@ interface UnconfirmedRevocation {
   /** Why it stopped: the system itself refused it (db.WaitReasonTargetRefused, or WaitReasonBindingConflict for a person's binding conflict), or Zitadel did (refused:cause). */
   wait_reason?: string;
   created_at: string;
+  /** When the revocation was recorded (design §13.4); it has not landed while it is listed here. */
+  recorded_at?: string;
   target: string;
   age_seconds: number;
   spent: boolean;
@@ -432,6 +434,7 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
             </ArrowLink>
           )}
           <LastError row={row} system={where} />
+          <NotYetApplied row={row} system={where} />
         </WhatSeat>
 
         <span className="block pt-0.5 text-body text-muted">{where}</span>
@@ -476,6 +479,23 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
       </ActionSeat>
     </div>
   );
+}
+
+/**
+ * Recorded is not landed (design §13.4): a row still on its way says the access stays until the
+ * system answers that it applied it, so nobody reads the list as done. Syndra sends it by itself:
+ * nothing for the reader to do here, and the age beside it is how long it has waited.
+ */
+export function notYetAppliedLine(row: Pick<UnconfirmedRevocation, "target" | "recorded_at" | "created_at">, system: string): string {
+  const at = formatShortDate(row.recorded_at ?? row.created_at);
+  return row.target === "zitadel"
+    ? `Recorded ${at}. Not yet applied in Zitadel; until it is, they keep the role there. Syndra applies it by itself.`
+    : `Recorded ${at}. Not yet applied on ${system}; until it is, the account there still works. Syndra applies it by itself when ${system} answers.`;
+}
+
+function NotYetApplied({ row, system }: { row: UnconfirmedRevocation; system: string }) {
+  if (row.spent) return null;
+  return <span className="mt-1 text-fine leading-[1.5] text-faint">{notYetAppliedLine(row, system)}</span>;
 }
 
 /**

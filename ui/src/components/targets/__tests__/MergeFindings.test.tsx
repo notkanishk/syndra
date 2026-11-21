@@ -20,6 +20,8 @@ const state = {
   resolved: [] as ResolveFindingInput[],
   error: null as unknown,
   decideOnSave: false,
+  /** What the resolution answered: nothing (a 200), or a 202 "may have been applied". */
+  answer: undefined as unknown,
 };
 
 vi.mock("@/lib/queries/useTargets", async () => {
@@ -35,11 +37,11 @@ vi.mock("@/lib/queries/useTargets", async () => {
       refetch: vi.fn(),
     }),
     useResolveMergeFinding: () => ({
-      mutate: (input: ResolveFindingInput, opts?: { onSuccess?: () => void }) => {
+      mutate: (input: ResolveFindingInput, opts?: { onSuccess?: (r: unknown) => void }) => {
         state.resolved.push(input);
         // The refetch that follows a save: the finding is now decided, and waits for the system to match.
         if (state.decideOnSave) state.findings = state.findings.map((f) => ({ ...f, decision: input.resolution, decided_by: "op-1" }));
-        opts?.onSuccess?.();
+        opts?.onSuccess?.(state.answer);
       },
       isPending: false,
       error: state.error,
@@ -234,6 +236,23 @@ it("offers to finish an unbind that did not complete", () => {
   fireEvent.click(screen.getByText("Finish: stop tracking it"));
   expect(state.resolved).toHaveLength(1);
   expect(state.resolved[0].resolution).toBe("unbound");
+});
+
+// Design §13.4: a choice sent and its answer lost is 202 unconfirmed. Said where it was made, never "Saved".
+it("says a resolution whose answer was lost may have been applied, and not to send it again", () => {
+  state.findings = [finding({ outcome: "deleted_upstream", field: undefined, decision: "unbound", decided_by: "op-charlotte" })];
+  state.resolved = [];
+  state.error = null;
+  state.answer = { operation: "op-1", status: "unconfirmed", detail: "This may have been applied. Syndra is checking; don't send it again." };
+  try {
+    renderFindings();
+    fireEvent.click(screen.getByText("Finish: stop tracking it"));
+    expect(screen.getByText("Not confirmed yet")).toBeTruthy();
+    expect(screen.getByText(/Syndra is checking; don't send it again/)).toBeTruthy();
+    expect(screen.queryByText("Saved")).toBeNull();
+  } finally {
+    state.answer = undefined;
+  }
 });
 
 // How the fields' read stands: known, still being read, failed, or read with no accepted schema.

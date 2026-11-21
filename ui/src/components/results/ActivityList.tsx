@@ -1,10 +1,11 @@
 "use client";
 
+import { ReadFreshness, useReadAgainPress } from "@/components/ui/ReadFreshness";
+import type { Read } from "@/lib/queries/read";
 import type { ReactNode } from "react";
 
 import { emptyEvents, uncoveredNote, type Reader } from "@/components/results/copy";
 import { Badge } from "@/components/ui/Badge";
-import { observed, ReadFreshness, useReadAgainPress, useReadAgainSince } from "@/components/ui/ReadFreshness";
 import { formatClock } from "@/lib/format";
 import type { ActivityResult } from "@/lib/queries/useMyStorage";
 import { sortNames } from "@/lib/sort";
@@ -49,9 +50,8 @@ export function ActivityRows({ events }: { events: TargetActivityEvent[] }) {
  * how old it is. `coverage` lets a kind say the places in its own words; the
  * default says them in none.
  */
-export function ActivityList({ result, name, reader, coverage }: { result: ActivityResult; name: string; reader: Reader; coverage?: ReactNode }) {
+export function ActivityList({ result, read, name, reader, coverage }: { result: ActivityResult; read: Read<unknown>; name: string; reader: Reader; coverage?: ReactNode }) {
   const again = useReadAgainPress();
-  const since = useReadAgainSince();
   const uncovered = sortNames(result.uncovered ?? []);
   return (
     <div className="-mx-5 flex flex-col gap-3 [&>:first-child]:border-t-0">
@@ -65,7 +65,9 @@ export function ActivityList({ result, name, reader, coverage }: { result: Activ
       )}
       <ReadFreshness
         className="px-5"
-        state={observed(result, since)}
+        read={read}
+        truncated={result.truncated}
+        system={name}
         subject={name}
         reader={reader}
         onRefresh={again}

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
+import { asRead } from "@/test-utils/wire";
 import { describe, expect, it, vi } from "vitest";
 
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
@@ -12,7 +13,7 @@ vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
 
 vi.mock("@/lib/queries/useTargets", () => ({
   useTargetInventory: () => ({
-    data: {
+    data: asRead({
       bound: 1,
       accounts: [
         {
@@ -22,12 +23,12 @@ vi.mock("@/lib/queries/useTargets", () => ({
           bound_at: "2026-10-15T10:00:00Z",
         },
       ],
-    },
+    }),
     isLoading: false,
     error: null,
     refetch: () => {},
   }),
-  useTargetHomes: () => ({ data: { accounts: [] }, isLoading: false, error: null }),
+  useTargetHomes: () => ({ data: asRead({ accounts: [] }), isLoading: false, error: null }),
 }));
 vi.mock("@/components/names", () => ({
   UserName: () => <span>Charlotte Flair</span>,

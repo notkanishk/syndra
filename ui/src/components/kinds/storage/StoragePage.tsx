@@ -39,7 +39,7 @@ export function StoragePage() {
           />
         }
       >
-        <ReadAgainProvider value={{ press: again.press, since: targets.dataUpdatedAt }}>
+        <ReadAgainProvider value={{ press: again.press }}>
           <ReadAgainError error={again.error} />
           <div className="grid gap-4">
             {storage.map((view) => (

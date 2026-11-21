@@ -6,6 +6,7 @@ import { AddMappingDialog } from "@/components/targets/AddMappingDialog";
 import { ApiError } from "@/lib/api-client";
 import type { MappingRehearsal } from "@/lib/queries/useMappings";
 import type { MappableValues, TargetReach } from "@/lib/queries/useTargets";
+import { notReadOf, readOf, type WireRead } from "@/lib/queries/read";
 
 /**
  * Adding a mapping (designs M1, M5).
@@ -26,7 +27,7 @@ const state = {
   values: null as MappableValues | null,
   valuesError: null as unknown,
   refetched: 0,
-  reach: { read: true, current: true, read_at: "2026-10-14T09:00:00Z", groups: {} } as TargetReach,
+  reach: { read: { state: "now", taken_at: "2026-10-14T09:00:00Z" }, groups: {} } as TargetReach,
 };
 
 vi.mock("@/lib/queries/useMappings", async (importOriginal) => ({
@@ -51,8 +52,8 @@ vi.mock("@/lib/queries/useMappings", async (importOriginal) => ({
 }));
 
 const homeSettings = {
-  data: { read: true, settings: [{ name: "home_root", label: "Where home folders go", value: "", values: [], values_read: true }] } as {
-    read: boolean;
+  data: { read: { state: "now", taken_at: new Date().toISOString() }, settings: [{ name: "home_root", label: "Where home folders go", value: "", values: [], values_read: true }] } as {
+    read: WireRead;
     settings: Array<{ name: string; label: string; value: string; values: string[]; labels?: Record<string, string>; values_read: boolean }>;
   },
 };
@@ -71,15 +72,16 @@ vi.mock("@/lib/queries/useTargets", async (importOriginal) => ({
     error: null,
   }),
   useMappableValues: () => ({
-    data: state.values ?? undefined,
-    error: state.valuesError,
+    // As the hook answers: a Read of the values, a 503 TARGET_NOT_READ as none; any other failure an error.
+    data: state.values ? readOf(state.values.read, state.values) : notReadOf(state.valuesError),
+    error: notReadOf(state.valuesError) ? null : state.valuesError,
     isLoading: false,
     refetch: () => {
       state.refetched++;
     },
   }),
-  useTargetSettings: () => ({ data: homeSettings.data, isLoading: false, error: null, refetch: () => {} }),
-  useTargetReach: () => ({ data: state.reach, isLoading: false, error: null }),
+  useTargetSettings: () => ({ data: readOf(homeSettings.data.read, homeSettings.data), isLoading: false, error: null, refetch: () => {} }),
+  useTargetReach: () => ({ data: readOf(state.reach.read, state.reach), isLoading: false, error: null }),
 }));
 
 vi.mock("@/lib/queries/useProjects", () => ({
@@ -122,8 +124,7 @@ function values(over: Partial<MappableValues> = {}): MappableValues {
     single: false,
     values: ["makers", "leads"],
     enumerable: true,
-    read_at: new Date().toISOString(),
-    current: true,
+    read: { state: "now", taken_at: new Date().toISOString() },
     ...over,
   };
 }
@@ -135,7 +136,7 @@ beforeEach(() => {
   state.values = values();
   state.valuesError = null;
   state.refetched = 0;
-  state.reach = { read: true, current: true, read_at: "2026-10-14T09:00:00Z", groups: {} };
+  state.reach = { read: { state: "now", taken_at: "2026-10-14T09:00:00Z" }, groups: {} };
   state.rehearsed = {
     op: "create_mapping",
     plan_id: "plan_61a8",
@@ -201,9 +202,7 @@ describe("adding a mapping", () => {
 
   it("says what the picked group opens before the preview", () => {
     state.reach = {
-      read: true,
-      read_at: "2026-11-21T10:00:00Z",
-      current: true,
+      read: { state: "now", taken_at: "2026-11-21T10:00:00Z" },
       groups: {
         makers: [
           { share: "main", folder: "waddle_share", path: "/mnt/p/main/waddle_share", access: "change" },
@@ -222,7 +221,7 @@ describe("adding a mapping", () => {
     state.rehearsed = { ...(state.rehearsed as MappingRehearsal), value_checked: false };
     compose();
     fireEvent.click(preview());
-    await waitFor(() => expect(document.body.textContent).toMatch(/could not be reached, so/));
+    await waitFor(() => expect(document.body.textContent).toMatch(/doesn't list its groups, so/));
   });
 });
 
@@ -248,18 +247,27 @@ describe("the group list", () => {
     expect(screen.queryByRole("button", { name: "Read again" })).toBeNull();
   });
 
-  it("says when the list was never read, with no count", () => {
+  // Design §13.3: a list with nothing to give is 503 TARGET_NOT_READ; the picker says why, in the
+  // backend's own sentence, with Read again, and offers no list, no count and no date.
+  it("says why the list was not read, with no count and no date", () => {
     state.values = null;
-    state.valuesError = new ApiError(409, { error: "VALUES_NEVER_READ", message: "never" });
+    state.valuesError = new ApiError(503, {
+      error: "TARGET_NOT_READ",
+      message: "Syndra can't reach TrueNAS's add-on. Check that its container is running. Syndra keeps trying.",
+      details: { reason: "addon_unreachable", cause: "no_answer" },
+      retry_after: 30,
+    });
     render(<AddMappingDialog target="truenas" onClose={vi.fn()} />);
-    expect(screen.getByText("TrueNAS hasn't listed its groups yet.")).toBeTruthy();
-    expect(screen.getByText(/hasn't answered since Syndra restarted at \d\d:\d\d/)).toBeTruthy();
+    expect(screen.getByText("Syndra can't reach TrueNAS's add-on. Check that its container is running. Syndra keeps trying.")).toBeTruthy();
     expect(screen.queryByText(/It lists/)).toBeNull();
+    expect(screen.queryByText(/Read from TrueNAS/)).toBeNull();
     expect(preview().hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Read again" }));
+    expect(state.refetched).toBe(1);
   });
 
   it("labels a last-known list with its time, and lets it through", () => {
-    state.values = values({ current: false, read_at: "2026-10-14T09:02:00Z" });
+    state.values = values({ read: { state: "kept", reason: "app_unreachable", taken_at: "2026-10-14T09:02:00Z" } });
     compose();
     expect(screen.getByText(/^The list TrueNAS gave at \d\d:\d\d\.$/)).toBeTruthy();
     expect(screen.getByText(/^This list is from/)).toBeTruthy();
@@ -363,7 +371,7 @@ describe("a mapping on a role nobody holds", () => {
 describe("a role's home folder", () => {
   const withRoot = (value: string) => {
     homeSettings.data = {
-      read: true,
+      read: { state: "now", taken_at: new Date().toISOString() },
       settings: [
         {
           name: "home_root",

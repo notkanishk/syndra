@@ -9,13 +9,10 @@ import { expectFullStrength } from "@/test-utils/fullStrength";
 import { makeProxyFetch } from "@/test-utils/proxyFetch";
 import { OVERVIEW_NEXT, RETENTION_TITLE } from "@/components/usage/copy";
 import { targetStats } from "@/components/usage/__tests__/fixtures";
-import type {
-  AccountHome,
-  TargetHealth,
-  TargetInventory,
-  TargetSetting,
-  TargetSummary,
-} from "@/lib/queries/useTargets";
+import type { AccountHome, TargetHealthWire, TargetInventory, TargetSetting, TargetSummary } from "@/lib/queries/useTargets";
+import type { WireRead } from "@/lib/queries/read";
+import { asRead, NONE, readNow } from "@/test-utils/wire";
+import { asHealth } from "@/test-utils/wireHealth";
 
 const nameResolverMiss = { value: undefined, resolved: true } as const;
 
@@ -37,11 +34,11 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 
 const state = {
   roster: [] as TargetSummary[],
-  health: {} as TargetHealth,
+  health: {} as TargetHealthWire,
   healthLoading: false,
   healthError: null as unknown,
   findingsError: null as unknown,
-  inventory: {} as TargetInventory,
+  inventory: {} as Omit<TargetInventory, "read"> & { read?: WireRead },
   resolved: [] as Array<{ head: string; note: string }>,
   reconcile: undefined as undefined | Record<string, unknown>,
   released: [] as { subjectId: string; version?: string }[],
@@ -49,12 +46,12 @@ const state = {
   adopted: [] as Array<{ username: string; subjectId: string }>,
   adoptResult: { status: "adopted", detail: "The account is now bound to that person." } as unknown,
   projectSet: [] as string[],
-  settings: { read: true, settings: [] as TargetSetting[] } as { read: boolean; settings?: TargetSetting[] },
+  settings: { settings: [] as TargetSetting[] } as { read?: WireRead; settings?: TargetSetting[] },
   settingsLoading: false,
   settingsError: null as unknown,
   settingsRefetches: 0,
   settingPut: [] as Array<{ name: string; value: string }>,
-  homes: { read: true, usage_read: true, accounts: [] as AccountHome[] },
+  homes: { accounts: [] as AccountHome[] } as { read?: WireRead; accounts: AccountHome[] },
 };
 
 vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
@@ -91,14 +88,14 @@ vi.mock("@/lib/queries/useTargets", async () => {
     ...actual,
     useTargets: () => ({ data: state.roster, isLoading: false, error: null }),
     useTargetHealth: () => ({
-      data: state.healthLoading ? undefined : state.health,
+      data: state.healthLoading ? undefined : asHealth(state.health),
       isLoading: state.healthLoading,
       error: state.healthError,
     }),
     useMergeFindings: () => ({ data: undefined, isLoading: false, error: state.findingsError }),
     useUnconfirmedOperations: () => ({ data: [], isLoading: false, error: null }),
     useTargetInventory: () => ({
-      data: state.inventory,
+      data: asRead(state.inventory),
       isLoading: false,
       error: null,
       refetch: vi.fn(),
@@ -125,14 +122,14 @@ vi.mock("@/lib/queries/useTargets", async () => {
     }),
     useSetLifecycle: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false }),
     useTargetSettings: () => ({
-      data: state.settingsLoading ? undefined : state.settings,
+      data: state.settingsLoading || !state.settings ? undefined : asRead(state.settings),
       isLoading: state.settingsLoading,
       error: state.settingsError,
       refetch: () => {
         state.settingsRefetches++;
       },
     }),
-    useTargetHomes: () => ({ data: state.homes, isLoading: false, error: null }),
+    useTargetHomes: () => ({ data: asRead(state.homes), isLoading: false, error: null }),
     useSetTargetSetting: () => ({
       mutate: (input: { name: string; value: string }, opts?: { onSuccess?: () => void }) => {
         state.settingPut.push(input);
@@ -199,7 +196,7 @@ beforeEach(() => {
   state.settingsLoading = false;
   state.settingsError = null;
   state.settingsRefetches = 0;
-  state.settings = { read: true, settings: [] };
+  state.settings = { settings: [] };
 });
 
 describe("one target's page", () => {
@@ -213,10 +210,9 @@ describe("one target's page", () => {
     state.inventory = {
       target: "truenas",
       bound: 0,
-      current: true,
       // A fresh read, because adoption is gated on one — without it the whole
       // list renders unadoptable and this test would pass for the wrong reason.
-      read_at: new Date().toISOString(),
+      read: readNow(new Date().toISOString()),
       unmanaged: [
         { username: "iyo", account_id: "3000" },
         { username: "syndra", account_id: "3001", self: true },
@@ -235,7 +231,7 @@ describe("one target's page", () => {
     // simply stops answering — which reads as an outage and sends an operator
     // to the NAS. An operator who states there is no expiry gets no warning.
     state.roster = [summary([])];
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
 
     state.health = { reachable: true, lifecycle: "active", key_expiry: "unrecorded" };
     const { unmount } = renderTarget();
@@ -249,7 +245,7 @@ describe("one target's page", () => {
 
   it("says SMB auditing is off before anyone runs an empty activity report", () => {
     state.roster = [summary([])];
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     state.health = {
       reachable: true,
       lifecycle: "active",
@@ -264,7 +260,7 @@ describe("one target's page", () => {
 
   it("does not claim auditing is fine when the share list could not be read", () => {
     state.roster = [summary([])];
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     // shares_readable false: the difference between "nothing is unaudited" and
     // "could not look", which must not render identically.
     state.health = { reachable: true, lifecycle: "active", shares_readable: false };
@@ -277,10 +273,10 @@ describe("one target's page", () => {
     // The sweep refuses to act on these: the plan for one says "create", so
     // acting would recreate an account somebody deleted.
     state.roster = [summary([])];
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
-      target: "truenas", bound: 4, queued: 1, current: true,
+      target: "truenas", bound: 4, queued: 1, read: readNow(),
       stale: [{ subject_id: "s1", username: "becky", account_id: "3999" }],
     };
     renderTarget();
@@ -298,10 +294,10 @@ describe("one target's page", () => {
     state.released = [];
     state.releaseResult = { status: "released" };
     state.roster = [summary([])];
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
-      target: "truenas", bound: 4, queued: 1, current: true,
+      target: "truenas", bound: 4, queued: 1, read: readNow(),
       stale: [{ subject_id: "s1", username: "becky", account_id: "3999", version: "v-read" }],
     };
     renderTarget();
@@ -326,14 +322,15 @@ describe("one target's page", () => {
   it("does not call an unconfirmed release done, and keeps the control", () => {
     state.released = [];
     state.releaseResult = {
+      operation: "op-1",
       status: "unconfirmed",
-      detail: "The target did not confirm the release. Nothing was changed here.",
+      detail: "This may have been applied. Syndra is checking; don't send it again.",
     };
     state.roster = [summary([])];
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
-      target: "truenas", bound: 4, queued: 1, current: true,
+      target: "truenas", bound: 4, queued: 1, read: readNow(),
       stale: [{ subject_id: "s1", username: "becky", account_id: "3999" }],
     };
     renderTarget();
@@ -342,7 +339,8 @@ describe("one target's page", () => {
     fireEvent.click(screen.getByText("Stop tracking becky"));
 
     expect(screen.queryByText(/Stopped tracking it\. Nothing on TrueNAS was changed/i)).toBeNull();
-    expect(screen.getByText(/did not confirm the release/i)).toBeTruthy();
+    // The one unconfirmed outcome every write says (design §13.4).
+    expect(screen.getByText(/This may have been applied\. Syndra is checking; don't send it again\./)).toBeTruthy();
     expect(screen.getByText("Stop tracking becky")).toBeTruthy();
   });
 
@@ -357,10 +355,10 @@ describe("one target's page", () => {
         "The add-on released the binding and Syndra's own copy of it was not removed. Press release again to repair it.",
     };
     state.roster = [summary([])];
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
-      target: "truenas", bound: 4, queued: 1, current: true,
+      target: "truenas", bound: 4, queued: 1, read: readNow(),
       stale: [{ subject_id: "s1", username: "becky", account_id: "3999" }],
     };
     renderTarget();
@@ -386,7 +384,7 @@ describe("one target's page", () => {
       },
     ];
     state.health = { reachable: false, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     expect(screen.getByText("Cannot connect.")).toBeTruthy();
@@ -401,7 +399,7 @@ describe("one target's page", () => {
   it("does not claim a transport fault when the secret loads", () => {
     state.roster = [{ ...summary([]), transport_status: "ok" }];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     expect(screen.queryByText(/Connection key missing/i)).toBeNull();
@@ -415,7 +413,7 @@ describe("one target's page", () => {
       ]),
     ];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 1, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 1, unmanaged: [] };
     renderTarget();
 
     // Words outside; the ids wait under Technical detail until it is opened (A-20 P11).
@@ -554,8 +552,7 @@ describe("one target's page", () => {
     state.inventory = {
       target: "truenas",
       bound: 0,
-      current: true,
-      read_at: new Date().toISOString(),
+      read: readNow(new Date().toISOString()),
       unmanaged: [
         { username: "a", account_id: "1", standing: { usable: false, waiting_on: "none", note: "Switched off on TrueNAS." } },
         { username: "a-much-longer-service-account", account_id: "2" },
@@ -583,8 +580,7 @@ describe("one target's page", () => {
     state.inventory = {
       target: "truenas",
       bound: 0,
-      current: true,
-      read_at: new Date().toISOString(),
+      read: readNow(new Date().toISOString()),
       unmanaged: [
         { username: "healthy", account_id: "1", standing: { usable: true, waiting_on: "none" } },
         { username: "waits", account_id: "2", standing: { usable: true, waiting_on: "member" } },
@@ -598,42 +594,47 @@ describe("one target's page", () => {
     expect(row("waits").querySelector("[data-row-detail] [data-standing-step]")).toHaveTextContent("Nothing for you to do.");
   });
 
-  // A-01: Syndra's breaker is "waiting to retry", and it sends the operator to
-  // the Syndra server; an outage outranks it and sends them to TrueNAS.
-  it("distinguishes Syndra waiting to retry from the target being down", () => {
+  // Design §13.1: two outages, never one word. The add-on down sends the operator to its container
+  // (and an open breaker says when Syndra tries again); the app down sends them to the system.
+  it("tells the add-on being down from the system behind it being down", () => {
     state.roster = [summary([])];
-    state.health = { reachable: true, lifecycle: "active", status: "waiting_to_retry", health: { status: "online", recent: ["answered"] } };
+    state.health = {
+      read: NONE,
+      status: "addon_unreachable",
+      health: { state: "addon_unreachable", cause: "no_answer", retry_after: 30, recent: ["missed", "missed", "missed"], since: "2026-10-14T08:33:00Z" },
+    };
     const { unmount } = renderTarget();
-    expect(screen.getByText("Syndra is waiting to retry TrueNAS.")).toBeInTheDocument();
-    expect(screen.getByText(/look at the Syndra server/)).toBeInTheDocument();
+    expect(screen.getByText("TrueNAS's add-on isn't answering.")).toBeInTheDocument();
+    expect(screen.getByText("TrueNAS's add-on isn't answering.").closest('[role="status"]')).toHaveClass("bg-warn-soft");
+    expect(screen.getAllByText(/Check that its container is running\. Syndra keeps trying\. Syndra tries again in 30 s\./).length).toBeGreaterThan(0);
+    expect(screen.getByRole("img", { name: "Last 3 checks: missed, missed, missed" })).toBeInTheDocument();
     unmount();
 
     state.health = {
-      reachable: false,
-      status: "offline",
-      health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: "2026-10-14T08:33:00Z" },
+      read: { state: "none", reason: "app_unreachable" },
+      status: "app_unreachable",
+      health: { state: "app_unreachable", recent: ["answered", "answered", "answered"] },
     };
     renderTarget();
     expect(screen.getByText("TrueNAS isn't answering.")).toBeInTheDocument();
-    // A Notice, amber: Syndra can't reach it, and nothing is in doubt.
-    expect(screen.getByText("TrueNAS isn't answering.").closest('[role="status"]')).toHaveClass("bg-warn-soft");
-    expect(screen.getByText(/Look at TrueNAS\./)).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Last 3 checks: missed, missed, missed" })).toBeInTheDocument();
+    expect(screen.getAllByText(/TrueNAS's add-on is running but can't reach TrueNAS\. Check that TrueNAS is on\./).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/container/)).toBeNull();
   });
 
-  // One failed read is a missed check, not an outage: still Answering, said
-  // faintly with the pips, and what is on screen is the last copy.
-  it("keeps a missed check calm, and says the screen is the last copy", () => {
+  // One failed live read is a missed check, not an outage: still Answering, said faintly with the
+  // pips, and the add-on's part that was not read says why, never "accepting changes".
+  it("keeps a missed check calm, and says why the add-on's part was not read", () => {
     state.roster = [summary([])];
     state.health = {
-      reachable: false,
+      read: NONE,
       status: "answering",
-      health: { status: "online", recent: ["answered", "answered", "missed"], missed_since: "2026-10-14T09:40:00Z" },
+      health: { state: "answering", recent: ["answered", "answered", "missed"], missed_since: "2026-10-14T09:40:00Z" },
     };
     renderTarget();
     expect(screen.getAllByText("Answering").length).toBeGreaterThan(0);
     expect(screen.getByText(/Missed its last check, at/)).toBeInTheDocument();
-    expect(screen.getByText(/no earlier copy to show/)).toBeInTheDocument();
+    expect(screen.getByText(/Syndra can't reach TrueNAS's add-on/)).toBeInTheDocument();
+    expect(screen.queryByText(/Accepting changes/)).toBeNull();
     expect(screen.queryByText(/isn't answering/)).toBeNull();
   });
 
@@ -644,15 +645,14 @@ describe("one target's page", () => {
       target: "truenas",
       bound: 2,
       unmanaged: [{ username: "root", account_id: "0" }],
-      current: false,
-      read_at: "2026-08-01T00:00:00Z",
+      read: { state: "kept", taken_at: "2026-08-01T00:00:00Z", reason: "cached" },
     };
     renderTarget();
 
     // The age is always given — "stale" without a number is not something an
     // operator can act on — and the control is off with its reason said once
     // for the card, as text, never a tooltip and never under every row (A-13).
-    expect(screen.getByText(/last state seen/i)).toBeInTheDocument();
+    expect(screen.getByText(/The account list was read/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Assign to a person" })).toBeDisabled();
     expect(screen.getAllByText(/Assigning waits for a current read of TrueNAS/)).toHaveLength(1);
     // A mirror read: the card recedes, its words at full strength.
@@ -664,7 +664,7 @@ describe("one target's page", () => {
   it("gives an unmanaged row's status a width of its own", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [{ username: "root", account_id: "0" }], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [{ username: "root", account_id: "0" }] };
     renderTarget();
     expect(document.querySelector("[data-standing-seat]")).toHaveClass("w-(--seat-status)");
   });
@@ -678,7 +678,6 @@ describe("one target's page", () => {
       target: "truenas",
       bound: 2,
       unmanaged: [{ username: "root", account_id: "0" }],
-      current: true,
     };
     renderTarget();
 
@@ -697,7 +696,7 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
   it("gives one calm sentence when reachable and active, with no leftover grid", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     expect(screen.getAllByText("Answering").length).toBeGreaterThan(0);
@@ -708,12 +707,12 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
 
   it("does not say it is accepting changes when the live read failed", () => {
     state.roster = [summary([])];
-    state.health = { reachable: false, lifecycle: "active" } as TargetHealth;
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.health = { read: NONE, status: "answering", health: { state: "answering", recent: ["answered"] } };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     expect(screen.queryByText(/Accepting changes/)).toBeNull();
-    expect(screen.getByText(/can't be confirmed/)).toBeInTheDocument();
+    expect(screen.getByText(/Syndra can't reach TrueNAS's add-on/)).toBeInTheDocument();
   });
 
   it("shows the accounts Syndra manages, read from the same inventory the census uses", () => {
@@ -723,8 +722,7 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
       target: "truenas",
       bound: 4,
       unmanaged: [],
-      current: true,
-      read_at: new Date().toISOString(),
+      read: readNow(new Date().toISOString()),
     };
     renderTarget();
 
@@ -735,9 +733,9 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
 
   it("does not call a target Active, or offer to drain it, before health has answered", () => {
     state.roster = [summary([])];
-    state.health = {} as TargetHealth;
+    state.health = {};
     state.healthLoading = true;
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     expect(screen.getByText("Maintenance")).toBeInTheDocument();
@@ -748,8 +746,8 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
 
   it("says the maintenance state was not read when health answered without one", () => {
     state.roster = [summary([])];
-    state.health = { reachable: false } as TargetHealth;
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.health = { read: NONE };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     expect(screen.getByText(/Not read just now\./)).toBeInTheDocument();
@@ -759,7 +757,7 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
   it("does not count Waiting on you as zero when the findings read failed", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     state.findingsError = new Error("boom");
     renderTarget();
 
@@ -770,7 +768,7 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
   it("says Nothing is waiting on you, in its card, when every read answered and nothing is waiting", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     const region = document.getElementById("waiting")!;
@@ -781,7 +779,7 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
   it("does not say nothing is waiting when a read failed: an unread region is not an empty one", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     state.findingsError = new Error("boom");
     renderTarget();
 
@@ -791,7 +789,7 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
   it("names the maintenance state in the Maintenance card, matching its action rows", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "draining" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     expect(screen.getByText("Maintenance")).toBeInTheDocument();
@@ -807,7 +805,7 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
       product: "TrueNAS",
       product_version: "TrueNAS-25.10.5",
     };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     expect(screen.queryByText(/TrueNAS TrueNAS-25\.10\.5/)).toBeNull();
@@ -829,7 +827,6 @@ describe("resolving a log finding", () => {
     state.reconcile = undefined;
     state.roster = [summary([])];
     state.health = {
-      target: "truenas",
       reachable: true,
       log_anchor: {
         target: "truenas",
@@ -841,7 +838,7 @@ describe("resolving a log finding", () => {
         violation_records: 3,
         violation_at: "2026-08-09T00:00:00Z",
       },
-    } as TargetHealth;
+    };
     return renderTarget();
   }
 
@@ -911,7 +908,7 @@ describe("what it can do · the confirmation the manifest declares", () => {
       ]),
     ];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     // The board's words: "Stops and asks" / "Runs by itself" (route-system-targets-id).
@@ -940,7 +937,7 @@ describe("what roles reach here · the census and its handoff", () => {
   it("no longer holds the mappings table or the version history", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     expect(screen.queryByText("What roles reach here")).toBeNull();
@@ -950,7 +947,7 @@ describe("what roles reach here · the census and its handoff", () => {
   it("offers the route that received them", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     const through = screen.getByRole("link", { name: /mapping/i });
@@ -961,7 +958,7 @@ describe("what roles reach here · the census and its handoff", () => {
   it("does not repeat the setup strip in a census card", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     expect(screen.queryByText(/Editing one changes access for everybody holding that role/)).toBeNull();
@@ -987,10 +984,9 @@ describe("adopting an account", () => {
       { username: "iyo", account_id: "3000" },
       { username: "alexa", account_id: "3002" },
     ],
-    current: true,
     // Adoption is blocked off anything but a live or ageing read (§31 A), so
     // the fixture has to carry one for the form to be reachable at all.
-    read_at: new Date().toISOString(),
+    read: readNow(new Date().toISOString()),
   };
 
   function openAdoptForSai() {
@@ -1111,8 +1107,8 @@ describe("the system's Zitadel project", () => {
       { ...summary([]), project: null },
       { ...summary([]), target: "door", project: { id: "p3", name: "Laser Lab" } },
     ];
-    state.health = { reachable: true, lifecycle: "active", status: "answering", health: { status: "online", recent: ["answered"] } };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.health = { reachable: true, lifecycle: "active", status: "answering", health: { state: "answering", recent: ["answered"] } };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     state.projectSet = [];
     renderTarget();
 
@@ -1144,7 +1140,7 @@ describe("the system's Zitadel project", () => {
     for (const project of [null, { id: "p1", name: "Network storage" }]) {
       state.roster = [{ ...summary([]), project }];
       state.health = { reachable: true, lifecycle: "active" };
-      state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+      state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
       const { unmount } = renderTarget();
       const change = screen.getByRole("button", { name: "Change name" });
       const card = change.closest("[data-card-row]")!.parentElement as HTMLElement;
@@ -1160,7 +1156,7 @@ describe("the system's Zitadel project", () => {
   it("is a thin strip once set, and the only link to the mappings", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
     expect(screen.getByRole("link", { name: "Network storage" }).getAttribute("href")).toBe("/projects/p1");
@@ -1183,12 +1179,10 @@ describe("where home folders go", () => {
   function open(value: string, values?: string[]) {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
-    state.settings = { read: true, settings: [setting(value, values)] };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
+    state.settings = { settings: [setting(value, values)] };
     state.settingPut = [];
     state.homes = {
-      read: true,
-      usage_read: true,
       accounts: [
         { subject_id: "a", username: "charlotte", gives_home: true, home: "/mnt/p/main/home_dir/charlotte" },
         { subject_id: "b", username: "booker", gives_home: true, home: "/mnt/p/main/home_dir/booker" },
@@ -1238,11 +1232,11 @@ describe("where home folders go", () => {
   function openSettings(kind: string | undefined, settings: "loading" | "failed" | "unread" | "not offered") {
     state.roster = [{ ...summary([]), kind }];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     state.settingsLoading = settings === "loading";
     state.settingsError = settings === "failed" ? new Error("down") : null;
     state.settings =
-      settings === "unread" ? { read: false } : settings === "failed" ? (undefined as never) : { read: true, settings: [] };
+      settings === "unread" ? { read: NONE } : settings === "failed" ? (undefined as never) : { settings: [] };
     return renderTarget();
   }
   const homeRow = () => (screen.queryByText("Home folders")?.closest("[data-card-row]") ?? null) as HTMLElement | null;
@@ -1257,8 +1251,8 @@ describe("where home folders go", () => {
     expect(within(row).queryByRole("button")).toBeNull();
   });
 
-  // A read that failed, or came back unread, keeps the row, says so, and offers the step.
-  it.each(["failed", "unread"] as const)("keeps the row when the settings are %s, with Try again", (how) => {
+  // A read that failed keeps the row, says so, and offers the step.
+  it.each(["failed"] as const)("keeps the row when the settings are %s, with Try again", (how) => {
     openSettings("storage", how);
     const row = homeRow()!;
     expect(row).toHaveTextContent("Could not be read");
@@ -1267,6 +1261,14 @@ describe("where home folders go", () => {
     expect(value.children).toHaveLength(2);
     fireEvent.click(within(row).getByRole("button", { name: "Try again" }));
     expect(state.settingsRefetches).toBe(1);
+  });
+
+  // A read with nothing to give (design §13.6) keeps the row and says why, in §13.1's words, never "not chosen".
+  it("keeps the row when the settings are unread, and says why", () => {
+    openSettings("storage", "unread");
+    const row = homeRow()!;
+    expect(row).toHaveTextContent("Syndra can't reach TrueNAS's add-on.");
+    expect(row).not.toHaveTextContent("Not chosen yet");
   });
 
   // The same reads on a storage system draw the row (above), so each absence here is the kind's doing.
@@ -1291,24 +1293,23 @@ describe("where home folders go", () => {
   });
 });
 
-// A-13 (d): while TrueNAS isn't answering, its own cards are its last read.
+// A-13 (d): while TrueNAS isn't answering (its add-on answers from the copy it kept, design §13.3),
+// its own cards are that copy.
 // They recede to the page and keep every word at full strength; the controls
 // that need it live are off with one reason each; Syndra's own cards stay
 // raised. The 0.62 dim shipped twice before this rule replaced it.
 describe("while TrueNAS isn't answering", () => {
   function openStale() {
     state.roster = [summary([])];
-    state.health = { reachable: false, lifecycle: "active" } as TargetHealth;
+    state.health = { read: { state: "none", reason: "app_unreachable" }, status: "app_unreachable", health: { state: "app_unreachable", recent: [] } };
     state.inventory = {
       target: "truenas",
       bound: 1,
       accounts: [{ target: "truenas", subject_id: "s-99", username: "iyo", bound_by: "op", bound_at: "2026-10-01T00:00:00Z", last_seen_at: "2026-10-01T00:00:00Z" }],
       unmanaged: [{ username: "kiosk", account_id: "1001" }, { username: "lab", account_id: "1002" }],
-      current: false,
-      read_at: new Date().toISOString(),
-    } as TargetInventory;
+      read: { state: "kept", taken_at: new Date().toISOString(), reason: "app_unreachable" },
+    };
     state.settings = {
-      read: true,
       settings: [
         {
           name: "home_root",
@@ -1355,8 +1356,7 @@ describe("while TrueNAS isn't answering", () => {
       target: "truenas",
       bound: 0,
       unmanaged: [{ username: "kiosk", account_id: "1001" }],
-      current: true,
-      read_at: new Date().toISOString(),
+      read: readNow(new Date().toISOString()),
     };
     renderTarget();
     expect(card("Not created by Syndra")).not.toHaveAttribute("data-stale");
@@ -1372,7 +1372,7 @@ describe("what has been used here (A-23 R2)", () => {
     stub.register("GET", "/api/proxy/targets/truenas/stats", () => ({ ...targetStats(), target: "truenas" }));
     vi.stubGlobal("fetch", stub.fetchImpl);
     state.roster = [summary([])];
-    state.health = { reachable: true, lifecycle: "active" } as TargetHealth;
+    state.health = { reachable: true, lifecycle: "active" };
     const { unmount } = renderTarget("advanced");
     const region = document.getElementById("stats") as HTMLElement;
     expect(await within(region).findByText(RETENTION_TITLE)).toBeInTheDocument();
@@ -1433,9 +1433,9 @@ describe("every action in its seat (D-1)", () => {
     state.releaseResult = { status: "released" };
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     state.reconcile = {
-      target: "truenas", bound: 4, queued: 1, current: true,
+      target: "truenas", bound: 4, queued: 1, read: readNow(),
       stale: [
         { subject_id: "s1", username: "becky", account_id: "3999", version: "v1" },
         { subject_id: "s2", username: "dana", account_id: "3998", version: "v2" },
@@ -1465,8 +1465,7 @@ describe("every action in its seat (D-1)", () => {
     state.inventory = {
       target: "truenas",
       bound: 0,
-      current: true,
-      read_at: new Date().toISOString(),
+      read: readNow(new Date().toISOString()),
       unmanaged: [
         { username: "iyo", account_id: "3000" },
         { username: "syndra", account_id: "3001", self: true },
@@ -1508,7 +1507,7 @@ describe("every action in its seat (D-1)", () => {
   it("the long explanations are captions, not notes", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
     for (const title of ["Check for differences", "Not created by Syndra"]) {
       const card = cardOf(title);

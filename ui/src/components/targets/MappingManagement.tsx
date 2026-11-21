@@ -31,7 +31,7 @@ import { HOME_ROOT, useTargetReach, useTargetReachAgain, useTargetSettings, type
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
 import { ReadAgainError, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
-import { STALE, stamped } from "@/lib/queries/fresh";
+import { ofRead, readOfQuery } from "@/lib/queries/read";
 import { UserName } from "@/components/names";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
@@ -84,9 +84,9 @@ export function MappingManagement({ target }: { target: string }) {
   const mappings = useMappings(target);
   const reach = useTargetReach(target);
   const reachAgain = useTargetReachAgain(target);
-  const reachCopy = stamped(reach.data?.stale, reach.dataUpdatedAt) ?? (reach.data?.retry_after ? { reason: STALE.cooldown, retry_after: reach.data.retry_after, since: reach.dataUpdatedAt } : undefined);
+  const opens = readOfQuery(reach);
   const settings = useTargetSettings(target);
-  const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
+  const homeSetting = ofRead(readOfQuery(settings), (d) => d.settings?.find((x) => x.name === HOME_ROOT));
   const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";
   const state = useFieldSchemaState(target);
   const { schema } = state;
@@ -117,17 +117,13 @@ export function MappingManagement({ target }: { target: string }) {
           count={mappings.data ? shown.length : undefined}
           // One freshness line, from one source: the read line below owns it whenever it is shown (stale
           // or cooling down, with the way to read again); the header says it only when that one is not.
-          caption={reach.data && reachCopy ? undefined : <OpensNote name={name} reach={reach.data} />}
+          caption={opens.state === "now" ? <OpensNote name={name} takenAt={opens.takenAt} /> : undefined}
           action={<AddMappingButton target={target} first={(mappings.data ?? []).length === 0} />}
         />
-        {reach.data && reachCopy && (
-          // What each group opens is a copy, or was read moments ago: the one place to read it again.
+        {(opens.state === "kept" || opens.state === "none") && (
+          // What each group opens is a copy, or was not read: the one place to say why and read it again.
           <div className="px-5 pb-3">
-            <ReadFreshness
-              subject="What each group opens"
-              state={{ readAt: reach.data.read_at, current: reach.data.current, stale: reachCopy }}
-              onRefresh={reachAgain.press}
-            />
+            <ReadFreshness subject="What each group opens" read={opens} system={name} onRefresh={reachAgain.press} />
           </div>
         )}
         <ReadAgainError error={reachAgain.error} />
@@ -154,8 +150,8 @@ export function MappingManagement({ target }: { target: string }) {
                 home={mapping.field === fields.membership ? rowsOf(all, mapping.project_id, mapping.role_key, fields) : undefined}
                 homeRoot={homeRoot}
                 first={i === 0}
-                opens={mapping.field === fields.membership && reach.data?.read ? (reach.data.groups?.[mapping.value] ?? []) : undefined}
-                lastKnown={reach.data?.read === true && reach.data.current === false}
+                opens={mapping.field === fields.membership ? ofRead(opens, (r) => r.groups?.[mapping.value] ?? []) : undefined}
+                lastKnown={opens.state === "kept"}
                 onEdit={() => setEditing(mapping)}
                 onDelete={() => setDeleting(mapping)}
               />
@@ -399,10 +395,10 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
             <>
               {" "}
               <span className="font-semibold">
-                {nameOf(mapping.target)} could not be reached, so{" "}
+                {nameOf(mapping.target)} doesn&apos;t list its {membershipNoun(schema)}s, so{" "}
                 <span className="type-mono">{value}</span> was not checked.
               </span>{" "}
-              The change is allowed through so an outage does not look like your mistake. If{" "}
+              The change is allowed through because nothing could check it. If{" "}
               <span className="type-mono">{value}</span> does not exist, the change fails when
               it reaches {nameOf(mapping.target)} and waits in Pending changes until
               somebody fixes it.

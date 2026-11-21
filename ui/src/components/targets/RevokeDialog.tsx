@@ -2,7 +2,7 @@
 
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
-import { describeFailure, sentence } from "@/lib/outcome";
+import { describeFailure, sentence, UNCONFIRMED, UNCONFIRMED_NEXT } from "@/lib/outcome";
 import { useState } from "react";
 
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
@@ -38,6 +38,17 @@ import { useIsTouch } from "@/lib/useViewport";
  *     ends access, and one word for one action beats a finer distinction only
  *     this file draws.
  */
+
+/**
+ * The credential half that did not land, as its next step: its own sentence (refused, never sent),
+ * the write's NOTHING_SENT sentence, or the 202's "don't send it again" (a second rotation on an
+ * account that did rotate locks its member out).
+ */
+function rotationNext(rotation: RevocationResult["rotation"]): string {
+  if (rotation?.status === UNCONFIRMED) return `The credential may have been replaced. ${UNCONFIRMED_NEXT}`;
+  const said = rotation?.detail ?? rotation?.message;
+  return said ? sentence(said) : "The credential was not replaced. Replace it from this person's page.";
+}
 
 /** Held here, not composed, because it is a statement about what the system does. */
 function sessionSentence(name: string): string {
@@ -80,17 +91,17 @@ export function RevokeDialog({
           the typed name unmount with the body; the header keeps its title. */}
       {result ? (
         <div className="grid gap-3 px-6">
-          {/* Only what was observed (A-24 §13): the password is replaced at once, and the lock is
-              queued, so it is On its way (the copy guide's word for a revocation that sends itself),
-              never Revoked, until nothing of it is still on its way. */}
+          {/* Only what was observed (A-24 §13, design §13.4): the deny is recorded now and lands on
+              the system only when its add-on answers, so this is Recorded, never Revoked, and the
+              reply's own sentence says the account there still works until then. Syndra applies it
+              by itself: no step is left for the reader but the credential, when that did not land. */}
           <ActionOutcome
-            word={result.status !== "revoked" ? "Partly done" : result.queued ? "On its way" : "Revoked"}
+            word="Recorded"
             outcome={{
-              kind: result.status === "revoked" && !result.queued ? "applied" : "queued",
-              message: result.detail ?? "",
-              detail: result.disclosure,
-              ...(result.status === "revoked" && result.queued ? { sendsItself: true } : {}),
-              ...(result.outstanding ? { next: `Still outstanding: ${result.outstanding}.` } : {}),
+              kind: "queued",
+              sendsItself: true,
+              message: result.detail,
+              ...(result.rotated ? {} : { next: rotationNext(result.rotation) }),
             }}
           />
         </div>

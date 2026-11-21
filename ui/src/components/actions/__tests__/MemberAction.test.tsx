@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as copy from "@/components/actions/copy";
 import { NOTHING_TO_DO } from "@/lib/outcome";
 import { MemberTargetCard } from "@/components/kinds/MemberTargetCard";
-import type { MyTargetView, ReadView } from "@/lib/queries/useMyStorage";
+import type { MyTargetView, ReadViewWire } from "@/lib/queries/useMyStorage";
 
 /**
  * A member checking something out: the form, the preview, the confirm, each
@@ -21,14 +21,13 @@ const OP = "0b7d4c1e-6a5f-4e2b-9c3d-8f1a2e4b6c70";
 const POST = `/me/targets/parts/operations/item.checkout`;
 const GET = `/me/targets/parts/operations/${OP}`;
 
-const record = (over: Partial<ReadView> = {}): ReadView => ({
+/** A record as the backend sends it (the hook makes it a `Read`, design §13.6). */
+const record = (over: Partial<ReadViewWire> = {}): ReadViewWire => ({
   operation: "item.checkout",
   shape: "records",
-  readable: true,
+  read: { state: "now", taken_at: "2026-11-12T09:00:00Z" },
   result: {
     records: [{ id: "item-0003", label: "Spool holder", category: "mk4-b", since: "2026-11-12T09:00:00Z", due: "2026-11-19T09:00:00Z" }],
-    taken_at: "2026-11-12T09:00:00Z",
-    current: true,
   },
   ...over,
 });
@@ -40,8 +39,7 @@ const view = (over: Partial<MyTargetView> = {}): MyTargetView => ({
   account: { username: "rey_mysterio" },
   kind: "inventory",
   credential: { set: false },
-  reachable: true,
-  health: "online",
+  health: "answering",
   actions: [{ id: "item.checkout", confirm: true, params: [{ name: "item_id", type: "string", required: true, format: "target_id" }] }],
   ...over,
 });
@@ -142,7 +140,7 @@ describe("preview, then confirm", () => {
   });
 
   it("a preview the page cannot read says so, offers Back, and never a blind Confirm", async () => {
-    server({ [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record({ readable: false, result: undefined }) }] });
+    server({ [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record({ read: { state: "none", reason: "read_refused" }, result: undefined }) }] });
     renderCard();
     open();
     typeId();
@@ -224,12 +222,19 @@ describe("a confirm whose reply never came back", () => {
     expect(confirms()).toHaveLength(1);
   });
 
-  it("a 5xx that is not a lost reply is still a plain refusal", async () => {
-    server({ [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }, refusalOf(503, "TARGET_UNREACHABLE")] });
+  it("nothing went out (503 NOTHING_SENT) is said in the backend's one sentence, never a lost reply", async () => {
+    const nothingSent = new ApiError(
+      503,
+      { error: "NOTHING_SENT", message: "Nothing went out. Parts shelf isn't answering right now. Try again when Parts shelf answers.", details: { reason: "addon_unreachable", cause: "no_answer" } },
+      "POST",
+    );
+    server({ [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }, nothingSent] });
     renderCard();
     await toPreview();
     press(copy.CONFIRM_BUTTON);
-    await screen.findByText("Not done");
+    await screen.findByText("Not sent");
+    expect(screen.getByText(/Nothing went out\. Parts shelf isn't answering right now\. Try again when Parts shelf answers\./)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Nothing was changed|server had a problem/);
     expect(sent("GET", "/me/targets")).toHaveLength(0);
   });
 });
@@ -260,7 +265,6 @@ describe("each refusal says what is true and its one step", () => {
     [409, "CALL_UNSETTLED", undefined],
     [422, "ACTION_REFUSED", undefined],
     [409, "TARGET_PAUSED", undefined],
-    [503, "TARGET_UNREACHABLE", undefined],
     [503, "CALL_UNSETTLED_UNKNOWN", undefined],
     [429, "TOO_MANY_ATTEMPTS", undefined],
     [429, "RATE_LIMITED", undefined],
@@ -284,7 +288,6 @@ describe("each refusal says what is true and its one step", () => {
   it.each([
     [404, "UNKNOWN_RESOURCE"],
     [409, "RESOURCE_TAKEN"],
-    [503, "PREVIEW_UNANSWERED"],
   ] as const)("a preview refused %i %s keeps the form, with what was typed, and shows the step", async (status, code) => {
     server({ [`POST ${POST}`]: [refusalOf(status, code, { param: "item_id" })] });
     renderCard();
@@ -323,7 +326,7 @@ describe("a confirm whose answer is lost", () => {
   async function toChecking(states: Array<unknown | Error>) {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     server({
-      [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }, { state: "checking", operation: OP, sent_at: "2026-11-12T09:00:03Z" }],
+      [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }, { status: "unconfirmed", operation: OP, sent_at: "2026-11-12T09:00:03Z", detail: "This may have been applied. Syndra is checking; don't send it again." }],
       [`GET ${GET}`]: states,
     });
     renderCard();

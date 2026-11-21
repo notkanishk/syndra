@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { readFrom, type Answered, type WireRead } from "@/lib/queries/read";
 import type { OneShotSecret } from "@/lib/secret";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
@@ -41,7 +42,8 @@ export interface DormantAccount {
 
 export interface DormantReport {
   target: string;
-  state_read_at?: string;
+  /** Always a read now: a copy is never listed (owner Q1); with nothing read the reply is `none`. */
+  read: WireRead;
   truncated: boolean;
   accounts: DormantAccount[];
 }
@@ -49,16 +51,19 @@ export interface DormantReport {
 export function useDormantAccounts(target: string | undefined) {
   return useQuery({
     queryKey: ["targets", target, "dormant"],
-    queryFn: () => request<DormantReport>(`/targets/${target}/accounts/dormant`),
+    queryFn: () => readFrom<DormantReport>(`/targets/${target}/accounts/dormant`),
     enabled: Boolean(target),
-    select: (r) => ({ ...r, accounts: sortByName(r.accounts ?? [], (a) => a.display_name || a.account, (a) => a.account) }),
+    select: (r): Answered<DormantReport> =>
+      r.state === "none" ? r : { ...r, data: { ...r.data, accounts: sortByName(r.data.accounts ?? [], (a) => a.display_name || a.account, (a) => a.account) } },
   });
 }
 
 export interface SweepOutcome {
   account: string;
-  outcome: "removed" | "refused" | "unreached" | "indeterminate";
+  outcome: "removed" | "refused" | "nothing_sent" | "unconfirmed";
   detail?: string;
+  /** With `nothing_sent` or `unconfirmed`: the write's own answer (a NOTHING_SENT envelope, or `{status: "unconfirmed", detail}`). */
+  answer?: { message?: string; detail?: string; status?: string; error?: string; details?: Record<string, string>; retry_after?: number };
 }
 
 export interface SweepResult {

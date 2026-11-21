@@ -15,7 +15,7 @@ const state = {
   findings: [] as MergeFinding[],
   resolved: [] as ResolveFindingInput[],
   checks: 0,
-  pass: { target: "truenas", bound: 1, queued: 0, current: true } as TargetReconcileResult,
+  pass: { target: "truenas", bound: 1, queued: 0, read: { state: "now", taken_at: "2026-11-21T10:00:00Z" } } as TargetReconcileResult,
 };
 
 vi.mock("@/lib/queries/useTargets", async () => {
@@ -90,7 +90,7 @@ beforeEach(() => {
   state.findings = [];
   state.resolved = [];
   state.checks = 0;
-  state.pass = { target: "truenas", bound: 1, queued: 0, current: true };
+  state.pass = { target: "truenas", bound: 1, queued: 0, read: { state: "now", taken_at: "2026-11-21T10:00:00Z" } };
 });
 
 describe("a binding conflict's answers", () => {
@@ -199,7 +199,7 @@ describe("Check again", () => {
 
   it("says when it can check again inside the add-on's cooldown, and waits", () => {
     state.findings = [conflict({ reason: "ambiguous" })];
-    state.pass = { target: "truenas", bound: 0, queued: 0, current: false, halted: true, retry_after: 30 };
+    state.pass = { target: "truenas", bound: 0, queued: 0, halted: true, read: { state: "kept", reason: "cooldown", retry_after: 30, taken_at: "2026-11-21T10:00:00Z" } };
     view();
     fireEvent.click(screen.getByText("Decide"));
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
@@ -222,7 +222,7 @@ describe("Check again", () => {
 
   it("says a stopped pass in the add-on's words with a next step", () => {
     state.findings = [conflict({ reason: "ambiguous" })];
-    state.pass = { target: "truenas", bound: 0, queued: 0, current: false, halted: true, detail: "Its records can't be read." };
+    state.pass = { target: "truenas", bound: 0, queued: 0, halted: true, read: { state: "kept", reason: "cached", taken_at: "2026-11-21T10:00:00Z" }, detail: "Its records can't be read." };
     view();
     fireEvent.click(screen.getByText("Decide"));
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));

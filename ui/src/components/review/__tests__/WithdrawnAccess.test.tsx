@@ -117,6 +117,27 @@ describe("what has not gone away yet", () => {
   });
 });
 
+// Design §13.4: recorded is not landed. A row still on its way says so, with when it was recorded, and
+// that the access there still works until the system answers that it applied it.
+describe("a revocation recorded and not yet applied", () => {
+  it("says the account on the system still works until it lands", async () => {
+    payload = listing([row("r1", false, { target: "truenas", recorded_at: "2026-11-20T09:00:00Z" })]);
+    await renderPage();
+    expect(screen.getByText(/^Recorded 20 Nov\. Not yet applied on .+; until it is, the account there still works\./)).toBeInTheDocument();
+  });
+
+  it("says the role is kept in Zitadel until it lands", async () => {
+    await renderPage();
+    expect(screen.getByText(/Not yet applied in Zitadel; until it is, they keep the role there/)).toBeInTheDocument();
+  });
+
+  it("says nothing of the kind on a row given up on", async () => {
+    payload = listing([row("r2", true, { target: "truenas" })]);
+    await renderPage();
+    expect(screen.queryByText(/Not yet applied/)).toBeNull();
+  });
+});
+
 describe("what happens next sits in one seat (D-1)", () => {
   it("is the same wide seat on a row still being tried and on one given up, and its heading cell matches", async () => {
     payload = listing([row("r1", false), row("r2", true, { user_id: "u2" })]);

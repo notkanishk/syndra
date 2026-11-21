@@ -14,6 +14,8 @@ import { describeFailure, sentence } from "@/lib/outcome";
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 import { HOME_ROOT, useSetTargetSetting, useTargetHomes, useTargetSettings, type TargetSetting } from "@/lib/queries/useTargets";
 import { sortByName } from "@/lib/sort";
+import { NotReadLine } from "@/components/ui/ReadFreshness";
+import { ofRead, readOfQuery } from "@/lib/queries/read";
 
 /**
  * Where home folders go, on the system's setup card (A-03 §1): the row, and
@@ -38,11 +40,12 @@ export function HomeLocationRow({
   const name = nameOf(target);
   const settings = useTargetSettings(target);
   const [choosing, setChoosing] = useState(false);
-  const home = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
+  const read = readOfQuery(settings);
+  const home = ofRead(read, (d) => d.settings?.find((x) => x.name === HOME_ROOT));
   const verb = home?.value ? "Change folder" : "Choose folder";
-  if (!(settings.data?.read && home)) {
+  if (!home) {
     // Read, and not offered; or a system that is not storage: no row.
-    if (!expected || settings.data?.read) return null;
+    if (!expected || read.state === "now" || read.state === "kept") return null;
     // Two lines while reading or after a failed read, as "Not chosen yet" has, so the rows under it
     // do not move when it lands.
     if (settings.isLoading) {
@@ -60,8 +63,24 @@ export function HomeLocationRow({
         </SettingRow>
       );
     }
-    // Not read: said, with its step and the control that takes it (copy guide: a read that did not
-    // come back, to an operator).
+    // Not read from the system (design §13.1): who is not answering and what to check, in the line's
+    // own words, with Try again in the row's seat. No "Not chosen yet": nothing was read to say so.
+    if (read.state === "none") {
+      return (
+        <SettingRow
+          label="Home folders"
+          action={
+            <Button variant="outline" size="sm" isPending={settings.isFetching} onClick={() => void settings.refetch()}>
+              Try again
+            </Button>
+          }
+        >
+          <NotReadLine why={read.why} system={name} />
+        </SettingRow>
+      );
+    }
+    // Syndra's own read failed: said, with its step and the control that takes it (copy guide: a
+    // read that did not come back, to an operator).
     return (
       <SettingRow
         label="Home folders"
@@ -143,9 +162,7 @@ export function HomeLocationDialog({
   const changing = Boolean(current) && chosen !== "" && chosen !== current;
   // The dialog ends on its result, with Close; it never closes onto the row.
   const [done, setDone] = useState<{ word: string; message: string } | null>(null);
-  const already = homes.data?.read
-    ? homes.data.accounts.filter((a) => a.home?.startsWith(`${current}/`)).length
-    : undefined;
+  const already = ofRead(readOfQuery(homes), (d) => d.accounts.filter((a) => a.home?.startsWith(`${current}/`)).length);
 
   return (
     <Modal open onClose={onClose} size="md" labelledBy="home-title" busy={save.isPending}>

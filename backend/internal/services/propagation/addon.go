@@ -312,6 +312,7 @@ func (res *DrainResult) deferUnsent(ctx context.Context, row models.PendingPropa
 		return
 	}
 	res.Requeued++
+	res.Deferred++
 }
 
 var errIndeterminate = errors.New("the call was sent and the answer was lost; whether it applied is unknown")

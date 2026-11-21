@@ -11,7 +11,8 @@ import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
-import { formatClock, versionLabel } from "@/lib/format";
+import { versionLabel } from "@/lib/format";
+import { dataOf, ofRead, readOfQuery } from "@/lib/queries/read";
 import {
   useMergeFindings,
   useTargetHealth,
@@ -119,38 +120,24 @@ export default function ConnectedSystemsPage() {
 }
 
 /**
- * The one Notice a faulted system earns: red for a key Syndra cannot read,
- * amber for a system that stopped answering or a breaker waiting to retry.
- * No answer yet is no fault and gets none — it clears by itself.
+ * The one Notice a faulted system earns (design §13.1): the add-on down, or
+ * its app down, named apart; red when the fault is Syndra's own (a secret it
+ * cannot load). Not checked yet is no fault and gets none: it clears by itself.
  */
 function FaultNotice({ row }: { row: TargetSummary }) {
   const name = row.name;
   const reading = readingFor(row);
-  if (row.status === "cannot_connect") {
-    return (
-      <Notice tone="danger" blocking title={`Syndra can't connect to ${name}.`} next="Ask whoever runs the Syndra server to fix the key. Syndra connects on its next check.">
-        {reading.sentence} Nothing is reaching {name}: no new accounts, and no revocations.{" "}
-        {reading.look}
-      </Notice>
-    );
-  }
-  if (row.status === "offline") {
-    return (
-      <Notice tone="warn" live title={`${name} isn't answering.`} next={`Check that ${name} is running and reachable.`}>
-        Syndra&apos;s last 3 checks went unanswered, from {formatClock(row.health?.reachable_since)},
-        and it keeps checking every 30 seconds. Look at {name}, not at Syndra. Changes for {name}{" "}
-        wait until it answers, and nothing is lost.
-      </Notice>
-    );
-  }
-  if (row.status === "waiting_to_retry") {
-    return (
-      <Notice tone="warn" live title={`Syndra is waiting to retry ${name}.`} next="Syndra tries again on its own when the wait is over. If it keeps happening, ask whoever runs the Syndra server to look at it.">
-        {reading.sentence}
-      </Notice>
-    );
-  }
-  return null;
+  if (row.status !== "addon_unreachable" && row.status !== "app_unreachable") return null;
+  return (
+    <Notice
+      tone={reading.tone === "danger" ? "danger" : "warn"}
+      live
+      title={row.status === "addon_unreachable" ? `${name}'s add-on isn't answering.` : `${name} isn't answering.`}
+      next="Nothing is lost: Syndra sends what waits once it answers."
+    >
+      {reading.sentence}
+    </Notice>
+  );
 }
 
 /**
@@ -175,17 +162,17 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
   const findings = useMergeFindings(ask);
 
   const answering = reading.tone === "healthy";
-  const bound = inventory.data?.bound;
-  // A pass that stopped read nothing: its count is "Not read", never "Not yet" (it has answered before).
-  const unread = inventory.data?.halted;
+  const read = readOfQuery(inventory);
+  // A count only from a read (design §13.6): a read with nothing to give is "Not read", never 0.
+  const bound = ofRead(read, (d) => d.bound);
+  const unread = read.state === "none";
   // The product and its version, whatever the operator named the system.
-  const product = health.data?.product
-    ? `${health.data.product} ${versionLabel(health.data.product, health.data.product_version)}`.trim()
-    : null;
+  const said = health.data ? dataOf(health.data.addon) : undefined;
+  const product = said?.product ? `${said.product} ${versionLabel(said.product, said.product_version)}`.trim() : null;
   const href = `/system/targets/${row.target}`;
 
   // What is waiting, each linking to where it is handled on the system's page.
-  const unmanaged = inventory.data?.unmanaged?.length ?? 0;
+  const unmanaged = ofRead(read, (d) => d.unmanaged?.length) ?? 0;
   const changed = findings.data?.length ?? 0;
   const decisions = health.data?.log_anchor?.violation_reason ? 1 : 0;
   const needs: Array<{ text: string; href: string }> = [];
@@ -276,26 +263,22 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
         )}
       </span>
 
-      {/* A count, and only when Syndra has one, never 0 in its place: that
-          would be a claim about the system rather than about Syndra's
-          ignorance of it. A pass that stopped says "Not read"; a system not
-          read yet says "Not yet". Once it stops answering, the last count
-          stays and says so. */}
+      {/* A count, and only from a read, never 0 in its place: that would be a
+          claim about the system rather than about Syndra's ignorance of it. A
+          read with nothing to give says "Not read"; a system not read yet says
+          "Not yet". */}
       <span data-figure className="flex flex-col gap-0.5 pt-px">
         {unread ? (
           <span className="text-body text-faint">Not read</span>
         ) : bound === undefined ? (
           <span className="text-body text-faint">Not yet</span>
         ) : (
-          <>
-            <span className={`text-body ${answering ? "" : "text-muted"}`}>
-              {bound}
-              <span className="text-small text-muted tablet:hidden">
-                {bound === 1 ? " person" : " people"}
-              </span>
+          <span className={`text-body ${answering ? "" : "text-muted"}`}>
+            {bound}
+            <span className="text-small text-muted tablet:hidden">
+              {bound === 1 ? " person" : " people"}
             </span>
-            {!answering && <span className="text-fine text-faint">last known</span>}
-          </>
+          </span>
         )}
       </span>
 
@@ -327,15 +310,15 @@ function NeedsNote({
 }
 
 /**
- * The backend ranks what can be true at once (A-01): cannot connect, offline,
- * waiting to retry, checking, answering. One reading here, besides: an add-on
+ * The monitor's state (design §13.2): the add-on down, its app down, checking,
+ * answering. One reading here, besides: an add-on
  * registered and not answered yet, which is where every add-on starts. Its
  * sentence stays under the row; the faults' go to a Notice above the card.
  */
 function readingFor(row: TargetSummary): Reading & { detail?: string } {
   const name = row.name;
-  const reading = targetReading({ status: row.status, health: row.health, name, transportError: row.transport_error });
-  if (!row.callable && !(row.status === "cannot_connect" || row.status === "offline" || row.status === "waiting_to_retry")) {
+  const reading = targetReading({ status: row.status, health: row.health, name });
+  if (!row.callable && row.status !== "addon_unreachable" && row.status !== "app_unreachable") {
     // Neutral, not amber. Registered-and-not-yet-answered resolves on its own
     // within a refresh interval, and colouring it would cost amber its meaning.
     return {

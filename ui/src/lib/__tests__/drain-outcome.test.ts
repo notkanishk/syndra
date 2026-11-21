@@ -161,12 +161,12 @@ describe("a send with more than one connected system", () => {
   });
 
   it("a skipped system with changes of its own says how many it left waiting", () => {
-    const pass = { target: "truenas", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: true, reason: "target_unreachable" };
+    const pass = { target: "truenas", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: true, reason: "addon_unreachable" };
     const res = (waiting: number) =>
       result({
         applied: 3,
         halted: true,
-        reason: "target_unreachable",
+        reason: "addon_unreachable",
         halted_target: "truenas",
         passes: [
           { target: "zitadel", applied: 3, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: false },
@@ -176,27 +176,40 @@ describe("a send with more than one connected system", () => {
     expect(named(res(2))).toEqual({
       tone: "warning",
       message: "3 reached Zitadel. TrueNAS didn't answer, so its 2 are still here.",
-      detail: "TrueNAS is not answering. Its 2 changes are still waiting for you to send, and nothing counts against the retry limit.",
+      detail: "TrueNAS's add-on isn't answering. Its 2 changes are still waiting for you to send, and nothing counts against the retry limit.",
     });
-    expect(named(res(1)).detail).toMatch(/^TrueNAS is not answering\. Its 1 change is still waiting/);
+    expect(named(res(1)).detail).toMatch(/^TrueNAS's add-on isn't answering\. Its 1 change is still waiting/);
   });
 
   it("says nothing was sent when the only pass that could run did not", () => {
     const out = named(
       result({
         halted: true,
-        reason: "target_unreachable",
+        reason: "addon_unreachable",
         halted_target: "truenas",
         passes: [
-          { target: "truenas", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: true, reason: "target_unreachable" },
+          { target: "truenas", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: true, reason: "addon_unreachable" },
         ],
       }),
     );
 
     expect(out.tone).toBe("error");
-    expect(out.message).toMatch(/TrueNAS is not answering/);
+    expect(out.message).toMatch(/TrueNAS's add-on isn't answering/);
     // The pre-flight is the point: an outage costs one probe, not a retry
     // budget per row.
     expect(out.detail).toMatch(/nothing counts against the retry limit/i);
+  });
+
+  // Design §13.1: the app down is its own sentence, never the add-on's.
+  it("names the system behind the add-on when only the app is down", () => {
+    const out = named(
+      result({
+        halted: true,
+        reason: "app_unreachable",
+        halted_target: "truenas",
+        passes: [{ target: "truenas", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: true, reason: "app_unreachable" }],
+      }),
+    );
+    expect(out.message).toBe("TrueNAS's add-on is running but can't reach TrueNAS. Nothing was sent.");
   });
 });

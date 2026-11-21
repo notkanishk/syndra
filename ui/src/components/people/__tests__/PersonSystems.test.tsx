@@ -6,7 +6,7 @@ import { PersonSystems } from "@/components/people/PersonSystems";
 import { MemberSystemPage } from "@/components/member/MemberSystemPage";
 import { TargetNameDialog } from "@/components/targets/TargetName";
 import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
-import type { PersonTargetView } from "@/lib/queries/useMyStorage";
+import type { PersonTargetView, ReadView } from "@/lib/queries/useMyStorage";
 import type { TargetSummary } from "@/lib/queries/useTargets";
 
 /**
@@ -44,7 +44,10 @@ vi.mock("@/lib/ui-view", () => ({ useUiView: () => ({ view: "basic", setView: ()
 vi.mock("@/components/names/shownNames", () => ({ useShownNames: () => ({ role: (_p: string, k: string) => (k === "laser" ? "Laser operator" : k) }) }));
 vi.mock("@/components/names/UserName", () => ({ UserName: ({ id }: { id: string }) => <span>{id}</span> }));
 
-const base = { entitled: true, credential: { set: false }, reachable: true, holds: [] as PersonTargetView["holds"] };
+const base = { entitled: true, credential: { set: false }, health: "answering" as const, holds: [] as PersonTargetView["holds"] };
+const NOW = "2026-11-10T09:30:00Z";
+/** The add-on's part of a view as a read now (design §13.6). */
+const said = (data: NonNullable<Extract<PersonTargetView["read"], { state: "now" }>>["data"]): PersonTargetView["read"] => ({ state: "now", takenAt: NOW, data });
 const nas: PersonTargetView = { ...base, target: "truenas", name: "TrueNAS", kind: "storage", entitlement_schema: TRUENAS_SCHEMA, account: { username: "rey" } };
 const laser: PersonTargetView = {
   ...base,
@@ -54,7 +57,7 @@ const laser: PersonTargetView = {
   entitlement_schema: [{ name: "on", role: "account" }],
   account: { username: "rey.mysterio" },
   roles: [{ project_id: "p", role_key: "laser" }],
-  standing: { usable: false, waiting_on: "member", note: "Induction not done", next: "Book an induction at the front desk" },
+  read: said({ standing: { usable: false, waiting_on: "member", note: "Induction not done", next: "Book an induction at the front desk" } }),
 };
 const door: PersonTargetView = { ...base, target: "door", name: "Door", entitled: false };
 
@@ -182,19 +185,18 @@ describe("the Name setting, the one write place", () => {
 
 describe("what an add-on says about a person, on their page (operators)", () => {
   it("draws every read through the generic renderer, for the operator's audience", () => {
-    const reads = [
+    const reads: ReadView[] = [
       {
         operation: "holdings.list",
-        shape: "records" as const,
-        readable: true,
-        result: {
-          records: [{ id: "a", label: "Digital caliper", standing: { usable: false, waiting_on: "member" as const, next: "Bring it back to the front desk" } }],
-          taken_at: "2026-11-10T09:30:00Z",
-          current: true,
+        shape: "records",
+        read: {
+          state: "now",
+          takenAt: NOW,
+          data: { records: [{ id: "a", label: "Digital caliper", standing: { usable: false, waiting_on: "member" as const, next: "Bring it back to the front desk" } }] },
         },
       },
     ];
-    state.views = { data: [{ ...laser, reads }], error: null, refetch: () => {} };
+    state.views = { data: [{ ...laser, read: said({ reads }) }], error: null, refetch: () => {} };
     render(<PersonSystems userId="u1" name="Rey" />);
     expect(screen.getByText("Digital caliper")).toBeInTheDocument();
     // An operator's standing is worded for the operator, not as "you".
@@ -211,17 +213,13 @@ describe("what an add-on says about a person, on their page (operators)", () => 
 
 // Feature freshness: the page that owns the read hands its one Read again to the cards.
 describe("Read again on a card served from the add-on's copy", () => {
-  const copied: NonNullable<PersonTargetView["reads"]> = [
-    {
-      operation: "holdings.list",
-      shape: "records",
-      readable: true,
-      result: { records: [], taken_at: new Date(Date.now() - 4 * 60_000).toISOString(), current: false, stale: { reason: "cached" } },
-    },
-  ];
+  const takenAt = new Date(Date.now() - 4 * 60_000).toISOString();
+  const copied = said({
+    reads: [{ operation: "holdings.list", shape: "records", read: { state: "kept", takenAt, why: { reason: "cached" }, data: { records: [] } } }],
+  });
 
   it("asks for the person's systems again, once, from an operator's card", () => {
-    state.views = { data: [{ ...laser, reads: copied }], error: null, refetch: () => {} };
+    state.views = { data: [{ ...laser, read: copied }], error: null, refetch: () => {} };
     render(<PersonSystems userId="u1" name="Rey" />);
     fireEvent.click(screen.getByRole("button", { name: "Read again" }));
     expect(state.pressPerson).toHaveBeenCalledTimes(1);
@@ -229,7 +227,7 @@ describe("Read again on a card served from the add-on's copy", () => {
   });
 
   it("asks for the member's own systems again, once, from the member's page", () => {
-    state.mine = { ...state.mine, data: [{ ...laser, reads: copied }] };
+    state.mine = { ...state.mine, data: [{ ...laser, read: copied }] };
     render(<MemberSystemPage target="laser" />);
     fireEvent.click(screen.getByRole("button", { name: "Read again" }));
     expect(state.pressMine).toHaveBeenCalledTimes(1);

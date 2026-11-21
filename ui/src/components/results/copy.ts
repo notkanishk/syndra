@@ -1,5 +1,6 @@
 import { formatList } from "@/lib/format";
 import { NOTHING_TO_DO } from "@/lib/outcome";
+import { REASON, type Why } from "@/lib/queries/read";
 
 /**
  * Every sentence the generic read renderers say, in one place, so the copy
@@ -18,9 +19,7 @@ export const emptyRecords = (name: string, who: Reader) =>
 export const emptyMeters = (name: string) => `${name} reports no usage. ${NOTHING_TO_DO}`;
 export const emptyEvents = (name: string) => `No recorded activity on ${name}. ${NOTHING_TO_DO}`;
 
-/** The read did not come back: not a claim that the answer is "none". The title is per read, so it never contradicts the system's own "read just now". */
-export const notReadableTitle = (name: string) => `One read from ${name} did not come back`;
-export const notReadableBody = (name: string) => `Syndra asked ${name} and did not get a usable answer. This is not a claim that nothing is there.`;
+/** The next step beside a read that did not come back, by who is reading. */
 export const notReadableNext = (who: Reader) =>
   who.audience === "member"
     ? "Try again in a minute. If it keeps failing, ask makerspace staff."
@@ -77,3 +76,47 @@ export const checkAgainNext = (seconds: number) =>
   seconds > 0 ? "Press Check now again when the count ends." : "Press Check now again.";
 export const unreachableLine = (name: string, time: string, who: Reader) =>
   `${name} can't be reached right now; this is what it said at ${time}. ${notReadableNext(who)}`;
+
+/**
+ * Why a system was not read (addon-contract design §13.1; copy guide section 19),
+ * ending in its next step. A member reads one sentence for both outages, since
+ * which box is down is not theirs to fix; an operator is told which side is
+ * down and what to check, and the add-on's own words come first where it is the
+ * one that knows (its app down, its refusal). The backend writes the same
+ * sentences into a 503's `message`, which is said as it came; both ends are
+ * held to the guide's table by a test each.
+ */
+export function whyLine(why: Why, system: string, who: Reader, product = system): string {
+  if (why.message) return why.message;
+  const { reason, cause, detail, retryAfter } = why;
+  if (reason === REASON.cooldown) return `${system} was read moments ago. Read it again in ${Math.max(1, retryAfter ?? 1)} s.`;
+  if (who.audience === "member") {
+    return reason === REASON.addonUnreachable || reason === REASON.appUnreachable
+      ? `${system} can't be read right now. ${NOTHING_TO_DO}`
+      : `${system} can't be read right now. Ask makerspace staff.`;
+  }
+  const said = detail?.trim();
+  if (said && (reason === REASON.appUnreachable || reason === REASON.readRefused)) return said.endsWith(".") ? said : `${said}.`;
+  switch (reason) {
+    case REASON.addonUnreachable: {
+      const again = retryAfter && retryAfter > 0 ? ` Syndra tries again in ${retryAfter} s.` : "";
+      switch (cause) {
+        case "wrong_host":
+          return `Something answered at ${system}'s add-on address, but it isn't the add-on registered here. Check the address and the shared secret, then restart the add-on.${again}`;
+        case "timeout":
+          return `${system}'s add-on started answering and stopped. Syndra keeps trying. If it lasts, read the add-on's log.${again}`;
+        case "fault":
+          return `${system}'s add-on answered with an error it didn't explain. Read the add-on's log.${again}`;
+        case "no_key":
+          return `Syndra can't load ${system}'s shared secret. Check Syndra's secret file.${again}`;
+        default:
+          return `Syndra can't reach ${system}'s add-on. Check that its container is running. Syndra keeps trying.${again}`;
+      }
+    }
+    case REASON.appUnreachable:
+      return `${system}'s add-on is running but can't reach ${product}. Check that ${product} is on.`;
+    case REASON.addonOutdated:
+      return `${system}'s add-on doesn't offer this. Update the add-on.`;
+  }
+  return `${system}'s add-on didn't take this. Read the add-on's log.`;
+}

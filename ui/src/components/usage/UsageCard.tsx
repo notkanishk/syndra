@@ -16,6 +16,7 @@ import { formatRelative } from "@/lib/format";
 import { Crossfade, Unfold } from "@/lib/motion";
 import type { MyTargetView } from "@/lib/queries/useMyStorage";
 import type { StatsMetric, UsageWindows } from "@/lib/queries/useStats";
+import { whyLine, type Reader } from "@/components/results/copy";
 import { CAP, capText, dayWords, daysSince, gapLines, gapRange, gapsShown, gapWhere, plot, quoted, windowDays } from "@/lib/usage";
 
 /** The most lines the fold lists; the rest is said, not drawn. */
@@ -97,7 +98,21 @@ function Fold({ metrics, windows, person }: { metrics: StatsMetric[]; windows: U
  * Insights, Usage, in the words the system's kind gives, `step`), and right, faint, when the record
  * began inside the window and how old the count is (totals) or how long a person's numbers are kept.
  */
-function End({ metrics, windows, target, step: insights }: { metrics: StatsMetric[]; windows: UsageWindows; target?: string; step?: string }) {
+function End({
+  metrics,
+  windows,
+  target,
+  step: insights,
+  system,
+  reader,
+}: {
+  metrics: StatsMetric[];
+  windows: UsageWindows;
+  target?: string;
+  step?: string;
+  system?: string;
+  reader: Reader;
+}) {
   const waiting = metrics.some((metric) => metric.watermark === null);
   const windowStart = windowDays(windows.today)[0];
   const began = metrics
@@ -121,7 +136,24 @@ function End({ metrics, windows, target, step: insights }: { metrics: StatsMetri
     .join(" · ");
   // Insights, Usage holds per-person metrics only: a system with none has nothing there to open.
   const link = target !== undefined && !waiting && metrics.some((metric) => metric.per_subject) ? insightsUsageHref(target) : null;
-  const step = waiting ? copy.NOT_COUNTED_NEXT : link ? (insights ?? copy.OVERVIEW_NEXT) : copy.NOTHING_TO_DO;
+  // While the system is down the newest days wait on it: said with the monitor's why, never as a zero (design §13.3).
+  const through = metrics
+    .map((metric) => metric.counted_through)
+    .filter((d): d is string => Boolean(d))
+    .sort()
+    .pop();
+  const { why } = windows;
+  // ponytail: said only where the card knows the system's name (every caller that can be down passes it).
+  const step = why && system
+    ? copy.notCountedSince(
+        through ? dayWords(through) : null,
+        whyLine({ reason: why.reason, cause: why.cause, detail: why.detail, retryAfter: why.retry_after }, system, reader),
+      )
+    : waiting
+      ? copy.NOT_COUNTED_NEXT
+      : link
+        ? (insights ?? copy.OVERVIEW_NEXT)
+        : copy.NOTHING_TO_DO;
   return (
     // The link is the card's one action, in the row's seat; on a system's card the seat is there with or
     // without it, so the faint facts never move with the data. A person's card never has the link, so it
@@ -159,6 +191,8 @@ export function UsageCard({
   target,
   step,
   person = false,
+  system,
+  reader = { audience: "operator", person: "" },
 }: {
   title?: string;
   label?: string;
@@ -167,6 +201,9 @@ export function UsageCard({
   target?: string;
   step?: string;
   person?: boolean;
+  /** The system's name and who is reading: they word why the newest days are not counted while it is down. */
+  system?: string;
+  reader?: Reader;
 }) {
   // A system's own card (it names its target): a per-person figure opens its people on Insights' Usage (A-24 §10).
   const opens = target !== undefined ? insightsUsageHref(target) : undefined;
@@ -177,7 +214,7 @@ export function UsageCard({
         <MetricBlock key={metric.name} metric={metric} windows={windows} first={i === 0} titled={Boolean(title)} person={person} opens={opens} />
       ))}
       <Fold metrics={metrics} windows={windows} person={person} />
-      <End metrics={metrics} windows={windows} target={target} step={step} />
+      <End metrics={metrics} windows={windows} target={target} step={step} system={system} reader={reader} />
     </Card>
   );
 }
@@ -212,7 +249,16 @@ export function ViewUsage({ view, person }: { view: MyTargetView; person?: strin
   // (A-23 part 5 frame 23 draws it under an account, and draws no empty form). The kind's card above
   // already says there is no account. Anything counted for them is still said, so it is never nowhere.
   if (metrics.length === 0 || (!view.account && metrics.every((m) => m.series.length === 0))) return null;
-  return <UsageCard title={title} metrics={metrics} windows={usage} person />;
+  return (
+    <UsageCard
+      title={title}
+      metrics={metrics}
+      windows={usage}
+      person
+      system={view.name}
+      reader={person === undefined ? { audience: "member" } : { audience: "operator", person }}
+    />
+  );
 }
 
 /**

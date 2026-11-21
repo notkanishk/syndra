@@ -492,6 +492,9 @@ describe("an error reaches the page in the product's voice", () => {
     // An operator pressing a control that cannot work needs the target's own
     // words; the file argues this at its call site.
     "components/targets/MergeFindings.tsx",
+    // Keeps a 503 TARGET_NOT_READ's message as the read's why: only that code, whose message is the
+    // backend's design §13.1 sentence, held to the copy guide's section 19 (whyCopyGuide.test.ts).
+    "lib/queries/read.ts",
   ]);
 
   it("never renders a caught error's message directly", () => {
