@@ -141,7 +141,10 @@ func Unread(r CallResponse) Why {
 
 // unsent is a reply with no status: nothing came back.
 func unsent(r CallResponse) Why {
+	var held *HeldError
 	switch {
+	case errors.As(r.Err, &held):
+		return held.Why
 	case errors.Is(r.Err, ErrFeatureNotDeclared):
 		return Why{Reason: ReasonAddonOutdated}
 	case errors.Is(r.Err, ErrNoCallRecord), errors.Is(r.Err, ErrNoFingerprint), errors.Is(r.Err, ErrFreshOutOfScope),
@@ -165,3 +168,42 @@ func cutOff(err error) bool {
 }
 
 func seconds(d time.Duration) int { return int(math.Ceil(d.Seconds())) }
+
+// HeldError is a write Syndra refused undialed because the monitor holds its
+// system addon_unreachable (design §13.4): nothing went out. Why is the
+// monitor's, so the page names the same cause the roster does.
+type HeldError struct {
+	Target string
+	Why    Why
+}
+
+func (e *HeldError) Error() string {
+	return fmt.Sprintf("addon %s: held %s (%s), nothing sent", e.Target, e.Why.Reason, e.Why.Cause)
+}
+
+// Held says an interactive write to target is refused at once, undialed: the
+// monitor holds it addon_unreachable (design §13.4, "Halts"). App down is not
+// held: the add-on answers, and its own refusal says so. The drain does not
+// ask: it already claims no row of an unreachable system.
+func Held(target string) (Why, bool) {
+	st := HealthOf(target)
+	if st.State != StateAddonUnreachable {
+		return Why{}, false
+	}
+	return Why{Reason: ReasonAddonUnreachable, Cause: st.Cause, RetryAfter: st.RetryAfter}, true
+}
+
+// NotLandedError is a write that did not land: unreached (nothing went out) or
+// indeterminate (sent, answer lost), and why. What writeOutcome answers from.
+type NotLandedError struct {
+	Target  string
+	Outcome Outcome
+	Why     Why
+	Err     error
+}
+
+func (e *NotLandedError) Error() string {
+	return fmt.Sprintf("addon %s: %s (%s %s): %v", e.Target, e.Outcome, e.Why.Reason, e.Why.Cause, e.Err)
+}
+
+func (e *NotLandedError) Unwrap() error { return e.Err }

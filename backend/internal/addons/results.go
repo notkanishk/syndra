@@ -153,6 +153,11 @@ func Preview(ctx context.Context, target, op, subject, actor string, params map[
 		out.Err = err
 		return out
 	}
+	// Refused undialed like the confirm it previews (design §13.4).
+	if why, held := Held(target); held {
+		out.Err = &HeldError{Target: target, Why: why}
+		return out
+	}
 	a, err := Get(target)
 	if err != nil {
 		out.Err = err
@@ -194,6 +199,11 @@ func ViewOf(target, op string, body []byte, c Clock) ReadView {
 // answer is the reply's payload: `result`, the one key a read is answered
 // under. A reply without it (an old per-read key such as `storage` in its
 // place) carries no reading, and is refused, never guessed at.
+// Why is why the reply is not a reading (Unread); zero when it is one.
+func (r ReadReply) Why() Why {
+	return Unread(CallResponse{Outcome: r.Outcome, Status: r.Status, Err: r.Err, Code: r.Code, Body: r.Body, RetryAfter: r.RetryAfter})
+}
+
 func (r ReadReply) answer() (json.RawMessage, error) {
 	if r.Outcome != OutcomeSucceeded {
 		return nil, fmt.Errorf("read %s: %s: %w", r.Operation, r.Outcome, r.Err)

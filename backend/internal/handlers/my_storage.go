@@ -521,13 +521,10 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusConflict, "TARGET_PAUSED",
 			"Account changes on that system are paused, so your password can't be changed right now. Your current one keeps working.")
 		return
-	case view.Health != addons.StateAnswering:
-		// Fails closed and says so. Accepting it and reporting success would
-		// tell a member their password works when nothing received it.
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREACHABLE",
-			"That system is not answering right now. Nothing was changed. Try again shortly.")
-		return
 	}
+	// A system the monitor holds down is refused undialed by the dispatch
+	// itself (addons.Held), and answered as NOTHING_SENT below: one gate for
+	// every write, not one per handler (design §13.4).
 
 	// Complexity is checked HERE, before the value leaves the process. Checking
 	// it after dispatch would mean a rejected password had already reached the
@@ -570,20 +567,22 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		writeCredentialError(w, err)
 		return
 	}
-	if res.Outcome != addons.OutcomeSucceeded {
-		// Never success, early or otherwise (owner, 3 Nov). The page tells the
-		// three apart: indeterminate is a lost reply, which it sends again once
-		// with the value it still holds; rejected and unreached are clear
-		// answers that nothing changed, and are not resent.
-		body := map[string]any{
-			"status":    string(res.Outcome),
-			"operation": res.OperationID,
-			"detail":    unconfirmedCredentialCopy[res.Outcome],
-		}
-		if res.Outcome == addons.OutcomeIndeterminate {
-			body["retry"] = credentialRetry(req.Resend, time.Now())
-		}
-		jsonResponse(w, http.StatusAccepted, body)
+	// Never success, early or otherwise (owner, 3 Nov). Rejected is a clear
+	// answer that nothing changed. Unreached and indeterminate answer through
+	// writeOutcome (design §13.4); an unconfirmed one carries the one resend
+	// the page makes with the value it still holds (extcall.AddonResend).
+	switch res.Outcome {
+	case addons.OutcomeSucceeded:
+	case addons.OutcomeRejected:
+		jsonResponse(w, http.StatusAccepted, map[string]any{
+			"status": string(res.Outcome), "operation": res.OperationID,
+			"detail": "The system refused the change. Nothing was changed.",
+		})
+		return
+	default:
+		n := notLandedOf(r.Context(), target, res.Outcome, res.Why)
+		n.Member = true
+		writeOutcome(w, n, map[string]any{"operation": res.OperationID, "retry": credentialRetry(req.Resend, time.Now())})
 		return
 	}
 
@@ -621,14 +620,6 @@ func credentialRetry(resend bool, now time.Time) extcall.RetryState {
 	}
 	next := p.NextTryAfter(now, 1)
 	return p.Retrying(1, &next)
-}
-
-// unconfirmedCredentialCopy is the backend's sentence for each answer that is
-// not "set". The page words its own lines; this is for any other reader.
-var unconfirmedCredentialCopy = map[addons.Outcome]string{
-	addons.OutcomeIndeterminate: "The system didn't answer, so your password may not have changed.",
-	addons.OutcomeRejected:      "The system refused the change. Nothing was changed.",
-	addons.OutcomeUnreached:     "The change didn't reach the system. Nothing was changed.",
 }
 
 func writeCredentialError(w http.ResponseWriter, err error) {

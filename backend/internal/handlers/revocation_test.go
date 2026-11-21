@@ -49,6 +49,7 @@ func stubRevocation(t *testing.T) *revokeHarness {
 			return db.Allowance{}, h.createErr
 		}
 		a.ID = "allow_1"
+		a.CreatedAt = time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
 		h.allowances = append(h.allowances, a)
 		return a, nil
 	}
@@ -134,10 +135,11 @@ func TestTheResponseSaysEstablishedSessionsEndOnReconnect(t *testing.T) {
 			t.Errorf("the response implies session termination this target cannot perform (%q): %s", forbidden, body)
 		}
 	}
-	// And it must not report the target as already changed: the convergence is
-	// queued and the drain has not run.
-	if !strings.Contains(body, `"queued":true`) {
-		t.Errorf("the suspension is queued, not applied: %s", body)
+	// And it must not report the target as already changed: recorded now, and
+	// landed only when the add-on answers succeeded (design §13.4).
+	if !strings.Contains(body, `"status":"recorded"`) || !strings.Contains(body, `"landed_at":null`) ||
+		!strings.Contains(body, `"recorded_at":"2026-11-21T09:00:00Z"`) || !strings.Contains(body, "the account there still works") {
+		t.Errorf("the suspension is recorded, not landed: %s", body)
 	}
 }
 
@@ -173,7 +175,7 @@ func TestAFailedRotationLeavesTheSuspensionStandingAndSaysWhatIsLeft(t *testing.
 		t.Error("the suspension must survive a failed rotation")
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "partially_revoked") || !strings.Contains(body, "password.rotate") {
+	if !strings.Contains(body, `"rotation":`) || !strings.Contains(body, "password.rotate") {
 		t.Errorf("the outstanding half must be named: %s", body)
 	}
 	if !strings.Contains(body, `"rotated":false`) {
@@ -289,7 +291,7 @@ func TestARevocationSaysItDrainsWithoutAnOperator(t *testing.T) {
 	rr := revoke(`{"reason":"offboarding","confirmed":true}`)
 	body := rr.Body.String()
 
-	if !strings.Contains(body, "drains on its own") {
+	if !strings.Contains(body, "Syndra applies it by itself") {
 		t.Errorf("a revocation must say it does not wait: %s", body)
 	}
 	if strings.Contains(body, "resumes the drain") {
@@ -313,8 +315,8 @@ func TestARefusedRotationNeverSaysTheCredentialWasReplaced(t *testing.T) {
 		want    string
 	}{
 		{"rejected", addons.OutcomeRejected, errors.New("the bound account no longer exists on the target"), "no longer exists"},
-		{"unreached", addons.OutcomeUnreached, nil, "could not be reached"},
-		{"indeterminate", addons.OutcomeIndeterminate, nil, "did not confirm"},
+		{"unreached", addons.OutcomeUnreached, nil, "Nothing went out"},
+		{"indeterminate", addons.OutcomeIndeterminate, nil, "don't send it again"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -334,7 +336,7 @@ func TestARefusedRotationNeverSaysTheCredentialWasReplaced(t *testing.T) {
 			}
 			// And the half that DID happen is still stated first — the failure
 			// must not read as "the revocation failed".
-			if !strings.Contains(body, "New connections are refused now") {
+			if !strings.Contains(body, "Recorded. Not yet applied") {
 				t.Errorf("the suspension is real and must be stated: %s", body)
 			}
 		})
@@ -373,7 +375,7 @@ func TestTheQueuedLockDeclaresItselfAWithdrawal(t *testing.T) {
 	if !h.converged[0].WithdrawsOnly {
 		t.Error("the lock must declare itself a withdrawal, or nothing claims it and the disclosure below is false")
 	}
-	if !strings.Contains(rr.Body.String(), "drains on its own") {
+	if !strings.Contains(rr.Body.String(), "Syndra applies it by itself") {
 		t.Error("the disclosure is the promise the declaration keeps; one without the other is the bug")
 	}
 }

@@ -64,8 +64,14 @@ func TestOnlyAConfirmedChangeSettlesTheEarlierOnes(t *testing.T) {
 		rr, _ := setCredential(t, `{"password":"`+memberSecret+`"}`)
 		var out map[string]any
 		_ = json.Unmarshal(rr.Body.Bytes(), &out)
-		if rr.Code != http.StatusAccepted || out["status"] != string(outcome) {
-			t.Errorf("%s: want 202 with status %q, got %d %v", outcome, outcome, rr.Code, out)
+		// Rejected is the add-on's clear no; the other two answer through
+		// writeOutcome (design §13.4).
+		code, status := http.StatusAccepted, map[addons.Outcome]string{addons.OutcomeRejected: "rejected", addons.OutcomeIndeterminate: "unconfirmed"}[outcome]
+		if outcome == addons.OutcomeUnreached {
+			code, status = http.StatusServiceUnavailable, ""
+		}
+		if rr.Code != code || (status != "" && out["status"] != status) {
+			t.Errorf("%s: want %d %q, got %d %v", outcome, code, status, rr.Code, out)
 		}
 		if len(h.superseded) != 0 {
 			t.Errorf("%s: an unconfirmed change must not settle anything", outcome)
@@ -89,8 +95,8 @@ func TestAnUnrecordedOutcomeIsALostReplyNotARefusal(t *testing.T) {
 	rr, _ := setCredential(t, `{"password":"`+memberSecret+`"}`)
 	var out map[string]any
 	_ = json.Unmarshal(rr.Body.Bytes(), &out)
-	if rr.Code != http.StatusAccepted || out["status"] != "indeterminate" {
-		t.Fatalf("want 202 indeterminate, got %d %v", rr.Code, out)
+	if rr.Code != http.StatusAccepted || out["status"] != "unconfirmed" {
+		t.Fatalf("want 202 unconfirmed, got %d %v", rr.Code, out)
 	}
 	if strings.Contains(rr.Body.String(), "Nothing was changed") {
 		t.Fatal("a send that may have applied must never read as nothing changed")

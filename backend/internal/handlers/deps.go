@@ -519,6 +519,7 @@ var (
 	addonsHealth     = addons.Health
 	addonsLastHealth = addons.LastHealth
 	addonsHealthOf   = addons.HealthOf
+	addonsHeld       = addons.Held
 	// How a member reaches a target, for the instructions on their own page.
 	addonsConnection = addons.ConnectionFor
 	// A target's kind, product and entitlement schema as last accepted, read

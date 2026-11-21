@@ -189,6 +189,10 @@ func (a *Addon) declares(feature string) error {
 // settles as unreached, which is what an unclaimed row may settle as.
 func (a *Addon) operate(ctx context.Context, p db.AddonOperationParams, s sendSpec) (CallResponse, error) {
 	// Before the row: a call that will not be sent leaves no record of one.
+	if why, held := Held(p.Target); held {
+		err := &HeldError{Target: p.Target, Why: why}
+		return CallResponse{Outcome: OutcomeUnreached, Err: err}, err
+	}
 	if err := a.declares(featureOf(s.Path)); err != nil {
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}, err
 	}

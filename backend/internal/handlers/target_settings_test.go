@@ -77,16 +77,10 @@ func TestATargetSettingThatTimedOutMayHaveApplied(t *testing.T) {
 	}
 
 	resp = addons.CallResponse{Outcome: addons.OutcomeIndeterminate}
-	rr := putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`)
-	if rr.Code != http.StatusServiceUnavailable || !strings.Contains(rr.Body.String(), "may have applied") ||
-		strings.Contains(rr.Body.String(), "nothing was changed") {
-		t.Fatalf("a lost answer may have applied: %d %s", rr.Code, rr.Body.String())
-	}
+	assertUnconfirmed(t, putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`))
 
 	resp = addons.CallResponse{Outcome: addons.OutcomeUnreached}
-	if rr := putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`); !strings.Contains(rr.Body.String(), "nothing was changed") {
-		t.Fatalf("a request that never left changed nothing: %s", rr.Body.String())
-	}
+	assertNothingSent(t, putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`), addons.ReasonAddonUnreachable)
 }
 
 func TestTargetSettingsSayWhenTheyCouldntBeRead(t *testing.T) {

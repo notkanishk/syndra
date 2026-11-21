@@ -805,6 +805,10 @@ func (w healthWire) view(target string, status int, c Clock) TargetHealth {
 	}
 }
 
+// ErrLifecycleRefused is the add-on answering a lifecycle change with no: it
+// did not change.
+var ErrLifecycleRefused = errors.New("lifecycle change refused")
+
 // SetLifecycle moves an add-on between active, draining and read-only at
 // runtime (design §18).
 //
@@ -833,11 +837,13 @@ func SetLifecycle(ctx context.Context, target, state, reason, actor string) (map
 	resp, err := a.operate(ctx, db.AddonOperationParams{
 		Target: target, Operation: "lifecycle.set", ActorID: actor, SubjectID: target, About: state,
 	}, sendSpec{Method: http.MethodPost, Path: "/lifecycle", Body: body, SkipBreaker: true})
-	if err != nil {
-		return nil, err
-	}
-	if resp.Outcome != OutcomeSucceeded {
-		return nil, fmt.Errorf("addon %s: lifecycle change refused (%d): %v", target, resp.Status, resp.Err)
+	switch resp.Outcome {
+	case OutcomeSucceeded:
+	case OutcomeRejected:
+		return nil, fmt.Errorf("addon %s: %w (%d): %v", target, ErrLifecycleRefused, resp.Status, resp.Err)
+	default:
+		// Unreached or indeterminate: the handler says which (design §13.4).
+		return nil, &NotLandedError{Target: target, Outcome: resp.Outcome, Why: Unread(resp), Err: errors.Join(err, resp.Err)}
 	}
 	monitor.setLifecycle(target, state)
 	var out map[string]any

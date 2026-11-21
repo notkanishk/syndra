@@ -36,18 +36,12 @@ func handlePutTargetSetting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor := resolveActor(r, "")
-	resp, ok := addonsPutSetting(r.Context(), target, name, req.Value, actor)
-	// First, because a timeout or a 5xx is not "nothing was changed": the
-	// request was sent and the answer was lost, so the write may have landed.
-	// Said the way every other add-on operation says it.
-	if resp.Outcome == addons.OutcomeIndeterminate {
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNCONFIRMED",
-			"The system didn't confirm, so the change may have applied. Check the setting before trying again.")
-		return
-	}
-	if !ok {
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREACHABLE",
-			"The system didn't answer, so nothing was changed.")
+	resp, _ := addonsPutSetting(r.Context(), target, name, req.Value, actor)
+	// Unreached or indeterminate, said apart (design §13.4): a timeout or a
+	// 5xx is not "nothing was changed", the request went out and the answer
+	// was lost. An add-on answering that its app is down is unreached too.
+	if resp.Outcome == addons.OutcomeUnreached || resp.Outcome == addons.OutcomeIndeterminate {
+		writeOutcome(w, notLandedOf(r.Context(), target, resp.Outcome, addons.Unread(resp)), nil)
 		return
 	}
 	switch {

@@ -349,8 +349,8 @@ func TestUnbindingIsRefusedWhenTheAddOnDoesNotConfirm(t *testing.T) {
 	stubFindings(t, h)
 
 	rr := resolveFinding(t, `{"resolution":"unbound","reason":"the account was removed on purpose"}`)
-	if rr.Code != http.StatusBadGateway {
-		t.Fatalf("want 502, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusAccepted || !strings.Contains(rr.Body.String(), `"status":"unconfirmed"`) {
+		t.Fatalf("want 202 unconfirmed (design §13.4), got %d: %s", rr.Code, rr.Body.String())
 	}
 	if len(h.forgotten) != 0 {
 		t.Fatalf("this side must not forget what the add-on still holds: %v", h.forgotten)

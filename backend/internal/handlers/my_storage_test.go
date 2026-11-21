@@ -125,6 +125,10 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 		return models.ShadowCredentialStatus{}, nil
 	}
 	svcDispatchOperation = func(_ context.Context, req addonop.Request) (addonop.Result, error) {
+		if h.unreachable {
+			// The dispatch's own gate (addons.Held): refused undialed.
+			return addonop.Result{Outcome: addons.OutcomeUnreached, Why: heldWhy}, nil
+		}
 		h.dispatched = append(h.dispatched, req)
 		if h.err != nil {
 			return addonop.Result{}, h.err
@@ -307,17 +311,16 @@ func TestAnAnsweringAddOnWithAnUnreachableTargetOffersNoForm(t *testing.T) {
 }
 
 // And the refusal is the backend's, not the target's: a credential for an
-// unreachable target is refused here, before the value is sent anywhere.
+// unreachable target is refused by the dispatch, undialed (addons.Held), and
+// answered NOTHING_SENT, never the add-on's TARGET_UNREACHABLE (design §13.4).
 func TestACredentialForAnUnreachableTargetIsNotDispatched(t *testing.T) {
 	h := &storageHarness{entitled: true, bound: true, unreachable: true}
 	stubMyStorage(t, h)
 
 	rr, logs := setCredential(t, `{"password":"`+memberSecret+`"}`)
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("want 503, got %d (%s)", rr.Code, rr.Body.String())
-	}
-	if len(h.dispatched) != 0 {
-		t.Error("nothing may be sent at a target that cannot receive it")
+	assertNothingSent(t, rr, addons.ReasonAddonUnreachable)
+	if len(h.dispatched) != 0 || len(h.recorded) != 0 {
+		t.Error("nothing may be sent at, or recorded for, a target that cannot receive it")
 	}
 	if strings.Contains(rr.Body.String(), memberSecret) || strings.Contains(logs, memberSecret) {
 		t.Error("the refusal carries the credential")

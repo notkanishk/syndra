@@ -43,6 +43,10 @@ type UnconfirmedRevocation struct {
 	// Spent says the row is terminal: its retry budget is gone and nothing will
 	// dispatch it again. The distinction the surface renders differently.
 	Spent bool `json:"spent"`
+	// RecordedAt is when the revocation was recorded (design §13.4): its row's
+	// creation. It has not landed (a row leaves this list when it does, and the
+	// landing time is in the audit log, revocation.landed).
+	RecordedAt time.Time `json:"recorded_at"`
 }
 
 // UnconfirmedRevocationSummary is the counted form, for an indicator.
@@ -58,19 +62,25 @@ type UnconfirmedRevocationSummary struct {
 	OldestAge time.Duration `json:"-"`
 	// OldestAgeSeconds is the same age in the unit the field name promises.
 	OldestAgeSeconds int64 `json:"oldest_age_seconds"`
+	// WaitingAge is the oldest queued row that escalates on time: Zitadel's.
+	// An add-on's revocation waits for its system without limit and without
+	// escalation (design §13.4, owner Q3): it is listed with its age and
+	// lands by itself when the system answers; only a spent one escalates.
+	WaitingAge time.Duration `json:"-"`
 }
 
 // Escalated reports whether this summary has crossed into a security finding.
 //
 // Any spent row is one immediately: it is retained access that nothing will
-// withdraw, and its age is beside the point. A merely queued row escalates on
-// time, because a revocation that has not landed in a day is not draining, it is
-// stuck behind something.
+// withdraw, and its age is beside the point. A merely queued Zitadel row
+// escalates on time, because a revocation that has not landed in a day is not
+// draining, it is stuck behind something. A queued add-on row does not
+// (WaitingAge): it waits for its system, listed with its age.
 //
 // The rule lives here rather than in a renderer so the indicator, the surface
 // and any future alert cannot disagree about what counts.
 func (s UnconfirmedRevocationSummary) Escalated(threshold time.Duration) bool {
-	return s.Spent > 0 || (s.Queued > 0 && s.OldestAge >= threshold)
+	return s.Spent > 0 || (s.Queued > 0 && s.WaitingAge >= threshold)
 }
 
 // unconfirmedRevocationPredicate is the shared WHERE clause.
@@ -139,6 +149,7 @@ func ListUnconfirmedRevocations(ctx context.Context, limit int) ([]UnconfirmedRe
 		if lastError != nil {
 			r.LastError = *lastError
 		}
+		r.RecordedAt = r.CreatedAt
 		r.Age = time.Duration(ageSeconds) * time.Second
 		r.AgeSeconds = ageSeconds
 		out = append(out, r)
@@ -156,16 +167,19 @@ func CountUnconfirmedRevocations(ctx context.Context) (UnconfirmedRevocationSumm
 		SELECT
 			COUNT(*) FILTER (WHERE p.status <> 'failed'),
 			COUNT(*) FILTER (WHERE p.status = 'failed'),
-			COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - p.created_at))::bigint), 0)
+			COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - p.created_at))::bigint), 0),
+			COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - p.created_at))::bigint)
+			         FILTER (WHERE p.status <> 'failed' AND p.target = $1), 0)
 		  FROM propagation_outbox p
 		 WHERE ` + unconfirmedRevocationPredicate
 
 	var s UnconfirmedRevocationSummary
-	var oldest int64
-	if err := querier(ctx).QueryRow(ctx, q).Scan(&s.Queued, &s.Spent, &oldest); err != nil {
+	var oldest, waiting int64
+	if err := querier(ctx).QueryRow(ctx, q, TargetZitadel).Scan(&s.Queued, &s.Spent, &oldest, &waiting); err != nil {
 		return UnconfirmedRevocationSummary{}, fmt.Errorf("count unconfirmed revocations: %w", err)
 	}
 	s.OldestAge = time.Duration(oldest) * time.Second
+	s.WaitingAge = time.Duration(waiting) * time.Second
 	s.OldestAgeSeconds = oldest
 	return s, nil
 }

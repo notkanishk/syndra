@@ -219,6 +219,9 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			return false
 		}
 		res.Applied++
+		if intent.WithdrawsOnly {
+			auditLanded(ctx, row)
+		}
 
 	case resp.LifecycleRefusal:
 		// A deliberate maintenance window. Accounted as queued, never failed:
@@ -297,6 +300,17 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		res.persistErr(row.ID, "dispatch", errIndeterminate)
 	}
 	return false
+}
+
+// auditLanded writes the second of a revocation's two times (design §13.4):
+// it was recorded when its row was, and has landed now, on the add-on's
+// succeeded and nothing else. Both in one line, so the log answers "how long
+// did the account still work" without a join. Non-fatal: the row is applied.
+func auditLanded(ctx context.Context, row models.PendingPropagation) {
+	details := map[string]any{"target": row.Target, "recorded_at": row.CreatedAt.UTC(), "landed_at": time.Now().UTC()}
+	if err := insertAudit(ctx, "system", row.UserID, "revocation.landed", row.ID, details); err != nil {
+		log.Printf("[ADDON-DRAIN] audit landed revocation row=%s: %v (non-fatal)", row.ID, err)
+	}
 }
 
 // deferUnsent is the one path for a send where nothing went out: pending
