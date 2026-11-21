@@ -202,6 +202,7 @@ describe("adding a mapping", () => {
   it("says what the picked group opens before the preview", () => {
     state.reach = {
       read: true,
+      read_at: "2026-11-21T10:00:00Z",
       current: true,
       groups: {
         makers: [

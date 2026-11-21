@@ -11,6 +11,9 @@ import {
   RetryWait,
 } from "@/components/ui/ReadFreshness";
 
+/** The wait is said once in its own status region too; these read the line on screen. */
+const STATUS = '[role="status"]';
+
 /**
  * §31 A — one answer to "how old is this", used everywhere state is read from a
  * target.
@@ -172,12 +175,12 @@ describe("how a copy is drawn", () => {
 
   it("never reads a since of 0 as the epoch: that is a query that has not answered", () => {
     render(<ReadFreshness state={{ readAt: ago(0.2), stale: { reason: "cooldown", retry_after: 10, since: 0 } }} subject="The list" onRefresh={() => {}} />);
-    expect(screen.getByText(/you can read again in 10 s/)).toBeInTheDocument();
+    expect(screen.getByText(/you can read again in 10 s/, { ignore: STATUS })).toBeInTheDocument();
   });
 
   it("counts a cooldown from when it arrived, not from when it was drawn", () => {
     render(<ReadFreshness state={{ readAt: ago(0.2), stale: { reason: "cooldown", retry_after: 10, since: Date.now() - 4000 } }} subject="The list" onRefresh={() => {}} />);
-    expect(screen.getByText(/you can read again in [56] s/)).toBeInTheDocument();
+    expect(screen.getByText(/you can read again in [56] s/, { ignore: STATUS })).toBeInTheDocument();
   });
 
   // At 390px the sentence wraps and the button drops to its own row: a zero-tall slot let its edge

@@ -29,6 +29,12 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   isPending?: boolean;
   /** Visible explanation rendered under a disabled control. */
   reason?: string;
+  /**
+   * Off without leaving the tab order: `aria-disabled` and a press that does nothing, rather than
+   * `disabled`, which drops a focused control's focus to <body> (WAI-ARIA APG, "Focusability of
+   * disabled controls"). For a control that turns itself off under the hand that pressed it.
+   */
+  keepFocus?: boolean;
 }
 
 /**
@@ -95,6 +101,8 @@ export function Button({
   isPending = false,
   reason,
   disabled,
+  keepFocus = false,
+  onClick,
   className = "",
   type = "button",
   children,
@@ -109,7 +117,9 @@ export function Button({
   const button = (
     <button
       type={type}
-      disabled={isDisabled}
+      disabled={isDisabled && !keepFocus}
+      aria-disabled={(isDisabled && keepFocus) || undefined}
+      onClick={isDisabled ? undefined : onClick}
       aria-busy={isPending || undefined}
       // A destructive confirm never takes a dialog's first focus, wherever the footer places Cancel (Q1).
       data-skip-initial-focus={variant === "dangerConfirm" || undefined}

@@ -136,7 +136,7 @@ describe("Expiring access, laid out as its board", () => {
   it("Extend reports in the seat its buttons held", async () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Extend 90 days" }));
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/Extended by 90 days/));
+    await waitFor(() => expect(screen.getByText(/Extended by 90 days/).closest('[role="status"]')).not.toBeNull());
     expect(screen.queryByRole("button", { name: "Extend 90 days" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Let it lapse" })).toBeNull();
   });

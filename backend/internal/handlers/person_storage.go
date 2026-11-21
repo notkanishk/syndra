@@ -76,12 +76,11 @@ var lastStorage sync.Map // target + "\x00" + subject -> lastKnownStorage
 
 // rememberStorage keeps a read dated by the add-on's taken_at: a copy it read
 // four minutes ago is remembered as four minutes old. A status with no
-// observation (one not read from a reply), or one whose taken_at is the zero
-// time, is dated by when the backend received it, the closest the backend can
-// say: a remembered read always has a date, so the page never says "—" for it.
+// observation (one not read from a reply) is dated by when the backend
+// received it, the closest the backend can say.
 func rememberStorage(target, subject string, status addons.StorageStatus) {
 	readAt := time.Now()
-	if status.Observation != nil && !status.Observation.TakenAt.IsZero() {
+	if status.Observation != nil {
 		readAt = status.Observation.TakenAt
 	}
 	lastStorage.Store(target+"\x00"+subject, lastKnownStorage{Storage: status, ReadAt: readAt})

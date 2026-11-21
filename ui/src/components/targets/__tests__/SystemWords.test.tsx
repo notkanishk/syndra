@@ -65,7 +65,7 @@ describe("counts of people", () => {
   it("say a count the pass did not take was not taken, never 0 and never nothing", () => {
     // A truncated read sends no `stale`: it cannot tell a missing account from one past the cut.
     expect(reconcileLine(4, 1, undefined, "TrueNAS")).toBe(
-      "4 people with a managed account · 1 fix waiting for you to send · missing accounts not checked: only the first part of the list was read",
+      "4 people with a managed account · 1 fix waiting for you to send · missing accounts not checked: only the first part was read",
     );
   });
 

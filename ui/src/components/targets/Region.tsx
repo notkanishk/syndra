@@ -5,6 +5,18 @@ import React from "react";
 import { CountChip } from "@/components/ui/Badge";
 
 /**
+ * Moves focus to a region's heading (`${id}-heading`) when the control that held it leaves
+ * (AccountsNotRead), as GOV.UK Frontend's `setFocus` does: the heading is focusable only for that
+ * moment, and drops `tabindex` on blur, so it never becomes a tab stop or a click target.
+ */
+export function focusHeading(heading: HTMLElement | null) {
+  if (!heading) return;
+  heading.setAttribute("tabindex", "-1");
+  heading.addEventListener("blur", () => heading.removeAttribute("tabindex"), { once: true });
+  heading.focus();
+}
+
+/**
  * One region of the target page (design T1).
  *
  * The page carries eleven answers and used to carry them as eleven peers, in
@@ -36,8 +48,7 @@ export function Region({
     <section id={id} aria-labelledby={`${id}-heading`} className="grid scroll-mt-4 gap-(--region-head-gap)">
       <div className="grid gap-1.5 tablet:gap-1">
         <div data-landing className="flex flex-wrap items-center gap-2.5">
-          {/* Focusable by script only: where focus lands when the control that held it leaves (AccountsNotRead). */}
-          <h2 id={`${id}-heading`} tabIndex={-1} className="type-section-title">
+          <h2 id={`${id}-heading`} className="type-section-title">
             {title}
           </h2>
           {count !== undefined && <CountChip n={count} />}

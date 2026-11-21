@@ -228,7 +228,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
             </ArrowLink>
           ))}
           {needs.length === 0 && row.project !== null && (
-            <NeedsNote answering={answering} callable={row.callable} loading={loading} unread={readFailed} />
+            <NeedsNote answering={answering} callable={row.callable} loading={loading} readFailed={readFailed} />
           )}
         </span>
       }
@@ -307,17 +307,17 @@ function NeedsNote({
   answering,
   callable,
   loading,
-  unread,
+  readFailed,
 }: {
   answering: boolean;
   callable: boolean;
   loading: boolean;
-  unread: boolean;
+  readFailed: boolean;
 }) {
   if (!callable) return <span className="text-faint">Not yet</span>;
   if (!answering) return <span className="text-faint">Unknown until it answers</span>;
   if (loading) return <span className="text-faint">Reading…</span>;
-  if (unread) return <span className="text-faint">Not read just now</span>;
+  if (readFailed) return <span className="text-faint">Not read just now</span>;
   return (
     <span className="inline-flex items-center gap-2 text-muted">
       <StatusDot tone="healthy" />

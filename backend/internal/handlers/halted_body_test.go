@@ -80,16 +80,6 @@ func TestAZeroReadTimeIsNeverSent(t *testing.T) {
 	}
 }
 
-// A remembered storage read is always dated, even when the add-on's taken_at
-// was the zero time: the person's page says "last read" and a clock after it.
-func TestARememberedStorageReadIsAlwaysDated(t *testing.T) {
-	rememberStorage("truenas", "sub-undertaker", addons.StorageStatus{Observation: &addons.Observation{}})
-	t.Cleanup(func() { lastStorage.Delete("truenas\x00sub-undertaker") })
-	if got := recalledStorage("truenas", "sub-undertaker"); got == nil || got.ReadAt.IsZero() {
-		t.Fatalf("recalled %+v, want a read dated when it arrived", got)
-	}
-}
-
 // The other side of the halted body: a whole read that found nothing sends
 // its zeros, because they were counted. Absent means unread, never empty.
 func TestAWholeEmptyReadSendsItsZeros(t *testing.T) {

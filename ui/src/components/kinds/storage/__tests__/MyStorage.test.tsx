@@ -11,6 +11,9 @@ import type { CredentialAnswer, MyTargetView, StoragePlace } from "@/lib/queries
 import type { OneShotSecret } from "@/lib/secret";
 import type { RetryState } from "@/lib/retry";
 
+/** The wait is said once in its own status region too; these read the line on screen. */
+const STATUS = '[role="status"]';
+
 // The member's storage page, state by state (route-storage; A-01, A-02).
 // What each state may and may not offer is the point: a password form where a
 // password can't land, an address that won't answer, or a zero for usage
@@ -646,8 +649,8 @@ describe("how old the storage read is", () => {
   it("says a read moments ago with nothing kept is that, and the button waits", () => {
     state.targets = [view(copy(undefined, 20))];
     renderStorage();
-    expect(screen.getByText(/TrueNAS was read moments ago; you can read again in 20 s/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
+    expect(screen.getByText(/TrueNAS was read moments ago; you can read again in 20 s/, { ignore: STATUS })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Read again" })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("tells a member the system cannot be reached, with the step, and no button", () => {

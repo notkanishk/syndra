@@ -10,6 +10,9 @@ import { ApiError } from "@/lib/api-client";
 import type { MappingHistory, RoleMapping } from "@/lib/queries/useMappings";
 import type { TargetReach } from "@/lib/queries/useTargets";
 
+/** The wait is said once in its own status region too; these read the line on screen. */
+const STATUS = '[role="status"]';
+
 const miss = { value: undefined, resolved: true } as const;
 
 // A role key alone is not an identity — "maker" means nothing without the
@@ -509,8 +512,8 @@ describe("what each group opens", () => {
 
     reach.data = { read: false, current: false, retry_after: 20 };
     renderMappings();
-    expect(screen.getByText("What each group opens was read moments ago; you can read again in 20 s")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
+    expect(screen.getByText("What each group opens was read moments ago; you can read again in 20 s", { ignore: STATUS })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Read again" })).toHaveAttribute("aria-disabled", "true");
     reach.data = undefined;
   });
 
@@ -523,7 +526,7 @@ describe("what each group opens", () => {
     renderMappings().unmount();
     act(() => void vi.advanceTimersByTime(12_000));
     const copy = renderMappings();
-    expect(screen.getByText(/you can read again in 18 s/)).toBeInTheDocument();
+    expect(screen.getByText(/you can read again in 18 s/, { ignore: STATUS })).toBeInTheDocument();
     expect(dot().className).toContain("bg-warn");
     copy.unmount();
     reach.data = { read: false, current: false, retry_after: 30 };

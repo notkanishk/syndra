@@ -11,6 +11,9 @@ import { DormantAccounts, sweepResult } from "@/components/targets/DormantAccoun
 import type { DormantReport, SweepResult } from "@/lib/queries/useDormant";
 import type { OneShotSecret } from "@/lib/secret";
 
+/** The wait is said once in its own status region too; these read the line on screen. */
+const STATUS = '[role="status"]';
+
 /**
  * §29 — the only bulk action in the product, and the two things that keep it
  * principled: it can only ever touch accounts that grant nobody anything, and
@@ -332,16 +335,16 @@ describe("inside the add-on's cooldown", () => {
     vi.useFakeTimers();
     state.error = cooling(2);
     renderDormant();
-    expect(screen.getByText(/can read again in 2 s/)).toBeInTheDocument();
+    expect(screen.getByText(/can read again in 2 s/, { ignore: STATUS })).toBeInTheDocument();
     expect(screen.queryByText(/nothing was changed/)).toBeNull();
     expect(screen.queryByText(/You can try again in/)).toBeNull();
     expect(screen.queryByText("Not read")).toBeNull();
     expect(screen.queryByText("This list could not be read")).toBeNull();
     expect(screen.queryByText("Nothing to tidy.")).toBeNull();
     const button = screen.getByRole("button", { name: "Read again" });
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
     act(() => void vi.advanceTimersByTime(2000));
-    expect(button).toBeEnabled();
+    expect(button).not.toHaveAttribute("aria-disabled");
     fireEvent.click(button);
     expect(state.refetch).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
@@ -383,7 +386,7 @@ describe("inside the add-on's cooldown", () => {
     state.error = cooling(30);
     state.errorAt = Date.now();
     view.rerender(tree());
-    expect(await screen.findByText(/can read again in/)).toBeInTheDocument();
+    expect(await screen.findByText(/can read again in/, { ignore: STATUS })).toBeInTheDocument();
     expect(screen.getByLabelText("Select former-member")).toBeChecked();
     expect(screen.queryByText("This list could not be read")).toBeNull();
   });

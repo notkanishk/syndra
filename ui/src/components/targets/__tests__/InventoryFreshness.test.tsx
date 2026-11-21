@@ -9,6 +9,9 @@ import { ApiError } from "@/lib/api-client";
 import { cooldownOf } from "@/lib/queries/fresh";
 import { formatRelative } from "@/lib/format";
 
+/** The wait is said once in its own status region too; these read the line on screen. */
+const STATUS = '[role="status"]';
+
 /**
  * The account list on a target's page, in each freshness the add-on can answer:
  * its copy (read again is the next step), a Read again refused inside the
@@ -97,11 +100,11 @@ describe("a Read again the add-on refused inside its cooldown", () => {
     state.inventory = copyOf();
     state.again = { error: cooling(2) };
     renderTarget();
-    expect(screen.getByText(cooldownLine("The account list", 2))).toBeInTheDocument();
+    expect(screen.getByText(cooldownLine("The account list", 2), { ignore: STATUS })).toBeInTheDocument();
     expect(screen.getByText("ci-runner")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Read again" })).toHaveAttribute("aria-disabled", "true");
     act(() => void vi.advanceTimersByTime(2000));
-    expect(screen.getByRole("button", { name: "Read again" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Read again" })).not.toHaveAttribute("aria-disabled");
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -111,12 +114,12 @@ describe("a Read again the add-on refused inside its cooldown", () => {
     state.inventory = {};
     state.again = { error: cooling(9) };
     renderTarget();
-    expect(screen.getByText(cooldownLine("The account list", 9))).toBeInTheDocument();
+    expect(screen.getByText(cooldownLine("The account list", 9), { ignore: STATUS })).toBeInTheDocument();
     expect(screen.queryByText(/nothing was changed/)).toBeNull();
     expect(screen.queryByText(/You can try again in/)).toBeNull();
     expect(screen.queryByText("The account list could not be read")).toBeNull();
     expect(screen.queryByText("Nothing outside Syndra.")).toBeNull();
-    expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Read again" })).toHaveAttribute("aria-disabled", "true");
   });
 
   // Only a wait the reader pressed into is a warning, and on this card a press is the only way into one.
@@ -132,7 +135,7 @@ describe("a Read again the add-on refused inside its cooldown", () => {
     state.again = { error: cooling(9) };
     renderTarget();
     expect(dot().className).toContain("bg-warn");
-    expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Read again" })).toHaveAttribute("aria-disabled", "true");
   });
 });
 
@@ -154,7 +157,7 @@ describe("a cooldown carried in the account list's data", () => {
     renderTarget().unmount();
     act(() => void vi.advanceTimersByTime(12_000));
     renderTarget();
-    expect(screen.getByText(cooldownLine("The account list", 18))).toBeInTheDocument();
+    expect(screen.getByText(cooldownLine("The account list", 18), { ignore: STATUS })).toBeInTheDocument();
   });
 });
 

@@ -118,24 +118,67 @@ describe("Read again on the region's line", () => {
       </QueryClientProvider>,
     );
 
-  it("counts down inside the add-on's cooldown, with the button waiting on that line", async () => {
+  it("keeps the reason inside the add-on's cooldown, counts down after it, and keeps focus on the waiting button", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) =>
         String(input).includes("fresh=true")
           ? Promise.resolve(new Response(JSON.stringify({ error: "FRESH_READ_COOLDOWN", message: "wait", retry_after: 30 }), { status: 429 }))
           : String(input).includes("/inventory")
-            ? Promise.resolve(halted())
+            ? Promise.resolve(
+                new Response(JSON.stringify({ target: "truenas", current: false, halted: true, reason: "addon_outdated" }), { status: 503 }),
+              )
             : new Promise<Response>(() => {}),
       ),
     );
     renderPage();
     const line = await screen.findByText(/^The account list could not be read\./);
+    const button = within(line.parentElement!).getByRole("button", { name: "Read again" });
+    button.focus();
+    fireEvent.click(button);
+    // The reason is the next step (update the add-on), so it stays; the count is said after it.
+    const said = await screen.findAllByText(/Update the add-on from the same release as Syndra\. .*You can try again in \d+ s\.$/);
+    const countdown = said.find((el) => el.id)!;
+    expect(screen.queryByText(/was read moments ago/)).toBeNull();
+    const waiting = within(countdown.parentElement!).getByRole("button", { name: "Read again" });
+    expect(waiting.getAttribute("aria-describedby")).toBe(countdown.id);
+    // Off without leaving the tab order: focus stays where the press was.
+    expect(waiting).toHaveAttribute("aria-disabled", "true");
+    expect(waiting).not.toBeDisabled();
+    expect(document.activeElement).toBe(waiting);
+    // The wait is announced, once, in its own status region.
+    expect(within(countdown.parentElement!).getByRole("status").textContent).toMatch(/You can try again in \d+ s\.$/);
+  });
+
+  it("leaves focus alone when a press failed and a later read lands by itself", async () => {
+    let answered = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).includes("fresh=true")
+          ? Promise.resolve(new Response(JSON.stringify({ error: "TARGET_UNREACHABLE", message: "TrueNAS did not answer" }), { status: 503 }))
+          : String(input).includes("/inventory")
+            ? Promise.resolve(
+                answered
+                  ? new Response(JSON.stringify({ target: "truenas", bound: 0, accounts: [], unmanaged: [], read_at: new Date().toISOString(), current: true }))
+                  : halted(),
+              )
+            : new Promise<Response>(() => {}),
+      ),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <TargetOverview target="truenas" />
+      </QueryClientProvider>,
+    );
+    const line = await screen.findByText(/^The account list could not be read\./);
     fireEvent.click(within(line.parentElement!).getByRole("button", { name: "Read again" }));
-    const countdown = await screen.findByText(/^The account list was read moments ago; you can read again in \d+ s$/);
-    const button = within(countdown.parentElement!).getByRole("button", { name: "Read again" });
-    expect(button).toBeDisabled();
-    expect(button.getAttribute("aria-describedby")).toBe(countdown.id);
+    await screen.findByText("Not read");
+    answered = true;
+    await client.refetchQueries({ queryKey: ["targets", "truenas", "inventory"] });
+    await waitFor(() => expect(screen.queryByText(/^The account list could not be read\./)).toBeNull());
+    expect(document.activeElement).toBe(document.body);
   });
 
   it("hands focus to the region's heading when a read lands and takes the line away", async () => {
@@ -160,7 +203,12 @@ describe("Read again on the region's line", () => {
     fireEvent.click(button);
     await waitFor(() => expect(screen.queryByText(/^The account list could not be read\./)).toBeNull());
     expect(document.activeElement).not.toBe(document.body);
-    expect(document.activeElement?.id).toBe("accounts-heading");
+    const heading = document.getElementById("accounts-heading")!;
+    expect(document.activeElement).toBe(heading);
+    // Focusable for that moment only (GOV.UK Frontend's setFocus): never a tab stop at rest.
+    expect(heading.getAttribute("tabindex")).toBe("-1");
+    heading.blur();
+    expect(heading.hasAttribute("tabindex")).toBe(false);
   });
 });
 

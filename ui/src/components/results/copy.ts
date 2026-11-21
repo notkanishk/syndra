@@ -70,6 +70,8 @@ export const cooldownLine = (name: string, seconds: number) => `${name} was read
 /** "Check now" or a removal the cooldown refused, going again by itself once the count ends (useRetryOnce); STOP_WAITING stops it. */
 export const retryingLine = (name: string, seconds: number) => `${name} was read moments ago; trying again by itself in ${seconds} s`;
 export const STOP_WAITING = "Stop waiting";
+/** A read that hit its cap, in the same words wherever it is said: the strip's clause and the reconcile line's. */
+export const FIRST_PART_READ = "only the first part was read";
 /** "Check now"'s step once a skipped pass is not going again by itself: while its count runs, and after. */
 export const checkAgainNext = (seconds: number) =>
   seconds > 0 ? "Press Check now again when the count ends." : "Press Check now again.";

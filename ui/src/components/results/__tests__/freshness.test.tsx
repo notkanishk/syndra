@@ -7,6 +7,9 @@ import { MEMBER, cooldownLine, notReadableTitle } from "@/components/results/cop
 import { ReadAgainProvider } from "@/components/ui/ReadFreshness";
 import type { ReadView } from "@/lib/queries/useMyStorage";
 
+/** The wait is said once in its own status region too; these read the line on screen. */
+const STATUS = '[role="status"]';
+
 /** The renderers carry the page's one Read again, and a read with nothing to show is a cooldown line, never an error. */
 
 const NAME = "Parts shelf";
@@ -51,9 +54,9 @@ describe("a read refused inside the cooldown with nothing kept", () => {
 
   it("says so with the countdown, and is not the could-not-be-read warning", () => {
     show([nothing]);
-    expect(screen.getByText(cooldownLine(NAME, 20))).toBeInTheDocument();
+    expect(screen.getByText(cooldownLine(NAME, 20), { ignore: STATUS })).toBeInTheDocument();
     expect(screen.queryByText(notReadableTitle(NAME))).toBeNull();
-    expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Read again" })).toHaveAttribute("aria-disabled", "true");
   });
 
   // Leaving the page and coming back must not restart the full count: it runs from when the page's read answered.
@@ -63,12 +66,12 @@ describe("a read refused inside the cooldown with nothing kept", () => {
         <Reads reads={[nothing]} name={NAME} reader={MEMBER} />
       </ReadAgainProvider>,
     );
-    expect(screen.getByText(/read again in 1[345] s/)).toBeInTheDocument();
+    expect(screen.getByText(/read again in 1[345] s/, { ignore: STATUS })).toBeInTheDocument();
   });
 
   it("does the same for a read the kind draws itself", () => {
     show([{ ...nothing, operation: "storage.status", shape: "status" }], vi.fn(), ["storage.status"]);
-    expect(screen.getByText(cooldownLine(NAME, 20))).toBeInTheDocument();
+    expect(screen.getByText(cooldownLine(NAME, 20), { ignore: STATUS })).toBeInTheDocument();
   });
 });
 
@@ -104,6 +107,6 @@ describe("a cooldown carried with a read's copy", () => {
     draw().unmount();
     act(() => void vi.advanceTimersByTime(12_000));
     draw();
-    expect(screen.getAllByText(/you can read again in 18 s/)).toHaveLength(2);
+    expect(screen.getAllByText(/you can read again in 18 s/, { ignore: STATUS })).toHaveLength(2);
   });
 });

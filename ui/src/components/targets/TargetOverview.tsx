@@ -2,8 +2,8 @@
 
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
-import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
-import { checkAgainNext, cooldownLine, retryingLine } from "@/components/results/copy";
+import { cooldownNext, describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
+import { checkAgainNext, cooldownLine, FIRST_PART_READ, retryingLine } from "@/components/results/copy";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { ArriveList, Crossfade, FOLD_MS, LeavingRow, TINT_MS, UnfoldOnArrival, Unfold, useExitPhase, useFlashOnChange, useLeavingRows } from "@/lib/motion";
@@ -19,7 +19,7 @@ import { MergeFindings } from "@/components/targets/MergeFindings";
 import { OVERVIEW_LEDE, OVERVIEW_TITLE } from "@/components/usage/copy";
 import { StatsRetention } from "@/components/targets/StatsRetention";
 import { TargetStats } from "@/components/usage/TargetStats";
-import { Region } from "@/components/targets/Region";
+import { focusHeading, Region } from "@/components/targets/Region";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -321,7 +321,7 @@ export function TargetOverview({ target }: { target: string }) {
           title={`Accounts on ${name}`}
           lede="Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action."
         >
-          <AccountsNotRead target={target} />
+          <AccountsNotRead target={target} region="accounts" />
           <PeopleOnTarget target={target} stale={lastKnown} />
           <Inventory target={target} stale={lastKnown} />
           <DormantAccounts target={target} stale={lastKnown} />
@@ -1380,39 +1380,41 @@ function Reading({
  * nothing, so the lists below have no count and no empty state, and this line
  * says why once, above them all, with Read again on it (the strip's own
  * control: a halted read has no freshness strip to carry it). Inside the
- * add-on's cooldown the line counts down in its place, as the strip's does.
+ * add-on's cooldown the reason stays, since for an outdated add-on or a refused
+ * read it is the next step, and the count is said after it.
  */
-function AccountsNotRead({ target }: { target: string }) {
+function AccountsNotRead({ target, region }: { target: string; region: string }) {
   const nameOf = useSystemNames();
   const inventory = useTargetInventory(target);
   const again = useTargetInventoryAgain(target);
   const left = useCountdown(again.cooldown?.retry_after, again.cooldown?.since);
   const lineId = useId();
-  const line = useRef<HTMLDivElement>(null);
-  // The region's heading, taken at the press: a read that lands takes this line, and its focused
-  // button, away, so focus goes to the heading rather than to <body>. Consumed once.
-  const heading = useRef<HTMLElement | null>(null);
+  // Set by a press, consumed once: a read that lands takes this line, and its focused button, away,
+  // so focus goes to the region's heading rather than to <body>. A press that fails clears it, so a
+  // later read that lands by itself never moves focus nobody asked to move.
+  const pressed = useRef(false);
   const unread = inventory.data?.halted;
   useEffect(() => {
-    if (unread || !heading.current) return;
-    if (document.activeElement === document.body) heading.current.focus();
-    heading.current = null;
-  }, [unread]);
+    if (unread || !pressed.current) return;
+    pressed.current = false;
+    if (document.activeElement === document.body) focusHeading(document.getElementById(`${region}-heading`));
+  }, [unread, region]);
   if (!unread) return null;
+  const line = `${inventoryNotRead(nameOf(target), inventory.data?.detail, inventory.data?.reason)}${left > 0 ? ` ${cooldownNext(left)}` : ""}`;
   return (
-    <div ref={line} className="grid gap-1">
+    <div className="grid gap-1">
       {/* The sentence and its button side by side, as ReadFreshness draws them (a button is never in prose). */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-warn-text">
-        <span id={lineId}>
-          {left > 0 ? cooldownLine("The account list", left) : inventoryNotRead(nameOf(target), inventory.data?.detail, inventory.data?.reason)}
-        </span>
+        <span id={lineId}>{line}</span>
         <ReadAgainButton
           onClick={() => {
-            heading.current = line.current?.closest("section")?.querySelector("h2") ?? null;
-            void again.press().catch(() => {});
+            pressed.current = true;
+            void again.press().catch(() => {
+              pressed.current = false;
+            });
           }}
           pending={again.pending}
-          disabled={left > 0}
+          cooldown={left > 0 ? line : undefined}
           describedBy={lineId}
         />
       </div>
@@ -2019,7 +2021,7 @@ export function reconcileLine(bound: number | undefined, queued: number, missing
     bound === undefined ? null : `${people(bound)} with a managed account`,
     `${queued} ${queued === 1 ? "fix" : "fixes"} waiting for you to send`,
     missing === undefined
-      ? "missing accounts not checked: only the first part of the list was read"
+      ? `missing accounts not checked: ${FIRST_PART_READ}`
       : `${people(missing)} with an account missing from ${name}`,
   ]
     .filter(Boolean)

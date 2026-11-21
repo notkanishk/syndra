@@ -629,17 +629,18 @@ export interface ReachPlace {
   access: "read" | "change";
 }
 
-/** What each of a system's own groups opens (A-02 §3). `read: false` is "not read yet". */
-export interface TargetReach {
-  read: boolean;
-  read_at?: string;
+/**
+ * What each of a system's own groups opens (A-02 §3). `read: false` is "not read yet", and carries
+ * no date; a read always carries one (as `last_known` and `MappableValues` do).
+ */
+export type TargetReach = ({ read: true; read_at: string } | { read: false; read_at?: never }) & {
   current?: boolean;
   /** Why this is the add-on's copy, when it is one (feature freshness). */
   stale?: Stale;
   /** Whole seconds, with `read: false`: read moments ago, and nothing kept to serve. */
   retry_after?: number;
   groups?: Record<string, ReachPlace[]>;
-}
+};
 
 /** "Read again" on what each group opens: the same GET, asking the target itself. */
 export const useTargetReachAgain = (target: string | undefined) =>

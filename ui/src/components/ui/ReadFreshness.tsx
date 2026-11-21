@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 
-import { copyLine, cooldownLine, READ_AGAIN, READING, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
+import { copyLine, cooldownLine, FIRST_PART_READ, READ_AGAIN, READING, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -217,17 +217,28 @@ export function ReadAgainError({ error, className = "px-5 pb-2" }: { error: unkn
   );
 }
 
-/** Read again, the one control: this strip's, and a line's that has no read to date (a halted inventory). */
-export function ReadAgainButton({ onClick, pending, disabled, describedBy }: {
+/**
+ * Read again, the one control: this strip's, and a line's that has no read to date (a halted
+ * inventory). While it reads, and while `cooldown` (the line said while it waits) counts, it is off
+ * and keeps focus. The wait is said once, in its own `role="status"` region, there empty from the
+ * start so the start is announced; the visible count ticks outside it (as RetryWait does).
+ */
+export function ReadAgainButton({ onClick, pending, cooldown, describedBy }: {
   onClick: () => void;
   pending: boolean;
-  disabled?: boolean;
+  cooldown?: string;
   describedBy?: string;
 }) {
+  // The first words of a wait, held while it lasts, so the region does not speak every second.
+  const [said, setSaid] = useState<string>();
+  if (Boolean(cooldown) !== Boolean(said)) setSaid(cooldown);
   return (
-    <Button variant="outline" size="sm" className={READ_AGAIN_PILL} onClick={onClick} isPending={pending} disabled={disabled} aria-describedby={describedBy}>
-      {pending ? READING : READ_AGAIN}
-    </Button>
+    <>
+      <Button variant="outline" size="sm" className={READ_AGAIN_PILL} onClick={onClick} isPending={pending} disabled={Boolean(cooldown)} keepFocus aria-describedby={describedBy}>
+        {pending ? READING : READ_AGAIN}
+      </Button>
+      <span role="status" className="sr-only">{said ?? ""}</span>
+    </>
   );
 }
 
@@ -332,7 +343,7 @@ export function ReadFreshness({
         // about what it saw and silent about the rest, and an operator who
         // reads it as "that is everything" concludes an absence from a list
         // that was cut off.
-        <span className="text-faint">· not the whole list, only the first part was read</span>
+        <span className="text-faint">· not the whole list, {FIRST_PART_READ}</span>
       )}
       {onRefresh && (reading === "stale" || aCopy) && (
         // It tints in where the line ends. Its slot is zero tall, so the button
@@ -347,7 +358,7 @@ export function ReadFreshness({
           <ReadAgainButton
             onClick={() => void press(onRefresh)}
             pending={refreshing || pressing}
-            disabled={cooling}
+            cooldown={cooling ? cooldownLine(subject, left) : undefined}
             // The line beside it is the reason it waits.
             describedBy={cooling ? lineId : undefined}
           />
