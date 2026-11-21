@@ -58,7 +58,7 @@ Push with `git -c credential.helper= -c credential.helper='!gh auth git-credenti
 - Never write to Zitadel, TrueNAS, staging data or production. Reading staging is fine.
 - No local Docker.
 - No host, IP or real name in any file; the repo is public. Fixtures use WWE ring names.
-- Stop any server you start.
+- Stop any server you start. To wait for a background command (a layout replay, a dev server), wait for its own completion notice, or use the Monitor tool. Never write an `until ! pgrep -f "…"` loop: the pattern matches the loop's own command line, so it never ends (26 such loops were left running on 21 Nov 2026).
 
 ## Report
 
