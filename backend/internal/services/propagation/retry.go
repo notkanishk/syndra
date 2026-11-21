@@ -76,8 +76,9 @@ func auditRetry(ctx context.Context, row models.PendingPropagation, outcome stri
 	}
 }
 
-// outcomeNotSent is an automatic try where nothing went out (the system was
-// not answering): the row was deferred, no attempt spent.
+// outcomeNotSent is an automatic try where nothing went out (the system was not
+// answering, or maintenance held it back): the row was deferred, no attempt spent. The audit row
+// names no cause.
 const outcomeNotSent = "not_sent"
 
 // retryOutcome reads what one row's processing did from the counters it moved.

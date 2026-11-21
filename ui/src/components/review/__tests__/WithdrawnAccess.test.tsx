@@ -136,7 +136,7 @@ describe("a revocation recorded and not yet applied", () => {
     await renderPage();
     expect(
       await screen.findByText(
-        /^Recorded 20 Nov\. Not yet applied on .+: Syndra can't reach .+'s add-on\. Check that its container is running\. Syndra keeps trying\. Until it is, the account there still works\./,
+        /^Recorded 20 Nov\. Not yet applied on .+: Syndra can't reach .+'s add-on\. Check that its container is running\. Syndra keeps trying\. Until it is applied, the account there still works\.$/,
       ),
     ).toBeInTheDocument();
   });

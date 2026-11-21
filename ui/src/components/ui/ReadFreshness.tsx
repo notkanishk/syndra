@@ -438,7 +438,7 @@ function Strip({
       <Crossfade id={glowing ? `landed:${landed}` : "read"}>
         <span id={lineId} className={tone.text}>
           {cooling
-            ? cooldownLine(subject, left)
+            ? cooldownLine(subject, left, age ?? undefined)
             : cannotReach
               ? unreachableLine(subject, formatClock(state.readAt), reader)
               : aCopy && age
@@ -467,7 +467,7 @@ function Strip({
           <ReadAgainButton
             onClick={() => void press(onRefresh)}
             pending={refreshing || pressing}
-            cooldown={cooling ? cooldownLine(subject, left) : undefined}
+            cooldown={cooling ? cooldownLine(subject, left, age ?? undefined) : undefined}
             // The line beside it is the reason it waits.
             describedBy={cooling ? lineId : undefined}
           />

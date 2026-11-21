@@ -382,11 +382,14 @@ describe("inside the add-on's cooldown", () => {
 
   // Steady under the hand: a Read again inside the cooldown is told only to wait, so the rows read
   // moments ago stay where they are and the strip counts the wait down.
-  it("a Read again told to wait keeps the rows on screen and counts down", async () => {
+  it("a Read again told to wait keeps the rows on screen, says their real age, and counts down", async () => {
+    state.report = { ...state.report, read: { state: "now", taken_at: new Date(Date.now() - 5 * 60_000).toISOString() } };
     const view = renderDormant();
     state.report = { ...state.report, read: { state: "none", reason: "cooldown", retry_after: 30 } };
     view.rerender(tree());
     expect(await screen.findByText(/can read again in 30 s/, { ignore: STATUS })).toBeInTheDocument();
+    expect(screen.getByText(/was read 5 min ago; you can read again in 30 s/, { ignore: STATUS })).toBeInTheDocument();
+    expect(screen.queryByText(/moments ago/, { ignore: STATUS })).toBeNull();
     expect(screen.getByLabelText("Select former-member")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Read again" })).toHaveAttribute("aria-disabled", "true");
   });

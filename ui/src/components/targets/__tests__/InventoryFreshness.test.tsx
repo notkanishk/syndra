@@ -102,7 +102,7 @@ describe("a copy kept inside the cooldown", () => {
     vi.useFakeTimers();
     state.read = kept({ reason: "cooldown", retry_after: 2 }, Date.now());
     renderTarget();
-    expect(screen.getByText(cooldownLine("The account list", 2), { ignore: STATUS })).toBeInTheDocument();
+    expect(screen.getByText(cooldownLine("The account list", 2, formatRelative(READ)), { ignore: STATUS })).toBeInTheDocument();
     expect(screen.getByText("ci-runner")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Read again" })).toHaveAttribute("aria-disabled", "true");
     act(() => void vi.advanceTimersByTime(2000));
@@ -122,7 +122,7 @@ describe("a copy kept inside the cooldown", () => {
     renderTarget().unmount();
     act(() => void vi.advanceTimersByTime(12_000));
     renderTarget();
-    expect(screen.getByText(cooldownLine("The account list", 18), { ignore: STATUS })).toBeInTheDocument();
+    expect(screen.getByText(cooldownLine("The account list", 18, formatRelative(READ)), { ignore: STATUS })).toBeInTheDocument();
   });
 });
 

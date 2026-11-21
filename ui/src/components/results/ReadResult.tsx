@@ -75,13 +75,15 @@ export function FreshnessOf({ read, name, reader }: { read: Read<unknown> } & Re
  * of them itself: its freshness line stays here, so every read says how old it
  * is in one place.
  */
+export const saysAge = (read: ReadView) => notRead(read.read) || typeof read.read.data !== "string";
+
 export function Reads({ reads, skip = [], ...props }: { reads?: ReadView[]; skip?: string[] } & ReadProps) {
   return (
     <>
       {(reads ?? []).map((read) =>
         skip.includes(read.operation) ? (
           // A raw answer (a string) has no age to say; any other read does, or its why.
-          !(!notRead(read.read) && typeof read.read.data === "string") && (
+          saysAge(read) && (
             <div key={read.operation} className="row-divider px-5 py-3">
               <ReadLine read={read} {...props} />
             </div>

@@ -31,12 +31,14 @@ describe("an automatic retry, worded by how it went", () => {
     expect(describeAction("propagation.retried", nameOf, { outcome: "retrying" }).verb).toMatch(/^Sent a change again on its own/);
   });
 
-  it("says nothing went out, and Syndra will try again, when it was not sent", () => {
-    const said = describeAction("propagation.retried", nameOf, { outcome: "not_sent", tries_spent: 1 });
-    for (const words of [said.verb, said.template, said.passive]) {
-      expect(words).toMatch(/nothing went out/);
-      expect(words).toMatch(/Syndra will try again/);
-      expect(words).not.toMatch(/\bSent\b|sent again/i);
+  it("names its system and no cause: the row carries none, and maintenance writes it too", () => {
+    for (const target of ["truenas", "zitadel"]) {
+      const said = describeAction("propagation.retried", nameOf, { outcome: "not_sent", tries_spent: 1, target });
+      for (const words of [said.verb, said.template, said.passive]) {
+        expect(words).toContain(nameOf(target));
+        expect(words).toMatch(/nothing went out, and no try was spent\. Syndra sends it by itself/);
+        expect(words).not.toMatch(/answering|\bSent\b|sent again/i);
+      }
     }
   });
 });

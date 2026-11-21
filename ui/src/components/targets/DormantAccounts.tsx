@@ -4,7 +4,7 @@ import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
 import { NOTHING_TO_DO, cooldownNext, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { formatBytes, formatSignIn } from "@/lib/format";
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 
@@ -66,13 +66,16 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   // only "wait" (cooldown) says nothing new about the rows read moments ago, so those rows stay,
   // dated by their own read, and the strip counts the wait down. They go when a real no-copy answer comes.
   const answered = readOfQuery(dormant);
-  const onScreen = useRef<Read<DormantReport> | undefined>(undefined);
+  const [seen, setSeen] = useState<Read<DormantReport> | undefined>(undefined);
   const waitOnly = notRead(answered) && answered.why.reason === REASON.cooldown;
-  if (answered.state === "now") onScreen.current = answered;
-  else if (notRead(answered) && !waitOnly) onScreen.current = undefined;
+  // Adjusted during render, from the read itself (React's derived-state pattern): no ref is written.
+  let onScreen = seen;
+  if (answered.state === "now" && (seen?.state !== "now" || seen.takenAt !== answered.takenAt)) onScreen = answered;
+  else if (notRead(answered) && !waitOnly) onScreen = undefined;
+  if (onScreen !== seen) setSeen(onScreen);
   const read: Read<DormantReport> =
-    waitOnly && onScreen.current?.state === "now"
-      ? { state: "kept", data: onScreen.current.data, takenAt: onScreen.current.takenAt, why: answered.why }
+    waitOnly && onScreen?.state === "now"
+      ? { state: "kept", data: onScreen.data, takenAt: onScreen.takenAt, why: answered.why }
       : answered;
   const accounts = ofRead(read, (d) => d.accounts) ?? [];
   const name = nameOf(target);

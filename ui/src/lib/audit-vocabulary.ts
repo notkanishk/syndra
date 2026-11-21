@@ -228,7 +228,7 @@ export function describeAction(
   details?: Record<string, unknown>,
 ): { verb: string; template?: string; passive?: string; destructive: boolean } {
   if (action === REVOCATION_LANDED && typeof details?.target === "string" && details.target) return landedWords(details.target, nameOf);
-  if (action === "propagation.retried" && details?.outcome === "not_sent") return NOT_SENT_WORDS;
+  if (action === "propagation.retried" && details?.outcome === "not_sent") return notSentWords(typeof details.target === "string" && details.target ? nameOf(details.target) : "the system");
   const known = AUDIT_ACTIONS[action];
   if (known) {
     return {
@@ -292,15 +292,18 @@ export function describeAction(
 const REVOCATION_LANDED = "revocation.landed";
 
 /**
- * An automatic try where nothing went out (`propagation.retried`, outcome `not_sent`): the system
- * wasn't answering, the change was put back, no try was spent. Never "Sent ... again".
+ * An automatic try where nothing went out (`propagation.retried`, outcome `not_sent`): the change
+ * was put back, no try was spent. The row carries no cause (maintenance writes it too), so none is
+ * named. Never "Sent ... again".
  */
-const NOT_SENT_WORDS = {
-  verb: "Held back a change on its own: the system wasn't answering, so nothing went out. Syndra will try again",
-  template: "Held back a change for {} on its own: the system wasn't answering, so nothing went out. Syndra will try again",
-  passive: "A change to their access was held back: the system wasn't answering, so nothing went out. Syndra will try again",
-  destructive: false,
-};
+function notSentWords(system: string) {
+  return {
+    verb: `Kept a change for ${system} for later on its own: nothing went out, and no try was spent. Syndra sends it by itself`,
+    template: `Kept a change for {} on ${system} for later on its own: nothing went out, and no try was spent. Syndra sends it by itself`,
+    passive: `A change to their access on ${system} was kept for later: nothing went out, and no try was spent. Syndra sends it by itself`,
+    destructive: false,
+  };
+}
 
 function landedWords(target: string, nameOf: (target: string) => string) {
   if (target === "zitadel") {

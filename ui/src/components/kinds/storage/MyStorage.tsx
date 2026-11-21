@@ -11,7 +11,7 @@ import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MEMBER } from "@/components/results/copy";
 import { ReadFreshness, useReadAgainPress } from "@/components/ui/ReadFreshness";
-import { Reads } from "@/components/results/ReadResult";
+import { Reads, saysAge } from "@/components/results/ReadResult";
 import { UsageUnread } from "@/components/results/StatusMeters";
 import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
@@ -100,7 +100,7 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
   // The add-on's kept copy (design §13.3): the card recedes, as an operator's does, and is dated.
   // Its storage.status line below dates it when the reply carries one; otherwise the strip does.
   const kept = view.read?.state === "kept";
-  const datedBelow = kept && view.read?.state === "kept" && (view.read.data.reads ?? []).some((r) => OWN_READS.includes(r.operation));
+  const datedBelow = view.read?.state === "kept" && (view.read.data.reads ?? []).some((r) => OWN_READS.includes(r.operation) && saysAge(r));
 
   return (
     <Card stale={kept}>

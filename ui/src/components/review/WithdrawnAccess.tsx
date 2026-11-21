@@ -493,9 +493,9 @@ export function notYetAppliedLine(row: Pick<UnconfirmedRevocation, "target" | "r
   const at = formatShortDate(row.recorded_at ?? row.created_at);
   if (row.target === "zitadel") return `Recorded ${at}. Not yet applied in Zitadel; until it is, they keep the role there. Syndra applies it by itself.`;
   // While the monitor holds the system down, §13.1's sentence says why it hasn't landed (design §13.4).
-  const because = why ? `: ${whyLine(why, system, OPERATOR)}` : ";";
-  const until = why ? "Until it is" : "until it is";
-  return `Recorded ${at}. Not yet applied on ${system}${because} ${until}, the account there still works. Syndra applies it by itself when ${system} answers.`;
+  // The why's own sentence ends in the next step: said once.
+  if (why) return `Recorded ${at}. Not yet applied on ${system}: ${whyLine(why, system, OPERATOR)} Until it is applied, the account there still works.`;
+  return `Recorded ${at}. Not yet applied on ${system}; until it is, the account there still works. Syndra applies it by itself when ${system} answers.`;
 }
 
 function NotYetApplied({ row, system }: { row: UnconfirmedRevocation; system: string }) {

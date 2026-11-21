@@ -681,6 +681,14 @@ describe("how old the storage read is", () => {
     expect(screen.getByText("waddle_share")).toBeTruthy();
   });
 
+  // Reads draws no line for a raw-string own read, so the card's strip must: else nothing dates it.
+  it("dates a kept copy whose only storage.status answer is a raw string", () => {
+    const raw: ReadView = { operation: "storage.status", shape: "", read: { state: "kept", takenAt: twoMinAgo, why: { reason: "cached" }, data: "ok" } };
+    state.targets = [view({ read: { state: "kept", takenAt: twoMinAgo, why: { reason: "cached" }, data: { storage: STORE, reads: [raw] } } })];
+    renderStorage();
+    expect(screen.getByText(/TrueNAS was read 2 min ago/)).toBeTruthy();
+  });
+
   it("says a read moments ago with nothing kept is that, and the button waits", () => {
     state.targets = [view(copy(undefined, 20))];
     renderStorage();
