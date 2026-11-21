@@ -1211,13 +1211,14 @@ type placeWire struct {
 		UsedBytes  int64 `json:"used_bytes"`
 		QuotaBytes int64 `json:"quota_bytes,omitempty"`
 	} `json:"usage"`
+	NotCounted string `json:"not_counted"`
 }
 
 func placesOf(ws []placeWire) []Place {
 	out := make([]Place, 0, len(ws))
 	for _, w := range ws {
 		out = append(out, Place{Share: w.Share, Folder: w.Folder, Path: w.Path, Access: w.Access,
-			Dataset: w.Dataset, Home: w.Home, Usage: w.Usage})
+			Dataset: w.Dataset, Home: w.Home, Usage: w.Usage, NotCounted: w.NotCounted})
 	}
 	return out
 }
@@ -1237,6 +1238,9 @@ type Place struct {
 		UsedBytes  int64 `json:"used_bytes"`
 		QuotaBytes int64 `json:"quota_bytes,omitempty"`
 	} `json:"usage,omitempty"`
+	// NotCounted is why a place they can change has no usage when the target
+	// itself is why (profiles/storage/reach.json): "folder" or "locked".
+	NotCounted string `json:"not_counted,omitempty"`
 	// SMBAddress and UNCAddress are filled by Syndra, never by an add-on:
 	// the storage kind's view builds them from the connection
 	// (handlers/kinds.Address), the one place an address is built.

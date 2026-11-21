@@ -39,6 +39,8 @@ export interface StoragePlace {
   home?: boolean;
   /** Only where they can change files and it could be read. 0 is nothing saved yet. */
   usage?: { used_bytes: number; quota_bytes?: number };
+  /** Why a place they can change has no usage when the target itself is why, never a read that failed (the storage kind says it). */
+  not_counted?: string;
   smb_address?: string;
   unc_address?: string;
   /** Their own roles whose groups open it. */

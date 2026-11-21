@@ -287,7 +287,7 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 // place's bytes are its datasets' as the live read resolves them (datasetAt
 // on the same mounts), so a folder that is its own dataset counts where
 // storage.status shows it.
-func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, mounts map[string]string, bound map[int64]string, failed error) {
+func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, mounts datasetMap, bound map[int64]string, failed error) {
 	c := s.stats
 	today := c.day(now)
 	metas := map[string]statsMeta{}
@@ -335,7 +335,7 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, m
 	for _, sh := range shares {
 		dims := map[string]string{"share": sh.Name}
 		usedDims = append(usedDims, dims)
-		u := usageUnder(mounts, sh.Path, table)
+		u := usageUnder(mounts, sh.Path, table, nil)
 		if !u.Own {
 			used[sh.Name] = nil
 			usedGaps[sh.Name] = gapOf(c.stamp(today), c.stamp(nextDayKey(today)), dims, reasonFolder)
@@ -375,7 +375,7 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, m
 		}
 		dataset := datasetAt(mounts, sub.Home)
 		var t map[int64]PlaceUsage
-		if dataset != "" {
+		if dataset != "" && !mounts.locked[dataset] { // a locked home is not read, never a 0
 			t = table(dataset)
 		}
 		if t == nil {

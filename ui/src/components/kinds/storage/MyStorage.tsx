@@ -492,6 +492,15 @@ function nameOf(place: StoragePlace) {
 /** What a place is called on screen, and what it sorts by. */
 const placeName = (place: StoragePlace) => (place.home ? "Your home folder" : nameOf(place));
 
+/**
+ * Why a place has no figure, when the NAS is why (`not_counted`): a plain folder the NAS does not count on its own,
+ * or an encrypted one whose key is not loaded. Never "nothing saved"; a reason this card does not know says nothing.
+ */
+const NOT_COUNTED: Partial<Record<string, string>> = {
+  folder: "Not counted on its own",
+  locked: "Not counted, locked",
+};
+
 function PlaceBlock({
   place,
   offline,
@@ -532,7 +541,7 @@ function PlaceBlock({
         : quota > 0
           ? `${formatBytes(usage.used_bytes)} of ${formatBytes(quota)}`
           : `${formatBytes(usage.used_bytes)} used · no limit set`;
-    }
+    } else if (place.not_counted) use = NOT_COUNTED[place.not_counted] ?? null;
   }
   // The meter draws when there is a limit to read against; how much is left is said under it (A-24 Q18).
   const metered = can && usage && quota > 0 && !offline ? usage : null;

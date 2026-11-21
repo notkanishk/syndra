@@ -163,6 +163,16 @@ describe("the three states", () => {
 });
 
 describe("usage", () => {
+  it("says why a place is not counted when the NAS is why, never nothing saved", () => {
+    const notes = place({ path: "notes", not_counted: "folder" });
+    const vault = place({ path: "main/vault", not_counted: "locked" });
+    state.targets = [view({ storage: { ...view().storage!, places: [notes, vault] } })];
+    renderStorage();
+    expect(screen.getByText("Not counted on its own")).toBeTruthy();
+    expect(screen.getByText("Not counted, locked")).toBeTruthy();
+    expect(screen.queryByText("Nothing saved here yet")).toBeNull();
+  });
+
   it("says nothing saved, nearly full from 90%, and nothing at all where you can't save", () => {
     state.targets = [view()];
     renderStorage();

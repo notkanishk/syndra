@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"path"
 	"strings"
 )
 
@@ -104,19 +105,27 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	status.NeedsPassword = !subject.PasswordSet
 	status.NeedsNewPassword = subject.needsNewPassword()
 
+	// One count for the places and the meters, so they never disagree.
+	count, countErr := s.countFor(subject.UID, subject.Home)
+	counted := &count
+	if countErr != nil {
+		counted = nil
+	}
+
 	// Best-effort like usage: whether the account works is the urgent half.
-	if places, seen, err := s.memberPlaces(req.Fresh, subject.UID, subject.groupIDs, subject.Home); err == nil {
+	if places, seen, err := s.memberPlaces(req.Fresh, subject.groupIDs, subject.Home, counted); err == nil {
 		status.Places, status.PlacesReadable, status.placesSeen = places, true, seen
 	}
 
 	// Usage is best-effort: a member who cannot be told their usage can still
 	// be told whether their account works, and that is the more urgent half.
 	// What was read is sent; QuotaRead is true only when all of it was.
-	meters, err := s.shareUsage(subject.UID)
-	if meters != nil {
+	if countErr == nil {
+		var meters []Meter
+		meters, countErr = count.meters()
 		status.Meters = meters
 	}
-	status.QuotaRead = err == nil
+	status.QuotaRead = countErr == nil
 
 	return OperationResult{
 		Operation: "storage.status", Subject: req.Subject, Outcome: "succeeded",
@@ -124,12 +133,67 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	}, http.StatusOK, nil
 }
 
-// shareUsage reports what one uid holds behind each enabled share: every
-// dataset the share reaches, nested ones included (usageUnder, the count
-// collectUsage samples), against the limit on the share's own dataset. A share
-// not wholly read (its dataset's table, or a nested one's, unreadable, or the
-// share a plain folder that cannot be counted by itself) makes the whole an
-// error, with the meters that were read: partial, and said to be.
+// memberCount is one member's count of what they hold, for their card's
+// meters and places: usageUnder, the count collectUsage samples, over one
+// read of the datasets, each table read at most once.
+//
+// Other members' homes are never read: a home holds its owner's files, so
+// reading every home in a share of per-user homes on every card load would be
+// one NAS call per member for nothing. A home is another account's home
+// folder at least two folders inside a share, where homes go (homePlaces);
+// one at a share's first level is a team folder that is also somebody's home,
+// and is read.
+//
+// ponytail: one user.query per card for the homes; if that read ever costs,
+// take the homes from the subjects copy (fresh.go) instead.
+type memberCount struct {
+	uid    int64
+	shares []smbShare
+	mounts datasetMap
+	skip   map[string]bool
+	table  func(string) map[int64]PlaceUsage
+}
+
+// countFor makes uid's count, home their own home folder. Without the homes
+// read every dataset is read: slower, never wrong.
+func (s *server) countFor(uid int64, home string) (memberCount, error) {
+	shares, err := s.enabledShares()
+	if err != nil {
+		return memberCount{}, err
+	}
+	mounts, err := s.datasetMounts()
+	if err != nil {
+		return memberCount{}, err
+	}
+	c := memberCount{uid: uid, shares: shares, mounts: mounts, skip: map[string]bool{}}
+	if accounts, _, err := s.readAccountsWhere([]any{}); err == nil {
+		for _, a := range accounts {
+			_, inside, ok := shareAt(shares, a.Home)
+			mine := a.UID == uid || home == a.Home || strings.HasPrefix(home, a.Home+"/")
+			if ok && strings.Contains(inside, "/") && !mine {
+				c.skip[a.Home] = true
+			}
+		}
+	}
+	tables := map[string]map[int64]PlaceUsage{}
+	c.table = func(dataset string) map[int64]PlaceUsage {
+		t, read := tables[dataset]
+		if !read {
+			t = s.userQuotas(dataset) // nil when unreadable
+			tables[dataset] = t
+		}
+		return t
+	}
+	return c, nil
+}
+
+// meters reports what the member holds behind each enabled share: every
+// dataset the share reaches, nested ones included, against the limit on the
+// share's own dataset. A share not wholly read (its dataset's table, or a
+// nested one's, unreadable or locked) makes the whole an error, with the
+// meters that were read: partial, and said to be. A share that is a plain
+// folder has no table to read: no meter, and not a partial read (it is a
+// place that is not counted on its own, on the card where they can open it).
 //
 // Where a share lives is DERIVED from the NAS's own read of its path and the
 // datasets' mountpoints, never configured: a configured dataset would be a
@@ -138,36 +202,27 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 // Matched on UID and never on the name in the quota row: that name is null for
 // a uid the target can no longer resolve, and matching on it would silently
 // report nothing for the accounts most likely to matter.
-func (s *server) shareUsage(uid int64) ([]Meter, error) {
-	shares, err := s.enabledShares()
-	if err != nil {
-		return nil, err
-	}
-	mounts, err := s.datasetMounts()
-	if err != nil {
-		return nil, err
-	}
-	out := make([]Meter, 0, len(shares))
+func (c memberCount) meters() ([]Meter, error) {
+	out := make([]Meter, 0, len(c.shares))
 	var unread []string
-	for _, sh := range shares {
-		u := usageUnder(mounts, sh.Path, s.userQuotas)
-		if u.Top == nil {
+	for _, sh := range c.shares {
+		u := usageUnder(c.mounts, sh.Path, c.table, c.skip)
+		if !u.Own {
+			continue
+		}
+		if u.Top == nil || len(u.Unread) > 0 {
 			// One share's quota table being unreadable is not a reason to
 			// withhold the others, and not one to pass the rest off as all.
 			unread = append(unread, sh.Name)
-			continue
 		}
-		if len(u.Unread) > 0 {
-			unread = append(unread, sh.Name)
-		}
-		used, held := u.ByUID[uid]
+		used, held := u.ByUID[c.uid]
 		if !held {
 			continue
 		}
 		m := Meter{Label: sh.Name, Used: used, Unit: "bytes"}
 		// shape-optional: TrueNAS omits `quota` for a uid with no limit set,
 		// the common case. 0 is rendered as "no limit set" — see MyStorage.
-		if q := u.Top[uid].QuotaBytes; q > 0 {
+		if q := u.Top[c.uid].QuotaBytes; q > 0 {
 			m.Limit = &q
 		}
 		out = append(out, m)
@@ -176,6 +231,53 @@ func (s *server) shareUsage(uid int64) ([]Meter, error) {
 		return out, fmt.Errorf("the quota of %s could not be read", strings.Join(unread, ", "))
 	}
 	return out, nil
+}
+
+// place is the member's usage of one place they can change, the count its
+// share's meter and the collector make; nil when not all of it was read, and
+// then why when the NAS is why (Place.NotCounted). A plain folder is never
+// counted as the dataset around it. A home is read as /homes reads it
+// (homeUsage).
+func (c memberCount) place(p Place) (*PlaceUsage, string) {
+	if p.Home {
+		u, locked := homeUsage(c.mounts, p.Path, c.uid, c.table)
+		if locked {
+			return nil, notCountedLocked
+		}
+		return u, ""
+	}
+	u := usageUnder(c.mounts, p.Path, c.table, c.skip)
+	switch {
+	case !u.Own:
+		return nil, notCountedFolder
+	case u.Locked:
+		return nil, notCountedLocked
+	case u.Top == nil || len(u.Unread) > 0:
+		return nil, "" // unreadable: say nothing rather than "nothing saved"
+	}
+	// no row is nothing saved yet
+	return &PlaceUsage{UsedBytes: u.ByUID[c.uid], QuotaBytes: u.Top[c.uid].QuotaBytes}, ""
+}
+
+// homeUsage is what uid holds in the home folder at home, as /homes, the
+// member's card and storage.home_bytes read it: the bytes in the home's own
+// dataset (datasetAt: a home that is a dataset of its own holds them there,
+// not in the parent), the limit a user quota on the dataset holding its
+// parent, where convergeQuota writes it. nil when either cannot be read, and
+// locked when a locked dataset is why: never 0.
+func homeUsage(m datasetMap, home string, uid int64, table func(string) map[int64]PlaceUsage) (u *PlaceUsage, locked bool) {
+	own, parent := datasetAt(m, home), datasetOf(path.Dir(home))
+	if m.locked[own] || m.locked[parent] {
+		return nil, true
+	}
+	if own == "" || parent == "" {
+		return nil, false
+	}
+	used, limits := table(own), table(parent)
+	if used == nil || limits == nil {
+		return nil, false
+	}
+	return &PlaceUsage{UsedBytes: used[uid].UsedBytes, QuotaBytes: limits[uid].QuotaBytes}, false
 }
 
 // datasetOf turns a share's mountpoint into the dataset name the quota call
