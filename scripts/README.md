@@ -137,8 +137,12 @@ scripts/addon-quiet-run.sh --writes -- sh -c "$call POST /operations/account.rel
 scripts/addon-quiet-run.sh --writes -- sh -c "$call PUT /settings/home_root '{\"value\":\"\"}'"
 # 4c. To link a test home to a test subject (the owner's 6.10 checks), adopt
 #     the kit's account for it inside a --writes window, with the account_id
-#     the NAS shows. The command adopts only a conformance- account, with its
-#     account_id, for a subject that is not all digits (never a member's):
+#     the NAS shows. The subject is an allow-list, never a guess at what a
+#     member's looks like: adopt names exactly rey_student; release names
+#     exactly rey_student or a subject beginning conformance- (4b). The
+#     username must be conformance- then a-z, 0-9 or -, the account_id digits
+#     only; a subject with invalid UTF-8, surrounding whitespace or a control
+#     character, and a body over 64 KiB, are refused unsent:
 scripts/addon-quiet-run.sh --writes -- sh -c "$call POST /operations/account.adopt '{\"subject\":\"rey_student\",\"params\":{\"username\":\"conformance-home-20261114123616\",\"account_id\":\"200007\"}}'"
 #     Undo: release the subject again.
 scripts/addon-quiet-run.sh --writes -- sh -c "$call POST /operations/account.release '{\"subject\":\"rey_student\"}'"

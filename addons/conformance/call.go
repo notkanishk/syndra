@@ -15,6 +15,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // CallConfig names one add-on and the secret its keys derive from.
@@ -26,19 +28,36 @@ type CallConfig struct {
 // callActor labels the request in the add-on's log, as the kit's own is.
 const callActor = "syndra-addon-call"
 
-var settingPath = regexp.MustCompile(`^/settings/[A-Za-z0-9_-]+$`)
+var (
+	settingPath = regexp.MustCompile(`^/settings/[A-Za-z0-9_-]+$`)
+	// adoptUsername is the kit's own account name: conformance- and at least
+	// one of [a-z0-9-], nothing around it (the add-on trims, so a trailing
+	// space would name another account than the one checked here).
+	adoptUsername = regexp.MustCompile(`^conformance-[a-z0-9-]+$`)
+	accountID     = regexp.MustCompile(`^[0-9]+$`)
+)
+
+// adoptSubject is the one subject an adoption may name: the staging test
+// subject the owner's 6.10 checks link a test home to.
+const adoptSubject = "rey_student"
+
+// maxCallBody caps what the tool reads of an operator's body.
+const maxCallBody = 64 << 10
 
 // checkCall is the whole of what one call may be, decided before anything is
 // sent (so before a key is even derived): a settings write of one value, the
 // release of one subject that is not a person's, the adoption of one account
-// the kit's prefix names for such a subject, or a read of the read routes.
+// the kit's prefix names for the one test subject, or a read of the read routes.
 // Deleting stays with a person on the NAS, so account.purge and every other
 // write operation is refused by the same rule that allows nothing else: an
 // allow-list, never a deny-list.
 //
-// A person's subject is all digits (a Zitadel user id), so a subject that is
-// is refused: the tool releases and adopts only for test subjects (a WWE ring
-// name, or the kit's conformance-<run>), never for a member.
+// Subjects are an allow-list too, never a guess at what a person's looks
+// like (Zitadel accepts custom user ids, so a member's need not be digits):
+// adopt names exactly rey_student; release names exactly rey_student or a
+// subject beginning conformance- (the kit's own, released in step 4b).
+// Compared byte for byte, after refusing invalid UTF-8, surrounding
+// whitespace and control characters.
 //
 // Nothing the operator typed is passed through. A body is parsed token by
 // token and may hold exactly the keys allowed, each byte-equal and once (Go's
@@ -47,6 +66,10 @@ var settingPath = regexp.MustCompile(`^/settings/[A-Za-z0-9_-]+$`)
 // payload is then BUILT from those typed values. The returned fields are those,
 // and Call adds the ones the tool sets itself.
 func checkCall(method, path string, body []byte) (map[string]any, error) {
+	// One byte past the cap is read, so an over-long body is seen, not cut.
+	if body, _ = io.ReadAll(io.LimitReader(bytes.NewReader(body), maxCallBody+1)); len(body) > maxCallBody {
+		return nil, fmt.Errorf("the body is refused: it is over %d bytes", maxCallBody)
+	}
 	switch {
 	case method == http.MethodGet && len(bytes.TrimSpace(body)) == 0 &&
 		(path == "/health" || path == "/capabilities" || path == "/subjects" || path == "/settings"):
@@ -59,7 +82,7 @@ func checkCall(method, path string, body []byte) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := testSubject("account.release", f["subject"]); err != nil {
+		if err := testSubject("account.release", f["subject"], true); err != nil {
 			return nil, err
 		}
 		return map[string]any{"subject": f["subject"], "operation": "account.release", "params": map[string]any{}}, nil
@@ -72,18 +95,18 @@ func checkCall(method, path string, body []byte) (map[string]any, error) {
 		if !ok {
 			return nil, errors.New(`account.adopt is refused: "subject" must be a string`)
 		}
-		if err := testSubject("account.adopt", subject); err != nil {
+		if err := testSubject("account.adopt", subject, false); err != nil {
 			return nil, err
 		}
 		p, err := strictStrings(top["params"], "username", "account_id")
 		if err != nil {
 			return nil, fmt.Errorf("account.adopt is refused: params: %w", err)
 		}
-		if !strings.HasPrefix(p["username"], subjectPrefix) || len(p["username"]) == len(subjectPrefix) {
-			return nil, fmt.Errorf("account.adopt is refused for username %q: it must begin %q (the kit's own account, never a member's)", p["username"], subjectPrefix)
+		if !adoptUsername.MatchString(p["username"]) {
+			return nil, fmt.Errorf("account.adopt is refused for username %q: it must be %q then a-z, 0-9 or -, nothing around it (the kit's own account, never a member's)", p["username"], subjectPrefix)
 		}
-		if p["account_id"] == "" {
-			return nil, errors.New("account.adopt is refused: params.account_id must name the account (the precondition the add-on checks)")
+		if !accountID.MatchString(p["account_id"]) {
+			return nil, fmt.Errorf("account.adopt is refused for account_id %q: it must be digits only (the precondition the add-on checks)", p["account_id"])
 		}
 		return map[string]any{"subject": subject, "operation": "account.adopt",
 			"params": map[string]any{"username": p["username"], "account_id": p["account_id"]}}, nil
@@ -92,11 +115,18 @@ func checkCall(method, path string, body []byte) (map[string]any, error) {
 		"and /operations/account.adopt, and GET /health, /capabilities, /subjects, /settings; deleting stays with a person on the NAS", method, path)
 }
 
-// testSubject refuses an empty subject and a person's: every real subject is
-// all digits.
-func testSubject(op, subject string) error {
-	if strings.TrimLeft(subject, "0123456789") == "" {
-		return fmt.Errorf("%s is refused for subject %q: a subject that is empty or all digits is a person's; only a test subject may be named", op, subject)
+// testSubject allows adoptSubject and, for a release (kit), a subject the
+// kit's prefix names; nothing else, so never a member's.
+func testSubject(op, subject string, kit bool) error {
+	ok := utf8.ValidString(subject) && strings.TrimSpace(subject) == subject &&
+		!strings.ContainsFunc(subject, unicode.IsControl) &&
+		(subject == adoptSubject || kit && strings.HasPrefix(subject, subjectPrefix) && len(subject) > len(subjectPrefix))
+	if !ok {
+		allowed := fmt.Sprintf("%q", adoptSubject)
+		if kit {
+			allowed += fmt.Sprintf(" or one beginning %q", subjectPrefix)
+		}
+		return fmt.Errorf("%s is refused for subject %q: only %s may be named, never a member", op, subject, allowed)
 	}
 	return nil
 }

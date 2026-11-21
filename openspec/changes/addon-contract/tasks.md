@@ -2243,6 +2243,14 @@ per-person only) applied there.
     the payload built from it; `account.purge` and every other write stay
     refused (`TestCallSendsAdoptAndReleaseForATestSubject`,
     `TestCallRefusalsSendNothing`, each guard mutation-checked)
+    *Review fix (21 Nov 2026):* Zitadel accepts custom user ids, so "not all
+    digits" was no proof a subject is not a person's. Now an allow-list:
+    adopt names exactly `rey_student`, release `rey_student` or a
+    `conformance-` subject, byte for byte, after refusing invalid UTF-8,
+    surrounding whitespace and control characters
+    (`TestCallSubjectAllowList`); `username` must match
+    `^conformance-[a-z0-9-]+$` and `account_id` `^[0-9]+$`; a body over
+    64 KiB is refused (`TestCallBodyCap`); each guard mutation-checked
 - [x] 6.11 Kit checks per feature (design §7 `freshness` row, the
   `operations` row's `physical`/`preview`/`calls`/`secret_result` part, and
   the §9.9 table: descriptors, points, totals, since, idempotent, gaps, no
