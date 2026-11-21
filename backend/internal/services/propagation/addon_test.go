@@ -896,3 +896,37 @@ func TestACheckingTargetHaltsAsAddonUnreachable(t *testing.T) {
 		t.Fatalf("want an addon_unreachable halt, got %+v", res)
 	}
 }
+
+// Design §13.4: a revocation is recorded at once and lands only on the
+// add-on's succeeded. With the add-on stopped it waits, queued, without limit
+// (never terminal, however many attempts it carries), and lands on the first
+// pass after the add-on answers (its revocation.landed line is written with
+// markApplied: db's TestLiveALandedRevocationIsAuditedWithBothTimes).
+func TestARevocationWaitsForItsSystemAndLandsWhenItAnswers(t *testing.T) {
+	row := addonRow("o1")
+	row.Attempts = maxRetries + 3
+	h := stubAddonDrain(t, row)
+	h.intent.WithdrawsOnly = true
+
+	// Stopped: the monitor holds it down, nothing is claimed or sent.
+	h.reachable = false
+	if res, _ := DrainAddon(context.Background(), "truenas"); !res.Halted || len(h.dispatched) != 0 {
+		t.Fatalf("a held system is not sent to: %+v, %d sent", res, len(h.dispatched))
+	}
+	// Answering to the monitor and refused at dial: deferred, never terminal.
+	h.reachable = true
+	closed := addons.CallResponse{Outcome: addons.OutcomeUnreached, Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Err: closed.Err, Why: addons.Unread(closed)}
+	for range 5 {
+		DrainAddon(context.Background(), "truenas")
+	}
+	if len(h.failed) != 0 || len(h.applied) != 0 {
+		t.Fatalf("an outage made the revocation terminal or landed: failed %v applied %v", h.failed, h.applied)
+	}
+	// Back: the first pass lands it, and only now is it landed.
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded}
+	DrainAddon(context.Background(), "truenas")
+	if len(h.applied) != 1 {
+		t.Fatalf("want landed once, got applied %v", h.applied)
+	}
+}

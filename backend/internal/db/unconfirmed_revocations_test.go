@@ -26,7 +26,7 @@ func TestASpentRevocationEscalatesImmediatelyAndAQueuedOneOnTime(t *testing.T) {
 	}{
 		{
 			name:    "a fresh queue is not a finding",
-			summary: UnconfirmedRevocationSummary{Queued: 3, OldestAge: 5 * time.Minute},
+			summary: UnconfirmedRevocationSummary{Queued: 3, OldestAge: 5 * time.Minute, WaitingAge: 5 * time.Minute},
 			want:    false,
 			because: "escalating on depth alone would make the badge permanent and therefore ignored",
 		},
@@ -38,15 +38,21 @@ func TestASpentRevocationEscalatesImmediatelyAndAQueuedOneOnTime(t *testing.T) {
 		},
 		{
 			name:    "a queue that has stopped draining",
-			summary: UnconfirmedRevocationSummary{Queued: 1, OldestAge: 25 * time.Hour},
+			summary: UnconfirmedRevocationSummary{Queued: 1, OldestAge: 25 * time.Hour, WaitingAge: 25 * time.Hour},
 			want:    true,
 			because: "a revocation that has not landed in a day is not draining, it is stuck behind something",
 		},
 		{
 			name:    "exactly at the threshold",
-			summary: UnconfirmedRevocationSummary{Queued: 1, OldestAge: threshold},
+			summary: UnconfirmedRevocationSummary{Queued: 1, OldestAge: threshold, WaitingAge: threshold},
 			want:    true,
 			because: "the boundary belongs to the finding: being wrong towards escalation costs a glance",
+		},
+		{
+			name:    "an add-on revocation waiting a week for its system",
+			summary: UnconfirmedRevocationSummary{Queued: 1, OldestAge: 7 * 24 * time.Hour},
+			want:    false,
+			because: "it waits without limit and without escalation, listed with its age (design §13.4, owner Q3)",
 		},
 		{
 			name:    "nothing at all",
@@ -145,7 +151,7 @@ func TestTheAgeOnTheWireIsInTheUnitItsNameClaims(t *testing.T) {
 		t.Errorf("age_seconds must be seconds, got %v", got)
 	}
 
-	summary := UnconfirmedRevocationSummary{Queued: 1, OldestAge: 2 * time.Hour, OldestAgeSeconds: 7200}
+	summary := UnconfirmedRevocationSummary{Queued: 1, OldestAge: 2 * time.Hour, OldestAgeSeconds: 7200, WaitingAge: 2 * time.Hour}
 	encoded, err = json.Marshal(summary)
 	if err != nil {
 		t.Fatal(err)
@@ -160,5 +166,19 @@ func TestTheAgeOnTheWireIsInTheUnitItsNameClaims(t *testing.T) {
 	// place the unit is not a matter of naming.
 	if !summary.Escalated(time.Hour) {
 		t.Error("a two-hour-old queued row must still escalate against a one-hour threshold")
+	}
+}
+
+// Owner 28.3: the age escalation exempts only the systems held unreachable
+// now, never every add-on row. And a revocation's landing is audited where it
+// settles, for exactly the rows this surface counts (TestLive… prove both).
+func TestEscalationExemptsOnlyHeldSystemsAndLandingIsAuditedOnSettle(t *testing.T) {
+	count := between(t, readSource(t, "unconfirmed_revocations.go"), "func CountUnconfirmedRevocations", "return s, nil")
+	if !strings.Contains(count, "p.target <> ALL($1)") {
+		t.Error("the waiting age must exempt only the held targets passed in")
+	}
+	applied := between(t, readSource(t, "propagations.go"), "func MarkPropagationApplied", "// MarkPropagationConfirmed")
+	if !strings.Contains(applied, "`+withdrawal+`") || !strings.Contains(applied, `"revocation.landed"`) {
+		t.Error("MarkPropagationApplied must audit the landing of exactly the surface's withdrawals, in its own statement")
 	}
 }

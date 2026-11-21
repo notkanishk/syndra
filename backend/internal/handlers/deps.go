@@ -464,7 +464,9 @@ var (
 	svcInTxLockingAccess      = db.InTxLockingAccess
 	dbRecordSystemConvergence = db.RecordSystemConvergence
 	// A retried revocation asks before queuing a second convergence.
-	dbHasUnfinishedConvergence = db.HasUnfinishedConvergence
+	dbUnfinishedConvergence = db.UnfinishedConvergence
+	// A revocation's one recorded time: its outbox row's.
+	dbPropagationRecordedAt = db.PropagationRecordedAt
 )
 
 // The unmanaged inventory and its one action (1.18/1.19, 6.8).
@@ -519,6 +521,9 @@ var (
 	addonsHealth     = addons.Health
 	addonsLastHealth = addons.LastHealth
 	addonsHealthOf   = addons.HealthOf
+	addonsHeld       = addons.Held
+	// The held set the unconfirmed-revocation count exempts from escalation.
+	addonsHeldTargets = addons.HeldTargets
 	// How a member reaches a target, for the instructions on their own page.
 	addonsConnection = addons.ConnectionFor
 	// A target's kind, product and entitlement schema as last accepted, read

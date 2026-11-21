@@ -163,15 +163,14 @@ func CreateAllowance(ctx context.Context, a Allowance) (Allowance, error) {
 			return Allowance{}, fmt.Errorf("replace the allowance in force: %w", err)
 		}
 	} else {
-		var existing string
-		var existingExpiry *time.Time
-		err := tx.QueryRow(ctx, `SELECT id, expires_at FROM allowances
+		var existing Allowance
+		err := tx.QueryRow(ctx, `SELECT id, expires_at, created_at FROM allowances
 			WHERE subject_id = $1 AND target = $2 AND field = $3 AND value = $4 AND direction = $5 AND `+inForce+`
-			LIMIT 1`, a.SubjectID, a.Target, a.Field, a.Value, a.Direction).Scan(&existing, &existingExpiry)
+			LIMIT 1`, a.SubjectID, a.Target, a.Field, a.Value, a.Direction).Scan(&existing.ID, &existing.ExpiresAt, &existing.CreatedAt)
 		if err == nil {
 			// The one in force, as it is: a caller finishing a retry needs to
 			// know whether it is permanent or will lapse on its own.
-			a.ID, a.ExpiresAt = existing, existingExpiry
+			a.ID, a.ExpiresAt, a.CreatedAt = existing.ID, existing.ExpiresAt, existing.CreatedAt
 			return a, ErrAllowanceAlreadyInForce
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {

@@ -705,10 +705,46 @@ func MarkPropagationSending(ctx context.Context, id string) error {
 
 // MarkPropagationApplied marks a row as terminal success and clears any prior
 // transient error message.
+//
+// A revocation (the unconfirmed surface's own direction, withdrawal) also
+// writes its revocation.landed audit line here, in the same transaction: the
+// row leaves the unconfirmed list and its landing is on record together, or
+// neither is. Both of its times in one line (design §13.4), so the log answers
+// "how long did the account still work" without a join; recorded is the row's
+// creation, the same time the list and the revoke reply show.
 func MarkPropagationApplied(ctx context.Context, id string) error {
-	return settleOne(ctx, "mark propagation applied", id,
+	tx, owned, err := beginOrJoin(ctx)
+	if err != nil {
+		return fmt.Errorf("mark propagation applied: %w", err)
+	}
+	if owned {
+		defer tx.Rollback(ctx) // no-op after Commit
+	}
+	joined := context.WithValue(ctx, txKey, tx)
+	if err := settleOne(joined, "mark propagation applied", id,
 		`UPDATE propagation_outbox SET status='applied', completed_at=NOW(), last_error=NULL
-		 WHERE id=$1 AND status='in_flight'`)
+		 WHERE id=$1 AND status='in_flight'`); err != nil {
+		return err
+	}
+	var revocation bool
+	var user, target string
+	var recorded, landed time.Time
+	if err := tx.QueryRow(ctx, `SELECT `+withdrawal+`, p.user_id, p.target, p.created_at, p.completed_at
+		FROM propagation_outbox p WHERE p.id=$1`, id).Scan(&revocation, &user, &target, &recorded, &landed); err != nil {
+		return fmt.Errorf("mark propagation applied: read back: %w", err)
+	}
+	if revocation {
+		details := map[string]any{"target": target, "recorded_at": recorded.UTC(), "landed_at": landed.UTC()}
+		if err := InsertAuditLogDetails(joined, "system", user, "revocation.landed", id, details); err != nil {
+			return fmt.Errorf("mark propagation applied: %w", err)
+		}
+	}
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("mark propagation applied: commit: %w", err)
+		}
+	}
+	return nil
 }
 
 // MarkPropagationConfirmed records that a read of Zitadel OBSERVED this write.

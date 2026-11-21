@@ -136,8 +136,9 @@ func TestAnUnconfirmedAdoptionIsNotRecorded(t *testing.T) {
 			stubAdopt(t, h)
 
 			rr := adopt(t, `{"subject_id":"u1","confirmed":true}`)
-			if rr.Code != http.StatusAccepted {
-				t.Fatalf("want 202, got %d (%s)", rr.Code, rr.Body.String())
+			// 503 NOTHING_SENT or 202 unconfirmed (design §13.4).
+			if want := map[addons.Outcome]int{addons.OutcomeUnreached: 503, addons.OutcomeIndeterminate: 202}[outcome]; rr.Code != want {
+				t.Fatalf("want %d, got %d (%s)", want, rr.Code, rr.Body.String())
 			}
 			var out map[string]any
 			_ = json.Unmarshal(rr.Body.Bytes(), &out)
@@ -349,7 +350,7 @@ func TestAnUnconfirmedPurgeIsReportedRatherThanRetried(t *testing.T) {
 		t.Fatalf("want exactly one attempt, got %d", len(h.purged))
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "did not confirm") {
+	if !strings.Contains(body, `"outcome":"unconfirmed"`) {
 		t.Errorf("an unconfirmed purge must say so: %s", body)
 	}
 	if strings.Contains(body, `"removed":1`) {

@@ -58,10 +58,17 @@ func stubMemberAction(t *testing.T) *actionHarness {
 	addonsResolveOperation = func(string, string) (addons.EffectiveOperation, error) { return h.op, h.opErr }
 	addonsOperations = func(string) []addons.EffectiveOperation { return []addons.EffectiveOperation{h.op} }
 	addonopPreview = func(_ context.Context, req addonop.Request) (addons.ReadReply, error) {
+		if h.unreachable {
+			// addons.Preview's own gate: refused undialed.
+			return addons.ReadReply{Outcome: addons.OutcomeUnreached, Err: &addons.HeldError{Target: req.Target, Why: heldWhy}}, nil
+		}
 		h.previews = append(h.previews, req)
 		return h.preview, h.previewEr
 	}
 	svcDispatchOperation = func(_ context.Context, req addonop.Request) (addonop.Result, error) {
+		if h.unreachable {
+			return addonop.Result{Outcome: addons.OutcomeUnreached, Why: heldWhy}, nil
+		}
 		h.confirms = append(h.confirms, req)
 		return h.result, h.resultErr
 	}
@@ -119,13 +126,17 @@ func TestAMemberActionIsPreviewedThenConfirmed(t *testing.T) {
 	}{
 		{"done", addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeSucceeded, View: &view}, nil, 200, "done"},
 		{"no_change", addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeSucceeded, NoChange: true}, nil, 200, "no_change"},
-		{"a lost answer", addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeIndeterminate}, nil, 202, "checking"},
-		{"sent, outcome not written", addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeSucceeded}, errors.New("db"), 202, "checking"},
+		{"a lost answer", addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeIndeterminate}, nil, 202, "unconfirmed"},
+		{"sent, outcome not written", addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeSucceeded}, errors.New("db"), 202, "unconfirmed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h.result, h.resultErr, h.confirms = tc.result, tc.err, nil
 			rr, out := act(t, "item.checkout", confirmBody)
-			if rr.Code != tc.code || out["state"] != tc.state || out["operation"] != "op_1" {
+			state := out["state"]
+			if rr.Code == http.StatusAccepted {
+				state = out["status"] // writeOutcome's one word (design §13.4)
+			}
+			if rr.Code != tc.code || state != tc.state || out["operation"] != "op_1" {
 				t.Fatalf("%d %s, want %d %s", rr.Code, rr.Body.String(), tc.code, tc.state)
 			}
 			if c := h.confirms[0]; !c.Confirmed || c.SubjectID != "u1" || c.ActorID != "u1" || c.About != "item-2207" || c.RetryOf != "" {
@@ -184,7 +195,7 @@ func TestOnlyAnOfferedActionGoesOut(t *testing.T) {
 		}, 409, "ACTION_UNAVAILABLE"},
 		{"no account yet", func(h *actionHarness) { h.bound = false }, 409, "ACCOUNT_PENDING"},
 		{"paused", func(h *actionHarness) { h.lifecycle = "read_only" }, 409, "TARGET_PAUSED"},
-		{"not answering", func(h *actionHarness) { h.unreachable = true }, 503, "TARGET_UNREACHABLE"},
+		{"not answering", func(h *actionHarness) { h.unreachable = true }, 503, "NOTHING_SENT"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

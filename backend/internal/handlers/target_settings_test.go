@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -58,6 +59,13 @@ func TestATargetSettingIsRelayedAndJudgedByTheTarget(t *testing.T) {
 	if rr := putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`); rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("unreached: %d", rr.Code)
 	}
+	// Syndra's own record failing is a 500 with a reference, never 503
+	// NOTHING_SENT telling the operator to check the add-on's container.
+	answer = addons.CallResponse{Outcome: addons.OutcomeUnreached, Err: fmt.Errorf("%w: no record committed", addons.ErrOwnFault)}
+	if rr := putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`); rr.Code != http.StatusInternalServerError ||
+		!strings.Contains(rr.Body.String(), `"SETTING_NOT_SET"`) {
+		t.Fatalf("own fault: %d %s", rr.Code, rr.Body.String())
+	}
 
 	if rr := putTargetSetting(t, `{"value":"x","extra":1}`); rr.Code != http.StatusBadRequest {
 		t.Fatalf("strict decoding: %d", rr.Code)
@@ -77,16 +85,10 @@ func TestATargetSettingThatTimedOutMayHaveApplied(t *testing.T) {
 	}
 
 	resp = addons.CallResponse{Outcome: addons.OutcomeIndeterminate}
-	rr := putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`)
-	if rr.Code != http.StatusServiceUnavailable || !strings.Contains(rr.Body.String(), "may have applied") ||
-		strings.Contains(rr.Body.String(), "nothing was changed") {
-		t.Fatalf("a lost answer may have applied: %d %s", rr.Code, rr.Body.String())
-	}
+	assertUnconfirmed(t, putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`))
 
 	resp = addons.CallResponse{Outcome: addons.OutcomeUnreached}
-	if rr := putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`); !strings.Contains(rr.Body.String(), "nothing was changed") {
-		t.Fatalf("a request that never left changed nothing: %s", rr.Body.String())
-	}
+	assertNothingSent(t, putTargetSetting(t, `{"value":"/mnt/p/main/home_dir"}`), addons.ReasonAddonUnreachable)
 }
 
 func TestTargetSettingsSayWhenTheyCouldntBeRead(t *testing.T) {

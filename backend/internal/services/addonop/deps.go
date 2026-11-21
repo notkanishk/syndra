@@ -14,6 +14,7 @@ var (
 	validateParams   = addons.ValidateParams
 	operationRecord  = addons.OperationRecord
 	callAddon        = addons.Call
+	heldUnreachable  = addons.Held
 	previewAddon     = addons.Preview
 	beginOperation   = db.BeginAddonOperation
 	// The rate limit counts the record table itself, so the thing bounded and

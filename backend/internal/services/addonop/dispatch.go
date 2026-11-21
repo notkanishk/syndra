@@ -169,6 +169,9 @@ type Result struct {
 	// words (UNKNOWN_RESOURCE and its param, LIMIT_REACHED and its limit).
 	Code    string
 	Refusal addons.Refusal
+	// Why is why an outcome that is not success did not land (addons.Unread),
+	// what writeOutcome says (design §13.4). Zero on success.
+	Why addons.Why
 	// View is a physical operation's reply for the generic renderer (the
 	// record made), through the read path's decoder; empty for a secret one.
 	View *addons.ReadView
@@ -323,6 +326,12 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 	if err := validateParams(op, req.Params); err != nil {
 		return Result{}, err
 	}
+	// Refused undialed, before the record and the rate limit: the monitor
+	// holds the system addon_unreachable, so nothing would go out, and nothing
+	// is recorded or counted against the member (design §13.4, "Halts").
+	if why, held := heldUnreachable(req.Target); held {
+		return Result{Status: db.AddonOpUnreached, Outcome: addons.OutcomeUnreached, Why: why}, nil
+	}
 	// After validation and before the record. Validation is local and free, so
 	// a malformed request costs no database read — and it must not spend a
 	// member's budget either, since it never reached the target and never cost
@@ -392,7 +401,7 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 	status := addons.StatusOf(resp)
 
 	result := Result{OperationID: id, Status: status, Outcome: resp.Outcome, Err: resp.Err,
-		NoChange: status == db.AddonOpNoChange, Code: resp.Code, Refusal: resp.Refusal}
+		NoChange: status == db.AddonOpNoChange, Code: resp.Code, Refusal: resp.Refusal, Why: addons.Unread(resp)}
 	if op.Effect == addons.EffectPhysical && resp.Outcome == addons.OutcomeSucceeded {
 		v := addons.ViewOf(req.Target, req.Operation, resp.Body, resp.Clock)
 		result.View = &v

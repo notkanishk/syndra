@@ -34,14 +34,25 @@ type revokeHarness struct {
 func stubRevocation(t *testing.T) *revokeHarness {
 	t.Helper()
 	h := &revokeHarness{}
-	create, record, dispatch, resolve, unfinished := dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementSet, dbHasUnfinishedConvergence
+	create, record, dispatch, resolve, unfinished, recordedAt := dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementSet, dbUnfinishedConvergence, dbPropagationRecordedAt
 	t.Cleanup(func() {
 		dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementSet = create, record, dispatch, resolve
-		dbHasUnfinishedConvergence = unfinished
+		dbUnfinishedConvergence, dbPropagationRecordedAt = unfinished, recordedAt
 	})
 	// What the outbox would say: a convergence queued earlier is still waiting.
-	dbHasUnfinishedConvergence = func(context.Context, string, string) (bool, error) {
-		return len(h.converged) > 0, nil
+	dbUnfinishedConvergence = func(context.Context, string, string) (string, error) {
+		if len(h.converged) > 0 {
+			return "outbox_1", nil
+		}
+		return "", nil
+	}
+	// The outbox row's creation: the one recorded time. The allowance's is
+	// an hour earlier, so a reply that read it would show.
+	dbPropagationRecordedAt = func(_ context.Context, id string) (time.Time, error) {
+		if id != "outbox_1" {
+			return time.Time{}, errors.New("no such row")
+		}
+		return time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC), nil
 	}
 
 	dbCreateAllowance = func(_ context.Context, a db.Allowance) (db.Allowance, error) {
@@ -49,6 +60,7 @@ func stubRevocation(t *testing.T) *revokeHarness {
 			return db.Allowance{}, h.createErr
 		}
 		a.ID = "allow_1"
+		a.CreatedAt = time.Date(2026, 11, 21, 8, 0, 0, 0, time.UTC)
 		h.allowances = append(h.allowances, a)
 		return a, nil
 	}
@@ -134,10 +146,11 @@ func TestTheResponseSaysEstablishedSessionsEndOnReconnect(t *testing.T) {
 			t.Errorf("the response implies session termination this target cannot perform (%q): %s", forbidden, body)
 		}
 	}
-	// And it must not report the target as already changed: the convergence is
-	// queued and the drain has not run.
-	if !strings.Contains(body, `"queued":true`) {
-		t.Errorf("the suspension is queued, not applied: %s", body)
+	// And it must not report the target as already changed: recorded now, and
+	// landed only when the add-on answers succeeded (design §13.4).
+	if !strings.Contains(body, `"status":"recorded"`) || !strings.Contains(body, `"landed_at":null`) ||
+		!strings.Contains(body, `"recorded_at":"2026-11-21T09:00:00Z"`) || !strings.Contains(body, "the account there still works") {
+		t.Errorf("the suspension is recorded, not landed: %s", body)
 	}
 }
 
@@ -173,7 +186,7 @@ func TestAFailedRotationLeavesTheSuspensionStandingAndSaysWhatIsLeft(t *testing.
 		t.Error("the suspension must survive a failed rotation")
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "partially_revoked") || !strings.Contains(body, "password.rotate") {
+	if !strings.Contains(body, `"rotation":`) || !strings.Contains(body, "password.rotate") {
 		t.Errorf("the outstanding half must be named: %s", body)
 	}
 	if !strings.Contains(body, `"rotated":false`) {
@@ -253,8 +266,14 @@ func TestADoubleRetryQueuesOneConvergence(t *testing.T) {
 	}
 
 	for i := 1; i <= 2; i++ {
-		if rr := revoke(`{"reason":"offboarding","confirmed":true}`); rr.Code != http.StatusAccepted {
+		rr := revoke(`{"reason":"offboarding","confirmed":true}`)
+		if rr.Code != http.StatusAccepted {
 			t.Fatalf("retry %d: want 202, got %d (%s)", i, rr.Code, rr.Body.String())
+		}
+		// Recorded is the outbox row's time on a retry too, never the zero
+		// time of an allowance read without its creation.
+		if !strings.Contains(rr.Body.String(), `"recorded_at":"2026-11-21T09:00:00Z"`) {
+			t.Errorf("retry %d: recorded_at is not the outbox row's: %s", i, rr.Body.String())
 		}
 	}
 	if len(h.converged) != 1 {
@@ -289,7 +308,7 @@ func TestARevocationSaysItDrainsWithoutAnOperator(t *testing.T) {
 	rr := revoke(`{"reason":"offboarding","confirmed":true}`)
 	body := rr.Body.String()
 
-	if !strings.Contains(body, "drains on its own") {
+	if !strings.Contains(body, "Syndra applies it by itself") {
 		t.Errorf("a revocation must say it does not wait: %s", body)
 	}
 	if strings.Contains(body, "resumes the drain") {
@@ -313,8 +332,8 @@ func TestARefusedRotationNeverSaysTheCredentialWasReplaced(t *testing.T) {
 		want    string
 	}{
 		{"rejected", addons.OutcomeRejected, errors.New("the bound account no longer exists on the target"), "no longer exists"},
-		{"unreached", addons.OutcomeUnreached, nil, "could not be reached"},
-		{"indeterminate", addons.OutcomeIndeterminate, nil, "did not confirm"},
+		{"unreached", addons.OutcomeUnreached, nil, "Nothing went out"},
+		{"indeterminate", addons.OutcomeIndeterminate, nil, "don't send it again"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -334,7 +353,7 @@ func TestARefusedRotationNeverSaysTheCredentialWasReplaced(t *testing.T) {
 			}
 			// And the half that DID happen is still stated first — the failure
 			// must not read as "the revocation failed".
-			if !strings.Contains(body, "New connections are refused now") {
+			if !strings.Contains(body, "Recorded. Not yet applied") {
 				t.Errorf("the suspension is real and must be stated: %s", body)
 			}
 		})
@@ -373,7 +392,7 @@ func TestTheQueuedLockDeclaresItselfAWithdrawal(t *testing.T) {
 	if !h.converged[0].WithdrawsOnly {
 		t.Error("the lock must declare itself a withdrawal, or nothing claims it and the disclosure below is false")
 	}
-	if !strings.Contains(rr.Body.String(), "drains on its own") {
+	if !strings.Contains(rr.Body.String(), "Syndra applies it by itself") {
 		t.Error("the disclosure is the promise the declaration keeps; one without the other is the bug")
 	}
 }

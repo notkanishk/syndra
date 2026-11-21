@@ -116,16 +116,10 @@ func handleAdoptAccount(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusConflict, "ADOPTION_REFUSED", adoptionRefusal(res.Err))
 		return
 	default:
-		// Unreached and indeterminate differ in what may have happened on the
-		// target, and neither is something to record here: the add-on's own
-		// binding store is the authority, and the next inventory read reports
-		// what it actually holds.
-		jsonResponse(w, http.StatusAccepted, map[string]any{
-			"status":    "unconfirmed",
-			"operation": res.OperationID,
-			"outcome":   res.Outcome,
-			"detail":    "The target did not confirm the adoption. Nothing was recorded here; check the inventory before trying again.",
-		})
+		// Unreached or indeterminate, said apart (design §13.4). Neither is
+		// recorded here: the add-on's own binding store is the authority, and
+		// the next inventory read reports what it holds.
+		writeOutcome(w, notLandedOf(r.Context(), target, res.Outcome, res.Why), map[string]any{"operation": res.OperationID})
 		return
 	}
 
@@ -224,8 +218,9 @@ func writeAdoptionError(w http.ResponseWriter, err error) {
 // The refusal an operator meets is the confirmation one, and it is the reason
 // this takes the sentence rather than composing one: "confirm to continue" with
 // no statement of what is being confirmed is the shape of dialog people click
-// through. Everything below it is a protocol fault and reads the same whichever
-// operation asked.
+// through. Everything below it is Syndra's own refusal before sending (a
+// record that did not write, parameters that do not validate): a 500 with a
+// reference, never a 502 blaming the add-on, which was not asked.
 func writeOperationError(w http.ResponseWriter, err error, code, confirmation string) {
 	switch {
 	case errors.Is(err, addonop.ErrConfirmationRequired):
@@ -234,8 +229,10 @@ func writeOperationError(w http.ResponseWriter, err error, code, confirmation st
 		jsonErrorResponse(w, http.StatusNotFound, "TARGET_NOT_REGISTERED", err.Error())
 	case errors.As(err, new(*addons.ErrOperationUnavailable)):
 		jsonErrorResponse(w, http.StatusConflict, "OPERATION_UNAVAILABLE", err.Error())
+	case errors.Is(err, addons.ErrInvalidParams):
+		jsonValidationErrorResponse(w, "That isn't something this action takes.", map[string]string{"params": err.Error()})
 	default:
-		writeUpstream(w, err, code)
+		writeSanitised(w, http.StatusInternalServerError, code, err.Error())
 	}
 }
 
@@ -282,7 +279,7 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 	// released, and the same press repairs a split.
 	if req.Version != "" {
 		if b, bound, err := dbGetTargetBinding(r.Context(), target, subject); err != nil {
-			writeOperationError(w, err, "RELEASE_FAILED", releaseConfirmation)
+			jsonErrorResponse(w, http.StatusInternalServerError, "RELEASE_FAILED", err.Error())
 			return
 		} else if bound && b.Version() != req.Version {
 			jsonErrorResponse(w, http.StatusConflict, "RELEASE_REFUSED",
@@ -324,13 +321,8 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		// Nothing forgotten. The add-on's store is the authority on whether it
 		// still binds this subject, and dropping the backend's copy against an
 		// answer nobody received would manufacture the split this handler exists
-		// to close.
-		jsonResponse(w, http.StatusAccepted, map[string]any{
-			"status":    "unconfirmed",
-			"operation": res.OperationID,
-			"outcome":   res.Outcome,
-			"detail":    "The target did not confirm the release. Nothing was changed here; try again once it is reachable.",
-		})
+		// to close. Unreached or indeterminate, said apart (design §13.4).
+		writeOutcome(w, notLandedOf(r.Context(), target, res.Outcome, res.Why), map[string]any{"operation": res.OperationID})
 		return
 	}
 
@@ -412,9 +404,24 @@ func handleSetTargetLifecycle(w http.ResponseWriter, r *http.Request) {
 	// The pipe commits the addon_operations row and its audit line (actor, target,
 	// new state) before the call, so a flip is attributable. Which is why the
 	// actor travels with it.
-	out, err := addonsSetLifecycle(r.Context(), r.PathValue("target"), req.State, req.Reason, resolveActor(r, ""))
-	if err != nil {
-		writeUpstream(w, err, "LIFECYCLE_NOT_SET")
+	target := r.PathValue("target")
+	out, err := addonsSetLifecycle(r.Context(), target, req.State, req.Reason, resolveActor(r, ""))
+	var nl *addons.NotLandedError
+	switch {
+	case errors.As(err, &nl):
+		writeOutcome(w, notLandedOf(r.Context(), target, nl.Outcome, nl.Why), nil)
+		return
+	case errors.Is(err, addons.ErrNotRegistered):
+		jsonErrorResponse(w, http.StatusNotFound, "TARGET_NOT_REGISTERED", err.Error())
+		return
+	case errors.Is(err, addons.ErrLifecycleRefused):
+		// Answered, and refused (RFC 9110 §15.5.10). Its words are in the log.
+		log.Printf("[TARGETS] %v", err)
+		jsonErrorResponse(w, http.StatusConflict, "LIFECYCLE_NOT_SET",
+			"The add-on refused the change, so nothing changed. Read the add-on's log for why.")
+		return
+	case err != nil:
+		jsonErrorResponse(w, http.StatusInternalServerError, "LIFECYCLE_NOT_SET", err.Error())
 		return
 	}
 	jsonResponse(w, http.StatusOK, out)
@@ -518,6 +525,13 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Refused at once, undialed, when the monitor holds the add-on down
+	// (design §13.4): the re-check below could not read it either.
+	if why, held := addonsHeld(target); held {
+		writeOutcome(w, notLandedOf(r.Context(), target, addons.OutcomeUnreached, why), nil)
+		return
+	}
+
 	// Re-read, and re-resolve. The list the operator ticked was true when they
 	// read it; this is the only thing that makes it true when it runs.
 	report, err := svcDormantAccounts(r.Context(), target)
@@ -530,8 +544,9 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREADABLE",
-			"That target could not be read, so nothing was removed.")
+		// The re-check did not read the target, so nothing went out (no Why
+		// travels with the report's error yet: 8c's read reply carries it).
+		writeOutcome(w, notLandedOf(r.Context(), target, addons.OutcomeUnreached, addons.Why{}), nil)
 		return
 	}
 	removable := map[string]string{} // account -> subject
@@ -587,13 +602,11 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 			}
 			outcomes = append(outcomes, map[string]any{"account": name, "outcome": "removed"})
 		default:
-			// Unreached and indeterminate both mean nobody can say. Never
-			// retried automatically: a purge that may have happened is the one
-			// operation where trying again is not free.
-			outcomes = append(outcomes, map[string]any{
-				"account": name, "outcome": string(res.Outcome),
-				"detail": "The target did not confirm this one. Check it before trying again.",
-			})
+			// Unreached or indeterminate, in writeOutcome's words, per account
+			// (design §13.4). Never retried automatically: a purge that may
+			// have happened is the one operation where trying again is not free.
+			_, body, _ := outcomeAnswer(notLandedOf(r.Context(), target, res.Outcome, res.Why), map[string]any{"operation": res.OperationID})
+			outcomes = append(outcomes, map[string]any{"account": name, "outcome": outcomeWord(res.Outcome), "answer": body})
 		}
 	}
 

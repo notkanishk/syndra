@@ -121,10 +121,9 @@ func handleMemberAction(w http.ResponseWriter, r *http.Request) {
 	case view.Lifecycle == "draining" || view.Lifecycle == "read_only":
 		jsonErrorResponse(w, http.StatusConflict, "TARGET_PAUSED", "Changes on that system are paused. Nothing was done.")
 		return
-	case view.Health != addons.StateAnswering:
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREACHABLE", "That system is not answering right now. Nothing went out.")
-		return
 	}
+	// A system the monitor holds down is refused undialed by the preview and
+	// the dispatch themselves (addons.Held), answered as NOTHING_SENT.
 
 	opReq := addonop.Request{Target: target, Operation: name, ActorID: subject, SubjectID: subject,
 		Confirmed: req.Confirm, Params: req.Params, About: aboutOf(op, req.Params)}
@@ -167,9 +166,10 @@ func previewAction(w http.ResponseWriter, r *http.Request, req addonop.Request) 
 		writeRefusal(w, reply.Code, reply.Refusal)
 	default:
 		// A preview has no effect by contract, so a lost answer to one is
-		// still nothing done; the member can ask again.
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "PREVIEW_UNANSWERED",
-			"That system didn't answer. Nothing went out; try again.")
+		// still nothing done: unreached, whatever the pipe saw.
+		n := notLandedOf(r.Context(), req.Target, addons.OutcomeUnreached, reply.Why())
+		n.Member = true
+		writeOutcome(w, n, nil)
 	}
 }
 
@@ -194,18 +194,19 @@ func confirmAction(w http.ResponseWriter, r *http.Request, req addonop.Request) 
 		jsonResponse(w, http.StatusOK, map[string]any{"state": state, "operation": res.OperationID, "view": res.View})
 	case addons.OutcomeRejected:
 		writeRefusal(w, res.Code, res.Refusal)
-	case addons.OutcomeUnreached:
+	default:
 		if res.Code == addons.CodeTargetChanged {
 			// Unreached like any other (nothing went out); it did answer, so it is not "not answering".
 			jsonErrorResponse(w, http.StatusServiceUnavailable, addons.CodeTargetChanged,
 				"That system changed while Syndra was reading it. Nothing went out. Try again.")
 			return
 		}
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREACHABLE", "That system is not answering right now. Nothing went out.")
-	default:
-		// 202 (RFC 9110 §15.3.3): accepted, and not known to be done. The
-		// page polls GET .../operations/{id}; nothing sends it again.
-		jsonResponse(w, http.StatusAccepted, map[string]any{"state": actionChecking, "operation": res.OperationID, "sent_at": time.Now().UTC()})
+		// Nothing went out, or 202 (RFC 9110 §15.3.3): accepted and not known
+		// to be done, which the page polls on GET .../operations/{id}; nothing
+		// sends it again (design §13.4).
+		n := notLandedOf(r.Context(), req.Target, res.Outcome, res.Why)
+		n.Member = true
+		writeOutcome(w, n, map[string]any{"operation": res.OperationID, "sent_at": time.Now().UTC()})
 	}
 }
 
@@ -262,7 +263,7 @@ func writeActionError(w http.ResponseWriter, err error) {
 	case errors.Is(err, addons.ErrInvalidParams):
 		jsonValidationErrorResponse(w, "That isn't something this action takes.", map[string]string{"params": err.Error()})
 	default:
-		writeCredentialError(w, err)
+		writeMemberRefusal(w, err, "ACTION_NOT_SENT")
 	}
 }
 

@@ -116,7 +116,7 @@ func handleUnconfirmedRevocations(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	summary, err := dbCountUnconfirmedRevocations(r.Context())
+	summary, err := dbCountUnconfirmedRevocations(r.Context(), addonsHeldTargets())
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
