@@ -32,10 +32,14 @@ func (k *kit) callsRead(c *check) {
 
 // neverUsed asks /calls about an id nobody sent: unknown, and no reply.
 func (k *kit) neverUsed(c *check) {
-	id := k.cfg.Subject + "-never-used-" + canary()[len("conformance-canary-"):]
+	k.callUnknown(c, k.cfg.Subject+"-never-used-"+canary()[len("conformance-canary-"):])
+}
+
+// callUnknown asserts /calls holds nothing for id: unknown, and no reply.
+func (k *kit) callUnknown(c *check, id string) {
 	doc := k.ok(c, k.send(request{method: http.MethodGet, target: "/calls/" + url.PathEscape(id)}), "call.json")
 	if doc != nil {
-		c.expect(str(doc, "state") == "unknown" && doc["reply"] == nil, "/calls on an id never used answered state %q", str(doc, "state"))
+		c.expect(str(doc, "state") == "unknown" && doc["reply"] == nil, "/calls/%s answered state %q; nothing was recorded for it", id, str(doc, "state"))
 		c.expect(str(doc, "call_id") == id, "/calls answered for call_id %q, asked %q", str(doc, "call_id"), id)
 	}
 }

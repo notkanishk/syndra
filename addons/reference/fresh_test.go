@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// An unreachable app is the half of freshness a black-box kit cannot take
-// offline (B4), so it is held here: a read answers the last value it read with
+// An unreachable app, held here without waiting out the cooldown (the kit
+// holds it too, given -stop-app: freshness.unreachable): a read answers the last value it read with
 // stale unreachable, never an error, and only with nothing kept is it 503
 // TARGET_UNREACHABLE with Retry-After.
 func TestAnUnreachableAppAnswersTheLastValueNotAnError(t *testing.T) {
@@ -333,5 +333,45 @@ func TestAWriteForgetsTheFailureToo(t *testing.T) {
 	_ = json.Unmarshal(rep.body, &doc)
 	if rep.status != 200 || doc["current"] != true {
 		t.Errorf("a read whose join a write forgot: %d %v, want a read of its own, current", rep.status, doc)
+	}
+}
+
+// health's reachable is a real call /health makes itself (health.json:
+// "a real call to the target just succeeded"), as TrueNAS pings: never what an
+// older read found. A call that succeeds, /health's or /plan's, moves
+// last_read_at; one that fails never does.
+func TestHealthReachableIsItsOwnCall(t *testing.T) {
+	var down atomic.Bool
+	a, err := New(Config{Target: "reference", Secret: []byte("s"), Down: down.Load})
+	if err != nil {
+		t.Fatal(err)
+	}
+	health := func() map[string]any {
+		var h map[string]any
+		_ = json.Unmarshal(a.health(nil, nil).body, &h)
+		return h
+	}
+	plan := func() reply {
+		return a.plan(nil, []byte(`{"contract_version":2,"subjects":[{"subject":"the-undertaker","email":"the-undertaker@example.org","desired":{}}]}`))
+	}
+
+	down.Store(true)
+	if h := health(); h["reachable"] != false || h["last_read_at"] != nil {
+		t.Errorf("before any read, with the app down, /health answered reachable %v, last_read_at %v; want false, none", h["reachable"], h["last_read_at"])
+	}
+	if rep := plan(); rep.status != 503 {
+		t.Fatalf("/plan with the app down answered %d", rep.status)
+	}
+	down.Store(false)
+	if h := health(); h["reachable"] != true || h["last_read_at"] == nil {
+		t.Errorf("with the app back and no other read, /health answered reachable %v, last_read_at %v; want true and a date", h["reachable"], h["last_read_at"])
+	}
+	if rep := plan(); rep.status != 200 {
+		t.Fatalf("/plan with the app up answered %d: %s", rep.status, rep.body)
+	}
+	last := health()["last_read_at"]
+	down.Store(true) // the app-down file appears; no read follows
+	if h := health(); h["reachable"] != false || h["last_read_at"] != last {
+		t.Errorf("right after the app went down /health answered reachable %v, last_read_at %v; want false, still %v", h["reachable"], h["last_read_at"], last)
 	}
 }

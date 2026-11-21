@@ -101,6 +101,9 @@ func (k *kit) reads() {
 	}
 	k.callsRead(k.at("calls.unknown"))
 	k.freshness()
+	if !k.cfg.Mutate { // -mutate takes the app down after its calls step, about its own account
+		k.outage()
+	}
 	k.stats()
 	k.scopes(k.at("dangerous-scopes"), health)
 }

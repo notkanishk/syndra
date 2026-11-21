@@ -103,6 +103,7 @@ func (k *kit) mutate() error {
 			k.preconditions(k.at("adopt.shown"), k.at("adopt.not-shown"), k.at("release.not-shown"))
 		}},
 		{"calls", []string{"calls.recorded", "operations.physical", "health"}, func() { k.callsWrite() }},
+		{"outage", []string{"outage.health", "outage.kept", "outage.none", "outage.write", "outage.restart", "freshness.unreachable"}, func() { k.outage() }},
 		{"reads", []string{"operations.reads", "operations.result"}, func() {
 			k.readOperations(k.at("operations.reads"), callID)
 			k.results(k.at("operations.result"), true)
@@ -907,6 +908,7 @@ func (k *kit) afterwards() {
 		if ex.err != nil || ex.status == 0 {
 			continue
 		}
+		k.noFalseZero(k.at("no-false-zero"), ex)
 		if len(k.canaries) > 0 && i >= k.since {
 			secret.mark()
 			for _, s := range k.canaries {

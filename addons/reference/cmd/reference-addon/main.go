@@ -2,6 +2,9 @@
 // the conformance kit and for an author reading the guide.
 //
 //	reference-addon -listen 127.0.0.1:8443 -target reference -secret-file ./secret
+//
+// With REFERENCE_APP_DOWN_FILE set, the fake app cannot be reached while that
+// file exists, so the kit's -stop-app and -start-app are touch and rm.
 package main
 
 import (
@@ -44,7 +47,11 @@ func main() {
 	if len(set) > 0 {
 		log.Printf("WARNING: deliberately violating the contract (%s); never connect this to Syndra", defects.String())
 	}
-	addon, err := reference.New(reference.Config{Target: *target, Secret: []byte(secret), Features: features, Defects: set})
+	cfg := reference.Config{Target: *target, Secret: []byte(secret), Features: features, Defects: set}
+	if downFile := os.Getenv("REFERENCE_APP_DOWN_FILE"); downFile != "" {
+		cfg.Down = func() bool { _, err := os.Stat(downFile); return err == nil }
+	}
+	addon, err := reference.New(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
