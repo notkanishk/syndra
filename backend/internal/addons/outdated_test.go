@@ -91,8 +91,8 @@ func TestHomesNeverReadAsNobodysWhenWhoseIsUnknown(t *testing.T) {
 		[]byte(`{"type":"urn:syndra:addon:error:NO_CURRENT_READ","title":"No current read","status":503,"code":"NO_CURRENT_READ","retry":"backoff","detail":"TrueNAS could not be read."}`))
 	for range 5 {
 		h := ReadHomes(context.Background(), "truenas", false)
-		if h.Read || h.Reason != db.UnreconciledUnreachable || len(h.Homes) != 0 {
-			t.Fatalf("whose unknown: want not read, target_unreachable, got %+v", h)
+		if h.Read || h.Reason != db.UnreconciledAppUnreachable || len(h.Homes) != 0 {
+			t.Fatalf("whose unknown: want not read, app_unreachable (NO_CURRENT_READ), got %+v", h)
 		}
 	}
 	if asked["/subjects"] != 1 || asked["/homes"] != 5 {
@@ -121,7 +121,8 @@ func TestHaltSaysWhatTheReplySaysAheadOfTheCooldown(t *testing.T) {
 			Stale: &Stale{Reason: StaleCooldown, RetryAfter: &retry}}, db.UnreconciledAddonOutdated},
 		{"store unreadable", SubjectsResult{Outcome: OutcomeIndeterminate, Code: CodeStoreUnreadable, RetryAfter: 5}, db.UnreconciledReadRefused},
 		{"cooldown, nothing to serve", SubjectsResult{Outcome: OutcomeUnreached, RetryAfter: 20}, db.UnreconciledStaleRead},
-		{"not answered", SubjectsResult{Outcome: OutcomeUnreached}, db.UnreconciledUnreachable},
+		{"not answered", SubjectsResult{Outcome: OutcomeUnreached}, db.UnreconciledAddonUnreachable},
+		{"the app down", SubjectsResult{Outcome: OutcomeUnreached, Status: 503, Code: codeTargetUnreachable}, db.UnreconciledAppUnreachable},
 	} {
 		if reason, _, halted := tc.read.Halt(); !halted || reason != tc.want {
 			t.Errorf("%s: got %q (halted %t), want %q", tc.name, reason, halted, tc.want)

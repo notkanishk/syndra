@@ -88,10 +88,10 @@ func DrainRevocations(ctx context.Context) (DrainResult, error) {
 	// deployments, and a NAS being off is not a reason to leave a door system's
 	// revocation queued.
 	for _, target := range addonDrainTargets() {
-		if !addonReachable(ctx, target) {
+		if st := addonState(target); !st.Answering() {
 			// A target with nothing of its own queued was not skipped:
 			// unanswered says so, as the operator's pass does.
-			res.merge(target, unanswered(ctx, target, "target_unreachable"))
+			res.merge(target, unanswered(ctx, target, string(st.State)))
 			continue
 		}
 		rows, err := claimRevocations(ctx, target, claimBatch)

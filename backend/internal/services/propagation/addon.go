@@ -78,8 +78,8 @@ func drainAddonPass(ctx context.Context, target string) (DrainResult, error) {
 	// a single call establishes — and an exhausted budget is terminal, so the
 	// rows an operator approved would be failed by the target being switched
 	// off rather than left queued for it coming back.
-	if !addonReachable(ctx, target) {
-		return unanswered(ctx, target, "target_unreachable"), nil
+	if st := addonState(target); !st.Answering() {
+		return unanswered(ctx, target, string(st.State)), nil
 	}
 
 	rows, err := claimPending(ctx, target, claimBatch)
@@ -258,6 +258,15 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			return false
 		}
 		res.Failed++
+
+	case resp.Outcome == addons.OutcomeUnreached && resp.Why.Unreachable():
+		// Nothing went out because a side was down (design §13.4): no attempt
+		// is spent, so an outage never makes a row "out of retries".
+		if err := release(ctx, row.ID, unreachedWhy(systemName(ctx, row.Target), resp)); err != nil {
+			res.settleFailure(row.ID, "release", err)
+			return false
+		}
+		res.Requeued++
 
 	case resp.Outcome == addons.OutcomeUnreached:
 		if row.Attempts >= maxRetries {

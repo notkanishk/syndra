@@ -33,9 +33,9 @@ func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
 		status string
 	}{
 		{"answering", addons.TargetHealth{Reachable: true, Outcome: addons.OutcomeSucceeded},
-			addons.HealthState{Status: addons.HealthOnline, CheckedAt: since}, "answering"},
+			addons.HealthState{State: addons.StateAnswering, CheckedAt: since}, "answering"},
 		{"down", addons.TargetHealth{Outcome: addons.OutcomeUnreached, Err: errors.New("no route")},
-			addons.HealthState{Status: addons.HealthOffline, CheckedAt: since.Add(time.Minute), ReachableSince: &since}, "offline"},
+			addons.HealthState{State: addons.StateAddonUnreachable, Cause: addons.CauseNoAnswer, CheckedAt: since.Add(time.Minute), Since: &since}, "addon_unreachable"},
 	} {
 		addonsHealth = func(context.Context, string) addons.TargetHealth { return tc.live }
 		addonsHealthOf = func(string) addons.HealthState { return tc.state }
@@ -52,38 +52,26 @@ func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
 		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
-		if body.Health.Status != tc.state.Status {
-			t.Errorf("%s: want health %s, got %s (%s)", tc.name, tc.state.Status, body.Health.Status, rr.Body.String())
+		if body.Health.State != tc.state.State || body.Health.Cause != tc.state.Cause {
+			t.Errorf("%s: want health %s, got %s (%s)", tc.name, tc.state.State, body.Health.State, rr.Body.String())
 		}
 		if body.Status != tc.status {
 			t.Errorf("%s: the system page reads the same ranked status as the roster, want %s, got %q", tc.name, tc.status, body.Status)
 		}
-		if tc.state.ReachableSince != nil && (body.Health.ReachableSince == nil || !body.Health.ReachableSince.Equal(since)) {
+		if tc.state.Since != nil && (body.Health.Since == nil || !body.Health.Since.Equal(since)) {
 			t.Errorf("%s: an outage carries when it began: %s", tc.name, rr.Body.String())
 		}
 	}
 }
 
-// One reading wins, in A-01's order. The breaker never outranks an outage:
-// that sent an operator to the Syndra server while TrueNAS itself was down.
-func TestOneReadingWinsInDesignsOrder(t *testing.T) {
-	off := addons.HealthState{Status: addons.HealthOffline}
-	on := addons.HealthState{Status: addons.HealthOnline}
-	unknown := addons.HealthState{Status: addons.HealthUnknown}
-	for _, tc := range []struct {
-		name string
-		s    targetSummary
-		want string
-	}{
-		{"key fails beats everything", targetSummary{TransportStatus: "error", CircuitOpen: true, Health: off}, "cannot_connect"},
-		{"offline beats the breaker", targetSummary{CircuitOpen: true, Health: off}, "offline"},
-		{"breaker while checks answer", targetSummary{CircuitOpen: true, Health: on}, "waiting_to_retry"},
-		{"breaker beats checking", targetSummary{CircuitOpen: true, Health: unknown}, "waiting_to_retry"},
-		{"can't tell yet", targetSummary{Health: unknown}, "checking"},
-		{"answering", targetSummary{Health: on}, "answering"},
-	} {
-		if got := targetStatus(tc.s); got != tc.want {
-			t.Errorf("%s: want %s, got %s", tc.name, tc.want, got)
+// The roster's status is the monitor's state and nothing ranks over it
+// (design §13.2): a key that does not load is the monitor's wrong_host, an
+// open breaker is the cause that opened it.
+func TestTheRosterStatusIsTheMonitorsState(t *testing.T) {
+	for _, st := range []addons.ReachState{addons.StateAnswering, addons.StateAddonUnreachable, addons.StateAppUnreachable, addons.StateChecking} {
+		s := targetSummary{TransportStatus: "error", CircuitOpen: true, Health: addons.HealthState{State: st}}
+		if got := targetStatus(s); got != string(st) {
+			t.Errorf("want %s, got %s", st, got)
 		}
 	}
 }

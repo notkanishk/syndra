@@ -64,18 +64,15 @@ type myTargetView struct {
 	// vault holds no credential for this path — the member's password is
 	// forwarded to the target and kept nowhere.
 	Credential myCredentialStatus `json:"credential"`
-	// Reachable says the target is confirmed online (Health is `online`). A
-	// member whose target is down is told so rather than shown a credential form
-	// that will fail.
-	Reachable bool `json:"reachable"`
-	// Health is what Syndra can honestly say: `online`, `offline` (three failed
-	// reads in a row) or `unknown` (can't tell yet, so the page says nothing).
-	// One slow answer stays online.
-	Health addons.HealthStatus `json:"health"`
-	// CheckedAt is the latest health read; ReachableSince is when the target
-	// stopped answering, set only while it is offline.
-	CheckedAt      *time.Time `json:"checked_at,omitempty"`
-	ReachableSince *time.Time `json:"reachable_since,omitempty"`
+	// Health is the monitor's state of the target (addons.HealthOf, design
+	// §13.2): answering, addon_unreachable, app_unreachable or checking. A
+	// member whose target is not answering is told so rather than shown a
+	// credential form that will fail. One slow answer stays answering.
+	Health addons.ReachState `json:"health"`
+	// CheckedAt is the latest probe; Since is when the state began, absent
+	// when it was already so at the first probe.
+	CheckedAt *time.Time `json:"checked_at,omitempty"`
+	Since     *time.Time `json:"since,omitempty"`
 	// Lifecycle is the state an operator put the target in: `active`,
 	// `draining` or `read_only`.
 	//
@@ -305,42 +302,22 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 		}
 	}
 
-	// One probe, and only to decide whether to offer the form. A member told
-	// their credential was set against an add-on that never answered is the one
-	// outcome this page must not produce.
-	//
-	// Callable is not reachable, and the difference is the whole point here. An
-	// add-on answers `/capabilities` from its own process; the credential is set
-	// on the TARGET, over a session the add-on may not currently have. Reading
-	// only the manifest offered the form to a member whose NAS was switched off,
-	// and the failure arrived after they had typed a password — which is the
-	// exact outcome the paragraph above forbids.
-	//
-	// A health read that fails is read as unreachable rather than ignored: this
-	// field withdraws a form, and withdrawing one wrongly is a member told to
-	// come back later, while offering one wrongly is a member told their
-	// credential is set when it is not.
-	if !addonsCallable(target) {
-		return view, set, nil
-	}
-	// The live read is counted by the health monitor; the page then says what
-	// the monitor can stand behind, so one slow answer does not read as an
-	// outage and a confirmed one carries the time it began.
-	health := addonsHealth(r.Context(), target)
+	// Whether to offer the form is the monitor's to say (design §13.2), read
+	// here and never probed per load. Callable is not reachable: an add-on
+	// answers /capabilities from its own process while its NAS is switched
+	// off, and only the monitor's state says the target can take a password.
 	state := addonsHealthOf(target)
-	view.Health = state.Status
-	view.Reachable = state.Status == addons.HealthOnline
+	view.Health = state.State
 	if !state.CheckedAt.IsZero() {
 		checked := state.CheckedAt
 		view.CheckedAt = &checked
 	}
-	view.ReachableSince = state.ReachableSince
-	view.Lifecycle = health.Lifecycle
-	if view.Lifecycle == "" {
-		// The add-on did not answer this time; the last lifecycle it reported
-		// still stands, since only an operator changes it.
-		view.Lifecycle = state.Lifecycle
+	view.Since = state.Since
+	if !addonsCallable(target) {
+		return view, set, nil
 	}
+	// The last lifecycle the add-on reported stands: only an operator changes it.
+	view.Lifecycle = state.Lifecycle
 
 	// Only where there is an account to connect WITH. In the other two states
 	// the instructions would describe reaching something that is not there —
@@ -544,7 +521,7 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusConflict, "TARGET_PAUSED",
 			"Account changes on that system are paused, so your password can't be changed right now. Your current one keeps working.")
 		return
-	case !view.Reachable:
+	case view.Health != addons.StateAnswering:
 		// Fails closed and says so. Accepting it and reporting success would
 		// tell a member their password works when nothing received it.
 		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREACHABLE",

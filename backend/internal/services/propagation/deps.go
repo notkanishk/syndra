@@ -158,27 +158,13 @@ var (
 	readIntent       = db.ReadEntitlementIntent
 	applyEntitlement = addons.Apply
 
-	// addonReachable is the add-on pass's pre-flight, matching the one the
-	// Zitadel passes take. Without it an outage spends a whole batch's retry
-	// budgets learning the same thing once per row — and a spent budget is now
-	// terminal, so an unreachable target would fail approved work rather than
-	// leaving it queued.
-	//
-	// It probes the TARGET, not the add-on, and the distinction is what this
-	// pre-flight is for. A manifest read proves only that the add-on's own
-	// process is answering — which it is, throughout a NAS outage, because the
-	// add-on is a separate container that stays up. Probing that way let a
-	// whole batch through to a target that was switched off: twenty-one rows
-	// each spent a round trip, each came back as "we cannot say what happened",
-	// and twenty-one unresolved operations landed on the surface an operator
-	// watches, for an outage a single call establishes.
-	//
-	// `/health` is that single call, and it is a live read on the add-on's side
-	// rather than a cached opinion.
-	addonReachable = func(ctx context.Context, target string) bool {
-		h := addons.Health(ctx, target)
-		return h.Outcome == addons.OutcomeSucceeded && h.Reachable
-	}
+	// addonState is the add-on pass's pre-flight: the health monitor's state
+	// (design §13.2), the one owner of "reachable". The drain claims no row of
+	// a target that is not answering, so an outage spends no attempt and leaves
+	// approved work queued. It reads the state rather than probing: the
+	// monitor's own probe is a /health on the add-on, which reads the TARGET,
+	// and its three-miss rule is the one every other reader follows.
+	addonState = addons.HealthOf
 
 	// Which targets the drain has a dispatcher for, beyond the built-in one.
 	// A seam because the alternative is a drain test that can only ever see

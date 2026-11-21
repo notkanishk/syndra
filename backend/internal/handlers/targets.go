@@ -83,14 +83,11 @@ type targetSummary struct {
 	CircuitOpen bool `json:"circuit_open"`
 	// LastError is why the last manifest read failed, when one did.
 	LastError string `json:"last_error,omitempty"`
-	// Health is the confirmed reachability (addons.HealthOf): offline only
-	// after three failed reads in a row, unknown until Syndra can tell.
+	// Health is the monitor's state (addons.HealthOf, design §13.2): an outage
+	// only after three missed probes in a row, checking until the first.
 	Health addons.HealthState `json:"health"`
-	// Status is the one reading the row and the header show, decided here so
-	// no screen can rank them differently (A-01): cannot_connect, then
-	// offline, then waiting_to_retry, then checking, then answering. The
-	// breaker used to win over everything, which sent an operator to the
-	// Syndra server while TrueNAS itself was down.
+	// Status is Health's state, the one reading the row and the header show:
+	// answering, addon_unreachable, app_unreachable or checking.
 	Status string `json:"status"`
 	// Project is the Zitadel project this system serves, nil until chosen.
 	// Shown read-only on Connected systems; a nil one is that row's Needs you.
@@ -291,42 +288,14 @@ func describeTarget(ctx context.Context, reg addons.Registration, transport addo
 	return s
 }
 
-// targetStatus ranks the readings that can be true at once (A-01, "which
-// reading wins"): what an operator must look at first comes first.
-func targetStatus(s targetSummary) string {
-	return statusOf(s.TransportStatus == "error", s.Health, s.CircuitOpen)
-}
-
-func statusOf(cannotSign bool, health addons.HealthState, circuitOpen bool) string {
-	switch {
-	case cannotSign:
-		return "cannot_connect"
-	case health.Status == addons.HealthOffline:
-		return "offline"
-	case circuitOpen:
-		return "waiting_to_retry"
-	case health.Status == addons.HealthUnknown:
-		return "checking"
-	default:
-		return "answering"
-	}
-}
+// targetStatus is the monitor's state (design §13.2): the roster reads it and
+// ranks nothing of its own. A credential that does not load is the monitor's
+// wrong_host, and an open breaker is the cause that opened it.
+func targetStatus(s targetSummary) string { return string(s.Health.State) }
 
 // liveStatus is targetStatus for one target, read now, for the system page:
 // the roster is cached for minutes and a status must not be.
-func liveStatus(target string) string {
-	cannotSign := false
-	for _, tc := range addonsTransportCredentials() {
-		if tc.Target == target && tc.Status == "error" {
-			cannotSign = true
-		}
-	}
-	circuitOpen := false
-	if a, err := addonsGet(target); err == nil {
-		circuitOpen = a.CircuitOpen()
-	}
-	return statusOf(cannotSign, addonsHealthOf(target), circuitOpen)
-}
+func liveStatus(target string) string { return string(addonsHealthOf(target).State) }
 
 func errText(err error) string {
 	if err == nil {

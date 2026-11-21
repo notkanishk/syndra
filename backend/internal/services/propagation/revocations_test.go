@@ -229,7 +229,7 @@ func TestDrainRevocations_OneTargetsOutageDoesNotStopAnother(t *testing.T) {
 	if len(applied) != 1 || applied[0] != "r1" {
 		t.Fatalf("Zitadel's revoke must still land while the add-on is down, got %v", applied)
 	}
-	if !res.Halted || res.HaltedTarget != "truenas" || res.Reason != "target_unreachable" {
+	if !res.Halted || res.HaltedTarget != "truenas" || res.Reason != "addon_unreachable" {
 		t.Errorf("the unreachable target must be named rather than folded into a total: %+v", res)
 	}
 }

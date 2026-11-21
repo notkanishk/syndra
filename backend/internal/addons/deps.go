@@ -27,6 +27,17 @@ var (
 	// up early becomes indeterminate and needs a human.
 	callTimeout = 30 * time.Second
 
+	// dialTimeout and tlsHandshakeTimeout bound the two steps before a request
+	// is written (design §13.5): a dead address is known in 3 s, not 30.
+	// Read when an add-on's client is built (newAddonClient).
+	dialTimeout         = 3 * time.Second
+	tlsHandshakeTimeout = 5 * time.Second
+
+	// probeInterval and probeTimeout are the health monitor's (design §13.2):
+	// GET /health every 30 s, 5 s each, targets in parallel.
+	probeInterval = 30 * time.Second
+	probeTimeout  = 5 * time.Second
+
 	// breakerThreshold is how many consecutive non-deterministic failures open a
 	// target's circuit. Five, not one: a single timeout is ordinary, and opening
 	// on it would make one slow response look like an outage.

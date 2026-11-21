@@ -173,6 +173,29 @@ func observeInterval() time.Duration {
 // onto their regular interval.
 var startupWaits = []time.Duration{2 * time.Second, 3 * time.Second, 5 * time.Second, 10 * time.Second, 15 * time.Second, 30 * time.Second, 45 * time.Second}
 
+// startHealthProbes runs the first addons.ProbeAll and returns when it is done
+// (at most one probe timeout: the targets are probed in parallel), then leaves
+// the periodic probe running from one interval on.
+func startHealthProbes(ctx context.Context) {
+	if len(addonsRegistered()) == 0 {
+		return
+	}
+	_ = probeAll(ctx)
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-time.After(addons.ProbeInterval()):
+			periodic.New("HEALTH", addons.ProbeInterval(), addons.ProbeInterval(), probeAll).Start(ctx)
+		}
+	}()
+}
+
+// Seams for startHealthProbes' test.
+var (
+	addonsRegistered = addons.Registered
+	probeAll         = addons.ProbeAll
+)
+
 func awaitFirstManifests(ctx context.Context) {
 	// Each start-up attempt that finds the add-on not listening yet is the
 	// ordinary case, not an error: quiet while waiting, one line at the end.
@@ -531,13 +554,11 @@ func main() {
 		go awaitFirstManifests(ctx)
 	}
 
-	// Target health: one read per add-on every 30s, so "offline" is confirmed
-	// (three misses in a row, addons.HealthOf) rather than said on the first
-	// slow answer, and the count keeps moving when nobody has a page open.
-	// Read-only, and never awaited at shutdown: an abandoned read changes nothing.
-	if len(addons.Registered()) > 0 {
-		go periodic.New("HEALTH", 30*time.Second, 30*time.Second, addons.ProbeAll).Start(ctx)
-	}
+	// Target health (design §13.2): one probe of every add-on now, before the
+	// listener serves, so a restart does not forget an outage and no page
+	// meets "checking"; then every 30 s. Read-only, and never awaited at
+	// shutdown: an abandoned read changes nothing.
+	startHealthProbes(ctx)
 
 	// The observation sweep.
 	//

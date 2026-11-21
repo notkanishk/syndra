@@ -7,118 +7,145 @@ import (
 	"time"
 )
 
-func observeSeq(m *healthMonitor, target string, start time.Time, ok ...bool) {
-	for i, reachable := range ok {
-		m.observe(target, reachable, "active", start.Add(time.Duration(i)*30*time.Second))
+// Probe results, as observe sees them.
+var (
+	probeOK     = TargetHealth{Outcome: OutcomeSucceeded, Reachable: true, Lifecycle: "active"}
+	probeAppOff = TargetHealth{Outcome: OutcomeSucceeded, Reachable: false}
+	probeNoAns  = TargetHealth{Outcome: OutcomeUnreached, Why: Why{Reason: ReasonAddonUnreachable, Cause: CauseNoAnswer}}
+)
+
+func observeSeq(m *healthMonitor, target string, start time.Time, probes ...TargetHealth) {
+	for i, h := range probes {
+		m.observe(target, h, start.Add(time.Duration(i)*30*time.Second))
 	}
 }
 
-func TestOneSlowAnswerStaysOnline(t *testing.T) {
+var t0 = time.Date(2026, 10, 14, 9, 40, 0, 0, time.UTC)
+
+// Design §13.2, decision 28.5: three missed probes make it unreachable (about
+// 90 s), one success recovers it.
+func TestThreeMissesAreUnreachableOneSuccessRecovers(t *testing.T) {
 	m := newHealthMonitor()
-	t0 := time.Date(2026, 10, 14, 9, 40, 0, 0, time.UTC)
-	observeSeq(m, "truenas", t0, true, false, true)
-	st := m.state("truenas")
-	if st.Status != HealthOnline || st.ReachableSince != nil {
-		t.Fatalf("a recovered blip must leave no trace, got %+v", st)
-	}
-	observeSeq(m, "truenas", t0.Add(2*time.Minute), false, false)
-	if st := m.state("truenas"); st.Status != HealthOnline {
+	observeSeq(m, "truenas", t0, probeOK, probeNoAns, probeNoAns)
+	if st := m.state("truenas", t0); st.State != StateAnswering {
 		t.Fatalf("two misses are not an outage, got %+v", st)
 	}
+	m.observe("truenas", probeNoAns, t0.Add(90*time.Second))
+	st := m.state("truenas", t0.Add(90*time.Second))
+	if st.State != StateAddonUnreachable || st.Cause != CauseNoAnswer {
+		t.Fatalf("the third miss is addon_unreachable no_answer, got %+v", st)
+	}
+	if st.Since == nil || !st.Since.Equal(t0.Add(30*time.Second)) {
+		t.Fatalf("unreachable since the FIRST miss of the run, got %v", st.Since)
+	}
+	if st.RetryAfter != 30 {
+		t.Fatalf("retry_after is the next probe, got %d", st.RetryAfter)
+	}
+	m.observe("truenas", probeOK, t0.Add(2*time.Minute))
+	st = m.state("truenas", t0.Add(2*time.Minute))
+	if st.State != StateAnswering || st.Cause != "" || st.RetryAfter != 0 {
+		t.Fatalf("one success recovers, got %+v", st)
+	}
+	if st.Since == nil || !st.Since.Equal(t0.Add(2*time.Minute)) {
+		t.Fatalf("answering since the recovery, got %v", st.Since)
+	}
 }
 
-func TestThreeFailuresAreOfflineSinceTheFirst(t *testing.T) {
+// From checking the first probe decides either way, and since is absent: the
+// state was already so when Syndra first looked, so when it began is unknown.
+func TestTheFirstProbeDecidesFromChecking(t *testing.T) {
 	m := newHealthMonitor()
-	t0 := time.Date(2026, 10, 14, 9, 40, 0, 0, time.UTC)
-	observeSeq(m, "truenas", t0, true, false, false, false)
-	st := m.state("truenas")
-	if st.Status != HealthOffline {
-		t.Fatalf("want offline, got %+v", st)
+	if st := m.state("truenas", t0); st.State != StateChecking {
+		t.Fatalf("never probed is checking, got %+v", st)
 	}
-	if st.ReachableSince == nil || !st.ReachableSince.Equal(t0.Add(30*time.Second)) {
-		t.Fatalf("offline since the FIRST failure in the run, got %v", st.ReachableSince)
+	m.observe("truenas", probeNoAns, t0)
+	if st := m.state("truenas", t0); st.State != StateAddonUnreachable || st.Since != nil {
+		t.Fatalf("one miss from checking is unreachable, since not observed: %+v", st)
 	}
-	if !st.CheckedAt.Equal(t0.Add(90 * time.Second)) {
-		t.Fatalf("checked_at is the latest probe, got %v", st.CheckedAt)
-	}
-	m.observe("truenas", true, "active", t0.Add(2*time.Minute))
-	if st := m.state("truenas"); st.Status != HealthOnline || st.ReachableSince != nil {
-		t.Fatalf("recovery clears the run, got %+v", st)
+	m2 := newHealthMonitor()
+	m2.observe("truenas", probeOK, t0)
+	if st := m2.state("truenas", t0); st.State != StateAnswering || st.Since != nil {
+		t.Fatalf("one answer from checking is answering, since not observed: %+v", st)
 	}
 }
 
-func TestBeforeAnyAnswerSyndraCannotTell(t *testing.T) {
+// The two outages are named apart: the add-on answering reachable false is
+// app_unreachable, after the same three misses.
+func TestAnAnswerSayingTheAppIsDownIsAppUnreachable(t *testing.T) {
 	m := newHealthMonitor()
-	if st := m.state("truenas"); st.Status != HealthUnknown {
-		t.Fatalf("never probed is unknown, got %+v", st)
+	observeSeq(m, "truenas", t0, probeOK, probeAppOff, probeAppOff, probeAppOff)
+	st := m.state("truenas", t0)
+	if st.State != StateAppUnreachable || st.Cause != "" {
+		t.Fatalf("want app_unreachable with no cause, got %+v", st)
 	}
-	observeSeq(m, "truenas", time.Now(), false, false)
-	if st := m.state("truenas"); st.Status != HealthUnknown {
-		t.Fatalf("two failures with no success yet is still unknown, got %+v", st)
-	}
-	m.observe("truenas", false, "", time.Now())
-	if st := m.state("truenas"); st.Status != HealthOffline {
-		t.Fatalf("the third confirms it even with no success seen, got %+v", st)
+	// The add-on going too while the app is down switches the class at once:
+	// it is already an outage, and the operator's next step changed.
+	m.observe("truenas", probeNoAns, t0.Add(2*time.Minute))
+	if st := m.state("truenas", t0); st.State != StateAddonUnreachable || st.Cause != CauseNoAnswer {
+		t.Fatalf("want addon_unreachable no_answer, got %+v", st)
 	}
 }
 
-// A-01: the operator sees the last three checks and when the run of misses
-// began, before it is an outage.
+// An open breaker is reported as the cause that opened it, with its time left.
+func TestAProbeTheBreakerRefusedCarriesTheOpeningCause(t *testing.T) {
+	m := newHealthMonitor()
+	open := CallResponse{Outcome: OutcomeUnreached,
+		Err: &CircuitOpenError{Target: "truenas", Opener: Why{Reason: ReasonAddonUnreachable, Cause: CauseWrongHost}, RetryAfter: 50 * time.Second}}
+	h := TargetHealth{Outcome: OutcomeUnreached, Err: open.Err, Why: Unread(open)}
+	m.observe("truenas", h, t0)
+	st := m.state("truenas", t0)
+	if st.State != StateAddonUnreachable || st.Cause != CauseWrongHost || st.RetryAfter != 50 {
+		t.Fatalf("want wrong_host, retry in 50 s, got %+v", st)
+	}
+}
+
+// A-01: the last three checks, and when the run of misses began.
 func TestTheMonitorRemembersTheLastThreeChecks(t *testing.T) {
 	m := newHealthMonitor()
-	t0 := time.Date(2026, 10, 14, 9, 39, 0, 0, time.UTC)
-	observeSeq(m, "truenas", t0, true, true, true, false)
-	st := m.state("truenas")
+	observeSeq(m, "truenas", t0, probeOK, probeOK, probeOK, probeNoAns)
+	st := m.state("truenas", t0)
 	if got := strings.Join(st.Recent, ","); got != "answered,answered,missed" {
 		t.Fatalf("want the last three, oldest first, got %s", got)
 	}
-	if st.Status != HealthOnline || st.MissedSince == nil || !st.MissedSince.Equal(t0.Add(90*time.Second)) {
-		t.Fatalf("one miss stays online and carries when it began, got %+v", st)
+	if st.MissedSince == nil || !st.MissedSince.Equal(t0.Add(90*time.Second)) {
+		t.Fatalf("one miss carries when it began, got %+v", st)
 	}
-	m.observe("truenas", true, "active", t0.Add(2*time.Minute))
-	if st := m.state("truenas"); st.MissedSince != nil {
+	m.observe("truenas", probeOK, t0.Add(2*time.Minute))
+	if st := m.state("truenas", t0); st.MissedSince != nil {
 		t.Fatalf("an answer ends the run, got %+v", st)
 	}
-	if st := newHealthMonitor().state("x"); st.StartedAt.IsZero() || st.Recent == nil {
+	if st := newHealthMonitor().state("x", t0); st.StartedAt.IsZero() || st.Recent == nil {
 		t.Fatalf("never checked still says when Syndra started, with an empty list: %+v", st)
 	}
 }
 
-// "Last answered" is the time of the last SUCCESSFUL answer: a later miss moves
-// checked_at but not it, and a target that never answered has none (null).
+// "Last answered" is the last SUCCESSFUL probe; null when none.
 func TestLastAnsweredAtStaysPutAcrossAMiss(t *testing.T) {
 	m := newHealthMonitor()
-	t0 := time.Date(2026, 10, 14, 9, 40, 0, 0, time.UTC)
-	if st := m.state("truenas"); st.LastAnsweredAt != nil {
-		t.Fatalf("never probed: no last answer, got %v", st.LastAnsweredAt)
-	}
-	observeSeq(m, "truenas", t0, false)
-	if st := m.state("truenas"); st.LastAnsweredAt != nil {
+	observeSeq(m, "truenas", t0, probeNoAns)
+	if st := m.state("truenas", t0); st.LastAnsweredAt != nil {
 		t.Fatalf("a miss is not an answer, got %v", st.LastAnsweredAt)
 	}
-	observeSeq(m, "truenas", t0.Add(time.Minute), true, false, false)
-	st := m.state("truenas")
+	observeSeq(m, "truenas", t0.Add(time.Minute), probeOK, probeNoAns, probeNoAns)
+	st := m.state("truenas", t0)
 	if st.LastAnsweredAt == nil || !st.LastAnsweredAt.Equal(t0.Add(time.Minute)) {
 		t.Fatalf("last_answered_at is the answered check, got %v", st.LastAnsweredAt)
 	}
 	if !st.CheckedAt.Equal(t0.Add(2 * time.Minute)) {
-		t.Fatalf("checked_at still moves with each check, got %v", st.CheckedAt)
+		t.Fatalf("checked_at moves with each check, got %v", st.CheckedAt)
 	}
-	b, _ := json.Marshal(m.state("never"))
-	if !strings.Contains(string(b), `"last_answered_at":null`) {
+	b, _ := json.Marshal(m.state("never", t0))
+	if !strings.Contains(string(b), `"last_answered_at":null`) || !strings.Contains(string(b), `"state":"checking"`) {
 		t.Fatalf("null on the wire when never answered, got %s", b)
 	}
 }
 
-// A zero time on the wire is a real-looking year-1 moment to a screen. Absent
-// is how the page learns nothing was checked.
+// A zero time on the wire is a real-looking year-1 moment to a screen.
 func TestZeroTimesAreOmittedFromTheWire(t *testing.T) {
-	b, _ := json.Marshal(HealthState{Status: HealthUnknown})
-	if strings.Contains(string(b), "checked_at") || strings.Contains(string(b), "started_at") {
-		t.Fatalf("zero times must be omitted, got %s", b)
-	}
-	b, _ = json.Marshal(HealthState{Status: HealthOnline, CheckedAt: time.Now(), StartedAt: time.Now()})
-	if !strings.Contains(string(b), `"checked_at"`) || !strings.Contains(string(b), `"started_at"`) {
-		t.Fatalf("set times stay on the wire, got %s", b)
+	b, _ := json.Marshal(HealthState{State: StateChecking})
+	for _, k := range []string{"checked_at", "started_at", "since", "retry_after", "cause"} {
+		if strings.Contains(string(b), k) {
+			t.Fatalf("%s must be omitted when unset, got %s", k, b)
+		}
 	}
 }

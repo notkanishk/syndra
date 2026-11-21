@@ -15,8 +15,16 @@ import (
 // channel — whatever a caller happens to hold ends up rendered on a governance
 // surface.
 const (
-	// UnreconciledUnreachable — the target did not answer at all.
+	// UnreconciledUnreachable — Zitadel's sweep had nothing to read. An add-on
+	// no longer writes it (design §13.1): its two outages are named apart below,
+	// and its stored rows keep this word.
 	UnreconciledUnreachable = "target_unreachable"
+	// UnreconciledAddonUnreachable — Syndra holds no usable answer from the
+	// add-on (addons.ReasonAddonUnreachable).
+	UnreconciledAddonUnreachable = "addon_unreachable"
+	// UnreconciledAppUnreachable — the add-on answered that it cannot read its
+	// app (addons.ReasonAppUnreachable).
+	UnreconciledAppUnreachable = "app_unreachable"
 	// UnreconciledStaleRead — the target answered from its last-known snapshot.
 	// The read is a mirror of some earlier moment, and diffing it would report
 	// every change made since as out-of-band (design §9).
@@ -46,7 +54,7 @@ const (
 
 func validUnreconciledReason(r string) bool {
 	switch r {
-	case UnreconciledUnreachable, UnreconciledStaleRead, UnreconciledTruncated,
+	case UnreconciledUnreachable, UnreconciledAddonUnreachable, UnreconciledAppUnreachable, UnreconciledStaleRead, UnreconciledTruncated,
 		UnreconciledReadRefused, UnreconciledFindingsUnrecorded, UnreconciledAddonOutdated:
 		return true
 	default:
@@ -58,7 +66,7 @@ func validUnreconciledReason(r string) bool {
 // vocabulary and never the value, so a caller that reached here holding
 // something it should not cannot write it into the error either.
 var ErrUnreconciledReason = errors.New(
-	"unreconciled reason must be one of: target_unreachable, read_stale, read_truncated, read_refused, findings_unrecorded, addon_outdated")
+	"unreconciled reason must be one of: target_unreachable, addon_unreachable, app_unreachable, read_stale, read_truncated, read_refused, findings_unrecorded, addon_outdated")
 
 // TargetReconciliation is how current Syndra's picture of a target is.
 //

@@ -368,6 +368,7 @@ func TestARestartWithTheAddonDownKeepsWhatSyndraHolds(t *testing.T) {
 	callable, schema := addonsCallable, addonsEntitlementSchema
 	t.Cleanup(func() { addonsCallable, addonsEntitlementSchema = callable, schema })
 	// The registry after the restart: registered, no manifest accepted yet.
+	// Health is still the monitor's (here answering), read without a manifest.
 	addonsCallable = func(string) bool { return false }
 	addonsEntitlementSchema = func(string) ([]addons.EntitlementField, error) { return nil, addons.ErrNoManifest }
 
@@ -381,7 +382,7 @@ func TestARestartWithTheAddonDownKeepsWhatSyndraHolds(t *testing.T) {
 	if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &mine) != nil || len(mine.Targets) != 1 {
 		t.Fatalf("R1: the member's storage must still show: %d %s", rr.Code, rr.Body.String())
 	}
-	if v := mine.Targets[0]; v.Kind != "storage" || !v.Entitled || v.Account == nil || v.Storage != nil || v.Health != "" {
+	if v := mine.Targets[0]; v.Kind != "storage" || !v.Entitled || v.Account == nil || v.Storage != nil || v.Health != addons.StateAnswering {
 		t.Fatalf("R1: the card from Syndra's own facts, nothing read: %+v", v)
 	}
 	rr = httptest.NewRecorder()

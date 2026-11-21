@@ -1,6 +1,7 @@
 package addons
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"sort"
 	"strings"
@@ -195,13 +197,56 @@ func loadCredential(r Registration, stamps map[string]time.Time) (*credential, e
 // ErrUseLastResponse stops at the 3xx and surfaces it, so nothing is ever sent
 // to a second host. The base URL is the only authority the backend will talk to,
 // which is what registering an authority was supposed to mean.
+//
+// Two deadlines below the call's own (design §13.5): a dead address costs
+// dialTimeout, not callTimeout, and a listener that accepts and never speaks
+// TLS costs tlsHandshakeTimeout. Both fail before the first byte of the
+// request is written, so both are surely unreached (dialFailed). Go's
+// net.Dialer.Timeout and http.Transport.TLSHandshakeTimeout, as named.
 func newAddonClient(tlsCfg *tls.Config) *http.Client {
 	return &http.Client{
-		Transport: &http.Transport{TLSClientConfig: tlsCfg},
+		Transport: &http.Transport{
+			TLSClientConfig:     tlsCfg,
+			DialContext:         dialAbsolute,
+			TLSHandshakeTimeout: tlsHandshakeTimeout,
+		},
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
+}
+
+// dialAbsolute dials the registered host as an absolute name (RFC 1034 §3.1):
+// a trailing dot, so the resolver never tries it with resolv.conf's search
+// list (resolv.conf(5)). A stopped container's name leaves Docker's DNS, and a
+// bare "truenas-addon" then fell through a search domain to another machine.
+// Only the dial sees the dot: the URL, the Host header and SNI are unchanged,
+// so the signed request is the same bytes. An IP literal is dialled as is.
+func dialAbsolute(ctx context.Context, network, addr string) (net.Conn, error) {
+	return addonDial(ctx, network, absoluteAddr(addr))
+}
+
+// addonDial is the dial under dialAbsolute, bounded by dialTimeout; tests swap
+// it to see the address the resolver is asked for.
+var addonDial = func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return (&net.Dialer{Timeout: dialTimeout}).DialContext(ctx, network, addr)
+}
+
+// absoluteAddr is addr with its host made absolute; an IP literal, an already
+// absolute name, or an addr that does not split is returned unchanged.
+func absoluteAddr(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || host == "" || strings.HasSuffix(host, ".") || isIPLiteral(host) {
+		return addr
+	}
+	return net.JoinHostPort(host+".", port)
+}
+
+// isIPLiteral includes a zoned IPv6 address (fe80::1%eth0), which
+// net.ParseIP does not.
+func isIPLiteral(host string) bool {
+	_, err := netip.ParseAddr(host)
+	return err == nil
 }
 
 // TransportCredential is the operator-facing state of one add-on's transport
@@ -263,6 +308,21 @@ func dialFailed(err error) bool {
 	if errors.As(err, &op) && op.Op == "dial" {
 		return true
 	}
+	if wrongHost(err) {
+		return true
+	}
+	// net/http's own handshake deadline, which has no typed form and is the one
+	// timeout that certainly delivered nothing.
+	return strings.Contains(err.Error(), "TLS handshake timeout")
+}
+
+// wrongHost says the handshake met something that is not the add-on
+// registered here: the pin, a certificate, or an alert refusing ours
+// (design §13.1's wrong_host). A subset of dialFailed.
+func wrongHost(err error) bool {
+	if err == nil {
+		return false
+	}
 	var verify *tls.CertificateVerificationError
 	var alert tls.AlertError
 	var record tls.RecordHeaderError
@@ -280,7 +340,5 @@ func dialFailed(err error) bool {
 		errors.As(err, &authority), errors.As(err, &hostname), errors.As(err, &certInvalid):
 		return true
 	}
-	// net/http's own handshake deadline, which has no typed form and is the one
-	// timeout that certainly delivered nothing.
-	return strings.Contains(err.Error(), "TLS handshake timeout")
+	return false
 }

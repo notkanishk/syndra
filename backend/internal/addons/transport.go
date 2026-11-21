@@ -466,7 +466,7 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 		out.Outcome, out.Err = OutcomeIndeterminate, readErr
 	case oversized && out.Outcome == OutcomeSucceeded:
 		out.Outcome = OutcomeIndeterminate
-		out.Err = fmt.Errorf("response exceeds %d bytes and was not read whole", maxResponseBytes)
+		out.Err = fmt.Errorf("%w: exceeds %d bytes", ErrUnreadableReply, maxResponseBytes)
 	case oversized:
 		// A refusal is decided by its status, so an oversized body does not
 		// make it ambiguous — reclassifying it would turn a deterministic
@@ -652,6 +652,9 @@ type breaker struct {
 	mu        sync.Mutex
 	failures  int
 	openUntil time.Time
+	// opener is Unread of the failure that opened it (design §13.2): an open
+	// breaker is reported as what opened it, never as a cause of its own.
+	opener Why
 }
 
 // allow reports whether a call may be dispatched.
@@ -662,9 +665,18 @@ type breaker struct {
 // state: several concurrent calls may probe at once, which costs one round of
 // timeouts and buys no extra state to get wrong.
 func (b *breaker) allow(now time.Time) bool {
+	_, _, open := b.opened(now)
+	return !open
+}
+
+// opened is allow's refusal with what opened it and the time left.
+func (b *breaker) opened(now time.Time) (opener Why, left time.Duration, open bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.openUntil.IsZero() || !now.Before(b.openUntil)
+	if b.openUntil.IsZero() || !now.Before(b.openUntil) {
+		return Why{}, 0, false
+	}
+	return b.opener, b.openUntil.Sub(now), true
 }
 
 // record folds one outcome into the breaker.
@@ -709,6 +721,9 @@ func (b *breaker) record(now time.Time, resp CallResponse) {
 	b.failures++
 	if b.failures >= breakerThreshold {
 		b.openUntil = now.Add(breakerCooldown)
+		if b.opener = Unread(resp); !b.opener.Unreachable() {
+			b.opener = Why{Reason: ReasonAddonUnreachable, Cause: CauseFault}
+		}
 	}
 }
 

@@ -143,14 +143,15 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 	addonsHealth = func(context.Context, string) addons.TargetHealth {
 		return addons.TargetHealth{Reachable: !h.unreachable, Lifecycle: h.lifecycle}
 	}
-	// unreachable means CONFIRMED offline: the monitor's three misses, not one.
+	// unreachable means the monitor's state, three misses, not one; the
+	// lifecycle is the one the add-on last reported to it.
 	addonsHealthOf = func(string) addons.HealthState {
 		checked := time.Date(2026, 10, 14, 9, 41, 0, 0, time.UTC)
 		if h.unreachable {
 			since := checked.Add(-time.Minute)
-			return addons.HealthState{Status: addons.HealthOffline, CheckedAt: checked, ReachableSince: &since}
+			return addons.HealthState{State: addons.StateAddonUnreachable, Cause: addons.CauseNoAnswer, CheckedAt: checked, Since: &since, Lifecycle: h.lifecycle}
 		}
-		return addons.HealthState{Status: addons.HealthOnline, CheckedAt: checked}
+		return addons.HealthState{State: addons.StateAnswering, CheckedAt: checked, Lifecycle: h.lifecycle}
 	}
 	dbEntitlementRecordedAt = func(context.Context, string, string) (time.Time, bool, error) {
 		return h.recordedAt, !h.recordedAt.IsZero(), nil
@@ -300,7 +301,7 @@ func TestAnAnsweringAddOnWithAnUnreachableTargetOffersNoForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Reachable {
+	if view.Health == addons.StateAnswering {
 		t.Error("a member must not be offered a form whose submission cannot land")
 	}
 }
@@ -422,10 +423,10 @@ func TestTheMemberViewCarriesConfirmedHealth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Health != addons.HealthOffline || view.Reachable {
-		t.Fatalf("want confirmed offline, got health=%s reachable=%v", view.Health, view.Reachable)
+	if view.Health != addons.StateAddonUnreachable {
+		t.Fatalf("want the monitor's addon_unreachable, got health=%s", view.Health)
 	}
-	if view.ReachableSince == nil || view.CheckedAt == nil {
+	if view.Since == nil || view.CheckedAt == nil {
 		t.Fatalf("an outage carries when it began and when it was last checked: %+v", view)
 	}
 }

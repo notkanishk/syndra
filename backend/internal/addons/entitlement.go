@@ -107,6 +107,8 @@ type ApplyResponse struct {
 	// from the outcome for the reason `CallResponse` carries it apart: one says
 	// what happened to the work, the other says whether the target is healthy.
 	LifecycleRefusal bool
+	// Why is Unread of the reply: a reachability cause spends no attempt.
+	Why Why
 }
 
 // Standing is whether an account on a target can be used yet, and who is
@@ -209,12 +211,12 @@ func Apply(ctx context.Context, req ApplyRequest) ApplyResponse {
 		Method: http.MethodPost, Path: "/apply", Body: body, Write: true, TraceID: req.CallID,
 	})
 	if err != nil {
-		return ApplyResponse{Outcome: OutcomeUnreached, Err: err}
+		return ApplyResponse{Outcome: OutcomeUnreached, Err: err, Why: Unread(resp)}
 	}
 
 	out := ApplyResponse{
 		Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err,
-		LifecycleRefusal: resp.LifecycleRefusal, Code: resp.Code,
+		LifecycleRefusal: resp.LifecycleRefusal, Code: resp.Code, Why: Unread(resp),
 	}
 	var wire applyWire
 	decodeErr := DecodeReply(resp.Body, &wire)
