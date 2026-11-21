@@ -8,15 +8,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang-migrate/migrate/v4"
+	pgx5 "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
 )
 
-// Live, against a _test database the db package's live run has migrated
-// (SYNDRA_TEST_DATABASE_URL): a drain into an outage, with the real claim,
-// stamp and defer, leaves the row with no attempt spent and the background
+// Live, against a throwaway _test database (SYNDRA_TEST_DATABASE_URL): a
+// drain into an outage, with the real claim, stamp and defer, leaves the row with no attempt spent and the background
 // drain's (ClaimDueRetries) once due. The unit tests stub the defer; this is
 // the one that would have seen a release with no not_before.
 func TestAnOutageLeavesTheRowToTheBackgroundDrainLive(t *testing.T) {
@@ -36,6 +39,34 @@ func TestAnOutageLeavesTheRowToTheBackgroundDrainLive(t *testing.T) {
 	pg := db.PG
 	db.PG = pool
 	t.Cleanup(func() { db.PG = pg; pool.Close() })
+
+	// The db package's live harness truncates propagation_outbox around every
+	// case, and `go test ./...` runs it in parallel with this package: wait
+	// for its lock (internal/db/livedb_test.go), held until that run ends, and
+	// hold it here so it cannot start mid-test. Migrate under it, as that
+	// harness does, so this test does not depend on which package ran first.
+	lock, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lock.Exec(ctx, `SELECT pg_advisory_lock(hashtext('syndra live-db tests'))`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = lock.Exec(ctx, `SELECT pg_advisory_unlock(hashtext('syndra live-db tests'))`)
+		lock.Release()
+	})
+	driver, err := pgx5.WithInstance(stdlib.OpenDB(*cfg.ConnConfig), &pgx5.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := migrate.NewWithDatabaseInstance("file://../../../db/migrations", "postgres", driver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		t.Fatalf("migrate: %v", err)
+	}
 
 	// A target of its own, so the real claim takes this row and nothing else.
 	const target = "defer-live"
