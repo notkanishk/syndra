@@ -263,7 +263,7 @@ func (s *server) homePlaces() (paths []string, labels map[string]string, err err
 func homePlacesIn(read shareRead) (paths []string, labels map[string]string) {
 	labels = map[string]string{}
 	for _, p := range read.places {
-		if p.folder != "" && !strings.HasPrefix(p.folder, ".") && read.mounts[p.path] != "" {
+		if p.folder != "" && !strings.HasPrefix(p.folder, ".") && read.mounts.at[p.path] != "" {
 			paths = append(paths, p.path)
 			labels[p.path] = p.share + " › " + p.folder
 		}
@@ -283,6 +283,10 @@ type HomeUsage struct {
 	Home       string `json:"home"`
 	UsedBytes  int64  `json:"used_bytes"`
 	QuotaBytes int64  `json:"quota_bytes,omitempty"`
+	// NotCounted is "locked" for a home whose dataset is encrypted with its
+	// key not loaded: its use is unknown, UsedBytes 0 is not a reading, and
+	// the list is still whole (a locked home affects only itself).
+	NotCounted string `json:"not_counted,omitempty"`
 }
 
 // HomesResponse is every account with a home folder in a share Syndra
@@ -340,24 +344,33 @@ func (s *server) readHomes() (HomesResponse, error) {
 	if err != nil {
 		return HomesResponse{}, unreadable(err)
 	}
+	mounts, err := s.datasetMounts()
+	if err != nil {
+		return HomesResponse{}, err
+	}
 	out := HomesResponse{Homes: []HomeUsage{}, QuotaRead: true}
 	quotas := map[string]map[int64]PlaceUsage{}
-	for _, sub := range snap.Subjects {
-		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
-			continue
-		}
-		h := HomeUsage{Username: sub.Username, AccountID: accountID(sub.UID), Subject: at.subjectOf[rowOf(&sub)], Home: sub.Home}
-		// The limit is a user quota on the dataset holding the home's parent,
-		// the same one convergeQuota sets.
-		dataset := datasetOf(path.Dir(sub.Home))
+	tableOf := func(dataset string) map[int64]PlaceUsage {
 		table, read := quotas[dataset]
 		if !read {
 			table = s.userQuotas(dataset)
 			quotas[dataset] = table
 		}
-		if table == nil {
+		return table
+	}
+	for _, sub := range snap.Subjects {
+		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
+			continue
+		}
+		h := HomeUsage{Username: sub.Username, AccountID: accountID(sub.UID), Subject: at.subjectOf[rowOf(&sub)], Home: sub.Home}
+		// Read as the member's card reads it (homeUsage). One not read makes
+		// the list partial; a locked one is that home's alone (owner, 21 Nov
+		// 2026): never a 0.
+		if u, locked := homeUsage(mounts, sub.Home, sub.UID, tableOf); locked {
+			h.NotCounted = notCountedLocked
+		} else if u == nil {
 			out.QuotaRead = false
-		} else if u, ok := table[sub.UID]; ok {
+		} else {
 			h.UsedBytes, h.QuotaBytes = u.UsedBytes, u.QuotaBytes
 		}
 		out.Homes = append(out.Homes, h)

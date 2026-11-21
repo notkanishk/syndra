@@ -832,6 +832,7 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | The same, over the year | {value} in the last 12 months |
 | The same, when retention starts either window later (n: its start to today, today included) | {value} in the last {n} days |
 | A counted metric with no series | Nothing counted in the last 30 days |
+| The same, when a gap falls in the 30 days (a share they can open that was not counted: its reason is in the fold) | Not everything could be counted in the last 30 days |
 | A member's own card: a line left out because the add-on named a person in it, one | 1 more line is not shown here, as the add-on named a person in it. |
 | The same, several | {n} more lines are not shown here, as the add-on named a person in them. |
 | A gauge's latest value | {value} on {day} |
@@ -857,6 +858,8 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | When the last count ran (the totals card's end row) | Last counted {age} |
 | The totals card's step, on a system whose metrics include a per-person one (a system with none ends on "Nothing for you to do.") | Nothing for you to do. Who used what is in Insights. |
 | The same, on a storage system (the owner's ruling of 18 Nov 2026; the storage kind supplies it, `kinds/storage/captions.ts`, so no other kind says "share") | Nothing for you to do. Who used each share is in Insights. |
+| The member's storage card: a place they can change that TrueNAS does not count on its own (`not_counted: "folder"`, `kinds/storage/captions.ts`) | Not counted on its own |
+| The same, a folder that is encrypted and whose key is not loaded (`not_counted: "locked"`): said as the folder, never as their account, with who can unlock it (section 1, "Ask makerspace staff" is a next step; never "the NAS") | Not counted: this folder is encrypted and locked. Ask makerspace staff to unlock it. |
 | Its link, to Insights, Usage at this system | Open Usage |
 | Accounts Syndra does not manage, one | {n} account Syndra does not manage also used it. It is in the totals. |
 | Accounts Syndra does not manage, several | {n} accounts Syndra does not manage also used it. They are in the totals. |

@@ -178,10 +178,11 @@ async def main():
             # make. "/mnt" exists on every TrueNAS, so the shape is recorded
             # without naming anyone's folder.
             ("filesystem.stat", ["/mnt"]),
-            # Where a role may put home folders (home.go, homePlaces).
-            ("pool.dataset.query", [[], {"select": ["name", "mountpoint"], "limit": 1}]),
+            # Where a role may put home folders (home.go, homePlaces), and
+            # which datasets are locked (reach.go, datasetMounts).
+            ("pool.dataset.query", [[], {"select": ["name", "mountpoint", "locked"], "limit": 1}]),
             # The union of both call sites' selects. `unauditedShares` asks for
-            # name+audit and `shareUsage` asks for name+path+enabled, so a
+            # name+audit and `enabledShares` asks for name+path+enabled, so a
             # recording of either one alone leaves the other unproven.
             ("sharing.smb.query", [[], {"select": ["name", "audit", "path", "enabled"], "limit": 1}]),
         ):

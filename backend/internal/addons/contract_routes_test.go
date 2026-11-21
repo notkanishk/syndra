@@ -355,6 +355,14 @@ func TestAnAddOnCannotSetTheBackendsOwnReadFlags(t *testing.T) {
 	if len(st.Places) != 1 || st.Places[0].SMBAddress != "" || st.Places[0].UNCAddress != "" || len(st.Places[0].Roles) != 0 {
 		t.Errorf("a storage place carries what the add-on planted: %+v", st.Places)
 	}
+	// Why a place has no figure is the add-on's to say, and lands as said.
+	addonServing(t, []byte(`{"operation":"storage.status","subject":"s","outcome":"succeeded","result":{"usable":true,`+
+		`"standing":{"usable":true,"waiting_on":"none"},"meters":[],"taken_at":"2026-11-10T09:30:00Z","current":true,`+
+		`"places_readable":true,"needs_password":false,"needs_new_password":false,"quota_read":true,"places":[`+
+		`{"share":"notes","path":"/mnt/tank/notes","access":"change","not_counted":"folder"}]}}`))
+	if st := Read(context.Background(), "truenas", "storage.status", "s", "s", nil, false).Storage(); len(st.Places) != 1 || st.Places[0].NotCounted != "folder" {
+		t.Errorf("why a place is not counted did not land: %+v", st.Places)
+	}
 }
 
 func TestValuesReplyLands(t *testing.T) {

@@ -83,8 +83,11 @@ type StatsPoint struct {
 // StatsGap is one unobserved window [Start, End) of a metric's series.
 // NamedSubjects: who a dimension value or the reason names.
 type StatsGap struct {
-	Dims       map[string]string
-	Start, End string
+	Dims map[string]string
+	// Scope "total" is a gap over the totals alone; Subject one over that
+	// person's own points alone; neither, every series at Dims (000103).
+	Scope, Subject string
+	Start, End     string
 	// Kind is the contract's gap kind (began, unread, dropped, unobserved; 000101).
 	Kind          string
 	Reason        string
@@ -186,12 +189,13 @@ func (c *StatsTx) UpsertGaps(ctx context.Context, today string, gaps []StatsGap)
 			return 0, err
 		}
 		tag, err := c.tx.Exec(ctx, `
-			INSERT INTO addon_metric_gaps (target_id, metric, dims, gap_start, gap_end, reason, named_subjects, kind)
-			SELECT $2, $3, $4::jsonb, $5::date, $6::date, $7, $8, $9
-			 WHERE $6::date > `+statsTotalKeptFrom+`
-			ON CONFLICT (target_id, metric, dims, gap_start)
+			INSERT INTO addon_metric_gaps (target_id, metric, dims, gap_start, gap_end, reason, named_subjects, kind, scope, subject)
+			SELECT $2, $3, $4::jsonb, $5::date, $6::date, $7, $8, $9, $10, $11
+			  FROM targets t
+			 WHERE t.target = $2 AND $6::date > `+statsKeptFrom("$11::text")+`
+			ON CONFLICT (target_id, metric, dims, scope, subject, gap_start)
 			DO UPDATE SET gap_end = EXCLUDED.gap_end, reason = EXCLUDED.reason, named_subjects = EXCLUDED.named_subjects, kind = EXCLUDED.kind`,
-			today, c.target, c.metric, string(raw), g.Start, g.End, g.Reason, nonNil(g.NamedSubjects), g.Kind)
+			today, c.target, c.metric, string(raw), g.Start, g.End, g.Reason, nonNil(g.NamedSubjects), g.Kind, g.Scope, g.Subject)
 		if err != nil {
 			return 0, fmt.Errorf("store gap: %w", err)
 		}
@@ -246,7 +250,9 @@ func PruneStats(ctx context.Context, today string) (points, gaps int64, err erro
 		return 0, 0, fmt.Errorf("prune points: %w", err)
 	}
 	points = tag.RowsAffected()
-	tag, err = querier(ctx).Exec(ctx, `DELETE FROM addon_metric_gaps WHERE gap_end <= `+statsTotalKeptFrom, today)
+	tag, err = querier(ctx).Exec(ctx, `
+		DELETE FROM addon_metric_gaps g USING targets t
+		 WHERE t.target = g.target_id AND g.gap_end <= `+statsKeptFrom("g.subject"), today)
 	if err != nil {
 		return points, 0, fmt.Errorf("prune gaps: %w", err)
 	}
@@ -409,9 +415,9 @@ type StatsGapRow struct {
 // not lose when its first collection's gap falls out of the window read.
 func StatsGaps(ctx context.Context, target, after string) ([]StatsGapRow, error) {
 	rows, err := querier(ctx).Query(ctx, `
-		SELECT metric, dims, to_char(gap_start, 'YYYY-MM-DD'), to_char(gap_end, 'YYYY-MM-DD'), kind, reason, named_subjects
+		SELECT metric, dims, to_char(gap_start, 'YYYY-MM-DD'), to_char(gap_end, 'YYYY-MM-DD'), kind, reason, named_subjects, scope, subject
 		  FROM addon_metric_gaps
-		 WHERE target_id = $2 AND (gap_end > $1::date OR (kind = 'began' AND dims = '{}'::jsonb))
+		 WHERE target_id = $2 AND (gap_end > $1::date OR (kind = 'began' AND dims = '{}'::jsonb AND scope = '' AND subject = ''))
 		 ORDER BY metric, gap_start`, after, target)
 	if err != nil {
 		return nil, fmt.Errorf("read gaps of %s: %w", target, err)
@@ -420,7 +426,7 @@ func StatsGaps(ctx context.Context, target, after string) ([]StatsGapRow, error)
 	var out []StatsGapRow
 	for rows.Next() {
 		var g StatsGapRow
-		if err := rows.Scan(&g.Metric, &g.Dims, &g.Start, &g.End, &g.Kind, &g.Reason, &g.NamedSubjects); err != nil {
+		if err := rows.Scan(&g.Metric, &g.Dims, &g.Start, &g.End, &g.Kind, &g.Reason, &g.NamedSubjects, &g.Scope, &g.Subject); err != nil {
 			return nil, err
 		}
 		out = append(out, g)

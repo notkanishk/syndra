@@ -124,6 +124,13 @@ export function dimensionWords(metric: Pick<StatsMetric, "dimensions">, dims: Re
   return parts.join(", ");
 }
 
+/**
+ * The gaps a card shows: one over the totals alone (`scope: "total"`) is never on a person's card,
+ * whose own figures it leaves standing (owner, 21 Nov 2026, "Only that home affected"). The backend
+ * leaves it off a person's page; this keeps it off a person's card whatever sends it.
+ */
+export const gapsShown = <G extends Pick<StatsGap, "scope">>(gaps: G[], person: boolean): G[] => (person ? gaps.filter((g) => g.scope !== "total") : gaps);
+
 /** A gap belongs to a series when every key=value it names is the series' (the backend's rule; `{}` is the whole metric). */
 export const gapIsOn = (gap: Pick<StatsGap, "dimensions">, series: Pick<StatsSeries, "dimensions">): boolean =>
   Object.entries(gap.dimensions ?? {}).every(([k, v]) => series.dimensions[k] === v);
@@ -165,7 +172,7 @@ export interface Plot {
 }
 
 /**
- * One series over the window. A day before `known.from` (the first day Syndra keeps, `kept_from`), before
+ * One series over the window, on a person's card when `known.person` (gapsShown). A day before `known.from` (the first day Syndra keeps, `kept_from`), before
  * `known.began` (the day the add-on began counting the metric, the view's `began`), or inside a gap of
  * kind `began` on this series is before the record: gone or never held, neither a zero nor a gap. The
  * add-on says which window that is (the gap's kind); nothing here guesses it. A day inside a gap of any
@@ -179,10 +186,10 @@ export function plot(
   gaps: StatsGap[],
   instrument: StatsMetric["instrument"],
   days: string[] = windowDays(),
-  known: { from?: string; began?: string | null; countedThrough?: string | null } = {},
+  known: { from?: string; began?: string | null; countedThrough?: string | null; person?: boolean } = {},
 ): Plot {
   const given = new Map<string, number>(series.days.map((d: StatsDay) => [d.day, d.value]));
-  const mine = gaps.filter((g) => gapIsOn(g, series));
+  const mine = gapsShown(gaps, known.person ?? false).filter((g) => gapIsOn(g, series));
   const within = (kind: (k: StatsGap["kind"]) => boolean, day: string) => mine.some((g) => kind(g.kind) && day >= g.start && day < g.end);
   const cells = days.map((day): Cell => {
     const began = (known.began != null && day < known.began) || within((k) => k === "began", day);

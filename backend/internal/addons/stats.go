@@ -230,9 +230,17 @@ type StatGap struct {
 	Start      time.Time         `json:"start"`
 	End        time.Time         `json:"end"`
 	Dimensions map[string]string `json:"dimensions,omitempty"`
-	Kind       string            `json:"kind"`
-	Reason     string            `json:"reason"`
+	// Scope GapScopeTotal is a gap over the metric's totals alone (every
+	// person's own points stand); Subject one over that person's own points
+	// alone. Neither: every series at Dimensions. Never both (stats.json).
+	Scope   string `json:"scope,omitempty"`
+	Subject string `json:"subject,omitempty"`
+	Kind    string `json:"kind"`
+	Reason  string `json:"reason"`
 }
+
+// GapScopeTotal is stats.json's gap scope: the totals only.
+const GapScopeTotal = "total"
 
 // GapKinds is stats.json's gap kind enum (contract 2, AUTHORING "every gap
 // MUST carry a kind"). GapBegan is the window before the add-on started

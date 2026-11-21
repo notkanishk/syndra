@@ -329,6 +329,24 @@ describe("a counted metric with no series", () => {
     expect(screen.getByText(copy.NOTHING_COUNTED)).toBeInTheDocument();
     expect(screen.queryByText(copy.NOT_COUNTED)).toBeNull();
   });
+
+  // Staging, 21 Nov 2026: a share they can open with auditing off has no series of theirs, only a gap.
+  it("never says nothing counted when a day in the window was not counted, and gives the reason", () => {
+    const off = { ...GAP, start: ago(29), end: ago(-1), reason: "Auditing is off for this share" };
+    render(<UsageCard title="t" windows={windows()} metrics={[sessions({ series: [], gaps: [off] }), level({ series: [], gaps: [off] })]} />);
+    expect(screen.queryByText(copy.NOTHING_COUNTED)).toBeNull();
+    expect(screen.queryByText(copy.NO_RECENT_VALUE)).toBeNull();
+    expect(screen.getAllByText(copy.NOT_ALL_COUNTED)).toHaveLength(2);
+    openFold();
+    expect(screen.getByText(/Area: “ring”: “Auditing is off for this share”/)).toBeInTheDocument();
+  });
+
+  it("a gap only before the window, or before the record, leaves nothing counted", () => {
+    const old = { ...GAP, start: ago(60), end: ago(30) };
+    const began = { ...GAP, kind: "began" as const, start: ago(20), end: ago(10) };
+    render(<UsageCard title="t" windows={windows()} metrics={[sessions({ series: [], gaps: [old, began] })]} />);
+    expect(screen.getByText(copy.NOTHING_COUNTED)).toBeInTheDocument();
+  });
 });
 
 describe("lines left out because they name a person", () => {
@@ -401,6 +419,38 @@ describe("a person's view of a system", () => {
       expect(within(svg as unknown as HTMLElement).getByText(copy.limitWord("20.0 GiB"))).toBeInTheDocument();
       expect(screen.getByText(/^Up .+ since /)).toBeInTheDocument();
       expect(container.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+    });
+
+    // The owner's ruling of 21 Nov 2026, "Only that home affected": Charlotte's home is locked for 14
+    // days. The add-on's gap is over the totals alone (scope "total"): Booker's chart draws every one of
+    // his 14 days, with his change line, under his meter and in the usage card alike; only the
+    // system's total hatches. Charlotte's own gap (over her alone, sent plain on her page) hatches hers.
+    it("draws a person's own days under a gap over the totals alone; only the total hatches", () => {
+      const locked: StatsGap = { start: ago(14), end: ago(0), scope: "total", kind: "unread", reason: "Not counted, could not be read: a home folder in main (locked)" };
+      const fortnight = (base: number) => Array.from({ length: 14 }, (_, i) => ({ day: ago(14 - i), value: base + i * GIB }));
+      const booker = homeBytes({ gaps: [locked], series: [{ dimensions: {}, latest: { day: ago(1), value: 13 * GIB }, days: fortnight(0) }] });
+      const points = (root: Element) => Array.from(root.querySelectorAll("[data-line]")).flatMap((l) => (l.getAttribute("points") ?? "").split(" ").filter(Boolean));
+
+      const month = render(<HomeMonth view={storage({ reported: true, metrics: [booker], ...windows(400) })} />);
+      expect(month.container.querySelectorAll("[data-gap]")).toHaveLength(0);
+      expect(points(month.container)).toHaveLength(14);
+      expect(screen.getByText(/^Up .+ since /)).toBeInTheDocument();
+      month.unmount();
+
+      const card = render(<ViewUsage view={view({ reported: true, metrics: [booker], ...windows(400) })} />);
+      expect(card.container.querySelectorAll("[data-gap]")).toHaveLength(0);
+      expect(points(card.container)).toHaveLength(14);
+      expect(screen.queryByText(/a home folder in main/)).toBeNull();
+      card.unmount();
+
+      const total = render(<UsageCard label={copy.OVERVIEW_TITLE} windows={windows()} metrics={[homeBytes({ gaps: [locked], series: [{ dimensions: {}, latest: { day: ago(1), value: 40 * GIB }, days: fortnight(27 * GIB) }] })]} target="gym" />);
+      expect(total.container.querySelectorAll("[data-gap]")).toHaveLength(1);
+      expect(points(total.container)).toHaveLength(0);
+      total.unmount();
+
+      const charlotte = homeBytes({ gaps: [{ ...locked, scope: undefined, reason: "Not counted: the home folder is encrypted and locked on TrueNAS" }], series: [{ dimensions: {}, days: [] }] });
+      const hers = render(<HomeMonth view={storage({ reported: true, metrics: [charlotte], ...windows(400) })} />);
+      expect(hers.container.querySelectorAll("[data-gap]")).toHaveLength(1);
     });
 
     it("is on its own scale with no limit line where the limit is 0 or was not read", () => {

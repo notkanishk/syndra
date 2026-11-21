@@ -218,7 +218,7 @@ func handleMyTargets(w http.ResponseWriter, r *http.Request) {
 			jsonErrorResponse(w, http.StatusInternalServerError, "VIEW_ERROR", err.Error())
 			return
 		}
-		view.Usage = personalUsage(r.Context(), reg.Target, subject, true)
+		view.Usage = personalUsage(r.Context(), reg.Target, subject, true, view.Storage)
 		views = append(views, view)
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"targets": views})

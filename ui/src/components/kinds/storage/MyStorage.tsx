@@ -34,7 +34,7 @@ import {
   type StoragePlace,
 } from "@/lib/queries/useMyStorage";
 import { Meter } from "@/components/ui/Meter";
-import { roomLine } from "@/components/kinds/storage/captions";
+import { PLACE_NOT_COUNTED, roomLine } from "@/components/kinds/storage/captions";
 import { HomeMonth } from "@/components/usage/UsageCard";
 import { oneShot } from "@/lib/secret";
 import dynamic from "next/dynamic";
@@ -532,7 +532,7 @@ function PlaceBlock({
         : quota > 0
           ? `${formatBytes(usage.used_bytes)} of ${formatBytes(quota)}`
           : `${formatBytes(usage.used_bytes)} used · no limit set`;
-    }
+    } else if (place.not_counted) use = PLACE_NOT_COUNTED[place.not_counted] ?? null;
   }
   // The meter draws when there is a limit to read against; how much is left is said under it (A-24 Q18).
   const metered = can && usage && quota > 0 && !offline ? usage : null;

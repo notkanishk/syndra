@@ -27,6 +27,8 @@ export const inDays = (value: string) => `${value} in the last 30 days`;
 export const inLastDays = (value: string, n: number) => `${value} in the last ${n === 1 ? "day" : `${n} days`}`;
 export const inMonths = (value: string) => `${value} in the last 12 months`;
 export const NOTHING_COUNTED = "Nothing counted in the last 30 days";
+/** A metric with no series of theirs where some of the 30 days were not counted (a gap, listed in the fold): never "nothing". */
+export const NOT_ALL_COUNTED = "Not everything could be counted in the last 30 days";
 /** A member's own card: series the backend left out because the add-on named a person in them (`left_out`). */
 export const leftOut = (n: number) =>
   n === 1 ? "1 more line is not shown here, as the add-on named a person in it." : `${n} more lines are not shown here, as the add-on named a person in them.`;

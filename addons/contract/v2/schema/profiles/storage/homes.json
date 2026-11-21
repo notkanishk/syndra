@@ -31,6 +31,12 @@
           "quota_bytes": {
             "type": "integer",
             "minimum": 0
+          },
+          "not_counted": {
+            "enum": [
+              "locked"
+            ],
+            "description": "Why this home has no use although quota_read is true: locked, its dataset is encrypted with its key not loaded, so its files cannot be read. used_bytes is then not a reading (0, never shown as one). A locked home leaves every other home counted and the list whole."
           }
         },
         "required": [

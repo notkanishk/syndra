@@ -3,11 +3,12 @@
 import { useState, type ReactNode } from "react";
 
 import * as copy from "@/components/usage/copy";
+import { addDays } from "@/components/insights/days";
 import { Band, cellWords } from "@/components/usage/Band";
 import { AdvancedLink } from "@/components/ui/AdvancedLink";
 import { Crossfade } from "@/lib/motion";
 import type { StatsMetric, StatsSeries, UsageWindows } from "@/lib/queries/useStats";
-import { CAP, capText, change, dayWords, daysSince, formatValue, plot, seriesName, windowDays, type Plot } from "@/lib/usage";
+import { CAP, capText, change, dayWords, daysSince, formatValue, gapLines, gapsShown, plot, seriesName, windowDays, type Plot } from "@/lib/usage";
 
 /**
  * One metric, drawn from its descriptor and nothing else (A-23 §3): a section
@@ -110,6 +111,17 @@ function LabelRow({ label, said }: { label: string; said: string }) {
   return <Row className="pt-0 pb-0" name={<h3 className="type-label text-label [overflow-wrap:anywhere]">{label}</h3>} figure={<Figure said={said} />} />;
 }
 
+/**
+ * A metric with no series: nothing counted, or no value, only when every day of the window was
+ * counted; a gap in it (a share that could not be counted, say) is never read as nothing (the fold
+ * lists it with its reason). A `began` gap is before the record, not a gap.
+ */
+function emptySaid(metric: StatsMetric, windows: UsageWindows, person: boolean): string {
+  const gaps = gapsShown(metric.gaps, person).filter((g) => g.kind !== "began");
+  if (gapLines(gaps, windows.window_30d_from, addDays(windows.today, 1)).length > 0) return copy.NOT_ALL_COUNTED;
+  return metric.instrument === "counter" ? copy.NOTHING_COUNTED : copy.NO_RECENT_VALUE;
+}
+
 /** The section's axis: the window's first day, and the readout seat (today at rest, else the day being read). */
 export function Axis({ first, readout, inset = true }: { first: string; readout: string; inset?: boolean }) {
   return (
@@ -127,15 +139,30 @@ export function Axis({ first, readout, inset = true }: { first: string; readout:
 /**
  * `windows`: where the backend read this page's two windows from (a person's are cut short by
  * retention; a totals page's never are). The day the record began is the add-on's (`metric.began`,
- * its began gap). `first`/`titled`: the section's place in its card.
+ * its began gap). `first`/`titled`: the section's place in its card. `person`: a person's card, never
+ * hatched by a gap over the totals alone (gapsShown).
  */
-export function MetricBlock({ metric, windows, first = false, titled = false, opens }: { metric: StatsMetric; windows: UsageWindows; first?: boolean; titled?: boolean; opens?: string }) {
+export function MetricBlock({
+  metric,
+  windows,
+  first = false,
+  titled = false,
+  person = false,
+  opens,
+}: {
+  metric: StatsMetric;
+  windows: UsageWindows;
+  first?: boolean;
+  titled?: boolean;
+  person?: boolean;
+  opens?: string;
+}) {
   const [read, setRead] = useState<{ row: number; index: number } | null>(null);
   const began = metric.began ?? undefined;
   const label = capText(metric.label, CAP.label);
   const rows = metric.watermark === null ? [] : metric.series.slice(0, MAX_ROWS);
   const days = windowDays(windows.today);
-  const plots = rows.map((s) => plot(s, metric.gaps, metric.instrument, days, { from: windows.kept_from, began, countedThrough: metric.counted_through }));
+  const plots = rows.map((s) => plot(s, metric.gaps, metric.instrument, days, { from: windows.kept_from, began, countedThrough: metric.counted_through, person }));
   const names = rows.map((s) => seriesName(metric, s.dimensions));
   // The label goes on its own line when there are several rows, or a row has a name of its own; else it is the row's name.
   const many = rows.length > 1 || names.some(Boolean);
@@ -150,7 +177,7 @@ export function MetricBlock({ metric, windows, first = false, titled = false, op
 
   let body: ReactNode;
   if (metric.watermark === null) body = <LabelRow label={label} said={copy.NOT_COUNTED} />;
-  else if (rows.length === 0) body = metric.left_out ? null : <LabelRow label={label} said={metric.instrument === "counter" ? copy.NOTHING_COUNTED : copy.NO_RECENT_VALUE} />;
+  else if (rows.length === 0) body = metric.left_out ? null : <LabelRow label={label} said={emptySaid(metric, windows, person)} />;
   else
     body = (
       <>

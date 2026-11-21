@@ -45,10 +45,22 @@ type Place struct {
 	// Home marks the member's own home folder.
 	Home bool `json:"home,omitempty"`
 	// Usage is what the member has saved there. Only on a member's own places
-	// they can change, and only when the quota table could be read; a
-	// read-only place has nothing of theirs to count.
+	// they can change, and only when all of it could be read; a read-only
+	// place has nothing of theirs to count.
 	Usage *PlaceUsage `json:"usage,omitempty"`
+	// NotCounted is why a place they can change has no usage when the NAS
+	// itself is why, never a read that failed: "folder", a plain folder in a
+	// dataset it shares with what lies beside it, which the NAS does not count
+	// on its own; "locked", the place is a locked dataset, whose files cannot
+	// be read (one inside it leaves the rest counted).
+	NotCounted string `json:"not_counted,omitempty"`
 }
+
+// Why a place has no usage (Place.NotCounted).
+const (
+	notCountedFolder = "folder"
+	notCountedLocked = "locked"
+)
 
 // PlaceUsage is one member's use of one place. UsedBytes 0 is "nothing saved
 // here yet", a real answer.
@@ -169,7 +181,7 @@ func sortPlaces(ps []Place) {
 type shareRead struct {
 	places []aclPlace
 	shares []smbShare
-	mounts map[string]string
+	mounts datasetMap
 }
 
 // errNeverRead is a NAS whose folder permissions can't be read now and that
@@ -332,32 +344,152 @@ func shareAt(shares []smbShare, at string) (share smbShare, inside string, ok bo
 	return smbShare{}, "", false
 }
 
-// datasetMounts maps each dataset's mountpoint to its name.
-func (s *server) datasetMounts() (map[string]string, error) {
+// datasetMap is one read of the datasets: where each is mounted, and which
+// are locked.
+type datasetMap struct {
+	// at is each dataset by its mountpoint.
+	at map[string]string
+	// locked is each dataset that is encrypted with its key not loaded: its
+	// files cannot be read, so neither can what it holds, and it is never
+	// counted as nothing.
+	locked map[string]bool
+}
+
+// datasetMounts reads where each dataset is mounted, and which are locked.
+//
+// A locked dataset may answer no mountpoint (UNVERIFIED on the real NAS, as
+// is `locked` itself: neither is in the recording yet). One with none is
+// placed where its name puts it, inside its nearest mounted parent, which is
+// where ZFS mounts a child whose mountpoint is inherited: so a locked folder
+// under a share or a home is found by its name, and never read as the
+// dataset around it. An unmounted dataset that is not locked holds nothing
+// at its folder (what is saved there is its parent's), and is left out.
+//
+// UNVERIFIED: a locked dataset whose mountpoint property was set by hand
+// (not inherited) is still placed by its name, so it is looked for where its
+// name puts it, not where it would mount; if the real NAS answers its own
+// mountpoint even while locked, that answer is used instead (tasks 6.10m).
+func (s *server) datasetMounts() (datasetMap, error) {
 	var rows []struct {
-		Name       string `json:"name"`
+		Name string `json:"name"`
+		// null for an unmounted dataset, a locked one likely (UNVERIFIED).
 		Mountpoint string `json:"mountpoint"`
+		// shape-optional: UNVERIFIED, not in the recording yet (record-truenas.py now asks for it); TrueNAS's pool.dataset.query documents it on every dataset, true for an encrypted one whose key is not loaded.
+		Locked bool `json:"locked"`
 	}
-	if err := s.nas.call("pool.dataset.query", []any{[]any{}, map[string]any{"select": []string{"name", "mountpoint"}}}, &rows); err != nil {
-		return nil, fmt.Errorf("read datasets: %w", err)
+	if err := s.nas.call("pool.dataset.query", []any{[]any{}, map[string]any{"select": []string{"name", "mountpoint", "locked"}}}, &rows); err != nil {
+		return datasetMap{}, fmt.Errorf("read datasets: %w", err)
 	}
-	out := make(map[string]string, len(rows))
+	out := datasetMap{at: make(map[string]string, len(rows)), locked: map[string]bool{}}
+	byName := map[string]string{}
+	var placed []string
 	for _, r := range rows {
-		if r.Mountpoint != "" {
-			out[strings.TrimRight(r.Mountpoint, "/")] = r.Name
+		if r.Locked {
+			out.locked[r.Name] = true
+		}
+		if mp := strings.TrimRight(r.Mountpoint, "/"); strings.HasPrefix(mp, "/") {
+			out.at[mp], byName[r.Name] = r.Name, mp
+		} else if r.Locked {
+			placed = append(placed, r.Name)
+		}
+	}
+	sort.Strings(placed) // a parent before its children, so a locked child of a locked parent is placed too
+	for _, name := range placed {
+		for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
+			if mp, ok := byName[parent]; ok {
+				at := mp + strings.TrimPrefix(name, parent)
+				if _, taken := out.at[at]; !taken {
+					out.at[at], byName[name] = name, at
+				}
+				break
+			}
 		}
 	}
 	return out, nil
 }
 
 // datasetAt is the innermost dataset holding a path.
-func datasetAt(mounts map[string]string, at string) string {
+func datasetAt(m datasetMap, at string) string {
 	for p := at; p != "/" && p != "."; p = path.Dir(p) {
-		if name, ok := mounts[p]; ok {
+		if name, ok := m.at[p]; ok {
 			return name
 		}
 	}
 	return ""
+}
+
+// spaceUnder is what each uid holds at or below a share's path: the sum over
+// the dataset mounted there and each one mounted inside it at any depth,
+// whose user quota tables never overlap (a dataset's userused leaves out its
+// children). It is the one count of a share, live (memberCount: a member's meters and
+// places) and collected (collectUsage), so they never disagree.
+type spaceUnder struct {
+	// Own is whether a dataset is mounted at the path itself. A share that is
+	// a plain folder holds its files in a dataset it shares with what lies
+	// beside it, whose table cannot say which bytes are the folder's: nothing
+	// of it is counted, never the parent whole.
+	Own bool
+	// Top is the table of the dataset mounted at the path, nil when it could
+	// not be read: the share's limits, and without it the share is not read.
+	Top map[int64]PlaceUsage
+	// ByUID is each uid's bytes over every dataset that was read, a uid with
+	// a row in any of them present even at 0.
+	ByUID map[int64]int64
+	// Unread is the folders, inside the path, of the nested datasets whose
+	// table could not be read: left out of ByUID, never counted as nothing,
+	// and the count is partial.
+	Unread []string
+	// LockedIn is the folders, inside the path, of the nested datasets that
+	// are locked: left out of ByUID and never read. Never said in a gap (a
+	// folder is often named for its account): only counted.
+	// A gap of its own, not a partial read (owner, 21 Nov 2026: a locked
+	// dataset affects only itself), so everyone's other bytes still count.
+	LockedIn []string
+	// Locked is whether the dataset at the path itself is locked: nothing of
+	// it was read.
+	Locked bool
+}
+
+// usageUnder counts a path through table, which reads one dataset's user
+// quota table (nil when it cannot be read). A locked dataset is never read:
+// what TrueNAS answers for one is not a count of its files.
+func usageUnder(m datasetMap, at string, table func(string) map[int64]PlaceUsage) spaceUnder {
+	top, own := m.at[at]
+	if !own {
+		return spaceUnder{}
+	}
+	if m.locked[top] {
+		return spaceUnder{Own: true, Locked: true}
+	}
+	out := spaceUnder{Own: true, Top: table(top)}
+	if out.Top == nil {
+		return out
+	}
+	out.ByUID = map[int64]int64{}
+	add := func(t map[int64]PlaceUsage) {
+		for uid, u := range t {
+			out.ByUID[uid] += u.UsedBytes
+		}
+	}
+	add(out.Top)
+	for mp, name := range m.at {
+		if !strings.HasPrefix(mp, at+"/") { // the folder boundary: /mnt/tank/share2 is not in /mnt/tank/share
+			continue
+		}
+		folder := strings.TrimPrefix(mp, at+"/")
+		if m.locked[name] {
+			out.LockedIn = append(out.LockedIn, folder)
+			continue
+		}
+		if t := table(name); t != nil {
+			add(t)
+		} else {
+			out.Unread = append(out.Unread, folder)
+		}
+	}
+	sort.Strings(out.Unread)
+	sort.Strings(out.LockedIn)
+	return out
 }
 
 // gidsOf maps group ids, as user.query lists them, to gids, which is what an
@@ -411,10 +543,10 @@ func (s *server) handleReach(w http.ResponseWriter, r *http.Request, _ []byte) {
 
 // memberPlaces is everywhere one account can connect: what its own groups
 // open, then its home folder first. Usage is filled in for the places it can
-// change, one quota read per dataset. The folder permissions come through the
-// fresher like /reach (fresh asks for a read of the NAS now), and the places
-// are as fresh as that read says.
-func (s *server) memberPlaces(fresh bool, uid int64, groupIDs []apiID, home string) ([]Place, Observed, error) {
+// change, by count (nil when it could not be made: no usage at all). The
+// folder permissions come through the fresher like /reach (fresh asks for a
+// read of the NAS now), and the places are as fresh as that read says.
+func (s *server) memberPlaces(fresh bool, groupIDs []apiID, home string, count *memberCount) ([]Place, Observed, error) {
 	read, seen, err := s.reach(fresh)
 	if err != nil {
 		return nil, Observed{}, err
@@ -432,22 +564,10 @@ func (s *server) memberPlaces(fresh bool, uid int64, groupIDs []apiID, home stri
 			Access: accessChange, Dataset: datasetAt(read.mounts, home), Home: true})
 		sortPlaces(places)
 	}
-
-	quotas := map[string]map[int64]PlaceUsage{}
 	for i, p := range places {
-		if p.Access != accessChange || p.Dataset == "" {
-			continue
+		if p.Access == accessChange && count != nil {
+			places[i].Usage, places[i].NotCounted = count.place(p)
 		}
-		table, read := quotas[p.Dataset]
-		if !read {
-			table = s.userQuotas(p.Dataset)
-			quotas[p.Dataset] = table
-		}
-		if table == nil {
-			continue // unreadable: say nothing rather than "nothing saved"
-		}
-		u := table[uid] // no row is nothing saved yet
-		places[i].Usage = &u
 	}
 	return places, seen, nil
 }

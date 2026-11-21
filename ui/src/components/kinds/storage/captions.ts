@@ -11,6 +11,17 @@ export const STORAGE_NOTE = "Your password and folders";
  */
 export const STORAGE_USAGE_STEP = `${NOTHING_TO_DO} Who used each share is in Insights.`;
 
+/**
+ * Why a place on the member's card has no figure, when TrueNAS itself is why (`not_counted`): a plain folder it does
+ * not count on its own, or an encrypted folder whose key is not loaded (said as the folder, never as their account,
+ * with the person who can unlock it). Never "nothing saved"; a reason this card does not know says nothing. Copy
+ * guide section 15.
+ */
+export const PLACE_NOT_COUNTED: Record<string, string> = {
+  folder: "Not counted on its own",
+  locked: "Not counted: this folder is encrypted and locked. Ask makerspace staff to unlock it.",
+};
+
 /** Under this share of the limit there is plenty of room: a judgement, so it is one named number. */
 export const PLENTY_BELOW = 0.5;
 

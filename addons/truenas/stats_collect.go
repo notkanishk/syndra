@@ -76,7 +76,8 @@ func (s *server) collectStatsOnce() {
 	shares, errShares := s.enabledShares()
 	failed := errors.Join(errAccounts, errShares)
 	s.collectSessions(now, snap, shares, bound, failed)
-	s.collectUsage(now, snap, shares, bound, failed)
+	mounts, errMounts := s.datasetMounts()
+	s.collectUsage(now, snap, shares, mounts, bound, errors.Join(failed, errMounts))
 }
 
 // oldest is the first day the buffer keeps: the day whose end is
@@ -103,12 +104,37 @@ func accountKey(username string, uid int64, known bool) string {
 	return "name:" + hex.EncodeToString(sum[:8])
 }
 
-// everyone is B1: a share's auditing records everyone only when it is on
-// and narrowed by neither list. Otherwise its count would undercount, which
-// is a gap and never a number.
-func (sh shareAudit) everyone() bool {
-	return sh.Enabled && len(sh.WatchList) == 0 && len(sh.IgnoreList) == 0
+// recordsEveryone is B1: a share's auditing records everyone when it is on
+// and watches every account that can connect over SMB (smb, from
+// smbMemberships), by the one rule a member's own coverage uses (watches).
+// Otherwise its count would undercount, which is a gap and never a number.
+// TrueNAS 25.10 refuses auditing with both lists empty, so a watch list
+// naming a group everyone is in (builtin_users) is how "everyone" is said
+// there (owner, on the NAS, 21 Nov 2026). Lists that narrow nothing need no
+// accounts read.
+//
+// Its ceiling: user.query lists the NAS's local accounts only, never a
+// directory service's (AD or LDAP). Were the NAS to join one, its users could
+// connect over SMB unseen here, and a share would be claimed to record
+// everyone while leaving them out: their group must then be on the watch
+// list, or the share not claimed. Whether a directory service is configured
+// is not read (directoryservices.status is not on readMethods, and its reply
+// on 25.10 is UNVERIFIED; addon-contract tasks.md).
+func (sh shareAudit) recordsEveryone(smb []map[string]bool) bool {
+	if !sh.Enabled {
+		return false
+	}
+	for _, memberOf := range smb {
+		if !sh.watches(memberOf) {
+			return false
+		}
+	}
+	return true
 }
+
+// narrowed is whether either audit list could leave somebody out: only then
+// does recordsEveryone need the accounts.
+func (sh shareAudit) narrowed() bool { return len(sh.WatchList) > 0 || len(sh.IgnoreList) > 0 }
 
 // auditConnects reads every successful CONNECT from `from` on, oldest first,
 // and says whether it stopped at the page bound with more to read.
@@ -188,9 +214,24 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 		return
 	}
 
-	counted := map[string]bool{} // the enabled shares whose auditing records everyone
+	// The enabled shares whose auditing records everyone. A share whose lists
+	// narrow it is checked against every SMB account; when they cannot be
+	// read, it is not counted, and its gap says the NAS could not be read,
+	// never that auditing leaves someone out.
+	counted, unknown := map[string]bool{}, map[string]bool{}
+	var smb []map[string]bool
+	var smbErr error
+	if slices.ContainsFunc(audits, func(a shareAudit) bool { return a.Enabled && a.narrowed() }) {
+		if smb, smbErr = s.smbMemberships(); smbErr != nil {
+			log.Printf("[STATS] %s: the SMB accounts could not be read, a share whose audit lists narrow it is not counted: %v", metricSessions, smbErr)
+		}
+	}
 	for _, a := range audits {
-		counted[a.Name] = a.everyone()
+		if a.Enabled && a.narrowed() && smbErr != nil {
+			unknown[a.Name] = true
+			continue
+		}
+		counted[a.Name] = a.recordsEveryone(smb)
 	}
 	// until is the first day not counted: past the page bound, the last
 	// day read may be part-read, so it and every later day wait for the
@@ -212,7 +253,11 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 		}
 		for _, sh := range shares {
 			if _, ok := gone[d]; !ok && !counted[sh.Name] && d < until {
-				rec.Gaps = append(rec.Gaps, gapOf(c.stamp(d), c.stamp(nextDayKey(d)), map[string]string{"share": sh.Name}, reasonAudited))
+				why := reasonAudited
+				if unknown[sh.Name] {
+					why = reasonNAS
+				}
+				rec.Gaps = append(rec.Gaps, gapOf(c.stamp(d), c.stamp(nextDayKey(d)), map[string]string{"share": sh.Name}, why))
 			}
 		}
 		days[d] = rec
@@ -283,8 +328,11 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	}
 }
 
-// collectUsage samples today's levels: per share, and in home folders.
-func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, bound map[int64]string, failed error) {
+// collectUsage samples today's levels: per share, and in home folders. A
+// place's bytes are its datasets' as the live read resolves them (datasetAt
+// on the same mounts), so a folder that is its own dataset counts where
+// storage.status shows it.
+func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, mounts datasetMap, bound map[int64]string, failed error) {
 	c := s.stats
 	today := c.day(now)
 	metas := map[string]statsMeta{}
@@ -321,24 +369,69 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, b
 		}
 	}
 
-	// storage.used_bytes: each share's dataset, by everyone in it.
+	// Whose home is locked, by its share: one place's lock affects only
+	// itself (owner, 21 Nov 2026), so each such person's own series there
+	// says not counted, and nobody else's does.
+	lockedHomeOf := map[string][]string{}
+	for _, sub := range snap.Subjects {
+		sh, inside, ok := shareAt(shares, sub.Home)
+		if _, _, locked := homeDatasets(mounts, sub.Home); ok && inside != "" && locked {
+			if subject, bound := bound[sub.UID]; bound {
+				lockedHomeOf[sh.Name] = append(lockedHomeOf[sh.Name], subject)
+			}
+		}
+	}
+	dayGap := func(dims map[string]string, why gapReason) StatGap {
+		return gapOf(c.stamp(today), c.stamp(nextDayKey(today)), dims, why)
+	}
+
+	// storage.used_bytes: every dataset a share reaches, nested ones
+	// included, by everyone in them (usageUnder, the count storage.status
+	// reads live). A share whose own dataset is unreadable is not sampled; one
+	// that is a plain folder, or locked, is a gap and no sample, today's
+	// earlier one dropped. One with a nested dataset that could not be read
+	// is sampled with a gap over every series of it: whose bytes are missing
+	// is not known. One with a nested dataset that is locked is sampled with
+	// a gap over its total alone, and, where that dataset is a person's home,
+	// one over that person's own series: everyone else's stand.
 	used, usedUnbound := map[string][]StatPoint{}, map[string]bool{}
+	usedGaps := map[string][]StatGap{}
 	var usedDims []map[string]string
 	for _, sh := range shares {
 		dims := map[string]string{"share": sh.Name}
 		usedDims = append(usedDims, dims)
-		t := table(datasetOf(sh.Path))
-		if t == nil {
+		u := usageUnder(mounts, sh.Path, table)
+		if !u.Own || u.Locked {
+			why := reasonFolder
+			if u.Own {
+				why = reasonLocked
+			}
+			used[sh.Name] = nil
+			usedGaps[sh.Name] = []StatGap{dayGap(dims, why)}
+			continue
+		}
+		if u.Top == nil {
 			continue // not read: the share keeps today's last sample
 		}
+		// The gaps name no folder: one is often named for its account, and
+		// a gap's reason is read by everyone the share reaches.
+		if n := len(u.Unread); n > 0 {
+			usedGaps[sh.Name] = append(usedGaps[sh.Name], dayGap(dims, reasonPartOf([]string{foldersIn(sh.Name, n, "")})))
+		}
+		if n := len(u.LockedIn); n > 0 {
+			usedGaps[sh.Name] = append(usedGaps[sh.Name], dayGap(dims, reasonPartOf([]string{foldersIn(sh.Name, n, " (locked)")})).forTotal())
+			for _, subject := range lockedHomeOf[sh.Name] {
+				usedGaps[sh.Name] = append(usedGaps[sh.Name], dayGap(dims, reasonHomeLocked).forSubject(subject))
+			}
+		}
 		var total int64
-		for uid, u := range t {
-			total += u.UsedBytes
-			if u.UsedBytes == 0 {
+		for uid, v := range u.ByUID {
+			total += v
+			if v == 0 {
 				continue
 			}
 			if subject, ok := bound[uid]; ok {
-				used[sh.Name] = append(used[sh.Name], point(subject, dims, u.UsedBytes))
+				used[sh.Name] = append(used[sh.Name], point(subject, dims, v))
 			} else {
 				unboundOf(uid, usedUnbound)
 			}
@@ -346,19 +439,41 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, b
 		used[sh.Name] = append(used[sh.Name], point("", dims, total))
 	}
 
-	// storage.home_bytes: the datasets holding home folders, read whole, or
-	// not sampled.
+	// storage.home_bytes: the datasets holding home folders (each home's
+	// own, as the live read resolves it: homeDatasets), read whole, or not
+	// sampled. A locked home affects only itself (owner, 21 Nov 2026): it
+	// has no point and a gap over its person's own series, everyone else's
+	// are sampled, and the total is partial, with a gap over the total alone
+	// saying where. That gap names the folder's place, never the folder: a
+	// home is named for its account, and no account's name is on the wire.
 	var home []StatPoint
 	homeUnbound := map[string]bool{}
 	homeRead := true
 	var homeTotal int64
 	counted := map[string]bool{}
+	var lockedHomes []string
+	var homeGaps []StatGap
 	for _, sub := range snap.Subjects {
-		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
+		sh, inside, ok := shareAt(shares, sub.Home)
+		if !ok || inside == "" {
 			continue
 		}
-		dataset := datasetOf(path.Dir(sub.Home))
-		t := table(dataset)
+		dataset, _, locked := homeDatasets(mounts, sub.Home)
+		if locked { // never read, never a 0
+			where := sh.Name
+			if dir := path.Dir(inside); dir != "." {
+				where += " › " + dir
+			}
+			lockedHomes = append(lockedHomes, "a home folder in "+where+" (locked)")
+			if subject, ok := bound[sub.UID]; ok {
+				homeGaps = append(homeGaps, dayGap(nil, reasonHomeLocked).forSubject(subject))
+			}
+			continue
+		}
+		var t map[int64]PlaceUsage
+		if dataset != "" {
+			t = table(dataset)
+		}
 		if t == nil {
 			homeRead = false
 			continue
@@ -376,24 +491,34 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, b
 		}
 	}
 	home = append(home, point("", nil, homeTotal))
+	if len(lockedHomes) > 0 {
+		slices.Sort(lockedHomes)
+		homeGaps = append(homeGaps, dayGap(nil, reasonPartOf(slices.Compact(lockedHomes))).forTotal())
+	}
 
 	s.putLevels(metricUsedBytes, metas[metricUsedBytes], now, usedDims, func(rec statDay) (statDay, bool) {
-		kept := rec.Points[:0]
+		kept := statDay{}
 		for _, p := range rec.Points {
 			if _, replaced := used[p.Dimensions["share"]]; !replaced {
-				kept = append(kept, p) // a share not read now keeps today's last sample
+				kept.Points = append(kept.Points, p) // a share not read now keeps today's last sample
 			}
 		}
-		for _, ps := range used {
-			kept = append(kept, ps...)
+		for _, g := range rec.Gaps {
+			if _, replaced := used[g.Dimensions["share"]]; !replaced {
+				kept.Gaps = append(kept.Gaps, g) // and its gap
+			}
 		}
-		return statDay{Points: kept}, len(used) == len(shares)
+		for name, ps := range used {
+			kept.Points = append(kept.Points, ps...)
+			kept.Gaps = append(kept.Gaps, usedGaps[name]...)
+		}
+		return kept, len(used) == len(shares)
 	}, usedUnbound)
 	s.putLevels(metricHomeBytes, metas[metricHomeBytes], now, []map[string]string{nil}, func(rec statDay) (statDay, bool) {
 		if !homeRead {
 			return rec, false
 		}
-		return statDay{Points: home}, true
+		return statDay{Points: home, Gaps: homeGaps}, true
 	}, homeUnbound)
 }
 
@@ -422,9 +547,12 @@ func (s *server) putLevels(metric string, meta statsMeta, now time.Time, dims []
 	for d := from; d < today; d = nextDayKey(d) {
 		rec := stored[d]
 		for _, want := range dims {
-			sampled := false
+			sampled := false // a total, or a gap saying why there is none
 			for _, p := range rec.Points {
 				sampled = sampled || p.Subject == "" && sameDims(p.Dimensions, want)
+			}
+			for _, g := range rec.Gaps {
+				sampled = sampled || g.Subject == "" && sameDims(g.Dimensions, want) // a person's gap says nothing of the total
 			}
 			if !sampled {
 				rec.Gaps = append(rec.Gaps, gapOf(c.stamp(d), c.stamp(nextDayKey(d)), want, reasonDark))

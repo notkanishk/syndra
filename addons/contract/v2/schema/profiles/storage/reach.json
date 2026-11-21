@@ -83,6 +83,14 @@
           "required": [
             "used_bytes"
           ]
+        },
+        "not_counted": {
+          "type": "string",
+          "enum": [
+            "folder",
+            "locked"
+          ],
+          "description": "Why a place the person can change has no usage when the target itself is why, never a read that failed: folder, a plain folder in a dataset it shares with what lies beside it, which the target does not count on its own; locked, the place is an encrypted dataset whose key is not loaded. A locked dataset inside a place leaves the rest of it counted: it affects only itself."
         }
       },
       "required": [

@@ -172,7 +172,7 @@ func TestMyUsageIsTheActorsOwn(t *testing.T) {
 func TestUsageCarriesSumsLatestAndGaps(t *testing.T) {
 	stubStats(t, &statsStore{})
 	now := time.Date(2026, 11, 12, 6, 0, 0, 0, time.UTC)
-	usage, err := statsUsageFor(context.Background(), "truenas", "u1", false, now)
+	usage, err := statsUsageFor(context.Background(), "truenas", "u1", false, nil, now)
 	if err != nil || !usage.Reported || len(usage.Metrics) != 2 {
 		t.Fatalf("%+v %v", usage, err)
 	}
@@ -199,14 +199,14 @@ func TestUsageCarriesSumsLatestAndGaps(t *testing.T) {
 		t.Errorf("a gap on a share u1 never used is on u1's page: %+v", sessions.Gaps)
 	}
 
-	totals, _ := statsUsageFor(context.Background(), "truenas", "", false, now)
+	totals, _ := statsUsageFor(context.Background(), "truenas", "", false, nil, now)
 	if g := sessionsOf(t, totals).Gaps; len(g) != 1 || g[0].Reason != "Auditing is off on this share" || g[0].End != "2026-11-10" {
 		t.Errorf("gaps %+v", g)
 	}
 	if len(totals.Metrics) != 3 || sessionsOf(t, totals).Collected == nil || sessionsOf(t, totals).Collected.UnboundAccounts != 2 {
 		t.Errorf("the totals carry every metric and the collection line: %+v", totals)
 	}
-	if none, _ := statsUsageFor(context.Background(), "unifi", "u1", false, now); none.Reported || none.Metrics != nil {
+	if none, _ := statsUsageFor(context.Background(), "unifi", "u1", false, nil, now); none.Reported || none.Metrics != nil {
 		t.Errorf("a target reporting nothing says so: %+v", none)
 	}
 }
@@ -231,7 +231,7 @@ func TestUsageSaysWhatRetentionKeptAndWhatIsFinal(t *testing.T) {
 	} {
 		s := &statsStore{retention: c.retention}
 		stubStats(t, s)
-		usage, err := statsUsageFor(context.Background(), "truenas", "u1", false, now)
+		usage, err := statsUsageFor(context.Background(), "truenas", "u1", false, nil, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -257,7 +257,7 @@ func TestUsageSaysWhatRetentionKeptAndWhatIsFinal(t *testing.T) {
 
 	s := &statsStore{retention: 10}
 	stubStats(t, s)
-	totals, _ := statsUsageFor(context.Background(), "truenas", "", false, now)
+	totals, _ := statsUsageFor(context.Background(), "truenas", "", false, nil, now)
 	if totals.KeptFrom != "" || s.from[0] != "2026-10-15" || s.from[1] != "2025-12-01" || totals.Window30dFrom != "2026-10-15" || totals.Window12mFrom != "2025-12-01" {
 		t.Errorf("the totals say kept_from %q and read from %v: a per-person setting is not theirs", totals.KeptFrom, s.from)
 	}
@@ -288,7 +288,7 @@ func TestTheDayCountingBeganOutlivesTheWindow(t *testing.T) {
 				{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{}, Start: "2026-10-20", End: "2026-10-22", Kind: "unread", Reason: "The NAS could not be read"}},
 			}, nil
 		}
-		usage, err := statsUsageFor(context.Background(), "truenas", subject, false, now)
+		usage, err := statsUsageFor(context.Background(), "truenas", subject, false, nil, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -330,7 +330,7 @@ func TestAPersonSeesOnlyGapsOnTheirOwnSeries(t *testing.T) {
 	}
 	now := time.Date(2026, 11, 12, 6, 0, 0, 0, time.UTC)
 	for subject, want := range map[string]string{"edge": `{"share":"makers"} {}`, "lita": `{"share":"kiln"} {"share":"makers"} {}`, "": `{"share":"kiln"} {"share":"makers"} {}`} {
-		usage, err := statsUsageFor(context.Background(), "truenas", subject, false, now)
+		usage, err := statsUsageFor(context.Background(), "truenas", subject, false, nil, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -342,6 +342,89 @@ func TestAPersonSeesOnlyGapsOnTheirOwnSeries(t *testing.T) {
 		if strings.Join(got, " ") != want {
 			t.Errorf("%q sees gaps on %v, want %s", subject, got, want)
 		}
+	}
+}
+
+// A locked home affects only that home (owner, 21 Nov 2026): the add-on's gap
+// over the totals alone is on the totals page alone, and its gap over the
+// locked home's person is on that person's page alone. Booker's page carries
+// neither: his own days stand. Charlotte's carries hers, and never the
+// totals' gap, which is about everyone's folders.
+func TestATotalsGapAndAPersonsGapStayOnTheirOwnPages(t *testing.T) {
+	stubStats(t, &statsStore{})
+	dbStatsDays = func(_ context.Context, _, subject, _ string) ([]db.StatsValue, error) {
+		return []db.StatsValue{{Metric: "storage.home_bytes", Dims: map[string]string{}, When: "2026-11-11", Value: 1}}, nil
+	}
+	dbStatsMonths = func(context.Context, string, string, string) ([]db.StatsValue, error) { return nil, nil }
+	dbStatsGaps = func(context.Context, string, string) ([]db.StatsGapRow, error) {
+		gap := func(scope, subject, reason string) db.StatsGapRow {
+			return db.StatsGapRow{Metric: "storage.home_bytes", StatsGap: db.StatsGap{Dims: map[string]string{}, Scope: scope, Subject: subject,
+				Start: "2026-11-08", End: "2026-11-10", Kind: "unread", Reason: reason}}
+		}
+		return []db.StatsGapRow{
+			gap("total", "", "Not counted, could not be read: a home folder in main (locked)"),
+			gap("", "charlotte", "Not counted: the home folder is encrypted and locked on TrueNAS"),
+		}, nil
+	}
+	now := time.Date(2026, 11, 12, 6, 0, 0, 0, time.UTC)
+	for subject, want := range map[string]string{
+		"booker":    "",
+		"charlotte": "Not counted: the home folder is encrypted and locked on TrueNAS",
+		"":          "total:Not counted, could not be read: a home folder in main (locked)",
+	} {
+		for _, member := range []bool{false, true} {
+			usage, err := statsUsageFor(context.Background(), "truenas", subject, member && subject != "", nil, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, m := range usage.Metrics {
+				for _, g := range m.Gaps {
+					if m.Name == "storage.home_bytes" {
+						got = append(got, strings.TrimPrefix(g.Scope+":", ":")+g.Reason)
+					}
+				}
+			}
+			if strings.Join(got, " | ") != want {
+				t.Errorf("%q (member %v) sees home gaps %q, want %q", subject, member, got, want)
+			}
+		}
+	}
+}
+
+// Staging, 21 Nov 2026: a member who can open a share whose auditing is off
+// has no series there, and their card said "Nothing counted" for it. A gap
+// on a share they can open is on their page with its reason, series or none,
+// and never as a value; a share they cannot open stays unsaid.
+func TestAGapOnAShareTheyCanOpenIsOnTheirPage(t *testing.T) {
+	stubStats(t, &statsStore{})
+	dbStatsDays = func(context.Context, string, string, string) ([]db.StatsValue, error) { return nil, nil }
+	dbStatsMonths = func(context.Context, string, string, string) ([]db.StatsValue, error) { return nil, nil }
+	dbStatsGaps = func(context.Context, string, string) ([]db.StatsGapRow, error) {
+		var out []db.StatsGapRow
+		for _, share := range []string{"open", "kiln"} {
+			out = append(out, db.StatsGapRow{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{"share": share},
+				Start: "2026-10-14", End: "2026-11-12", Kind: "unobserved", Reason: "Auditing is off for this share"}})
+		}
+		return out, nil
+	}
+	storage := &addons.StorageStatus{Places: []addons.Place{{Share: "open", Path: "/mnt/tank/open", Access: "read"}}}
+	usage := personalUsage(context.Background(), "truenas", "sub-cena", true, storage)
+	if usage == nil {
+		t.Fatal("no usage")
+	}
+	m := sessionsOf(t, *usage)
+	if len(m.Series) != 0 {
+		t.Errorf("series %+v, want none: a share never counted has no value, not 0", m.Series)
+	}
+	if len(m.Gaps) != 1 || m.Gaps[0].Dimensions["share"] != "open" || m.Gaps[0].Reason != "Auditing is off for this share" {
+		t.Errorf("gaps %+v, want the one on open with its reason (kiln is not theirs)", m.Gaps)
+	}
+	// While the target is down, the last storage read remembered says where they reach.
+	rememberStorage("truenas", "sub-cena", *storage)
+	t.Cleanup(func() { lastStorage.Delete("truenas\x00sub-cena") })
+	if m := sessionsOf(t, *personalUsage(context.Background(), "truenas", "sub-cena", true, nil)); len(m.Gaps) != 1 {
+		t.Errorf("offline: gaps %+v, want the one on open", m.Gaps)
 	}
 }
 
@@ -374,7 +457,7 @@ func TestAGapOnPartOfASeriesIsOnThatSeries(t *testing.T) {
 	}
 	now := time.Date(2026, 11, 12, 6, 0, 0, 0, time.UTC)
 	for subject, want := range map[string]string{"edge": `{} {"share":"makers"}`, "lita": `{}`, "orton": `{}`} {
-		usage, err := statsUsageFor(context.Background(), "truenas", subject, false, now)
+		usage, err := statsUsageFor(context.Background(), "truenas", subject, false, nil, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -512,7 +595,7 @@ func TestAMemberNeverSeesWhatNamesAPerson(t *testing.T) {
 	now := time.Date(2026, 11, 12, 6, 0, 0, 0, time.UTC)
 	names := []string{"john_cena", "John Cena", "lita-scratch"}
 
-	member, err := statsUsageFor(context.Background(), "truenas", "u1", true, now)
+	member, err := statsUsageFor(context.Background(), "truenas", "u1", true, nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,7 +622,7 @@ func TestAMemberNeverSeesWhatNamesAPerson(t *testing.T) {
 	}
 
 	for _, subject := range []string{"u1", ""} { // an admin on u1's page, and the totals
-		admin, err := statsUsageFor(context.Background(), "truenas", subject, false, now)
+		admin, err := statsUsageFor(context.Background(), "truenas", subject, false, nil, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -573,7 +656,7 @@ func TestAMembersOwnNameHidesNothingOfTheirs(t *testing.T) {
 		member  bool
 		shown   bool
 	}{{"sub-cena", true, true}, {"sub-lita", true, false}, {"sub-lita", false, true}} {
-		usage, err := statsUsageFor(context.Background(), "truenas", c.subject, c.member, now)
+		usage, err := statsUsageFor(context.Background(), "truenas", c.subject, c.member, nil, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -601,7 +684,7 @@ func TestARecordNamingTwoPeopleIsLeftOutForEveryMember(t *testing.T) {
 		member  bool
 		shown   bool
 	}{{"sub-a", true, false}, {"sub-b", true, false}, {"sub-c", true, false}, {"sub-a", false, true}} {
-		usage, err := statsUsageFor(context.Background(), "truenas", c.subject, c.member, now)
+		usage, err := statsUsageFor(context.Background(), "truenas", c.subject, c.member, nil, now)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -89,7 +89,7 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 		if h, ok := bySubject[b.SubjectID]; ok {
 			row.Username = h.Username // the account's own name now
 			row.Home = h.Home
-			if homes.UsageRead {
+			if homes.UsageRead && h.NotCounted == "" { // a locked home is not 0 B, and affects only itself
 				used, quota := h.UsedBytes, h.QuotaBytes
 				row.UsedBytes, row.QuotaBytes = &used, &quota
 			}

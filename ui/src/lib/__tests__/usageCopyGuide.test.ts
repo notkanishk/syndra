@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { STORAGE_USAGE_STEP } from "@/components/kinds/storage/captions";
+import { PLACE_NOT_COUNTED, STORAGE_USAGE_STEP } from "@/components/kinds/storage/captions";
 import * as copy from "@/components/usage/copy";
 import type { StatsUnit } from "@/lib/queries/useStats";
 
@@ -24,6 +24,7 @@ const SAID = [
   copy.inDays("{value}"),
   copy.inMonths("{value}"),
   copy.NOTHING_COUNTED,
+  copy.NOT_ALL_COUNTED,
   copy.latestOn("{value}", "{day}"),
   copy.NO_RECENT_VALUE,
   copy.GAPS_HEADING,
@@ -99,6 +100,7 @@ const SAID = [
   copy.OVERVIEW_NEXT,
   copy.OVERVIEW_NEXT_LINK,
   STORAGE_USAGE_STEP,
+  ...Object.values(PLACE_NOT_COUNTED),
   ...Object.values(copy.UNIT_HEADING),
 ];
 

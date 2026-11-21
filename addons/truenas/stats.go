@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -96,10 +97,35 @@ var (
 	reasonAudited  = gapReason{"Auditing does not record everyone on this share", kindUnobserved}
 	reasonPurged   = gapReason{"The NAS no longer keeps its log of these days", kindDropped}
 	reasonOverfull = gapReason{"Too much activity to count", kindUnread}
+	// reasonFolder is a share that is a plain folder inside a dataset it shares with what lies beside
+	// it: the NAS counts space per dataset, so the folder's own cannot be told apart.
+	reasonFolder = gapReason{"The NAS does not count this share's space on its own", kindUnobserved}
+	// reasonLocked is a share whose own dataset is encrypted with its key not loaded: none of its files
+	// can be read, so it is not counted at all, never a 0 and never an earlier sample of the day.
+	reasonLocked = gapReason{"Not counted: this share is encrypted and locked on TrueNAS", kindUnread}
 )
 
+// reasonPartOf is a share counted without the folders, inside it, that could not be read (an encrypted
+// one whose key is not loaded refuses the read): what was read is sent, and this says what it leaves out.
+func reasonPartOf(folders []string) gapReason {
+	return gapReason{"Not counted, could not be read: " + strings.Join(folders, ", "), kindUnread}
+}
+
+// reasonHomeLocked is a person's own series where their home folder's dataset is encrypted and locked:
+// a gap over them alone (StatGap.forSubject), read by them and by who may read their figures.
+var reasonHomeLocked = gapReason{"Not counted: the home folder is encrypted and locked on TrueNAS", kindUnread}
+
+// foldersIn is n folders inside a share, said without naming one: a folder is often named for its
+// account, and a gap's reason is read by everyone the share reaches.
+func foldersIn(share string, n int, suffix string) string {
+	if n == 1 {
+		return "a folder in " + share + suffix
+	}
+	return strconv.Itoa(n) + " folders in " + share + suffix
+}
+
 // gapReasons is every fixed reason: a gap stored before kinds existed takes its sentence's kind.
-var gapReasons = []gapReason{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonPurged, reasonOverfull}
+var gapReasons = []gapReason{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonPurged, reasonOverfull, reasonFolder, reasonLocked, reasonHomeLocked}
 
 // gapOf is the one way a window not observed is made: from its reason, which carries its kind.
 func gapOf(start, end string, dims map[string]string, why gapReason) StatGap {
@@ -146,8 +172,23 @@ type StatGap struct {
 	Start      string
 	End        string
 	Dimensions map[string]string
-	why        gapReason
+	// Scope "total" is a gap over the totals only (every person's own points
+	// stand); Subject one over that person's points only. Neither: every
+	// series at Dimensions. Set by forTotal and forSubject alone.
+	Scope   string
+	Subject string
+	why     gapReason
 }
+
+// scopeTotal is stats.json's gap scope: the totals only.
+const scopeTotal = "total"
+
+// forTotal is the gap over the totals only: a part of the NAS not read
+// leaves the whole partial and no person's own figure (owner, 21 Nov 2026).
+func (g StatGap) forTotal() StatGap { g.Scope, g.Subject = scopeTotal, ""; return g }
+
+// forSubject is the gap over one person's own points only.
+func (g StatGap) forSubject(subject string) StatGap { g.Scope, g.Subject = "", subject; return g }
 
 // Kind is the contract's kind of the gap; Reason, the member's sentence.
 func (g StatGap) Kind() gapKind  { return g.why.kind }
@@ -157,6 +198,8 @@ type statGapWire struct {
 	Start      string            `json:"start"`
 	End        string            `json:"end"`
 	Dimensions map[string]string `json:"dimensions,omitempty"`
+	Scope      string            `json:"scope,omitempty"`
+	Subject    string            `json:"subject,omitempty"`
 	Kind       gapKind           `json:"kind"`
 	Reason     string            `json:"reason"`
 }
@@ -167,7 +210,7 @@ func (g StatGap) MarshalJSON() ([]byte, error) {
 	if g.why.kind == "" {
 		return nil, errors.New("stats: the gap " + g.Start + " to " + g.End + " has no kind (made without gapOf)")
 	}
-	return json.Marshal(statGapWire{Start: g.Start, End: g.End, Dimensions: g.Dimensions, Kind: g.why.kind, Reason: g.why.text})
+	return json.Marshal(statGapWire{Start: g.Start, End: g.End, Dimensions: g.Dimensions, Scope: g.Scope, Subject: g.Subject, Kind: g.why.kind, Reason: g.why.text})
 }
 
 // UnmarshalJSON reads a gap as served or as stored. One stored before kinds existed has none and takes
@@ -185,7 +228,7 @@ func (g *StatGap) UnmarshalJSON(b []byte) error {
 			why = gapReasons[i]
 		}
 	}
-	*g = StatGap{Start: w.Start, End: w.End, Dimensions: w.Dimensions, why: why}
+	*g = StatGap{Start: w.Start, End: w.End, Dimensions: w.Dimensions, Scope: w.Scope, Subject: w.Subject, why: why}
 	return nil
 }
 
@@ -311,12 +354,15 @@ func fill(encoded [][]byte, room int) int {
 	return len(encoded)
 }
 
-// mergeGaps joins the days' gaps with the same dimensions and reason into
-// windows, never across the watermark: a final gap keeps the end it had.
-// Gaps are keyed by (dimensions, start), so two shares' gaps on one day stay
-// two gaps.
+// mergeGaps joins the days' gaps with the same series (dimensions, scope,
+// subject) and reason into windows, never across the watermark: a final gap
+// keeps the end it had. Gaps are keyed by (dimensions, start), so two shares'
+// gaps on one day stay two gaps.
 func mergeGaps(gaps []StatGap, watermark string) []StatGap {
-	series := func(g StatGap) string { d, _ := json.Marshal(g.Dimensions); return string(d) + g.why.text }
+	series := func(g StatGap) string {
+		d, _ := json.Marshal(g.Dimensions)
+		return string(d) + "\x00" + g.Scope + "\x00" + g.Subject + "\x00" + g.why.text
+	}
 	gaps = slices.Clone(gaps)
 	slices.SortStableFunc(gaps, func(a, b StatGap) int {
 		if c := strings.Compare(series(a), series(b)); c != 0 {
@@ -327,7 +373,8 @@ func mergeGaps(gaps []StatGap, watermark string) []StatGap {
 	var out []StatGap
 	for _, g := range gaps {
 		if n := len(out); n > 0 && out[n-1].End == g.Start && g.Start != watermark &&
-			out[n-1].why == g.why && sameDims(out[n-1].Dimensions, g.Dimensions) {
+			out[n-1].why == g.why && sameDims(out[n-1].Dimensions, g.Dimensions) &&
+			out[n-1].Scope == g.Scope && out[n-1].Subject == g.Subject {
 			out[n-1].End = g.End
 			continue
 		}

@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"path"
 	"strings"
+	"time"
 )
 
 // storage.status answers the two questions a member actually has: can I use
@@ -48,6 +50,9 @@ type StorageStatus struct {
 	// this account was read: a read just now is no fresher than it, and a copy
 	// is dated no later than it (Observed.with).
 	placesSeen Observed
+	// quotaSeen is how fresh the quota tables behind Meters and the places'
+	// usage were (quotaTable): a copy dates the card by its read, not now.
+	quotaSeen Observed
 	// NeedsPassword is the reason, when there is one an action fixes. Setting a
 	// password is what turns the account on, so this is an invitation rather
 	// than an error.
@@ -104,19 +109,30 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	status.NeedsPassword = !subject.PasswordSet
 	status.NeedsNewPassword = subject.needsNewPassword()
 
+	// One count for the places and the meters, so they never disagree.
+	count, countErr := s.countFor(subject.UID, req.Fresh)
+	counted := &count
+	if countErr != nil {
+		counted = nil
+	}
+
 	// Best-effort like usage: whether the account works is the urgent half.
-	if places, seen, err := s.memberPlaces(req.Fresh, subject.UID, subject.groupIDs, subject.Home); err == nil {
+	if places, seen, err := s.memberPlaces(req.Fresh, subject.groupIDs, subject.Home, counted); err == nil {
 		status.Places, status.PlacesReadable, status.placesSeen = places, true, seen
 	}
 
 	// Usage is best-effort: a member who cannot be told their usage can still
 	// be told whether their account works, and that is the more urgent half.
 	// What was read is sent; QuotaRead is true only when all of it was.
-	meters, err := s.shareUsage(subject.UID)
-	if meters != nil {
+	if countErr == nil {
+		var meters []Meter
+		meters, countErr = count.meters()
 		status.Meters = meters
 	}
-	status.QuotaRead = err == nil
+	status.QuotaRead = countErr == nil
+	if counted != nil {
+		status.quotaSeen = *count.seen
+	}
 
 	return OperationResult{
 		Operation: "storage.status", Subject: req.Subject, Outcome: "succeeded",
@@ -124,71 +140,176 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	}, http.StatusOK, nil
 }
 
-// shareUsage reports what one uid holds in the dataset behind each enabled
-// share. A quota table that cannot be read leaves that share out and makes the
-// whole an error, with the meters that were read: partial, and said to be.
+// memberCount is one member's count of what they hold, for their card's
+// meters and places: usageUnder, the count collectUsage samples, over every
+// dataset, other members' homes included (Rey's files in a home that is
+// not his are his), each table read through the shared copy (quotaTable).
+type memberCount struct {
+	uid    int64
+	shares []smbShare
+	mounts datasetMap
+	table  func(string) map[int64]PlaceUsage
+	// seen is how fresh the tables behind the count are: the least fresh of
+	// them, so the card is dated by its oldest copy, never by now.
+	seen *Observed
+}
+
+// countFor makes uid's count. fresh asks for a read of each table now,
+// within its cooldown (fresh.go).
+func (s *server) countFor(uid int64, fresh bool) (memberCount, error) {
+	shares, err := s.enabledShares()
+	if err != nil {
+		return memberCount{}, err
+	}
+	mounts, err := s.datasetMounts()
+	if err != nil {
+		return memberCount{}, err
+	}
+	c := memberCount{uid: uid, shares: shares, mounts: mounts, seen: &Observed{}}
+	tables := map[string]map[int64]PlaceUsage{} // each at most once per load: a second fresh ask would meet its own cooldown
+	c.table = func(dataset string) map[int64]PlaceUsage {
+		if t, read := tables[dataset]; read {
+			return t
+		}
+		t, obs := s.quotaTable(dataset, fresh)
+		tables[dataset] = t
+		if t != nil {
+			if c.seen.TakenAt == "" {
+				*c.seen = obs
+			} else {
+				*c.seen = c.seen.least(obs)
+			}
+		}
+		return t
+	}
+	return c, nil
+}
+
+// quotaTable is one dataset's user quota table for members' cards, nil when
+// it cannot be read, and when that read was taken. Every card shares one copy
+// per dataset through the fresher (fresh.go): a copy answers while it is
+// fresh (freshMaxAge), labelled as a copy and dated by its read, never
+// current; a fresh ask reads again outside the cooldown; concurrent loads
+// make one read. Counting every dataset on every load would otherwise be one
+// NAS call per home per card. A write forgets it like every copy. The
+// collector reads its own tables and never this copy.
+func (s *server) quotaTable(dataset string, fresh bool) (map[int64]PlaceUsage, Observed) {
+	val, obs, err := s.fresh.read("quota:"+dataset, fresh, func() (any, time.Time, error) {
+		t := s.userQuotas(dataset)
+		if t == nil {
+			return nil, time.Time{}, fmt.Errorf("the quota table of %s could not be read", dataset)
+		}
+		return t, s.fresh.clock(), nil
+	})
+	if err != nil {
+		return nil, Observed{}
+	}
+	return val.(map[int64]PlaceUsage), obs
+}
+
+// meters reports what the member holds behind each enabled share: every
+// dataset the share reaches, nested ones included, against the limit on the
+// share's own dataset. A share not wholly read (its dataset's table, or a
+// nested one's, unreadable; or its own dataset locked) makes the whole an
+// error, with the meters that were read: partial, and said to be. A locked
+// dataset inside it is left out and is not a partial read: it affects only
+// itself (owner, 21 Nov 2026), and is "not counted, locked" where it is a
+// place. A share that is a plain
+// folder has no table to read: no meter, and not a partial read (it is a
+// place that is not counted on its own, on the card where they can open it).
 //
-// The dataset is DERIVED from the share's own path rather than configured. A
-// configured dataset would be a second definition of where a share lives, and
-// the two would disagree the first time somebody moved one — which is exactly
-// the failure this codebase keeps paying for. `/mnt/pool/dataset` is the
-// mountpoint convention TrueNAS uses for every dataset it creates.
+// Where a share lives is DERIVED from the NAS's own read of its path and the
+// datasets' mountpoints, never configured: a configured dataset would be a
+// second definition of where a share lives.
 //
 // Matched on UID and never on the name in the quota row: that name is null for
 // a uid the target can no longer resolve, and matching on it would silently
 // report nothing for the accounts most likely to matter.
-func (s *server) shareUsage(uid int64) ([]Meter, error) {
-	var shares []struct {
-		Name    string `json:"name"`
-		Path    string `json:"path"`
-		Enabled bool   `json:"enabled"`
-	}
-	if err := s.nas.call("sharing.smb.query",
-		[]any{[]any{}, map[string]any{"select": []string{"name", "path", "enabled"}}}, &shares); err != nil {
-		return nil, err
-	}
-
-	out := make([]Meter, 0, len(shares))
+func (c memberCount) meters() ([]Meter, error) {
+	out := make([]Meter, 0, len(c.shares))
 	var unread []string
-	for _, sh := range shares {
-		if !sh.Enabled || !s.considers(sh.Name) {
+	for _, sh := range c.shares {
+		u := usageUnder(c.mounts, sh.Path, c.table)
+		if !u.Own {
 			continue
 		}
-		dataset := datasetOf(sh.Path)
-		if dataset == "" {
-			continue
-		}
-		var rows []struct {
-			ID        int64 `json:"id"`
-			UsedBytes int64 `json:"used_bytes"`
-			// shape-optional: TrueNAS omits `quota` entirely for a uid with no
-			// quota set, which is the common case and the one every account on
-			// the live target is in. Absent decodes to 0, and 0 is rendered as
-			// "no limit set" rather than as a full bar — see MyStorage.
-			QuotaBytes int64 `json:"quota"`
-		}
-		if err := s.nas.call("pool.dataset.get_quota", []any{dataset, "USER"}, &rows); err != nil {
+		if u.Top == nil || len(u.Unread) > 0 {
 			// One share's quota table being unreadable is not a reason to
 			// withhold the others, and not one to pass the rest off as all.
 			unread = append(unread, sh.Name)
+		}
+		used, held := u.ByUID[c.uid]
+		if !held {
 			continue
 		}
-		for _, row := range rows {
-			if row.ID != uid {
-				continue
-			}
-			m := Meter{Label: sh.Name, Used: row.UsedBytes, Unit: "bytes"}
-			if row.QuotaBytes > 0 {
-				m.Limit = &row.QuotaBytes
-			}
-			out = append(out, m)
-			break
+		m := Meter{Label: sh.Name, Used: used, Unit: "bytes"}
+		// shape-optional: TrueNAS omits `quota` for a uid with no limit set,
+		// the common case. 0 is rendered as "no limit set" — see MyStorage.
+		if q := u.Top[c.uid].QuotaBytes; q > 0 {
+			m.Limit = &q
 		}
+		out = append(out, m)
 	}
 	if len(unread) > 0 {
 		return out, fmt.Errorf("the quota of %s could not be read", strings.Join(unread, ", "))
 	}
 	return out, nil
+}
+
+// place is the member's usage of one place they can change, the count its
+// share's meter and the collector make; nil when not all of it was read, and
+// then why when the NAS is why (Place.NotCounted). A plain folder is never
+// counted as the dataset around it. A home is read as /homes reads it
+// (homeUsage). A locked dataset inside a place leaves the rest of it counted:
+// only the place that is that dataset says locked.
+func (c memberCount) place(p Place) (*PlaceUsage, string) {
+	if p.Home {
+		u, locked := homeUsage(c.mounts, p.Path, c.uid, c.table)
+		if locked {
+			return nil, notCountedLocked
+		}
+		return u, ""
+	}
+	u := usageUnder(c.mounts, p.Path, c.table)
+	switch {
+	case !u.Own:
+		return nil, notCountedFolder
+	case u.Locked:
+		return nil, notCountedLocked
+	case u.Top == nil || len(u.Unread) > 0:
+		return nil, "" // unreadable: say nothing rather than "nothing saved"
+	}
+	// no row is nothing saved yet
+	return &PlaceUsage{UsedBytes: u.ByUID[c.uid], QuotaBytes: u.Top[c.uid].QuotaBytes}, ""
+}
+
+// homeUsage is what uid holds in the home folder at home, as /homes and the
+// member's card read it: the bytes in the home's own dataset, the limit a
+// user quota on the dataset holding its parent (homeDatasets). nil when
+// either cannot be read, and locked when a locked dataset is why: never 0.
+func homeUsage(m datasetMap, home string, uid int64, table func(string) map[int64]PlaceUsage) (u *PlaceUsage, locked bool) {
+	own, parent, locked := homeDatasets(m, home)
+	if locked {
+		return nil, true
+	}
+	if own == "" || parent == "" {
+		return nil, false
+	}
+	used, limits := table(own), table(parent)
+	if used == nil || limits == nil {
+		return nil, false
+	}
+	return &PlaceUsage{UsedBytes: used[uid].UsedBytes, QuotaBytes: limits[uid].QuotaBytes}, false
+}
+
+// homeDatasets is where a home folder is read, the one rule the card, /homes
+// and storage.home_bytes share: its bytes in its own dataset (datasetAt: a
+// home that is a dataset of its own holds them there, not in the parent), its
+// limit on the dataset holding its parent, where convergeQuota writes it; and
+// locked when either is, since then its files cannot be read.
+func homeDatasets(m datasetMap, home string) (own, parent string, locked bool) {
+	own, parent = datasetAt(m, home), datasetOf(path.Dir(home))
+	return own, parent, m.locked[own] || m.locked[parent]
 }
 
 // datasetOf turns a share's mountpoint into the dataset name the quota call

@@ -46,6 +46,11 @@ export interface StatsGap {
    * as before the record, never hatched or listed; every other kind is hatched and listed with its reason.
    */
   kind: GapKind;
+  /**
+   * `total`: the gap covers the totals alone (a part of the system not read), and every person's own
+   * figures stand (owner, 21 Nov 2026, "Only that home affected"). Only a totals page carries one.
+   */
+  scope?: "total";
   reason: string;
 }
 
