@@ -93,7 +93,7 @@ func TestAMemberActionIsPreviewedThenConfirmed(t *testing.T) {
 	if rr.Code != http.StatusOK || out["state"] != "preview" || out["outcome"] != "done" {
 		t.Fatalf("preview %d %s", rr.Code, rr.Body.String())
 	}
-	if v, _ := out["view"].(map[string]any); v["readable"] != true || v["shape"] != "records" {
+	if v, _ := out["view"].(map[string]any); v["read"].(map[string]any)["state"] != "now" || v["shape"] != "records" {
 		t.Errorf("the preview's record is not shown: %v", out["view"])
 	}
 	if len(h.previews) != 1 || len(h.confirms) != 0 {

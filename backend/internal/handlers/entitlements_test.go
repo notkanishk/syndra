@@ -3,12 +3,14 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/services"
 	"syndra/internal/services/planapply"
@@ -311,7 +313,8 @@ func TestAnUnreachableAddonAndADisabledTargetAnswerDifferently(t *testing.T) {
 		want int
 		code string
 	}{
-		{"the add-on is down", services.ErrTargetUnplannable, http.StatusServiceUnavailable, "ADDON_UNREACHABLE"},
+		{"the add-on is down", fmt.Errorf("%w: %w", services.ErrTargetUnplannable, addons.NotRead{Why: addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseNoAnswer}}),
+			http.StatusServiceUnavailable, codeTargetNotRead},
 		{"the deployment dropped the target", db.ErrTargetNotActive, http.StatusConflict, "TARGET_NOT_ACTIVE"},
 		{"not an add-on at all", services.ErrTargetIsBuiltIn, http.StatusBadRequest, "TARGET_NOT_AN_ADDON"},
 	} {

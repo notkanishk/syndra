@@ -203,8 +203,8 @@ func settleFromRead(ctx context.Context, target string, ops []db.AddonOperation)
 			continue
 		}
 		if settings == nil {
-			read, ok := addonsReadSettings(ctx, target)
-			if !ok {
+			read, state := addonsReadSettings(ctx, target)
+			if state.None() {
 				// Unreadable now: nothing is concluded, and the rows stay.
 				return ops
 			}

@@ -58,6 +58,13 @@ type accountHome struct {
 
 func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 	target := r.PathValue("target")
+	homes := addonsReadHomes(r.Context(), target, wantsFresh(r))
+	if homes.Read.None() {
+		// No copy: 503 TARGET_NOT_READ (design §13.3), never rows whose use
+		// reads as nothing saved.
+		writeUnread(w, r, target, homes.Read.Why())
+		return
+	}
 	bindings, err := dbListTargetBindings(r.Context(), target)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -67,7 +74,6 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 	// (acceptedShape): none known, no limit is shown.
 	_, schema := acceptedShape(r.Context(), target)
 	limit, _ := kinds.HomeLimit(schema)
-	homes := addonsReadHomes(r.Context(), target, wantsFresh(r))
 	// Whose each home is, by the add-on's attribution (design 7t D3): never by
 	// the name Syndra's copy of the binding recorded, which a rename moves and
 	// a stranger can take.
@@ -98,24 +104,7 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 		out = append(out, row)
 	}
 	textsort.ByName(out, func(r accountHome) string { return r.Username }, nil)
-	body := map[string]any{"read": homes.Read, "usage_read": homes.UsageRead, "accounts": out}
-	if homes.Reason != "" {
-		// None is shown as anybody's: addon_outdated (the same state, by the
-		// same test, the reconcile pass records), or whose they are could not
-		// be learned (addons.Attribution).
-		body["reason"] = homes.Reason
-	}
-	// When the add-on read them, and whether this is that read or its copy;
-	// or, inside its cooldown with nothing kept, when it may read again.
-	if o := homes.Observation; o != nil {
-		body["taken_at"], body["current"] = o.TakenAt, o.Current
-		if o.Stale != nil {
-			body["stale"] = o.Stale
-		}
-	}
-	if homes.RetryAfter > 0 {
-		body["retry_after"] = homes.RetryAfter
-	}
+	body := map[string]any{"read": homes.Read, "accounts": out}
 	jsonResponse(w, http.StatusOK, body)
 }
 

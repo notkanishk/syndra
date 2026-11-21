@@ -31,7 +31,7 @@ func TestTheInventoryPassesReadAgainThroughAndCountsDown(t *testing.T) {
 	svcTargetInventory = func(_ context.Context, _ string, fresh bool) (drift.AddonReconcileResult, error) {
 		asked = append(asked, fresh)
 		if fresh {
-			return drift.AddonReconcileResult{Halted: true, RetryAfter: 9}, nil
+			return drift.AddonReconcileResult{}, addons.NotRead{Why: addons.Why{Reason: addons.ReasonCooldown, RetryAfter: 9}}
 		}
 		return drift.AddonReconcileResult{}, nil
 	}
@@ -48,8 +48,9 @@ func TestTheInventoryPassesReadAgainThroughAndCountsDown(t *testing.T) {
 	rr := get("/api/v1/targets/truenas/inventory?fresh=true")
 	var body ErrorResponse
 	_ = json.Unmarshal(rr.Body.Bytes(), &body)
-	if rr.Code != http.StatusTooManyRequests || rr.Header().Get("Retry-After") != "9" || body.RetryAfter != 9 || body.Error != "FRESH_READ_COOLDOWN" {
-		t.Errorf("read again inside the cooldown: %d Retry-After %q %s, want 429 FRESH_READ_COOLDOWN, retry_after 9", rr.Code, rr.Header().Get("Retry-After"), rr.Body)
+	if rr.Code != http.StatusServiceUnavailable || rr.Header().Get("Retry-After") != "9" || body.RetryAfter != 9 ||
+		body.Error != codeTargetNotRead || body.Details["reason"] != addons.ReasonCooldown {
+		t.Errorf("read again inside the cooldown, nothing kept: %d Retry-After %q %s, want 503 TARGET_NOT_READ cooldown, retry_after 9", rr.Code, rr.Header().Get("Retry-After"), rr.Body)
 	}
 	if len(asked) != 2 || asked[0] || !asked[1] {
 		t.Errorf("asked fresh %v, want [false true]", asked)
@@ -88,31 +89,29 @@ func TestTheStorageCardsPassReadAgainThrough(t *testing.T) {
 	var asked []bool
 	addonsReadReach = func(_ context.Context, _ string, fresh bool) addons.Reach {
 		asked = append(asked, fresh)
-		return addons.Reach{RetryAfter: 4}
+		return addons.Reach{Read: cooledDown(4)}
 	}
 	addonsActivity = func(_ context.Context, _, _, _, _ string, fresh bool) addons.ActivityReport {
 		asked = append(asked, fresh)
-		return addons.ActivityReport{RetryAfter: 4}
+		return addons.ActivityReport{Read: cooledDown(4)}
 	}
 	for _, q := range []string{"", "&fresh=true"} {
 		r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/reach?x=1"+q, nil)
 		r.SetPathValue("target", "truenas")
 		rr := httptest.NewRecorder()
 		handleTargetReach(rr, r)
-		var reach addons.Reach
-		_ = json.Unmarshal(rr.Body.Bytes(), &reach)
-		if reach.RetryAfter != 4 {
-			t.Errorf("the reach countdown did not reach the page: %s", rr.Body)
+		if rr.Code != http.StatusServiceUnavailable || rr.Header().Get("Retry-After") != "4" {
+			t.Errorf("the reach countdown did not reach the page: %d %s", rr.Code, rr.Body)
 		}
 
 		r = httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/activity?subject=s"+q, nil)
 		r.SetPathValue("target", "truenas")
 		rr = httptest.NewRecorder()
 		handleTargetActivity(rr, r)
-		var act map[string]any
+		var act ErrorResponse
 		_ = json.Unmarshal(rr.Body.Bytes(), &act)
-		if act["reason"] != "cooldown" || act["retry_after"] != float64(4) || act["readable"] != false {
-			t.Errorf("the activity countdown did not reach the page: %s", rr.Body)
+		if rr.Code != http.StatusServiceUnavailable || act.Details["reason"] != addons.ReasonCooldown || act.RetryAfter != 4 {
+			t.Errorf("the activity countdown did not reach the page: %d %s", rr.Code, rr.Body)
 		}
 	}
 	if want := []bool{false, false, true, true}; len(asked) != 4 || asked[0] != want[0] || asked[1] != want[1] || asked[2] != want[2] || asked[3] != want[3] {
@@ -150,22 +149,25 @@ func TestTheHomesSayHowFreshTheirReadIs(t *testing.T) {
 	addonsReadHomes = func(_ context.Context, _ string, fresh bool) addons.Homes {
 		asked = append(asked, fresh)
 		if fresh {
-			return addons.Homes{RetryAfter: 6}
+			return addons.Homes{Read: cooledDown(6)}
 		}
-		return addons.Homes{Read: true, Observation: &addons.Observation{TakenAt: at, Stale: &addons.Stale{Reason: "cached", RetryAfter: &retry}}}
+		return addons.Homes{Read: addons.ReadOf(&addons.Observation{TakenAt: at, Stale: &addons.Stale{Reason: "cached", RetryAfter: &retry}}, addons.Why{})}
 	}
 	for _, q := range []string{"", "?fresh=true"} {
 		r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/homes"+q, nil)
 		r.SetPathValue("target", "truenas")
 		rr := httptest.NewRecorder()
 		handleTargetHomes(rr, r)
-		var body map[string]any
-		_ = json.Unmarshal(rr.Body.Bytes(), &body)
-		if q == "" && (body["taken_at"] != "2026-11-10T09:30:00Z" || body["current"] != false || body["stale"].(map[string]any)["reason"] != "cached") {
-			t.Errorf("a copy is dated and labelled: %s", rr.Body)
+		var body struct {
+			Read    addons.ReadState `json:"read"`
+			Details map[string]string
 		}
-		if q != "" && (body["retry_after"] != float64(6) || body["read"] != false) {
-			t.Errorf("a cooldown with nothing to serve counts down: %s", rr.Body)
+		_ = json.Unmarshal(rr.Body.Bytes(), &body)
+		if q == "" && (body.Read.State != addons.ReadKept || !body.Read.TakenAt.Equal(at) || body.Read.Reason != addons.ReasonCached || body.Read.RetryAfter != 20) {
+			t.Errorf("a copy is dated and said kept: %s", rr.Body)
+		}
+		if q != "" && (rr.Code != http.StatusServiceUnavailable || rr.Header().Get("Retry-After") != "6" || body.Details["reason"] != addons.ReasonCooldown) {
+			t.Errorf("a cooldown with nothing to serve counts down: %d %s", rr.Code, rr.Body)
 		}
 	}
 	if len(asked) != 2 || asked[0] || !asked[1] {
@@ -180,4 +182,15 @@ func TestCheckNowIsThePassThatNeverWaits(t *testing.T) {
 	if reflect.ValueOf(svcReconcileAddon).Pointer() != reflect.ValueOf(drift.ReconcileAddonNow).Pointer() {
 		t.Error("handleReconcileTarget runs a pass that may wait out a cooldown inside the request")
 	}
+}
+
+// cooledDown is a fresh read refused inside the add-on's cooldown with
+// nothing kept: no copy, with its countdown.
+func cooledDown(retryAfter int) addons.ReadState {
+	return addons.ReadOf(nil, addons.Why{Reason: addons.ReasonCooldown, RetryAfter: retryAfter})
+}
+
+// readNow is a read answered now.
+func readNow() addons.ReadState {
+	return addons.ReadOf(&addons.Observation{TakenAt: time.Now().UTC(), Current: true}, addons.Why{})
 }

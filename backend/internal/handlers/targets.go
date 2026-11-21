@@ -180,9 +180,15 @@ func handleListTargets(w http.ResponseWriter, r *http.Request) {
 // known answer is the field most likely to be wrong exactly when it is read.
 // handleTargetReach is what each of a target's groups opens, for the mappings
 // page: one line per place under each mapping, and the read's age said once.
-// Always 200: "not read from TrueNAS yet" is an answer the page renders.
+// No copy is 503 TARGET_NOT_READ (design §13.3), never an empty map.
 func handleTargetReach(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, http.StatusOK, addonsReadReach(r.Context(), r.PathValue("target"), wantsFresh(r)))
+	target := r.PathValue("target")
+	reach := addonsReadReach(r.Context(), target, wantsFresh(r))
+	if reach.Read.None() {
+		writeUnread(w, r, target, reach.Read.Why())
+		return
+	}
+	jsonResponse(w, http.StatusOK, reach)
 }
 
 // wantsFresh is a person pressing "Read again" (feature freshness): the same
@@ -210,10 +216,11 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 	// differ and the page can tell which is which.
 	live := wantsFresh(r)
 	health := addonsLastHealth(target)
+	state := addonsHealthOf(target)
+	takenAt := state.CheckedAt
 	if live {
-		health = addonsHealth(r.Context(), target)
+		health, takenAt = addonsHealth(r.Context(), target), time.Now().UTC()
 	}
-
 	// The anchor's finding, if it is carrying one, travels with the health of
 	// the target it is about — and it travels whether or not the add-on is
 	// answering right now. It was previously written to a table with no reader
@@ -229,16 +236,16 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if health.Outcome != addons.OutcomeSucceeded {
-		// 200 with `reachable: false`, not an error status. The add-on being
-		// unreachable is the answer to the question, and an error would make a
-		// health surface unable to render the one state it exists to show.
-		body := map[string]any{
-			"target":    target,
-			"reachable": false,
-			"detail":    errText(health.Err),
-			"health":    addonsHealthOf(target),
-			"status":    liveStatus(target),
+		// The add-on's account of itself was not read: `read` none, with the
+		// monitor's why, and none of its fields. The monitor's state and the
+		// anchor's finding are Syndra's own records and stand outside `read`
+		// (design §13.3): a truncated log is reported whether or not the
+		// add-on answers. Before the first probe there is no why yet.
+		why := health.Why
+		if why.Reason == "" {
+			why = addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: state.Cause}
 		}
+		body := map[string]any{"target": target, "read": addons.ReadOf(nil, why), "health": state, "status": string(state.State)}
 		if live {
 			body["live"] = true
 		}
@@ -251,8 +258,8 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 
 	// Merged rather than nested under a second request, because the operator's
 	// question is one question: is this target all right.
-	merged := targetHealthWithAnchor{TargetHealth: health,
-		Health: addonsHealthOf(target), Status: liveStatus(target), Live: live}
+	merged := targetHealthWithAnchor{TargetHealth: health, Read: addons.ReadOf(&addons.Observation{TakenAt: takenAt, Current: true}, addons.Why{}),
+		Health: state, Status: string(state.State), Live: live}
 	if anchored {
 		merged.LogAnchor = &anchor
 	}
@@ -264,7 +271,10 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 // source of truth about whether its own record has been edited.
 type targetHealthWithAnchor struct {
 	addons.TargetHealth
-	LogAnchor *db.LogAnchor `json:"log_anchor,omitempty"`
+	// Read is the answer's `read` (design §13.3): the monitor's last probe,
+	// dated when it ran, or a "Check now" read, dated now.
+	Read      addons.ReadState `json:"read"`
+	LogAnchor *db.LogAnchor    `json:"log_anchor,omitempty"`
 	// Health is the confirmed answer beside this live one: one failed read is
 	// not an outage, three in a row are, and this says which (addons.HealthOf).
 	Health addons.HealthState `json:"health"`
@@ -308,10 +318,6 @@ func describeTarget(ctx context.Context, reg addons.Registration, transport addo
 // ranks nothing of its own. A credential that does not load is the monitor's
 // no_key, and an open breaker is the cause that opened it.
 func targetStatus(s targetSummary) string { return string(s.Health.State) }
-
-// liveStatus is targetStatus for one target, read now, for the system page:
-// the roster is cached for minutes and a status must not be.
-func liveStatus(target string) string { return string(addonsHealthOf(target).State) }
 
 func errText(err error) string {
 	if err == nil {
@@ -409,10 +415,16 @@ func handleReconcileTarget(w http.ResponseWriter, r *http.Request) {
 	// Who asked for a check, and what it came to: Check now, and Check again on
 	// a binding conflict, which is this same pass (addon-contract 7t-7).
 	_ = dbInsertAuditLogDetails(r.Context(), resolveActor(r, ""), "", "target.checked", target, map[string]any{
-		"failed": err != nil, "halted": res.Halted, "reason": res.Reason, "retry_after": res.RetryAfter,
+		"failed": err != nil, "halted": res.Halted, "reason": res.Reason, "retry_after": res.Read.RetryAfter,
 	})
 	if err != nil {
 		writeUpstream(w, err, "RECONCILE_FAILED")
+		return
+	}
+	if res.Read.None() {
+		// Nothing read, nothing concluded: the pass is recorded (halt), and
+		// the person is answered as every read with no copy is (design §13.3).
+		writeUnread(w, r, target, res.Read.Why())
 		return
 	}
 	jsonResponse(w, http.StatusOK, res)
@@ -438,26 +450,21 @@ func handleReconcileTarget(w http.ResponseWriter, r *http.Request) {
 // the target. That one is cheap and polled by every target page; this costs
 // four calls to the NAS and is read once when somebody opens it.
 //
-// Answers 200 with `readable: false` when the read fails, for the same reason
-// the activity surface does: "the target could not be asked" is an answer, and
-// it must never render as "the target reported nothing wrong". A pool that
-// could not be read and a healthy pool are opposite facts.
+// A read that fails is 503 TARGET_NOT_READ (design §13.3): "the target could
+// not be asked" must never render as "the target reported nothing wrong". A
+// pool that could not be read and a healthy pool are opposite facts.
 func handleTargetSystemHealth(w http.ResponseWriter, r *http.Request) {
 	target := r.PathValue("target")
 
 	report := addonsSystemHealth(r.Context(), target, resolveActor(r, ""))
-	if report.Outcome != addons.OutcomeSucceeded {
-		jsonResponse(w, http.StatusOK, map[string]any{
-			"target":   target,
-			"readable": false,
-			"detail":   errText(report.Err),
-		})
+	if report.Read.None() {
+		writeUnread(w, r, target, report.Read.Why())
 		return
 	}
 
 	jsonResponse(w, http.StatusOK, map[string]any{
 		"target":   target,
-		"readable": true,
+		"read":     report.Read,
 		"system":   report.System,
 		"alerts":   report.Alerts,
 		"pools":    report.Pools,
@@ -489,61 +496,26 @@ func handleTargetActivity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	report := addonsActivity(r.Context(), target, subject, resolveActor(r, ""), since, wantsFresh(r))
-	if report.RetryAfter > 0 {
-		// Read again inside the add-on's cooldown, nothing kept to show: not
-		// an outage, a countdown.
-		jsonResponse(w, http.StatusOK, map[string]any{
-			"target": target, "subject": subject, "readable": false,
-			"reason": "cooldown", "retry_after": report.RetryAfter, "detail": "",
-		})
-		return
-	}
-	if report.Outcome != addons.OutcomeSucceeded {
-		// 200 with `readable: false`, for the same reason the health surface
-		// answers 200 when the add-on is down: "the log could not be read" is
-		// the answer to the question, and it must not render as "no activity".
-		// Those two are the whole point of this surface.
-		//
+	if report.Outcome == addons.OutcomeRejected && report.Status == http.StatusUnprocessableEntity {
 		// A 422 on activity.get is the add-on saying the subject has no bound
-		// account on this target — a positive fact, not a failure, and it must
-		// not surface as "addon returned 422". Everything else is a genuine
-		// unreachable/failed read: the raw error goes to the log, and the
-		// client gets a plain-language sentence with no status numbers in it.
-		if report.Outcome == addons.OutcomeRejected && report.Status == http.StatusUnprocessableEntity {
-			jsonResponse(w, http.StatusOK, map[string]any{
-				"target":   target,
-				"subject":  subject,
-				"readable": false,
-				"reason":   "no_account",
-				"detail":   "",
-			})
-			return
-		}
-		log.Printf("[TARGETS] could not read %s's activity for %s: %v", target, subject, report.Err)
-		jsonResponse(w, http.StatusOK, map[string]any{
-			"target":   target,
-			"subject":  subject,
-			"readable": false,
-			"reason":   "unreachable",
-			"detail":   "the activity log could not be read",
-		})
+		// account on this target: a positive fact, answered, and not a read
+		// of anybody's log.
+		jsonResponse(w, http.StatusOK, map[string]any{"target": target, "subject": subject, "no_account": true})
 		return
 	}
-
+	if report.Read.None() {
+		// "The log could not be read" must not render as "no activity":
+		// those two are the whole point of this surface.
+		writeUnread(w, r, target, report.Read.Why())
+		return
+	}
 	body := map[string]any{
 		"target":    target,
 		"subject":   subject,
-		"readable":  true,
+		"read":      report.Read,
 		"events":    report.Events,
 		"uncovered": report.Uncovered,
 		"truncated": report.Truncated,
-	}
-	// When the log was read.
-	if report.Observation != nil {
-		body["taken_at"], body["current"] = report.TakenAt, report.Current
-		if report.Stale != nil {
-			body["stale"] = report.Stale
-		}
 	}
 	jsonResponse(w, http.StatusOK, body)
 }

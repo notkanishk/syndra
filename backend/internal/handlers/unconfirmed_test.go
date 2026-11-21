@@ -44,8 +44,8 @@ func TestASettingChangeIsSettledFromTheTargetsOwnRecordOfIt(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			read, resolve := addonsReadSettings, dbResolveAddonOperation
 			t.Cleanup(func() { addonsReadSettings, dbResolveAddonOperation = read, resolve })
-			addonsReadSettings = func(context.Context, string) ([]addons.TargetSetting, bool) {
-				return []addons.TargetSetting{c.setting}, true
+			addonsReadSettings = func(context.Context, string) ([]addons.TargetSetting, addons.ReadState) {
+				return []addons.TargetSetting{c.setting}, readNow()
 			}
 			got := map[string]bool{}
 			dbResolveAddonOperation = func(_ context.Context, _, id string, happened bool, by string, _ time.Duration) (db.AddonOperation, error) {
@@ -79,7 +79,9 @@ func TestASettingChangeIsSettledFromTheTargetsOwnRecordOfIt(t *testing.T) {
 func TestAnUnreadableTargetSettlesNothing(t *testing.T) {
 	read, resolve := addonsReadSettings, dbResolveAddonOperation
 	t.Cleanup(func() { addonsReadSettings, dbResolveAddonOperation = read, resolve })
-	addonsReadSettings = func(context.Context, string) ([]addons.TargetSetting, bool) { return nil, false }
+	addonsReadSettings = func(context.Context, string) ([]addons.TargetSetting, addons.ReadState) {
+		return nil, addons.ReadOf(nil, addons.Why{Reason: addons.ReasonAddonUnreachable})
+	}
 	dbResolveAddonOperation = func(context.Context, string, string, bool, string, time.Duration) (db.AddonOperation, error) {
 		t.Error("nothing may be settled from a read that did not happen")
 		return db.AddonOperation{}, nil

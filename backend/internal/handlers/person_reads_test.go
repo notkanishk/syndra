@@ -47,7 +47,7 @@ func TestAnAdminsReadOfHoldingsWritesNoOperationsRow(t *testing.T) {
 		t.Fatalf("storage %+v, reads %+v", view.Storage, view.Reads)
 	}
 	r := view.Reads[0]
-	if r.Operation != "holdings.list" || r.Shape != "records" || !r.Readable || len(r.AlsoSays) != 1 {
+	if r.Operation != "holdings.list" || r.Shape != "records" || r.Read.None() || len(r.AlsoSays) != 1 {
 		t.Fatalf("the holdings read did not land on the person page: %+v", r)
 	}
 	if rec, ok := r.Result.(map[string]any); !ok || len(rec["records"].([]any)) != 2 {

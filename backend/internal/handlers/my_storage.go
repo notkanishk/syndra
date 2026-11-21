@@ -103,6 +103,12 @@ type myTargetView struct {
 	// password authentication disabled until the member sets one, so it exists,
 	// is correct, and refuses them.
 	Storage *addons.StorageStatus `json:"storage,omitempty"`
+	// Read is this system's `read` (design §13.3): its account's reads, now,
+	// the add-on's kept copy, or none, when there is an account to read.
+	// Storage and the reads' results are present exactly when it is not
+	// none; Syndra's own records (the account, the credential, usage) stand
+	// outside it.
+	Read *addons.ReadState `json:"read,omitempty"`
 	// Reads is every member read the target answered
 	// (storage.status, holdings.list), for the generic renderers: its shape,
 	// its result and what the add-on also says. A kind module may render the
@@ -314,6 +320,16 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 	}
 	view.Since = state.Since
 	if !addonsCallable(target) {
+		// No manifest: nothing can be asked, so the account's read is none,
+		// with the monitor's why (design §13.3), never a silent absence.
+		if view.Account != nil {
+			why, _ := state.Down()
+			if why.Reason == "" {
+				why = addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: state.Cause}
+			}
+			read := addons.ReadOf(nil, why)
+			view.Read = &read
+		}
 		return view, set, nil
 	}
 	// The last lifecycle the add-on reported stands: only an operator changes it.
@@ -342,7 +358,13 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 			// fresh only when the person pressed "Read again" (wantsFresh);
 			// a page load and the waiting poll accept the add-on's copy.
 			reply := addonsRead(r.Context(), target, op, subject, resolveActor(r, ""), nil, wantsFresh(r))
-			view.Reads = append(view.Reads, reply.View())
+			read := reply.View()
+			view.Reads = append(view.Reads, read)
+			// The system's `read` is storage.status's where it is offered,
+			// else the first read's (design §13.3: one per system).
+			if op == storageStatusRead || view.Read == nil {
+				view.Read = &read.Read
+			}
 			if op != storageStatusRead {
 				continue
 			}
@@ -354,7 +376,6 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 				attributePlaces(r.Context(), target, set, status.Places, wantsFresh(r))
 				view.HomeKept = homeKept(set, status.Places)
 				view.Storage = &status
-				rememberStorage(target, subject, status)
 				if status.NeedsNewPassword {
 					view.RestoredAt = restoredAt(r.Context(), subject, target)
 				}
@@ -374,7 +395,7 @@ func attributePlaces(ctx context.Context, target string, set services.Entitlemen
 		return
 	}
 	reach := addonsReadReach(ctx, target, fresh)
-	if !reach.Read {
+	if reach.Read.None() {
 		return
 	}
 	for i := range places {

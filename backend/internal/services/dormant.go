@@ -71,12 +71,13 @@ type DormantAccount struct {
 // carries.
 type DormantReport struct {
 	Target string `json:"target"`
-	// StateReadAt and Truncated for the same reason as everywhere else: an
-	// absence read out of a capped list is not an absence, and this surface's
-	// whole action is removing things on the strength of one.
-	StateReadAt time.Time        `json:"state_read_at,omitzero"`
-	Truncated   bool             `json:"truncated"`
-	Accounts    []DormantAccount `json:"accounts"`
+	// Read and Truncated for the same reason as everywhere else: an absence
+	// read out of a capped list is not an absence, and this surface's whole
+	// action is removing things on the strength of one. Always now: a copy is
+	// never listed (owner Q1).
+	Read      addons.ReadState `json:"read"`
+	Truncated bool             `json:"truncated"`
+	Accounts  []DormantAccount `json:"accounts"`
 }
 
 // ReadCooledDown is a fresh read the target's add-on would not make yet,
@@ -110,11 +111,15 @@ func DormantAccounts(ctx context.Context, target string) (DormantReport, error) 
 	if !read.Usable() {
 		// Refused rather than answered with an empty list. Every row here is a
 		// candidate for removal, and concluding "this account has no reason to
-		// exist" from a read that did not happen — or that stopped at a cap — is
-		// the one conclusion this data cannot support.
-		return DormantReport{}, fmt.Errorf("dormant accounts for %s: %w", target, ErrTargetUnplannable)
+		// exist" from a read that did not happen, from a copy, or from one that
+		// stopped at a cap is the one conclusion this data cannot support.
+		why := read.Read().Why()
+		if why.Reason == "" {
+			why = addons.Why{Reason: addons.ReasonReadRefused} // current, and cut at the cap
+		}
+		return DormantReport{}, fmt.Errorf("dormant accounts for %s: %w: %w", target, ErrTargetUnplannable, addons.NotRead{Why: why})
 	}
-	report.StateReadAt, report.Truncated = read.TakenAt, read.Truncated
+	report.Read, report.Truncated = read.Read(), read.Truncated
 
 	// Whose each account is, by the add-on's attribution (design 7t D3): never
 	// the name Syndra's copy recorded, which a rename moves and a stranger can

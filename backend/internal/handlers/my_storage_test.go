@@ -75,6 +75,11 @@ func storageReply(st addons.StorageStatus) addons.ReadReply {
 	var doc map[string]any
 	_ = json.Unmarshal(result, &doc)
 	doc["meters"] = []any{}
+	// The observation travels on the wire; Syndra serves it only as `read`.
+	doc["taken_at"], doc["current"] = st.Observation.TakenAt.Format(time.RFC3339), st.Observation.Current
+	if st.Observation.Stale != nil {
+		doc["stale"] = st.Observation.Stale
+	}
 	body, _ := json.Marshal(map[string]any{"operation": "storage.status", "outcome": "succeeded", "result": doc})
 	return addons.ReadReply{Operation: "storage.status", Schema: "profiles/storage/status.json", Outcome: addons.OutcomeSucceeded, Status: http.StatusOK, Body: body}
 }
@@ -511,7 +516,7 @@ func TestPlacesNameTheRolesThatOpenThem(t *testing.T) {
 		}}
 	})
 	addonsReadReach = func(context.Context, string, bool) addons.Reach {
-		return addons.Reach{Read: true, Groups: map[string][]addons.Place{
+		return addons.Reach{Read: readNow(), Groups: map[string][]addons.Place{
 			"community": {{Path: "/mnt/p/main/waddle_share"}},
 			"staff":     {{Path: "/mnt/p/main/waddle_share"}, {Path: "/mnt/p/main/quack_share"}},
 		}}

@@ -67,7 +67,7 @@ func TestAnAddOnOlderThanAttributionIsOutdatedForSubjectsAndHomes(t *testing.T) 
 			if !tc.conflicts {
 				wantReason = db.UnreconciledAddonOutdated
 			}
-			if h.Reason != wantReason || h.Read != tc.conflicts {
+			if h.Read.Reason != wantReason || h.Read.None() == tc.conflicts {
 				t.Fatalf("homes: %+v, want reason %q", h, wantReason)
 			}
 			// Remembered: the next /homes asks /subjects nothing.
@@ -91,7 +91,7 @@ func TestHomesNeverReadAsNobodysWhenWhoseIsUnknown(t *testing.T) {
 		[]byte(`{"type":"urn:syndra:addon:error:NO_CURRENT_READ","title":"No current read","status":503,"code":"NO_CURRENT_READ","retry":"backoff","detail":"TrueNAS could not be read."}`))
 	for range 5 {
 		h := ReadHomes(context.Background(), "truenas", false)
-		if h.Read || h.Reason != db.UnreconciledAppUnreachable || len(h.Homes) != 0 {
+		if !h.Read.None() || h.Read.Reason != db.UnreconciledAppUnreachable || len(h.Homes) != 0 {
 			t.Fatalf("whose unknown: want not read, app_unreachable (NO_CURRENT_READ), got %+v", h)
 		}
 	}

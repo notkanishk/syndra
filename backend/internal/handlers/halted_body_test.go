@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,68 +24,53 @@ func keysOf(t *testing.T, body []byte) map[string]json.RawMessage {
 	return m
 }
 
-// A pass that halted, as the API sends it: the inventory is a 503 and the
-// check a 200, and neither body carries a count, a list or a date it never
-// read (holding is observed). The card read "0 people with an account missing"
-// and "1 Jan 1" off exactly these bodies.
+// A pass with no copy, as the API sends it: the inventory and the check are
+// both 503 TARGET_NOT_READ with no data member (design §13.3). The card read
+// "0 people with an account missing" and "1 Jan 1" off the old halted bodies.
 func TestAHaltedPassSendsNoCountListOrDate(t *testing.T) {
 	origInv, origGet, origRec := svcTargetInventory, addonsGet, svcReconcileAddon
 	t.Cleanup(func() { svcTargetInventory, addonsGet, svcReconcileAddon = origInv, origGet, origRec })
-	// What Inventory and halt() return: the target, the flag and the reason, nothing counted.
-	halted := drift.AddonReconcileResult{Target: "truenas", Halted: true, Reason: db.UnreconciledUnreachable}
-	svcTargetInventory = func(context.Context, string, bool) (drift.AddonReconcileResult, error) { return halted, nil }
+	why := addons.Why{Reason: addons.ReasonAddonUnreachable, Cause: addons.CauseNoAnswer}
+	svcTargetInventory = func(context.Context, string, bool) (drift.AddonReconcileResult, error) {
+		return drift.AddonReconcileResult{}, addons.NotRead{Why: why}
+	}
 	addonsGet = func(string) (*addons.Addon, error) { return &addons.Addon{}, nil }
-	svcReconcileAddon = func(context.Context, string) (drift.AddonReconcileResult, error) { return halted, nil }
+	svcReconcileAddon = func(context.Context, string) (drift.AddonReconcileResult, error) {
+		return drift.AddonReconcileResult{Target: "truenas", Halted: true, Reason: db.UnreconciledAddonUnreachable,
+			Read: addons.ReadOf(nil, why)}, nil
+	}
 
 	for _, c := range []struct {
 		method, path string
 		handle       http.HandlerFunc
-		status       int
 	}{
-		{http.MethodGet, "/api/v1/targets/truenas/inventory", handleTargetInventory, http.StatusServiceUnavailable},
-		{http.MethodPost, "/api/v1/targets/truenas/reconcile", handleReconcileTarget, http.StatusOK},
+		{http.MethodGet, "/api/v1/targets/truenas/inventory", handleTargetInventory},
+		{http.MethodPost, "/api/v1/targets/truenas/reconcile", handleReconcileTarget},
 	} {
 		r := httptest.NewRequest(c.method, c.path, nil)
 		r.SetPathValue("target", "truenas")
 		rr := httptest.NewRecorder()
 		c.handle(rr, r)
-		if rr.Code != c.status {
-			t.Fatalf("%s: status %d, want %d: %s", c.path, rr.Code, c.status, rr.Body)
+		if rr.Code != http.StatusServiceUnavailable || rr.Header().Get("Retry-After") == "" {
+			t.Fatalf("%s: status %d, want 503 with Retry-After: %s", c.path, rr.Code, rr.Body)
 		}
 		m := keysOf(t, rr.Body.Bytes())
-		if string(m["halted"]) != "true" || string(m["reason"]) != `"`+db.UnreconciledUnreachable+`"` {
-			t.Errorf("%s: the body must say it halted and why: %s", c.path, rr.Body)
+		if string(m["error"]) != `"`+codeTargetNotRead+`"` || string(m["details"]) != `{"cause":"no_answer","reason":"addon_unreachable"}` {
+			t.Errorf("%s: the body must say not read, and why: %s", c.path, rr.Body)
 		}
-		for _, k := range []string{"bound", "accounts", "unmanaged", "stale", "read_at"} {
-			if v, ok := m[k]; ok {
-				t.Errorf("%s: a halted body carries %s=%s; nothing was read", c.path, k, v)
+		for k := range m {
+			if k != "error" && k != "message" && k != "details" && k != "retry_after" {
+				t.Errorf("%s: no copy carries %s; nothing was read", c.path, k)
 			}
 		}
 	}
 }
 
-// A read time nobody took is absent, never Go's zero time: the page would date
-// it "1 Jan 1". The last storage read and a mapping's values, as sent.
-func TestAZeroReadTimeIsNeverSent(t *testing.T) {
-	for name, v := range map[string]any{
-		"last storage":   lastKnownStorage{},
-		"mapping values": mappableValuesAnswer{},
-	} {
-		raw, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got, ok := keysOf(t, raw)["read_at"]; ok {
-			t.Errorf("%s: read_at=%s for a read never taken", name, got)
-		}
-	}
-}
-
-// The other side of the halted body: a whole read that found nothing sends
-// its zeros, because they were counted. Absent means unread, never empty.
+// The other side of no copy: a whole read that found nothing sends its zeros,
+// because they were counted. Absent means unread, never empty.
 func TestAWholeEmptyReadSendsItsZeros(t *testing.T) {
 	read := drift.AddonReconcileResult{Target: "truenas", Bound: new(0), Unmanaged: []drift.UnmanagedAccount{},
-		Stale: []drift.StaleBinding{}, ReadAt: time.Now(), Current: true}
+		Stale: []drift.StaleBinding{}, Read: addons.ReadOf(&addons.Observation{TakenAt: time.Now(), Current: true}, addons.Why{})}
 	raw, err := json.Marshal(read)
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +81,7 @@ func TestAWholeEmptyReadSendsItsZeros(t *testing.T) {
 			t.Errorf("%s=%s, want %s: a count taken is sent, 0 included", k, m[k], want)
 		}
 	}
-	if _, ok := m["read_at"]; !ok {
+	if !json.Valid(m["read"]) || !strings.Contains(string(m["read"]), `"taken_at"`) {
 		t.Error("a whole read is dated")
 	}
 }

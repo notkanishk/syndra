@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,7 +56,7 @@ func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
 			Direction: db.AllowanceSet, ExpiresAt: &ended}}, nil
 	}
 	addonsReadHomes = func(context.Context, string, bool) addons.Homes {
-		return addons.Homes{Read: true, UsageRead: true, Homes: []addons.HomeUsage{
+		return addons.Homes{Read: readNow(), UsageRead: true, Homes: []addons.HomeUsage{
 			{Username: "charlotte", Subject: "u-charlotte", Home: "/mnt/p/main/home_dir/charlotte", UsedBytes: 18 * gb},
 			// booker's account was renamed on the NAS; a stranger took the
 			// name Syndra's copy recorded. The home is matched by subject.
@@ -108,7 +109,7 @@ func TestALockedHomeHasNoUseAndTheOthersKeepTheirs(t *testing.T) {
 	dbAllowancesInForce = func(context.Context, string, string) ([]db.Allowance, error) { return nil, nil }
 	dbAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) { return nil, nil }
 	addonsReadHomes = func(context.Context, string, bool) addons.Homes {
-		return addons.Homes{Read: true, UsageRead: true, Homes: []addons.HomeUsage{
+		return addons.Homes{Read: readNow(), UsageRead: true, Homes: []addons.HomeUsage{
 			{Username: "charlotte", Subject: "u-charlotte", Home: "/mnt/p/main/home_dir/charlotte", UsedBytes: 0, NotCounted: "locked"},
 			{Username: "booker", Subject: "u-booker", Home: "/mnt/p/main/home_dir/booker", UsedBytes: 400},
 		}}
@@ -118,8 +119,7 @@ func TestALockedHomeHasNoUseAndTheOthersKeepTheirs(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handleTargetHomes(rr, r)
 	var body struct {
-		UsageRead bool          `json:"usage_read"`
-		Accounts  []accountHome `json:"accounts"`
+		Accounts []accountHome `json:"accounts"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil || len(body.Accounts) != 2 {
 		t.Fatalf("%d %s", rr.Code, rr.Body.String())
@@ -128,8 +128,8 @@ func TestALockedHomeHasNoUseAndTheOthersKeepTheirs(t *testing.T) {
 	if charlotte.UsedBytes != nil {
 		t.Errorf("a locked home reads %d bytes, want no use", *charlotte.UsedBytes)
 	}
-	if !body.UsageRead || booker.UsedBytes == nil || *booker.UsedBytes != 400 {
-		t.Errorf("the home beside a locked one: usage_read %v, %v", body.UsageRead, booker.UsedBytes)
+	if booker.UsedBytes == nil || *booker.UsedBytes != 400 || strings.Contains(rr.Body.String(), "usage_read") {
+		t.Errorf("the home beside a locked one keeps its use, and no state boolean travels: %v %s", booker.UsedBytes, rr.Body)
 	}
 }
 
@@ -189,22 +189,19 @@ func TestHomesFromAnOutdatedAddOnAreNotShownAsAnybodys(t *testing.T) {
 		return services.EntitlementSet{Roles: truenasRoles}, nil
 	}
 	addonsReadHomes = func(context.Context, string, bool) addons.Homes {
-		return addons.Homes{Reason: db.UnreconciledAddonOutdated}
+		return addons.Homes{Read: addons.ReadOf(nil, addons.Why{Reason: addons.ReasonAddonOutdated})}
 	}
 
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/homes", nil)
 	r.SetPathValue("target", "truenas")
 	rr := httptest.NewRecorder()
 	handleTargetHomes(rr, r)
-	var body struct {
-		Read     bool          `json:"read"`
-		Reason   string        `json:"reason"`
-		Accounts []accountHome `json:"accounts"`
-	}
+	var body ErrorResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Read || body.Reason != db.UnreconciledAddonOutdated || len(body.Accounts) != 1 || body.Accounts[0].Home != "" {
-		t.Fatalf("want not read, addon_outdated, no home shown: %s", rr.Body.String())
+	if rr.Code != http.StatusServiceUnavailable || body.Error != codeTargetNotRead || body.Details["reason"] != addons.ReasonAddonOutdated ||
+		strings.Contains(rr.Body.String(), "accounts") {
+		t.Fatalf("want no copy, addon_outdated, no home shown: %d %s", rr.Code, rr.Body.String())
 	}
 }

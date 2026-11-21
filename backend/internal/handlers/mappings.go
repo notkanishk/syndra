@@ -312,8 +312,13 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 		return "", "", addons.Resolution{}, fmt.Errorf("%w: %s is not a registered add-on target", db.ErrMappingInvalid, target)
 	case err != nil:
 		// Registered and never answered. Structure could still be checked
-		// against a manifest we do not have, which is to say it could not.
-		return "", "", addons.Resolution{}, fmt.Errorf("%w: %s has not published a capability manifest yet, so its entitlement schema is unknown", errMappingTargetSilent, target)
+		// against a manifest we do not have, which is to say it could not:
+		// refused, as a value that could not be checked is (resolveValue).
+		why, _ := addonsHealthOf(target).Down()
+		if why.Reason == "" {
+			why = addons.Why{Reason: addons.ReasonAddonUnreachable}
+		}
+		return "", "", addons.Resolution{}, valueUnchecked(ctx, target, addons.NotRead{Why: why})
 	}
 
 	// By role (design §3): `account` and `channel` are computed, never bound;
@@ -340,15 +345,30 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 // A membership it cannot list comes back as the operator-worded notListable.
 func resolveValue(ctx context.Context, target, field, value string, schema []addons.EntitlementField) (addons.Resolution, error) {
 	resolution, err := addonsResolvesValue(ctx, target, field, value)
-	if errors.Is(err, addons.ErrFieldNotListable) {
+	var nr addons.NotRead
+	switch {
+	case errors.Is(err, addons.ErrFieldNotListable):
 		return resolution, newNotListable(ctx, target, field, schema)
+	case errors.As(err, &nr):
+		return resolution, valueUnchecked(ctx, target, nr)
 	}
 	return resolution, err
 }
 
-// errMappingTargetSilent separates "the add-on is wrong" from "the add-on has
-// not spoken". An operator whose mapping is refused needs to know which.
-var errMappingTargetSilent = errors.New("the target has not published its capabilities")
+// notChecked is a mapping or allowance refused because its value could not be
+// checked on the system (design §13.3, owner Q2: fail closed): never saved
+// unchecked. One path, for a manifest never read and a /values not answered.
+type notChecked struct {
+	addons.NotRead
+	sentence string
+}
+
+func (e notChecked) Unwrap() error { return e.NotRead }
+
+func valueUnchecked(ctx context.Context, target string, nr addons.NotRead) error {
+	system, _ := systemName(ctx, target)
+	return notChecked{NotRead: nr, sentence: "Not saved. Syndra couldn't check this value on " + system + ". Try again when it answers."}
+}
 
 // notListable is the refusal of a mapping on a membership the add-on cannot
 // list, worded for the operator: the system's name and the field's label, never
@@ -379,7 +399,13 @@ func newNotListable(ctx context.Context, target, field string, schema []addons.E
 // reports whether it did. Shared by mappings and allowances, so a value the
 // add-on will not vouch for is refused in one shape wherever it is named.
 func writeValueRefusal(w http.ResponseWriter, err error) bool {
+	var unchecked notChecked
 	switch {
+	case errors.As(err, &unchecked):
+		// 503, not 400: the request may be perfectly correct and the value
+		// could not be checked. Trying again once the system answers is the
+		// step (design §13.3).
+		writeNotRead(w, unchecked.sentence, unchecked.Why)
 	case errors.Is(err, addons.ErrFieldNotListable):
 		// Before the family sentinel it wraps. A distinct detail key, because the
 		// dialog's step for "unresolvable" (read again, pick another) is false here.
@@ -416,10 +442,6 @@ func writeMappingError(w http.ResponseWriter, err error) {
 		jsonErrorResponse(w, http.StatusNotFound, "MAPPING_NOT_FOUND", err.Error())
 	case errors.Is(err, db.ErrMappingInvalid):
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"mapping": "invalid"})
-	case errors.Is(err, errMappingTargetSilent):
-		// 503, not 400: the request may be perfectly correct and the backend
-		// cannot tell yet. Retrying once the add-on answers is the right move.
-		writeUpstreamStatus(w, http.StatusServiceUnavailable, err, "TARGET_CAPABILITIES_UNKNOWN")
 	case writeValueRefusal(w, err):
 		// The value half is shared with the allowance surface: one answer shape.
 	default:
