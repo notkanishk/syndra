@@ -37,6 +37,11 @@ interface ModalProps {
    * already rises from the bottom edge.
    */
   pinned?: boolean;
+  /**
+   * Go to's pane (A-26 §0): one glass surface floating at the top at every width (a phone's too: never a
+   * sheet), with the lamp's light on the window behind it, and the edge under your hand on its rim.
+   */
+  glass?: boolean;
   /** The dialog's name when it has no visible title (Go to); otherwise its ModalHeader names it. */
   label?: string;
   children: React.ReactNode;
@@ -180,14 +185,17 @@ export function useDialogFocusTrap(
       // An Escape something inside already used (a search clearing its words, A-24 §11.5) is spent.
       // Checked here rather than trusted to stopPropagation: the app's React root is the document
       // itself, so a stop there does not keep this listener on the same node from running.
-      if (event.key === "Escape" && !event.defaultPrevented && !busyRef.current) {
+      // An Escape that ends a composition (an input method choosing its characters) is the method's, not the
+      // dialog's. Safari sends that Escape with `isComposing` false and keyCode 229.
+      if (event.key === "Escape" && !event.defaultPrevented && !event.isComposing && event.keyCode !== 229 && !busyRef.current) {
         event.preventDefault();
         // The dialog's Esc is the dialog's: a page behind it must not also act on it.
         event.stopPropagation();
         closeRef.current();
         return;
       }
-      if (event.key !== "Tab") return;
+      // A Tab a field inside already used (Go to taking its offered scope, A-26) is spent, as an Escape is.
+      if (event.key !== "Tab" || event.defaultPrevented) return;
       if (!panelRef.current) return;
       const list = focusableIn(panelRef.current);
       if (list.length === 0) return;
@@ -330,6 +338,7 @@ export function Modal({
   size = "md",
   still = false,
   pinned = false,
+  glass = false,
   label,
   children,
 }: ModalProps) {
@@ -368,7 +377,13 @@ export function Modal({
       aria-label={label}
       aria-labelledby={label ? undefined : (labelledBy ?? titleId)}
       aria-describedby={describedBy}
-      className={`${still ? "" : "settle-scrim"} fixed inset-0 z-(--layer-dialog) flex items-end justify-center bg-scrim tablet:px-4 ${place.scrim}`}
+      // Go to's pane wears the edge under your hand (A-25 moment 2) like any card: its dialog opts in.
+      data-hand={glass ? "" : undefined}
+      className={
+        glass
+          ? "go-to-scrim fixed inset-0 z-(--layer-dialog) flex items-start justify-center bg-scrim px-2 tablet:px-4"
+          : `${still ? "" : "settle-scrim"} fixed inset-0 z-(--layer-dialog) flex items-end justify-center bg-scrim tablet:px-4 ${place.scrim}`
+      }
       onClick={(event) => {
         if (event.target === event.currentTarget && !busy) onClose();
       }}
@@ -389,9 +404,13 @@ export function Modal({
           `overscroll-contain`: scrolling past the sheet's end never drags the page behind it (A-24 §11.6). */}
       <div
         ref={panelRef}
-        className={`flex w-full ${SIZE_CLASS[size]} ${place.panel} ${still ? "" : "sheet-in"} flex-col overflow-y-auto overscroll-contain [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
+        className={
+          glass
+            ? "go-to-pane rim [overflow-wrap:anywhere]"
+            : `flex w-full ${SIZE_CLASS[size]} ${place.panel} ${still ? "" : "sheet-in"} flex-col overflow-y-auto overscroll-contain [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`
+        }
       >
-        <SheetGrabber busy={busy} onClose={onClose} drag={grabber} />
+        {!glass && <SheetGrabber busy={busy} onClose={onClose} drag={grabber} />}
         <NameLinksContext.Provider value={false}>{children}</NameLinksContext.Provider>
       </div>
     </div>

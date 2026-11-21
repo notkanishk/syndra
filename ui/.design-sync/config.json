@@ -73,7 +73,6 @@
     "FormPart": "src/components/ui/FormPart.tsx",
     "GlideIndicator": "src/lib/motion/glide-indicator.tsx",
     "GoTo": "src/components/ui/GoTo.tsx",
-    "GoToPanel": "src/components/ui/GoTo.tsx",
     "Kbd": "src/components/ui/Kbd.tsx",
     "KeysSheet": "src/components/ui/KeysSheet.tsx",
     "Input": "src/components/ui/Input.tsx",
@@ -159,11 +158,9 @@
     "PushedStep": "/** The return of `useCancelStep({ host, goAhead, tone?, standalone? })`; `step.run(write)` or `step.confirm(changes, write)` pushes the step when the write is refused with WouldCancelQueued. */\n  step: { /** A write not on the planner: on its 409, the step, then write(the ids shown). */ run: <T>(write: (cancelIds?: string[]) => Promise<T>) => Promise<T | symbol>; /** The press of an act the planner planned: the step is pushed at once with the plan's changes. */ confirm: <T>(changes: Array<{ id: string; op_type: string; user_id: string; project_id: string; role_keys: string[]; source: string; initiated_by: string; initiated_by_name?: string; said?: string; queued_at: string; new?: boolean }>, write: () => Promise<T>) => Promise<T | symbol>; /** The step is on screen (or fading back to the form). */ asking: { changes: Array<{ id: string; op_type: string; user_id: string; project_id: string; role_keys: string[]; source: string; initiated_by: string; initiated_by_name?: string; said?: string; queued_at: string; new?: boolean }>; fresh: Set<string>; busy: boolean; closed: boolean; answer: (goAhead: boolean) => void } | null; open: boolean; note: React.ReactNode; after: React.ReactNode; element: React.ReactNode; view: React.ReactNode };\n  children: React.ReactNode;",
     "GlideIndicator": "/** From `useGlideIndicator(choice)`: the active button's box, null until measured. */\n  box: { left: number; top: number; width: number; height: number } | null;\n  kind: \"fill\" | \"underline\";\n  /** The indicator's colour, a token class. */\n  className?: string;",
     "GoTo": "open: boolean;\n  onClose: () => void;\n  /** Which pages may be listed: the current view's nav tree (NavEntry[] in source: a leaf, or a group of leaves). */\n  nav: Array<{ kind: \"leaf\"; label: string; href: string } | { kind: \"group\"; label: string; children: Array<{ kind: \"leaf\"; label: string; href: string }> }>;",
-    "StandingLine": "standing: { usable: boolean; waiting_on: \"member\" | \"operator\" | \"target\" | \"none\"; /** The add-on's own note. */ note?: string; /** The add-on's own next step. */ next?: string };\n  /** The system's name, as the reader knows it. */\n  system: string;\n  audience: \"member\" | \"operator\";\n  /** false: the state and its note only, for a narrow status column. */\n  step?: boolean;",
-    "GoToPanel": "nav: Array<{ kind: \"leaf\"; label: string; href: string } | { kind: \"group\"; label: string; children: Array<{ kind: \"leaf\"; label: string; href: string }> }>;\n  /** Called when a row is opened, so the host can close. */\n  onGo: () => void;\n  /** Inside the phone's Go to sheet: no key hints, rows replace. */\n  embedded?: boolean;\n  /** Embedded only: what the sheet shows while the Input is empty. */\n  idle?: React.ReactNode;"
+    "StandingLine": "standing: { usable: boolean; waiting_on: \"member\" | \"operator\" | \"target\" | \"none\"; /** The add-on's own note. */ note?: string; /** The add-on's own next step. */ next?: string };\n  /** The system's name, as the reader knows it. */\n  system: string;\n  audience: \"member\" | \"operator\";\n  /** false: the state and its note only, for a narrow status column. */\n  step?: boolean;"
   },
   "overrides": {
-    "GoToPanel": {"cardMode": "column"},
     "KeysSheet": {"cardMode": "single", "viewport": "1000x760"},
     "GoTo": {
       "cardMode": "single",

@@ -31,7 +31,7 @@
  *       the tape does not hold fails the replay (exit 4): answered with a 404, the
  *       page would draw an error state and pass for the wrong reason.
  *
- * Read-only: it signs in, reads pages, and never clicks.
+ * Read-only: it signs in, reads pages, and never clicks. On Home it presses `/` to open Go to, a read.
  * System Chrome (`channel: "chrome"`); CHROME_PATH overrides it.
  * Exit codes, as `sweep:touch`: 1 found something, 2 signed out (wrong page) or no
  * server named, 3 could not run; and 4, a replay whose tape lacked a read the pages
@@ -205,6 +205,42 @@ for (const view of list(opt.views)) {
             runs++;
             for (const [kind, lines] of Object.entries(found)) {
               for (const line of lines) findings.push(`${path} ${width} ${view} ${theme} ${kind} ${line}`);
+            }
+          }
+          // Go to, opened as it is opened, by its key, on Home: its light must be spent inside the window
+          // (A-26). Only the `goto` rule is read with it open: the rest are the page's, under a dialog.
+          if (path === "/") {
+            await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+            await page.keyboard.press("/");
+            const opened = await page.waitForSelector('[role="dialog"][aria-label="Go to"]', { timeout: 5000 }).catch(() => null);
+            if (!opened) findings.push(`${path} ${width} ${view} goto Go to did not open with its key`);
+            else {
+              await page.waitForTimeout(1100);
+              const goto = new Set((await page.evaluate(detect, { tablet: 720 })).goto);
+              // Then a scope, entered by its key: the gesture's lights are measured at their largest (each
+              // of its animations held at the frame where it reaches furthest), and again once it is done.
+              await page.keyboard.type("@");
+              await page.evaluate(() => {
+                for (const animation of document.querySelector(".go-to-pane")?.parentElement?.getAnimations({ subtree: true }) ?? []) {
+                  const frames = animation.effect.getKeyframes();
+                  // How far a frame reaches: its scale's area (one value scales both ways), plus a run's own reach in px.
+                  const reach = (frame) => {
+                    const scale = String(frame.scale ?? 1).split(" ").map(Number);
+                    return scale[0] * (scale[1] ?? scale[0]) + (parseFloat(frame["--reach"] ?? "0") || 0);
+                  };
+                  const furthest = frames.reduce((best, frame) => (reach(frame) > reach(best) ? frame : best), frames[0]);
+                  animation.pause();
+                  animation.currentTime = furthest.computedOffset * animation.effect.getComputedTiming().duration;
+                }
+              });
+              for (const line of (await page.evaluate(detect, { tablet: 720 })).goto) goto.add(`at its largest: ${line}`);
+              await page.evaluate(() => {
+                for (const animation of document.querySelector(".go-to-pane")?.parentElement?.getAnimations({ subtree: true }) ?? []) animation.finish();
+              });
+              for (const line of (await page.evaluate(detect, { tablet: 720 })).goto) goto.add(line);
+              for (const line of goto) findings.push(`${path} ${width} ${view} goto ${line}`);
+              await page.keyboard.press("Escape");
+              await page.keyboard.press("Escape");
             }
           }
         } catch (error) {

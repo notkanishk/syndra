@@ -1,4 +1,5 @@
 import type { Lane } from "@/components/insights/model";
+import { matchKey, rankName } from "@/lib/go-to";
 import { compareNames } from "@/lib/sort";
 
 /**
@@ -122,18 +123,9 @@ export interface Entity {
   label: string;
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[\s·.,:;()_/\\-]+/g, " ").trim();
-
-/** 0 is the best match; null is none. Every word typed must start a word of the name. */
-function rank(label: string, phrase: string): number | null {
-  const name = norm(label);
-  const typed = norm(phrase);
-  if (!typed) return null;
-  if (name === typed) return 0;
-  if (name.startsWith(typed)) return 1;
-  const words = name.split(" ");
-  return typed.split(" ").every((p) => words.some((x) => x.startsWith(p))) ? 2 : null;
-}
+// One way to read a name, shared with Go to (lib/go-to.ts): 0 is the best match; null is none.
+const norm = matchKey;
+const rank = rankName;
 
 const STOP = /\b(?:follow|path|compare|who|has|have|what|if|went|go|gone|also|gave|give|gives|from|to|with|without|on|and|the)\b/;
 

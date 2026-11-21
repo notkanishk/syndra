@@ -38,12 +38,8 @@
       "phone": "A bottom sheet, as every Modal."
     },
     "GoTo": {
-      "moves": "Settles in as a Modal. Still: appears at once.",
-      "phone": "Becomes the Go to a page sheet with the Input at its top; the page list stays until something is typed."
-    },
-    "GoToPanel": {
-      "moves": "Nothing on it moves. Still: the same.",
-      "phone": "Sits above the page list inside the sheet."
+      "moves": "Appears at once, whole, pinned at the top. Entering a scope: the lamp takes its colour, the bar presses in 2% and the lamp's light runs once through it. Still: the colour, at once.",
+      "phone": "The same pane, floating at the top under the notch; the nav sheet opens it. No scope buttons: the offer is tapped, or @ # / typed."
     },
     "AccountSheet": {
       "moves": "Settles in as a Modal. Still: appears at once.",
