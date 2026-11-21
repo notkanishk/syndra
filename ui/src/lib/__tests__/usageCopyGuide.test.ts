@@ -24,6 +24,7 @@ const SAID = [
   copy.inDays("{value}"),
   copy.inMonths("{value}"),
   copy.NOTHING_COUNTED,
+  copy.NOT_ALL_COUNTED,
   copy.latestOn("{value}", "{day}"),
   copy.NO_RECENT_VALUE,
   copy.GAPS_HEADING,

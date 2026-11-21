@@ -110,6 +110,16 @@ function LabelRow({ label, said }: { label: string; said: string }) {
   return <Row className="pt-0 pb-0" name={<h3 className="type-label text-label [overflow-wrap:anywhere]">{label}</h3>} figure={<Figure said={said} />} />;
 }
 
+/**
+ * A metric with no series: nothing counted, or no value, only when every day of the window was
+ * counted; a gap in it (a share that could not be counted, say) is never read as nothing (the fold
+ * lists it with its reason). A `began` gap is before the record, not a gap.
+ */
+function emptySaid(metric: StatsMetric, windows: UsageWindows): string {
+  if (metric.gaps.some((g) => g.kind !== "began" && g.end > windows.window_30d_from)) return copy.NOT_ALL_COUNTED;
+  return metric.instrument === "counter" ? copy.NOTHING_COUNTED : copy.NO_RECENT_VALUE;
+}
+
 /** The section's axis: the window's first day, and the readout seat (today at rest, else the day being read). */
 export function Axis({ first, readout, inset = true }: { first: string; readout: string; inset?: boolean }) {
   return (
@@ -150,7 +160,7 @@ export function MetricBlock({ metric, windows, first = false, titled = false, op
 
   let body: ReactNode;
   if (metric.watermark === null) body = <LabelRow label={label} said={copy.NOT_COUNTED} />;
-  else if (rows.length === 0) body = metric.left_out ? null : <LabelRow label={label} said={metric.instrument === "counter" ? copy.NOTHING_COUNTED : copy.NO_RECENT_VALUE} />;
+  else if (rows.length === 0) body = metric.left_out ? null : <LabelRow label={label} said={emptySaid(metric, windows)} />;
   else
     body = (
       <>

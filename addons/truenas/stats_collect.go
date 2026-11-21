@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"log"
-	"path"
 	"slices"
 	"strconv"
 	"time"
@@ -76,7 +75,8 @@ func (s *server) collectStatsOnce() {
 	shares, errShares := s.enabledShares()
 	failed := errors.Join(errAccounts, errShares)
 	s.collectSessions(now, snap, shares, bound, failed)
-	s.collectUsage(now, snap, shares, bound, failed)
+	mounts, errMounts := s.datasetMounts()
+	s.collectUsage(now, snap, shares, mounts, bound, errors.Join(failed, errMounts))
 }
 
 // oldest is the first day the buffer keeps: the day whose end is
@@ -283,8 +283,11 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	}
 }
 
-// collectUsage samples today's levels: per share, and in home folders.
-func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, bound map[int64]string, failed error) {
+// collectUsage samples today's levels: per share, and in home folders. A
+// place's bytes are its datasets' as the live read resolves them (datasetAt
+// on the same mounts), so a folder that is its own dataset counts where
+// storage.status shows it.
+func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, mounts map[string]string, bound map[int64]string, failed error) {
 	c := s.stats
 	today := c.day(now)
 	metas := map[string]statsMeta{}
@@ -321,24 +324,38 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, b
 		}
 	}
 
-	// storage.used_bytes: each share's dataset, by everyone in it.
+	// storage.used_bytes: every dataset a share reaches, nested ones
+	// included, by everyone in them; all of them read, or the share not
+	// sampled.
 	used, usedUnbound := map[string][]StatPoint{}, map[string]bool{}
 	var usedDims []map[string]string
 	for _, sh := range shares {
 		dims := map[string]string{"share": sh.Name}
 		usedDims = append(usedDims, dims)
-		t := table(datasetOf(sh.Path))
-		if t == nil {
+		datasets := datasetsUnder(mounts, sh.Path)
+		byUID := map[int64]int64{}
+		read := len(datasets) > 0
+		for _, dataset := range datasets {
+			t := table(dataset)
+			if t == nil {
+				read = false
+				break
+			}
+			for uid, u := range t {
+				byUID[uid] += u.UsedBytes
+			}
+		}
+		if !read {
 			continue // not read: the share keeps today's last sample
 		}
 		var total int64
-		for uid, u := range t {
-			total += u.UsedBytes
-			if u.UsedBytes == 0 {
+		for uid, v := range byUID {
+			total += v
+			if v == 0 {
 				continue
 			}
 			if subject, ok := bound[uid]; ok {
-				used[sh.Name] = append(used[sh.Name], point(subject, dims, u.UsedBytes))
+				used[sh.Name] = append(used[sh.Name], point(subject, dims, v))
 			} else {
 				unboundOf(uid, usedUnbound)
 			}
@@ -346,8 +363,8 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, b
 		used[sh.Name] = append(used[sh.Name], point("", dims, total))
 	}
 
-	// storage.home_bytes: the datasets holding home folders, read whole, or
-	// not sampled.
+	// storage.home_bytes: the datasets holding home folders (each home's
+	// own, as the live read resolves it), read whole, or not sampled.
 	var home []StatPoint
 	homeUnbound := map[string]bool{}
 	homeRead := true
@@ -357,8 +374,11 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, b
 		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
 			continue
 		}
-		dataset := datasetOf(path.Dir(sub.Home))
-		t := table(dataset)
+		dataset := datasetAt(mounts, sub.Home)
+		var t map[int64]PlaceUsage
+		if dataset != "" {
+			t = table(dataset)
+		}
 		if t == nil {
 			homeRead = false
 			continue

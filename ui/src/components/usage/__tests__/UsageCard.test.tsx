@@ -329,6 +329,24 @@ describe("a counted metric with no series", () => {
     expect(screen.getByText(copy.NOTHING_COUNTED)).toBeInTheDocument();
     expect(screen.queryByText(copy.NOT_COUNTED)).toBeNull();
   });
+
+  // Staging, 21 Nov 2026: a share they can open with auditing off has no series of theirs, only a gap.
+  it("never says nothing counted when a day in the window was not counted, and gives the reason", () => {
+    const off = { ...GAP, start: ago(29), end: ago(-1), reason: "Auditing is off for this share" };
+    render(<UsageCard title="t" windows={windows()} metrics={[sessions({ series: [], gaps: [off] }), level({ series: [], gaps: [off] })]} />);
+    expect(screen.queryByText(copy.NOTHING_COUNTED)).toBeNull();
+    expect(screen.queryByText(copy.NO_RECENT_VALUE)).toBeNull();
+    expect(screen.getAllByText(copy.NOT_ALL_COUNTED)).toHaveLength(2);
+    openFold();
+    expect(screen.getByText(/Area: “ring”: “Auditing is off for this share”/)).toBeInTheDocument();
+  });
+
+  it("a gap only before the window, or before the record, leaves nothing counted", () => {
+    const old = { ...GAP, start: ago(60), end: ago(30) };
+    const began = { ...GAP, kind: "began" as const, start: ago(20), end: ago(10) };
+    render(<UsageCard title="t" windows={windows()} metrics={[sessions({ series: [], gaps: [old, began] })]} />);
+    expect(screen.getByText(copy.NOTHING_COUNTED)).toBeInTheDocument();
+  });
 });
 
 describe("lines left out because they name a person", () => {

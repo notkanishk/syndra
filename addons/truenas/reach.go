@@ -360,6 +360,26 @@ func datasetAt(mounts map[string]string, at string) string {
 	return ""
 }
 
+// datasetsUnder is every dataset a path reaches: the one holding it, as
+// datasetAt reads it, and each one mounted inside it at any depth. Their user
+// quota tables never overlap, since a dataset's userused leaves out its
+// children, so the bytes under the path are their sum. Nil when no dataset
+// holds the path.
+func datasetsUnder(mounts map[string]string, at string) []string {
+	top := datasetAt(mounts, at)
+	if top == "" {
+		return nil
+	}
+	out := []string{top}
+	for mp, name := range mounts {
+		if strings.HasPrefix(mp, at+"/") {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out[1:])
+	return out
+}
+
 // gidsOf maps group ids, as user.query lists them, to gids, which is what an
 // ACL names.
 func gidsOf(groups []nasGroup) map[string]int64 {

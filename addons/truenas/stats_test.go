@@ -93,6 +93,10 @@ func statsServer(t *testing.T) (*server, *statsNAS, *time.Time) {
 		"pool.dataset.get_quota tank/open":          `[{"id":3077,"used_bytes":500}]`,
 		"pool.dataset.get_quota tank/scratch":       `[]`,
 		"pool.dataset.get_quota tank/main/home_dir": `[{"id":3051,"used_bytes":900,"quota":5000},{"id":3077,"used_bytes":400}]`,
+		"pool.dataset.query": `[{"name":"tank/main","mountpoint":"/mnt/tank/main"},
+			{"name":"tank/main/home_dir","mountpoint":"/mnt/tank/main/home_dir"},
+			{"name":"tank/open","mountpoint":"/mnt/tank/open"},
+			{"name":"tank/scratch","mountpoint":"/mnt/tank/scratch"}]`,
 	}}
 	nas := &statsNAS{fakeRPC: fake}
 	// The log has kept rows since long before: no day the tests count is
@@ -532,11 +536,12 @@ func TestLevelsArePerShareAndPerHome(t *testing.T) {
 	s, _, _ := statsServer(t)
 	s.collectStatsOnce()
 	_, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
-	if v, _ := onDay(used, "2026-11-09", "", "main"); v != 9000 {
-		t.Errorf("main's total %d, want 9000 (everyone in it)", v)
+	// main reaches tank/main and the home_dir dataset inside it.
+	if v, _ := onDay(used, "2026-11-09", "", "main"); v != 9000+1300 {
+		t.Errorf("main's total %d, want 10300 (everyone in it, home_dir included)", v)
 	}
-	if v, _ := onDay(used, "2026-11-09", "sub-rey", "main"); v != 1200 {
-		t.Errorf("Rey's bytes on main %d, want 1200", v)
+	if v, _ := onDay(used, "2026-11-09", "sub-rey", "main"); v != 1200+900 {
+		t.Errorf("Rey's bytes on main %d, want 2100", v)
 	}
 	first, home, _ := allStats(t, s, metricHomeBytes, day0.Add(-time.Hour))
 	if v, _ := onDay(home, "2026-11-09", "sub-rey", ""); v != 900 {
@@ -547,6 +552,73 @@ func TestLevelsArePerShareAndPerHome(t *testing.T) {
 	}
 	if first.Unbound.Accounts != 1 {
 		t.Errorf("unbound.accounts %d, want 1 (Seth's home)", first.Unbound.Accounts)
+	}
+}
+
+// Staging, 21 Nov 2026: a team folder that is its own dataset inside a share
+// read 67,036,288 bytes live while the share's collected total was the top
+// dataset's 33,344, and members had no per-person series. The collector now
+// counts by the live read's resolution: a share's level is every dataset it
+// reaches, each once; a home is its own dataset's.
+func TestCollectedLevelsAreWhatTheLiveReadSees(t *testing.T) {
+	s, nas, _ := statsServer(t)
+	for k, v := range reachFake().answers {
+		nas.answers[k] = v // the folders, their ACLs and their datasets
+	}
+	nas.answers["pool.dataset.query"] = `[{"name":"tank/main","mountpoint":"/mnt/tank/main"},
+		{"name":"tank/main/waddle","mountpoint":"/mnt/tank/main/waddle"},
+		{"name":"tank/main/quack","mountpoint":"/mnt/tank/main/quack"},
+		{"name":"tank/main/home_dir","mountpoint":"/mnt/tank/main/home_dir"},
+		{"name":"tank/main/home_dir/rey_mysterio","mountpoint":"/mnt/tank/main/home_dir/rey_mysterio"},
+		{"name":"tank/open","mountpoint":"/mnt/tank/open"},
+		{"name":"tank/scratch","mountpoint":"/mnt/tank/scratch"}]`
+	nas.answers["pool.dataset.get_quota tank/main"] = `[{"id":0,"used_bytes":33344}]`
+	nas.answers["pool.dataset.get_quota tank/main/waddle"] = `[{"id":3051,"used_bytes":67036288},{"id":3077,"used_bytes":10}]`
+	nas.answers["pool.dataset.get_quota tank/main/quack"] = `[{"id":3051,"used_bytes":5}]`
+	nas.answers["pool.dataset.get_quota tank/main/home_dir"] = `[{"id":3077,"used_bytes":400}]`
+	nas.answers["pool.dataset.get_quota tank/main/home_dir/rey_mysterio"] = `[{"id":3051,"used_bytes":2500,"quota":5000}]`
+	s.collectStatsOnce()
+
+	staff := []apiID{{raw: json.RawMessage("51")}}
+	live, _, err := s.memberPlaces(true, 3051, staff, "/mnt/tank/main/home_dir/rey_mysterio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveAt := map[string]int64{} // by folder, "" the home
+	for _, p := range live {
+		if p.Usage == nil {
+			continue
+		}
+		if p.Home {
+			liveAt[""] = p.Usage.UsedBytes
+		} else {
+			liveAt[p.Folder] = p.Usage.UsedBytes
+		}
+	}
+	if liveAt["waddle"] != 67036288 || liveAt["quack"] != 5 || liveAt[""] != 2500 {
+		t.Fatalf("the live read's usage %v, not the fixture's", liveAt)
+	}
+
+	_, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
+	// Rey has no row on tank/main: everything of his on main is in the
+	// datasets the live read names for his places there.
+	rey, ok := onDay(used, "2026-11-09", "sub-rey", "main")
+	if !ok {
+		t.Fatalf("no per-person series for Rey on main: %+v", used)
+	}
+	if want := liveAt["waddle"] + liveAt["quack"] + liveAt[""]; rey != want {
+		t.Errorf("Rey's collected bytes on main %d, live %d", rey, want)
+	}
+	// Each dataset once: tank/main, waddle, quack, home_dir, Rey's home.
+	if v, _ := onDay(used, "2026-11-09", "", "main"); v != 33344+67036288+10+5+400+2500 {
+		t.Errorf("main's total %d, want 67072547 (every dataset in it once)", v)
+	}
+	_, home, _ := allStats(t, s, metricHomeBytes, day0.Add(-time.Hour))
+	if v, _ := onDay(home, "2026-11-09", "sub-rey", ""); v != liveAt[""] {
+		t.Errorf("Rey's home folder collected %d, live %d", v, liveAt[""])
+	}
+	if v, _ := onDay(home, "2026-11-09", "", ""); v != 2500+400 {
+		t.Errorf("the home folders' total %d, want 2900 (his dataset and home_dir, once each)", v)
 	}
 }
 

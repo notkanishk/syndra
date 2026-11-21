@@ -154,10 +154,15 @@ func namesOther(named []string, subject string) bool {
 //
 // A gap that names someone else keeps its window and its dimensions: a member
 // is shown only a gap whose dimensions sit inside one of their displayed
-// series, which itself names nobody else, so they say nothing new; dropped,
+// series, which itself names nobody else, or inside a share they can open,
+// which their own storage read already names, so they say nothing new; dropped,
 // its days would read as counted, and without dimensions it would cover the
 // member's whole metric. Only its reason, which may name someone, is withheld.
-func statsUsageFor(ctx context.Context, target, subject string, memberView bool, now time.Time) (statsUsage, error) {
+//
+// reached is each part of the target the person can open, as dimensions
+// (reachedShares): a gap there is theirs too, series or none, so a share they
+// can open that was never counted reads as not counted, never as nothing.
+func statsUsageFor(ctx context.Context, target, subject string, memberView bool, reached []map[string]string, now time.Time) (statsUsage, error) {
 	stored, err := dbStatsMetrics(ctx, target)
 	if err != nil || len(stored) == 0 {
 		return statsUsage{}, err
@@ -253,12 +258,17 @@ func statsUsageFor(ctx context.Context, target, subject string, memberView bool,
 		// Series by their dimension values as a person reads them.
 		textsort.ByName(view.Series, func(s statsSeries) string { return dimsText(s.Dimensions) }, func(s statsSeries) string { return "" })
 		for _, g := range gaps {
-			// A person's page carries a gap over the whole metric ({}) or over
+			// A person's page carries a gap over the whole metric ({}), over
 			// a part of one of their own series (every key=value of the gap in
-			// that series: {"share":"makers"} covers their makers/smb), never
-			// the target's others: a gap on a share only someone else used
-			// would say that share exists here.
-			if g.Metric != m.Name || subject != "" && len(g.Dims) > 0 && !slices.ContainsFunc(view.Series, func(s statsSeries) bool { return within(g.Dims, s.Dimensions) }) {
+			// that series: {"share":"makers"} covers their makers/smb), or over
+			// a part they can open (reached), never the target's others: a gap
+			// on a share they cannot open would say that share exists here.
+			if g.Metric != m.Name {
+				continue
+			}
+			if subject != "" && len(g.Dims) > 0 &&
+				!slices.ContainsFunc(view.Series, func(s statsSeries) bool { return within(g.Dims, s.Dimensions) }) &&
+				!slices.ContainsFunc(reached, func(r map[string]string) bool { return within(g.Dims, r) }) {
 				continue
 			}
 			if g.Kind == addons.GapBegan && len(g.Dims) == 0 && (view.Began == nil || g.End > *view.Began) {
@@ -279,6 +289,26 @@ func statsUsageFor(ctx context.Context, target, subject string, memberView bool,
 	// One rule, the add-on's own: counters, then levels, each in manifest order (A-23), not alphabetical.
 	addons.SortMetrics(target, out.Metrics, func(m statsMetricView) addons.Metric { return m.Metric })
 	return out, nil
+}
+
+// reachedShares is each share a person's places are in, as the share
+// dimension the storage profile's metrics break down by: from the storage read
+// on the same page, or the last one remembered while the target is down. Nil
+// when neither is known, and then a gap is kept on their own series only.
+func reachedShares(target, subject string, storage *addons.StorageStatus) []map[string]string {
+	if storage == nil {
+		if known := recalledStorage(target, subject); known != nil {
+			storage = &known.Storage
+		}
+	}
+	if storage == nil {
+		return nil
+	}
+	var out []map[string]string
+	for _, p := range storage.Places {
+		out = append(out, map[string]string{"share": p.Share})
+	}
+	return out
 }
 
 // within reports whether every key=value of part is also in whole.
@@ -312,8 +342,8 @@ func dimsText(dims map[string]string) string {
 // four statistics queries for a page nobody renders. Syndra's own store,
 // never the add-on, so a target that is down still shows its history.
 // Best-effort: a page that cannot read it says less rather than failing.
-func personalUsage(ctx context.Context, target, subject string, memberView bool) *statsUsage {
-	usage, err := statsUsageFor(ctx, target, subject, memberView, clock.Now())
+func personalUsage(ctx context.Context, target, subject string, memberView bool, storage *addons.StorageStatus) *statsUsage {
+	usage, err := statsUsageFor(ctx, target, subject, memberView, reachedShares(target, subject, storage), clock.Now())
 	if err != nil {
 		log.Printf("[STATS] could not read %s's usage on %s: %v (non-fatal)", subject, target, err)
 		return nil
@@ -330,7 +360,7 @@ func handleTargetStats(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusNotFound, "TARGET_NOT_FOUND", target+" is not a connected system.")
 		return
 	}
-	usage, err := statsUsageFor(r.Context(), target, "", false, clock.Now())
+	usage, err := statsUsageFor(r.Context(), target, "", false, nil, clock.Now())
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return

@@ -832,6 +832,7 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | The same, over the year | {value} in the last 12 months |
 | The same, when retention starts either window later (n: its start to today, today included) | {value} in the last {n} days |
 | A counted metric with no series | Nothing counted in the last 30 days |
+| The same, when a gap falls in the 30 days (a share they can open that was not counted: its reason is in the fold) | Not everything could be counted in the last 30 days |
 | A member's own card: a line left out because the add-on named a person in it, one | 1 more line is not shown here, as the add-on named a person in it. |
 | The same, several | {n} more lines are not shown here, as the add-on named a person in them. |
 | A gauge's latest value | {value} on {day} |
