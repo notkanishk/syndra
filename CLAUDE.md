@@ -74,14 +74,15 @@ Scale depth to the task: a one-line typo fix does not need a full spec revision,
 
 ## Agent skills
 
-### Building
+### Orchestration
 
-Building a decided change follows `docs/agents/build-workflow.md`. That file covers:
-- a fresh `syndra-builder` for each build or fix round;
-- Opus for logic, Sonnet for CSS and docs;
-- side-by-side visuals before a build;
-- the loop limits;
-- one branch at a time on `globals.css`.
+The main session orchestrates. Follow `docs/agents/orchestrator.md` for every multi-agent task. It is the one source for:
+- roles and models;
+- the design → build → review → fix loop and its limits;
+- the hand-off templates in `docs/agents/templates/`;
+- what needs the owner's yes.
+
+Change the protocol there, with a changelog line.
 
 ### Issue tracker
 
