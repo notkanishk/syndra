@@ -345,6 +345,53 @@ func TestAPersonSeesOnlyGapsOnTheirOwnSeries(t *testing.T) {
 	}
 }
 
+// A locked home affects only that home (owner, 21 Nov 2026): the add-on's gap
+// over the totals alone is on the totals page alone, and its gap over the
+// locked home's person is on that person's page alone. Booker's page carries
+// neither: his own days stand. Charlotte's carries hers, and never the
+// totals' gap, which is about everyone's folders.
+func TestATotalsGapAndAPersonsGapStayOnTheirOwnPages(t *testing.T) {
+	stubStats(t, &statsStore{})
+	dbStatsDays = func(_ context.Context, _, subject, _ string) ([]db.StatsValue, error) {
+		return []db.StatsValue{{Metric: "storage.home_bytes", Dims: map[string]string{}, When: "2026-11-11", Value: 1}}, nil
+	}
+	dbStatsMonths = func(context.Context, string, string, string) ([]db.StatsValue, error) { return nil, nil }
+	dbStatsGaps = func(context.Context, string, string) ([]db.StatsGapRow, error) {
+		gap := func(scope, subject, reason string) db.StatsGapRow {
+			return db.StatsGapRow{Metric: "storage.home_bytes", StatsGap: db.StatsGap{Dims: map[string]string{}, Scope: scope, Subject: subject,
+				Start: "2026-11-08", End: "2026-11-10", Kind: "unread", Reason: reason}}
+		}
+		return []db.StatsGapRow{
+			gap("total", "", "Not counted, could not be read: a home folder in main (locked)"),
+			gap("", "charlotte", "Not counted: the home folder is encrypted and locked on TrueNAS"),
+		}, nil
+	}
+	now := time.Date(2026, 11, 12, 6, 0, 0, 0, time.UTC)
+	for subject, want := range map[string]string{
+		"booker":    "",
+		"charlotte": "Not counted: the home folder is encrypted and locked on TrueNAS",
+		"":          "total:Not counted, could not be read: a home folder in main (locked)",
+	} {
+		for _, member := range []bool{false, true} {
+			usage, err := statsUsageFor(context.Background(), "truenas", subject, member && subject != "", nil, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, m := range usage.Metrics {
+				for _, g := range m.Gaps {
+					if m.Name == "storage.home_bytes" {
+						got = append(got, strings.TrimPrefix(g.Scope+":", ":")+g.Reason)
+					}
+				}
+			}
+			if strings.Join(got, " | ") != want {
+				t.Errorf("%q (member %v) sees home gaps %q, want %q", subject, member, got, want)
+			}
+		}
+	}
+}
+
 // Staging, 21 Nov 2026: a member who can open a share whose auditing is off
 // has no series there, and their card said "Nothing counted" for it. A gap
 // on a share they can open is on their page with its reason, series or none,

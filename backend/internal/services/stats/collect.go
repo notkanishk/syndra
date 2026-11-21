@@ -421,7 +421,20 @@ func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[st
 			dropped[DropNotADay]++
 		case why != "":
 			dropped[why]++
+		case g.Subject != "" && g.Scope != "":
+			dropped[DropBadValue]++ // over a person and over the totals alone: neither can be believed
+		case g.Subject != "" && !m.PerSubject:
+			dropped[DropNotPerSubject]++
+		case g.Subject != "" && !who.bound[g.Subject]:
+			dropped[DropUnboundSubject]++
 		default:
+			scope := g.Scope
+			if scope != "" && scope != addons.GapScopeTotal {
+				// A scope the contract does not know is kept over the totals
+				// alone: what claims least about anyone's own figures.
+				dropped[DropBadValue]++
+				scope = addons.GapScopeTotal
+			}
 			kind := g.Kind
 			if strings.TrimSpace(g.Reason) == "" || !slices.Contains(addons.GapKinds, g.Kind) {
 				dropped[DropBadValue]++
@@ -430,8 +443,12 @@ func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[st
 				}
 			}
 			reason := []rune(strings.TrimSpace(g.Reason))
-			out = append(out, db.StatsGap{Dims: g.Dimensions, Start: start, End: end, Kind: kind, Reason: string(reason[:min(len(reason), 200)]),
-				NamedSubjects: union(who.namesIn(g.Dimensions), who.names(g.Reason))})
+			named := union(who.namesIn(g.Dimensions), who.names(g.Reason))
+			if g.Subject != "" {
+				named = union(named, []string{g.Subject})
+			}
+			out = append(out, db.StatsGap{Dims: g.Dimensions, Scope: scope, Subject: g.Subject, Start: start, End: end, Kind: kind,
+				Reason: string(reason[:min(len(reason), 200)]), NamedSubjects: named})
 		}
 	}
 	return out

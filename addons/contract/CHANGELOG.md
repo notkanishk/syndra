@@ -3,6 +3,19 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## A gap over the totals only, or over one person (PR 246, 21 Nov 2026)
+
+Still major 2 before its release. A `/stats` gap MAY carry `scope: "total"`:
+it covers the metric's totals at its dimensions and no person's own points
+(one part of the app not read leaves the whole partial while everyone else's
+own figures stand; owner, 21 Nov 2026, "Only that home affected"). It MAY
+instead carry `subject`: it covers that person's own points only (a
+per-subject metric; Syndra drops one for a subject it does not bind) and is
+shown only where that person's figures are. Never both. Absent, a gap covers
+every series at its dimensions, as before. A gap whose reason anyone but its
+subject can read names no account: "a folder in main (locked)", never the
+folder. Schema: `stats.json` (gap `scope`, `subject`). No fixture changed.
+
 ## Why a place is not counted (PR 246, 21 Nov 2026)
 
 Still major 2 before its release. A storage `Place` the person can change

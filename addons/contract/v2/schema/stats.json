@@ -92,6 +92,14 @@
               "type": "string"
             }
           },
+          "scope": {
+            "const": "total",
+            "description": "The gap covers the metric's totals only (the points with no subject) at its dimensions: what one part of the app not being read leaves out of the whole, while every person's own points stand. Absent: every series at its dimensions, totals and per person. Never with subject."
+          },
+          "subject": {
+            "type": "string",
+            "description": "The gap covers this person's own points only (a Syndra subject id, never a local name; a per-subject metric only) at its dimensions: what of theirs was not counted. Never with scope."
+          },
           "kind": {
             "enum": [
               "began",
@@ -111,7 +119,13 @@
           "end",
           "kind",
           "reason"
-        ]
+        ],
+        "not": {
+          "required": [
+            "scope",
+            "subject"
+          ]
+        }
       }
     },
     "next_cursor": {

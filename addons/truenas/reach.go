@@ -440,7 +440,8 @@ type spaceUnder struct {
 	// and the count is partial.
 	Unread []string
 	// LockedIn is the folders, inside the path, of the nested datasets that
-	// are locked, each "<folder> (locked)": left out of ByUID and never read.
+	// are locked: left out of ByUID and never read. Never said in a gap (a
+	// folder is often named for its account): only counted.
 	// A gap of its own, not a partial read (owner, 21 Nov 2026: a locked
 	// dataset affects only itself), so everyone's other bytes still count.
 	LockedIn []string
@@ -477,7 +478,7 @@ func usageUnder(m datasetMap, at string, table func(string) map[int64]PlaceUsage
 		}
 		folder := strings.TrimPrefix(mp, at+"/")
 		if m.locked[name] {
-			out.LockedIn = append(out.LockedIn, folder+" (locked)")
+			out.LockedIn = append(out.LockedIn, folder)
 			continue
 		}
 		if t := table(name); t != nil {

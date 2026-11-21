@@ -219,6 +219,37 @@ func TestAGapIsKeptWithItsKindAndNeverLost(t *testing.T) {
 	}
 }
 
+// A gap over the totals alone, or over one person alone (PR 246): kept with
+// its scope, the person a gap is over named by it; one over a person this
+// target does not bind, or over a person on a metric not counted per person,
+// is dropped; one over both, or with a scope the contract does not know, is
+// a bad value, the unknown scope kept over the totals alone (it claims least
+// about anyone's own figures).
+func TestAGapKeepsItsScopeAndItsPerson(t *testing.T) {
+	who := peopleOn([]db.TargetBinding{{SubjectID: "sub-charlotte", Username: "charlotte_flair"}}, nil)
+	m := addons.Metric{Name: "storage.home_bytes", Instrument: "gauge", Unit: "bytes", PerSubject: true}
+	start := time.Date(2026, 11, 9, 0, 0, 0, 0, clock.Loc)
+	end := start.AddDate(0, 0, 1)
+	gap := func(scope, subject string) addons.StatGap {
+		return addons.StatGap{Start: start, End: end, Scope: scope, Subject: subject, Kind: "unread", Reason: "a reason"}
+	}
+	dropped := map[string]int{}
+	var kept []string
+	for _, g := range keepGaps([]addons.StatGap{gap("total", ""), gap("", "sub-charlotte"), gap("", "sub-booker"), gap("total", "sub-charlotte"), gap("whole", "")}, m, who, dropped) {
+		kept = append(kept, g.Scope+"/"+g.Subject+"/"+strings.Join(g.NamedSubjects, "+"))
+	}
+	if want := []string{"total//", "/sub-charlotte/sub-charlotte", "total//"}; !slices.Equal(kept, want) {
+		t.Errorf("kept %q, want %q", kept, want)
+	}
+	if dropped[DropUnboundSubject] != 1 || dropped[DropBadValue] != 2 {
+		t.Errorf("dropped %v, want one unbound and two bad values", dropped)
+	}
+	m.PerSubject = false
+	if got := keepGaps([]addons.StatGap{gap("", "sub-charlotte")}, m, who, dropped); len(got) != 0 || dropped[DropNotPerSubject] != 1 {
+		t.Errorf("a person's gap on a metric not counted per person: kept %+v, dropped %v", got, dropped)
+	}
+}
+
 // The name set is everyone in the directory (7i), not only who is bound here:
 // an unbound user's id, display name and username are each a name, recorded
 // as their subject id; an account name and id only for a binding. A text

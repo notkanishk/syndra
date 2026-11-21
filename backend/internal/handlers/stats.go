@@ -108,6 +108,11 @@ type statsGapView struct {
 	Start      string            `json:"start"`
 	End        string            `json:"end"`
 	Dimensions map[string]string `json:"dimensions,omitempty"`
+	// Scope "total": over the totals alone, on the totals page alone. A
+	// person's page never carries one, and carries a gap over one person's
+	// own points (the add-on's subject) on that person's page alone, as
+	// theirs.
+	Scope string `json:"scope,omitempty"`
 	// Kind is the add-on's (began, unread, dropped, unobserved): what the page
 	// draws by. Reason is what it shows.
 	Kind   string `json:"kind"`
@@ -266,18 +271,25 @@ func statsUsageFor(ctx context.Context, target, subject string, memberView bool,
 			if g.Metric != m.Name {
 				continue
 			}
+			// A gap over one person's own points is on their page alone; one
+			// over the totals alone is on the totals page alone: a part of the
+			// app not read leaves the whole partial and nobody else's figures
+			// (owner, 21 Nov 2026, "Only that home affected").
+			if g.Subject != "" && g.Subject != subject || g.Scope == addons.GapScopeTotal && subject != "" {
+				continue
+			}
 			if subject != "" && len(g.Dims) > 0 &&
 				!slices.ContainsFunc(view.Series, func(s statsSeries) bool { return within(g.Dims, s.Dimensions) }) &&
 				!slices.ContainsFunc(reached, func(r map[string]string) bool { return within(g.Dims, r) }) {
 				continue
 			}
-			if g.Kind == addons.GapBegan && len(g.Dims) == 0 && (view.Began == nil || g.End > *view.Began) {
+			if g.Kind == addons.GapBegan && len(g.Dims) == 0 && g.Scope == "" && g.Subject == "" && (view.Began == nil || g.End > *view.Began) {
 				view.Began = &g.End
 			}
 			if g.End <= from12m { // the began gap, kept for Began alone: older than any window shown
 				continue
 			}
-			gap := statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Kind: g.Kind, Reason: g.Reason}
+			gap := statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Scope: g.Scope, Kind: g.Kind, Reason: g.Reason}
 			if memberView && namesOther(g.NamedSubjects, subject) {
 				gap.Reason = reasonWithheld
 			}

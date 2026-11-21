@@ -16,7 +16,7 @@ import { formatRelative } from "@/lib/format";
 import { Crossfade, Unfold } from "@/lib/motion";
 import type { MyTargetView } from "@/lib/queries/useMyStorage";
 import type { StatsMetric, UsageWindows } from "@/lib/queries/useStats";
-import { CAP, capText, dayWords, daysSince, gapLines, gapRange, gapWhere, plot, quoted, windowDays } from "@/lib/usage";
+import { CAP, capText, dayWords, daysSince, gapLines, gapRange, gapsShown, gapWhere, plot, quoted, windowDays } from "@/lib/usage";
 
 /** The most lines the fold lists; the rest is said, not drawn. */
 const MAX_LINES = 12;
@@ -27,7 +27,7 @@ const MAX_LINES = 12;
  * did not keep, then that a striped day is not a zero. A `began` gap is before the record, not a gap,
  * and is never listed. Present only when there is something to say.
  */
-function Fold({ metrics, windows }: { metrics: StatsMetric[]; windows: UsageWindows }) {
+function Fold({ metrics, windows, person }: { metrics: StatsMetric[]; windows: UsageWindows; person: boolean }) {
   const [open, setOpen] = useState(false);
   const end = addDays(windows.today, 1);
   const seen = new Set<string>();
@@ -36,7 +36,7 @@ function Fold({ metrics, windows }: { metrics: StatsMetric[]; windows: UsageWind
     if (metric.watermark === null) continue;
     // A counter's 12-month total is drawn, so every gap inside it is explained; a level shows 30 days.
     const from = metric.instrument === "counter" && windows.window_12m_from < windows.window_30d_from ? windows.window_12m_from : windows.window_30d_from;
-    for (const g of gapLines(metric.gaps.filter((x) => x.kind !== "began"), from, end)) {
+    for (const g of gapLines(gapsShown(metric.gaps, person).filter((x) => x.kind !== "began"), from, end)) {
       const said = copy.gapLine(gapRange(g), gapWhere(metric, g), g.reason.trim() ? quoted(g.reason, CAP.reason) : copy.NO_REASON);
       if (seen.has(said)) continue;
       seen.add(said);
@@ -148,7 +148,8 @@ function End({ metrics, windows, target, step: insights }: { metrics: StatsMetri
  * The usage card (A-23 §3): "What I have used", the operator's "What {person} has used" (`title`), or
  * the target overview's totals (`target`, no title: the Region is the title; `step`, its kind's words
  * for the way to Insights). Its sections, one fold and one end row. It never draws a meter: a person's
- * limit has its meter, and its month, in the kind's card (R1, Q4).
+ * limit has its meter, and its month, in the kind's card (R1, Q4). `person`: a person's card, which a
+ * gap over the totals alone never hatches (gapsShown).
  */
 export function UsageCard({
   title,
@@ -157,6 +158,7 @@ export function UsageCard({
   windows,
   target,
   step,
+  person = false,
 }: {
   title?: string;
   label?: string;
@@ -164,6 +166,7 @@ export function UsageCard({
   windows: UsageWindows;
   target?: string;
   step?: string;
+  person?: boolean;
 }) {
   // A system's own card (it names its target): a per-person figure opens its people on Insights' Usage (A-24 §10).
   const opens = target !== undefined ? insightsUsageHref(target) : undefined;
@@ -171,9 +174,9 @@ export function UsageCard({
     <Card role="group" aria-label={title ?? label} className="@container">
       {title && <CardHeader title={title} />}
       {metrics.map((metric, i) => (
-        <MetricBlock key={metric.name} metric={metric} windows={windows} first={i === 0} titled={Boolean(title)} opens={opens} />
+        <MetricBlock key={metric.name} metric={metric} windows={windows} first={i === 0} titled={Boolean(title)} person={person} opens={opens} />
       ))}
-      <Fold metrics={metrics} windows={windows} />
+      <Fold metrics={metrics} windows={windows} person={person} />
       <End metrics={metrics} windows={windows} target={target} step={step} />
     </Card>
   );
@@ -209,7 +212,7 @@ export function ViewUsage({ view, person }: { view: MyTargetView; person?: strin
   // (A-23 part 5 frame 23 draws it under an account, and draws no empty form). The kind's card above
   // already says there is no account. Anything counted for them is still said, so it is never nowhere.
   if (metrics.length === 0 || (!view.account && metrics.every((m) => m.series.length === 0))) return null;
-  return <UsageCard title={title} metrics={metrics} windows={usage} />;
+  return <UsageCard title={title} metrics={metrics} windows={usage} person />;
 }
 
 /**
@@ -225,7 +228,7 @@ export function HomeMonth({ view, operator = false }: { view: MyTargetView; oper
   const usage = view.usage;
   if (!metric || !usage?.reported) return null;
   const days = windowDays(usage.today);
-  const p = plot(metric.series[0], metric.gaps, metric.instrument, days, { from: usage.kept_from, began: metric.began, countedThrough: metric.counted_through });
+  const p = plot(metric.series[0], metric.gaps, metric.instrument, days, { from: usage.kept_from, began: metric.began, countedThrough: metric.counted_through, person: true });
   const limit = observedLimits(view)[metric.against ?? ""];
   const keptDays = usage.kept_from ? daysSince(usage.kept_from, usage.today) : undefined;
   const changed = changeWords(p, metric.unit);

@@ -260,7 +260,10 @@ func TestAShareNotAuditedForEveryoneIsAGapNotAZero(t *testing.T) {
 // everyone when every account that can connect over SMB is watched, by the
 // rule a member's own coverage uses: a list that narrows nobody is counted,
 // one that leaves an SMB account out is a gap, and accounts that cannot be
-// read are a gap saying so, never counted.
+// read are a gap saying so, never counted. An account that cannot connect
+// over SMB (smb off, or locked) is nobody the share could record: outside
+// the watched group, it leaves nobody out (the fake applies the read's smb
+// and locked filters, as TrueNAS does).
 func TestAShareRecordsEveryoneWhenItWatchesEverySMBAccount(t *testing.T) {
 	inBuiltin := `"groups":[41]`
 	for _, tc := range []struct {
@@ -268,19 +271,26 @@ func TestAShareRecordsEveryoneWhenItWatchesEverySMBAccount(t *testing.T) {
 		watch      string
 		ignore     string
 		seth       string // Seth's groups
+		other      string // a third account, outside every group
 		smbDown    bool
 		counted    bool
 		reasonText string
 	}{
-		{"every SMB account in the watched group", `["builtin_users"]`, `[]`, inBuiltin, false, true, ""},
-		{"one SMB account outside it", `["builtin_users"]`, `[]`, `"groups":[]`, false, false, reasonAudited.text},
-		{"an ignored group holds an SMB account", `[]`, `["staff"]`, `"groups":[41,51]`, false, false, reasonAudited.text},
-		{"both lists empty", `[]`, `[]`, `"groups":[]`, true, true, ""},
-		{"the accounts cannot be read", `["builtin_users"]`, `[]`, inBuiltin, true, false, reasonNAS.text},
+		{"a locked account outside the watched group", `["builtin_users"]`, `[]`, inBuiltin, `"locked":true,"smb":true`, false, true, ""},
+		{"an account with SMB off outside the watched group", `["builtin_users"]`, `[]`, inBuiltin, `"locked":false,"smb":false`, false, true, ""},
+		{"an SMB account outside the watched group", `["builtin_users"]`, `[]`, inBuiltin, `"locked":false,"smb":true`, false, false, reasonAudited.text},
+		{"every SMB account in the watched group", `["builtin_users"]`, `[]`, inBuiltin, "", false, true, ""},
+		{"one SMB account outside it", `["builtin_users"]`, `[]`, `"groups":[]`, "", false, false, reasonAudited.text},
+		{"an ignored group holds an SMB account", `[]`, `["staff"]`, `"groups":[41,51]`, "", false, false, reasonAudited.text},
+		{"both lists empty", `[]`, `[]`, `"groups":[]`, "", true, true, ""},
+		{"the accounts cannot be read", `["builtin_users"]`, `[]`, inBuiltin, "", true, false, reasonNAS.text},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, nas, at := statsServer(t)
 			nas.users = strings.Replace(strings.Replace(statsUsers, `"groups":[]`, inBuiltin, 1), `"groups":[]`, tc.seth, 1)
+			if tc.other != "" {
+				nas.users = strings.TrimSuffix(nas.users, "]") + `,{"id":13,"username":"finn_balor","uid":3099,` + tc.other + `,"groups":[],"home":"/var/empty"}]`
+			}
 			nas.shares = strings.Replace(statsShares, `"audit":{"enable":true,"watch_list":[],"ignore_list":[]}`,
 				`"audit":{"enable":true,"watch_list":`+tc.watch+`,"ignore_list":`+tc.ignore+`}`, 1)
 			nas.smbDown = tc.smbDown
@@ -741,7 +751,9 @@ func TestLiveAndCollectedStorageAreOneNumber(t *testing.T) {
 
 // A nested dataset that cannot be read (an encrypted one whose key is not
 // loaded refuses get_quota) leaves the share counted without it, with a gap
-// naming it: never the whole share unsampled, never that folder as zero.
+// over every series of it (whose bytes are missing is not known) saying a
+// folder was not read, never which: never the whole share unsampled, never
+// that folder as zero.
 func TestAnUnreadableNestedDatasetIsAGapNotTheShare(t *testing.T) {
 	s, nas, at := nestedStatsServer(t)
 	if nas.refuse == nil {
@@ -768,8 +780,8 @@ func TestAnUnreadableNestedDatasetIsAGapNotTheShare(t *testing.T) {
 		t.Errorf("main's gaps %+v, want them from the first day", mainGaps)
 	}
 	for _, g := range mainGaps { // the closed day keeps its reason, not "could not be read that day"
-		if g.Kind() != kindUnread || !strings.Contains(g.Reason(), "quack") {
-			t.Errorf("main's gap %+v, want unread, naming quack", g)
+		if g.Kind() != kindUnread || g.Reason() != "Not counted, could not be read: a folder in main" || g.Scope != "" || g.Subject != "" {
+			t.Errorf("main's gap %+v, want unread over every series, naming no folder", g)
 		}
 	}
 	meters, err := metersOf(s, 3051)
@@ -859,23 +871,35 @@ func lockedAt(name string) string {
 // A locked dataset inside a share (encrypted, its key not loaded) answers no
 // mountpoint, so a count by mountpoint left it out of the share's sum with no
 // gap at all. It is found by its name and never read. It affects only itself
-// (owner, 21 Nov 2026): the share is counted without it, with a gap naming it
-// as locked; on the card the share's figure is everyone's other bytes, read
-// whole, and only the place that is that dataset says locked.
+// (owner, 21 Nov 2026): the share is counted without it, with a gap over the
+// share's total alone saying a folder in it is locked, never which (a folder
+// is often named for its account, and everyone the share reaches reads the
+// gap); every person's own series stands. On the card the share's figure is
+// everyone's other bytes, read whole, and only the place that is that
+// dataset says locked.
 func TestALockedNestedDatasetIsNeverZero(t *testing.T) {
 	s, nas, _ := nestedStatsServer(t)
 	nas.answers["pool.dataset.query"] = lockedAt("tank/main/quack")
 	s.collectStatsOnce()
-	page, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
+	page, used, raw := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
 	if v, _ := onDay(used, "2026-11-09", "sub-rey", "main"); v != 67036288+2500 {
 		t.Errorf("Rey on main %d, want waddle and his home, quack not read", v)
 	}
 	var said bool
 	for _, g := range page.Gaps {
-		said = said || g.Dimensions["share"] == "main" && g.Kind() == kindUnread && strings.Contains(g.Reason(), "quack (locked)")
+		if g.Dimensions["share"] != "main" {
+			continue
+		}
+		said = said || g.Kind() == kindUnread && g.Scope == scopeTotal && g.Reason() == "Not counted, could not be read: a folder in main (locked)"
+		if g.Scope != scopeTotal {
+			t.Errorf("main's gap %+v covers people's own series: a lock affects only itself", g)
+		}
 	}
 	if !said {
-		t.Errorf("main's gaps %+v, want one naming quack as locked", page.Gaps)
+		t.Errorf("main's gaps %+v, want one over the total, a folder in it locked", page.Gaps)
+	}
+	if strings.Contains(string(raw), "quack") {
+		t.Errorf("a locked folder's name is on the wire: %s", raw)
 	}
 	meters, err := metersOf(s, 3051)
 	if err != nil {
@@ -986,8 +1010,45 @@ func TestALockedHomeAffectsOnlyThatHome(t *testing.T) {
 			if !said {
 				t.Errorf("home gaps %+v, want the total partial, naming where the locked home is", page.Gaps)
 			}
+			// The total's gap is the total's alone; Rey's own series says not counted, Seth's says nothing.
+			var rey bool
+			for _, g := range page.Gaps {
+				switch {
+				case g.Subject == "sub-rey":
+					rey = rey || g.Reason() == reasonHomeLocked.text && g.Scope == ""
+				case g.Subject == "sub-seth" && !lockedHome: // home_dir locked: Seth's home is locked too
+				case g.Subject != "":
+					t.Errorf("a gap over someone else's own series for Rey's locked home: %+v", g)
+				case strings.Contains(g.Start, "2026-11-09") && g.Scope != scopeTotal:
+					t.Errorf("a gap over every series for one locked home: %+v", g)
+				}
+			}
+			if !rey {
+				t.Errorf("home gaps %+v, want one over Rey's own series", page.Gaps)
+			}
 			if strings.Contains(string(raw), "rey_mysterio") {
 				t.Errorf("a home's account name is on the wire: %s", raw)
+			}
+			// On main, where the home is a dataset inside the share: the same.
+			usedPage, _, usedRaw := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
+			var reyOnMain bool
+			for _, g := range usedPage.Gaps {
+				if g.Dimensions["share"] != "main" {
+					continue
+				}
+				switch {
+				case g.Subject == "sub-rey":
+					reyOnMain = true
+				case g.Subject == "sub-seth" && !lockedHome:
+				case g.Subject != "" || g.Scope != scopeTotal:
+					t.Errorf("main's gap %+v for Rey's locked home reaches beyond the total and Rey", g)
+				}
+			}
+			if !reyOnMain {
+				t.Errorf("main's gaps %+v, want one over Rey's own series there", usedPage.Gaps)
+			}
+			if strings.Contains(string(usedRaw), "rey_mysterio") {
+				t.Errorf("a home's account name is on the wire: %s", usedRaw)
 			}
 		})
 	}
@@ -1667,5 +1728,30 @@ func TestAVersionZeroMetaThatNeverCollectedBeginsAtItsFirstCollection(t *testing
 				t.Fatalf("Began %q version %d, want the first collection %q", m.Began, m.Version, s.stats.day(*at))
 			}
 		})
+	}
+}
+
+// The quota copy the cards share is forgotten by a write like every copy:
+// a limit just set is read back on the next load, never the copy from
+// before it, and a read with no write between answers from the copy.
+func TestAWriteForgetsTheQuotaCopy(t *testing.T) {
+	s, nas, _ := nestedStatsServer(t)
+	used := func() int64 {
+		t.Helper()
+		table, _ := s.quotaTable("tank/main/waddle", false)
+		return table[3051].UsedBytes
+	}
+	if got := used(); got != 67036288 {
+		t.Fatalf("first read %d", got)
+	}
+	nas.answers["pool.dataset.get_quota tank/main/waddle"] = `[{"id":3051,"used_bytes":7}]`
+	if got := used(); got != 67036288 {
+		t.Errorf("a read with no write between read the NAS again: %d", got)
+	}
+	if err := s.mutate(caller{operation: "quota.set", subject: "sub-rey", actor: "sub-rey", callID: "call-q"}, "store.binding", func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got := used(); got != 7 {
+		t.Errorf("the read after a write answered %d from the copy, want the NAS's 7", got)
 	}
 }

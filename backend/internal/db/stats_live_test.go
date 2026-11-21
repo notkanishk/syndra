@@ -659,3 +659,73 @@ func TestLiveTheBeganGapIsReadHoweverOld(t *testing.T) {
 		t.Errorf("read %v, want %v", said, want)
 	}
 }
+
+// 000103 swaps one key for a wider one and adds two columns: its one drop is
+// the primary key, put back with scope and subject in it.
+func TestMigration103OnlyWidensTheGapsKey(t *testing.T) {
+	up, down := readMigrationPair(t, "000103_stats_gap_scope")
+	swap := "ALTER TABLE addon_metric_gaps DROP CONSTRAINT addon_metric_gaps_pkey;"
+	again := "ALTER TABLE addon_metric_gaps DROP CONSTRAINT IF EXISTS addon_metric_gaps_scope_subject_check;"
+	u := strings.ToUpper(strings.Replace(strings.Replace(stripSQLComments(up), swap, "", 1), again, "", 1))
+	if strings.Contains(u, "DROP ") || strings.Contains(u, " TYPE ") || strings.Contains(u, "DELETE") {
+		t.Error("000103 up may drop only the gaps' primary key, to widen it")
+	}
+	for _, want := range []string{
+		"ADD PRIMARY KEY (target_id, metric, dims, scope, subject, gap_start)",
+		"CHECK (scope IN ('', 'total'))",
+		"CHECK (scope = '' OR subject = '')",
+	} {
+		if !strings.Contains(up, want) {
+			t.Errorf("000103 up must contain %q", want)
+		}
+	}
+	if !strings.Contains(down, "ADD PRIMARY KEY (target_id, metric, dims, gap_start)") {
+		t.Error("000103 down must put the old key back")
+	}
+}
+
+// A day holds a share's gap over every series, its totals' gap and a
+// person's beside each other (000103's key), each read back with its scope
+// and person; a person's gap is kept as long as their points, the totals'
+// as long as the totals.
+func TestLiveScopedGapsAreKeptBesideEachOther(t *testing.T) {
+	ctx := statsLive(t)
+	today := clock.Day(clock.Now())
+	ago := func(n int) string { return clock.AddDate(today, 0, 0, -n) }
+	main := map[string]string{"share": "main"}
+	if err := CollectStats(ctx, statsTarget, "storage.sessions", func(c *StatsTx) error {
+		_, err := c.UpsertGaps(ctx, today, []StatsGap{
+			{Dims: main, Start: ago(40), End: ago(39), Kind: "unread", Reason: "a folder in main"},
+			{Dims: main, Scope: "total", Start: ago(40), End: ago(39), Kind: "unread", Reason: "a folder in main (locked)"},
+			{Dims: main, Subject: "sub-charlotte", Start: ago(40), End: ago(39), Kind: "unread", Reason: "the home folder is locked", NamedSubjects: []string{"sub-charlotte"}},
+		})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	read := func() []string {
+		got, err := StatsGaps(ctx, statsTarget, ago(60))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var said []string
+		for _, g := range got {
+			said = append(said, g.Scope+"/"+g.Subject)
+		}
+		slices.Sort(said)
+		return said
+	}
+	if got, want := read(), []string{"/", "/sub-charlotte", "total/"}; !slices.Equal(got, want) {
+		t.Errorf("read %v, want %v", got, want)
+	}
+	thirty := 30
+	if err := SetStatsRetention(ctx, statsTarget, &thirty, "op-1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := PruneStats(ctx, today); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := read(), []string{"/", "total/"}; !slices.Equal(got, want) {
+		t.Errorf("after a 30-day retention, read %v, want %v: a person's gap is kept as long as their points", got, want)
+	}
+}
