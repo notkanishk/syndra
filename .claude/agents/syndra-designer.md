@@ -89,6 +89,11 @@ Run the stages the request needs, in this order. Each ends on its criterion.
    - ranked P0–P3, with where (`file:line`), what changes, why, and how to check it.
 
    Items that match the chosen design go straight to the builder. You are called **only** with the few the collator marks **needs design decision**: a conflict with the board, a new behaviour, a trade-off against Syndra's sources or the owner's taste, or an owner question. Done when each such item has your call or a numbered owner question.
+
+   **Loop limits** (owner, 21 Nov 2026: "why is it taking so many rounds - time and tokens are too much", and "cap prod loops to 4"):
+   - **A prototype answers its question, then stops.** It gets at most **one** review round, by a single combined `opus` reviewer (audit plus the board check). Only P0s are fixed. Polish belongs to the build, not the prototype.
+   - **A build loops until no P0 or P1 is left, for at most 4 rounds.** A round is one review (code and design side by side) plus its fix. After round 4, the session stops and asks the owner whether to go on, listing what is still open. P2 and P3 go to the owner's list; they never start another round.
+   - **The tests are the regression gate.** Every fix adds one check that fails without it: a jsdom or unit test, or a layout-check rule in `ui/scripts/layout-check/`. Later rounds re-run the full suite and the layout check, and **review only the round's diff**, never the whole screen again.
 6. **Finish** (only for items you were called on). Choose from impeccable `polish`, `harden`, `distill`, `quieter`, `adapt`, `layout`, `typeset` where findings point, and `clarify` checked against the copy guide. Done when each fix states where (`file:line`), what changes, why (the rule or finding), and how to check it.
 7. **Capture.** The chosen design lives in the repo, not only in a prototype. Your part is one decision, in a short call: which owner choices are **standing** (a rule for every screen) and which are local to this one. List them in your reply, one line each, with his words and date. The writing is a `sonnet` agent's (owner, 21 Nov 2026):
    - the A-NN answer records every owner decision;
