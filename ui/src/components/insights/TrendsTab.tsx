@@ -64,10 +64,9 @@ function Fact({ label, value, opens }: { label: string; value: string | number; 
   );
 }
 
-// Below tablet the two number seats are narrow and the name takes the rest and wraps (never 1fr
-// against two 110px seats: that left a phone 66px for a project's name). From tablet, D-1 §3's seat.
+// The name takes the rest and wraps; the two numbers sit in D-1 §3's seat, which a phone narrows.
 const ENDING_ROW =
-  "row-divider grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem] items-baseline gap-x-3 px-5 py-3 tablet:grid-cols-[minmax(0,1fr)_var(--seat-number)_var(--seat-number)] tablet:gap-x-(--row-gap)";
+  "row-divider grid grid-cols-[minmax(0,1fr)_var(--seat-number)_var(--seat-number)] items-baseline gap-x-(--row-gap) px-5 py-3";
 
 /** A line that says nothing is wrong is the healthy dot's (resolved); "not yet" lines are not. */
 const Quiet = ({ children, ok = false }: { children: string; ok?: boolean }) => <EmptyState title={children} resolved={ok} />;

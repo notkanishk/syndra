@@ -594,6 +594,9 @@
       --row-y: 14px;
       --row-gap: 18px;
       --empty-y: 32px;
+      /* A number's seat on a phone: two of them beside a name still leave the name
+         the room to read (110 + 110 left a project's name 66px at 390). */
+      --seat-number: 4.75rem; /* 76px: "30 DAYS ↑" in the label step needs 74 */
     }
   }
 

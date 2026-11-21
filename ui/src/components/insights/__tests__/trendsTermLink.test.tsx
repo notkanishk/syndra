@@ -88,8 +88,12 @@ describe("Ending soon", () => {
     );
     const name = await screen.findByText(/Casket Workshop/);
     const row = name.closest('[role="row"]')!;
-    // The name's track may shrink to 0 (minmax(0,1fr)) and wrap; the seats are fixed, not 1fr beside them.
-    expect(row.className).toContain("grid-cols-[minmax(0,1fr)_4.5rem_4.5rem]");
+    // The name's track may shrink to 0 (minmax(0,1fr)) and wrap; the numbers sit in the seat token,
+    // which a phone narrows. The heading row is the same grid, so a heading can never drift off its cell.
+    expect(row.className).toContain("grid-cols-[minmax(0,1fr)_var(--seat-number)_var(--seat-number)]");
+    const head = screen.getAllByRole("row").find((r) => r !== row && r.className.includes("--seat-number"))!;
+    // Same grid; only the type step differs (a label head, small rows).
+    expect(head.className.replace(/ type-label$/, "")).toBe(row.className.replace(/ text-small$/, ""));
     expect(name.className).toMatch(/min-w-0/);
     expect(name.className).toMatch(/break-words/);
   });
