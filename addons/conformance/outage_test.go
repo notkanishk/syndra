@@ -313,7 +313,9 @@ func TestNoFreshReadSkipsOnlyFreshnessUnreachable(t *testing.T) {
 // When the plan read just before the stop names an account the kit does not
 // own, the run halts there: the app is never stopped.
 func TestAHaltBeforeTheStopLeavesTheAppUp(t *testing.T) {
-	plans := func(seen []string) int { return len(slices.DeleteFunc(seen, func(s string) bool { return s != "POST /plan" })) }
+	plans := func(seen []string) int {
+		return len(slices.DeleteFunc(seen, func(s string) bool { return s != "POST /plan" }))
+	}
 	// The first run finds which /plan is the one just before the stop.
 	var down atomic.Bool
 	url, seen := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: down.Load}, nil, nil, nil)
