@@ -713,8 +713,7 @@ Schema: `v2/schema/health.json`.
   is up. With the app stopped, `reachable` MUST be `false` after one fresh
   read and `last_read_at` MUST NOT move; with it back, `reachable` MUST be
   `true` and a fresh read `current: true`. The kit will check exactly this
-  (`outage.health`, [Validating](#13-validating-before-you-ask-to-be-connected));
-  built in 8f, until then the kit does not take your app down.
+  (`outage.health`, [The outage checks](#the-outage-checks)).
 - `circuit_open` MUST be `true` while the add-on's own breaker is holding
   back its calls to the app (backing off to avoid a lockout or overload).
   It is distinct from `reachable: false`, so an operator does not look at
@@ -2641,18 +2640,14 @@ signed `POST /operations/{id}` for each operation the registry gives
 
 ### The outage checks
 
-*Built in 8f; until then the kit has no `-stop-app` flag and no `outage.*`
-checks, and `freshness.unreachable` is still always skipped.*
-
 The kit takes your app and your add-on down only through commands you give
 it, each run by the shell and expected to return once the change has
 happened:
 
 - `-stop-app <command>` and `-start-app <command>` make the app
   unreachable from your add-on and bring it back. The reference add-on's
-  fake app is meant to be switched by a file, so its hooks would be `touch`
-  and `rm`; built in 8f, until then it is switched in process by
-  `Config.Down` (test-only), which the kit cannot reach.
+  fake app is off while the file `REFERENCE_APP_DOWN_FILE` names exists,
+  so its hooks are `touch` and `rm`.
 - `-stop-addon <command>` and `-start-addon <command>` stop your add-on and
   start it again, its disk kept.
 
@@ -2670,13 +2665,23 @@ With them it runs:
   and `GET /calls/{call_id}` shows nothing recorded for it.
 - `outage.restart` (the add-on hooks): `/subjects` answers from your mirror
   as `cached` with its original `taken_at`, and a call made before the stop
-  still answers on `GET /calls/{call_id}`.
+  still answers on `GET /calls/{call_id}` (with `-mutate` and feature
+  `calls`).
+- `freshness.unreachable`, with feature `freshness`: the fresh read with
+  the app stopped answers the value read just before, `stale.reason:
+  unreachable`, never an error.
 
-On every reply of the run, outage or not, a no-copy reply carrying a `0`,
-an empty list, `""` or a zero date fails, and so does a zero `taken_at`
-anywhere, and `current: false` without `stale`. A CI run MUST give the app
-hooks. Against a real system a check whose hook is missing is reported "not
-checked", never "pass".
+On every reply of the run, outage or not, `no-false-zero` fails a reply with
+nothing to serve (`TARGET_UNREACHABLE`, `NO_CURRENT_READ`,
+`TARGET_UNREADABLE`, `FRESH_READ_COOLDOWN`, `STORE_UNREADABLE`) that carries
+a `0`, an empty list, `""` or a zero date, and any reply with a zero
+`taken_at`, or `current: false` without `stale`. A CI run MUST give the app
+hooks and `-require-outage`, which fails the outage checks when either app
+hook is missing (`-start-app "rm -f …"` beside `-stop-app "touch …"`, as
+Syndra's CI runs the reference). Against a real system a check whose hook is
+missing is reported "not checked", a skip, never "pass". The add-on hooks
+stay optional: an add-on that keeps no disk, as the reference, cannot pass
+`outage.restart`.
 
 ### What the kit cannot check
 

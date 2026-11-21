@@ -56,6 +56,13 @@ type Config struct {
 	// creates it again (identity.not-reused); the kit never purges anything
 	// else. Empty skips that check, and nothing is deleted.
 	ElevatedKey string
+	// StopApp and StartApp make the app unreachable from the add-on and bring
+	// it back; StopAddon and StartAddon stop the add-on and start it again,
+	// its disk kept. Each returns once the change has happened. Without a
+	// pair its outage checks are not checked: a skip, never a pass.
+	StopApp, StartApp, StopAddon, StartAddon func(context.Context) error
+	// RequireOutage makes a missing StopApp or StartApp a failure (CI).
+	RequireOutage bool
 }
 
 // spansTheRun are the checks judged across several steps or over every reply
@@ -63,7 +70,7 @@ type Config struct {
 const interruptedNote = "not judged: the run was interrupted"
 
 var spansTheRun = []string{"health", "settings", "strict-requests", "requests.exact-names", "error-envelope", "required-fields",
-	"plan-equals-apply", "create-is-new", "bound-to-created", "replay.refusal", "operations.secret"}
+	"plan-equals-apply", "create-is-new", "bound-to-created", "replay.refusal", "operations.secret", "no-false-zero"}
 
 var (
 	// ErrSubjectExists refuses a -mutate run whose subject already has an

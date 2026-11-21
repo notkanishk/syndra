@@ -49,9 +49,6 @@ func (k *kit) freshness() {
 		after, ok2 := k.targetReads()
 		return after - before - base, ok && ok2
 	}
-	k.at("freshness.unreachable").skip("a black-box kit cannot take the app offline; the add-on's own test holds it " +
-		"(TestAnUnreachableAppAnswersTheLastValueNotAnError in addons/reference)")
-
 	// cached: a plain read after a fresh one may come from the mirror, and
 	// then says so and costs the app nothing.
 	if c := k.at("freshness.cached"); k.wait(cooldown) {

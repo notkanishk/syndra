@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// An unreachable app is the half of freshness a black-box kit cannot take
-// offline (B4), so it is held here: a read answers the last value it read with
+// An unreachable app, held here without waiting out the cooldown (the kit
+// holds it too, given -stop-app: freshness.unreachable): a read answers the last value it read with
 // stale unreachable, never an error, and only with nothing kept is it 503
 // TARGET_UNREACHABLE with Retry-After.
 func TestAnUnreachableAppAnswersTheLastValueNotAnError(t *testing.T) {
