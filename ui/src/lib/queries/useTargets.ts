@@ -2,11 +2,12 @@
 
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, request } from "@/lib/api-client";
+import { request } from "@/lib/api-client";
 import type { EntitlementField } from "@/lib/fields";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
-import { useReadAgain, type Stale } from "./fresh";
+import { useReadAgain } from "./fresh";
+import { readFrom, readOf, withRead, type Answered, type WithRead, type WireRead } from "./read";
 
 /**
  * The add-on roster and the reads hanging off it.
@@ -29,30 +30,35 @@ export interface TargetOperation {
 }
 
 /**
- * What the health monitor can stand behind (A-01): offline only after three
- * missed checks in a row, unknown until Syndra can tell.
+ * The health monitor's reading of one system (design §13.2): the one owner of
+ * "reachable". `answering` is the add-on answered its last probe and could
+ * read its app; the two outages are named apart; `checking` is a system not
+ * probed yet.
  */
+export type ReachState = "answering" | "app_unreachable" | "addon_unreachable" | "checking";
+
 export interface HealthState {
-  status: "online" | "offline" | "unknown";
+  state: ReachState;
+  /** What the pipe saw, for `addon_unreachable` only (`no_answer`, `wrong_host`, `no_key`, `timeout`, `fault`). */
+  cause?: string;
+  /** When this state began; absent when it was already so at the first probe (not observed, so not stated). */
+  since?: string;
   checked_at?: string;
-  /** When the current run of misses began; set only while offline. */
-  reachable_since?: string;
+  /** Whole seconds until the next probe, while it is down. */
+  retry_after?: number;
   lifecycle?: string;
   /** The last three checks, oldest first. */
   recent: Array<"answered" | "missed">;
-  /** The first miss of the current run, before it is ever offline. */
+  /** The first miss of the current run. */
   missed_since?: string;
   /** When this Syndra process started. */
   started_at?: string;
-  /**
-   * When the system last gave a good answer to a check; null when it never has. The API grows
-   * this (A-07 §22); absent until it does, and the row then says what it said before.
-   */
+  /** When the system last gave a good answer to a check; null when it never has. */
   last_answered_at?: string | null;
 }
 
-/** The one reading a row and a header show, ranked on the backend (A-01). */
-export type TargetStatus = "cannot_connect" | "offline" | "waiting_to_retry" | "checking" | "answering";
+/** The one reading a row and a header show: the monitor's state. */
+export type TargetStatus = ReachState;
 
 /** Where a system's name came from (backend `systemName`). */
 export type NameFrom = "operator" | "product" | "id";
@@ -107,6 +113,7 @@ export function useTargets(enabled = true) {
   });
 }
 
+/** What the add-on said about itself (`health.get`): present only under a read that has data. */
 export interface TargetHealth {
   reachable: boolean;
   product?: string;
@@ -114,12 +121,6 @@ export interface TargetHealth {
   version_tested?: boolean;
   version_note?: string;
   circuit_open?: boolean;
-  /** The confirmed reading beside this live one. */
-  health?: HealthState;
-  /** The same ranked reading the roster row shows, read now. */
-  status?: TargetStatus;
-  /** A "Try again" answer: reachable and detail are a live read, `health` and `status` still the monitor's. */
-  live?: boolean;
   lifecycle?: string;
   lifecycle_note?: string;
   in_flight?: number;
@@ -142,7 +143,19 @@ export interface TargetHealth {
   /** Whether the share list could be read at all — "nothing is unaudited" and
    * "could not look" must not render as the same thing. */
   shares_readable?: boolean;
-  detail?: string;
+}
+
+/**
+ * GET /targets/{t}/health: Syndra's own records (the monitor, the log anchor)
+ * beside the add-on's answer, which is a `Read` (design §13.3: a reply about a
+ * system that may be down is 200 with `read: none` beside what Syndra holds).
+ */
+export interface TargetHealthReply {
+  /** The monitor's reading, never the add-on's. */
+  health?: HealthState;
+  status?: TargetStatus;
+  /** A "Try again" answer: the add-on's part is a live read; `health` and `status` are still the monitor's. */
+  live?: boolean;
   /**
    * The backend's memory of this target's mutation log, when it is carrying a
    * finding. Two authorities in one payload on purpose: the add-on reports its
@@ -150,7 +163,18 @@ export interface TargetHealth {
    * its own record has been edited.
    */
   log_anchor?: LogAnchor;
+  addon: Answered<TargetHealth>;
 }
+
+export type TargetHealthWire = Partial<TargetHealth> & Omit<TargetHealthReply, "addon"> & { read?: WireRead };
+
+/** The health reply as its two halves: the monitor and anchor always, the add-on's answer as a `Read`. */
+export function healthReplyOf(body: TargetHealthWire, since = Date.now()): TargetHealthReply {
+  const { health, status, live, log_anchor, read, ...addon } = body;
+  return { health, status, live, log_anchor, addon: readOf(read, addon as TargetHealth, since) };
+}
+
+const readHealth = async (path: string) => healthReplyOf(await request<TargetHealthWire>(path));
 
 export interface LogAnchor {
   target: string;
@@ -168,7 +192,7 @@ export interface LogAnchor {
 export function useTargetHealth(target: string | undefined) {
   return useQuery({
     queryKey: ["targets", target, "health"],
-    queryFn: () => request<TargetHealth>(`/targets/${target}/health`),
+    queryFn: () => readHealth(`/targets/${target}/health`),
     enabled: Boolean(target),
     refetchInterval: 30_000,
   });
@@ -176,7 +200,7 @@ export function useTargetHealth(target: string | undefined) {
 
 /** "Try again" on the health page: the same GET, read live from the add-on (`?fresh=true`). */
 export const useTargetHealthAgain = (target: string) =>
-  useReadAgain<TargetHealth>(["targets", target, "health"], `/targets/${target}/health`);
+  useReadAgain<TargetHealthReply>(["targets", target, "health"], `/targets/${target}/health`, readHealth);
 
 /**
  * Clearing a tamper finding by adopting the head that produced it.
@@ -241,7 +265,7 @@ export interface UnmanagedAccount {
 export interface AdoptionResult {
   status: "adopted" | "unconfirmed";
   detail?: string;
-  outcome?: string;
+  operation?: string;
   warning?: string;
 }
 
@@ -260,7 +284,7 @@ export interface BoundAccount {
 
 export interface TargetInventory {
   target: string;
-  /** Absent when the inventory halted before reading: unknown, never 0 (holding is observed). */
+  /** Syndra's own count of the bindings it holds on this system. */
   bound?: number;
   /**
    * The accounts Syndra manages. The other half of "whose accounts are on this
@@ -268,46 +292,24 @@ export interface TargetInventory {
    * those are not the ones an operator acts on.
    */
   accounts?: BoundAccount[];
-  /** Absent, like `bound`, `accounts` and `read_at`, when nothing was read. */
   unmanaged?: UnmanagedAccount[];
-  read_at?: string;
-  current: boolean;
   truncated?: boolean;
-  halted?: boolean;
+  /** `read_truncated` when the read hit the add-on's cap. */
   reason?: string;
-  /** The add-on's own sentence for a read it refused, with its next step; shown as written. */
-  detail?: string;
-  /** Why this is the add-on's copy, when it is one (feature freshness). */
-  read_stale?: Stale;
+  read: WireRead;
 }
+
+const inventoryPath = (target: string | undefined) => `/targets/${target}/inventory`;
 
 /** "Read again" on the inventory: the same GET, asking the target itself. */
 export const useTargetInventoryAgain = (target: string | undefined) =>
-  useReadAgain<TargetInventory>(["targets", target, "inventory"], `/targets/${target}/inventory`, readInventory);
+  useReadAgain(["targets", target, "inventory"], inventoryPath(target), readFrom<TargetInventory>);
 
-/**
- * A pass that stopped answers 503 with the inventory itself (`halted`, `reason`, `detail`), never an
- * empty list (handlers/inventory.go). Read as data, so the card can say why. Only such a body: any
- * other 503 (an unreachable system's envelope, a gateway's page) and every other failure, a 429's
- * cooldown included, still throws as it did.
- */
-async function readInventory(path: string): Promise<TargetInventory> {
-  try {
-    return await request<TargetInventory>(path);
-  } catch (e) {
-    // The handler's own reason for the 503 is `halted`: nothing else is read as an inventory.
-    const body = e instanceof ApiError && e.status === 503 ? e.body : undefined;
-    if (typeof body === "object" && body !== null && (body as { halted?: unknown }).halted === true) {
-      return body as TargetInventory;
-    }
-    throw e;
-  }
-}
-
+/** The inventory as a `Read`: a system with nothing to give is `none`, never an empty list (design §13.6). */
 export function useTargetInventory(target: string | undefined) {
   return useQuery({
     queryKey: ["targets", target, "inventory"],
-    queryFn: () => readInventory(`/targets/${target}/inventory`),
+    queryFn: () => readFrom<TargetInventory>(inventoryPath(target)),
     enabled: Boolean(target),
   });
 }
@@ -341,7 +343,8 @@ export function useAdoptAccount(target: string) {
 export function useReconcileTarget(target: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: () => request<TargetReconcileResult>(`/targets/${target}/reconcile`, { method: "POST" }),
+    // The pass's read, built once here: every reader takes its wait and state from the `Read`.
+    mutationFn: async () => withRead(await request<TargetReconcileResult>(`/targets/${target}/reconcile`, { method: "POST" })),
     onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }
@@ -553,13 +556,17 @@ export interface StaleBinding {
   version?: string;
 }
 
+/** A reconcile pass as `useReconcileTarget` gives it: its `read` a `Read`. */
+export type TargetReconcilePass = WithRead<TargetReconcileResult>;
+
 export interface TargetReconcileResult {
   target: string;
   /** Absent on a pass that halted before counting: unknown, never 0. */
   bound?: number;
   queued: number;
-  current: boolean;
   truncated?: boolean;
+  /** The pass's read (design §13.3). A pass with no copy is a 503 `TARGET_NOT_READ`, never this body. */
+  read: WireRead;
   /**
    * The pass stopped before concluding anything (`halt()` in the add-on
    * reconciler), and every count beside it is a zero that was never measured.
@@ -572,8 +579,6 @@ export interface TargetReconcileResult {
   reason?: string;
   /** The add-on's own sentence for a read it refused (reason `read_refused`, e.g. its records can't be read), with its next step; shown as written. */
   detail?: string;
-  /** A pass skipped inside the add-on's cooldown: seconds until it may read again ("Check now" waits them out once). */
-  retry_after?: number;
   unmanaged?: UnmanagedAccount[];
   /** Bindings whose account is no longer on the target. Never converged — the
    * plan for one says "create", and acting on it would recreate an account
@@ -635,27 +640,22 @@ export interface ReachPlace {
   access: "read" | "change";
 }
 
-/**
- * What each of a system's own groups opens (A-02 §3). `read: false` is "not read yet", and carries
- * no date; a read always carries one (as `last_known` and `MappableValues` do).
- */
-export type TargetReach = ({ read: true; read_at: string } | { read: false; read_at?: never }) & {
-  current?: boolean;
-  /** Why this is the add-on's copy, when it is one (feature freshness). */
-  stale?: Stale;
-  /** Whole seconds, with `read: false`: read moments ago, and nothing kept to serve. */
-  retry_after?: number;
+/** What each of a system's own groups opens (A-02 §3). */
+export interface TargetReach {
+  read: WireRead;
   groups?: Record<string, ReachPlace[]>;
-};
+}
+
+const reachPath = (target: string | undefined) => `/targets/${target}/reach`;
 
 /** "Read again" on what each group opens: the same GET, asking the target itself. */
 export const useTargetReachAgain = (target: string | undefined) =>
-  useReadAgain<TargetReach>(["targets", target, "reach"], `/targets/${target}/reach`);
+  useReadAgain(["targets", target, "reach"], reachPath(target), readFrom<TargetReach>);
 
 export function useTargetReach(target: string | undefined) {
   return useQuery({
     queryKey: ["targets", target, "reach"],
-    queryFn: () => request<TargetReach>(`/targets/${target}/reach`),
+    queryFn: () => readFrom<TargetReach>(reachPath(target)),
     enabled: Boolean(target),
   });
 }
@@ -670,15 +670,13 @@ export interface MappableValues {
   enumerable: boolean;
   builtin_count?: number;
   builtin_examples?: string[];
-  read_at: string;
-  current: boolean;
+  read: WireRead;
 }
 
 export function useMappableValues(target: string | undefined, field: string, enabled = true) {
   return useQuery({
     queryKey: ["targets", target, "mappable-values", field],
-    queryFn: () =>
-      request<MappableValues>(`/targets/${target}/mappable-values?field=${encodeURIComponent(field)}`),
+    queryFn: () => readFrom<MappableValues>(`/targets/${target}/mappable-values?field=${encodeURIComponent(field)}`),
     enabled: Boolean(target) && enabled,
     // Read when the dialog opens, every time: a group made on TrueNAS a minute
     // ago must be offered.
@@ -702,10 +700,16 @@ export interface TargetSetting {
   values_read: boolean;
 }
 
+/** GET /targets/{t}/settings. */
+export interface TargetSettings {
+  read: WireRead;
+  settings?: TargetSetting[];
+}
+
 export function useTargetSettings(target: string | undefined) {
   return useQuery({
     queryKey: ["targets", target, "settings"],
-    queryFn: () => request<{ read: boolean; settings?: TargetSetting[] }>(`/targets/${target}/settings`),
+    queryFn: () => readFrom<TargetSettings>(`/targets/${target}/settings`),
     enabled: Boolean(target),
   });
 }
@@ -743,24 +747,16 @@ export interface AccountHome {
   quota_bytes?: number;
 }
 
-/** GET /targets/{target}/homes. */
+/** GET /targets/{target}/homes: every managed account's home and limit, read from the add-on. */
 export interface TargetHomes {
-  read: boolean;
-  usage_read: boolean;
+  read: WireRead;
   accounts: AccountHome[];
-  /**
-   * Why no home is shown as anybody's although the system answered (`read` false):
-   * `addon_outdated`, or a not-checked reason (whose they are could not be learned).
-   * Said through `whyNotChecked`, never as empty homes.
-   */
-  reason?: string;
 }
 
 export function useTargetHomes(target: string | undefined) {
   return useQuery({
     queryKey: ["targets", target, "homes"],
-    queryFn: () =>
-      request<TargetHomes>(`/targets/${target}/homes`),
+    queryFn: () => readFrom<TargetHomes>(`/targets/${target}/homes`),
     enabled: Boolean(target),
   });
 }

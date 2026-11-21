@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MergeFindings } from "@/components/targets/MergeFindings";
-import type { MergeFinding, ResolveFindingInput, TargetReconcileResult } from "@/lib/queries/useTargets";
+import type { MergeFinding, ResolveFindingInput, TargetReconcilePass, TargetReconcileResult } from "@/lib/queries/useTargets";
 
 // 7t-7: the three more answers to a binding conflict (owner ruling 17 Nov 2026). Each shows only
 // where it can work, each says in the decision form what happens, and Check again waits out the
@@ -15,10 +15,11 @@ const state = {
   findings: [] as MergeFinding[],
   resolved: [] as ResolveFindingInput[],
   checks: 0,
-  pass: { target: "truenas", bound: 1, queued: 0, current: true } as TargetReconcileResult,
+  pass: { target: "truenas", bound: 1, queued: 0, read: { state: "now", taken_at: "2026-11-21T10:00:00Z" } } as TargetReconcileResult,
 };
 
 vi.mock("@/lib/queries/useTargets", async () => {
+  const { withRead } = await import("@/lib/queries/read");
   const actual = await vi.importActual<typeof import("@/lib/queries/useTargets")>("@/lib/queries/useTargets");
   return {
     ...actual,
@@ -32,9 +33,9 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
     }),
     useReconcileTarget: () => ({
-      mutate: (_: undefined, opts?: { onSuccess?: (pass: TargetReconcileResult) => void }) => {
+      mutate: (_: undefined, opts?: { onSuccess?: (pass: TargetReconcilePass) => void }) => {
         state.checks++;
-        opts?.onSuccess?.(state.pass);
+        opts?.onSuccess?.(withRead(state.pass));
       },
       isPending: false,
       error: null,
@@ -90,7 +91,7 @@ beforeEach(() => {
   state.findings = [];
   state.resolved = [];
   state.checks = 0;
-  state.pass = { target: "truenas", bound: 1, queued: 0, current: true };
+  state.pass = { target: "truenas", bound: 1, queued: 0, read: { state: "now", taken_at: "2026-11-21T10:00:00Z" } };
 });
 
 describe("a binding conflict's answers", () => {
@@ -199,7 +200,7 @@ describe("Check again", () => {
 
   it("says when it can check again inside the add-on's cooldown, and waits", () => {
     state.findings = [conflict({ reason: "ambiguous" })];
-    state.pass = { target: "truenas", bound: 0, queued: 0, current: false, halted: true, retry_after: 30 };
+    state.pass = { target: "truenas", bound: 0, queued: 0, halted: true, read: { state: "kept", reason: "cooldown", retry_after: 30, taken_at: "2026-11-21T10:00:00Z" } };
     view();
     fireEvent.click(screen.getByText("Decide"));
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
@@ -222,7 +223,7 @@ describe("Check again", () => {
 
   it("says a stopped pass in the add-on's words with a next step", () => {
     state.findings = [conflict({ reason: "ambiguous" })];
-    state.pass = { target: "truenas", bound: 0, queued: 0, current: false, halted: true, detail: "Its records can't be read." };
+    state.pass = { target: "truenas", bound: 0, queued: 0, halted: true, read: { state: "kept", reason: "cached", taken_at: "2026-11-21T10:00:00Z" }, detail: "Its records can't be read." };
     view();
     fireEvent.click(screen.getByText("Decide"));
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));

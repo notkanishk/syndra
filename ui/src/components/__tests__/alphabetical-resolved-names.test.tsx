@@ -16,15 +16,19 @@ vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
 vi.mock("@/lib/queries/useTargets", () => ({
   useTargetInventory: () => ({
     data: {
-      bound: 4,
-      // Shuffled; "u0-unnamed" has no name yet and sorts by its id.
-      accounts: ["u1", "u0-unnamed", "u3", "u2"].map((id) => ({ subject_id: id, username: id, bound_at: "2026-10-15T10:00:00Z" })),
+      state: "now",
+      takenAt: "2026-11-21T10:00:00Z",
+      data: {
+        bound: 4,
+        // Shuffled; "u0-unnamed" has no name yet and sorts by its id.
+        accounts: ["u1", "u0-unnamed", "u3", "u2"].map((id) => ({ subject_id: id, username: id, bound_at: "2026-10-15T10:00:00Z" })),
+      },
     },
     isLoading: false,
     error: null,
     refetch: () => {},
   }),
-  useTargetHomes: () => ({ data: { accounts: [] }, isLoading: false, error: null }),
+  useTargetHomes: () => ({ data: { state: "now", takenAt: "2026-11-21T10:00:00Z", data: { accounts: [] } }, isLoading: false, error: null }),
 }));
 const resolver = {
   resolveUser: (id: string) => ({ value: NAMES[id] ? { display_name: NAMES[id] } : undefined, resolved: Boolean(NAMES[id]) }),

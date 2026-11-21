@@ -1,8 +1,9 @@
 "use client";
 
+import { ReadFreshness, useReadAgainPress } from "@/components/ui/ReadFreshness";
+import type { Read } from "@/lib/queries/read";
 import { dueDate, emptyRecords, RECORD_HEADS, RECORD_SORT_BY, sinceDate, type Reader } from "@/components/results/copy";
 import { CardColumns, Cells, NUMBER_COL, STATUS_COL, type Columns } from "@/components/ui/Card";
-import { observed, ReadFreshness, useReadAgainPress, useReadAgainSince } from "@/components/ui/ReadFreshness";
 import { orderBy, SortHead, useSort } from "@/components/ui/SortHead";
 import { StandingLine } from "@/components/ui/StandingLine";
 import { formatShortDate } from "@/lib/format";
@@ -33,9 +34,8 @@ const when = (iso: string | undefined) => (iso ? Date.parse(iso) : null);
 /** Record, since, due, standing: dates and the standing are seats from tablet up, stacked on a phone. */
 const COLS: Columns = ["min-w-[200px] flex-1", NUMBER_COL, NUMBER_COL, `min-w-0 ${STATUS_COL}`];
 
-export function RecordsList({ result, name, reader }: { result: RecordsResult; name: string; reader: Reader }) {
+export function RecordsList({ result, read, name, reader }: { result: RecordsResult; read: Read<unknown>; name: string; reader: Reader }) {
   const again = useReadAgainPress();
-  const since = useReadAgainSince();
   const [sort, setSort, view] = useSort<RecordSort>("due");
   const by: Record<RecordSort, (r: Held) => string | number | null> = {
     record: (r) => r.label,
@@ -75,7 +75,7 @@ export function RecordsList({ result, name, reader }: { result: RecordsResult; n
           </ul>
         </div>
       )}
-      <ReadFreshness state={observed(result, since)} subject={name} reader={reader} onRefresh={again} />
+      <ReadFreshness read={read} system={name} subject={name} reader={reader} onRefresh={again} />
     </div>
   );
 }

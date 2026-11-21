@@ -28,8 +28,7 @@ const offered = manifest.operations.find((o) => o.id === answer.operation && o.s
 const read: ReadView = {
   operation: answer.operation,
   shape: registry.operations[answer.operation].result.replace(/^common\/|\.json$/g, "") as ReadView["shape"],
-  readable: true,
-  result: answer.result,
+  read: { state: "now", takenAt: "2026-11-10T09:30:00Z", data: answer.result },
 };
 
 const view: MyTargetView = {
@@ -39,10 +38,9 @@ const view: MyTargetView = {
   account: { username: "rey_mysterio" },
   kind: manifest.kind,
   entitlement_schema: manifest.entitlement_schema,
-  reads: [read],
+  read: { state: "now", takenAt: "2026-11-10T09:30:00Z", data: { reads: [read] } },
   credential: { set: false },
-  reachable: true,
-  health: "online",
+  health: "answering",
 };
 
 describe("a kind with no module of its own, from a manifest and a binary's answer", () => {
@@ -62,7 +60,7 @@ describe("a kind with no module of its own, from a manifest and a binary's answe
   });
 
   it("is the same card with no reads: the account row, and no list", () => {
-    render(<MemberTargetCard view={{ ...view, reads: undefined }} />);
+    render(<MemberTargetCard view={{ ...view, read: { state: "now", takenAt: "2026-11-10T09:30:00Z", data: {} } }} />);
     expect(screen.getByText("rey_mysterio")).toBeInTheDocument();
     expect(screen.queryByText("Digital caliper, 150 mm")).toBeNull();
   });

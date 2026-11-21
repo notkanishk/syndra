@@ -9,6 +9,7 @@ import { gapSettled } from "@/test-utils/leaving";
 import { motionInTests } from "@/test-utils/motion";
 import { DormantAccounts, sweepResult } from "@/components/targets/DormantAccounts";
 import type { DormantReport, SweepResult } from "@/lib/queries/useDormant";
+import { readOf } from "@/lib/queries/read";
 import type { OneShotSecret } from "@/lib/secret";
 
 /** The wait is said once in its own status region too; these read the line on screen. */
@@ -32,7 +33,7 @@ const state: {
   refetch: ReturnType<typeof vi.fn>;
 } = {
   refetch: vi.fn(),
-  report: { target: "truenas", state_read_at: new Date().toISOString(), truncated: false, accounts: [] },
+  report: { target: "truenas", read: { state: "now", taken_at: new Date().toISOString() }, truncated: false, accounts: [] },
   swept: [],
 };
 
@@ -43,7 +44,7 @@ vi.mock("@/lib/queries/useDormant", async () => {
   return {
     ...actual,
     useDormantAccounts: () => ({
-      data: state.error && !state.keepData ? undefined : state.report,
+      data: state.error && !state.keepData ? undefined : readOf(state.report.read, state.report, Date.now()),
       isLoading: false,
       isFetching: false,
       error: state.error ?? null,
@@ -84,7 +85,7 @@ beforeEach(() => {
   state.refetch = vi.fn();
   state.report = {
     target: "truenas",
-    state_read_at: new Date().toISOString(),
+    read: { state: "now", taken_at: new Date().toISOString() },
     truncated: false,
     accounts: [
       {
@@ -232,11 +233,29 @@ describe("the sweep result", () => {
   it("says Not removed with the account's own sentence and a step", () => {
     const failed = sweepResult({ target: "truenas", removed: 0, outcomes: [{ account: "former-member", outcome: "refused" }] }, "TrueNAS");
     expect(failed.word).toBe("Not removed");
-    expect(failed.outcome).toMatchObject({ kind: "failed", next: "Refresh this list to see what is left." });
+    expect(failed.outcome).toMatchObject({ kind: "failed", next: "Read this list again to see what is left." });
     expect(failed.outcome.message).toContain("former-member: refused. It gained a role since you loaded this list, so it was left alone.");
-    const unsure = sweepResult({ target: "truenas", removed: 1, outcomes: [{ account: "a", outcome: "removed" }, { account: "b", outcome: "indeterminate" }] }, "TrueNAS");
+    const unsure = sweepResult(
+      { target: "truenas", removed: 1, outcomes: [{ account: "a", outcome: "removed" }, { account: "b", outcome: "unconfirmed", answer: { status: "unconfirmed", detail: "This may have been applied. Syndra is checking; don't send it again." } }] },
+      "TrueNAS",
+    );
     expect(unsure.word).toBe("Removed 1 of 2");
-    expect(unsure.outcome.next).toBe("Check TrueNAS before you try again.");
+    expect(unsure.outcome.message).toContain("b: This may have been applied. Syndra is checking; don't send it again.");
+    expect(unsure.outcome.next).toBe("Syndra is checking; don't remove it again.");
+  });
+
+  // Design §13.4: a row nothing went out for carries the write's own answer, its why and its step.
+  it("says an account nothing went out for in the write's own words, with when to try again", () => {
+    const unsent = sweepResult(
+      {
+        target: "truenas",
+        removed: 0,
+        outcomes: [{ account: "the-miz", outcome: "nothing_sent", answer: { error: "NOTHING_SENT", message: "Nothing went out. Syndra can't reach TrueNAS's add-on. Try again when TrueNAS answers." } }],
+      },
+      "TrueNAS",
+    );
+    expect(unsent.outcome.message).toContain("the-miz: Nothing went out. Syndra can't reach TrueNAS's add-on.");
+    expect(unsent.outcome.next).toBe("Try again when TrueNAS answers.");
   });
 });
 
@@ -331,9 +350,10 @@ describe("inside the add-on's cooldown", () => {
     vi.useRealTimers();
   });
 
-  it("a list load says so once, in the freshness line with its waiting button: no refusal block, no claim that nothing was changed", () => {
+  // A list read inside the cooldown has nothing to give (503 TARGET_NOT_READ, reason cooldown): it is none.
+  it("a list load says so once, in the read line with its waiting button: no refusal block, no claim that nothing was changed", () => {
     vi.useFakeTimers();
-    state.error = cooling(2);
+    state.report = { ...state.report, read: { state: "none", reason: "cooldown", retry_after: 2 } };
     renderDormant();
     expect(screen.getByText(/can read again in 2 s/, { ignore: STATUS })).toBeInTheDocument();
     expect(screen.queryByText(/nothing was changed/)).toBeNull();
@@ -350,24 +370,6 @@ describe("inside the add-on's cooldown", () => {
     vi.useRealTimers();
   });
 
-  // Somebody else's wait is not the reader's doing, and only their own press into it is a warning.
-  it("draws a cooldown the load ran into neutral, and amber only once the reader's own press meets it", () => {
-    vi.useFakeTimers();
-    state.error = cooling(2);
-    state.errorAt = Date.now();
-    const view = renderDormant();
-    const dot = () => document.querySelector("[data-freshness-dot]") as HTMLElement;
-    expect(dot().className).toContain("bg-faint");
-    expect(dot().className).not.toContain("warn");
-    act(() => void vi.advanceTimersByTime(2000));
-    fireEvent.click(screen.getByRole("button", { name: "Read again" }));
-    state.error = cooling(30);
-    state.errorAt = Date.now();
-    view.rerender(tree());
-        expect(dot().className).toContain("bg-warn");
-    vi.useRealTimers();
-  });
-
   it("a Read again that fails for another reason says Not read beside the press and keeps the list", () => {
     state.keepData = true;
     state.error = new ApiError(500, { error: "INTERNAL", message: "the add-on fell over" });
@@ -378,17 +380,30 @@ describe("inside the add-on's cooldown", () => {
     expect(screen.queryByText("This list could not be read")).toBeNull();
   });
 
-  it("keeps the list and its selection when a refetch is refused while it is on hand", async () => {
+  // Steady under the hand: a Read again inside the cooldown is told only to wait, so the rows read
+  // moments ago stay where they are and the strip counts the wait down.
+  it("a Read again told to wait keeps the rows on screen, says their real age, and counts down", async () => {
+    state.report = { ...state.report, read: { state: "now", taken_at: new Date(Date.now() - 5 * 60_000).toISOString() } };
     const view = renderDormant();
-    fireEvent.click(screen.getByLabelText("Select former-member"));
-    expect(screen.getByLabelText("Select former-member")).toBeChecked();
-    state.keepData = true;
-    state.error = cooling(30);
-    state.errorAt = Date.now();
+    state.report = { ...state.report, read: { state: "none", reason: "cooldown", retry_after: 30 } };
     view.rerender(tree());
-    expect(await screen.findByText(/can read again in/, { ignore: STATUS })).toBeInTheDocument();
-    expect(screen.getByLabelText("Select former-member")).toBeChecked();
-    expect(screen.queryByText("This list could not be read")).toBeNull();
+    expect(await screen.findByText(/can read again in 30 s/, { ignore: STATUS })).toBeInTheDocument();
+    expect(screen.getByText(/was read 5 min ago; you can read again in 30 s/, { ignore: STATUS })).toBeInTheDocument();
+    expect(screen.queryByText(/moments ago/, { ignore: STATUS })).toBeNull();
+    expect(screen.getByLabelText("Select former-member")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Read again" })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  // Syndra keeps no copy (owner Q1): a Read again answered with nothing to give takes the list away,
+  // and the line says why, never an empty list.
+  it("a Read again answered with nothing to give says why in place of the list", async () => {
+    const view = renderDormant();
+    state.report = { ...state.report, read: { state: "none", reason: "addon_unreachable", cause: "no_answer" } };
+    view.rerender(tree());
+    expect(await screen.findByText(/add-on/, { ignore: STATUS })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Select former-member")).toBeNull();
+    expect(screen.queryByText("Nothing to tidy.")).toBeNull();
+    expect(screen.queryByTestId("card-count")).toBeNull();
   });
 });
 

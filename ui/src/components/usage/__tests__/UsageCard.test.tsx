@@ -17,7 +17,7 @@ import { dayWords, formatValue } from "@/lib/usage";
 import { motionInTests } from "@/test-utils/motion";
 import { makeProxyFetch } from "@/test-utils/proxyFetch";
 
-import { ago, GAP, GIB, homeBytes, sessions, targetStats, view, windows } from "./fixtures";
+import { ago, GAP, GIB, homeBytes, readNow, sessions, targetStats, view, windows } from "./fixtures";
 
 const withQuery = (ui: ReactElement, advanced = false) => (
   <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -270,6 +270,16 @@ describe("the states (A-23 part 2)", () => {
 });
 
 describe("the end row", () => {
+  it("while the system is down, says since when nothing is counted and why, in the reader's words", () => {
+    const m = sessions({ counted_through: ago(3) });
+    const why = { reason: "addon_unreachable", cause: "no_answer" };
+    const { unmount } = render(<UsageCard title="t" windows={{ ...windows(), why }} metrics={[m]} system="Training hall" reader={{ audience: "member" }} />);
+    expect(screen.getByText(`Not counted since ${dayWords(ago(3))}. Training hall can't be read right now. Nothing for you to do.`)).toBeInTheDocument();
+    unmount();
+    render(<UsageCard title="t" windows={{ ...windows(), why }} metrics={[m]} system="Training hall" />);
+    expect(screen.getByText(/^Not counted since .*\. Syndra can't reach Training hall's add-on\./)).toBeInTheDocument();
+  });
+
   it("on a person's card: its step, no link, no Last counted, and what retention keeps", () => {
     const m = sessions({ collected: { at: new Date().toISOString() } });
     render(<UsageCard title={copy.MEMBER_TITLE} windows={windows(10)} metrics={[m]} />);
@@ -367,7 +377,7 @@ describe("a person's view of a system", () => {
   const storage = (usage: Parameters<typeof view>[0]) =>
     ({
       ...view(usage, { kind: "storage", entitlement_schema: [{ name: "quota_field", role: "limit", unit: "bytes", label: "Limit" }] as never }),
-      storage: { usable: true, needs_password: false, places_readable: true, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: 18.4 * GIB, quota_bytes: 20 * GIB } }] },
+      read: readNow({ usable: true, needs_password: false, places_readable: true, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: 18.4 * GIB, quota_bytes: 20 * GIB } }] }),
     });
 
   it("titles the member's card as theirs and the operator's by the person's name", () => {
@@ -455,11 +465,8 @@ describe("a person's view of a system", () => {
 
     it("is on its own scale with no limit line where the limit is 0 or was not read", () => {
       const none = storage({ reported: true, metrics: [homeBytes()], ...windows() });
-      none.storage.places[0].usage = { used_bytes: 1 } as never;
-      const { unmount } = render(<HomeMonth view={none} />);
-      expect(bands()[0].querySelector("[data-limit]")).toBeNull();
-      unmount();
-      render(<HomeMonth view={{ ...none, health: "offline" }} />);
+      none.read.data.storage!.places![0].usage = { used_bytes: 1 } as never;
+      render(<HomeMonth view={none} />);
       expect(bands()[0].querySelector("[data-limit]")).toBeNull();
     });
 
@@ -672,7 +679,7 @@ describe("the band's fidelity", () => {
     const storage = (used: number) =>
       ({
         ...view({ reported: true, metrics: [homeBytes({ series: [{ dimensions: {}, latest: { day: ago(1), value: used }, days: Array.from({ length: 29 }, (_, i) => ({ day: ago(29 - i), value: i >= 25 ? used : Math.min(used, 19 * GIB) })) }] })], ...windows() }, { kind: "storage", entitlement_schema: [{ name: "quota_field", role: "limit", unit: "bytes", label: "Limit" }] as never }),
-        storage: { usable: true, needs_password: false, places_readable: true, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: used, quota_bytes: 20 * GIB } }] },
+        read: readNow({ usable: true, needs_password: false, places_readable: true, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: used, quota_bytes: 20 * GIB } }] }),
       });
     const { unmount } = render(<HomeMonth view={storage(19 * GIB)} />);
     let svg = bands()[0];
@@ -693,7 +700,7 @@ describe("the band's fidelity", () => {
     const over = 22 * GIB;
     const v = {
       ...view({ reported: true, metrics: [homeBytes({ series: [{ dimensions: {}, latest: { day: ago(0), value: over }, days: Array.from({ length: 30 }, (_, i) => ({ day: ago(29 - i), value: over })) }] })], ...windows() }, { kind: "storage", entitlement_schema: [{ name: "quota_field", role: "limit", unit: "bytes", label: "Limit" }] as never }),
-      storage: { usable: true, needs_password: false, places_readable: true, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: over, quota_bytes: 20 * GIB } }] },
+      read: readNow({ usable: true, needs_password: false, places_readable: true, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: over, quota_bytes: 20 * GIB } }] }),
     };
     render(<HomeMonth view={v} />);
     expect(bands()[0].querySelector("[data-limit]")).not.toBeNull();
@@ -819,7 +826,7 @@ describe("the storage kind's limit", () => {
   const field = (name: string, unit: string) => ({ name, role: "limit", unit, label: name });
   const read = (schema: unknown[], over = {}) => {
     const v = view({ reported: true, metrics: [homeBytes()], ...windows() }, { kind: "storage", entitlement_schema: schema as never, ...over });
-    return { ...v, storage: { usable: true, needs_password: false, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: 1, quota_bytes: 20 * GIB } }] } };
+    return { ...v, read: readNow({ usable: true, needs_password: false, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: 1, quota_bytes: 20 * GIB } }] }), ...over };
   };
 
   it("takes the one limit in bytes, and none when two are (it would be a guess) or none is", async () => {
@@ -830,12 +837,13 @@ describe("the storage kind's limit", () => {
     expect(storageLimits(read([field("seats", "items")]))).toEqual({});
   });
 
-  it("is not read while offline or where the person cannot change the place", async () => {
+  it("is not read from a read with no data, or where the person cannot change the place", async () => {
     const { storageLimits } = await import("@/components/kinds/storage/limits");
     const schema = [field("quota_field", "bytes")];
-    expect(storageLimits(read(schema, { health: "offline" }))).toEqual({});
+    expect(storageLimits(read(schema, { read: { state: "none", why: { reason: "addon_unreachable" } } }))).toEqual({});
     const readOnly = read(schema);
-    readOnly.storage.places[0] = { ...readOnly.storage.places[0], access: "read" as never };
+    const places = readOnly.read.state === "now" ? readOnly.read.data.storage!.places! : [];
+    places[0] = { ...places[0], access: "read" as never };
     expect(storageLimits(readOnly)).toEqual({});
   });
 });

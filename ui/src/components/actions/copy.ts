@@ -98,10 +98,6 @@ export function refusal(code: string, details: Record<string, string> = {}): { m
       return { message: "That system cannot do this right now", next: TRY_LATER };
     case "NO_SUCH_ACTION":
       return { message: "This system does not offer that", next: "Reload the page to see what it offers now." };
-    case "TARGET_UNREACHABLE":
-      return { message: "That system is not answering. Nothing went out", next: TRY_LATER };
-    case "PREVIEW_UNANSWERED":
-      return { message: "That system did not answer the preview. Nothing went out", next: TRY_LATER };
     case "CALL_UNSETTLED_UNKNOWN":
       return { message: "We could not check on your last one. Nothing went out", next: "Try again in a minute." };
     case "TOO_MANY_ATTEMPTS":
@@ -126,8 +122,6 @@ export const REFUSAL_CODES = [
   "TARGET_PAUSED",
   "ACTION_UNAVAILABLE",
   "NO_SUCH_ACTION",
-  "TARGET_UNREACHABLE",
-  "PREVIEW_UNANSWERED",
   "CALL_UNSETTLED_UNKNOWN",
   "TOO_MANY_ATTEMPTS",
   "RATE_LIMITED",

@@ -7,6 +7,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ToBody } from "@/components/ui/Modal";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { whyLine } from "@/components/results/copy";
+import { ApiError } from "@/lib/api-client";
+import { TARGET_NOT_READ, type Answered, notRead } from "@/lib/queries/read";
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
 import {
   useApplyEntitlements,
@@ -32,7 +35,7 @@ const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").
  * Two properties the endpoint has that no other planned surface does, and both
  * are rendered rather than smoothed over:
  *
- *   provisional — the plan was computed against the add-on's last-known state
+ *   a kept copy — the plan was computed against the add-on's kept copy (`read.state` kept)
  *                 because the target was unreachable. It stays applicable,
  *                 labelled with the age of that state. This differs on purpose
  *                 from the unmanaged inventory, where a stale read BLOCKS
@@ -66,15 +69,17 @@ export function ConvergeEntitlements({
   const nameOf = useSystemNames();
   const rehearse = useRehearseEntitlements(target);
   const apply = useApplyEntitlements(target);
-  const [plan, setPlan] = useState<EntitlementPlan | null>(null);
+  // The plan as the read it is: computed against the system now, or against its kept copy, dated.
+  const [planRead, setPlan] = useState<PlanRead | null>(null);
+  const plan = planRead?.data ?? null;
   // What leaves is the plan it was showing; a dialog opened again starts with none.
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) setPlan(null);
   }
-  const [lastPlan, setLastPlan] = useState(plan);
-  if (plan && plan !== lastPlan) setLastPlan(plan);
+  const [lastPlan, setLastPlan] = useState(planRead);
+  if (planRead && planRead !== lastPlan) setLastPlan(planRead);
   const dock = useExitPhase(open && plan !== null, TINT_MS);
 
   return (
@@ -87,8 +92,12 @@ export function ConvergeEntitlements({
         system={nameOf(target)}
         onRehearse={async (acknowledgeScope) => {
           const result = await rehearse.mutateAsync({ subjectIds, acknowledgeScope });
+          // Nothing to compute against (design §13.3): the why is the dialog's refusal, never an empty plan.
+          if (notRead(result)) {
+            throw new ApiError(503, { error: TARGET_NOT_READ, message: whyLine(result.why, nameOf(target), { audience: "operator", person: "" }) });
+          }
           setPlan(result);
-          return asBulkPlan(result);
+          return asBulkPlan(result.data);
         }}
         onApply={async (planId) => {
           const result = await apply.mutateAsync({ planId, subjectIds });
@@ -100,7 +109,7 @@ export function ConvergeEntitlements({
       {/* Outside the dialog's own body so it survives every step of it: the age
           of the state a provisional plan was computed against is exactly as
           relevant on the review step as on the result. */}
-      {dock.rendered && lastPlan && <PlanProvenance plan={lastPlan} leaving={dock.leaving} />}
+      {dock.rendered && lastPlan && <PlanProvenance read={lastPlan} leaving={dock.leaving} />}
     </>
   );
 }
@@ -114,7 +123,7 @@ export function ConvergeEntitlements({
  * state from fourteen minutes ago", and only the second one lets an operator
  * decide whether that matters.
  */
-function PlanProvenance({ plan, leaving }: { plan: EntitlementPlan; leaving: boolean }) {
+function PlanProvenance({ read, leaving }: { read: PlanRead; leaving: boolean }) {
   return (
     // Above the page, below a dialog. It once sat above every dialog, the highest step in
     // the product — which put a passive freshness read on top of the scrim of
@@ -139,11 +148,8 @@ function PlanProvenance({ plan, leaving }: { plan: EntitlementPlan; leaving: boo
       >
         <ReadFreshness
           subject="What this preview is based on"
-          state={{
-            readAt: plan.state_read_at,
-            current: !plan.provisional,
-            truncated: plan.truncated,
-          }}
+          read={read}
+          truncated={read.data.truncated}
         />
       </div>
     </div>
@@ -158,6 +164,9 @@ function PlanProvenance({ plan, leaving }: { plan: EntitlementPlan; leaving: boo
  * same language already — and the one field that differs is the one that
  * matters: `succeeded` is always zero here, so it stays zero.
  */
+/** A plan that has data: computed now, or against the add-on's kept copy. */
+type PlanRead = Exclude<Answered<EntitlementPlan>, { state: "none" }>;
+
 function asBulkPlan(plan: EntitlementPlan): BulkPlan {
   return {
     op: "converge_entitlements" as BulkPlan["op"],

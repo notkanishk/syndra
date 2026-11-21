@@ -1,5 +1,6 @@
 "use client";
 
+import { notRead } from "@/lib/queries/read";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
@@ -16,7 +17,7 @@ import { Notice } from "@/components/ui/Notice";
 import { ApiError } from "@/lib/api-client";
 import { mayHaveGoneThrough } from "@/lib/outcome";
 import { invalidateAfter } from "@/lib/queries/invalidation";
-import { settled, useMemberAction, useMemberOperation, type ActionParams } from "@/lib/queries/useMemberAction";
+import { settled, unconfirmed, useMemberAction, useMemberOperation, type ActionParams } from "@/lib/queries/useMemberAction";
 import type { MyTargetView, ReadView } from "@/lib/queries/useMyStorage";
 
 type Action = NonNullable<MyTargetView["actions"]>[number];
@@ -100,10 +101,13 @@ function Watching({ target, name, id }: { target: string; name: string; id: stri
   return (
     <div className="flex flex-col gap-3">
       <ActionOutcome word={said.word} outcome={said.outcome} />
-      {view?.readable && <ReadResult read={view} name={name} reader={MEMBER} />}
+      {readable(view) && <ReadResult read={view} name={name} reader={MEMBER} />}
     </div>
   );
 }
+
+/** A read that came back with something to show (design §13.6): a preview or record with no data is not drawn. */
+const readable = (view: ReadView | null | undefined): view is ReadView => Boolean(view && !notRead(view.read));
 
 type Step =
   | { at: "form"; error?: unknown }
@@ -156,7 +160,7 @@ function ActionDialog({
     go(
       { params: sent(), mode: "preview" },
       {
-        onSuccess: (a) => setStep(a.state === "preview" ? { at: "preview", view: a.view, noChange: a.outcome === "no_change" } : { at: "form" }),
+        onSuccess: (a) => setStep("state" in a && a.state === "preview" ? { at: "preview", view: a.view, noChange: a.outcome === "no_change" } : { at: "form" }),
         onError: (error) => setStep({ at: "form", error }),
       },
     );
@@ -166,10 +170,12 @@ function ActionDialog({
       { params: sent(), mode: "confirm" },
       {
         onSuccess: (a) => {
-          if (a.state === "checking") {
+          // 202: sent, the answer lost; it may have been applied (design §13.4). Ask after it, never send again.
+          if (unconfirmed(a)) {
             onWatch(a.operation);
             setStep({ at: "checking", id: a.operation });
-          } else if (a.state === "no_change") setStep({ at: "result", said: saidFromState("no_change"), view: a.view });
+          } else if (a.state === "preview") setStep({ at: "form" });
+          else if (a.state === "no_change") setStep({ at: "result", said: saidFromState("no_change"), view: a.view });
           else setStep({ at: "result", said: saidFromState("done"), view: a.view });
         },
         onError: (error) => {
@@ -205,7 +211,7 @@ function ActionDialog({
   const toForm = () => setStep({ at: "form" });
   const titleId = `action-${action.id}-title`;
   const lede =
-    step.at === "form" ? copy.FORM_LEDE : step.at === "preview" && !step.noChange && step.view.readable ? copy.PREVIEW_LEDE : undefined;
+    step.at === "form" ? copy.FORM_LEDE : step.at === "preview" && !step.noChange && readable(step.view) ? copy.PREVIEW_LEDE : undefined;
 
   return (
     <Modal open onClose={onClose} busy={send.isPending || step.at === "asking"} size="md" labelledBy={titleId}>
@@ -261,7 +267,7 @@ function ActionDialog({
           </form>
         )}
         {step.at === "preview" &&
-          (step.view.readable ? (
+          (readable(step.view) ? (
             <>
               <ReadResult read={step.view} name={view.name} reader={MEMBER} />
               {step.noChange && <p className="m-0 text-body text-muted">{copy.PREVIEW_NO_CHANGE}</p>}
@@ -274,7 +280,7 @@ function ActionDialog({
         {step.at === "result" && (
           <>
             <ActionOutcome word={step.said.word} outcome={step.said.outcome} />
-            {step.view?.readable && <ReadResult read={step.view} name={view.name} reader={MEMBER} />}
+            {readable(step.view) && <ReadResult read={step.view} name={view.name} reader={MEMBER} />}
           </>
         )}
         {step.at === "asking" && <ActionOutcome word={saidFromState("checking").word} outcome={saidFromState("checking").outcome} />}
@@ -285,19 +291,19 @@ function ActionDialog({
           cancel={
             step.at === "form"
               ? { onClick: onClose, disabled: send.isPending }
-              : step.at === "preview" && !step.noChange && step.view.readable
+              : step.at === "preview" && !step.noChange && readable(step.view)
                 ? { label: "Back", onClick: toForm, disabled: send.isPending }
                 : step.at === "result" && step.said.outcome.kind === "refused"
                   ? { label: "Back", onClick: toForm }
                   : undefined
           }
-          note={step.at === "preview" && !step.noChange && step.view.readable ? copy.previewNote(view.name) : undefined}
+          note={step.at === "preview" && !step.noChange && readable(step.view) ? copy.previewNote(view.name) : undefined}
         >
           {step.at === "form" ? (
             <Button key="preview" type="submit" form="action-form" variant="accent" disabled={!ready} isPending={send.isPending}>
               {copy.PREVIEW_BUTTON}
             </Button>
-          ) : step.at === "preview" && !step.noChange && step.view.readable ? (
+          ) : step.at === "preview" && !step.noChange && readable(step.view) ? (
             <Button key="confirm" variant="accent" isPending={send.isPending} onClick={confirm}>
               {copy.CONFIRM_BUTTON}
             </Button>

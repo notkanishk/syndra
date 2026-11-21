@@ -40,11 +40,11 @@ describe("a copy the add-on kept", () => {
 });
 
 describe("a Read again inside the cooldown", () => {
-  it("says it was read moments ago, counts down, keeps the button off with its reason, and gives it back at 0", () => {
+  it("says how long ago it was read, counts down, keeps the button off with its reason, and gives it back at 0", () => {
     vi.useFakeTimers();
     const press = vi.fn();
     render(<ReadFreshness state={copy({ reason: "cooldown", retry_after: 3 })} subject={NAME} onRefresh={press} />);
-    const line = screen.getByText(cooldownLine(NAME, 3), { ignore: STATUS });
+    const line = screen.getByText(cooldownLine(NAME, 3, formatRelative(at)), { ignore: STATUS });
     const button = screen.getByRole("button", { name: "Read again" });
     expect(button).toHaveAttribute("aria-disabled", "true");
     expect(button.getAttribute("aria-describedby")).toBe(line.id);
@@ -52,9 +52,9 @@ describe("a Read again inside the cooldown", () => {
     expect(press).not.toHaveBeenCalled();
 
     act(() => void vi.advanceTimersByTime(1000));
-    expect(screen.getByText(cooldownLine(NAME, 2), { ignore: STATUS })).toBeInTheDocument();
+    expect(screen.getByText(cooldownLine(NAME, 2, formatRelative(at)), { ignore: STATUS })).toBeInTheDocument();
     act(() => void vi.advanceTimersByTime(2000));
-    expect(screen.queryByText(/moments ago/)).toBeNull();
+    expect(screen.queryByText(/you can read again/)).toBeNull();
     expect(screen.getByText(copyLine(NAME, formatRelative(at)))).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Read again" })).not.toHaveAttribute("aria-disabled");
     fireEvent.click(screen.getByRole("button", { name: "Read again" }));

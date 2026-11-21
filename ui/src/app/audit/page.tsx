@@ -272,7 +272,7 @@ function downloadCsv(
       entry.created_at,
       entry.actor_id.startsWith("system:") ? humanizeKey(entry.actor_id.slice(7)) : person(entry.actor_id),
       entry.actor_id,
-      describeAction(entry.action, nameOf).verb,
+      describeAction(entry.action, nameOf, entry.details as Record<string, unknown> | undefined).verb,
       target,
       entry.target_id,
       entry.resource_id,

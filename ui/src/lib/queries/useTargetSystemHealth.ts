@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { request } from "@/lib/api-client";
+import { readFrom, type WireRead } from "@/lib/queries/read";
 
 /**
  * What the TARGET says about itself.
@@ -19,14 +19,13 @@ import { request } from "@/lib/api-client";
  */
 export interface TargetSystemHealth {
   target: string;
-  readable: boolean;
+  read: WireRead;
   system?: { hostname?: string; version?: string; uptime_seconds?: number };
   alerts?: TargetAlert[];
   pools?: PoolStatus[];
   services?: ServiceState[];
   /** Names the sources that could not be read: `system`, `alerts`, `pools`, `services`. */
   degraded?: string[];
-  detail?: string;
 }
 
 export interface TargetAlert {
@@ -57,7 +56,7 @@ export interface ServiceState {
 export function useTargetSystemHealth(target: string | undefined) {
   return useQuery({
     queryKey: ["targets", target, "system-health"],
-    queryFn: () => request<TargetSystemHealth>(`/targets/${target}/system-health`),
+    queryFn: () => readFrom<TargetSystemHealth>(`/targets/${target}/system-health`),
     enabled: Boolean(target),
     // Four calls to the NAS per read. Long enough that moving between tabs on
     // one target does not re-ask, short enough that an operator who fixed

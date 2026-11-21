@@ -317,6 +317,12 @@ export function whyNotChecked(reason: string, system?: string): string {
 
 function reasonWords(reason: string): string {
   switch (reason) {
+    // Who was not answering (design §13.1): the add-on, or the app behind it. A row from before
+    // the two were told apart keeps the word it was written with.
+    case "addon_unreachable":
+      return "Its add-on did not answer when Syndra last tried. Check that the add-on is running.";
+    case "app_unreachable":
+      return "Its add-on answered and could not reach the system behind it. Check that the system is on.";
     case "target_unreachable":
       return "It did not answer when Syndra last tried.";
     case "read_refused":
@@ -333,17 +339,6 @@ function reasonWords(reason: string): string {
       // Never the code: a reason nobody has worded yet is still said in words.
       return "It could not be checked, and Syndra has no words for why.";
   }
-}
-
-/**
- * The account list when the pass stopped before it concluded anything: the
- * add-on's own sentence and next step when it gave them (`detail`), else the
- * reason in words, naming the system, and the one step true of every reason.
- * The empty list such a pass returns is never shown as "nothing outside Syndra".
- */
-export function inventoryNotRead(system: string, detail: string | undefined, reason: string | undefined): string {
-  const why = detail?.trim() || `${reason ? whyNotChecked(reason, system) : `${system} could not be read.`} Read again once that is fixed.`;
-  return `The account list could not be read. ${why}`;
 }
 
 /**

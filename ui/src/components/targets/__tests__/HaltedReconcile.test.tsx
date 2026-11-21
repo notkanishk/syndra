@@ -4,6 +4,7 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
+import { ApiError } from "@/lib/api-client";
 import { LONG_WAIT_MS } from "@/lib/useLongWait";
 
 /**
@@ -32,15 +33,17 @@ const pass = vi.hoisted(() => ({
   data: {
     target: "truenas",
     queued: 0,
-    current: false,
+    read: { state: "now", taken_at: new Date().toISOString() },
     halted: true,
-    reason: "target unreachable",
-  } as Record<string, unknown>,
+    reason: "a_reason_nobody_worded",
+  } as Record<string, unknown> | undefined,
+  error: null as unknown,
 }));
 
 // Every helper lives INSIDE the factory: `vi.mock` is hoisted above every
 // const in the file, so a top-level one is not yet initialised when it runs.
-vi.mock("@/lib/queries/useTargets", () => {
+vi.mock("@/lib/queries/useTargets", async () => {
+  const { withRead } = await import("@/lib/queries/read");
   const idle = () => ({
     data: undefined,
     isLoading: false,
@@ -68,7 +71,7 @@ vi.mock("@/lib/queries/useTargets", () => {
     useSetLifecycle: inert,
     useReleaseBinding: inert,
     useAdoptAccount: inert,
-    useReconcileTarget: () => ({ ...inert(), data: pass.data, isPending: pass.pending }),
+    useReconcileTarget: () => ({ ...inert(), data: pass.data && withRead(pass.data as never), error: pass.error, isPending: pass.pending }),
   };
 });
 
@@ -113,47 +116,31 @@ describe("a reconcile pass that halted", () => {
     expect(screen.queryByText(/fixes waiting for you to send/)).toBeNull();
   });
 
-  // 7t-3: the add-on answered and refused the read because its own records
-  // failed (STORE_UNREADABLE → read_refused). Its sentence carries the next
-  // step; "once it is reachable" and the raw reason would both be untrue.
+  // Nothing to read (design §13.3): a 503 TARGET_NOT_READ, said in the backend's §13.1 sentence,
+  // which names the side that is down and its step, never as zeroes or as Syndra's own failure.
+  const notRead = (reason: string, message: string) =>
+    new ApiError(503, { error: "TARGET_NOT_READ", message, details: { reason } });
+
   it("says the add-on's own words when it refused the read", () => {
     const detail =
       "Syndra's records of who has which account on TrueNAS can't be read. Check the add-on's storage, then try again.";
-    pass.data = { ...pass.data, reason: "read_refused", detail };
+    pass.data = undefined;
+    pass.error = notRead("read_refused", detail);
     renderTarget();
 
-    expect(
-      screen.getByText(`The check stopped before it concluded anything. ${detail}`),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/once it is reachable/)).toBeNull();
+    expect(screen.getByText(`The check stopped before it concluded anything. ${detail}`)).toBeInTheDocument();
     expect(screen.queryByText(/read_refused/)).toBeNull();
+    expect(screen.queryByText(/ask the person who runs the Syndra server/)).toBeNull();
+    expect(screen.queryByText(/fixes waiting for you to send/)).toBeNull();
   });
 
-  // Without the add-on's words the reason is still said in words, never its
-  // code, with a next step true of it: a refused read is fixed, not waited out.
-  it("words a refused read with no sentence, and never as an outage", () => {
-    pass.data = { ...pass.data, reason: "read_refused", detail: undefined };
+  it("says the add-on is outdated and to update it", () => {
+    pass.data = undefined;
+    pass.error = notRead("addon_outdated", "TrueNAS's add-on doesn't offer this. Update the add-on.");
     renderTarget();
 
-    expect(screen.getByText(/would not serve the read/)).toBeInTheDocument();
-    expect(screen.getByText(/add-on, then check again\./)).toBeInTheDocument();
-    expect(screen.queryByText(/read_refused/)).toBeNull();
-    expect(screen.queryByText(/once it is reachable/)).toBeNull();
-  });
-
-  // 7t-3: an add-on older than this Syndra. Waiting never ends it, so the
-  // Check now line names the system and says to update the add-on.
-  it("says the add-on is older than Syndra and to update it", () => {
-    pass.data = { ...pass.data, reason: "addon_outdated", detail: undefined };
-    renderTarget();
-
-    expect(
-      screen.getByText(
-        /add-on is older than this Syndra, so Syndra stopped checking it\. Update the add-on from the same release as Syndra, then check again\./,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText("The check stopped before it concluded anything. TrueNAS's add-on doesn't offer this. Update the add-on.")).toBeInTheDocument();
     expect(screen.queryByText(/addon_outdated/)).toBeNull();
-    expect(screen.queryByText(/once it is reachable|older copy/)).toBeNull();
   });
 });
 

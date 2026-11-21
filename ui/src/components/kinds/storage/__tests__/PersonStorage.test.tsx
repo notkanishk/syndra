@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonStorage } from "@/components/kinds/storage/PersonStorage";
 import { homeBytes, sessions, windows } from "@/components/usage/__tests__/fixtures";
-import type { PersonTargetView } from "@/lib/queries/useMyStorage";
+import type { PersonTargetView, ReadView, StorageStatus } from "@/lib/queries/useMyStorage";
 
 const state = vi.hoisted(() => ({
   views: { data: undefined as unknown, error: null as unknown, refetch: () => {} },
@@ -35,7 +35,14 @@ const homePlace = {
   usage: { used_bytes: 18.4 * GB, quota_bytes: 50 * GB },
 };
 
-function view(over: Partial<PersonTargetView> = {}): PersonTargetView {
+const STORE: StorageStatus = { usable: true, needs_password: false, places: [homePlace, renders], places_readable: true };
+const NOW = "2026-11-10T09:30:00Z";
+type Over = Partial<PersonTargetView> & { storage?: StorageStatus; reads?: ReadView[] };
+
+/** A view, its add-on part a read now unless `read` is given; `storage: undefined` is a read that did not tell it. */
+function view(over: Over = {}): PersonTargetView {
+  const { storage: given, reads, ...rest } = over;
+  const storage = "storage" in over ? given : STORE;
   return {
     target: "truenas",
     name: "TrueNAS",
@@ -45,10 +52,9 @@ function view(over: Partial<PersonTargetView> = {}): PersonTargetView {
     account: { username: "roman.reigns", bound_at: "2026-09-03T10:00:00Z" },
     roles: [lead],
     credential: { set: true, last_changed_at: "2026-10-14T10:00:00Z" },
-    reachable: true,
-    health: "online",
+    health: "answering",
     checked_at: new Date().toISOString(),
-    storage: { usable: true, needs_password: false, places: [homePlace, renders], places_readable: true },
+    read: { state: "now", takenAt: NOW, data: { storage, reads } },
     home: {
       subject_id: "u1",
       username: "roman.reigns",
@@ -68,7 +74,7 @@ function view(over: Partial<PersonTargetView> = {}): PersonTargetView {
       },
     },
     holds: [],
-    ...over,
+    ...rest,
   };
 }
 
@@ -140,7 +146,7 @@ describe("a person's network storage (A-10 Part 1)", () => {
     show(
       view({
         restored_at: "2026-10-20T10:00:00Z",
-        storage: { ...view().storage!, usable: false, needs_new_password: true },
+        storage: { ...STORE, usable: false, needs_new_password: true },
       }),
     );
     expect(within(rowOf("Password")).getByText("Needs a new password")).toBeInTheDocument();
@@ -173,43 +179,56 @@ describe("a person's network storage (A-10 Part 1)", () => {
     expect(screen.queryByText("Password")).toBeNull();
   });
 
-  it("offline: one Notice, the last read with its time, Syndra's own rows as they are", () => {
-    const readAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  it("the app down with the add-on's kept copy: the Notice names the side, the copy recedes, Syndra's rows as they are", () => {
+    const takenAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     show(
       view({
-        health: "offline",
-        reachable: false,
-        reachable_since: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
-        storage: undefined,
-        last_known: { storage: view().storage!, read_at: readAt },
+        health: "app_unreachable",
+        since: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+        read: { state: "kept", takenAt, why: { reason: "app_unreachable" }, data: { storage: STORE } },
       }),
     );
-    expect(screen.getByText("TrueNAS is offline")).toBeInTheDocument();
-    expect(screen.getByText(/Home folder and Folders below are what it said at/)).toBeInTheDocument();
-    expect(screen.getByText(/Offline since .* · last read/)).toBeInTheDocument();
+    expect(screen.getByText("TrueNAS isn't answering")).toBeInTheDocument();
+    expect(screen.getByText(/TrueNAS's add-on is running but can't reach TrueNAS\. Check that TrueNAS is on\./)).toBeInTheDocument();
+    expect(screen.getByText(/^Not answering since/)).toBeInTheDocument();
     expect(within(rowOf("Folders")).getByText("renders")).toBeInTheDocument();
     // The card is stale (A-13 (d)): it recedes, its dots become rings, and the hand's light refuses it.
-    const card = screen.getByText("TrueNAS is offline").closest(".card")!;
+    const card = screen.getByText("TrueNAS isn't answering").closest(".card")!;
     expect(card).toHaveAttribute("data-stale");
     expect(card.className).not.toMatch(/!border-line-strong|!bg-canvas|!shadow-none/);
   });
 
-  it("offline with no last read: the Notice alone, and no numbers", () => {
-    show(view({ health: "offline", reachable: false, storage: undefined, last_known: undefined, home: { ...view().home!, used_bytes: undefined, quota_bytes: undefined } }));
-    expect(screen.getByText("TrueNAS is offline")).toBeInTheDocument();
+  it("the add-on down: which side is down and why, the Notice alone, and no numbers or dates", () => {
+    show(
+      view({
+        health: "addon_unreachable",
+        read: { state: "none", why: { reason: "addon_unreachable", cause: "no_answer" } },
+        home: { ...view().home!, used_bytes: undefined, quota_bytes: undefined },
+      }),
+    );
+    expect(screen.getByText("TrueNAS's add-on isn't answering")).toBeInTheDocument();
+    expect(screen.getByText(/^Add-on not answering/)).toBeInTheDocument();
+    expect(screen.getByText(/Syndra can't reach TrueNAS's add-on\. Check that its container is running\./)).toBeInTheDocument();
     expect(screen.queryByText("Home folder")).toBeNull();
     expect(screen.queryByText("Folders")).toBeNull();
     expect(screen.queryByText(/GB of/)).toBeNull();
   });
 
+  it("not read while the add-on answers (a refusal): the why once, with no Notice and no rows", () => {
+    show(view({ read: { state: "none", why: { reason: "read_refused", detail: "TrueNAS's records can't be read. Check the add-on's storage." } } }));
+    expect(screen.queryByText(/isn't answering$/)).toBeNull();
+    expect(screen.getByText("TrueNAS's records can't be read. Check the add-on's storage.")).toBeInTheDocument();
+    expect(screen.queryByText("Folders")).toBeNull();
+  });
+
   it("one slow answer says so in place, with no Notice", () => {
     show(view({ storage: undefined }));
-    expect(screen.queryByText("TrueNAS is offline")).toBeNull();
+    expect(screen.queryByText(/isn't answering/)).toBeNull();
     expect(within(rowOf("Home folder")).getByText(/didn't answer when this page asked/)).toBeInTheDocument();
   });
 
   it("usage the target could not read is said, in an operator's words, and absent when it was read", () => {
-    show(view({ storage: { ...view().storage!, quota_read: false } }));
+    show(view({ storage: { ...STORE, quota_read: false } }));
     expect(screen.getByText("Some usage could not be read from TrueNAS.")).toBeInTheDocument();
     expect(screen.getByText(/check the add-on's health on its system page/)).toBeInTheDocument();
     expect(screen.queryByText(/ask makerspace staff/)).toBeNull();
@@ -218,18 +237,18 @@ describe("a person's network storage (A-10 Part 1)", () => {
   it("says some was read only when the home folder's usage is drawn, not when only an undrawn place carries it", () => {
     // The places carry usage (homePlace does), but this card draws only view.home's.
     const { used_bytes: _u, ...home } = view().home!;
-    show(view({ home, storage: { ...view().storage!, quota_read: false } }));
+    show(view({ home, storage: { ...STORE, quota_read: false } }));
     expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeInTheDocument();
     expect(screen.queryByText(/Some usage could not be read/)).toBeNull();
   });
 
   it("says some was read when the home folder's usage is drawn", () => {
-    show(view({ storage: { ...view().storage!, quota_read: false } }));
+    show(view({ storage: { ...STORE, quota_read: false } }));
     expect(screen.getByText("Some usage could not be read from TrueNAS.")).toBeInTheDocument();
   });
 
   it("says nothing about unread usage when quota_read is true", () => {
-    show(view({ storage: { ...view().storage!, quota_read: true } }));
+    show(view({ storage: { ...STORE, quota_read: true } }));
     expect(screen.queryByText(/usage could not be read/i)).toBeNull();
   });
 
@@ -265,12 +284,12 @@ describe("a person's network storage (A-10 Part 1)", () => {
   it.each([
     ["a home drawn", {}, "card"],
     ["no home and none given (the limit lines stand in)", { home: { subject_id: "u1", username: "roman.reigns", gives_home: false } }, "usage"],
-    ["the system did not answer", { storage: undefined, last_known: undefined }, "usage"],
+    ["the system did not answer", { read: { state: "none", why: { reason: "addon_unreachable" } } }, "usage"],
     ["a home kept after its role was removed", { home: { subject_id: "u1", username: "roman.reigns", gives_home: false, home: homePlace.path, used_bytes: 1 * GB, quota_bytes: 20 * GB } }, "card"],
     ["no account yet", { account: undefined }, "usage"],
   ] as const)("says the home folder's month once: %s", (_, over, where) => {
     const usage = { reported: true as const, metrics: [homeBytes({ against: "home_quota" }), sessions()], ...windows() };
-    const v = view({ usage, ...(over as Partial<PersonTargetView>) });
+    const v = view({ usage, ...(over as Over) });
     show(v);
     const inCard = document.querySelectorAll("[data-home-month]").length;
     const inUsage = screen.queryAllByRole("heading", { name: "Home folder used" }).length;
@@ -288,8 +307,7 @@ describe("a person's network storage (A-10 Part 1)", () => {
 
   it("lists folders A to Z, and says the write place once per row, not in a caption too", () => {
     const folder = (name: string) => ({ ...renders, folder: `projects/${name}`, path: `/mnt/main/projects/${name}` });
-    const base = view();
-    show(view({ storage: { ...base.storage!, places: [folder("zine"), homePlace, folder("assets")] } }));
+    show(view({ storage: { ...STORE, places: [folder("zine"), homePlace, folder("assets")] } }));
     const names = within(rowOf("Folders")).getAllByText(/^(zine|assets)$/).map((el) => el.textContent);
     expect(names).toEqual(["assets", "zine"]);
     expect(screen.queryByText(/Limits, holds and folders are set on/)).toBeNull();
@@ -297,11 +315,10 @@ describe("a person's network storage (A-10 Part 1)", () => {
 });
 
 describe("reads beside the storage card", () => {
-  const read = (operation: string) => ({
+  const read = (operation: string): ReadView => ({
     operation,
-    shape: "records" as const,
-    readable: true,
-    result: { records: [{ id: "a", label: `From ${operation}` }], taken_at: "2026-11-10T09:30:00Z", current: true },
+    shape: "records",
+    read: { state: "now", takenAt: NOW, data: { records: [{ id: "a", label: `From ${operation}` }] } },
   });
 
   it("skips the read it draws itself from view.storage and draws any other", () => {

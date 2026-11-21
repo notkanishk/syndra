@@ -2,6 +2,8 @@ package propagation
 
 import (
 	"context"
+	"errors"
+	"net"
 	"os"
 	"regexp"
 	"strings"
@@ -283,6 +285,40 @@ func TestDrainRevocations_AuditsADeferredRowItSends(t *testing.T) {
 	}
 	if action != "propagation.retried" || audited["try"] != 1 || audited["outcome"] != "applied" {
 		t.Fatalf("a deferred row sent on its own must be audited as try 1, got %q %v", action, audited)
+	}
+}
+
+// A deferred row sent again by itself, where again nothing went out, spends no
+// try, so its audit line says how many are spent and no try number: it never
+// repeats "try 1" each time the row is deferred (8e, from 8b fix round 3).
+func TestDrainRevocations_AReDeferredRowSaysNoTryWasSpent(t *testing.T) {
+	h := stubAddonDrain(t)
+	closed := addons.CallResponse{Outcome: addons.OutcomeUnreached,
+		Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Err: closed.Err, Why: addons.Unread(closed)}
+	t.Cleanup(swap(&registeredAddons, func() []addons.Registration { return []addons.Registration{{Target: "truenas"}} }))
+	due := time.Now().Add(-time.Minute)
+	t.Cleanup(swap(&claimRevocations, func(_ context.Context, target string, _ int) ([]models.PendingPropagation, error) {
+		if target == db.TargetZitadel {
+			return nil, nil
+		}
+		row := addonRow("lock-1")
+		row.NotBefore = &due
+		return []models.PendingPropagation{row}, nil
+	}))
+	var audited map[string]any
+	insertAudit = func(_ context.Context, _, _, _, _ string, details any) error {
+		audited = details.(map[string]any)
+		return nil
+	}
+	if _, err := DrainRevocations(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if audited["outcome"] != "not_sent" || audited["tries_spent"] != 0 {
+		t.Fatalf("a re-deferred row must say nothing went out and no try was spent, got %v", audited)
+	}
+	if _, numbered := audited["try"]; numbered {
+		t.Fatalf("a re-deferred row must carry no try number, got %v", audited)
 	}
 }
 

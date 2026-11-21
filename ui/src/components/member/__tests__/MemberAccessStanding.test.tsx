@@ -420,7 +420,13 @@ describe("MemberAccess header line and cards", () => {
 
   // The password step is the storage card's own (needsPassword): an account
   // that is made and has no password yet, on a system of the storage kind.
-  const waitingForPassword = { entitled: true, account: { username: "rey_mysterio" }, credential: { set: false } };
+  // Read now, the storage status not told and no password recorded (design §13.6: a system that was not read never asks for one).
+  const waitingForPassword = {
+    entitled: true,
+    account: { username: "rey_mysterio" },
+    credential: { set: false },
+    read: { state: "now" as const, takenAt: "2026-11-10T09:30:00Z", data: {} },
+  };
 
   it("sends a storage step to Network storage", () => {
     reset();

@@ -1,5 +1,5 @@
 import { ApiError } from "@/lib/api-client";
-import { outcomeFromError, type ActionOutcome } from "@/lib/outcome";
+import { isNothingSent, nothingSentOutcome, NOTHING_SENT_WORD, outcomeFromError, type ActionOutcome } from "@/lib/outcome";
 import type { OperationState } from "@/lib/queries/useMemberAction";
 import * as copy from "./copy";
 
@@ -11,6 +11,8 @@ export interface Said {
 
 /** A refusal or failure of a preview or confirm, in the member's words. A code with none falls to the shared wording. */
 export function saidFromError(error: unknown): Said {
+  // Nothing went out (design §13.4): the backend's one sentence, which ends on its step.
+  if (isNothingSent(error)) return { word: NOTHING_SENT_WORD, outcome: nothingSentOutcome(error) };
   const said = error instanceof ApiError ? copy.refusal(error.code, error.details) : undefined;
   if (!(error instanceof ApiError) || !said) return { word: copy.WORD.notDone, outcome: outcomeFromError(error) };
   return {

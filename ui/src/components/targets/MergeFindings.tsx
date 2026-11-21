@@ -30,7 +30,17 @@ import { whyNotChecked } from "@/lib/format";
 
 import { ListStates } from "@/components/states";
 import { ApiError } from "@/lib/api-client";
-import { describeFailure, mayHaveGoneThrough, outcomeFromError, partialSentence, sentence } from "@/lib/outcome";
+import {
+  describeFailure,
+  isUnconfirmed,
+  mayHaveGoneThrough,
+  outcomeFromError,
+  partialSentence,
+  sentence,
+  unconfirmedOutcome,
+  UNCONFIRMED_WORD,
+  type ActionOutcome as Outcome,
+} from "@/lib/outcome";
 import { UserName } from "@/components/names";
 import { AdvancedOnly } from "@/components/ui/AdvancedOnly";
 import { useIsAdvanced } from "@/lib/ui-view";
@@ -91,7 +101,14 @@ export function MergeFindings({
   const [deciding, setDeciding] = useState<string | null>(null);
   // What a saved limit said, kept past the refetch that moves its row to "waiting
   // for the system to match", so the result is shown where the decision was made.
-  const [saved, setSaved] = useState<{ id: string; message: string } | null>(null);
+  // A choice sent to the system whose answer was lost (202 unconfirmed, design §13.4) says so here too.
+  const [saved, setSaved] = useState<{ id: string; word: string; outcome: Outcome } | null>(null);
+  /** A resolution's answer: an unconfirmed one is said where it was made, and the row stays. */
+  const answered = (id: string, result: unknown, message?: string) => {
+    if (isUnconfirmed(result)) return setSaved({ id, word: UNCONFIRMED_WORD, outcome: unconfirmedOutcome() });
+    mine.current.add(id);
+    if (message) setSaved({ id, word: "Saved", outcome: { kind: "applied", message } });
+  };
   // The "Finish" button below has no onSuccess and no server field to key off
   // until the list refetches, so a second click before then re-submits the
   // same finish. Marked synchronously, same idiom as the request queues.
@@ -178,8 +195,8 @@ export function MergeFindings({
                   resolve.mutate(
                     { id: f.id, resolution, reason },
                     settled === "error"
-                      ? { onError: release, onSuccess: () => void mine.current.add(f.id) }
-                      : { onSettled: release, onSuccess: () => void mine.current.add(f.id) },
+                      ? { onError: release, onSuccess: (r) => answered(f.id, r) }
+                      : { onSettled: release, onSuccess: (r) => answered(f.id, r) },
                   );
                 }}
               >
@@ -247,9 +264,9 @@ export function MergeFindings({
                 // Saying "resolved" here would be the surface claiming the
                 // difference is over while it is still on the target.
                 <CardRow className="flex-wrap">
-                  {saved?.id === f.id && (
+                  {saved?.id === f.id && saved.word !== UNCONFIRMED_WORD && (
                     <div className="w-full pb-1">
-                      <ActionOutcome word="Saved" outcome={{ kind: "applied", message: saved.message }} />
+                      <ActionOutcome word={saved.word} outcome={saved.outcome} />
                     </div>
                   )}
                   <span className="text-small text-faint">
@@ -264,6 +281,12 @@ export function MergeFindings({
                   )}
                 </CardRow>
               ) : null}
+              {saved?.id === f.id && saved.word === UNCONFIRMED_WORD && (
+                // A choice that may have reached the system: said under its row, which stays.
+                <div className="px-5 pb-3">
+                  <ActionOutcome word={saved.word} outcome={saved.outcome} />
+                </div>
+              )}
               {/* The form is the row's own panel, always mounted (a fragment), so the row's shape never
                   changes and focus is kept: it opens under the row and closes by fading first (D-1 M6). */}
                 <Unfold open={!f.decision && deciding === f.id}>
@@ -278,9 +301,8 @@ export function MergeFindings({
                         onCancel={() => setDeciding(null)}
                         onResolve={(input, savedMessage) =>
                           resolve.mutate(input, {
-                            onSuccess: () => {
-                              mine.current.add(f.id);
-                              if (savedMessage) setSaved({ id: f.id, message: savedMessage });
+                            onSuccess: (r) => {
+                              answered(f.id, r, savedMessage);
                               setDeciding(null);
                             },
                           })
@@ -647,16 +669,19 @@ function ConflictDecision({
   function check() {
     const before = finding.last_seen_at;
     run.mutate(undefined, {
-      onSuccess: (pass) =>
+      onSuccess: (pass) => {
+        // A pass skipped inside the cooldown carries its wait on its read (design §13.3).
+        const wait = pass.read.state === "now" ? undefined : pass.read.why.retryAfter;
         setChecked({
           before,
           at: Date.now(),
-          retry: pass.halted && pass.retry_after ? pass.retry_after : undefined,
+          retry: pass.halted ? wait : undefined,
           stopped:
-            pass.halted && !pass.retry_after
+            pass.halted && !wait
               ? checkStopped(pass.detail ?? (pass.reason ? whyNotChecked(pass.reason, name) : `${name} could not be read.`))
               : undefined,
-        }),
+        });
+      },
     });
   }
 

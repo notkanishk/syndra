@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
+import { asRead } from "@/test-utils/wire";
 import { describe, expect, it, vi } from "vitest";
 
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 
-// 7t-3: when the system answered but whose each home folder is could not be
-// said (an add-on older than this Syndra, or the verdict not learned), the
-// card says why in words (whyNotChecked), never homes shown empty as though
+// 7t-3, design §13.6: when the accounts were read and their home folders were
+// not, the card says why in §13.1's words, never homes shown empty as though
 // they were nobody's, and never the reason's code.
 
-const homes = vi.hoisted(() => ({ reason: "addon_outdated" }));
+const homes = vi.hoisted(() => ({ read: { state: "none", reason: "addon_outdated" } as Record<string, unknown> }));
 
 vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
   ...(await original<typeof import("@/lib/queries/useServiceAccounts")>()),
@@ -18,16 +18,16 @@ vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
 
 vi.mock("@/lib/queries/useTargets", () => ({
   useTargetInventory: () => ({
-    data: {
+    data: asRead({
       bound: 1,
       accounts: [{ subject_id: "u1", username: "charlotte.l", account_id: "200001", bound_at: "2026-10-15T10:00:00Z" }],
-    },
+    }),
     isLoading: false,
     error: null,
     refetch: () => {},
   }),
   useTargetHomes: () => ({
-    data: { read: false, usage_read: false, accounts: [], reason: homes.reason },
+    data: asRead({ read: homes.read as never, accounts: [] }),
     isLoading: false,
     error: null,
   }),
@@ -47,22 +47,20 @@ vi.mock("@/components/kinds/storage/HomeLimit", async (original) => ({
 }));
 vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);
 
-describe("home folders whose owner could not be said", () => {
+describe("home folders that were not read", () => {
   it("says an outdated add-on in words", () => {
-    homes.reason = "addon_outdated";
+    homes.read = { state: "none", reason: "addon_outdated" };
     render(<PeopleOnTarget target="truenas" />);
 
-    expect(
-      screen.getByText(/Home folders aren't shown\. Its add-on is older than this Syndra.*Update the add-on/),
-    ).toBeInTheDocument();
+    expect(screen.getByText("TrueNAS's add-on doesn't offer this. Update the add-on.")).toBeInTheDocument();
     expect(screen.queryByText(/addon_outdated/)).toBeNull();
   });
 
-  it("says a verdict not learned in words", () => {
-    homes.reason = "target_unreachable";
+  it("says the add-on not answering in words, with what to check", () => {
+    homes.read = { state: "none", reason: "addon_unreachable", cause: "no_answer" };
     render(<PeopleOnTarget target="truenas" />);
 
-    expect(screen.getByText(/Home folders aren't shown\. It did not answer when Syndra last tried\./)).toBeInTheDocument();
-    expect(screen.queryByText(/target_unreachable/)).toBeNull();
+    expect(screen.getByText(/Syndra can't reach TrueNAS's add-on\. Check that its container is running\./)).toBeInTheDocument();
+    expect(screen.queryByText(/addon_unreachable/)).toBeNull();
   });
 });

@@ -1,11 +1,14 @@
 import { STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { whyLine, type Reader } from "@/components/results/copy";
 import { formatClock } from "@/lib/format";
+import { REASON, type Why } from "@/lib/queries/read";
 import type { HealthState, TargetStatus } from "@/lib/queries/useTargets";
 
 /**
- * How a connected system is doing, in A-01's words, for the Connected systems
- * row and the system page alike. The backend ranks the readings (`status`), so
- * no screen can send an operator to the Syndra server while TrueNAS is down.
+ * How a connected system is doing, for the Connected systems row and the
+ * system page alike: the health monitor's state (design §13.2), the add-on's
+ * outage and the app's named apart, so no screen sends an operator to the
+ * wrong box.
  *
  * "Paused" is only ever a person's choice; Syndra's own stops say what's
  * happening.
@@ -18,8 +21,6 @@ export interface Reading {
   line?: string;
   /** The sentence on the system page. */
   sentence?: string;
-  /** Where to look, when the reading is a fault. */
-  look?: string;
   /** Show the last three checks. */
   pips: boolean;
 }
@@ -32,6 +33,8 @@ export interface Reading {
 export const SYSTEM_WORDS = {
   answering: "Answering",
   notAnswering: "Not answering",
+  /** Syndra holds no answer from the add-on itself (design §13.1): its own word, never the app's. */
+  addonNotAnswering: "Add-on not answering",
   offline: "Offline",
   waitingToRetry: "Waiting to retry",
   notConnected: "Not connected",
@@ -66,44 +69,43 @@ function missedRun(recent: HealthState["recent"]): number {
   return n;
 }
 
+/** The monitor's why for a system it holds down (design §13.2), in §13.1's terms; undefined while it answers. */
+export function downWhy(status: TargetStatus | undefined, health: HealthState | undefined): Why | undefined {
+  if (status === "addon_unreachable") return { reason: REASON.addonUnreachable, cause: health?.cause, retryAfter: health?.retry_after };
+  if (status === "app_unreachable") return { reason: REASON.appUnreachable };
+  return undefined;
+}
+
 export function targetReading({
   status,
   health,
   name,
-  transportError,
 }: {
   status?: TargetStatus;
   health?: HealthState;
   name: string;
-  transportError?: string;
 }): Reading {
   const recent = health?.recent ?? [];
+  const since = health?.since ? formatClock(health.since) : null;
   switch (status) {
-    case "cannot_connect":
+    // Design §13.1: two outages, never one word. The add-on itself is down: what the pipe saw
+    // says what to check (a secret Syndra can't load is Syndra's own, so it is the danger tone).
+    case "addon_unreachable":
       return {
-        tone: "danger",
-        word: "Cannot connect",
-        sentence: `Syndra cannot read the key it signs requests with${transportError ? `: ${transportError}` : ""}.`,
-        look: `Look at the Syndra server, not at ${name}.`,
-        pips: false,
-      };
-    case "offline": {
-      const since = formatClock(health?.reachable_since);
-      return {
-        tone: "warn",
-        word: SYSTEM_WORDS.offline,
-        line: `Since ${since}`,
-        sentence: `Since ${since}: 3 checks in a row went unanswered. Changes for ${name} wait until it answers.`,
-        look: `Look at ${name}.`,
+        tone: health?.cause === "no_key" ? "danger" : "warn",
+        word: SYSTEM_WORDS.addonNotAnswering,
+        line: since ? `Since ${since}` : undefined,
+        sentence: `${since ? `Since ${since}. ` : ""}${whyLine(downWhy(status, health)!, name, OPERATOR)} Changes for ${name} wait until it answers.`,
         pips: true,
       };
-    }
-    case "waiting_to_retry":
+    // The add-on answers, and says it cannot reach the system behind it.
+    case "app_unreachable":
       return {
         tone: "warn",
-        word: SYSTEM_WORDS.waitingToRetry,
-        sentence: `5 calls in a row failed, so it stopped calling and tries again by itself every 30 seconds. ${name} still answers Syndra's checks, so look at the Syndra server. Changes for ${name} wait, and nothing is lost.`,
-        pips: false,
+        word: SYSTEM_WORDS.notAnswering,
+        line: since ? `Since ${since}` : undefined,
+        sentence: `${since ? `Since ${since}. ` : ""}${whyLine(downWhy(status, health)!, name, OPERATOR)} Changes for ${name} wait until it answers.`,
+        pips: true,
       };
     case "checking": {
       // The API omits a start time it does not have: no check yet, and no clock to name.
@@ -124,7 +126,7 @@ export function targetReading({
           tone: "healthy",
           word: SYSTEM_WORDS.answering,
           line: `Missed ${run} check${run === 1 ? "" : "s"}, ${at}`,
-          sentence: `Missed its last check${run === 1 ? "" : "s"}, ${run === 1 ? "at" : "from"} ${at}. Syndra checks every 30 seconds and calls it offline after 3 in a row. Changes still go out.`,
+          sentence: `Missed its last check${run === 1 ? "" : "s"}, ${run === 1 ? "at" : "from"} ${at}. Syndra checks every 30 seconds and calls it not answering after 3 in a row. Changes still go out.`,
           pips: true,
         };
       }
@@ -132,6 +134,9 @@ export function targetReading({
     }
   }
 }
+
+/** The page's reader: an operator (the person is not named on a system page). */
+const OPERATOR: Reader = { audience: "operator", person: "" };
 
 /**
  * The last three checks, oldest first: lime filled answered, amber ring

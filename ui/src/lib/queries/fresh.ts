@@ -18,12 +18,6 @@ export interface Stale {
   note?: string;
   /** When this answer arrived (ms since the epoch): a cooldown counts from here, not from when it was drawn. */
   since?: number;
-  /**
-   * `false` where a page load ran into the wait, not a press: the reader did not cause it, so it is not
-   * drawn amber. Absent means the reader did: a cooldown only reaches the data through a press, because
-   * a load and a poll never send `fresh`. Marked at the load sites only.
-   */
-  pressed?: false;
 }
 
 /**
@@ -37,14 +31,6 @@ export const STALE = { cached: "cached", cooldown: "cooldown", unreachable: "unr
 export function withFresh(path: string): string {
   return `${path}${path.includes("?") ? "&" : "?"}fresh=true`;
 }
-
-/** A copy as of `since` (when its answer arrived), so a cooldown it carries counts from there and a remount does not restart it. */
-export function stamped(stale: Stale | undefined, since?: number): Stale | undefined {
-  return stale && since ? { ...stale, since } : stale;
-}
-
-/** The one marker: a cooldown a page load ran into, which the reader did not cause. */
-export const pageLoad = (stale: Stale | undefined): Stale | undefined => stale && { ...stale, pressed: false };
 
 /** A read refused inside the cooldown, as the copy it leaves; undefined for any other error. */
 export function cooldownOf(error: unknown, since?: number): Stale | undefined {

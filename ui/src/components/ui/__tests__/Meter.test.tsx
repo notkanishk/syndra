@@ -55,7 +55,7 @@ describe("colour is never the only signal", () => {
 
 describe("the same value looks the same everywhere", () => {
   const status = (used: number): StatusResult =>
-    ({ usable: true, standing: { usable: true, waiting_on: "none" }, meters: [{ label: "makers", used, limit: 100, unit: "items" }], taken_at: "2026-11-10T09:30:00Z", current: true }) as StatusResult;
+    ({ usable: true, standing: { usable: true, waiting_on: "none" }, meters: [{ label: "makers", used, limit: 100, unit: "items" }] }) as StatusResult;
 
   it.each([
     [50, "bg-accent", null],
@@ -63,7 +63,7 @@ describe("the same value looks the same everywhere", () => {
     [100, "bg-warn", "full"],
   ])("%i of 100: a status read says its colour and its word", (used, token, word) => {
     const said = () => [screen.queryByText("nearly full") !== null, screen.queryByText("full") !== null];
-    render(<StatusMeters result={status(used)} name="Parts shelf" reader={MEMBER} />);
+    render(<StatusMeters result={status(used)} read={{ state: "now", data: status(used), takenAt: "2026-11-10T09:30:00Z" }} name="Parts shelf" reader={MEMBER} />);
     expect(fill()).toHaveClass(token);
     expect(said()).toEqual([word === "nearly full", word === "full"]);
     cleanup();

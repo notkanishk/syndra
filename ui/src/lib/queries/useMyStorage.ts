@@ -9,7 +9,9 @@ import type { OneShotSecret } from "@/lib/secret";
 import type { Usage } from "@/lib/queries/useStats";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
-import { useReadAgain, type Stale } from "./fresh";
+import { useReadAgain } from "./fresh";
+import { readOf, type Answered, type WireRead } from "./read";
+import type { ReachState } from "./useTargets";
 import type { RetryState } from "@/lib/retry";
 
 /**
@@ -53,14 +55,7 @@ export interface StoragePlace {
  * raw. Syndra shows it; it never decides on it, and `also_says` is whatever
  * else the add-on added, already quoted.
  */
-export interface Observation {
-  taken_at: string;
-  current: boolean;
-  /** Why it is a copy, when it is one (feature freshness). */
-  stale?: Stale;
-}
-
-export interface RecordsResult extends Observation {
+export interface RecordsResult {
   records: Array<{
     id: string;
     label: string;
@@ -71,7 +66,7 @@ export interface RecordsResult extends Observation {
   }>;
 }
 
-export interface StatusResult extends Observation {
+export interface StatusResult {
   usable: boolean;
   standing: Standing;
   meters: Array<{ label: string; used: number; limit?: number; unit: string }>;
@@ -79,7 +74,7 @@ export interface StatusResult extends Observation {
   quota_read?: boolean;
 }
 
-export interface ActivityResult extends Observation {
+export interface ActivityResult {
   events: Array<{ at: string; event: string; success: boolean; resource?: string; address?: string; detail?: string }>;
   uncovered: string[];
   truncated: boolean;
@@ -89,13 +84,20 @@ export interface ReadView {
   operation: string;
   /** "" is an id's own shape, shown raw. */
   shape: "records" | "activity" | "status" | "";
-  /** False: unreachable, refused, or a reply missing a required key. */
-  readable: boolean;
-  /** Absent when not readable; JSON text (capped) when `shape` is "". */
-  result?: RecordsResult | StatusResult | ActivityResult | string;
+  /** The result, as a `Read`: JSON text (capped) when `shape` is "". */
+  read: Answered<ReadResultBody>;
   also_says?: string[];
-  /** Whole seconds: the add-on refused this read inside its cooldown and kept nothing to serve. */
-  retry_after?: number;
+}
+
+export type ReadResultBody = RecordsResult | StatusResult | ActivityResult | string;
+
+/** A read as the backend sends it, before it is a `Read`. */
+export interface ReadViewWire {
+  operation: string;
+  shape: ReadView["shape"];
+  read: WireRead;
+  result?: ReadResultBody;
+  also_says?: string[];
 }
 
 export interface MyTargetView {
@@ -133,20 +135,18 @@ export interface MyTargetView {
    * that store just now, which is not "no data".
    */
   usage?: Usage;
-  /** Every member-scope read the add-on offers, each through the one read path (unreadable ones included), in the add-on's order. */
-  reads?: ReadView[];
-  /** Whether the account can be used yet, and who is waited on, in the add-on's words. */
-  standing?: Standing;
-  /** The add-on answered. A member whose target is down is told, not shown a form that fails. */
-  reachable: boolean;
   /**
-   * What the health monitor can stand behind: `offline` only after three
-   * missed checks in a row, `unknown` when Syndra can't tell yet.
+   * What the add-on said about this account (design §13.3): storage, the
+   * member reads and the standing, as one `Read`. Absent while there is no
+   * account to read. Everything else on the view is Syndra's own record and
+   * stands outside it, so it is there while the system is down.
    */
-  health?: "online" | "offline" | "unknown";
+  read?: Answered<AddonView>;
+  /** The health monitor's reading (design §13.2), the one owner of "reachable". */
+  health: ReachState;
   checked_at?: string;
-  /** When it stopped answering, set only while offline. */
-  reachable_since?: string;
+  /** When the monitor's state began; absent when not observed. */
+  since?: string;
   /** When access was given back, while the account waits for a new password. */
   restored_at?: string;
   /**
@@ -198,6 +198,14 @@ export interface MyTargetView {
    * omits the instructions rather than printing one that does not answer.
    */
   connection?: { protocol: string; host: string };
+}
+
+/** What the add-on says about one account: only under a read that has data. */
+export interface AddonView {
+  /** Whether the account can be used yet, and who is waited on, in the add-on's words. */
+  standing?: Standing;
+  /** Every member-scope read the add-on offers, each through the one read path, in the add-on's order. */
+  reads?: ReadView[];
   /**
    * What the TARGET says about this account right now.
    *
@@ -206,20 +214,44 @@ export interface MyTargetView {
    * it — and an account Syndra created has password authentication disabled
    * until its member sets one, so it exists, is correct, and refuses them.
    */
-  storage?: {
-    /** Whether they can connect right now. */
-    usable: boolean;
-    /** The one action that fixes it, when that is what is wrong. */
-    needs_password: boolean;
-    /** "Nothing used" and "could not look" are the same zero without this.
-     *  False when any share's usage was unread (a partial read too). */
-    quota_read?: boolean;
-    /** Access given back: SMB waits for a new password. */
-    needs_new_password?: boolean;
-    places?: StoragePlace[];
-    /** False is "couldn't read", never "none". */
-    places_readable?: boolean;
-  };
+  storage?: StorageStatus;
+}
+
+export interface StorageStatus {
+  /** Whether they can connect right now. */
+  usable: boolean;
+  /** The one action that fixes it, when that is what is wrong. */
+  needs_password: boolean;
+  /** "Nothing used" and "could not look" are the same zero without this.
+   *  False when any share's usage was unread (a partial read too). */
+  quota_read?: boolean;
+  /** Access given back: SMB waits for a new password. */
+  needs_new_password?: boolean;
+  places?: StoragePlace[];
+  /** False is "couldn't read", never "none". */
+  places_readable?: boolean;
+}
+
+/** The view as the backend sends it: the add-on's part beside Syndra's own, with a `read` of its own. */
+type ViewWire<V extends MyTargetView> = Omit<V, "read"> & AddonView & { read?: WireRead; reads?: ReadViewWire[] };
+
+/** One view as its two halves: Syndra's records, and the add-on's part as a `Read` (the one builder, `readOf`). */
+function viewOf<V extends MyTargetView>(wire: ViewWire<V>, since: number): V {
+  const { read, storage, reads, standing, ...own } = wire;
+  const views = reads?.map((r) => readViewOf(r, since));
+  return { ...own, ...(read ? { read: readOf(read, { storage, standing, reads: views }, since) } : {}) } as unknown as V;
+}
+
+/** One read's view as a `Read` of its result. */
+export function readViewOf({ read, result, ...rest }: ReadViewWire, since: number): ReadView {
+  return { ...rest, read: readOf(read, result as ReadResultBody, since) };
+}
+
+/** A reply of several systems (`/me/targets`, `/users/{id}/targets`), each with its own `Read`. */
+async function readViews<V extends MyTargetView>(path: string): Promise<{ targets: V[] }> {
+  const body = await request<{ targets?: ViewWire<V>[] }>(path);
+  const since = Date.now();
+  return { targets: (body.targets ?? []).map((v) => viewOf(v, since)) };
 }
 
 /**
@@ -228,7 +260,7 @@ export interface MyTargetView {
  * stays true.
  */
 export function waitingOn(view: MyTargetView): boolean {
-  return view.health === "offline" || view.lifecycle === "draining" || view.lifecycle === "read_only";
+  return view.health === "addon_unreachable" || view.health === "app_unreachable" || view.lifecycle === "draining" || view.lifecycle === "read_only";
 }
 
 /** A hold in force on one person on one system, as the person page reads it. */
@@ -252,8 +284,6 @@ export interface PersonTargetView extends MyTargetView {
   /** Their home folder limit and where it comes from, with use as last read. */
   home?: AccountHome;
   holds: PersonHold[];
-  /** The last successful read, while the system is offline. */
-  last_known?: { storage: NonNullable<MyTargetView["storage"]>; read_at: string };
   /** Why nobody can have an account there yet. */
   setup?: "no_project" | "no_mapping";
   /** What an account still to be made will open. */
@@ -265,27 +295,27 @@ const personTargetsKey = (userId: string) => ["users", userId, "targets"];
 
 /** "Read again" on a person's systems: the same GET, asking the systems themselves. */
 export const usePersonTargetsAgain = (userId: string) =>
-  useReadAgain<{ targets: PersonTargetView[] }>(personTargetsKey(userId), personTargetsPath(userId));
+  useReadAgain(personTargetsKey(userId), personTargetsPath(userId), readViews<PersonTargetView>);
 
 /** A person's storage on every connected system (operators). */
 export function usePersonTargets(userId: string, enabled = true) {
   return useQuery({
     queryKey: personTargetsKey(userId),
     enabled,
-    queryFn: () => request<{ targets: PersonTargetView[] }>(personTargetsPath(userId)),
+    queryFn: () => readViews<PersonTargetView>(personTargetsPath(userId)),
     select: (data) => sortByName(data.targets ?? [], (t) => t.name, (t) => t.target),
   });
 }
 
 /** "Read again" on a member's own systems: the same GET, asking the systems themselves. */
-export const useMyStorageAgain = () => useReadAgain<{ targets: MyTargetView[] }>(["me", "targets"], "/me/targets");
+export const useMyStorageAgain = () => useReadAgain(["me", "targets"], "/me/targets", readViews<MyTargetView>);
 
 export function useMyStorage(enabled = true) {
   return useQuery({
     queryKey: ["me", "targets"],
     enabled,
     // Never `fresh`: a load and every poll below are answered from the add-on's copy.
-    queryFn: () => request<{ targets: MyTargetView[] }>("/me/targets"),
+    queryFn: () => readViews<MyTargetView>("/me/targets"),
     select: (data) => sortByName(data.targets ?? [], (t) => t.name, (t) => t.target),
     refetchInterval: (query) =>
       (query.state.data?.targets ?? []).some(waitingOn) ? 30_000 : false,
@@ -304,8 +334,11 @@ export function useMyStorage(enabled = true) {
  */
 /** What the backend said, or what the page concluded when nothing it said arrived. */
 export interface CredentialAnswer {
-  /** `set` is the only confirmed done; the other three are not success. */
-  status: "set" | "indeterminate" | "rejected" | "unreached";
+  /**
+   * `set` is the only confirmed done. `unconfirmed` (202) may have been applied; `rejected` was
+   * refused. A send where nothing went out is not an answer but a 503 `NOTHING_SENT`, thrown.
+   */
+  status: "set" | "unconfirmed" | "rejected";
   detail?: string;
   /**
    * On a lost reply, where the change stands under the one retry model
@@ -352,7 +385,7 @@ export async function sendWithOneResend(
   let retry = RESEND_NOW;
   try {
     const first = await send(false);
-    if (first.status !== "indeterminate") return first;
+    if (first.status !== "unconfirmed") return first;
     if (first.retry) retry = first.retry;
   } catch (error) {
     if (!lostReply(error)) throw error;
@@ -368,7 +401,7 @@ export async function sendWithOneResend(
     // Unanswered again, or refused after a first send that may have landed:
     // either way nobody knows, and the page says so.
   }
-  return { status: "indeterminate", retry: after };
+  return { status: "unconfirmed", retry: after };
 }
 
 export function useSetStorageCredential(target: string, onRetry?: (retry: RetryState) => void) {

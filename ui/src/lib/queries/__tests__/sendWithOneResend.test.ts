@@ -29,7 +29,7 @@ describe("the one automatic resend", () => {
   });
 
   it("a lost reply is sent again once, marked as the resend, and a confirmed resend is done", async () => {
-    for (const lost of [LOST, PROXY_GAVE_UP, { status: "indeterminate" } as CredentialAnswer]) {
+    for (const lost of [LOST, PROXY_GAVE_UP, { status: "unconfirmed" } as CredentialAnswer]) {
       const { send, calls } = sender(lost, { status: "set" });
       expect((await sendWithOneResend(send)).status).toBe("set");
       expect(calls).toEqual([false, true]);
@@ -39,7 +39,7 @@ describe("the one automatic resend", () => {
   it("never sends a third time: two lost replies are unconfirmed", async () => {
     const { send, calls } = sender(LOST, LOST);
     expect(await sendWithOneResend(send, () => {}, async () => {})).toEqual({
-      status: "indeterminate",
+      status: "unconfirmed",
       // Two tries spent: nothing sends it again until the member does.
       retry: { state: "waiting", try: 2, of: 2 },
     });
@@ -49,20 +49,23 @@ describe("the one automatic resend", () => {
   it("a resend that hears anything but a confirmed set is unconfirmed, because the first may have landed", async () => {
     for (const second of [
       { status: "rejected" } as CredentialAnswer,
-      { status: "indeterminate" } as CredentialAnswer,
+      { status: "unconfirmed" } as CredentialAnswer,
       new ApiError(503, { error: "TARGET_UNREACHABLE", message: "not answering" }),
     ]) {
       const { send } = sender(LOST, second);
-      expect((await sendWithOneResend(send)).status).toBe("indeterminate");
+      expect((await sendWithOneResend(send)).status).toBe("unconfirmed");
     }
   });
 
   it("a clear answer to the first send is final and is not resent", async () => {
-    for (const first of [{ status: "rejected" } as CredentialAnswer, { status: "unreached" } as CredentialAnswer]) {
-      const { send, calls } = sender(first);
-      expect((await sendWithOneResend(send)).status).toBe(first.status);
-      expect(calls).toEqual([false]);
-    }
+    const { send: refusedSend, calls: refusedCalls } = sender({ status: "rejected" });
+    expect((await sendWithOneResend(refusedSend)).status).toBe("rejected");
+    expect(refusedCalls).toEqual([false]);
+    // Nothing went out (503 NOTHING_SENT, design §13.4) is Syndra's clear answer, never a lost reply: not resent.
+    const nothingSent = new ApiError(503, { error: "NOTHING_SENT", message: "Nothing went out. The Ring isn't answering right now." });
+    const { send: unsent, calls: unsentCalls } = sender(nothingSent);
+    await expect(sendWithOneResend(unsent)).rejects.toBe(nothingSent);
+    expect(unsentCalls).toEqual([false]);
     const refusal = new ApiError(429, { error: "TOO_MANY_ATTEMPTS", message: "Wait" });
     const { send, calls } = sender(refusal);
     await expect(sendWithOneResend(send)).rejects.toBe(refusal);
@@ -74,7 +77,7 @@ describe("the one automatic resend", () => {
   // until then, and only then sends it again.
   it("says the next try first, waits for it, then resends", async () => {
     const next = new Date(Date.now() + 8000).toISOString();
-    const lost: CredentialAnswer = { status: "indeterminate", retry: { state: "retrying", try: 2, of: 2, next_try: next } };
+    const lost: CredentialAnswer = { status: "unconfirmed", retry: { state: "retrying", try: 2, of: 2, next_try: next } };
     const { send, calls } = sender(lost, { status: "set" });
     const heard: unknown[] = [];
     const waited: number[] = [];

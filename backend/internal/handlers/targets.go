@@ -499,8 +499,8 @@ func handleTargetActivity(w http.ResponseWriter, r *http.Request) {
 	if report.Outcome == addons.OutcomeRejected && report.Status == http.StatusUnprocessableEntity {
 		// A 422 on activity.get is the add-on saying the subject has no bound
 		// account on this target: a positive fact, answered, and not a read
-		// of anybody's log.
-		jsonResponse(w, http.StatusOK, map[string]any{"target": target, "subject": subject, "no_account": true})
+		// of anybody's log. Its read is dated by the backend, never the browser.
+		jsonResponse(w, http.StatusOK, map[string]any{"target": target, "subject": subject, "no_account": true, "read": report.Read})
 		return
 	}
 	if report.Read.None() {

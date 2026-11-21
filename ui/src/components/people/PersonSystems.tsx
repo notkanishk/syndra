@@ -1,5 +1,10 @@
 "use client";
 
+import { notRead } from "@/lib/queries/read";
+import { down } from "@/components/kinds/storage/state";
+import { whyLine } from "@/components/results/copy";
+import { NotReadLine } from "@/components/ui/ReadFreshness";
+import type { Why } from "@/lib/queries/read";
 import { Fragment, type ReactNode } from "react";
 
 import { UserName } from "@/components/names/UserName";
@@ -84,7 +89,7 @@ export function SystemsSection({
           Syndra didn&apos;t answer when this page asked. Nothing was changed.
         </Notice>
       ) : data ? (
-        <ReadAgainProvider value={{ press: again.press, since: views.dataUpdatedAt }}>
+        <ReadAgainProvider value={{ press: again.press }}>
           <ReadAgainError error={again.error} />
           {data.map((view) => (
             <Fragment key={view.target}>
@@ -145,16 +150,17 @@ export function Dotted({ tone, children }: { tone: StatusTone; children: ReactNo
 }
 
 export function Status({ view }: { view: PersonTargetView }) {
-  if (!view.health || view.health === "unknown") return null;
-  const offline = view.health === "offline";
+  if (view.health === "checking") return null;
+  const offline = down(view);
   const held = view.holds.some((h) => roleOf(view.entitlement_schema, h.field) === "account");
   return (
     <span role="status" className={`inline-flex items-center gap-2 text-small ${offline ? "text-warn-text" : "text-muted"}`}>
       <StatusDot tone={offline ? "warn" : held ? "neutral" : "healthy"} />
       {offline ? (
         <>
-          {SYSTEM_WORDS.offline}{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}
-          {view.last_known ? ` · last read ${formatClock(view.last_known.read_at)}` : ""}
+          {/* Which side is down, to an operator (design §13.1): the add-on, or the app behind it. */}
+          {view.health === "addon_unreachable" ? SYSTEM_WORDS.addonNotAnswering : SYSTEM_WORDS.notAnswering}
+          {view.since ? ` since ${formatClock(view.since)}` : ""}
         </>
       ) : held ? (
         <>{SYSTEM_WORDS.answering} · their account is on hold</>
@@ -179,22 +185,31 @@ export function Status({ view }: { view: PersonTargetView }) {
 export function offlineNext(label: string, auto: boolean | null): string {
   // Not known yet whether revocations go on their own (N3): no promise either way.
   if (auto === null) {
-    return `If you change their access while ${label} is offline, the change stays in Pending changes until it reaches ${label}. Otherwise there is nothing for you to do.`;
+    return `If you change their access while ${label} isn't answering, the change stays in Pending changes until it reaches ${label}. Otherwise there is nothing for you to do.`;
   }
   return auto
-    ? `If you change their access while ${label} is offline, the change waits until it answers: a revocation then sends on its own, anything else when you press Send on Pending changes. Otherwise there is nothing for you to do.`
-    : `If you change their access while ${label} is offline, the change waits in Pending changes; press Send there once it answers. Otherwise there is nothing for you to do.`;
+    ? `If you change their access while ${label} isn't answering, the change waits until it answers: a revocation then sends on its own, anything else when you press Send on Pending changes. Otherwise there is nothing for you to do.`
+    : `If you change their access while ${label} isn't answering, the change waits in Pending changes; press Send there once it answers. Otherwise there is nothing for you to do.`;
 }
 
-/** The offline Notice, above any card's body: when it stopped, then what the card says about it. */
+/**
+ * The Notice while the monitor holds a system down, above any card's body: which side is down and
+ * why (design §13.1, the operator's sentence), since when, then what the card says about it.
+ */
 export function OfflineNotice({ view, children }: { view: PersonTargetView; children: ReactNode }) {
   const auto = useAutoRetry();
-  if (view.health !== "offline") return null;
+  if (!down(view)) return null;
+  const why: Why = notRead(view.read) ? view.read.why : { reason: view.health };
   return (
     <div className="px-5 pb-3">
-      <Notice tone="warn" live title={`${view.name} is offline`} next={offlineNext(view.name, auto)}>
-        {view.reachable_since ? `It stopped answering at ${formatClock(view.reachable_since)}. ` : ""}
-        {children}
+      <Notice
+        tone="warn"
+        live
+        title={view.health === "addon_unreachable" ? `${view.name}'s add-on isn't answering` : `${view.name} isn't answering`}
+        next={offlineNext(view.name, auto)}
+      >
+        {view.since ? `It stopped answering at ${formatClock(view.since)}. ` : ""}
+        {whyLine(why, view.name, { audience: "operator", person: "" })} {children}
       </Notice>
     </div>
   );
@@ -252,6 +267,7 @@ export function reachWords(roles: string[], name: string): string {
  */
 export function PersonSystemCard({ view, userId, name }: { view: PersonTargetView; userId: string; name: string }) {
   const roleNames = useRoleNames();
+  const addon = view.read && !notRead(view.read) ? view.read.data : undefined;
   const system = view.name;
   const page = `/system/targets/${view.target}?person=${encodeURIComponent(userId)}#accounts`;
   const onPage = <ArrowLink href={page}>Set on {system}&apos;s page</ArrowLink>;
@@ -300,8 +316,8 @@ export function PersonSystemCard({ view, userId, name }: { view: PersonTargetVie
       <>
         <Row label="Account" first>
           <span className="font-mono text-body">{view.account.username}</span>
-          {view.standing ? (
-            <StandingLine standing={view.standing} system={system} audience="operator" />
+          {addon?.standing ? (
+            <StandingLine standing={addon.standing} system={system} audience="operator" />
           ) : (
             <Faint>Made by Syndra on {formatShortDate(view.account.bound_at)}</Faint>
           )}
@@ -319,8 +335,12 @@ export function PersonSystemCard({ view, userId, name }: { view: PersonTargetVie
     <Card id={`sys-${view.target}`} className="scroll-mt-4">
       <CardTop target={view.target} name={system} status={<Status view={view} />} />
       <OfflineNotice view={view}>{name}&apos;s access hasn&apos;t changed.</OfflineNotice>
+      {/* Not read while the monitor says it answers (a refusal, an outdated add-on): the why, once. */}
+      {notRead(view.read) && !down(view) && (
+        <NotReadLine why={view.read.why} system={system} reader={{ audience: "operator", person: name }} className="px-5 pb-3" />
+      )}
       {body}
-      <Reads reads={view.reads} name={system} reader={{ audience: "operator", person: name }} />
+      <Reads reads={addon?.reads} name={system} reader={{ audience: "operator", person: name }} />
     </Card>
   );
 }

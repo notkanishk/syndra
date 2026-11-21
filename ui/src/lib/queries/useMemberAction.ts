@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, request } from "@/lib/api-client";
 import { invalidateAfter } from "./invalidation";
-import type { ReadView } from "./useMyStorage";
+import { readViewOf, type ReadView, type ReadViewWire } from "./useMyStorage";
 
 /**
  * A member acting on the world (a physical operation such as item.checkout),
@@ -18,8 +18,16 @@ export type ActionAnswer =
   /** Nothing was sent but the preview: `done` is what a confirm would do, `no_change` that they already have it. */
   | { state: "preview"; outcome: "done" | "no_change"; view: ReadView }
   | { state: "done" | "no_change"; operation: string; view: ReadView | null }
-  /** Sent, the answer lost: poll `operation`. */
-  | { state: "checking"; operation: string; sent_at: string };
+  /** Sent, the answer lost (202, design §13.4): it may have been applied; poll `operation`. Nothing went out is a 503 `NOTHING_SENT`, thrown. */
+  | { status: "unconfirmed"; operation: string; sent_at: string; detail?: string };
+
+type Wire<T> = T extends { view: ReadView } ? Omit<T, "view"> & { view: ReadViewWire } : T extends { view: ReadView | null } ? Omit<T, "view"> & { view: ReadViewWire | null } : T;
+
+/** An answer with its view as a `Read`. */
+function answerOf<T>(wire: Wire<T>): T {
+  const view = (wire as { view?: ReadViewWire | null }).view;
+  return (view ? { ...wire, view: readViewOf(view, Date.now()) } : wire) as T;
+}
 
 /** Where a confirm stands (GET .../operations/{id}). `view` only on the poll that settled it. */
 export interface OperationState {
@@ -28,6 +36,9 @@ export interface OperationState {
   state: "checking" | "done" | "no_change" | "not_done" | "ask_desk";
   view?: ReadView | null;
 }
+
+/** Whether an answer is the 202 "may have been applied" (design §13.4). */
+export const unconfirmed = (a: ActionAnswer): a is Extract<ActionAnswer, { status: "unconfirmed" }> => "status" in a && a.status === "unconfirmed";
 
 /** Whether a state is final: nothing left to poll for. */
 export const settled = (state: OperationState["state"] | undefined) => state !== undefined && state !== "checking";
@@ -41,8 +52,8 @@ const path = (system: string, tail: string) => `/me/targets/${encodeURIComponent
 export function useMemberAction(system: string, action: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ params, mode }: { params: ActionParams; mode: "preview" | "confirm" }) =>
-      request<ActionAnswer>(path(system, action), { method: "POST", body: { params, [mode]: true } }),
+    mutationFn: async ({ params, mode }: { params: ActionParams; mode: "preview" | "confirm" }) =>
+      answerOf<ActionAnswer>(await request<Wire<ActionAnswer>>(path(system, action), { method: "POST", body: { params, [mode]: true } })),
     // A preview writes nothing; a confirm moves what they hold and what is unsettled.
     onSettled: (_data, _error, { mode }) => {
       if (mode === "confirm") invalidateAfter(client, "memberAction");
@@ -59,7 +70,7 @@ export function useMemberOperation(system: string, id: string | undefined) {
   return useQuery({
     queryKey: ["me", "operations", id],
     enabled: Boolean(id),
-    queryFn: () => request<OperationState>(path(system, id ?? "")),
+    queryFn: async () => answerOf<OperationState>(await request<Wire<OperationState>>(path(system, id ?? ""))),
     staleTime: Infinity,
     refetchInterval: (query) => {
       const error = query.state.error;

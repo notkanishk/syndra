@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { readFrom, type WireRead } from "@/lib/queries/read";
 import { invalidateAfter } from "./invalidation";
 
 /**
@@ -38,17 +39,16 @@ export interface EntitlementPlan {
     succeeded: number;
     queued: number;
   };
-  /** Computed against the add-on's last-known state because the target was down. */
-  provisional: boolean;
-  /** When that state was read. The age a provisional plan must be labelled with. */
-  state_read_at: string;
+  /** The state the plan was computed against: now, or the add-on's kept copy, dated. */
+  read: WireRead;
   truncated?: boolean;
 }
 
 export function useRehearseEntitlements(target: string) {
   return useMutation({
     mutationFn: (input: { subjectIds: string[]; acknowledgeScope?: boolean }) =>
-      request<EntitlementPlan>(`/targets/${target}/entitlements/rehearse`, {
+      // A plan is a read of the system: with nothing to read it is `none`, never an empty plan.
+      readFrom<EntitlementPlan>(`/targets/${target}/entitlements/rehearse`, {
         method: "POST",
         body: { subject_ids: input.subjectIds, acknowledge_scope: input.acknowledgeScope ?? false },
       }),

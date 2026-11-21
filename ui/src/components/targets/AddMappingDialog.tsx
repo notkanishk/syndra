@@ -10,6 +10,8 @@ import { FieldHint, FieldLabel } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
 import { Select } from "@/components/ui/Select";
 import { Relative } from "@/components/ui/Time";
+import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { dataOf, ofRead, readOfQuery, notRead as isNotRead } from "@/lib/queries/read";
 import { ApiError } from "@/lib/api-client";
 import { fieldsByRole, mappingFields, membershipNoun } from "@/lib/fields";
 import { schemaReason } from "@/components/states/SchemaState";
@@ -110,7 +112,8 @@ export function RoleMappingDialog({
   const roleLabel =
     roleName(role && resolver.resolveRole(role.projectId, role.roleKey).value?.display_name, role?.roleKey ?? "");
 
-  const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
+  const settingsRead = readOfQuery(settings);
+  const homeSetting = ofRead(settingsRead, (d) => d.settings?.find((x) => x.name === HOME_ROOT));
   const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";
   const choice: RoleChoice = {
     group: value,
@@ -119,8 +122,11 @@ export function RoleMappingDialog({
   };
   const ops = opsFor(current, choice, fields);
 
-  const list = values.data;
-  const neverRead = values.error instanceof ApiError && values.error.code === "VALUES_NEVER_READ";
+  const valuesRead = readOfQuery(values);
+  const list = dataOf(valuesRead);
+  // Not read (design §13.6): no list, no "no groups", no date; the line says why and how to read again.
+  const notRead = isNotRead(valuesRead);
+  const valuesAt = valuesRead.state === "now" || valuesRead.state === "kept" ? valuesRead.takenAt : undefined;
   const noGroups = Boolean(list && list.values.length === 0);
   // A membership the system cannot list at all: Syndra can't check or manage a
   // value it can't see, so it is not the "only built-in groups" case.
@@ -129,7 +135,7 @@ export function RoleMappingDialog({
   const ready = Boolean(
     project && roleKey && value && list && !noGroups && ops.length > 0 && (choice.quota !== "" || !home),
   );
-  const notReadyReason = neverRead
+  const notReadyReason = notRead
     ? `Nothing to preview until ${name} lists its ${noun}s.`
     : unlistable
       ? `Nothing to preview: ${name} doesn't list its ${noun}s.`
@@ -180,40 +186,29 @@ export function RoleMappingDialog({
 
           <div className="grid gap-1.5">
             <FieldLabel htmlFor="m-val">{fieldName}</FieldLabel>
-            {neverRead || noGroups || !list ? (
+            {notRead || noGroups || !list ? (
               <>
                 <Select id="m-val" disabled>
                   <option>
-                    {neverRead ? `Waiting for ${name}'s list` : noGroups ? `No ${noun}s to offer` : `Reading ${name}'s ${noun}s…`}
+                    {notRead ? `Not read from ${name}` : noGroups ? `No ${noun}s to offer` : `Reading ${name}'s ${noun}s…`}
                   </option>
                 </Select>
-                <FieldHint>{neverRead ? "Not read yet." : list ? <>Read from {name} <Relative iso={list.read_at} />.</> : " "}</FieldHint>
-                {(neverRead || noGroups) && (
+                <FieldHint>{list && valuesAt ? <>Read from {name} <Relative iso={valuesAt} />.</> : " "}</FieldHint>
+                {notRead && <ReadFreshness read={valuesRead} system={name} onRefresh={() => values.refetch()} />}
+                {noGroups && list && (
                   <Notice
                     tone="neutral"
-                    title={
-                      neverRead
-                        ? `${name} hasn't listed its ${noun}s yet.`
-                        : unlistable
-                          ? `${name} doesn't list its ${noun}s.`
-                          : `${name} has no ${noun}s of its own yet.`
-                    }
+                    title={unlistable ? `${name} doesn't list its ${noun}s.` : `${name} has no ${noun}s of its own yet.`}
                     action={unlistable ? undefined : { label: "Read again", onClick: () => void values.refetch() }}
                     next={
-                      neverRead
-                        ? "Press Read again in a minute."
-                        : unlistable
-                          ? `Ask whoever maintains the ${name} add-on to make them listable.`
-                          : `Press Read again once ${name} has ${noun}s of its own.`
+                      unlistable
+                        ? `Ask whoever maintains the ${name} add-on to make them listable.`
+                        : `Press Read again once ${name} has ${noun}s of its own.`
                     }
                   >
-                    {neverRead
-                      ? `Syndra asks for the list when this opens, and ${name} hasn't answered${
-                          row?.health?.started_at ? ` since Syndra restarted at ${formatClock(row.health.started_at)}` : " yet"
-                        }. This usually clears within a minute and a half.`
-                      : unlistable
-                        ? `Syndra can't check or manage a ${noun} it can't see, so it offers none.`
-                        : builtinSentence(name, list, noun)}
+                    {unlistable
+                      ? `Syndra can't check or manage a ${noun} it can't see, so it offers none.`
+                      : builtinSentence(name, list, noun)}
                   </Notice>
                 )}
               </>
@@ -228,27 +223,27 @@ export function RoleMappingDialog({
                   ))}
                 </Select>
                 <FieldHint>
-                  {list.current ? (
+                  {valuesRead.state === "now" ? (
                     <>
-                      Made on {name}, read <Relative iso={list.read_at} />. Its built-in ones are never
+                      Made on {name}, read <Relative iso={valuesRead.takenAt} />. Its built-in ones are never
                       offered.
                     </>
                   ) : (
-                    `The list ${name} gave at ${formatClock(list.read_at)}.`
+                    `The list ${name} gave at ${formatClock(valuesAt)}.`
                   )}
                 </FieldHint>
-                {value && <OpensLine name={name} places={reach.data?.read ? reach.data.groups?.[value] : undefined} />}
-                {!list.current && (
-                  <Notice tone="warn" title={`This list is from ${formatClock(list.read_at)}.`} next={`Preview as usual. If you doubt a ${noun} still exists, check it on ${name} first.`}>
+                {value && <OpensLine name={name} places={ofRead(readOfQuery(reach), (r) => r.groups?.[value])} />}
+                {valuesRead.state === "kept" && (
+                  <Notice tone="warn" title={`This list is from ${formatClock(valuesAt)}.`} next={`Preview as usual. If you doubt a ${noun} still exists, check it on ${name} first.`}>
                     Syndra can&apos;t read {name}&apos;s {noun}s right now. You can still preview. A {noun} deleted since{" "}
-                    {formatClock(list.read_at)} fails when the mapping is applied, and the failure is reported.
+                    {formatClock(valuesAt)} fails when the mapping is applied, and the failure is reported.
                   </Notice>
                 )}
               </>
             )}
           </div>
 
-          {settings.data?.read && (
+          {!isNotRead(settingsRead) && settingsRead.state !== "pending" && (
             <HomeChoice
               target={target}
               name={name}
@@ -280,9 +275,9 @@ export function RoleMappingDialog({
             {!checked && (
               <>
                 <span className="font-semibold">
-                  {name} could not be reached, so <span className="type-mono">{value}</span> was not checked.
+                  {name} doesn&apos;t list its {noun}s, so <span className="type-mono">{value}</span> was not checked.
                 </span>{" "}
-                The mapping is allowed through so an outage does not look like your mistake. If{" "}
+                The mapping is allowed through because nothing could check it. If{" "}
                 <span className="type-mono">{value}</span> does not exist, the change fails when it reaches {name} and
                 waits in Pending changes until somebody fixes it.
               </>

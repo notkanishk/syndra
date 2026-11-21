@@ -119,7 +119,8 @@ export function Button({
       type={type}
       disabled={isDisabled && !keepFocus}
       aria-disabled={(isDisabled && keepFocus) || undefined}
-      onClick={isDisabled ? undefined : onClick}
+      // Off under keepFocus is still a button in a form: its press must not submit it either.
+      onClick={isDisabled ? (keepFocus ? (e) => e.preventDefault() : undefined) : onClick}
       aria-busy={isPending || undefined}
       // A destructive confirm never takes a dialog's first focus, wherever the footer places Cancel (Q1).
       data-skip-initial-focus={variant === "dangerConfirm" || undefined}
@@ -219,7 +220,7 @@ export function buttonClasses({
   // `press`, and a 3% scale-down rather than a translate, so the button stays
   // under the finger. Destructive buttons behave identically — muscle memory
   // must never depend on what a button does.
-  return `inline-flex items-center justify-center gap-2 relative rounded-pill font-semibold control press-scale disabled:cursor-not-allowed ${sizeClass} ${
+  return `inline-flex items-center justify-center gap-2 relative rounded-pill font-semibold control press-scale disabled:cursor-not-allowed aria-disabled:cursor-not-allowed ${sizeClass} ${
     disabled ? DISABLED[variant] : `${VARIANTS[variant]} ${RIM[variant]}`
   } ${className}`;
 }

@@ -21,9 +21,11 @@ import {
   useDormantAccounts,
   useSweepDormant,
   type DormantAccount,
+  type DormantReport,
   type SweepResult,
 } from "@/lib/queries/useDormant";
-import { cooldownOf, pageLoad, useCountdown, useRetryOnce } from "@/lib/queries/fresh";
+import { cooldownOf, useCountdown, useRetryOnce } from "@/lib/queries/fresh";
+import { ofRead, readOfQuery, REASON, type Read, notRead } from "@/lib/queries/read";
 import { retryingLine } from "@/components/results/copy";
 import { sortByName } from "@/lib/sort";
 import { oneShot } from "@/lib/secret";
@@ -58,20 +60,31 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   // One result slot, cleared by the press before it writes (A-22 G23).
   const [result, setResult] = useState<{ outcome: Outcome; word: string } | null>(null);
 
-  const accounts = dormant.data?.accounts ?? [];
-  // The list always reads the target itself, so a load inside the cooldown is refused (429, nothing was read).
-  // That is said once, by the freshness line and its waiting button: no other block, and no "nothing was changed".
-  // Amber only when the reader's own press ran into it, not a page load inside someone else's wait.
-  const [pressedAt, setPressedAt] = useState(0);
-  const cooldown = cooldownOf(dormant.error, dormant.errorUpdatedAt);
-  const refused = pressedAt > 0 && dormant.errorUpdatedAt >= pressedAt ? cooldown : pageLoad(cooldown);
+  // The list always reads the system itself, never a copy (owner Q1): a read with nothing to give
+  // is `none`, said once by the read line with its way to read again; no count, no rows, no empty
+  // state, no "nothing was changed". One exception keeps the hand steady: a Read again answered
+  // only "wait" (cooldown) says nothing new about the rows read moments ago, so those rows stay,
+  // dated by their own read, and the strip counts the wait down. They go when a real no-copy answer comes.
+  const answered = readOfQuery(dormant);
+  const [seen, setSeen] = useState<Read<DormantReport> | undefined>(undefined);
+  const waitOnly = notRead(answered) && answered.why.reason === REASON.cooldown;
+  // Adjusted during render, from the read itself (React's derived-state pattern): no ref is written.
+  let onScreen = seen;
+  if (answered.state === "now" && (seen?.state !== "now" || seen.takenAt !== answered.takenAt)) onScreen = answered;
+  else if (notRead(answered) && !waitOnly) onScreen = undefined;
+  if (onScreen !== seen) setSeen(onScreen);
+  const read: Read<DormantReport> =
+    waitOnly && onScreen?.state === "now"
+      ? { state: "kept", data: onScreen.data, takenAt: onScreen.takenAt, why: answered.why }
+      : answered;
+  const accounts = ofRead(read, (d) => d.accounts) ?? [];
   const name = nameOf(target);
   const byName = (list: DormantAccount[]) => sortByName(list, (a) => a.account, (a) => a.account);
   const safe = byName(accounts.filter((a) => !a.subject_still_member));
   const lockouts = byName(accounts.filter((a) => a.subject_still_member));
   // A removed account fades where it was and its gap closes after (D-1 M5). One list for both
   // groups, so the pointer and focus guard is the card's, and a gap never closes under the cursor.
-  const leaving = useLeavingRows([...safe, ...lockouts], (a) => a.account, Boolean(dormant.data));
+  const leaving = useLeavingRows([...safe, ...lockouts], (a) => a.account, read.state === "now");
   const safeRows = leaving.rows.filter((a) => !a.subject_still_member);
   const lockoutRows = leaving.rows.filter((a) => a.subject_still_member);
   const chosen = safe.filter((a) => selected.has(a.account));
@@ -133,37 +146,30 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
     <Card stale={stale} {...leaving.listProps}>
       <CardHeader
         title="No longer needed"
-        count={dormant.data ? leaving.rows.length : undefined}
+        count={ofRead(read, () => leaving.rows.length)}
         caption="Accounts Syndra created that no active role needs any more"
       />
 
-      {(dormant.data || refused) && (
+      {read.state !== "pending" && (
         <div className="px-5 pb-2">
           <ReadFreshness
             subject="This list"
-            state={{
-              readAt: dormant.data?.state_read_at,
-              current: dormant.data ? true : undefined,
-              truncated: dormant.data?.truncated,
-              stale: refused,
-            }}
-            onRefresh={() => {
-              setPressedAt(Date.now());
-              return dormant.refetch();
-            }}
+            read={read}
+            truncated={ofRead(read, (d) => d.truncated)}
+            system={name}
+            onRefresh={() => dormant.refetch()}
             refreshing={dormant.isFetching}
           />
         </div>
       )}
 
-      {/* A press that failed for any other reason says so beside the press and keeps the list on hand. */}
+      {/* A press that failed for Syndra's own reason says so beside the press and keeps the list on hand. */}
       {dormant.data && <ReadAgainError error={dormant.error} />}
 
-      {!dormant.data && refused ? null : (
       <ListStates
+        read={read}
         isLoading={dormant.isLoading}
-        // A refusal is the line's to say, never a reason to take the list away while it is on hand.
-        error={refused || dormant.data ? null : dormant.error}
+        error={dormant.data ? null : dormant.error}
         isEmpty={leaving.rows.length === 0}
         onRetry={() => dormant.refetch()}
         errorTitle="This list could not be read"
@@ -220,7 +226,6 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
           )}
         </>
       </ListStates>
-      )}
 
       {result && (
         <div className="border-t border-line px-5 py-4">
@@ -369,19 +374,25 @@ function AccountLine({ account }: { account: DormantAccount }) {
  */
 export function sweepResult(result: SweepResult, name: string): { outcome: Outcome; word: string } {
   const unresolved = result.outcomes.filter((o) => o.outcome !== "removed");
+  // A row the add-on did not settle carries the write's own answer (design §13.4): nothing went
+  // out, said with why; or it may have been applied, and Syndra is checking.
   const fallback: Record<string, string> = {
     refused: "refused. It gained a role since you loaded this list, so it was left alone",
-    unreached: `${name} did not answer, so it was not removed`,
-    indeterminate: `not confirmed. Check ${name} before trying again`,
+    nothing_sent: `nothing went out to ${name}, so it was not removed`,
+    unconfirmed: "this may have been applied. Syndra is checking; don't send it again",
   };
+  const said = (o: SweepResult["outcomes"][number]) =>
+    o.outcome === "nothing_sent" ? o.answer?.message : o.outcome === "unconfirmed" ? o.answer?.detail : o.detail;
   const removed = `${result.removed} ${result.removed === 1 ? "account" : "accounts"} removed.`;
   if (unresolved.length === 0) {
     return { outcome: { kind: "applied", message: removed, next: NOTHING_TO_DO }, word: "Removed" };
   }
-  const why = unresolved.map((o) => `${o.account}: ${o.detail ?? fallback[o.outcome] ?? "recorded"}.`.replace(/\.\.$/, "."));
-  const next = unresolved.some((o) => o.outcome === "indeterminate")
-    ? `Check ${name} before you try again.`
-    : "Refresh this list to see what is left.";
+  const why = unresolved.map((o) => `${o.account}: ${said(o) ?? fallback[o.outcome] ?? "recorded"}.`.replace(/\.\.$/, "."));
+  const next = unresolved.some((o) => o.outcome === "unconfirmed")
+    ? `Syndra is checking; don't remove ${unresolved.length === 1 ? "it" : "those"} again.`
+    : unresolved.some((o) => o.outcome === "nothing_sent")
+      ? `Try again when ${name} answers.`
+      : "Read this list again to see what is left.";
   return {
     outcome: { kind: "failed", recorded: true, message: [removed, ...why].join(" "), next },
     word: result.removed > 0 ? `Removed ${result.removed} of ${result.outcomes.length}` : "Not removed",

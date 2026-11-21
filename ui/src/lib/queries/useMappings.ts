@@ -131,11 +131,10 @@ export function useMappingHolders(id: string | undefined) {
 /**
  * A rehearsal, plus whether the value was actually checked.
  *
- * `value_checked: false` means the add-on could not be asked — it is not
- * answering, or it cannot enumerate this field — and the edit was allowed
- * through deliberately. Refusing an edit while a NAS reboots would make an
- * outage look like the operator's mistake, so the check fails open on
- * everything except a definite no.
+ * `value_checked: false` means the add-on answered and cannot enumerate this
+ * field, and the edit was allowed through deliberately. A value the add-on
+ * could not be asked about is not saved at all (503 TARGET_NOT_READ, "Not
+ * saved…", design §13.3: a read a write depends on fails closed).
  *
  * But a check that did not run must not read as one that passed, which is what
  * it did while success carried no distinction at all.

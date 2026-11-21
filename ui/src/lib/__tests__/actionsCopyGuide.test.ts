@@ -75,7 +75,7 @@ describe("the copy guide's section on acting on things in the world", () => {
 
   it("names the five words and walks every code the page words", () => {
     for (const word of WORDS) expect(section, word).toContain(`**${word}**`);
-    expect(new Set(copy.REFUSAL_CODES).size).toBe(16);
+    expect(new Set(copy.REFUSAL_CODES).size).toBe(14);
     for (const code of copy.REFUSAL_CODES) expect(copy.refusal(code, DETAILS[code]), code).toBeDefined();
     expect(copy.refusal("SOMETHING_NEW")).toBeUndefined();
   });

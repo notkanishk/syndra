@@ -2173,6 +2173,23 @@ Every backend route that answers from an add-on (`research/reachability-survey.m
   whose value `ResolvesValue` could not check is not saved ("Not saved.
   Syndra couldn't check this value on {system}. Try again when it answers.").
 
+*Decided in session, 21 Nov 2026 (recorded with 8e):*
+
+- (a) **Composite routes answer 200, pure add-on routes 503.** The health
+  route, `/me/targets` and `/users/{id}/targets` answer 200 with
+  `read: {state: "none", …}` beside Syndra's own records (the monitor, the log
+  anchor, bindings, credentials, usage), so those stay visible during an
+  outage; every route that answers only from the add-on (inventory, homes,
+  reach, settings, values, system health, activity, the dormant list, the
+  plan) answers 503 `TARGET_NOT_READ` with no data member. The UI reads both
+  through `readOf`: a composite route's add-on part is a `Read` beside the
+  rest.
+- (b) **A cooldown with nothing kept is 503 everywhere.** A read refused
+  inside the add-on's cooldown with no copy to serve is 503 `TARGET_NOT_READ`
+  with reason `cooldown` and `Retry-After`, on every read, the inventory and
+  the dormant list included. 429 `FRESH_READ_COOLDOWN` remains only for the
+  dormant removal, a write that may not act on a copy.
+
 ### 13.4 Writes and revocation
 
 **Two words, on every write path, from §4's classes** (one helper,

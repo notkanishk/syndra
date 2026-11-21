@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { render } from "@testing-library/react";
+import { asRead } from "@/test-utils/wire";
 import { describe, expect, it, vi } from "vitest";
 
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
@@ -12,15 +13,15 @@ vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
 
 vi.mock("@/lib/queries/useTargets", () => ({
   useTargetInventory: () => ({
-    data: {
+    data: asRead({
       bound: 1,
       accounts: [{ subject_id: "zq-9981", username: "charlotte.l", bound_at: "2026-10-15T10:00:00Z" }],
-    },
+    }),
     isLoading: false,
     error: null,
     refetch: () => {},
   }),
-  useTargetHomes: () => ({ data: { accounts: [] }, isLoading: false, error: null }),
+  useTargetHomes: () => ({ data: asRead({ accounts: [] }), isLoading: false, error: null }),
 }));
 // A name that has not resolved: the avatar must stay blank, not abbreviate the raw id.
 vi.mock("@/lib/queries/useNameResolver", () => ({

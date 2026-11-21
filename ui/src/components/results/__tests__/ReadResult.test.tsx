@@ -10,7 +10,6 @@ import {
   emptyMeters,
   emptyRecords,
   notReadableNext,
-  notReadableTitle,
   uncoveredNote,
   usageUnread,
   type Reader,
@@ -22,60 +21,48 @@ import type { ActivityResult, ReadView, RecordsResult, StatusResult } from "@/li
 // and nothing here knows what product answered.
 
 const NAME = "Parts shelf";
-const taken = { taken_at: "2026-11-10T09:30:00Z", current: true };
+const NOW = "2026-11-10T09:30:00Z";
+const now = <T,>(data: T) => ({ state: "now" as const, data, takenAt: NOW });
+/** A read with nothing to give (design §13.3): no data member at all. */
+const NONE = { state: "none" as const, why: { reason: "addon_unreachable" } };
 const PERSON = "Bobby Roode";
 const OPERATOR: Reader = { audience: "operator", person: PERSON };
 const show = (read: ReadView, reader: Reader = MEMBER) => render(<ReadResult read={read} name={NAME} reader={reader} />);
 
-const records = (r: RecordsResult["records"]): ReadView => ({ operation: "holdings.list", shape: "records", readable: true, result: { records: r, ...taken } });
+const records = (r: RecordsResult["records"]): ReadView => ({ operation: "holdings.list", shape: "records", read: now({ records: r }) });
 const status = (over: Partial<StatusResult>): ReadView => ({
   operation: "usage.get",
   shape: "status",
-  readable: true,
-  result: { usable: true, standing: { usable: true, waiting_on: "none" }, meters: [], ...taken, ...over },
+  read: now({ usable: true, standing: { usable: true, waiting_on: "none" }, meters: [], ...over }),
 });
 const activity = (over: Partial<ActivityResult>): ReadView => ({
   operation: "activity.get",
   shape: "activity",
-  readable: true,
-  result: { events: [], uncovered: [], truncated: false, ...taken, ...over },
+  read: now({ events: [], uncovered: [], truncated: false, ...over }),
 });
 
-describe("not readable", () => {
+describe("a read with nothing to give", () => {
   for (const shape of ["records", "status", "activity", ""] as const) {
-    it(`says so, with the next step, for shape "${shape}", and draws no empty result`, () => {
-      show({ operation: "x.get", shape, readable: false });
-      expect(screen.getByText(notReadableTitle(NAME))).toBeInTheDocument();
-      expect(screen.getByText(notReadableNext(MEMBER))).toBeInTheDocument();
+    it(`says why, with the next step, for shape "${shape}", and draws no empty result, count or date`, () => {
+      const { container } = show({ operation: "x.get", shape, read: NONE });
+      expect(screen.getByText("Parts shelf can't be read right now. Nothing for you to do.")).toBeInTheDocument();
       expect(screen.queryByText(emptyRecords(NAME, MEMBER))).toBeNull();
       expect(screen.queryByText(emptyMeters(NAME))).toBeNull();
       expect(screen.queryByText(emptyEvents(NAME))).toBeNull();
+      expect(container.textContent).not.toMatch(/\b0\b|was read|Nov/);
     });
   }
 });
 
-describe("a read that did not come back, by reader", () => {
-  it("names the one read, so it never contradicts the system's own read-just-now line", () => {
-    show({ operation: "x.get", shape: "records", readable: false });
-    expect(screen.getByText("One read from Parts shelf did not come back")).toBeInTheDocument();
-  });
-
-  it("sends a member to staff and an operator to the add-on's health, never the other way", () => {
-    const { container, unmount } = show({ operation: "x.get", shape: "status", readable: false });
-    expect(container.textContent).toContain("ask makerspace staff");
-    expect(container.textContent).not.toContain("health");
+describe("a read with nothing to give, by reader", () => {
+  it("gives a member one sentence and an operator which side is down, never the other way", () => {
+    const { container, unmount } = show({ operation: "x.get", shape: "status", read: NONE });
+    expect(container.textContent).toContain("Nothing for you to do.");
+    expect(container.textContent).not.toContain("add-on");
     unmount();
-    const op = show({ operation: "x.get", shape: "status", readable: false }, OPERATOR);
-    expect(op.container.textContent).toContain("check the add-on's health on its system page");
-    expect(op.container.textContent).not.toContain("makerspace staff");
-  });
-});
-
-describe("readable is the add-on's word", () => {
-  it("a read that says it is not readable is never drawn as a result, even if a result came with it", () => {
-    show({ ...records([{ id: "a", label: "Hot glue gun" }]), readable: false });
-    expect(screen.getByText(notReadableTitle(NAME))).toBeInTheDocument();
-    expect(screen.queryByText("Hot glue gun")).toBeNull();
+    const op = show({ operation: "x.get", shape: "status", read: NONE }, OPERATOR);
+    expect(op.container.textContent).toContain("Syndra can't reach Parts shelf's add-on. Check that its container is running.");
+    expect(op.container.textContent).not.toContain("Nothing for you to do.");
   });
 });
 
@@ -265,7 +252,8 @@ describe("activity", () => {
   });
 
   it("lets a kind say the places in its own words", () => {
-    render(<ActivityList result={{ events: [], uncovered: ["scratch"], truncated: false, ...taken }} name={NAME} reader={MEMBER} coverage={<>Kind words here.</>} />);
+    const result = { events: [], uncovered: ["scratch"], truncated: false };
+    render(<ActivityList result={result} read={now(result)} name={NAME} reader={MEMBER} coverage={<>Kind words here.</>} />);
     expect(screen.getByText("Kind words here.")).toBeInTheDocument();
   });
 
@@ -277,7 +265,7 @@ describe("activity", () => {
 
 describe("an unknown shape", () => {
   it("falls back to the raw view, behind Technical detail, exactly as it came", () => {
-    const { container } = show({ operation: "x.get", shape: "", readable: true, result: '{"queue":3}' });
+    const { container } = show({ operation: "x.get", shape: "", read: now('{"queue":3}') });
     expect(container.textContent).not.toContain('{"queue":3}');
     fireEvent.click(within(container).getByText("Technical detail"));
     expect(container.textContent).toContain('{"queue":3}');

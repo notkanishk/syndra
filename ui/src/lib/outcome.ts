@@ -1,5 +1,6 @@
-import { ApiError, LostReply } from "@/lib/api-client";
+import { ApiError, LostReply, NOTHING_SENT } from "@/lib/api-client";
 import { cooldownOf } from "@/lib/queries/fresh";
+import { TARGET_NOT_READ } from "@/lib/queries/read";
 
 /**
  * What happened, in six words, everywhere in the product.
@@ -250,6 +251,9 @@ export function outcomeFromError(error: unknown): ActionOutcome {
     (error instanceof ApiError && error.status >= 400 && error.status < 500);
   const where = mayHaveGoneThrough(error);
   const wait = cooldownOf(error)?.retry_after;
+  // A system that did not answer is a refusal with its own step, never a failure of Syndra's: a write
+  // where nothing went out, or one refused because the value it depends on could not be read (owner Q2).
+  if (isNothingSent(error) || (error instanceof ApiError && error.code === TARGET_NOT_READ)) return nothingSentOutcome(error);
   return {
     kind: refused ? "refused" : "failed",
     partial: where,
@@ -289,6 +293,42 @@ export function outcomeFromError(error: unknown): ActionOutcome {
             ? error.details.next
             : undefined,
   };
+}
+
+/**
+ * Design §13.4's two words for a write that did not land, one pair for every write path. A 503
+ * `NOTHING_SENT`: nothing went out, so the state on screen holds; the backend's sentence says
+ * why (§13.1) and ends on its step ("Try again when {system} answers", or that Syndra sends it by
+ * itself), which is the outcome's next step. A refusal in tone, never a failure: Syndra is fine.
+ */
+export function nothingSentOutcome(error: ApiError): ActionOutcome {
+  const said = sentence(error.message);
+  const steps = said.match(/[^.]+\.(?=\s|$)/g) ?? [said];
+  return { kind: "refused", message: said, next: steps[steps.length - 1].trim() };
+}
+
+/** The word a write where nothing went out wears. */
+export const NOTHING_SENT_WORD = "Not sent";
+
+/** Whether a write's failure is design §13.4's "nothing went out". */
+export const isNothingSent = (error: unknown): error is ApiError => error instanceof ApiError && error.code === NOTHING_SENT;
+
+/** The word a write that did not land wears: the one for nothing sent, else the act's own. */
+export const notDoneWord = (error: unknown, own: string) => (isNothingSent(error) ? NOTHING_SENT_WORD : own);
+
+/** A 202 `{status: "unconfirmed"}` (RFC 9110 §15.3.3): sent, the answer lost, it may have been applied. */
+export const UNCONFIRMED = "unconfirmed";
+export const UNCONFIRMED_WORD = "Not confirmed yet";
+const UNCONFIRMED_MESSAGE = "This may have been applied";
+export const UNCONFIRMED_NEXT = "Syndra is checking; don't send it again.";
+
+/** Whether a write's answer is the 202 "may have been applied". */
+export const isUnconfirmed = (body: unknown): boolean =>
+  typeof body === "object" && body !== null && (body as { status?: unknown }).status === UNCONFIRMED;
+
+/** The 202 as an outcome: nothing for the reader to send; Syndra settles it, or leaves it for a person if it cannot. */
+export function unconfirmedOutcome(): ActionOutcome {
+  return { kind: "queued", sendsItself: true, message: UNCONFIRMED_MESSAGE, next: UNCONFIRMED_NEXT };
 }
 
 /** How long an extension buys. Stated in the row's own result, never implied. */
@@ -431,10 +471,6 @@ export const MAY_HAVE_GONE_THROUGH: Record<string, string> = {
   CONVERGENCE_CHECK_FAILED: "Pending changes",
   RECONCILE_FAILED: "the system's page under System",
   LIFECYCLE_NOT_SET: "the system's page under System",
-  RELEASE_NOT_CONFIRMED: "the system's page under System",
-  // An adoption from a binding conflict the add-on did not confirm (handlers/merge_findings.go adoptOnTarget): it may be bound.
-  ADOPTION_NOT_CONFIRMED: "the system's page under System",
-  TARGET_UNCONFIRMED: "the system's page under System",
   TARGET_ANSWER_UNREADABLE: "the system's page under System",
   SWEEP_ERROR: "Audit",
   // A refused role write whose undo failed: Zitadel did not change, but Syndra's own list of roles may still show it (services/roles.go writeRole).

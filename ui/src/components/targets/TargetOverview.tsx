@@ -2,8 +2,22 @@
 
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
-import { cooldownNext, describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
-import { checkAgainNext, cooldownLine, FIRST_PART_READ, retryingLine } from "@/components/results/copy";
+import {
+  cooldownNext,
+  describeFailure,
+  failureMessage,
+  isUnconfirmed,
+  nextStep,
+  isNothingSent,
+  notDoneWord,
+  outcomeFromError,
+  sentence,
+  UNCONFIRMED_WORD,
+  unconfirmedOutcome,
+} from "@/lib/outcome";
+import { checkAgainNext, cooldownLine, FIRST_PART_READ, READING, retryingLine, whyLine, type Reader } from "@/components/results/copy";
+import { ApiError } from "@/lib/api-client";
+import { dataOf, notRead as isNotRead, notReadOf, ofRead, readOfQuery, REASON, type Why } from "@/lib/queries/read";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { ArriveList, Crossfade, FOLD_MS, LeavingRow, TINT_MS, UnfoldOnArrival, Unfold, useExitPhase, useFlashOnChange, useLeavingRows } from "@/lib/motion";
@@ -38,7 +52,7 @@ import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
-import { blocksIrreversibleAction, ReadAgainButton, ReadAgainError, ReadFreshness, RetryWait } from "@/components/ui/ReadFreshness";
+import { blocksIrreversibleAction, ReadAgainButton, ReadAgainError, ReadFreshness, RetryWait, stateOfRead } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { AdvancedOnly } from "@/components/ui/AdvancedOnly";
 import { lifecycleWhy } from "@/lib/lifecycle-reason";
@@ -46,8 +60,8 @@ import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
-import { formatBytes, formatClock, formatShortDate, inventoryNotRead, personLine, versionLabel, whyNotChecked } from "@/lib/format";
-import { stamped, useCountdown, useRetryOnce } from "@/lib/queries/fresh";
+import { formatBytes, formatClock, formatShortDate, personLine, versionLabel, whyNotChecked } from "@/lib/format";
+import { useCountdown, useRetryOnce } from "@/lib/queries/fresh";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
   useAdoptAccount,
@@ -65,6 +79,8 @@ import {
   type AdoptionResult,
   type LogAnchor,
   type TargetHealth,
+  type TargetHealthReply,
+  type TargetReconcilePass,
   type BoundAccount,
   type TargetSummary,
 } from "@/lib/queries/useTargets";
@@ -117,10 +133,13 @@ export function TargetOverview({ target }: { target: string }) {
     !unconfirmed.isLoading && !unconfirmed.error;
   const emptied = useEmptied(waitingKnown ? (clear ? 0 : waiting) : undefined);
   const name = nameOf(target);
-  // It isn't answering, so its own cards show the last read (A-13): they
-  // recede, and the controls that need it live are off. Syndra's own cards
-  // (reach, lifecycle, Waiting on you, what runs here) stay raised.
-  const lastKnown = health.data?.reachable === false;
+  // The add-on's account of itself, when it gave one (design §13.3): its product, its pause.
+  const said = health.data ? dataOf(health.data.addon) : undefined;
+  // The add-on's own answer was not read (design §13.3): its cards recede and
+  // say why, with no copy to draw, and the controls that need it live are off
+  // (A-13). Syndra's own cards (reach, lifecycle, Waiting on you, what runs
+  // here) stay raised. False while the health read is pending.
+  const notRead = isNotRead(health.data?.addon);
   // One Zitadel project per system (3a). Unknown until the roster answers;
   // null is "not chosen", and everything that gives access waits for it.
   const project = registered?.project;
@@ -135,15 +154,14 @@ export function TargetOverview({ target }: { target: string }) {
       count: waitingKnown ? waiting : undefined,
       tone: waitingKnown && waiting ? "warn" : undefined,
     },
-    { id: "accounts", label: "Accounts", count: inventory.data?.bound },
+    // A count only from a read (design §13.6): a read with nothing to give leaves the chip without one.
+    { id: "accounts", label: "Accounts", count: ofRead(readOfQuery(inventory), (d) => d.bound) },
     { id: "runs", label: "What runs here", count: registered?.callable ? registered.operations.length : undefined },
     { id: "stats", label: OVERVIEW_TITLE },
   ];
 
   const meta = [
-    health.data?.product
-      ? `${health.data.product} ${versionLabel(health.data.product, health.data.product_version)}`.trim()
-      : null,
+    said?.product ? `${said.product} ${versionLabel(said.product, said.product_version)}`.trim() : null,
     gated && !justSet ? "no Zitadel project yet" : null,
   ];
 
@@ -173,7 +191,7 @@ export function TargetOverview({ target }: { target: string }) {
         <ProjectSet target={target} project={justSet} />
       ) : null}
       {registered && (
-        <SetupStrip target={target} registered={registered} project={justSet ? null : project ?? null} lastKnown={lastKnown} />
+        <SetupStrip target={target} registered={registered} project={justSet ? null : project ?? null} lastKnown={notRead} />
       )}
 
       {/* One chip per region at the right end of the read line (board, RULES):
@@ -207,17 +225,18 @@ export function TargetOverview({ target }: { target: string }) {
               tone="danger"
               blocking
               title={`This page for ${name} could not be read.`}
-              action={{ label: "Try again", onClick: () => void healthAgain.press().catch(() => {}) }}
               next="Press Try again. If it keeps failing, ask whoever runs the Syndra server."
             >
               Syndra&rsquo;s server did not answer when this page asked for it. This says nothing about{" "}
               {name} itself. Nothing was changed.
+              <HealthTryAgain again={healthAgain} name={name} serverSaid />
             </Notice>
           ) : (
             <>
               <ReachNotice
                 target={target}
                 health={health.data}
+                again={healthAgain}
                 // A deployment-side fault, carried here because that is where an
                 // operator looks when a target stops working.
                 transportError={
@@ -244,11 +263,11 @@ export function TargetOverview({ target }: { target: string }) {
                     registered?.transport_status === "error" ? registered.transport_error : undefined
                   }
                 />
-                <SystemHealth target={target} stale={lastKnown} />
+                <SystemHealth target={target} stale={notRead} />
               </CardGrid>
               {/* Advanced only: lifecycle controls are for whoever looks after the add-on. */}
               <AdvancedOnly gap={16}>
-                <LifecycleControl target={target} health={health.data} isLoading={health.isLoading} />
+                <LifecycleControl target={target} health={said} isLoading={health.isLoading} />
               </AdvancedOnly>
             </>
           )}
@@ -325,9 +344,9 @@ export function TargetOverview({ target }: { target: string }) {
           lede="Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action."
         >
           <AccountsNotRead target={target} region="accounts" />
-          <PeopleOnTarget target={target} stale={lastKnown} />
-          <Inventory target={target} stale={lastKnown} />
-          <DormantAccounts target={target} stale={lastKnown} />
+          <PeopleOnTarget target={target} stale={notRead} />
+          <Inventory target={target} stale={notRead} />
+          <DormantAccounts target={target} stale={notRead} />
         </Region>
 
         {/* Region 3 · what an add-on can do and what actually runs against it
@@ -341,7 +360,7 @@ export function TargetOverview({ target }: { target: string }) {
           {/* Side by side where there is room, as the board draws them. */}
           <CardGrid>
             {registered && <Capabilities registered={registered} />}
-            <ReconcileControl target={target} lastKnown={lastKnown} />
+            <ReconcileControl target={target} addonNotRead={notRead} />
           </CardGrid>
         </Region>
 
@@ -350,7 +369,7 @@ export function TargetOverview({ target }: { target: string }) {
             control is Advanced's (A-23 R2), the region's last card, so nothing
             above it moves when it comes and goes. */}
         <Region id="stats" title={OVERVIEW_TITLE} lede={OVERVIEW_LEDE}>
-          <TargetStats target={target} kind={registered?.kind} />
+          <TargetStats target={target} kind={registered?.kind} name={name} />
           <AdvancedOnly gap={16}>
             <StatsRetention target={target} />
           </AdvancedOnly>
@@ -383,13 +402,13 @@ function AllClearCard({ emptied, children }: { emptied: boolean; children: React
 function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
   const nameOf = useSystemNames();
   const report = useTargetSystemHealth(target);
-  const data = report.data;
+  const read = readOfQuery(report);
   const name = nameOf(target);
 
   // The card keeps its seat while it is asked, with nothing in it. Four calls to
   // the target take a moment, and a card that flashes "no alerts" before the
   // answer arrives has said something false.
-  if (report.isLoading) {
+  if (read.state === "pending" && !report.isError) {
     return (
       <Card>
         <CardHeader title={`What ${name} reports`} />
@@ -397,7 +416,7 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
       </Card>
     );
   }
-  if (report.isError || !data) {
+  if (read.state === "pending") {
     return (
       <Card>
         <CardHeader title={`What ${name} reports`} />
@@ -407,6 +426,16 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
       </Card>
     );
   }
+  if (isNotRead(read)) {
+    // Nothing to give (design §13.6): why, and what to check, never "nothing raised".
+    return (
+      <Card>
+        <CardHeader title={`What ${name} reports`} />
+        <ReadFreshness read={read} system={name} className="px-5 py-3" />
+      </Card>
+    );
+  }
+  const data = read.data;
 
   const alerts = (data.alerts ?? []).filter((a) => !a.dismissed);
   const pools = data.pools ?? [];
@@ -415,7 +444,7 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
   // it is invisible from every other read the add-on makes.
   const services = (data.services ?? []).filter((s) => s.service === "cifs" || s.service === "nfs");
   const degraded = data.degraded ?? [];
-  const allRead = data.readable && degraded.length === 0;
+  const allRead = degraded.length === 0;
 
   return (
     // Last known while Syndra cannot reach the system (A-13): the card recedes
@@ -437,13 +466,6 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
           )
         }
       />
-      {!data.readable && (
-        <Reading tone="warn" label="Could not be asked">
-          {name} did not answer its own health reads, so this is not a report that nothing
-          is wrong.{data.detail ? ` ${data.detail}` : ""}
-        </Reading>
-      )}
-
       {/* Named sources. "alerts could not be read" and "there are no alerts"
           are the same empty list without this, and they are opposite facts. */}
       {degraded.length > 0 && (
@@ -495,8 +517,7 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
           </Reading>
         ))}
 
-      {data.readable &&
-        degraded.length === 0 &&
+      {degraded.length === 0 &&
         alerts.length === 0 &&
         pools.every((p) => p.healthy && !p.warning) &&
         services.every((s) => s.state === "RUNNING") && (
@@ -546,7 +567,7 @@ function alertLabel(level: string): string {
  * act on and which nothing else surfaces. A binding whose account is gone plans
  * as a create, and acting on it would recreate an account somebody deleted.
  */
-function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: boolean }) {
+function ReconcileControl({ target, addonNotRead }: { target: string; addonNotRead: boolean }) {
   const nameOf = useSystemNames();
   const run = useReconcileTarget(target);
   const release = useReleaseBinding(target);
@@ -573,28 +594,38 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
   // itself (RFC 9110 §10.2.3), so one press ends on a live read; a second skip is shown as it is.
   const retry = useRetryOnce();
   const waiting = retry.waiting;
+  // A pass with nothing to read is a 503 TARGET_NOT_READ (design §13.3): a read that is none, with
+  // its why, never a result of zeros. It is newer than any result kept above while it stands.
+  const notRead = notReadOf(run.error);
   // When the last skipped pass arrived: its count runs from there once nothing goes again by itself
   // (a second skip, or Stop waiting), and the card says it, never the pass's raw reason.
   const [skippedAt, setSkippedAt] = useState(0);
-  const skipped = !waiting && result?.halted && result.retry_after ? result.retry_after : undefined;
+  const skipped = waiting ? undefined : notRead ? cooldownOf503(notRead.why) : result ? skipWait(result) : undefined;
   const left = useCountdown(skipped, skippedAt);
   // What the check concluded, as the sentence below is worded from it. A new result crossfades
   // its words and washes the row once; the same result read again is not news (D-1 M4).
-  const resultKey = !result
-    ? "none"
-    : result.halted
-      ? `halted:${result.reason ?? ""}:${result.detail ?? ""}:${result.retry_after ?? ""}`
-      : `read:${result.current}:${result.bound}:${result.queued}:${result.stale?.length ?? 0}`;
+  const resultKey = notRead
+    ? `none:${notRead.why.reason}:${notRead.why.cause ?? ""}`
+    : !result
+      ? "none"
+      : result.halted
+        ? `halted:${result.reason ?? ""}:${result.detail ?? ""}:${result.read.state === "now" ? "" : (result.read.why.retryAfter ?? "")}`
+        : `read:${result.read.state}:${result.bound}:${result.queued}:${result.stale?.length ?? 0}`;
   const changed = useFlashOnChange(resultKey);
   // A check past ten seconds says so, once, on tint (A-24 §6). Only that: its result is a mutation's
   // answer, gone if the page is left, so it never says the result will be here on return (§13).
   const long = useLongWait(run.isPending);
   function check() {
+    const skip = (wait: number | undefined) => {
+      if (!wait) return;
+      setSkippedAt(Date.now());
+      retry.refused(wait, check);
+    };
     run.mutate(undefined, {
-      onSuccess: (pass) => {
-        if (!(pass.halted && pass.retry_after)) return;
-        setSkippedAt(Date.now());
-        retry.refused(pass.retry_after, check);
+      onSuccess: (pass) => skip(skipWait(pass)),
+      onError: (e) => {
+        const none = notReadOf(e);
+        skip(none ? cooldownOf503(none.why) : undefined);
       },
     });
   }
@@ -616,13 +647,13 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
             variant="outline"
             size="sm"
             isPending={run.isPending}
-            disabled={lastKnown || waiting || left > 0}
+            disabled={addonNotRead || waiting || left > 0}
             reason={
               waiting
                 ? retryingLine(name, retry.left)
                 : left > 0
                   ? cooldownLine(name, left)
-                  : lastKnown
+                  : addonNotRead
                     ? `Check now waits too: it reads ${name} first.`
                     : undefined
             }
@@ -640,6 +671,11 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
               {left > 0 ? `${cooldownLine(name, left)}. ` : ""}
               {checkAgainNext(left)}
             </span>
+          ) : notRead ? (
+            // Nothing to read: §13.1's sentence, which says which side is down and what to check.
+            <span className="text-warn-text">
+              The check stopped before it concluded anything. {whyLine(notRead.why, name, OPERATOR)}
+            </span>
           ) : !result ? (
             "Syndra checks by itself every six hours."
           ) : result.halted && result.detail ? (
@@ -648,12 +684,6 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
             // reachable" would be untrue.
             <span className="text-warn-text">
               The check stopped before it concluded anything. {result.detail}
-            </span>
-          ) : result.halted && result.reason === "addon_outdated" ? (
-            // Waiting never ends it: the add-on has to be updated.
-            <span className="text-warn-text">
-              {name}&apos;s add-on is older than this Syndra, so Syndra stopped checking it. Update
-              the add-on from the same release as Syndra, then check again.
             </span>
           ) : result.halted ? (
             // The reason in words (whyNotChecked), never its code, and a next
@@ -672,7 +702,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
       </CardRow>
       <RetryWait name={name} retry={retry} onStop={retry.stop} />
 
-      {run.error && (
+      {run.error && !notRead && (
         <CardRow>
           <span className="text-small text-danger-text">
             {sentence(describeFailure(run.error))}
@@ -680,7 +710,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
         </CardRow>
       )}
 
-      {result && !result.current && !result.halted && !waiting && !skipped && (
+      {result && !notRead && result.read.state !== "now" && !result.halted && !waiting && !skipped && (
         // A pass that concluded nothing must not read as a clean one.
         <CardRow>
           <span className="text-small text-warn-text">
@@ -725,12 +755,13 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
                               setConfirming(null);
                               return;
                             }
+                            // Sent, the answer lost (202): the one unconfirmed outcome every write says.
+                            const unsure = unconfirmedOutcome();
                             setUnfinished((prev) => ({
                               ...prev,
-                              [b.subject_id]:
-                                res.warning ||
-                                res.detail ||
-                                `${name} did not confirm. Some of this may have gone through. Check this list again before trying again.`,
+                              [b.subject_id]: isUnconfirmed(res)
+                                ? `${sentence(unsure.message)} ${unsure.next}`
+                                : res.warning || res.detail || `${name} did not confirm. Check this list again before trying again.`,
                             }));
                           },
                         })
@@ -774,9 +805,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
           </ArriveList>
           {release.error && (
             <CardRow>
-              <span className="text-small text-danger-text">
-                {sentence(describeFailure(release.error))}
-              </span>
+              <ActionOutcome placement="inline" word={notDoneWord(release.error, "Not released")} outcome={outcomeFromError(release.error)} />
             </CardRow>
           )}
         </>
@@ -794,47 +823,84 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
 function ReachNotice({
   target,
   health,
+  again,
   transportError,
 }: {
   target: string;
-  health: TargetHealth | undefined;
+  health: TargetHealthReply | undefined;
+  again: HealthAgain;
   transportError?: string;
 }) {
   const nameOf = useSystemNames();
   const name = nameOf(target);
 
-  if (transportError || health?.status === "cannot_connect") {
+  if (transportError) {
     return (
       <Notice tone="danger" blocking title="Cannot connect." next="Ask whoever runs the Syndra server to fix the key. Syndra connects on its next check.">
         Syndra cannot read the key it uses to talk to {name}, so it cannot make any request. This is
-        a problem on <strong className="font-semibold">the Syndra server</strong>, not on {name}
-        {transportError ? `: ${transportError}` : "."}
+        a problem on <strong className="font-semibold">the Syndra server</strong>, not on {name}: {transportError}
       </Notice>
     );
   }
 
-  // The monitor's confirmed answer leads. One failed live read is a missed
-  // check, not an outage; three in a row are offline (A-01).
-  if (health?.status === "offline" || health?.status === "waiting_to_retry") {
-    const offline = health.status === "offline";
-    const reading = targetReading({ status: health.status, health: health.health, name });
+  // The monitor's confirmed answer leads (design §13.2): the add-on down, or its app down, named
+  // apart, each with what to check. One failed live read is not an outage.
+  const status = health?.status;
+  if (status === "addon_unreachable" || status === "app_unreachable") {
+    const reading = targetReading({ status, health: health?.health, name });
     return (
       <Notice
-        tone="warn"
-        live={offline}
-        title={offline ? `${name} isn't answering.` : `Syndra is waiting to retry ${name}.`}
-        next={
-          offline
-            ? `Check that ${name} is running and reachable.`
-            : "Syndra tries again on its own when the wait is over. If it keeps happening, ask whoever runs the Syndra server to look at it."
-        }
+        tone={reading.tone === "danger" ? "danger" : "warn"}
+        live
+        title={status === "addon_unreachable" ? `${name}'s add-on isn't answering.` : `${name} isn't answering.`}
+        next="Nothing is lost: Syndra sends what waits once it answers."
       >
-        {reading.sentence} {offline && reading.look}
+        {reading.sentence}
+        <HealthTryAgain again={again} name={name} />
       </Notice>
     );
   }
 
   return null;
+}
+
+type HealthAgain = ReturnType<typeof useTargetHealthAgain>;
+
+/** The page's reader: an operator. */
+const OPERATOR: Reader = { audience: "operator", person: "" };
+
+/**
+ * "Try again" on the health page: a live read (`?fresh=true`). It says what it is doing: Reading
+ * while it asks; a wait Syndra put on it (429) with its count; and a failure of Syndra's own
+ * server, told apart from the add-on's, which the reach card says from the live read itself.
+ * `serverSaid`: its Notice already says Syndra's server failed and what to do, so a failure here
+ * says only what came back.
+ */
+function HealthTryAgain({ again, name, serverSaid = false }: { again: HealthAgain; name: string; serverSaid?: boolean }) {
+  const { error, errorAt, pending } = again;
+  const wait = error instanceof ApiError && error.status === 429 ? error.retryAfter : undefined;
+  const left = useCountdown(wait, errorAt);
+  const said = pending
+    ? `Reading ${name} now.`
+    : wait !== undefined
+      ? `Syndra is being asked too often. ${cooldownNext(left)}`
+      : error
+        ? serverSaid
+          ? sentence(failureMessage(error))
+          : `${sentence(failureMessage(error))} This says nothing about ${name} itself. ${nextStep(false)}`
+        : "";
+  // A block of its own: a button is never inside the Notice's sentence (D-1 §4). Its words are
+  // said by the Notice's own live region, so no second region speaks them again.
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <Button variant="outline" size="sm" keepFocus isPending={pending} disabled={left > 0} onClick={() => void again.press().catch(() => {})}>
+        {pending ? READING : "Try again"}
+      </Button>
+      <span data-try-again-said className="text-small text-muted">
+        {said}
+      </span>
+    </div>
+  );
 }
 
 /**
@@ -849,13 +915,14 @@ function ReachCard({
   transportError,
 }: {
   target: string;
-  health: TargetHealth | undefined;
+  health: TargetHealthReply | undefined;
   isLoading: boolean;
   transportError?: string;
 }) {
   const nameOf = useSystemNames();
   const name = nameOf(target);
   const { view, revealInAdvanced } = useUiView();
+  const said = health ? dataOf(health.addon) : undefined;
 
   // Nothing read yet: no word, no count, no age.
   if (isLoading && !health) {
@@ -867,21 +934,16 @@ function ReachCard({
     );
   }
 
-  const cannot = Boolean(transportError) || health?.status === "cannot_connect";
+  const cannot = Boolean(transportError);
   const status = health?.status;
-  const reading = targetReading({
-    status: cannot ? "cannot_connect" : status,
-    health: health?.health,
-    name,
-    transportError,
-  });
+  const reading = targetReading({ status, health: health?.health, name });
   const recent = health?.health?.recent ?? [];
-  const lifecycle = health?.lifecycle ?? "active";
+  const lifecycle = said?.lifecycle ?? health?.health?.lifecycle ?? "active";
   const paused = lifecycle !== "active";
   // The add-on's own breaker toward the system, while Syndra's checks still
   // answer: the connector on the Syndra server is holding off, and says so.
-  const holdingOff = health?.circuit_open;
-  const fault = cannot || status === "offline" || status === "waiting_to_retry";
+  const holdingOff = said?.circuit_open;
+  const fault = cannot || status === "addon_unreachable" || status === "app_unreachable";
 
   // A fault's sentence, and where to look, are the Notice above; its row is
   // the word, the pips and the one faint line.
@@ -892,17 +954,17 @@ function ReachCard({
         ? holdingOff
           ? `The add-on on the Syndra server is waiting before it calls ${name} again, after repeated failures, and tries again by itself. Changes for ${name} wait, and nothing is lost.`
           : paused
-            ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)}. ${lifecycleWhy(health.lifecycle_note)} ${
+            ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)}. ${lifecycleWhy(said?.lifecycle_note)} ${
                 lifecycle === "draining"
                   ? "New changes are refused and the ones already sent are being allowed to finish."
                   : "Every change is refused at once. Reads keep working."
               }`
-            : (reading.sentence ??
-              // A failed live read is not "accepting changes": the copy below the card
-              // (LastKnown) is all there is, and it cannot say what is in flight now.
-              (!health.reachable
-                ? `${name} didn't answer Syndra's live check just now, so whether it is taking changes can't be confirmed.`
-                : health.in_flight ?`Accepting changes. ${health.in_flight} in flight.` : "Accepting changes. Nothing is in flight."))
+            : isNotRead(health.addon)
+              ? // The add-on's answer was not read (a missed check, a live "Try again" that came back
+                // with none): never "accepting changes"; its why, in §13.1's words, says which side.
+                [reading.sentence, whyLine(health.addon.why, name, OPERATOR, said?.product)].filter(Boolean).join(" ")
+              : (reading.sentence ??
+                (said?.in_flight ? `Accepting changes. ${said.in_flight} in flight.` : "Accepting changes. Nothing is in flight."))
         : reading.sentence;
   }
   const faint =
@@ -934,7 +996,7 @@ function ReachCard({
       >
         {detail}
       </Reading>
-      <ConnectionNotices target={target} health={health} />
+      <ConnectionNotices target={target} health={said} />
     </Card>
   );
 }
@@ -1010,20 +1072,12 @@ function ConnectionNotices({
 }
 
 /**
- * How current the reading is, said once for the page: the live check while the
- * target answers, the last copy Syndra holds while it does not.
+ * How current the reading is, said once for the page: the add-on's account of itself, dated by its
+ * read (design §13.3). A read with nothing to give has no date to say: its why is said once, by the
+ * fault Notice or the reach card, never again here.
  */
-function TargetRead({ health, name }: { health: TargetHealth | undefined; name: string }) {
-  if (health && !health.reachable) {
-    return (
-      <ReadFreshness
-        subject={`${name}'s last known state`}
-        state={{ readAt: health.snapshot_taken_at, current: false }}
-      />
-    );
-  }
-  const checkedAt = health?.health?.checked_at;
-  return checkedAt ? <ReadFreshness subject={name} state={{ readAt: checkedAt, current: health?.reachable }} /> : null;
+function TargetRead({ health, name }: { health: TargetHealthReply | undefined; name: string }) {
+  return health && !isNotRead(health.addon) ? <ReadFreshness read={health.addon} subject={name} /> : null;
 }
 
 /**
@@ -1379,31 +1433,35 @@ function Reading({
 }
 
 /**
- * The Accounts region's one "could not be read": a pass that stopped read
- * nothing, so the lists below have no count and no empty state, and this line
- * says why once, above them all, with Read again on it (the strip's own
- * control: a halted read has no freshness strip to carry it). Inside the
- * add-on's cooldown the reason stays, since for an outdated add-on or a refused
- * read it is the next step, and the count is said after it.
+ * The Accounts region's one "could not be read": a read with nothing to give
+ * (design §13.6), so the lists below have no count and no empty state, and this
+ * line says why once, above them all, in §13.1's words, with Read again on it.
+ * Inside the cooldown it says the one wait wording (`cooldownNext`).
  */
 function AccountsNotRead({ target, region }: { target: string; region: string }) {
   const nameOf = useSystemNames();
-  const inventory = useTargetInventory(target);
+  const read = readOfQuery(useTargetInventory(target));
   const again = useTargetInventoryAgain(target);
-  const left = useCountdown(again.cooldown?.retry_after, again.cooldown?.since);
+  const why = isNotRead(read) ? read.why : undefined;
+  const cooldown = why?.reason === REASON.cooldown;
+  const left = useCountdown(cooldown ? why?.retryAfter : undefined, why?.since);
   const lineId = useId();
-  // Set by a press, consumed once: a read that lands takes this line, and its focused button, away,
-  // so focus goes to the region's heading rather than to <body>. A press that fails clears it, so a
-  // later read that lands by itself never moves focus nobody asked to move.
+  // Set by a press, consumed once, when the press settles: a read that lands takes this line, and its
+  // focused button, away, so focus goes to the region's heading rather than to <body>. A press that
+  // settles with nothing again (none, or a failure) only clears it, so a later read that lands by
+  // itself never moves focus nobody asked to move.
   const pressed = useRef(false);
-  const unread = inventory.data?.halted;
+  const unread = isNotRead(read);
   useEffect(() => {
-    if (unread || !pressed.current) return;
+    if (!pressed.current || again.pending) return;
     pressed.current = false;
-    if (document.activeElement === document.body) focusHeading(document.getElementById(`${region}-heading`));
-  }, [unread, region]);
-  if (!unread) return null;
-  const line = `${inventoryNotRead(nameOf(target), inventory.data?.detail, inventory.data?.reason)}${left > 0 ? ` ${cooldownNext(left)}` : ""}`;
+    if (!unread && document.activeElement === document.body) focusHeading(document.getElementById(`${region}-heading`));
+  }, [read, unread, again.pending, region]);
+  if (!why) return null;
+  const name = nameOf(target);
+  const line = cooldown
+    ? cooldownLine(name, left)
+    : `The account list could not be read. ${whyLine(why, name, OPERATOR)}`;
   return (
     <div className="grid gap-1">
       {/* The sentence and its button side by side, as ReadFreshness draws them (a button is never in prose). */}
@@ -1412,9 +1470,7 @@ function AccountsNotRead({ target, region }: { target: string; region: string })
         <ReadAgainButton
           onClick={() => {
             pressed.current = true;
-            void again.press().catch(() => {
-              pressed.current = false;
-            });
+            void again.press().catch(() => {});
           }}
           pending={again.pending}
           cooldown={left > 0 ? line : undefined}
@@ -1452,20 +1508,13 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
     { username: string; person: string; result: AdoptionResult } | null
   >(null);
 
-  // A pass that stopped read nothing: no list, no count, no freshness (AccountsNotRead says so).
-  const unread = inventory.data?.halted;
-  // Refused inside the cooldown: only ever a press, since a load never sends fresh.
-  const refused = again.cooldown;
-  const read = {
-    readAt: inventory.data?.read_at,
-    current: inventory.data?.current,
-    truncated: inventory.data?.truncated,
-    // A press the cooldown refused is newer than the copy it leaves on show.
-    stale: refused ?? stamped(inventory.data?.read_stale, inventory.dataUpdatedAt),
-  };
-  const tooOldToAdopt = !inventory.data || blocksIrreversibleAction(read);
+  // A read with nothing to give: no list, no count, no freshness (AccountsNotRead says so, once).
+  const read = readOfQuery(inventory);
+  // Assigning binds an identity for good: only off a read taken now, and young enough (§31 A). A kept
+  // copy, or no read at all, keeps it off.
+  const tooOldToAdopt = read.state !== "now" || blocksIrreversibleAction(stateOfRead(read)!);
   const name = nameOf(target);
-  const unmanaged = inventory.data?.unmanaged ?? [];
+  const unmanaged = ofRead(read, (d) => d.unmanaged) ?? [];
   // An account that is assigned fades where it was and its gap closes after (D-1 M5).
   // The account just assigned keeps its row until the outcome under it has been read.
   const stay = useMemo(() => new Set(result ? [result.username] : []), [result]);
@@ -1477,18 +1526,19 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
   );
 
   return (
-    <Card stale={stale || read.current === false} {...leaving.listProps}>
+    <Card stale={stale || read.state === "kept"} {...leaving.listProps}>
       <CardHeader
         title="Not created by Syndra"
-        count={inventory.data && !unread ? leaving.rows.length : undefined}
+        count={ofRead(read, () => leaving.rows.length)}
         caption={`Accounts on ${name} that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.`}
       />
-      {/* A pass that read nothing has no freshness: the region's line above the cards says so, once. */}
-      {!unread && (
+      {/* A read with nothing to give has no freshness: the region's line above the cards says so, once. */}
+      {!isNotRead(read) && (
         <div className="px-5 pb-2">
           <ReadFreshness
             subject="The account list"
-            state={read}
+            read={read}
+            truncated={ofRead(read, (d) => d.truncated)}
             onRefresh={() => {
               setResult(null);
               return again.press();
@@ -1498,9 +1548,8 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
         </div>
       )}
       <ReadAgainError error={again.error} />
-      {(!inventory.data && refused) || unread ? null : (
       <ListStates
-        isLoading={inventory.isLoading}
+        read={read}
         error={inventory.error}
         isEmpty={leaving.rows.length === 0}
         onRetry={() => inventory.refetch()}
@@ -1568,7 +1617,6 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
                       result={result.result}
                       username={result.username}
                       person={result.person}
-                      name={name}
                     />
                   )}
                 </>
@@ -1597,7 +1645,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
             <AdoptPanel
               username={adopting}
               target={target}
-              accounts={inventory.data?.accounts ?? []}
+              accounts={ofRead(read, (d) => d.accounts) ?? []}
               pending={adopt.isPending}
               error={adopt.error}
               result={result?.username === adopting ? result : null}
@@ -1615,7 +1663,6 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
           )}
         </>
       </ListStates>
-      )}
     </Card>
   );
 }
@@ -1668,7 +1715,7 @@ function AdoptPanel({
       />
       {result ? (
         <div className="grid gap-3 px-6">
-          <ActionOutcome {...adoptionOutcome(result.result, result.username, result.person, name)} />
+          <ActionOutcome {...adoptionOutcome(result.result, result.username, result.person)} />
         </div>
       ) : (
       <form
@@ -1747,7 +1794,7 @@ function AdoptPanel({
         )}
 
         <ConfirmByTyping expected={username} noun="account name" value={confirm.typed} onChange={confirm.setTyped} />
-        {Boolean(error) && <ActionOutcome word="Not assigned" outcome={outcomeFromError(error)} />}
+        {Boolean(error) && <ActionOutcome word={notDoneWord(error, "Not assigned")} outcome={outcomeFromError(error)} />}
       </form>
       )}
       {result ? (
@@ -1784,28 +1831,20 @@ function AdoptPanel({
 }
 
 /**
- * What the adoption actually did — three outcomes, rendered as three.
- *
- * `unconfirmed` is the one that matters: the target did not answer, nothing was
- * recorded here, and the operator must look before trying again. Rendering it as
- * success is what this screen used to do.
+ * What the adoption actually did. `unconfirmed` (202, design §13.4) is the one
+ * that matters: sent, the answer lost, it may have been applied, and Syndra is
+ * checking; it wears the one unconfirmed outcome every write wears. A send
+ * where nothing went out is a 503, said where the error is.
  */
-function adoptionOutcome(result: AdoptionResult, username: string, person: string, name: string) {
-  const adopted = result.status === "adopted";
+function adoptionOutcome(result: AdoptionResult, username: string, person: string) {
+  if (isUnconfirmed(result)) return { word: UNCONFIRMED_WORD, outcome: unconfirmedOutcome() };
   // The backend's own `detail` never names the person (it is written for the
   // audit trail, not the row), so the sentence names them here.
-  const said = [
-    adopted ? `${username} is now ${person}'s account.` : `${name} did not confirm it.`,
-    result.detail ?? (adopted ? "" : "Nothing was recorded."),
-    result.warning ?? "",
-  ]
+  const said = [`${username} is now ${person}'s account.`, result.detail ?? "", result.warning ?? ""]
     .filter(Boolean)
     .map(sentence)
     .join(" ");
-  return {
-    word: adopted ? "Assigned" : "Not confirmed",
-    outcome: { kind: adopted ? "applied" : "failed", message: said } as const,
-  };
+  return { word: "Assigned", outcome: { kind: "applied", message: said } as const };
 }
 
 /** The row's copy of the result. It leaves on the next read of the list (G26), never on a button. */
@@ -1813,14 +1852,12 @@ function AdoptionOutcome({
   result,
   username,
   person,
-  name,
 }: {
   result: AdoptionResult;
   username: string;
   person: string;
-  name: string;
 }) {
-  return <ActionOutcome placement="inline" {...adoptionOutcome(result, username, person, name)} />;
+  return <ActionOutcome placement="inline" {...adoptionOutcome(result, username, person)} />;
 }
 
 /**
@@ -1850,6 +1887,8 @@ function LifecycleControl({
 }) {
   const nameOf = useSystemNames();
   const set = useSetLifecycle(target);
+  // Sent, the answer lost (202): it may have been applied; the state shown is the last one read.
+  const unsure = isUnconfirmed(set.data);
   const [reason, setReason] = useState("");
   // Which action row is asking why. One at a time, so a reason typed for one
   // state is never sent for another.
@@ -2001,20 +2040,41 @@ function LifecycleControl({
         <CardRow>
           <ActionOutcome
             placement="inline"
-            word="Not changed"
-            outcome={{
-              ...outcomeFromError(set.error),
-              message: `${name} did not answer the request. The state is still ${stateLabel(current)}, unchanged.`,
-              detail: reason ? "Your reason was kept. Trying again sends the same request with the same reason." : undefined,
-              next: `Try again. If it keeps failing, check that ${name} is running.`,
-            }}
+            word={notDoneWord(set.error, "Not changed")}
+            outcome={
+              isNothingSent(set.error)
+                ? // Nothing went out: §13.1's why, and its step, as the backend said them.
+                  { ...outcomeFromError(set.error), detail: reason ? `The state is still ${stateLabel(current)}. Your reason was kept.` : undefined }
+                : {
+                    ...outcomeFromError(set.error),
+                    message: `${name} did not answer the request. The state is still ${stateLabel(current)}, unchanged.`,
+                    detail: reason ? "Your reason was kept. Trying again sends the same request with the same reason." : undefined,
+                    next: `Try again. If it keeps failing, check that ${name} is running.`,
+                  }
+            }
           />
+        </CardRow>
+      )}
+      {unsure && (
+        <CardRow>
+          <ActionOutcome placement="inline" word={UNCONFIRMED_WORD} outcome={unconfirmedOutcome()} />
         </CardRow>
       )}
     </Card>
   );
 }
 
+/** A pass skipped inside the add-on's cooldown, answered from its kept copy: the seconds to wait it out. */
+function skipWait(pass: TargetReconcilePass): number | undefined {
+  return pass.halted && pass.read.state === "kept" && pass.read.why.reason === REASON.cooldown ? pass.read.why.retryAfter : undefined;
+}
+
+/** A pass the cooldown refused with nothing kept (503 `cooldown`): the seconds to wait it out. */
+function cooldownOf503(why: Why): number | undefined {
+  return why.reason === REASON.cooldown ? why.retryAfter : undefined;
+}
+
+/** A write where nothing went out (503 NOTHING_SENT, design §13.4). */
 /** The reconcile result in one line. Counts of people, singular and plural both right. */
 export function reconcileLine(bound: number | undefined, queued: number, missing: number | undefined, name: string): string {
   const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;

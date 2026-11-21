@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ConnectedSystemsPage from "@/app/system/targets/page";
 import { targetLabel } from "@/lib/nav";
 import type { TargetSummary } from "@/lib/queries/useTargets";
+import { asRead, readNow } from "@/test-utils/wire";
 
 /**
  * The index exists for the deployment that has registered NOTHING. That case is
@@ -36,8 +37,8 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: state.error,
       refetch: vi.fn(),
     }),
-    useTargetHealth: () => ({ data: state.health, isLoading: false, isError: false }),
-    useTargetInventory: () => ({ data: state.inventory, isLoading: false, isError: false }),
+    useTargetHealth: () => ({ data: state.health && actual.healthReplyOf({ read: readNow(), ...state.health }), isLoading: false, isError: false }),
+    useTargetInventory: () => ({ data: state.inventory && asRead(state.inventory), isLoading: false, isError: false }),
     useMergeFindings: () => ({ data: state.findings, isLoading: false, isError: false }),
   };
 });
@@ -55,7 +56,7 @@ function target(over: Partial<TargetSummary> = {}): TargetSummary {
     ],
     circuit_open: false,
     status: "answering",
-    health: { status: "online", recent: ["answered", "answered", "answered"], checked_at: "2026-10-14T09:41:00Z" },
+    health: { state: "answering", recent: ["answered", "answered", "answered"], checked_at: "2026-10-14T09:41:00Z" },
     project: { id: "p1", name: "Makerspace" },
     ...over,
     // The backend's name: the fixtures' operator named TrueNAS; any other is its id title-cased.
@@ -127,25 +128,39 @@ describe("connected systems", () => {
   // manages": one read, so the two pages cannot disagree.
   it("counts the people with an account Syndra manages there, from the system's own inventory", () => {
     state.targets = [target()];
-    state.inventory = { bound: 48, unmanaged: [], current: true };
+    state.inventory = { bound: 48, unmanaged: [] };
     render(<ConnectedSystemsPage />);
 
     expect(screen.getByText("48")).toBeTruthy();
     expect(screen.queryByText("last known")).toBeNull();
   });
 
-  it("keeps the last count and labels it once the system stops answering", () => {
-    state.targets = [
-      target({
-        status: "offline",
-        health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: "2026-10-14T08:33:00Z" },
-      }),
-    ];
-    state.inventory = { bound: 48, unmanaged: [], current: true };
+  // A count from the add-on's kept copy says when it was read: never a bare number from a copy.
+  it("dates a count drawn from a kept copy", () => {
+    state.targets = [target()];
+    state.inventory = { bound: 48, unmanaged: [], read: { state: "kept", taken_at: new Date(Date.now() - 5 * 60_000).toISOString(), reason: "cached" } };
     render(<ConnectedSystemsPage />);
 
     expect(screen.getByText("48")).toBeTruthy();
-    expect(screen.getByText("last known")).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.tagName === "SPAN" && /^Read 5 min ago$/.test(el.textContent ?? ""))).toBeTruthy();
+  });
+
+  // Design §13.3: with the add-on down nobody gets a copy, so the row has no count, never a 0 or a
+  // "last known" one.
+  it("shows no count once the add-on stops answering, and says it was not read", () => {
+    state.targets = [
+      target({
+        status: "addon_unreachable",
+        health: { state: "addon_unreachable", cause: "no_answer", recent: ["missed", "missed", "missed"], since: "2026-10-14T08:33:00Z" },
+      }),
+    ];
+    state.inventory = { read: { state: "none", reason: "addon_unreachable", cause: "no_answer" } };
+    render(<ConnectedSystemsPage />);
+
+    expect(screen.queryByText("48")).toBeNull();
+    expect(screen.queryByText("0")).toBeNull();
+    expect(screen.queryByText("last known")).toBeNull();
+    expect(screen.getAllByText("Not read").length).toBeGreaterThan(0);
     expect(screen.getByText("Unknown until it answers")).toBeTruthy();
   });
 
@@ -156,9 +171,9 @@ describe("connected systems", () => {
     expect(screen.getAllByText("Not yet").length).toBeGreaterThan(0);
   });
 
-  it("says Not read, never Not yet, when the system answered and the pass stopped", () => {
+  it("says Not read, never Not yet, when the read had nothing to give", () => {
     state.targets = [target()];
-    state.inventory = { current: false, halted: true, reason: "target_unreachable" };
+    state.inventory = { read: { state: "none", reason: "read_refused" } };
     render(<ConnectedSystemsPage />);
     expect(screen.getAllByText("Not read").length).toBeGreaterThan(0);
     expect(screen.queryByText("Not yet")).toBeNull();
@@ -167,7 +182,7 @@ describe("connected systems", () => {
   describe("Needs you", () => {
     it("links each thing that is waiting to the part of the system's page that handles it", () => {
       state.targets = [target()];
-      state.inventory = { bound: 48, unmanaged: [{ username: "a" }, { username: "b" }, { username: "c" }], current: true };
+      state.inventory = { bound: 48, unmanaged: [{ username: "a" }, { username: "b" }, { username: "c" }] };
       state.findings = [{ id: "f1" }];
       render(<ConnectedSystemsPage />);
 
@@ -182,7 +197,7 @@ describe("connected systems", () => {
 
     it("counts a tampered change log as a decision", () => {
       state.targets = [target()];
-      state.inventory = { bound: 3, unmanaged: [], current: true };
+      state.inventory = { bound: 3, unmanaged: [] };
       state.findings = [];
       state.health = { log_anchor: { violation_reason: "edited" } };
       render(<ConnectedSystemsPage />);
@@ -192,7 +207,7 @@ describe("connected systems", () => {
 
     it("says nothing is waiting, so an empty cell never reads as unknown", () => {
       state.targets = [target()];
-      state.inventory = { bound: 3, unmanaged: [], current: true };
+      state.inventory = { bound: 3, unmanaged: [] };
       state.findings = [];
       render(<ConnectedSystemsPage />);
 
@@ -200,7 +215,10 @@ describe("connected systems", () => {
     });
 
     it("says unknown until it answers, never nothing waiting, for a system that is not answering", () => {
-      state.targets = [target({ circuit_open: true, status: "waiting_to_retry" })];
+      state.targets = [target({
+          status: "addon_unreachable",
+          health: { state: "addon_unreachable", cause: "no_answer", recent: ["missed", "missed", "missed"], since: "2026-10-14T08:33:00Z" },
+        })];
       state.findings = [];
       render(<ConnectedSystemsPage />);
 
@@ -221,11 +239,11 @@ describe("connected systems", () => {
     const at = new Date(Date.now() - 3 * 3_600_000).toISOString();
     state.targets = [
       target({
-        status: "offline",
+        status: "addon_unreachable",
         health: {
-          status: "offline",
+          state: "addon_unreachable",
           recent: ["missed", "missed", "missed"],
-          reachable_since: "2026-10-14T08:33:00Z",
+          since: "2026-10-14T08:33:00Z",
           last_answered_at: at,
         },
       }),
@@ -235,7 +253,7 @@ describe("connected systems", () => {
   });
 
   it("says nothing of a last answer for a system that has never given one", () => {
-    state.targets = [target({ health: { status: "unknown", recent: [], last_answered_at: null } })];
+    state.targets = [target({ health: { state: "checking", recent: [], last_answered_at: null } })];
     render(<ConnectedSystemsPage />);
     expect(screen.queryByText(/^Last answered\b/)).toBeNull();
   });
@@ -258,42 +276,41 @@ describe("connected systems", () => {
   // A secret that will not load is a fault on THIS side. Reporting it as the
   // target being unreachable sends an operator to the wrong machine.
   it("separates a transport fault from a target that is merely quiet", () => {
-    state.targets = [target({ transport_status: "error", transport_error: "no such file", status: "cannot_connect" })];
+    state.targets = [target({ transport_status: "error", transport_error: "no such file", status: "addon_unreachable", health: { state: "addon_unreachable", cause: "no_key", recent: [] } })];
     render(<ConnectedSystemsPage />);
 
-    expect(screen.getByText("Cannot connect")).toBeTruthy();
+    expect(screen.getByText("Add-on not answering")).toBeTruthy();
     expect(screen.queryByText("Answering")).toBeNull();
-    expect(screen.getByText(/Look at the Syndra server, not at TrueNAS/)).toBeTruthy();
+    expect(screen.getByText(/Syndra can't load TrueNAS's shared secret\. Check Syndra's secret file\./)).toBeTruthy();
   });
 
   // A-01: the breaker is "Waiting to retry", never "paused", which is only
   // ever a person's choice.
-  it("reports the breaker as waiting to retry, and where to look", () => {
-    state.targets = [target({ circuit_open: true, status: "waiting_to_retry" })];
+  it("reports an open breaker as its cause, with when Syndra tries again", () => {
+    state.targets = [target({ circuit_open: true, status: "addon_unreachable", health: { state: "addon_unreachable", cause: "timeout", retry_after: 25, recent: ["missed", "missed", "missed"] } })];
     const { container } = render(<ConnectedSystemsPage />);
 
-    expect(screen.getByText("Waiting to retry")).toBeTruthy();
-    expect(screen.getByText(/look at the Syndra server/)).toBeTruthy();
+    expect(screen.getByText(/started answering and stopped\. .*Syndra tries again in 25 s\./)).toBeTruthy();
     expect(container.textContent).not.toMatch(/paused/i);
   });
 
-  it("calls a system offline only after three misses, with when it began and the pips", () => {
+  it("names the add-on's outage, with when it began and the pips", () => {
     state.targets = [
       target({
-        status: "offline",
-        health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: "2026-10-14T08:33:00Z" },
+        status: "addon_unreachable",
+        health: { state: "addon_unreachable", cause: "no_answer", recent: ["missed", "missed", "missed"], since: "2026-10-14T08:33:00Z" },
       }),
     ];
     render(<ConnectedSystemsPage />);
 
-    expect(screen.getByText("Offline")).toBeTruthy();
+    expect(screen.getByText("Add-on not answering")).toBeTruthy();
     expect(screen.getByText(/^Since \d\d:\d\d$/)).toBeTruthy();
     expect(screen.getByRole("img", { name: "Last 3 checks: missed, missed, missed" })).toBeTruthy();
   });
 
   it("keeps a missed check green, with a faint line and the pips", () => {
     state.targets = [
-      target({ health: { status: "online", recent: ["answered", "answered", "missed"], missed_since: "2026-10-14T09:40:00Z" } }),
+      target({ health: { state: "answering", recent: ["answered", "answered", "missed"], missed_since: "2026-10-14T09:40:00Z" } }),
     ];
     render(<ConnectedSystemsPage />);
 
@@ -309,7 +326,7 @@ describe("connected systems", () => {
   });
 
   it("says checking, not offline, when Syndra has just restarted", () => {
-    state.targets = [target({ status: "checking", health: { status: "unknown", recent: [], started_at: "2026-10-14T09:38:00Z" } })];
+    state.targets = [target({ status: "checking", health: { state: "checking", recent: [], started_at: "2026-10-14T09:38:00Z" } })];
     render(<ConnectedSystemsPage />);
 
     expect(screen.getByText("Checking")).toBeTruthy();
@@ -318,7 +335,7 @@ describe("connected systems", () => {
   });
 
   it("names no clock when the API omits the start time", () => {
-    state.targets = [target({ status: "checking", health: { status: "unknown", recent: [] } })];
+    state.targets = [target({ status: "checking", health: { state: "checking", recent: [] } })];
     render(<ConnectedSystemsPage />);
 
     expect(screen.getByText("Not checked yet")).toBeTruthy();
@@ -344,15 +361,24 @@ describe("connected systems", () => {
   it("puts a system that stopped answering in one amber Notice above the page, and keeps the row's word", () => {
     state.targets = [
       target({
-        status: "offline",
-        health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: "2026-10-14T08:33:00Z" },
+        status: "addon_unreachable",
+        health: { state: "addon_unreachable", cause: "no_answer", recent: ["missed", "missed", "missed"], since: "2026-10-14T08:33:00Z" },
       }),
     ];
     render(<ConnectedSystemsPage />);
 
+    expect(screen.getByText("TrueNAS's add-on isn't answering.")).toBeTruthy();
+    expect(screen.getByText(/Check that its container is running/)).toBeTruthy();
+    expect(screen.getByText("Add-on not answering")).toBeTruthy();
+  });
+
+  it("names the system behind the add-on when only it is down", () => {
+    state.targets = [target({ status: "app_unreachable", health: { state: "app_unreachable", recent: ["answered", "answered", "answered"] } })];
+    render(<ConnectedSystemsPage />);
+
     expect(screen.getByText("TrueNAS isn't answering.")).toBeTruthy();
-    expect(screen.getByText(/Look at TrueNAS, not at Syndra/)).toBeTruthy();
-    expect(screen.getByText("Offline")).toBeTruthy();
+    expect(screen.getByText(/TrueNAS's add-on is running but can't reach TrueNAS/)).toBeTruthy();
+    expect(screen.queryByText(/container/)).toBeNull();
   });
 
   it("gives an answering system no Notice", () => {
@@ -383,17 +409,17 @@ describe("the tone a reading wears", () => {
     expect(toneOf("No answer yet")).toBe("muted");
   });
 
-  it("keeps amber for the reading that is a real fault on this host", () => {
-    state.targets = [target({ transport_status: "error", transport_error: "no such file", status: "cannot_connect" })];
+  it("keeps red for the reading that is a real fault on this host", () => {
+    state.targets = [target({ transport_status: "error", transport_error: "no such file", status: "addon_unreachable", health: { state: "addon_unreachable", cause: "no_key", recent: [] } })];
     render(<ConnectedSystemsPage />);
 
-    expect(toneOf("Cannot connect")).toBe("danger-text");
+    expect(toneOf("Add-on not answering")).toBe("danger-text");
   });
 
   it("keeps amber for a breaker somebody has to act on", () => {
-    state.targets = [target({ circuit_open: true, status: "waiting_to_retry" })];
+    state.targets = [target({ circuit_open: true, status: "addon_unreachable", health: { state: "addon_unreachable", cause: "timeout", retry_after: 25, recent: ["missed", "missed", "missed"] } })];
     render(<ConnectedSystemsPage />);
 
-    expect(toneOf("Waiting to retry")).toBe("warn-text");
+    expect(toneOf("Add-on not answering")).toBe("warn-text");
   });
 });

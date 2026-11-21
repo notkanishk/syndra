@@ -1,5 +1,5 @@
 import { limitFields } from "@/lib/fields";
-import { drawnUsage, stateOf } from "@/components/kinds/storage/state";
+import { drawnUsage, stateOf, storageOf } from "@/components/kinds/storage/state";
 import type { MyTargetView, PersonTargetView } from "@/lib/queries/useMyStorage";
 import type { Limits } from "@/lib/usage";
 
@@ -13,16 +13,17 @@ export const drawsHome = ({ home }: PersonTargetView): boolean => Boolean(home?.
  * - The member's own card (`MyStorage`) draws it in the home place's block: an account that is
  *   theirs, whose places were read, with a home place among them (not "unread", not "opens nothing").
  * - The person page's card (`PersonStorage`, `operator`) draws it in the Home folder row: an account,
- *   no setup step, a read storage (or its last read while offline), and a home that is drawn.
+ *   no setup step, a read storage (now or the add-on's kept copy), and a home that is drawn.
  */
 export function drawsHomeMonth(view: MyTargetView, operator: boolean): boolean {
   if (operator) {
     const person = view as PersonTargetView;
-    return !person.setup && Boolean(person.account) && Boolean(person.storage ?? person.last_known?.storage) && drawsHome(person);
+    return !person.setup && Boolean(person.account) && Boolean(storageOf(person)) && drawsHome(person);
   }
   const state = stateOf(view);
   if (state === "none" || state === "held" || state === "waiting" || state === "unread" || state === "opens-nothing" || !view.account) return false;
-  return Boolean(view.storage?.places_readable && view.storage.places?.some((p) => p.home));
+  const storage = storageOf(view);
+  return Boolean(storage?.places_readable && storage.places?.some((p) => p.home));
 }
 
 /**
@@ -39,12 +40,12 @@ export function storageLimitField(view: MyTargetView): string | undefined {
  * The storage kind's observed limits, for a statistics band. A band is scaled to the limit Syndra
  * READ (`quota_bytes` on the home place), never to a limit it computed. No place read means no
  * entry: "not read", which is not the same as 0, "no limit". The usage is the one the storage card
- * draws: a place the person can change, and nothing while the system is offline.
+ * draws: a place the person can change, and nothing from a read that has no data.
  */
 export function storageLimits(view: MyTargetView): Limits {
   const field = storageLimitField(view);
-  const home = view.storage?.places?.find((p) => p.home);
-  const usage = home && drawnUsage(home, view.health === "offline");
+  const home = storageOf(view)?.places?.find((p) => p.home);
+  const usage = home && drawnUsage(home);
   if (field === undefined || !usage) return {};
   return { [field]: usage.quota_bytes ?? 0 };
 }

@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TargetOverview } from "@/components/targets/TargetOverview";
 import type { TargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import { expectFullStrength } from "@/test-utils/fullStrength";
+import type { WireRead } from "@/lib/queries/read";
+import { asRead, NONE, readNow } from "@/test-utils/wire";
 
 /**
  * What the TARGET says about itself.
@@ -19,7 +21,8 @@ import { expectFullStrength } from "@/test-utils/fullStrength";
  * in Syndra can give.
  */
 
-const state: { health: TargetSystemHealth | undefined; loading: boolean; reachable: boolean | undefined } = {
+type Report = Omit<TargetSystemHealth, "read"> & { read?: WireRead };
+const state: { health: Report | undefined; loading: boolean; reachable: boolean | undefined } = {
   health: undefined,
   loading: false,
   reachable: undefined,
@@ -31,7 +34,7 @@ const READ_AT = new Date(2026, 10, 3, 9, 41).getTime();
 vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig));
 vi.mock("@/lib/queries/useTargetSystemHealth", () => ({
   useTargetSystemHealth: () => ({
-    data: state.health,
+    data: state.health && asRead(state.health),
     dataUpdatedAt: READ_AT,
     isLoading: state.loading,
     isError: false,
@@ -40,7 +43,8 @@ vi.mock("@/lib/queries/useTargetSystemHealth", () => ({
 
 // Everything else on the page is another component's subject. Declared inside
 // the factory because `vi.mock` is hoisted above every const in this file.
-vi.mock("@/lib/queries/useTargets", () => {
+vi.mock("@/lib/queries/useTargets", async () => {
+  const { healthReplyOf } = await vi.importActual<typeof import("@/lib/queries/useTargets")>("@/lib/queries/useTargets");
   const idle = () => ({ data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() });
   const inert = () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, error: null, data: undefined, reset: vi.fn() });
   return {
@@ -50,7 +54,10 @@ vi.mock("@/lib/queries/useTargets", () => {
     useTargetHealthAgain: () => ({ press: async () => {} }),
     useTargetHealth: () => ({
       ...idle(),
-      data: state.reachable === undefined ? undefined : { reachable: state.reachable, lifecycle: "active" },
+      data:
+        state.reachable === undefined
+          ? undefined
+          : healthReplyOf({ read: state.reachable ? readNow() : NONE, reachable: state.reachable, lifecycle: "active" }),
     }),
     useTargetInventory: idle,
     useTargetInventoryAgain: () => ({ press: async () => {}, pending: false, error: null }),
@@ -93,7 +100,6 @@ describe("what the target reports", () => {
   it("names a failing disk the target reported", () => {
     state.health = {
       target: "truenas",
-      readable: true,
       system: { hostname: "truenas", version: "25.10.5" },
       alerts: [
         {
@@ -132,7 +138,6 @@ describe("what the target reports", () => {
   it("gives each reading's title the row's first line and its sentence the line under it", () => {
     state.health = {
       target: "truenas",
-      readable: true,
       system: { hostname: "truenas", version: "25.10.5" },
       alerts: [
         {
@@ -165,18 +170,19 @@ describe("what the target reports", () => {
     expect(screen.getByText(/8 Offline uncorrectable sectors/).closest("[data-row-detail]")).not.toBeNull();
   });
 
-  it("does not claim health for a report it could not read", () => {
-    state.health = { target: "truenas", readable: false, detail: "no route to host" };
+  // Nothing to give (503 TARGET_NOT_READ): why, in §13.1's words, never "nothing raised" and no date.
+  it("does not claim health for a report it could not read, and says why", () => {
+    state.health = { target: "truenas", read: { state: "none", reason: "addon_unreachable", cause: "timeout" } };
     renderTarget();
 
-    expect(screen.getByText(/not a report that nothing is wrong/i)).toBeInTheDocument();
+    expect(screen.getByText(/TrueNAS's add-on started answering and stopped\. Syndra keeps trying\./)).toBeInTheDocument();
     expect(screen.queryByText(/Nothing raised/)).toBeNull();
+    expect(screen.queryByText(/Last known|All read|Partly read/)).toBeNull();
   });
 
   it("names the source that failed rather than implying it was empty", () => {
     state.health = {
       target: "truenas",
-      readable: true,
       pools: [
         {
           name: "tank",
@@ -201,7 +207,6 @@ describe("what the target reports", () => {
   it("explains a stopped sharing service in terms of what it costs", () => {
     state.health = {
       target: "truenas",
-      readable: true,
       pools: [],
       services: [
         { service: "cifs", state: "STOPPED", enable: true },
@@ -220,7 +225,6 @@ describe("what the target reports", () => {
   it("says so plainly when the target reported nothing wrong", () => {
     state.health = {
       target: "truenas",
-      readable: true,
       alerts: [],
       pools: [
         {
@@ -243,7 +247,6 @@ describe("what the target reports", () => {
   it("ignores an alert somebody already dismissed on the target", () => {
     state.health = {
       target: "truenas",
-      readable: true,
       alerts: [{ level: "WARNING", klass: "HasUpdate", text: "An update is available.", dismissed: true }],
       pools: [],
       services: [],
@@ -258,9 +261,8 @@ describe("what the target reports", () => {
   // recedes to the page, its dots ring in their own colour, its age is said
   // once in its note, and nothing in it is dimmed.
   describe("while the system isn't answering", () => {
-    const report: TargetSystemHealth = {
+    const report: Report = {
       target: "truenas",
-      readable: true,
       alerts: [{ level: "WARNING", klass: "SMARTUncorrectedErrors", text: "1 uncorrectable error on sde.", dismissed: false }],
       pools: [
         { name: "tank", status: "ONLINE", healthy: true, warning: false, free_bytes: 1, allocated_bytes: 1, size_bytes: 2 },

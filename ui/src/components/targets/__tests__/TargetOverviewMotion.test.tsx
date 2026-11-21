@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
 import { FLASH_MS, FOLD_MS, TINT_MS } from "@/lib/motion";
-import type { MergeFinding, TargetHealth, TargetInventory, TargetSummary } from "@/lib/queries/useTargets";
+import type { MergeFinding, TargetHealthWire, TargetInventory, TargetSummary } from "@/lib/queries/useTargets";
+import { asRead, readNow } from "@/test-utils/wire";
 import { gapSettled } from "@/test-utils/leaving";
 import { motionInTests } from "@/test-utils/motion";
 
@@ -15,9 +16,9 @@ import { motionInTests } from "@/test-utils/motion";
 
 const state = {
   roster: [] as TargetSummary[],
-  health: {} as TargetHealth,
+  health: {} as TargetHealthWire,
   findings: [] as MergeFinding[],
-  inventory: {} as TargetInventory,
+  inventory: {} as Omit<TargetInventory, "read">,
   reconcile: undefined as undefined | Record<string, unknown>,
 };
 
@@ -29,11 +30,12 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 }));
 
 vi.mock("@/lib/queries/useTargets", async () => {
+  const { withRead } = await import("@/lib/queries/read");
   const actual = await vi.importActual<typeof import("@/lib/queries/useTargets")>("@/lib/queries/useTargets");
   return {
     ...actual,
     useTargets: () => ({ data: state.roster, isLoading: false, error: null }),
-    useTargetHealth: () => ({ data: state.health, isLoading: false, error: null, refetch: vi.fn() }),
+    useTargetHealth: () => ({ data: actual.healthReplyOf({ read: readNow(), ...state.health }), isLoading: false, error: null, refetch: vi.fn() }),
     useMergeFindings: () => ({ data: state.findings, isLoading: false, error: null, refetch: vi.fn() }),
     useResolveMergeFinding: () => ({
       mutate: (_input: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
@@ -41,15 +43,15 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
     }),
     useUnconfirmedOperations: () => ({ data: [], isLoading: false, error: null }),
-    useTargetInventory: () => ({ data: state.inventory, isLoading: false, error: null, refetch: vi.fn() }),
+    useTargetInventory: () => ({ data: asRead(state.inventory), isLoading: false, error: null, refetch: vi.fn() }),
     useAdoptAccount: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null }),
     useReleaseBinding: () => ({ mutate: vi.fn(), isPending: false, error: null }),
     useSetLifecycle: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false }),
-    useTargetSettings: () => ({ data: { read: true, settings: [] }, isLoading: false, error: null, refetch: vi.fn() }),
-    useTargetHomes: () => ({ data: { read: true, usage_read: true, accounts: [] }, isLoading: false, error: null }),
+    useTargetSettings: () => ({ data: asRead({ settings: [] }), isLoading: false, error: null, refetch: vi.fn() }),
+    useTargetHomes: () => ({ data: asRead({ accounts: [] }), isLoading: false, error: null }),
     useSetTargetSetting: () => ({ mutate: vi.fn(), isPending: false, error: null }),
     useSetTargetProject: () => ({ mutate: vi.fn(), isPending: false, error: null }),
-    useReconcileTarget: () => ({ mutate: vi.fn(), isPending: false, data: state.reconcile, error: null }),
+    useReconcileTarget: () => ({ mutate: vi.fn(), isPending: false, data: state.reconcile && withRead(state.reconcile as never), error: null }),
     useResolveLogFinding: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null }),
   };
 });
@@ -107,7 +109,7 @@ beforeEach(() => {
   state.roster = [roster()];
   state.health = { reachable: true, lifecycle: "active" };
   state.findings = [];
-  state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+  state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
   state.reconcile = undefined;
 });
 afterEach(() => {
@@ -173,12 +175,12 @@ describe("the last item leaves in order (M3)", () => {
   it("lets the anchor's finding leave with its Notice, drawn while the count holds", () => {
     vi.useFakeTimers();
     proto.getAnimations = () => [];
-    state.health = { reachable: true, lifecycle: "active", log_anchor: anchor } as TargetHealth;
+    state.health = { reachable: true, lifecycle: "active", log_anchor: anchor };
     const { rerender } = render(tree());
     const finding = () => document.getElementById("waiting")!.querySelector("[data-phase]");
     expect(finding()).not.toBeNull();
 
-    state.health = { reachable: true, lifecycle: "active", log_anchor: { ...anchor, violation_reason: undefined } } as TargetHealth;
+    state.health = { reachable: true, lifecycle: "active", log_anchor: { ...anchor, violation_reason: undefined } };
     rerender(tree());
     // Closing, not gone: the row is still drawn while the count still says one.
     expect(finding()?.getAttribute("data-phase")).toBe("closing");
@@ -188,12 +190,12 @@ describe("the last item leaves in order (M3)", () => {
   it("holds the count for the Notice's fade and the all-clear for its fold", () => {
     vi.useFakeTimers();
     proto.getAnimations = () => [];
-    state.health = { reachable: true, lifecycle: "active", log_anchor: anchor } as TargetHealth;
+    state.health = { reachable: true, lifecycle: "active", log_anchor: anchor };
     const { rerender } = render(tree());
     expect(screen.getByText("One item under Waiting on you needs a decision.")).toBeTruthy();
     expect(regionCount()).toBe("Waiting on you1");
 
-    state.health = { reachable: true, lifecycle: "active", log_anchor: { ...anchor, violation_reason: undefined } } as TargetHealth;
+    state.health = { reachable: true, lifecycle: "active", log_anchor: { ...anchor, violation_reason: undefined } };
     rerender(tree());
     // The Notice is fading: still drawn, still readable, and the item still counted.
     expect(screen.getByText("One item under Waiting on you needs a decision.")).toBeTruthy();
@@ -213,7 +215,7 @@ describe("the last item leaves in order (M3)", () => {
 
 describe("Check now lands (M4)", () => {
   const read = (over: Record<string, unknown> = {}) => ({
-    target: "truenas", bound: 4, queued: 1, current: true, ...over,
+    target: "truenas", bound: 4, queued: 1, read: readNow(), ...over,
   });
   const checkRow = () => screen.getByRole("button", { name: "Check now" }).closest("[data-card-row]")!;
 
@@ -284,7 +286,7 @@ describe("accounts not created by Syndra leave by fading and folding (M5)", () =
 
   it("marks an assigned account leaving, still drawn, before it goes", () => {
     state.inventory = {
-      target: "truenas", bound: 0, current: true, read_at: new Date().toISOString(),
+      target: "truenas", bound: 0,
       unmanaged: [{ username: "iyo", account_id: "3000" }, { username: "kairi", account_id: "3001" }],
     };
     const { rerender, container } = render(tree());

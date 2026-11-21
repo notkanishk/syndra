@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
-import { copyLine, cooldownLine, FIRST_PART_READ, READ_AGAIN, READING, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
+import { copyLine, cooldownLine, FIRST_PART_READ, READ_AGAIN, READING, retryingLine, STOP_WAITING, unreachableLine, whyLine, type Reader } from "@/components/results/copy";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -10,7 +10,8 @@ import { CardRow } from "@/components/ui/Card";
 import { Crossfade, LANDED_HOLD_MS, PRESS_FORGET_MS } from "@/lib/motion";
 import { formatClock, formatRelative, moment } from "@/lib/format";
 import { outcomeFromError } from "@/lib/outcome";
-import { cooldownOf, STALE, stamped, useCountdown, type Stale } from "@/lib/queries/fresh";
+import { cooldownOf, STALE, useCountdown, type Stale } from "@/lib/queries/fresh";
+import { REASON, type Read, type Why, notRead } from "@/lib/queries/read";
 
 /**
  * How old the state on this screen is (design §31 A).
@@ -58,9 +59,23 @@ export function readStateOfQuery(q: { dataUpdatedAt: number; isError: boolean })
   return { readAt: q.dataUpdatedAt ? new Date(q.dataUpdatedAt).toISOString() : null, current: !q.isError };
 }
 
-/** The read state of an add-on's answer that carries its own (`taken_at`, `current`, `stale`). */
-export function observed(o: { taken_at: string; current: boolean; stale?: Stale; truncated?: boolean }, since?: number): ReadState {
-  return { readAt: o.taken_at, current: o.current, stale: stamped(o.stale, since), truncated: o.truncated };
+/** A kept copy's reason in the strip's words (`common/stale.json`): the app down is `unreachable`. */
+const STALE_OF: Record<string, string> = { [REASON.cached]: STALE.cached, [REASON.cooldown]: STALE.cooldown, [REASON.appUnreachable]: STALE.unreachable };
+
+/**
+ * The strip's state of an add-on read that has data (`now` or `kept`); undefined for one that has
+ * none, which the strip draws as its why instead (`NotReadLine`).
+ */
+export function stateOfRead(read: Read<unknown>, truncated?: boolean): ReadState | undefined {
+  if (read.state === "now") return { readAt: read.takenAt, current: true, truncated };
+  if (read.state !== "kept") return undefined;
+  const { reason, retryAfter, detail, since } = read.why;
+  return {
+    readAt: read.takenAt,
+    current: false,
+    truncated,
+    stale: { reason: STALE_OF[reason] ?? STALE.cached, ...(retryAfter ? { retry_after: retryAfter } : {}), ...(detail ? { note: detail } : {}), ...(since ? { since } : {}) },
+  };
 }
 
 /**
@@ -104,17 +119,13 @@ const TONE: Record<Freshness, string> = {
 
 /**
  * What colour the line and its dot are drawn in. A copy the add-on kept is the
- * normal state of a read, so it is neutral however old it is, and so is a
- * cooldown the reader did not cause (a page load inside someone else's, marked
- * `pressed: false`). A cooldown carried in the data is the reader's own press, so it is amber, and a system that cannot be reached are
- * amber; every other reading is drawn by its age.
+ * normal state of a read, so it is neutral however old it is. A cooldown only
+ * reaches a read through a press (a load and a poll never send `fresh`), so it
+ * is the reader's own and amber, and so is a system that cannot be reached;
+ * every other reading is drawn by its age.
  */
-export function toneOf(
-  reading: Freshness,
-  why: string | undefined,
-  pressed: boolean,
-): { text: string; dot: { tone: StatusTone; ring?: boolean } } {
-  if (why === STALE.cached || (why === STALE.cooldown && !pressed)) return { text: "text-faint", dot: { tone: "neutral" } };
+export function toneOf(reading: Freshness, why: string | undefined): { text: string; dot: { tone: StatusTone; ring?: boolean } } {
+  if (why === STALE.cached) return { text: "text-faint", dot: { tone: "neutral" } };
   if (why === STALE.cooldown) return { text: "text-warn-text", dot: { tone: "warn" } };
   return {
     text: TONE[reading],
@@ -198,11 +209,23 @@ export function useRefreshPress(readAt: string | null | undefined): RefreshPress
  * `fresh=true` (`useReadAgain`). The renderers of an add-on's reads take it
  * from here, so a card names no press of its own.
  */
-const ReadAgainContext = createContext<{ press: () => unknown; since?: number } | undefined>(undefined);
-/** `since`: when the page's read last answered (its query's `dataUpdatedAt`), where a cooldown a reply carries counts from. */
-export const ReadAgainProvider = ReadAgainContext.Provider;
+const ReadAgainContext = createContext<{ press: () => unknown; say?: (words: string) => void } | undefined>(undefined);
+
+/**
+ * The page's one Read again, and its one `role="status"` region: every Read again under it says
+ * its wait there, so a page of several cards has one region, not one per button. The region is
+ * there empty from the start, so the first words are announced.
+ */
+export function ReadAgainProvider({ value, children }: { value: { press: () => unknown }; children: ReactNode }) {
+  const [said, say] = useState("");
+  return (
+    <ReadAgainContext.Provider value={{ press: value.press, say }}>
+      <span role="status" className="sr-only">{said}</span>
+      {children}
+    </ReadAgainContext.Provider>
+  );
+}
 export const useReadAgainPress = () => useContext(ReadAgainContext)?.press;
-export const useReadAgainSince = () => useContext(ReadAgainContext)?.since;
 
 /**
  * Why the last "Read again" failed, when it was not the cooldown (the line says that one): in the
@@ -232,12 +255,21 @@ export function ReadAgainButton({ onClick, pending, cooldown, describedBy }: {
   // The first words of a wait, held while it lasts, so the region does not speak every second.
   const [said, setSaid] = useState<string>();
   if (Boolean(cooldown) !== Boolean(said)) setSaid(cooldown);
+  // Under a page's provider the wait is said in its one region; alone, in this button's own.
+  const say = useContext(ReadAgainContext)?.say;
+  useEffect(() => {
+    say?.(said ?? "");
+  }, [say, said]);
+  // A counting button that goes (its line replaced, its card gone) takes its words with it, so the
+  // page's region never keeps saying a wait nobody can see.
+  const counting = Boolean(said);
+  useEffect(() => (counting ? () => say?.("") : undefined), [say, counting]);
   return (
     <>
       <Button variant="outline" size="sm" className={READ_AGAIN_PILL} onClick={onClick} isPending={pending} disabled={Boolean(cooldown)} keepFocus aria-describedby={describedBy}>
         {pending ? READING : READ_AGAIN}
       </Button>
-      <span role="status" className="sr-only">{said ?? ""}</span>
+      {!say && <span role="status" className="sr-only">{said ?? ""}</span>}
     </>
   );
 }
@@ -253,16 +285,7 @@ const UNNAMED_OPERATOR: Reader = { audience: "operator", person: "" };
  * where re-reading is the operator's next move — a provisional read has nothing
  * to refresh to, since the target is the thing that is not answering.
  */
-export function ReadFreshness({
-  state: given,
-  subject = "This",
-  onRefresh,
-  refreshing = false,
-  refresh,
-  reader = UNNAMED_OPERATOR,
-  className = "",
-}: {
-  state: ReadState;
+type StripProps = {
   subject?: string;
   /** Who is reading: it words the step beside a system that cannot be reached. */
   reader?: Reader;
@@ -271,7 +294,93 @@ export function ReadFreshness({
   /** When the press is somewhere else on the page (a header button), its `useRefreshPress`. */
   refresh?: RefreshPress;
   className?: string;
+};
+
+/**
+ * The strip, for an add-on read (`read`, design §13.6) or a list Syndra holds itself (`state`,
+ * `readStateOfQuery`). An add-on read with no data draws its why and next step (`NotReadLine`):
+ * never an age, a count or "last state seen"; a pending one draws nothing yet.
+ */
+export function ReadFreshness({
+  read,
+  state,
+  truncated,
+  system,
+  product,
+  ...strip
+}: StripProps &
+  (
+    | { read: Read<unknown>; state?: never; truncated?: boolean; system?: string; product?: string }
+    | { state: ReadState; read?: never; truncated?: never; system?: never; product?: never }
+  )) {
+  if (!read) return <Strip {...strip} state={state} />;
+  if (read.state === "pending") return null;
+  if (notRead(read)) {
+    return <NotReadLine why={read.why} system={system} product={product} reader={strip.reader} onRefresh={strip.onRefresh} refreshing={strip.refreshing} className={strip.className} />;
+  }
+  return <Strip {...strip} state={stateOfRead(read, truncated)!} />;
+}
+
+/** The name a sentence uses when the page knows none (copy guide section 3, rule 10). */
+const CONNECTED_SYSTEM = "The connected system";
+
+/**
+ * A read that has no data: §13.1's sentence for why, ending in its next step, and Read again where
+ * the page offers it (counting down a cooldown's wait). Amber, with the ring a reading that is
+ * neither healthy nor broken wears: nothing is wrong with what is on the page, there is nothing on it.
+ */
+export function NotReadLine({
+  why,
+  system = CONNECTED_SYSTEM,
+  product,
+  reader = UNNAMED_OPERATOR,
+  onRefresh,
+  refreshing = false,
+  className = "",
+}: {
+  why: Why;
+  system?: string;
+  product?: string;
+  reader?: Reader;
+  onRefresh?: () => unknown;
+  refreshing?: boolean;
+  className?: string;
 }) {
+  const left = useCountdown(why.reason === REASON.cooldown ? why.retryAfter : undefined, why.since);
+  const cooling = why.reason === REASON.cooldown && left > 0;
+  const lineId = useId();
+  const { pressing, press } = useRefreshPress(undefined);
+  return (
+    <div data-not-read="" className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-fine ${className}`}>
+      <span className="isolate flex min-w-0 items-start gap-2">
+        <StatusDot data-freshness-dot="" tone="warn" ring className="mt-[0.5em]" />
+        <span id={lineId} className="text-warn-text">
+          {cooling ? cooldownLine(system, left) : whyLine(why, system, reader, product)}
+        </span>
+      </span>
+      {onRefresh && why.reason !== REASON.addonOutdated && (
+        <span className="tint-in flex h-[var(--tap)] items-center desktop:h-0">
+          <ReadAgainButton
+            onClick={() => void press(onRefresh)}
+            pending={refreshing || pressing}
+            cooldown={cooling ? cooldownLine(system, left) : undefined}
+            describedBy={cooling ? lineId : undefined}
+          />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Strip({
+  state: given,
+  subject = "This",
+  onRefresh,
+  refreshing = false,
+  refresh,
+  reader = UNNAMED_OPERATOR,
+  className = "",
+}: StripProps & { state: ReadState }) {
   // A read with no moment is no copy (Go's zero time, 0001-01-01, from a read that never happened):
   // every caller passes through here, so none of them ever says "last state seen, 1 Jan 1".
   const state = { ...given, readAt: moment(given.readAt) ? given.readAt : undefined };
@@ -307,7 +416,7 @@ export function ReadFreshness({
   // Coloured by what the line says: the cooldown while it counts, then a copy is a copy (a copy of a
   // read that failed is still neutral) and anything else is drawn by its age.
   const said = cooling || why !== STALE.cooldown ? why : state.current === false ? STALE.cached : undefined;
-  const tone = toneOf(reading, said, state.stale?.pressed !== false);
+  const tone = toneOf(reading, said);
   const aCopy = why === STALE.cached || why === STALE.cooldown;
   const cannotReach = why === STALE.unreachable && Boolean(state.readAt);
   const lineId = useId();
@@ -329,7 +438,7 @@ export function ReadFreshness({
       <Crossfade id={glowing ? `landed:${landed}` : "read"}>
         <span id={lineId} className={tone.text}>
           {cooling
-            ? cooldownLine(subject, left)
+            ? cooldownLine(subject, left, age ?? undefined)
             : cannotReach
               ? unreachableLine(subject, formatClock(state.readAt), reader)
               : aCopy && age
@@ -358,7 +467,7 @@ export function ReadFreshness({
           <ReadAgainButton
             onClick={() => void press(onRefresh)}
             pending={refreshing || pressing}
-            cooldown={cooling ? cooldownLine(subject, left) : undefined}
+            cooldown={cooling ? cooldownLine(subject, left, age ?? undefined) : undefined}
             // The line beside it is the reason it waits.
             describedBy={cooling ? lineId : undefined}
           />

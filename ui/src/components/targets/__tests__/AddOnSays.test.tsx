@@ -73,8 +73,12 @@ describe("a kind with no module of its own gets the core member card", () => {
     entitled: true,
     account: { username: "mick.foley" },
     credential: { set: false },
-    reachable: true,
-    standing: { usable: false, waiting_on: "member", note: "No card enrolled yet", next: "Enrol a card at the front desk" },
+    health: "answering",
+    read: {
+      state: "now",
+      takenAt: new Date().toISOString(),
+      data: { standing: { usable: false, waiting_on: "member", note: "No card enrolled yet", next: "Enrol a card at the front desk" } },
+    },
   };
 
   it("renders the account's standing and its next step, from the add-on's words", () => {
@@ -85,7 +89,7 @@ describe("a kind with no module of its own gets the core member card", () => {
   });
 
   it("says there is nothing to do when the add-on reported no standing", () => {
-    render(<CoreMemberCard view={{ ...view, standing: undefined }} />);
+    render(<CoreMemberCard view={{ ...view, read: { state: "now", takenAt: new Date().toISOString(), data: {} } }} />);
     expect(screen.getByText("Nothing for you to do.")).toBeInTheDocument();
   });
 
@@ -99,15 +103,15 @@ describe("a kind with no module of its own gets the core member card", () => {
   // TestAMemberMeetsOnlySystemsWhoseKindIsKnown), so no card guesses a kind.
 
   it("words each state with its next step, by the system's name", () => {
-    const { rerender } = render(<CoreMemberCard view={{ ...view, account: undefined, entitled: false, standing: undefined }} />);
+    const { rerender } = render(<CoreMemberCard view={{ ...view, account: undefined, entitled: false, read: undefined }} />);
     expect(screen.getByText("None of your roles reaches Doors.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ask for access in Requests" })).toHaveAttribute("href", "/requests?ask");
-    rerender(<CoreMemberCard view={{ ...view, account: undefined, entitled: true, standing: undefined }} />);
+    rerender(<CoreMemberCard view={{ ...view, account: undefined, entitled: true, read: undefined }} />);
     expect(screen.getByText("Your account on Doors is not made yet.")).toBeInTheDocument();
     expect(screen.getByText("Nothing for you to do. Syndra makes it.")).toBeInTheDocument();
-    rerender(<CoreMemberCard view={{ ...view, health: "offline" }} />);
-    expect(screen.getByText("Doors is offline")).toBeInTheDocument();
-    expect(screen.getByText(/This page updates on its own when Doors returns\./)).toBeInTheDocument();
+    // A member reads one sentence for both outages (design §13.1).
+    rerender(<CoreMemberCard view={{ ...view, health: "addon_unreachable", read: { state: "none", why: { reason: "addon_unreachable", cause: "no_answer" } } }} />);
+    expect(screen.getByText("Doors can't be read right now. Nothing for you to do.")).toBeInTheDocument();
   });
 });
 

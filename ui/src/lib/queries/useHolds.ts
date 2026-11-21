@@ -114,15 +114,28 @@ export function useLiftHold() {
   });
 }
 
+/**
+ * A revocation's reply (design §13.4): *recorded* now, *landed* per system only
+ * when the add-on answers that it applied it. Between the two the account there
+ * still works, and the reply says so in `detail`.
+ */
 export interface RevocationResult {
-  status: "revoked" | "partially_revoked";
+  status: "recorded";
   allowance_id: string;
+  recorded_at: string;
+  /** Always null on the reply: nothing lands before the add-on answers. */
+  landed_at: string | null;
+  /** The credential half: replaced now, or `outstanding` with how `rotation` went. */
   rotated: boolean;
   operation?: string;
-  queued?: boolean;
-  disclosure?: string;
+  /** Recorded, not yet applied, why when the system is held down, that the account still works, and that Syndra applies it by itself. */
   detail: string;
-  outstanding?: string;
+  outstanding?: "password.rotate";
+  /**
+   * The credential half that did not land: refused or never sent (with its own sentence), or
+   * a write's two answers (a NOTHING_SENT envelope, or `{status: "unconfirmed"}`).
+   */
+  rotation?: { status?: "not_sent" | "refused" | "unconfirmed"; detail?: string; error?: string; message?: string };
 }
 
 /**

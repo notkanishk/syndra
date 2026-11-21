@@ -58,7 +58,7 @@ export function MemberSystemPage({ target }: { target: string }) {
       >
         {/* The page's heading already names the system: the card does not again. */}
         {view && (
-          <ReadAgainProvider value={{ press: again.press, since: mine.dataUpdatedAt }}>
+          <ReadAgainProvider value={{ press: again.press }}>
             <ReadAgainError error={again.error} />
             <MemberTargetCard view={view} untitled />
           </ReadAgainProvider>

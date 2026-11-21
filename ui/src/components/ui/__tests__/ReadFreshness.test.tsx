@@ -142,13 +142,6 @@ describe("how a copy is drawn", () => {
     expect(line(/can.t be reached/).className).toContain("text-warn-text");
   });
 
-  // A page load inside somebody else's wait is not the reader's doing, so it is not a warning: only the load sites say so.
-  it("a cooldown marked as a page load's is neutral, like a copy", () => {
-    render(<ReadFreshness state={{ readAt: ago(0.2), current: true, stale: { reason: "cooldown", retry_after: 30, pressed: false } }} subject="The list" />);
-    expect(dot().className).toContain("bg-faint");
-    expect(dot().className).not.toMatch(/warn/);
-    expect(line(/you can read again in/).className).toContain("text-faint");
-  });
 
   describe("once the count is over", () => {
     afterEach(() => vi.useRealTimers());

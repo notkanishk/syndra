@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WithdrawnAccess } from "@/components/review/WithdrawnAccess";
+import { WithdrawnAccess, notYetAppliedLine } from "@/components/review/WithdrawnAccess";
 
 /**
  * route-revocations.dc.html: a meta line, search and Filters, a read line with a chip per
@@ -56,12 +56,14 @@ function listing(revocations: Row[], total?: { spent: number; queued: number }) 
 let payload: unknown = listing([]);
 // A system's standing findings, for the one read the page makes per system (7t-6).
 let findings: Array<{ subject_id: string; outcome: string }> = [];
+// The roster, as /targets answers it: the monitor's state for each system.
+let roster: Array<Record<string, unknown>> = [];
 
 vi.mock("@/lib/api-client", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api-client")>("@/lib/api-client");
   return {
     ...actual,
-    request: vi.fn(async (path: string) => (path.endsWith("/merge-findings") ? { findings } : payload)),
+    request: vi.fn(async (path: string) => (path.endsWith("/merge-findings") ? { findings } : path === "/targets" ? { targets: roster } : payload)),
   };
 });
 
@@ -80,6 +82,7 @@ const sectionTitles = () =>
 
 beforeEach(() => {
   payload = listing([row("r1", false)]);
+  roster = [];
 });
 
 describe("what has not gone away yet", () => {
@@ -114,6 +117,45 @@ describe("what has not gone away yet", () => {
     await renderPage();
     expect(sectionTitles()).toEqual(["Given up", "Still on the way"]);
     expect(screen.queryByText(/Nothing has been given up on/)).toBeNull();
+  });
+});
+
+// Design §13.4: recorded is not landed. A row still on its way says so, with when it was recorded, and
+// that the access there still works until the system answers that it applied it.
+describe("a revocation recorded and not yet applied", () => {
+  it("says the account on the system still works until it lands", async () => {
+    payload = listing([row("r1", false, { target: "truenas", recorded_at: "2026-11-20T09:00:00Z" })]);
+    await renderPage();
+    expect(screen.getByText(/^Recorded 20 Nov\. Not yet applied on .+; until it is, the account there still works\./)).toBeInTheDocument();
+  });
+
+  // Design §13.4: while the monitor holds the system down, the row carries §13.1's sentence for why.
+  it("says why it hasn't landed while its system is down", async () => {
+    roster = [{ target: "truenas", name: "TrueNAS", status: "addon_unreachable", health: { state: "addon_unreachable", cause: "no_answer", recent: [] } }];
+    payload = listing([row("r1", false, { target: "truenas", recorded_at: "2026-11-20T09:00:00Z" })]);
+    await renderPage();
+    expect(
+      await screen.findByText(
+        /^Recorded 20 Nov\. Not yet applied on .+: Syndra can't reach .+'s add-on\. Check that its container is running\. Syndra keeps trying\. Until it is applied, the account there still works\. Syndra applies it by itself once .+ answers\.$/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("ends a cause that names its own fix with the one shared next step", () => {
+    const line = notYetAppliedLine({ target: "truenas", recorded_at: "2026-11-20T09:00:00Z", created_at: "" }, "TrueNAS", { reason: "app_unreachable" });
+    expect(line).toMatch(/Check that .+ is on\. Until it is applied, the account there still works\. Syndra applies it by itself once TrueNAS answers\.$/);
+    expect(line.match(/Syndra applies it by itself/g)).toHaveLength(1);
+  });
+
+  it("says the role is kept in Zitadel until it lands", async () => {
+    await renderPage();
+    expect(screen.getByText(/Not yet applied in Zitadel; until it is, they keep the role there/)).toBeInTheDocument();
+  });
+
+  it("says nothing of the kind on a row given up on", async () => {
+    payload = listing([row("r2", true, { target: "truenas" })]);
+    await renderPage();
+    expect(screen.queryByText(/Not yet applied/)).toBeNull();
   });
 });
 
