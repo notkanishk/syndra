@@ -135,6 +135,13 @@ GOOS=linux GOARCH=amd64 go build -C addons/conformance -o /tmp/syndra-addon-call
 call='/tmp/syndra-addon-call -url "https://$ADDON_IP:8443" -target truenas -secret-file "$SECRET"'
 scripts/addon-quiet-run.sh --writes -- sh -c "$call POST /operations/account.release '{\"subject\":\"conformance-<run>\"}'"
 scripts/addon-quiet-run.sh --writes -- sh -c "$call PUT /settings/home_root '{\"value\":\"\"}'"
+# 4c. To link a test home to a test subject (the owner's 6.10 checks), adopt
+#     the kit's account for it inside a --writes window, with the account_id
+#     the NAS shows. The command adopts only a conformance- account, with its
+#     account_id, for a subject that is not all digits (never a member's):
+scripts/addon-quiet-run.sh --writes -- sh -c "$call POST /operations/account.adopt '{\"subject\":\"rey_student\",\"params\":{\"username\":\"conformance-home-20261114123616\",\"account_id\":\"200007\"}}'"
+#     Undo: release the subject again.
+scripts/addon-quiet-run.sh --writes -- sh -c "$call POST /operations/account.release '{\"subject\":\"rey_student\"}'"
 # 5. When staging testing is over, staging goes back to its normal settings
 #    (no add-on): remove truenas from COMPOSE_PROFILES and ADDON_TARGETS in
 #    .env, then

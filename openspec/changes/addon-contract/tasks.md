@@ -2234,6 +2234,15 @@ per-person only) applied there.
   shows a gap and not zero, that a day with the NAS stopped shows a gap and
   then fills after it returns, and that "Refresh" advances `taken_at` once
   and reports the cooldown the second time #ready-for-human
+  - [x] Staging prep (21 Nov 2026, the owner's "yes to all"):
+    `syndra-addon-call` also sends `account.adopt` of a `conformance-`
+    account with its `account_id`, and `account.release`, for any subject
+    that is not all digits (every person's is), so a test home can be linked
+    to `rey_student` and released again (`scripts/README.md` step 4c). The
+    body is read strictly, every key byte-equal and once, nothing else, and
+    the payload built from it; `account.purge` and every other write stay
+    refused (`TestCallSendsAdoptAndReleaseForATestSubject`,
+    `TestCallRefusalsSendNothing`, each guard mutation-checked)
 - [x] 6.11 Kit checks per feature (design §7 `freshness` row, the
   `operations` row's `physical`/`preview`/`calls`/`secret_result` part, and
   the §9.9 table: descriptors, points, totals, since, idempotent, gaps, no

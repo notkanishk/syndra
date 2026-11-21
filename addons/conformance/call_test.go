@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -18,7 +19,7 @@ import (
 // callServer is the reference over TLS, plus account.release (which the
 // reference does not serve) answered 200 only for a request whose signature
 // verifies under the derived key, so the release test proves the signing too.
-// It returns the URL and every body it saw for the release.
+// It returns the URL and every body it saw for a release or an adoption.
 func callServer(t *testing.T) (string, func() []map[string]any, func() []string) {
 	t.Helper()
 	addon, err := reference.New(reference.Config{Target: "reference", Secret: []byte(testSecret)})
@@ -34,7 +35,7 @@ func callServer(t *testing.T) (string, func() []map[string]any, func() []string)
 		mu.Lock()
 		seen = append(seen, r.Method+" "+r.URL.Path)
 		mu.Unlock()
-		if r.URL.Path != "/operations/account.release" {
+		if r.URL.Path != "/operations/account.release" && r.URL.Path != "/operations/account.adopt" {
 			h.ServeHTTP(w, r)
 			return
 		}
@@ -104,9 +105,9 @@ func TestCallRefusalsSendNothing(t *testing.T) {
 	for name, c := range map[string]struct{ method, path, body string }{
 		"purge":                    {"POST", "/operations/account.purge", `{"subject":"conformance-x"}`},
 		"another operation":        {"POST", "/operations/password.set", `{"subject":"conformance-x"}`},
-		"release, a member":        {"POST", "/operations/account.release", `{"subject":"wwe-the-rock"}`},
+		"release, a member":        {"POST", "/operations/account.release", `{"subject":"300000000000000001"}`},
+		"release, empty subject":   {"POST", "/operations/account.release", `{"subject":""}`},
 		"release, no subject":      {"POST", "/operations/account.release", `{}`},
-		"release, bare prefix":     {"POST", "/operations/account.release", `{"subject":"conformance-"}`},
 		"release, another op body": {"POST", "/operations/account.release", `{"subject":"conformance-x","operation":"account.purge"}`},
 		"settings, POST":           {"POST", "/settings/home_root", `{"value":""}`},
 		"settings, DELETE":         {"DELETE", "/settings/home_root", ``},
@@ -132,10 +133,37 @@ func TestCallRefusalsSendNothing(t *testing.T) {
 		"setting, folded value":    {"PUT", "/settings/home_root", `{"value":"","\u017ealue":"x"}`},
 		"setting, capital Value":   {"PUT", "/settings/home_root", `{"Value":""}`},
 		"setting, no body":         {"PUT", "/settings/home_root", ``},
+		"setting, no value":        {"PUT", "/settings/home_root", `{}`},
 		"setting, value not text":  {"PUT", "/settings/home_root", `{"value":1}`},
 		"setting, trailing":        {"PUT", "/settings/home_root", `{"value":""}x`},
 		"setting read by name":     {"GET", "/settings/home_root", ``},
 		"read with a body":         {"GET", "/health", `{}`},
+		"adopt, a member":          {"POST", "/operations/account.adopt", `{"subject":"300000000000000001","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, empty subject":     {"POST", "/operations/account.adopt", `{"subject":"","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, member's account":  {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"rey","account_id":"200007"}}`},
+		"adopt, bare prefix":       {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-","account_id":"200007"}}`},
+		"adopt, no account_id":     {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1"}}`},
+		"adopt, empty account_id":  {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":""}}`},
+		"adopt, numeric id":        {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":200007}}`},
+		"adopt, no params":         {"POST", "/operations/account.adopt", `{"subject":"rey_student"}`},
+		"adopt, null params":       {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":null}`},
+		"adopt, subject not text":  {"POST", "/operations/account.adopt", `{"subject":7,"params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, extra field":       {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"200007"},"actor":"x"}`},
+		"adopt, extra param":       {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"200007","home":"/x"}}`},
+		"adopt, another op":        {"POST", "/operations/account.adopt", `{"subject":"rey_student","operation":"account.purge","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, duplicate subject": {"POST", "/operations/account.adopt", `{"subject":"rey_student","subject":"300000000000000001","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, duplicate param":   {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","username":"rey","account_id":"200007"}}`},
+		"adopt, folded param":      {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","USERNAME":"rey","account_id":"200007"}}`},
+		"adopt, trailing junk":     {"POST", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"200007"}} x`},
+		"adopt, read":              {"GET", "/operations/account.adopt", ``},
+		"adopt, PUT":               {"PUT", "/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"adopt, near path":         {"POST", "/operations/account.adopt/", `{"subject":"rey_student","params":{"username":"conformance-home-1","account_id":"200007"}}`},
+		"purge, a test subject":    {"POST", "/operations/account.purge", `{"subject":"rey_student"}`},
+		"create":                   {"POST", "/operations/account.create", `{"subject":"rey_student"}`},
+		"apply":                    {"POST", "/apply", `{"subject":"rey_student"}`},
+		"plan":                     {"POST", "/plan", `{}`},
+		"calls":                    {"GET", "/calls", ``},
+		"stats":                    {"GET", "/stats", ``},
 	} {
 		if status, _, err := Call(context.Background(), callCfg(url), c.method, c.path, []byte(c.body)); err == nil || status != 0 {
 			t.Errorf("%s: sent, answered %d, err %v", name, status, err)
@@ -143,6 +171,38 @@ func TestCallRefusalsSendNothing(t *testing.T) {
 	}
 	if s := seen(); len(s) != 0 {
 		t.Fatalf("a refused call reached the add-on: %v", s)
+	}
+}
+
+// A release or an adoption goes out for a test subject (any that is not all
+// digits, as every person's is), built from the typed values alone.
+func TestCallSendsAdoptAndReleaseForATestSubject(t *testing.T) {
+	for name, c := range map[string]struct {
+		path, body string
+		want       map[string]any
+	}{
+		"adopt": {"/operations/account.adopt", `{"subject":"rey_student","params":{"username":"conformance-home-20261114123616","account_id":"200007"}}`,
+			map[string]any{"subject": "rey_student", "operation": "account.adopt",
+				"params": map[string]any{"username": "conformance-home-20261114123616", "account_id": "200007"}}},
+		"release, a ring name": {"/operations/account.release", `{"subject":"rey_student"}`,
+			map[string]any{"subject": "rey_student", "operation": "account.release", "params": map[string]any{}}},
+		"release, the kit's": {"/operations/account.release", `{"subject":"conformance-wwe-rey"}`,
+			map[string]any{"subject": "conformance-wwe-rey", "operation": "account.release", "params": map[string]any{}}},
+	} {
+		url, sent, _ := callServer(t)
+		if status, reply, err := Call(context.Background(), callCfg(url), "POST", c.path, []byte(c.body)); err != nil || status != 200 {
+			t.Fatalf("%s: answered %d %s, %v", name, status, reply, err)
+		}
+		got := sent()
+		if len(got) != 1 {
+			t.Fatalf("%s: the add-on saw %v", name, got)
+		}
+		for _, k := range []string{"contract_version", "call_id", "actor"} {
+			delete(got[0], k)
+		}
+		if !reflect.DeepEqual(got[0], c.want) {
+			t.Errorf("%s: sent %v, want %v", name, got[0], c.want)
+		}
 	}
 }
 

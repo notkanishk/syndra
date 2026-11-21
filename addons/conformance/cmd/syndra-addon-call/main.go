@@ -4,9 +4,11 @@
 //
 //	syndra-addon-call -url https://host:8443 -target truenas -secret-file F <METHOD> <path> [json-body]
 //
-// Allowed: PUT/GET /settings/<name>, POST /operations/account.release for a
-// conformance- subject, GET /health /capabilities /subjects /settings. Nothing
-// else is sent; deleting stays with a person on the NAS. Prints the status and
+// Allowed: PUT /settings/<name>; POST /operations/account.release for a test
+// subject (one that is not all digits, as every person's is); POST
+// /operations/account.adopt of a conformance- account, with its account_id, for
+// such a subject; GET /health /capabilities /subjects /settings. Nothing else
+// is sent; deleting stays with a person on the NAS. Prints the status and
 // the body. Exit 0 on 2xx, 1 on any other answer, 2 when refused or not sent.
 package main
 
