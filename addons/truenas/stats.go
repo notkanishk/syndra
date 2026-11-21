@@ -90,13 +90,18 @@ type gapReason struct {
 var (
 	// reasonBuffer is for days the buffer dropped to stay within its size or its P90D; days before
 	// the first collection were never held, and say so (beganGap).
-	reasonBuffer   = gapReason{"The add-on no longer holds these days", kindDropped}
-	reasonNAS      = gapReason{"The NAS could not be read", kindUnread}
-	reasonDark     = gapReason{"The NAS could not be read that day", kindUnread}
-	reasonBehind   = gapReason{"Too much activity to count yet", kindUnread}
-	reasonAudited  = gapReason{"Auditing does not record everyone on this share", kindUnobserved}
-	reasonPurged   = gapReason{"The NAS no longer keeps its log of these days", kindDropped}
-	reasonOverfull = gapReason{"Too much activity to count", kindUnread}
+	reasonBuffer  = gapReason{"The add-on no longer holds these days", kindDropped}
+	reasonNAS     = gapReason{"The NAS could not be read", kindUnread}
+	reasonDark    = gapReason{"The NAS could not be read that day", kindUnread}
+	reasonBehind  = gapReason{"Too much activity to count yet", kindUnread}
+	reasonAudited = gapReason{"Auditing does not record everyone on this share", kindUnobserved}
+	// reasonNotYet is a share that records everyone now, but whose coverage began after the day's
+	// midnight, after it was narrowed or when it was first seen. A chain broken by the NAS being
+	// unreadable says reasonNAS; one broken by no run at all (the add-on stopped) says reasonUnwatched.
+	reasonNotYet    = gapReason{"Not counted: this share wasn't yet seen recording everyone", kindUnobserved}
+	reasonUnwatched = gapReason{"Not counted: Syndra wasn't watching this share then", kindUnread}
+	reasonPurged    = gapReason{"The NAS no longer keeps its log of these days", kindDropped}
+	reasonOverfull  = gapReason{"Too much activity to count", kindUnread}
 	// reasonFolder is a share that is a plain folder inside a dataset it shares with what lies beside
 	// it: the NAS counts space per dataset, so the folder's own cannot be told apart.
 	reasonFolder = gapReason{"The NAS does not count this share's space on its own", kindUnobserved}
@@ -125,7 +130,7 @@ func foldersIn(share string, n int, suffix string) string {
 }
 
 // gapReasons is every fixed reason: a gap stored before kinds existed takes its sentence's kind.
-var gapReasons = []gapReason{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonPurged, reasonOverfull, reasonFolder, reasonLocked, reasonHomeLocked}
+var gapReasons = []gapReason{reasonBuffer, reasonNAS, reasonDark, reasonBehind, reasonAudited, reasonNotYet, reasonUnwatched, reasonPurged, reasonOverfull, reasonFolder, reasonLocked, reasonHomeLocked}
 
 // gapOf is the one way a window not observed is made: from its reason, which carries its kind.
 func gapOf(start, end string, dims map[string]string, why gapReason) StatGap {
@@ -239,6 +244,9 @@ type statsClock struct {
 	// pageBytes is the reply ceiling a page is cut under; 0 is
 	// statsMaxReplyBytes. A seam, so a test sees several pages.
 	pageBytes int
+	// every is STATS_COLLECT_EVERY: a share's chain of sightings breaks
+	// when two of them lie more than 3*every apart (coverSessions).
+	every time.Duration
 }
 
 func (c statsClock) loc() *time.Location {

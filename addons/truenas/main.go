@@ -356,7 +356,7 @@ func run() error {
 		elevated: func(apiKey string) (rpc, error) {
 			return dialTrueNAS(cfg.nasURL, apiKey, cfg.nasVerify)()
 		},
-		stats: statsClock{zone: cfg.statsZone},
+		stats: statsClock{zone: cfg.statsZone, every: cfg.statsEvery},
 	}
 
 	tlsConf, err := serverTLS(cfg)
