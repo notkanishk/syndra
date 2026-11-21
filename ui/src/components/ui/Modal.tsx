@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { NameLinksContext } from "@/components/names/NameLink";
@@ -37,9 +37,29 @@ interface ModalProps {
    * already rises from the bottom edge.
    */
   pinned?: boolean;
+  /**
+   * Go to's pane (A-26 §0): one glass surface floating at the top at every width (a phone's too: never a
+   * sheet), with the lamp's light on the window behind it, and the edge under your hand on its rim.
+   */
+  glass?: boolean;
   /** The dialog's name when it has no visible title (Go to); otherwise its ModalHeader names it. */
   label?: string;
   children: React.ReactNode;
+}
+
+/** The light behind Go to at its largest: as wide as a wide window, a little over half a laptop's height. */
+const GO_TO_LIGHT = { width: 1180, height: 620 };
+
+/**
+ * Where the light behind Go to sits, in the window (A-26, the lamp's light; A-25 §7): on the lamp, unless
+ * the lamp is too near an edge for a wide pool (a phone), then the window's middle; never more than twice
+ * its centre's distance from the nearest edge, so its closest-side pool is spent before every edge.
+ */
+export function goToLightBox(lamp: { x: number; y: number }, view: { width: number; height: number }) {
+  const x = Math.min(lamp.x, view.width - lamp.x) < 280 ? view.width / 2 : lamp.x;
+  const width = Math.max(0, Math.min(GO_TO_LIGHT.width, 2 * Math.min(x, view.width - x)));
+  const height = Math.max(0, Math.min(GO_TO_LIGHT.height, 2 * Math.min(lamp.y, view.height - lamp.y)));
+  return { x, y: lamp.y, width, height };
 }
 
 /**
@@ -187,7 +207,8 @@ export function useDialogFocusTrap(
         closeRef.current();
         return;
       }
-      if (event.key !== "Tab") return;
+      // A Tab a field inside already used (Go to taking its offered scope, A-26) is spent, as an Escape is.
+      if (event.key !== "Tab" || event.defaultPrevented) return;
       if (!panelRef.current) return;
       const list = focusableIn(panelRef.current);
       if (list.length === 0) return;
@@ -330,6 +351,7 @@ export function Modal({
   size = "md",
   still = false,
   pinned = false,
+  glass = false,
   label,
   children,
 }: ModalProps) {
@@ -345,6 +367,28 @@ export function Modal({
   useDialogFocusTrap(panelRef, open, busy, onClose);
 
   useSheetLeave(scrimRef, draggedAway, open && !still);
+
+  // Go to's light: placed on the lamp before the first paint, and again when the window changes.
+  useLayoutEffect(() => {
+    const scrim = scrimRef.current;
+    const panel = panelRef.current;
+    if (!open || !glass || !scrim || !panel) return;
+    const place = () => {
+      const lamp = (panel.querySelector("[data-lamp]") ?? panel).getBoundingClientRect();
+      const view = scrim.getBoundingClientRect();
+      const box = goToLightBox(
+        { x: lamp.left + lamp.width / 2 - view.left, y: lamp.top + lamp.height / 2 - view.top },
+        { width: scrim.clientWidth, height: scrim.clientHeight },
+      );
+      scrim.style.setProperty("--light-x", `${box.x}px`);
+      scrim.style.setProperty("--light-y", `${box.y}px`);
+      scrim.style.setProperty("--light-w", `${box.width}px`);
+      scrim.style.setProperty("--light-h", `${box.height}px`);
+    };
+    place();
+    addEventListener("resize", place);
+    return () => removeEventListener("resize", place);
+  }, [open, glass]);
 
   const grabber = useSheetDrag({ panelRef, scrimRef, busy, onClose, draggedAway });
 
@@ -368,7 +412,13 @@ export function Modal({
       aria-label={label}
       aria-labelledby={label ? undefined : (labelledBy ?? titleId)}
       aria-describedby={describedBy}
-      className={`${still ? "" : "settle-scrim"} fixed inset-0 z-(--layer-dialog) flex items-end justify-center bg-scrim tablet:px-4 ${place.scrim}`}
+      // Go to's pane wears the edge under your hand (A-25 moment 2) like any card: its dialog opts in.
+      data-hand={glass ? "" : undefined}
+      className={
+        glass
+          ? "go-to-scrim fixed inset-0 z-(--layer-dialog) flex items-start justify-center bg-scrim px-2 pt-3 tablet:items-start tablet:px-4 tablet:pt-24"
+          : `${still ? "" : "settle-scrim"} fixed inset-0 z-(--layer-dialog) flex items-end justify-center bg-scrim tablet:px-4 ${place.scrim}`
+      }
       onClick={(event) => {
         if (event.target === event.currentTarget && !busy) onClose();
       }}
@@ -389,9 +439,13 @@ export function Modal({
           `overscroll-contain`: scrolling past the sheet's end never drags the page behind it (A-24 §11.6). */}
       <div
         ref={panelRef}
-        className={`flex w-full ${SIZE_CLASS[size]} ${place.panel} ${still ? "" : "sheet-in"} flex-col overflow-y-auto overscroll-contain [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
+        className={
+          glass
+            ? "go-to-pane rim [overflow-wrap:anywhere]"
+            : `flex w-full ${SIZE_CLASS[size]} ${place.panel} ${still ? "" : "sheet-in"} flex-col overflow-y-auto overscroll-contain [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`
+        }
       >
-        <SheetGrabber busy={busy} onClose={onClose} drag={grabber} />
+        {!glass && <SheetGrabber busy={busy} onClose={onClose} drag={grabber} />}
         <NameLinksContext.Provider value={false}>{children}</NameLinksContext.Provider>
       </div>
     </div>

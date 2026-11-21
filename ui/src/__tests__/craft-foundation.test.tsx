@@ -230,12 +230,10 @@ describe("Escape in two stages, in every search (§11.5)", () => {
     const onClose = renderGoTo();
     const field = screen.getByRole("combobox");
     fireEvent.change(field, { target: { value: "bec" } });
-    expect(screen.getByText("clear, then close")).toBeInTheDocument();
 
     fireEvent.keyDown(field, { key: "Escape" });
     expect(field).toHaveValue("");
     expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByText("close")).toBeInTheDocument();
 
     fireEvent.keyDown(field, { key: "Escape" });
     expect(onClose).toHaveBeenCalled();

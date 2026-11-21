@@ -1,0 +1,71 @@
+"use client";
+
+import { useMemo } from "react";
+
+import { buildModel } from "@/components/insights/model";
+import { PART_KEYS, sentence, sentenceText, suggest, toParams, type Entity, type Question } from "@/components/insights/question";
+import { useAnswer } from "@/components/insights/useAnswer";
+import { UNKNOWN_ACCOUNT } from "@/components/names/Unresolved";
+import { useTopology } from "@/lib/queries/useTopology";
+import type { UserProfile } from "@/lib/types";
+
+/** What reads as a question, not a name: its first word (A-26 §0, the board's own grammar). */
+export const QUESTION_START = /^(who|what|path|compare|how|why|when|where|which)\b/i;
+
+/** The sentences Insights can answer, as starts to type (A-26 §0a: "the six sentences Insights reads today"). */
+export const GO_TO_ASKS = ["Who has ", "Path from ", "Compare ", "What if "] as const;
+
+/** The link that opens Insights with a question already asked: the map's own words for it. */
+export function insightsHref(q: Question): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(toParams(q))) if (value) params.set(key, value);
+  return `/insights?${params}`;
+}
+
+/**
+ * A question typed into Go to, answered in place by the very reads and sentences Insights uses
+ * (`suggest`, `useAnswer`): one source, so Go to's answer and the map's are the same answer. Only a
+ * question that names things on the map is asked; nothing is guessed. `text` empty: nothing is read.
+ */
+export function useGoToAsk(text: string, users: UserProfile[] | undefined) {
+  const on = text.trim() !== "";
+  const topology = useTopology(on);
+  const model = useMemo(() => (on && topology.data ? buildModel(topology.data) : null), [on, topology.data]);
+  const people = useMemo(() => new Map((users ?? []).map((u) => [u.id, u])), [users]);
+  const entities = useMemo<Entity[]>(
+    () =>
+      model
+        ? [
+            ...Array.from(model.byId.values(), (n) => ({ id: n.id, kind: n.kind, label: model.nameOf(n.id) })),
+            ...(users ?? []).map((u) => ({ id: u.id, kind: "person" as const, label: u.name })),
+          ]
+        : [],
+    [model, users],
+  );
+  const question = useMemo(
+    () => (on && model ? (suggest(text, entities).find((q) => q.kind !== "follow") ?? null) : null),
+    [on, model, text, entities],
+  );
+  const title = question && model ? sentenceText(sentence(question, (id) => model.nameOf(id), (id) => people.get(id)?.name ?? UNKNOWN_ACCOUNT)) : "";
+  const answered = useAnswer(model, question, people, title);
+  // What the question names, by the names the map gives them: Go to lists those places under the answer.
+  const named = useMemo(() => {
+    if (!question || !model) return [];
+    const parts = question as Partial<Record<(typeof PART_KEYS)[number], string | null>>;
+    return PART_KEYS.flatMap((key) => {
+      const id = parts[key];
+      return id ? [people.get(id)?.name ?? model.nameOf(id)] : [];
+    });
+  }, [question, model, people]);
+  return {
+    /** The map is still being read: nothing is said yet. */
+    reading: on && !model && !topology.isError,
+    question,
+    title,
+    answer: answered.answer,
+    named,
+    /** "Working it out." or "Couldn't load this answer.", from the map's own panel. */
+    status: answered.status,
+    href: question ? insightsHref(question) : null,
+  };
+}

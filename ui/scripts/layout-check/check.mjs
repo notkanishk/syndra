@@ -31,7 +31,7 @@
  *       the tape does not hold fails the replay (exit 4): answered with a 404, the
  *       page would draw an error state and pass for the wrong reason.
  *
- * Read-only: it signs in, reads pages, and never clicks.
+ * Read-only: it signs in, reads pages, and never clicks. On Home it presses `/` to open Go to, a read.
  * System Chrome (`channel: "chrome"`); CHROME_PATH overrides it.
  * Exit codes, as `sweep:touch`: 1 found something, 2 signed out (wrong page) or no
  * server named, 3 could not run; and 4, a replay whose tape lacked a read the pages
@@ -205,6 +205,20 @@ for (const view of list(opt.views)) {
             runs++;
             for (const [kind, lines] of Object.entries(found)) {
               for (const line of lines) findings.push(`${path} ${width} ${view} ${theme} ${kind} ${line}`);
+            }
+          }
+          // Go to, opened as it is opened, by its key, on Home: its light must be spent inside the window
+          // (A-26). Only the `goto` rule is read with it open: the rest are the page's, under a dialog.
+          if (path === "/") {
+            await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+            await page.keyboard.press("/");
+            const opened = await page.waitForSelector('[role="dialog"][aria-label="Go to"]', { timeout: 5000 }).catch(() => null);
+            if (!opened) findings.push(`${path} ${width} ${view} goto Go to did not open with its key`);
+            else {
+              await page.waitForTimeout(1100);
+              const found = await page.evaluate(detect, { tablet: 720 });
+              for (const line of found.goto) findings.push(`${path} ${width} ${view} goto ${line}`);
+              await page.keyboard.press("Escape");
             }
           }
         } catch (error) {

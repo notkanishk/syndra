@@ -81,14 +81,17 @@ describe("Go to's keys", () => {
   });
 
   it("lists Basic's pages in Basic and Advanced's in Advanced", () => {
+    const find = () => fireEvent.change(screen.getByRole("combobox"), { target: { value: "pending" } });
     view.audience = "basic";
     const { unmount } = mount();
     key({ key: "/" });
+    find();
     expect(screen.queryByRole("option", { name: /Pending changes/ })).not.toBeInTheDocument();
     unmount();
     view.audience = "advanced";
     mount();
     key({ key: "/" });
+    find();
     expect(screen.getByRole("option", { name: /Pending changes/ })).toBeInTheDocument();
   });
 

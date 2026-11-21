@@ -34,9 +34,10 @@ const KEYS = {
 };
 
 /** Full topology graph for /graph. Cached at the QueryClient defaults. */
-export function useTopology() {
+export function useTopology(enabled = true) {
   return useQuery({
     queryKey: KEYS.graph,
+    enabled,
     queryFn: async (): Promise<TopologyGraph> => {
       const data = await request<TopologyGraph | { nodes?: unknown; edges?: unknown }>(
         "/topology",

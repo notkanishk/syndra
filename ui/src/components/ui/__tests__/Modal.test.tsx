@@ -53,6 +53,20 @@ describe("Modal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("leaves alone a Tab a field inside already used, as it does an Escape (A-26: Go to's Tab takes a scope)", () => {
+    render(
+      <Modal open={true} onClose={() => {}}>
+        <button type="button">First</button>
+        <input aria-label="Field" onKeyDown={(event) => event.key === "Tab" && event.preventDefault()} />
+      </Modal>,
+    );
+    const field = screen.getByLabelText("Field");
+    field.focus();
+    // The field is the last stop, so an unspent Tab would wrap to the first.
+    fireEvent.keyDown(field, { key: "Tab" });
+    expect(field).toHaveFocus();
+  });
+
   it("does not dismiss on Escape when busy", () => {
     const onClose = vi.fn();
     render(

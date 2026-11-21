@@ -38,6 +38,9 @@
  *             sits in: its four quarters must be spent inside the card's inner box. A dialog
  *             opens only from a click, so a replay sees one only where a page draws
  *             a trail open.
+ *   goto      Go to's light (A-26) reaching past the window: its pool on the
+ *             scrim must be spent inside every edge. The check opens Go to by its key
+ *             on Home, at each width and view, and reads only this rule with it open.
  *   lamp      the mark's breathing glow (A-25 moment 3) reaching past a box that
  *             clips it (the rail's scroller, the phone's bar, the window): its pool
  *             must be spent inside every edge, read from the glow's own computed box.
@@ -497,5 +500,29 @@ export function detect({ tablet = 720 } = {}) {
     for (const [side, by] of past) trail.push(`a change's light reaches ${by.toFixed(1)}px past its card's ${side} (${sel(room)})`);
   }
 
-  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pill, place, trail, pageScroll };
+  // ── goto ──
+  // Go to's light (A-26, the lamp's light behind the pane) is a closest-side pool on its scrim, which is the window: its box must lie
+  // inside the window on every side, so no edge cuts it (the window's top, a phone's sides).
+  const goto = [];
+  for (const scrim of document.querySelectorAll(".go-to-scrim")) {
+    const pool = getComputedStyle(scrim, "::before");
+    if (pool.display === "none" || pool.content === "none") continue;
+    const w = parseFloat(pool.width);
+    const h = parseFloat(pool.height);
+    if (!(w >= 1 && h >= 1)) {
+      goto.push(`Go to's light measures nothing (${sel(scrim)})`);
+      continue;
+    }
+    const x = parseFloat(pool.left);
+    const y = parseFloat(pool.top);
+    const past = [
+      ["left", -(x - w / 2)],
+      ["top", -(y - h / 2)],
+      ["right", x + w / 2 - scrim.clientWidth],
+      ["bottom", y + h / 2 - scrim.clientHeight],
+    ].filter(([, by]) => by > 0.5);
+    for (const [side, by] of past) goto.push(`Go to's light reaches ${by.toFixed(1)}px past the window's ${side}`);
+  }
+
+  return { overlap, clipped: [...clipped.values()].map((v) => v.line), heading, seat, steady, edge, lamp, pill, place, trail, goto, pageScroll };
 }

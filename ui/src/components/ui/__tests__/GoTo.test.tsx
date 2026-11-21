@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { css } from "@/__tests__/cssTokens";
-import { GoTo, GoToPanel } from "@/components/ui/GoTo";
+import { GESTURE, GoTo, GoToPanel } from "@/components/ui/GoTo";
+import { forgetLately, keepLately } from "@/lib/go-to";
 import { NAME_CATALOG_KEY } from "@/lib/queries/useNameCatalog";
 import { ADVANCED_NAV, BASIC_NAV, memberNav } from "@/lib/nav";
+import { motionInTests } from "@/test-utils/motion";
 
 const view = vi.hoisted(() => ({ audience: "advanced" as "basic" | "advanced" | "member" }));
 vi.mock("@/lib/ui-view", () => ({
@@ -27,7 +29,7 @@ function renderIn(node: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(NAME_CATALOG_KEY, catalog);
   client.setQueryData(["name-bundles"], [{ id: "b1", name: "Printing basics" }]);
-  return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
+  return { ...render(<QueryClientProvider client={client}>{node}</QueryClientProvider>), client };
 }
 
 const type = (text: string) => fireEvent.change(screen.getByRole("combobox"), { target: { value: text } });
@@ -35,13 +37,14 @@ const names = () => screen.getAllByRole("option").map((o) => within(o).getAllByT
 
 beforeEach(() => {
   view.audience = "advanced";
+  forgetLately();
 });
 
-describe("Go to's placeholder says what this session can reach (A-20 P17)", () => {
+describe("Go to's placeholder says what this session can reach (A-26 §0)", () => {
   it.each([
     ["member", memberNav([]), "A page"],
-    ["basic", BASIC_NAV, "A person, a project, an app, or a page"],
-    ["advanced", ADVANCED_NAV, "A person, a project, an app, a bundle, or a page"],
+    ["basic", BASIC_NAV, "A person, a role, or a page"],
+    ["advanced", ADVANCED_NAV, "A person, a role, a page, or a question"],
   ] as const)("%s", (audience, nav, words) => {
     view.audience = audience;
     renderIn(<GoTo open onClose={() => {}} nav={nav} />);
@@ -49,93 +52,83 @@ describe("Go to's placeholder says what this session can reach (A-20 P17)", () =
   });
 });
 
-describe("Go to", () => {
-  it("is a dialog named Go to, holding a combobox that owns a listbox", () => {
+const field = () => screen.getByRole("combobox");
+const press = (key: string, extra: object = {}) => fireEvent.keyDown(field(), { key, ...extra });
+const pill = () => screen.queryByRole("button", { name: /^Looking only among/ });
+const scrim = () => screen.getByRole("dialog", { name: "Go to" });
+
+describe("Go to, as chosen (A-26 §0)", () => {
+  it("is one glass pane pinned at the top, the lamp the field's first glyph, and its dialog wears the hand", () => {
     renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
-    const dialog = screen.getByRole("dialog", { name: "Go to" });
-    const box = within(dialog).getByRole("combobox");
-    expect(box).toHaveAttribute("aria-controls", within(dialog).getByRole("listbox").id);
-    // Empty: pages only.
-    expect(screen.queryAllByRole("group")).toHaveLength(1);
-    expect(screen.getAllByRole("option").length).toBeGreaterThan(5);
+    expect(scrim()).toHaveClass("go-to-scrim", "tablet:items-start", "tablet:pt-24", "items-start");
+    expect(scrim()).not.toHaveClass("items-end");
+    // The edge under your hand, the same rule as every card's: the dialog opts in, the pane wears `rim`.
+    expect(scrim()).toHaveAttribute("data-hand");
+    const pane = scrim().querySelector(".go-to-pane")!;
+    expect(pane).toHaveClass("rim");
+    expect(within(scrim()).queryByRole("heading")).toBeNull();
+    const row = field().parentElement!;
+    expect(row).toHaveClass("go-to-field");
+    expect(row.firstElementChild).toHaveAttribute("data-lamp");
+    // No keys line: what the keys do is said by the offer and the pill.
+    expect(screen.queryByText("move")).toBeNull();
   });
 
-  // A-24 frame 22: the panel is the field row over the list. Centred on its own height it jumped as the
-  // list grew and shrank (title at y 140, 39, 356 on staging); it is pinned at a fixed top instead.
-  it("is the board's panel: pinned at a fixed top, no heading, the bare field row (A-24 frame 22)", () => {
+  it("at rest holds one quiet line: the last place, with Lately at its right; ↓ brings the rest", () => {
+    keepLately("/applications");
+    keepLately("/users/u2");
     renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
-    const dialog = screen.getByRole("dialog", { name: "Go to" });
-    expect(dialog).toHaveAttribute("aria-label", "Go to");
-    expect(dialog).toHaveClass("tablet:items-start", "tablet:pt-24");
-    expect(dialog).not.toHaveClass("tablet:items-center");
-    expect(within(dialog).queryByRole("heading")).toBeNull();
-    const box = within(dialog).getByRole("combobox");
-    expect(box.parentElement).toHaveClass("field-row");
-    expect(box).not.toHaveClass("border");
-    expect(box).not.toHaveClass("rounded-inner");
-    // The whole row is the target: its inset is the input's own, not the row's.
-    expect(box).toHaveClass("px-6", "py-3.5");
-    expect(box.parentElement).not.toHaveClass("px-6");
+    expect(names()).toEqual(["Primo Colon"]);
+    expect(within(screen.getByRole("option")).getByText("Lately")).toBeInTheDocument();
+    press("ArrowDown");
+    expect(names()).toEqual(["Primo Colon", "Apps"]);
   });
 
-  it("says the bare field's focus on its row at the house ring's 2px, in the ring's colour", () => {
-    const rule = /@utility field-row \{[\s\S]*?&:has\(> input:focus-visible\) \{([^}]*)\}/.exec(css)?.[1] ?? "";
-    expect(rule).toContain("border-bottom-color: var(--focus-ring);");
-    expect(rule).toContain("box-shadow: inset 0 -1px var(--focus-ring);");
+  it("lists what needs you only after ↓, last, and only when something waits", () => {
+    keepLately("/users/u2");
+    const { client } = renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    expect(screen.queryByText("Needs you")).toBeNull();
+    act(() => client.setQueryData(["governance", "indicators"], { pending_propagation: 3 }));
+    expect(screen.queryByText("Needs you")).toBeNull();
+    press("ArrowDown");
+    const rows = screen.getAllByRole("option");
+    expect(within(rows.at(-1)!).getByText("Needs you")).toBeInTheDocument();
+    expect(rows.at(-1)).toHaveTextContent("3 changes are waiting for you to send");
   });
 
-  it("is closed when not open, and reopens clean", () => {
-    const { rerender } = renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
-    type("pri");
-    rerender(
-      <QueryClientProvider client={new QueryClient()}>
-        <GoTo open={false} onClose={() => {}} nav={ADVANCED_NAV} />
-      </QueryClientProvider>,
-    );
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("groups results in a fixed order, each A to Z, naming the kind on the right", () => {
+  it("grows one list as you type, best match first, seven at most, each with its kind", () => {
     renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
     type("pri");
-    const groups = screen.getAllByRole("group").map((g) => g.getAttribute("aria-labelledby")).map((id) => document.getElementById(id!)!.textContent);
-    expect(groups).toEqual(["People", "Projects", "Apps", "Bundles"]);
-    expect(names()).toEqual(["Damian Priest", "Primo Colon", "Print Lab", "Print Queue", "Printing basics"]);
+    // "Primo", "Print Lab", "Print Queue", "Printing basics" start with it; "Damian Priest" has a word that does.
+    expect(names()).toEqual(["Primo Colon", "Print Lab", "Print Queue", "Printing basics", "Damian Priest"]);
     expect(within(screen.getByRole("option", { name: /Primo Colon/ })).getByText("Person")).toBeInTheDocument();
-  });
-
-  it("shows Advanced pages only in Advanced, and no Bundles in Basic", () => {
-    view.audience = "basic";
-    renderIn(<GoTo open onClose={() => {}} nav={BASIC_NAV} />);
-    expect(screen.queryByRole("option", { name: /Pending changes/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /Requests/ })).toBeInTheDocument();
-    type("pri");
-    expect(screen.queryByText("Printing basics")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("option", { name: /Print Lab/ }).length).toBeGreaterThan(0);
-  });
-
-  it("gives a member their pages and nothing else", () => {
-    view.audience = "member";
-    renderIn(<GoTo open onClose={() => {}} nav={memberNav([])} />);
-    type("pri");
-    expect(screen.queryByRole("option")).not.toBeInTheDocument();
-    expect(screen.getByText("Nothing by that name.")).toBeInTheDocument();
-    type("storage");
-    expect(names()).toEqual(["Network storage"]);
+    expect(screen.queryAllByRole("group")).toHaveLength(0);
   });
 
   it("moves with the arrow keys, wrapping, and says which row is active", () => {
     renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
     type("pri");
-    const box = screen.getByRole("combobox");
     const options = screen.getAllByRole("option");
-    expect(box).toHaveAttribute("aria-activedescendant", options[0].id);
+    expect(field()).toHaveAttribute("aria-activedescendant", options[0].id);
+    press("ArrowDown");
+    expect(field()).toHaveAttribute("aria-activedescendant", options[1].id);
+    press("ArrowUp");
+    press("ArrowUp");
+    expect(field()).toHaveAttribute("aria-activedescendant", options[options.length - 1].id);
+  });
+
+  it("never moves the selection under the hand: hovering a row only tints it", () => {
+    renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    type("pri");
+    const options = screen.getAllByRole("option");
+    fireEvent.pointerMove(options[2]);
+    fireEvent.mouseEnter(options[2]);
+    fireEvent.mouseOver(options[2]);
     expect(options[0]).toHaveAttribute("aria-selected", "true");
-    fireEvent.keyDown(box, { key: "ArrowDown" });
-    expect(box).toHaveAttribute("aria-activedescendant", options[1].id);
-    fireEvent.keyDown(box, { key: "ArrowUp" });
-    fireEvent.keyDown(box, { key: "ArrowUp" });
-    expect(box).toHaveAttribute("aria-activedescendant", options[options.length - 1].id);
+    expect(options[2]).toHaveAttribute("aria-selected", "false");
+    // The row's hover is a list row's own (`hover-tint`), and the chosen row's look wins over it.
+    for (const option of options) expect(option).toHaveClass("go-to-row", "hover-tint");
+    expect(css).toMatch(/&\[aria-selected="true"\]:hover \{\s*background-color: transparent;/);
   });
 
   it("opens the selected row on Enter, as a link does, and closes", () => {
@@ -146,15 +139,8 @@ describe("Go to", () => {
     expect(link).toHaveAttribute("href", "/users/u2");
     const click = vi.fn((event: Event) => event.preventDefault());
     link.addEventListener("click", click);
-    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    press("Enter");
     expect(click).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("closes on Esc", () => {
-    const onClose = vi.fn();
-    renderIn(<GoTo open onClose={onClose} nav={ADVANCED_NAV} />);
-    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -163,6 +149,206 @@ describe("Go to", () => {
     type("zzzz");
     expect(screen.getByText("Nothing by that name.")).toBeInTheDocument();
     expect(screen.queryByRole("option")).not.toBeInTheDocument();
+  });
+
+  it("gives a member their pages and nothing else, and no scopes", () => {
+    view.audience = "member";
+    renderIn(<GoTo open onClose={() => {}} nav={memberNav([])} />);
+    type("peo");
+    expect(screen.queryByText(/only people/)).toBeNull();
+    type("@");
+    expect(pill()).toBeNull();
+    type("storage");
+    expect(names()).toEqual(["Network storage"]);
+  });
+
+  it("is closed when not open", () => {
+    const { rerender } = renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <GoTo open={false} onClose={() => {}} nav={ADVANCED_NAV} />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("a scope: entered, kept, and left (A-26 §0, the state machine)", () => {
+  it("offers a kind's scope while its word is typed, and Tab takes it; Tab with nothing offered is the browser's", () => {
+    renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    type("p");
+    expect(screen.queryByText(/only people/)).toBeNull();
+    press("Tab"); // nothing is offered: Tab is not Go to's
+    expect(pill()).toBeNull();
+    type("peo");
+    const offer = screen.getByRole("button", { name: /only people/ });
+    expect(offer).toHaveClass("go-to-offer");
+    expect(press("Tab")).toBe(false); // taken
+    // The dialog's focus trap leaves a spent Tab alone: the caret stays, so Backspace can give the typing back.
+    expect(field()).toHaveFocus();
+    expect(pill()).toHaveTextContent("People");
+    expect(pill()).toHaveAttribute("aria-label", "Looking only among people. Look everywhere again.");
+    expect(field()).toHaveValue("");
+    expect(field()).toHaveAttribute("placeholder", "A person");
+    expect(scrim()).toHaveAttribute("data-scope", "people");
+    // In a scope: all of that kind, A to Z.
+    expect(names()).toEqual(["Damian Priest", "Primo Colon"]);
+  });
+
+  it("is entered by a tap on the offer, too", () => {
+    renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    type("role");
+    fireEvent.click(screen.getByRole("button", { name: /only roles/ }));
+    expect(pill()).toHaveTextContent("Roles");
+    expect(names()).toEqual(["Trained"]);
+  });
+
+  it.each([
+    ["@", "People"],
+    ["#", "Roles"],
+    ["/", "Pages"],
+  ])("is entered by %s first, which is not kept as typing", (sigil, word) => {
+    renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    type(sigil);
+    expect(pill()).toHaveTextContent(word);
+    expect(field()).toHaveValue("");
+    // Backspace on the empty field leaves, and gives nothing back: a key is not a word.
+    press("Backspace");
+    expect(pill()).toBeNull();
+    expect(field()).toHaveValue("");
+  });
+
+  it("gives the typing back on Backspace in an empty field: 'peo' comes back", () => {
+    renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    type("peo");
+    press("Tab");
+    type("pr");
+    expect(names()).toEqual(["Damian Priest", "Primo Colon"]);
+    // With words typed, Backspace is the field's own.
+    type("");
+    press("Backspace");
+    expect(pill()).toBeNull();
+    expect(field()).toHaveValue("peo");
+    expect(scrim()).not.toHaveAttribute("data-scope");
+  });
+
+  it("leaves and clears on a press of the pill", () => {
+    renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    type("@");
+    type("da");
+    fireEvent.click(pill()!);
+    expect(pill()).toBeNull();
+    expect(field()).toHaveValue("");
+  });
+
+  it("takes Esc in two stages: what is typed or chosen first, then the dialog", () => {
+    const onClose = vi.fn();
+    renderIn(<GoTo open onClose={onClose} nav={ADVANCED_NAV} />);
+    type("@");
+    type("da");
+    press("Escape");
+    expect(pill()).toBeNull();
+    expect(field()).toHaveValue("");
+    expect(onClose).not.toHaveBeenCalled();
+    press("ArrowDown");
+    press("Escape");
+    expect(onClose).not.toHaveBeenCalled();
+    press("Escape");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers the hand as a filled button does: the pill wears the edge, and the offer's hover is colour only", () => {
+    renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    type("@");
+    expect(pill()).toHaveClass("rim", "rim-filled");
+    const offer = /\.go-to-offer \{([\s\S]*?)\n  \}\n/.exec(css)?.[1] ?? "";
+    expect(offer).toMatch(/@media \(hover: hover\) \{\s*&:hover \{\s*color: var\(--ink\);\s*\}/);
+    expect(offer).not.toMatch(/:hover \{[^}]*(font-weight|padding|scale|transform)/);
+  });
+});
+
+describe("entering a scope: one gesture at the lamp, and still under less motion", () => {
+  const animated = () => {
+    const calls: string[] = [];
+    const spy = vi.fn(function (this: Element) {
+      calls.push(this.className.toString());
+      return { cancel() {}, finished: Promise.resolve() } as unknown as Animation;
+    });
+    (Element.prototype as unknown as { animate: unknown }).animate = spy;
+    return calls;
+  };
+  afterEach(() => {
+    delete (Element.prototype as unknown as { animate?: unknown }).animate;
+  });
+
+  it("presses the bar 2% and runs the lamp's light through it, once, on entering", () => {
+    motionInTests();
+    const calls = animated();
+    renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    type("peo");
+    press("Tab");
+    expect(calls.some((c) => c.includes("go-to-pane"))).toBe(true);
+    expect(calls.some((c) => c.includes("go-to-beam"))).toBe(true);
+    expect(calls.some((c) => c.includes("go-to-wave"))).toBe(true);
+    expect(calls.some((c) => c.includes("go-to-halo"))).toBe(true);
+    expect(calls.some((c) => c.includes("go-to-scrim"))).toBe(true);
+    expect(GESTURE.press).toBe(0.98);
+    // Never on leaving.
+    calls.length = 0;
+    press("Backspace");
+    expect(calls).toEqual([]);
+  });
+
+  it("does nothing but turn the colour when less motion is asked for: no press, no beam, no wave", () => {
+    motionInTests(false);
+    const calls = animated();
+    renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    type("peo");
+    press("Tab");
+    expect(calls).toEqual([]);
+    expect(scrim()).toHaveAttribute("data-scope", "people");
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.go-to-scrim \{\s*transition: none;/);
+  });
+});
+
+describe("a question, in Advanced (A-26 §0, §0a)", () => {
+  const topology = {
+    nodes: [
+      { id: "role:p1:trained", kind: "role", label: "Trained", project_id: "p1", meta: { role_key: "trained" } },
+      { id: "project:p1", kind: "project", label: "Print Lab" },
+    ],
+    edges: [],
+  };
+
+  it("answers in place from Insights' own reads, lists what it names beneath, and ⌘↵ from there follows the answer on the map", async () => {
+    const { client } = renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
+    // The reads, as the server would answer them, and fresh: nothing here reaches a server.
+    client.setQueryDefaults(["topology"], { staleTime: Infinity });
+    client.setQueryDefaults(["insights"], { staleTime: Infinity });
+    client.setQueryData(["topology", "graph"], topology);
+    client.setQueryData(["insights", "who", "role:p1:trained", null], [{ user_id: "u2", name: "Primo Colon", how: [] }]);
+    type("who has trained");
+    const answer = await screen.findByRole("option", { name: /Follow it on the map/ });
+    expect(answer).toHaveAttribute("href", expect.stringMatching(/^\/insights\?/));
+    expect(answer.getAttribute("href")).toContain("q=who");
+    const click = vi.fn((event: Event) => event.preventDefault());
+    answer.addEventListener("click", click);
+    // Beneath the answer, the places the question names (the board's three at most), best first.
+    expect(names().slice(1)).toEqual(["Trained"]);
+    press("ArrowDown");
+    expect(screen.getAllByRole("option")[1]).toHaveAttribute("aria-selected", "true");
+    expect(answer).toHaveAttribute("aria-selected", "false");
+    expect(answer).toHaveTextContent("⌘↵");
+    press("Enter", { metaKey: true });
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it("is not asked in Basic: Basic has no Insights to follow it to", () => {
+    view.audience = "basic";
+    renderIn(<GoTo open onClose={() => {}} nav={BASIC_NAV} />);
+    type("who has trained");
+    expect(screen.queryByText(/Follow it on the map/)).toBeNull();
+    expect(screen.queryByText(/isn't a question/)).toBeNull();
   });
 });
 
