@@ -50,8 +50,8 @@ function minutes(m: number): string {
 function Fact({ label, value, opens }: { label: string; value: string | number; opens?: { href: string; to: string } }) {
   return (
     <div className="row-divider flex items-baseline justify-between gap-4 px-5 py-3 text-small">
-      <span className="text-muted">{label}</span>
-      <span data-figure className="font-semibold">
+      <span className="min-w-0 text-muted">{label}</span>
+      <span data-figure className="shrink-0 font-semibold">
         {opens ? (
           <AdvancedLink href={opens.href} aria-label={`${label}, ${value}: open ${opens.to}`} className="link-hover">
             {value}
@@ -64,7 +64,10 @@ function Fact({ label, value, opens }: { label: string; value: string | number; 
   );
 }
 
-const ENDING_ROW = "row-divider grid grid-cols-[1fr_110px_110px] items-baseline gap-4 px-5 py-3";
+// Below tablet the two number seats are narrow and the name takes the rest and wraps (never 1fr
+// against two 110px seats: that left a phone 66px for a project's name). From tablet, D-1 §3's seat.
+const ENDING_ROW =
+  "row-divider grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem] items-baseline gap-x-3 px-5 py-3 tablet:grid-cols-[minmax(0,1fr)_var(--seat-number)_var(--seat-number)] tablet:gap-x-(--row-gap)";
 
 /** A line that says nothing is wrong is the healthy dot's (resolved); "not yet" lines are not. */
 const Quiet = ({ children, ok = false }: { children: string; ok?: boolean }) => <EmptyState title={children} resolved={ok} />;
@@ -213,7 +216,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
                     .sort((a, b) => b.d30 - a.d30)
                     .map((p) => (
                       <div key={p.project_id} role="row" className={`${ENDING_ROW} text-small`}>
-                        <span role="cell" className="text-muted">
+                        <span role="cell" className="min-w-0 break-words text-muted">
                           {projectLabel(p.project_name)}
                         </span>
                         <span role="cell" data-figure className="text-right font-semibold">

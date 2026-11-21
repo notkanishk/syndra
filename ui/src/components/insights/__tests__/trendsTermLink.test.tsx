@@ -75,6 +75,25 @@ describe("Ending soon", () => {
     expect(rows).toEqual(["Wood shop25", "Laser room12"]);
   });
 
+  it("holds its name to what is left of the number seats, so a long name wraps and never pushes them", async () => {
+    query = "tab=trends";
+    respond.mockResolvedValue({
+      ...trends("Monsoon 2026"),
+      ending_soon: [{ project_id: "p1", project_name: "The Undertaker's Casket Workshop and Finishing Bay", d14: 12, d30: 345 }],
+    });
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Mount />
+      </QueryClientProvider>,
+    );
+    const name = await screen.findByText(/Casket Workshop/);
+    const row = name.closest('[role="row"]')!;
+    // The name's track may shrink to 0 (minmax(0,1fr)) and wrap; the seats are fixed, not 1fr beside them.
+    expect(row.className).toContain("grid-cols-[minmax(0,1fr)_4.5rem_4.5rem]");
+    expect(name.className).toMatch(/min-w-0/);
+    expect(name.className).toMatch(/break-words/);
+  });
+
   it("opens Expiring access in the same window from each number", async () => {
     query = "tab=trends";
     respond.mockResolvedValue({
