@@ -179,7 +179,7 @@ func TestATargetCanBeReconciledOnDemand(t *testing.T) {
 	svcReconcileAddon = func(_ context.Context, target string) (drift.AddonReconcileResult, error) {
 		called = target
 		return drift.AddonReconcileResult{
-			Target: target, Bound: new(4), Queued: 1, Current: true,
+			Target: target, Bound: new(4), Queued: 1, Read: readNow(),
 			Stale: []drift.StaleBinding{{SubjectID: "s", Username: "becky", AccountID: func() *string { s := "3999"; return &s }()}},
 		}, nil
 	}

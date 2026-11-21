@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"syndra/internal/addons"
@@ -16,8 +15,9 @@ import (
 // per registered system. It is the member's own view of the same system
 // (describeMyTarget, the same code), plus what only an operator reads: how the
 // account came to be theirs, the home folder limit and where it comes from,
-// the holds in force, the last read when the system is offline, why a system
-// isn't ready yet, and what an account still to be made will open.
+// the holds in force, why a system isn't ready yet, and what an account still
+// to be made will open. Syndra keeps no copy of a read (design §13.3): with the
+// add-on down the system's read is none, and the page says "not read".
 //
 // Nothing here writes. Every value set elsewhere is set on the system's page.
 
@@ -32,9 +32,6 @@ type personTargetView struct {
 	Home *accountHome `json:"home,omitempty"`
 	// Holds is every deny in force for this person on this system.
 	Holds []personHold `json:"holds"`
-	// LastKnown is the last successful read of this account, for an offline
-	// system. Absent when there is none: the page then shows the Notice alone.
-	LastKnown *lastKnownStorage `json:"last_known,omitempty"`
 	// Setup says why the system can't reach anybody yet: "no_project" or
 	// "no_mapping". Empty once a mapped role can reach it.
 	Setup string `json:"setup,omitempty"`
@@ -58,42 +55,10 @@ type personHold struct {
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 }
 
-type lastKnownStorage struct {
-	Storage addons.StorageStatus `json:"storage"`
-	ReadAt  time.Time            `json:"read_at,omitzero"`
-}
-
 // adoptionWindow is how close an account.adopt must sit before the binding it
 // wrote for it to be that binding's origin. A binding made later (released,
 // then made by a drain) is not the adopted one.
 const adoptionWindow = 10 * time.Minute
-
-// lastStorage is each person's last successful storage read, per system.
-// ponytail: in memory, so a restart forgets it and the offline card then shows
-// the Notice alone, which is the honest fallback; a table is the upgrade if
-// last-known has to survive restarts.
-var lastStorage sync.Map // target + "\x00" + subject -> lastKnownStorage
-
-// rememberStorage keeps a read dated by the add-on's taken_at: a copy it read
-// four minutes ago is remembered as four minutes old. A status with no
-// observation (one not read from a reply) is dated by when the backend
-// received it, the closest the backend can say.
-func rememberStorage(target, subject string, status addons.StorageStatus) {
-	readAt := time.Now()
-	if status.Observation != nil {
-		readAt = status.Observation.TakenAt
-	}
-	lastStorage.Store(target+"\x00"+subject, lastKnownStorage{Storage: status, ReadAt: readAt})
-}
-
-func recalledStorage(target, subject string) *lastKnownStorage {
-	v, ok := lastStorage.Load(target + "\x00" + subject)
-	if !ok {
-		return nil
-	}
-	known := v.(lastKnownStorage)
-	return &known
-}
 
 // handleUserTargets is GET /api/v1/users/{id}/targets (operators only).
 func handleUserTargets(w http.ResponseWriter, r *http.Request) {
@@ -154,14 +119,7 @@ func describePersonTarget(r *http.Request, target, subject string, hasProject bo
 		home := accountHome{SubjectID: subject, Username: view.Account.Username}
 		roleLimits(&home, set, limit)
 		home.Own = ownHomeLimit(r, subject, target, limit.Name, now)
-		storage := view.Storage
-		if storage == nil && (view.Health == addons.StateAddonUnreachable || view.Health == addons.StateAppUnreachable) {
-			view.LastKnown = recalledStorage(target, subject)
-			if view.LastKnown != nil {
-				storage = &view.LastKnown.Storage
-			}
-		}
-		if storage != nil {
+		if storage := view.Storage; storage != nil {
 			for _, p := range storage.Places {
 				if p.Home && p.Usage != nil {
 					used, quota := p.Usage.UsedBytes, p.Usage.QuotaBytes
@@ -207,7 +165,7 @@ func adoptionOf(r *http.Request, target, subject string, boundAt *time.Time) *pe
 // that hasn't been read.
 func previewPlaces(r *http.Request, target string, set services.EntitlementSet) []addons.Place {
 	reach := addonsReadReach(r.Context(), target, wantsFresh(r))
-	if !reach.Read {
+	if reach.Read.None() {
 		return nil
 	}
 	byPath := map[string]int{}

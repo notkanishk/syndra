@@ -60,11 +60,11 @@ func TestEveryDatedReadIsClampedAlike(t *testing.T) {
 	forgetLogged(t)
 	t.Cleanup(func() { timeNow = saved })
 	addonServing(t, []byte(`{"taken_at":"2099-01-01T00:00:00Z","current":true,"groups":{},"everyone":[]}`))
-	if r := ReadReach(context.Background(), "truenas", false); !r.Read || !r.ReadAt.Equal(now) {
+	if r := ReadReach(context.Background(), "truenas", false); r.Read.None() || !readAt(r.Read).Equal(now) {
 		t.Errorf("reach dated 2099 read %+v, want read at now", r)
 	}
 	addonServing(t, []byte(`{"taken_at":"2099-01-01T00:00:00Z","current":true,"homes":[],"quota_read":true}`))
-	if h := ReadHomes(context.Background(), "truenas", false); !h.Read || !h.Observation.TakenAt.Equal(now) {
+	if h := ReadHomes(context.Background(), "truenas", false); h.Read.None() || !readAt(h.Read).Equal(now) {
 		t.Errorf("homes dated 2099 read %+v, want taken at now", h)
 	}
 }
@@ -106,7 +106,7 @@ func TestEveryResultShapeIsClampedAlike(t *testing.T) {
 				return s.TakenAt, true
 			}
 		default:
-			if v := r.View(); v.Readable {
+			if v := r.View(); !v.Read.None() {
 				return v.Result.(observed).observation().TakenAt, true
 			}
 		}

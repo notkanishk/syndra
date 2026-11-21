@@ -2,6 +2,7 @@ package drift
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -63,8 +64,8 @@ func TestTheSweepWaitsOutOneCooldownAndReadsAgain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Halted || !res.Current || !h.reconciled || len(h.marked) != 0 {
-		t.Errorf("a current second read is a pass: halted %t current %t reconciled %t marked %v", res.Halted, res.Current, h.reconciled, h.marked)
+	if res.Halted || res.Read.State != addons.ReadNow || !h.reconciled || len(h.marked) != 0 {
+		t.Errorf("a current second read is a pass: halted %t read %+v reconciled %t marked %v", res.Halted, res.Read, h.reconciled, h.marked)
 	}
 	if !slices.Equal(h.waited, []time.Duration{12 * time.Second}) || !slices.Equal(h.askedFresh, []bool{true, true}) {
 		t.Errorf("waited %v, asked fresh %v, want one 12 s wait, then a fresh read", h.waited, h.askedFresh)
@@ -139,8 +140,8 @@ func TestCheckNowNeverWaitsOutACooldown(t *testing.T) {
 	if len(h.waited) != 0 || !slices.Equal(h.askedFresh, []bool{true}) {
 		t.Errorf("check now waited %v and asked fresh %v, want no wait and one fresh read", h.waited, h.askedFresh)
 	}
-	if !res.Halted || res.Reason != db.UnreconciledStaleRead || res.RetryAfter != 12 {
-		t.Errorf("check now inside the cooldown: halted %t reason %q retry_after %d, want a skipped pass saying when to ask again", res.Halted, res.Reason, res.RetryAfter)
+	if !res.Halted || res.Reason != db.UnreconciledStaleRead || res.Read.RetryAfter != 12 || res.Read.State != addons.ReadKept {
+		t.Errorf("check now inside the cooldown: halted %t reason %q read %+v, want a skipped pass on a kept copy saying when to ask again", res.Halted, res.Reason, res.Read)
 	}
 }
 
@@ -163,14 +164,16 @@ func TestTheInventorySaysHowFreshItsReadIs(t *testing.T) {
 	h := &addonReconcileHarness{read: addons.SubjectsResult{Outcome: addons.OutcomeSucceeded, TakenAt: currentRead().TakenAt, Stale: cached}}
 	stubAddonReconcile(t, h)
 	res, _ := Inventory(context.Background(), "truenas", false)
-	if res.Halted || res.Current || res.ReadStale != cached || res.Reason != db.UnreconciledStaleRead {
-		t.Errorf("a copy is shown, dated and labelled: %+v", res)
+	if res.Halted || res.Read.State != addons.ReadKept || res.Read.Reason != addons.ReasonCached ||
+		res.Read.TakenAt == nil || !res.Read.TakenAt.Equal(currentRead().TakenAt) || res.Reason != "" {
+		t.Errorf("a copy is shown, dated by its read and said kept: %+v", res)
 	}
 
 	h.read = addons.SubjectsResult{Outcome: addons.OutcomeUnreached, Status: 429, RetryAfter: 9}
-	res, _ = Inventory(context.Background(), "truenas", true)
-	if !res.Halted || res.RetryAfter != 9 || res.Reason != db.UnreconciledStaleRead {
-		t.Errorf("a cooldown with nothing to serve is a countdown, not an outage: %+v", res)
+	_, err := Inventory(context.Background(), "truenas", true)
+	var nr addons.NotRead
+	if !errors.As(err, &nr) || nr.Why.Reason != addons.ReasonCooldown || nr.Why.RetryAfter != 9 {
+		t.Errorf("a cooldown with nothing to serve is no copy, with its countdown: %v", err)
 	}
 	if len(h.marked) != 0 {
 		t.Error("a listing recorded a reconciliation state")

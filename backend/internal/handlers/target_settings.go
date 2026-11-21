@@ -14,14 +14,14 @@ import (
 // the read and the write, and says who changed what.
 
 func handleTargetSettings(w http.ResponseWriter, r *http.Request) {
-	settings, ok := addonsReadSettings(r.Context(), r.PathValue("target"))
-	if !ok {
-		// 200: "couldn't read the settings right now" is something the page
-		// says, not an error it fails on.
-		jsonResponse(w, http.StatusOK, map[string]any{"read": false})
+	target := r.PathValue("target")
+	settings, read := addonsReadSettings(r.Context(), target)
+	if read.None() {
+		// Not "it has none": 503 TARGET_NOT_READ (design §13.3).
+		writeUnread(w, r, target, read.Why())
 		return
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{"read": true, "settings": settings})
+	jsonResponse(w, http.StatusOK, map[string]any{"read": read, "settings": settings})
 }
 
 type putTargetSettingRequest struct {

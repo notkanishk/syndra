@@ -99,7 +99,7 @@ func Read(ctx context.Context, target, op, subject, actor string, params map[str
 		out.Err = err
 		return out
 	}
-	return out.sent(a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/" + url.PathEscape(op), Body: raw, Fresh: fresh}))
+	return out.sent(a.read(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/" + url.PathEscape(op), Body: raw, Fresh: fresh}))
 }
 
 // operationBody is an operation request's body as every unrecorded send
@@ -456,13 +456,12 @@ type ReadView struct {
 	Operation string `json:"operation"`
 	// Shape is records, activity or status; "" is an id's own result, shown
 	// raw (Result is then the JSON text, capped).
-	Shape    string   `json:"shape"`
-	Readable bool     `json:"readable"`
-	Result   any      `json:"result,omitempty"`
-	AlsoSays []string `json:"also_says,omitempty"`
-	// RetryAfter is a fresh read refused inside the add-on's cooldown with
-	// nothing to serve: unreadable, and readable again in this many seconds.
-	RetryAfter int `json:"retry_after,omitempty"`
+	Shape string `json:"shape"`
+	// Read is this read's `read` (design §13.3); Result is present exactly
+	// when it is not none.
+	Read     ReadState `json:"read"`
+	Result   any       `json:"result,omitempty"`
+	AlsoSays []string  `json:"also_says,omitempty"`
 }
 
 // rawResultCap bounds an id's own result shown raw: the least trusted
@@ -472,28 +471,34 @@ const rawResultCap = 4 << 10
 // View is the reply for a generic renderer.
 func (r ReadReply) View() ReadView {
 	sh := shapes[r.Schema]
-	v := ReadView{Operation: r.Operation, Shape: sh.shape, RetryAfter: r.RetryAfter}
+	v := ReadView{Operation: r.Operation, Shape: sh.shape}
 	raw, err := r.answer()
 	if err != nil {
+		v.Read = ReadOf(nil, r.notRead(err))
 		return v
 	}
 	if sh.shape == "" {
-		if staleInvariant(raw) != nil {
+		if err := staleInvariant(raw); err != nil {
+			v.Read = ReadOf(nil, r.notRead(err))
+			return v
+		}
+		if v.Read = ReadOf(r.observedRaw(raw), Why{}); v.Read.None() {
 			return v
 		}
 		shown := string(raw)
 		if len(shown) > rawResultCap {
 			shown = shown[:rawResultCap] + "…"
 		}
-		v.Readable, v.Result = true, shown
+		v.Result = shown
 		return v
 	}
 	decoded := sh.result()
 	if err := r.decodeShape(sh.need, raw, decoded); err != nil {
+		v.Read = ReadOf(nil, r.notRead(err))
 		return v
 	}
 	var doc any
 	_ = json.Unmarshal(raw, &doc)
-	v.Readable, v.Result, v.AlsoSays = true, decoded, unknownKeys("", doc, sh.keys)
+	v.Read, v.Result, v.AlsoSays = ReadOf(r.observed(decoded), Why{}), decoded, unknownKeys("", doc, sh.keys)
 	return v
 }

@@ -31,24 +31,15 @@ import (
 // handleTargetInventory lists what lives on the target that Syndra does not
 // manage.
 func handleTargetInventory(w http.ResponseWriter, r *http.Request) {
-	inv, err := svcTargetInventory(r.Context(), r.PathValue("target"), wantsFresh(r))
+	target := r.PathValue("target")
+	inv, err := svcTargetInventory(r.Context(), target, wantsFresh(r))
 	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "INVENTORY_ERROR", err.Error())
-		return
-	}
-	if inv.RetryAfter > 0 {
-		// "Read again" inside the add-on's cooldown, nothing kept to show:
-		// a countdown, not an outage (RFC 6585 §4), said as every cooldown
-		// refusal is (FRESH_READ_COOLDOWN).
-		writeCooledDown(w, inv.RetryAfter, "That target was read moments ago, so its accounts can be listed again in "+
-			strconv.Itoa(inv.RetryAfter)+" seconds.")
-		return
-	}
-	if inv.Halted {
-		// 503 rather than an empty list. An empty list is a statement that the
-		// target holds nothing else, and the whole point of this surface is that
-		// an operator acts on it.
-		jsonResponse(w, http.StatusServiceUnavailable, inv)
+		// No copy is 503 TARGET_NOT_READ rather than an empty list (design
+		// §13.3): an empty list says the target holds nothing else, and an
+		// operator acts on this surface.
+		if !writeIfNotRead(w, r, target, err) {
+			jsonErrorResponse(w, http.StatusInternalServerError, "INVENTORY_ERROR", err.Error())
+		}
 		return
 	}
 	jsonResponse(w, http.StatusOK, inv)
@@ -458,12 +449,10 @@ func handleDormantAccounts(w http.ResponseWriter, r *http.Request) {
 				strconv.Itoa(cooled.RetryAfter)+" seconds.")
 			return
 		}
-		if errors.Is(err, services.ErrTargetUnplannable) {
-			// 503, not an empty list. Every row here is a candidate for
-			// removal, and an empty list is a statement that there are none —
-			// which a read that did not happen cannot support.
-			jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREADABLE",
-				"That target could not be read, so nothing can be said about which of its accounts are dormant.")
+		// 503 TARGET_NOT_READ, not an empty list. Every row here is a
+		// candidate for removal, and an empty list is a statement that there
+		// are none — which a read that did not happen cannot support.
+		if writeIfNotRead(w, r, r.PathValue("target"), err) {
 			return
 		}
 		jsonErrorResponse(w, http.StatusInternalServerError, "DORMANT_ERROR", err.Error())

@@ -420,12 +420,6 @@ func TestAGapOnAShareTheyCanOpenIsOnTheirPage(t *testing.T) {
 	if len(m.Gaps) != 1 || m.Gaps[0].Dimensions["share"] != "open" || m.Gaps[0].Reason != "Auditing is off for this share" {
 		t.Errorf("gaps %+v, want the one on open with its reason (kiln is not theirs)", m.Gaps)
 	}
-	// While the target is down, the last storage read remembered says where they reach.
-	rememberStorage("truenas", "sub-cena", *storage)
-	t.Cleanup(func() { lastStorage.Delete("truenas\x00sub-cena") })
-	if m := sessionsOf(t, *personalUsage(context.Background(), "truenas", "sub-cena", true, nil)); len(m.Gaps) != 1 {
-		t.Errorf("offline: gaps %+v, want the one on open", m.Gaps)
-	}
 }
 
 // A gap over part of a series' dimensions is on that series: on a metric by

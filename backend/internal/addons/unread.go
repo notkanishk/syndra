@@ -107,6 +107,10 @@ func Unread(r CallResponse) Why {
 		why.RetryAfter = seconds(open.RetryAfter)
 		return why
 	}
+	var held *heldError
+	if errors.As(r.Err, &held) {
+		return held.why
+	}
 	switch {
 	case r.ShapeRefusal:
 		return Why{Reason: ReasonAddonOutdated}
