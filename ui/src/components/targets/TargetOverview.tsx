@@ -17,7 +17,7 @@ import {
 } from "@/lib/outcome";
 import { checkAgainNext, cooldownLine, FIRST_PART_READ, READING, retryingLine, whyLine, type Reader } from "@/components/results/copy";
 import { ApiError } from "@/lib/api-client";
-import { dataOf, notReadOf, ofRead, readOfQuery, REASON, type Why } from "@/lib/queries/read";
+import { dataOf, notRead as isNotRead, notReadOf, ofRead, readOfQuery, REASON, type Why } from "@/lib/queries/read";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { ArriveList, Crossfade, FOLD_MS, LeavingRow, TINT_MS, UnfoldOnArrival, Unfold, useExitPhase, useFlashOnChange, useLeavingRows } from "@/lib/motion";
@@ -80,7 +80,7 @@ import {
   type LogAnchor,
   type TargetHealth,
   type TargetHealthReply,
-  type TargetReconcileResult,
+  type TargetReconcilePass,
   type BoundAccount,
   type TargetSummary,
 } from "@/lib/queries/useTargets";
@@ -135,10 +135,11 @@ export function TargetOverview({ target }: { target: string }) {
   const name = nameOf(target);
   // The add-on's account of itself, when it gave one (design §13.3): its product, its pause.
   const said = health.data ? dataOf(health.data.addon) : undefined;
-  // It isn't answering, so its own cards show the last read (A-13): they
-  // recede, and the controls that need it live are off. Syndra's own cards
-  // (reach, lifecycle, Waiting on you, what runs here) stay raised.
-  const lastKnown = health.data?.addon.state === "none";
+  // The add-on's own answer was not read (design §13.3): its cards recede and
+  // say why, with no copy to draw, and the controls that need it live are off
+  // (A-13). Syndra's own cards (reach, lifecycle, Waiting on you, what runs
+  // here) stay raised. False while the health read is pending.
+  const notRead = isNotRead(health.data?.addon);
   // One Zitadel project per system (3a). Unknown until the roster answers;
   // null is "not chosen", and everything that gives access waits for it.
   const project = registered?.project;
@@ -190,7 +191,7 @@ export function TargetOverview({ target }: { target: string }) {
         <ProjectSet target={target} project={justSet} />
       ) : null}
       {registered && (
-        <SetupStrip target={target} registered={registered} project={justSet ? null : project ?? null} lastKnown={lastKnown} />
+        <SetupStrip target={target} registered={registered} project={justSet ? null : project ?? null} lastKnown={notRead} />
       )}
 
       {/* One chip per region at the right end of the read line (board, RULES):
@@ -228,7 +229,7 @@ export function TargetOverview({ target }: { target: string }) {
             >
               Syndra&rsquo;s server did not answer when this page asked for it. This says nothing about{" "}
               {name} itself. Nothing was changed.
-              <HealthTryAgain again={healthAgain} name={name} />
+              <HealthTryAgain again={healthAgain} name={name} serverSaid />
             </Notice>
           ) : (
             <>
@@ -262,7 +263,7 @@ export function TargetOverview({ target }: { target: string }) {
                     registered?.transport_status === "error" ? registered.transport_error : undefined
                   }
                 />
-                <SystemHealth target={target} stale={lastKnown} />
+                <SystemHealth target={target} stale={notRead} />
               </CardGrid>
               {/* Advanced only: lifecycle controls are for whoever looks after the add-on. */}
               <AdvancedOnly gap={16}>
@@ -343,9 +344,9 @@ export function TargetOverview({ target }: { target: string }) {
           lede="Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action."
         >
           <AccountsNotRead target={target} region="accounts" />
-          <PeopleOnTarget target={target} stale={lastKnown} />
-          <Inventory target={target} stale={lastKnown} />
-          <DormantAccounts target={target} stale={lastKnown} />
+          <PeopleOnTarget target={target} stale={notRead} />
+          <Inventory target={target} stale={notRead} />
+          <DormantAccounts target={target} stale={notRead} />
         </Region>
 
         {/* Region 3 · what an add-on can do and what actually runs against it
@@ -359,7 +360,7 @@ export function TargetOverview({ target }: { target: string }) {
           {/* Side by side where there is room, as the board draws them. */}
           <CardGrid>
             {registered && <Capabilities registered={registered} />}
-            <ReconcileControl target={target} lastKnown={lastKnown} />
+            <ReconcileControl target={target} addonNotRead={notRead} />
           </CardGrid>
         </Region>
 
@@ -425,7 +426,7 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
       </Card>
     );
   }
-  if (read.state === "none") {
+  if (isNotRead(read)) {
     // Nothing to give (design §13.6): why, and what to check, never "nothing raised".
     return (
       <Card>
@@ -566,7 +567,7 @@ function alertLabel(level: string): string {
  * act on and which nothing else surfaces. A binding whose account is gone plans
  * as a create, and acting on it would recreate an account somebody deleted.
  */
-function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: boolean }) {
+function ReconcileControl({ target, addonNotRead }: { target: string; addonNotRead: boolean }) {
   const nameOf = useSystemNames();
   const run = useReconcileTarget(target);
   const release = useReleaseBinding(target);
@@ -608,7 +609,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
     : !result
       ? "none"
       : result.halted
-        ? `halted:${result.reason ?? ""}:${result.detail ?? ""}:${result.read.retry_after ?? ""}`
+        ? `halted:${result.reason ?? ""}:${result.detail ?? ""}:${result.read.state === "now" ? "" : (result.read.why.retryAfter ?? "")}`
         : `read:${result.read.state}:${result.bound}:${result.queued}:${result.stale?.length ?? 0}`;
   const changed = useFlashOnChange(resultKey);
   // A check past ten seconds says so, once, on tint (A-24 §6). Only that: its result is a mutation's
@@ -646,13 +647,13 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
             variant="outline"
             size="sm"
             isPending={run.isPending}
-            disabled={lastKnown || waiting || left > 0}
+            disabled={addonNotRead || waiting || left > 0}
             reason={
               waiting
                 ? retryingLine(name, retry.left)
                 : left > 0
                   ? cooldownLine(name, left)
-                  : lastKnown
+                  : addonNotRead
                     ? `Check now waits too: it reads ${name} first.`
                     : undefined
             }
@@ -872,8 +873,10 @@ const OPERATOR: Reader = { audience: "operator", person: "" };
  * "Try again" on the health page: a live read (`?fresh=true`). It says what it is doing: Reading
  * while it asks; a wait Syndra put on it (429) with its count; and a failure of Syndra's own
  * server, told apart from the add-on's, which the reach card says from the live read itself.
+ * `serverSaid`: its Notice already says Syndra's server failed and what to do, so a failure here
+ * says only what came back.
  */
-function HealthTryAgain({ again, name }: { again: HealthAgain; name: string }) {
+function HealthTryAgain({ again, name, serverSaid = false }: { again: HealthAgain; name: string; serverSaid?: boolean }) {
   const { error, errorAt, pending } = again;
   const wait = error instanceof ApiError && error.status === 429 ? error.retryAfter : undefined;
   const left = useCountdown(wait, errorAt);
@@ -882,15 +885,18 @@ function HealthTryAgain({ again, name }: { again: HealthAgain; name: string }) {
     : wait !== undefined
       ? `Syndra is being asked too often. ${cooldownNext(left)}`
       : error
-        ? `${sentence(failureMessage(error))} This says nothing about ${name} itself. ${nextStep(false)}`
+        ? serverSaid
+          ? sentence(failureMessage(error))
+          : `${sentence(failureMessage(error))} This says nothing about ${name} itself. ${nextStep(false)}`
         : "";
-  // A block of its own: a button is never inside the Notice's sentence (D-1 §4).
+  // A block of its own: a button is never inside the Notice's sentence (D-1 §4). Its words are
+  // said by the Notice's own live region, so no second region speaks them again.
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
       <Button variant="outline" size="sm" keepFocus isPending={pending} disabled={left > 0} onClick={() => void again.press().catch(() => {})}>
         {pending ? READING : "Try again"}
       </Button>
-      <span role="status" className="text-small text-muted">
+      <span data-try-again-said className="text-small text-muted">
         {said}
       </span>
     </div>
@@ -953,7 +959,7 @@ function ReachCard({
                   ? "New changes are refused and the ones already sent are being allowed to finish."
                   : "Every change is refused at once. Reads keep working."
               }`
-            : health.addon.state === "none"
+            : isNotRead(health.addon)
               ? // The add-on's answer was not read (a missed check, a live "Try again" that came back
                 // with none): never "accepting changes"; its why, in §13.1's words, says which side.
                 [reading.sentence, whyLine(health.addon.why, name, OPERATOR, said?.product)].filter(Boolean).join(" ")
@@ -1071,7 +1077,7 @@ function ConnectionNotices({
  * fault Notice or the reach card, never again here.
  */
 function TargetRead({ health, name }: { health: TargetHealthReply | undefined; name: string }) {
-  return health && health.addon.state !== "none" ? <ReadFreshness read={health.addon} subject={name} /> : null;
+  return health && !isNotRead(health.addon) ? <ReadFreshness read={health.addon} subject={name} /> : null;
 }
 
 /**
@@ -1436,7 +1442,7 @@ function AccountsNotRead({ target, region }: { target: string; region: string })
   const nameOf = useSystemNames();
   const read = readOfQuery(useTargetInventory(target));
   const again = useTargetInventoryAgain(target);
-  const why = read.state === "none" ? read.why : undefined;
+  const why = isNotRead(read) ? read.why : undefined;
   const cooldown = why?.reason === REASON.cooldown;
   const left = useCountdown(cooldown ? why?.retryAfter : undefined, why?.since);
   const lineId = useId();
@@ -1445,7 +1451,7 @@ function AccountsNotRead({ target, region }: { target: string; region: string })
   // settles with nothing again (none, or a failure) only clears it, so a later read that lands by
   // itself never moves focus nobody asked to move.
   const pressed = useRef(false);
-  const unread = read.state === "none";
+  const unread = isNotRead(read);
   useEffect(() => {
     if (!pressed.current || again.pending) return;
     pressed.current = false;
@@ -1527,7 +1533,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
         caption={`Accounts on ${name} that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.`}
       />
       {/* A read with nothing to give has no freshness: the region's line above the cards says so, once. */}
-      {read.state !== "none" && (
+      {!isNotRead(read) && (
         <div className="px-5 pb-2">
           <ReadFreshness
             subject="The account list"
@@ -2059,8 +2065,8 @@ function LifecycleControl({
 }
 
 /** A pass skipped inside the add-on's cooldown, answered from its kept copy: the seconds to wait it out. */
-function skipWait(pass: TargetReconcileResult): number | undefined {
-  return pass.halted && pass.read.state === "kept" && pass.read.reason === REASON.cooldown ? pass.read.retry_after : undefined;
+function skipWait(pass: TargetReconcilePass): number | undefined {
+  return pass.halted && pass.read.state === "kept" && pass.read.why.reason === REASON.cooldown ? pass.read.why.retryAfter : undefined;
 }
 
 /** A pass the cooldown refused with nothing kept (503 `cooldown`): the seconds to wait it out. */

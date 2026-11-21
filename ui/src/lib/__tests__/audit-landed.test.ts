@@ -25,3 +25,18 @@ describe("a withdrawal that reached its system", () => {
     for (const words of [said.verb, said.template, said.passive]) expect(words).not.toMatch(/Revoked access/i);
   });
 });
+
+describe("an automatic retry, worded by how it went", () => {
+  it("says it was sent again when something went out", () => {
+    expect(describeAction("propagation.retried", nameOf, { outcome: "retrying" }).verb).toMatch(/^Sent a change again on its own/);
+  });
+
+  it("says nothing went out, and Syndra will try again, when it was not sent", () => {
+    const said = describeAction("propagation.retried", nameOf, { outcome: "not_sent", tries_spent: 1 });
+    for (const words of [said.verb, said.template, said.passive]) {
+      expect(words).toMatch(/nothing went out/);
+      expect(words).toMatch(/Syndra will try again/);
+      expect(words).not.toMatch(/\bSent\b|sent again/i);
+    }
+  });
+});

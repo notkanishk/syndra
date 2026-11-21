@@ -1,5 +1,6 @@
 "use client";
 
+import { notRead } from "@/lib/queries/read";
 import { down } from "@/components/kinds/storage/state";
 import { whyLine } from "@/components/results/copy";
 import { NotReadLine } from "@/components/ui/ReadFreshness";
@@ -198,7 +199,7 @@ export function offlineNext(label: string, auto: boolean | null): string {
 export function OfflineNotice({ view, children }: { view: PersonTargetView; children: ReactNode }) {
   const auto = useAutoRetry();
   if (!down(view)) return null;
-  const why: Why = view.read?.state === "none" ? view.read.why : { reason: view.health };
+  const why: Why = notRead(view.read) ? view.read.why : { reason: view.health };
   return (
     <div className="px-5 pb-3">
       <Notice
@@ -266,7 +267,7 @@ export function reachWords(roles: string[], name: string): string {
  */
 export function PersonSystemCard({ view, userId, name }: { view: PersonTargetView; userId: string; name: string }) {
   const roleNames = useRoleNames();
-  const addon = view.read && view.read.state !== "none" ? view.read.data : undefined;
+  const addon = view.read && !notRead(view.read) ? view.read.data : undefined;
   const system = view.name;
   const page = `/system/targets/${view.target}?person=${encodeURIComponent(userId)}#accounts`;
   const onPage = <ArrowLink href={page}>Set on {system}&apos;s page</ArrowLink>;
@@ -335,7 +336,7 @@ export function PersonSystemCard({ view, userId, name }: { view: PersonTargetVie
       <CardTop target={view.target} name={system} status={<Status view={view} />} />
       <OfflineNotice view={view}>{name}&apos;s access hasn&apos;t changed.</OfflineNotice>
       {/* Not read while the monitor says it answers (a refusal, an outdated add-on): the why, once. */}
-      {view.read?.state === "none" && !down(view) && (
+      {notRead(view.read) && !down(view) && (
         <NotReadLine why={view.read.why} system={system} reader={{ audience: "operator", person: name }} className="px-5 pb-3" />
       )}
       {body}

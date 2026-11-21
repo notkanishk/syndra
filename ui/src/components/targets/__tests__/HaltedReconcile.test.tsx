@@ -42,7 +42,8 @@ const pass = vi.hoisted(() => ({
 
 // Every helper lives INSIDE the factory: `vi.mock` is hoisted above every
 // const in the file, so a top-level one is not yet initialised when it runs.
-vi.mock("@/lib/queries/useTargets", () => {
+vi.mock("@/lib/queries/useTargets", async () => {
+  const { withRead } = await import("@/lib/queries/read");
   const idle = () => ({
     data: undefined,
     isLoading: false,
@@ -70,7 +71,7 @@ vi.mock("@/lib/queries/useTargets", () => {
     useSetLifecycle: inert,
     useReleaseBinding: inert,
     useAdoptAccount: inert,
-    useReconcileTarget: () => ({ ...inert(), data: pass.data, error: pass.error, isPending: pass.pending }),
+    useReconcileTarget: () => ({ ...inert(), data: pass.data && withRead(pass.data as never), error: pass.error, isPending: pass.pending }),
   };
 });
 

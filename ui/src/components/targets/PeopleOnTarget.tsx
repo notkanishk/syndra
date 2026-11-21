@@ -22,7 +22,7 @@ import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetHomes, useTargetInventory, type AccountHome, type BoundAccount } from "@/lib/queries/useTargets";
 import { HomeLine, LimitDialog, limitVerb } from "@/components/kinds/storage/HomeLimit";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
-import { ofRead, readOfQuery } from "@/lib/queries/read";
+import { ofRead, readOfQuery, notRead } from "@/lib/queries/read";
 import { sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 
@@ -106,7 +106,7 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
         count={ofRead(read, (d) => d.bound)}
         note="Put what a role gives them on hold, or revoke it"
       />
-      {hasLimit && read.state !== "none" && homes.state === "none" && (
+      {hasLimit && !notRead(read) && notRead(homes) && (
         // A system with home folders whose accounts were read and whose homes were not: why, in
         // §13.1's words, never homes shown empty as though nobody had one.
         <CardRow>

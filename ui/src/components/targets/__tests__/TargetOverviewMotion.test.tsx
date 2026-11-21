@@ -30,6 +30,7 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 }));
 
 vi.mock("@/lib/queries/useTargets", async () => {
+  const { withRead } = await import("@/lib/queries/read");
   const actual = await vi.importActual<typeof import("@/lib/queries/useTargets")>("@/lib/queries/useTargets");
   return {
     ...actual,
@@ -50,7 +51,7 @@ vi.mock("@/lib/queries/useTargets", async () => {
     useTargetHomes: () => ({ data: asRead({ accounts: [] }), isLoading: false, error: null }),
     useSetTargetSetting: () => ({ mutate: vi.fn(), isPending: false, error: null }),
     useSetTargetProject: () => ({ mutate: vi.fn(), isPending: false, error: null }),
-    useReconcileTarget: () => ({ mutate: vi.fn(), isPending: false, data: state.reconcile, error: null }),
+    useReconcileTarget: () => ({ mutate: vi.fn(), isPending: false, data: state.reconcile && withRead(state.reconcile as never), error: null }),
     useResolveLogFinding: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null }),
   };
 });

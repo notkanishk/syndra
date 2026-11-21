@@ -1,5 +1,6 @@
 "use client";
 
+import { notRead } from "@/lib/queries/read";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
@@ -106,7 +107,7 @@ function Watching({ target, name, id }: { target: string; name: string; id: stri
 }
 
 /** A read that came back with something to show (design §13.6): a preview or record with no data is not drawn. */
-const readable = (view: ReadView | null | undefined): view is ReadView => Boolean(view && view.read.state !== "none");
+const readable = (view: ReadView | null | undefined): view is ReadView => Boolean(view && !notRead(view.read));
 
 type Step =
   | { at: "form"; error?: unknown }

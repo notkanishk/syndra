@@ -11,7 +11,7 @@ import { Crossfade, LANDED_HOLD_MS, PRESS_FORGET_MS } from "@/lib/motion";
 import { formatClock, formatRelative, moment } from "@/lib/format";
 import { outcomeFromError } from "@/lib/outcome";
 import { cooldownOf, STALE, useCountdown, type Stale } from "@/lib/queries/fresh";
-import { REASON, type Read, type Why } from "@/lib/queries/read";
+import { REASON, type Read, type Why, notRead } from "@/lib/queries/read";
 
 /**
  * How old the state on this screen is (design §31 A).
@@ -260,6 +260,10 @@ export function ReadAgainButton({ onClick, pending, cooldown, describedBy }: {
   useEffect(() => {
     say?.(said ?? "");
   }, [say, said]);
+  // A counting button that goes (its line replaced, its card gone) takes its words with it, so the
+  // page's region never keeps saying a wait nobody can see.
+  const counting = Boolean(said);
+  useEffect(() => (counting ? () => say?.("") : undefined), [say, counting]);
   return (
     <>
       <Button variant="outline" size="sm" className={READ_AGAIN_PILL} onClick={onClick} isPending={pending} disabled={Boolean(cooldown)} keepFocus aria-describedby={describedBy}>
@@ -311,7 +315,7 @@ export function ReadFreshness({
   )) {
   if (!read) return <Strip {...strip} state={state} />;
   if (read.state === "pending") return null;
-  if (read.state === "none") {
+  if (notRead(read)) {
     return <NotReadLine why={read.why} system={system} product={product} reader={strip.reader} onRefresh={strip.onRefresh} refreshing={strip.refreshing} className={strip.className} />;
   }
   return <Strip {...strip} state={stateOfRead(read, truncated)!} />;

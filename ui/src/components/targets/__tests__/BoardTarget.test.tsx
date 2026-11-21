@@ -265,7 +265,20 @@ describe("the states between answering and offline", () => {
   describe("Try again", () => {
     const down = () =>
       ready({ read: NONE, status: "addon_unreachable", health: { state: "addon_unreachable", cause: "no_answer", recent: ["missed", "missed", "missed"] } });
-    const said = () => within(screen.getByRole("button", { name: /Try again|Reading/ }).closest("div")!).getByRole("status");
+    const said = () => screen.getByRole("button", { name: /Try again|Reading/ }).closest("div")!.querySelector("[data-try-again-said]")!;
+    // Every live region the line sits in: the Notice's alone, so one press is said once.
+    const regionsOf = (el: Element) => {
+      const found: Element[] = [];
+      for (let n: Element | null = el; n; n = n.parentElement) if (n.matches("[role=status],[role=alert],[aria-live]")) found.push(n);
+      return found;
+    };
+
+    it("is said by one live region, the Notice's, never a second inside it", () => {
+      down();
+      state.again = { pending: true, error: null, errorAt: undefined };
+      renderTarget();
+      expect(regionsOf(said())).toHaveLength(1);
+    });
 
     it("says it is reading while it reads, and stays where it was pressed", () => {
       down();
@@ -306,6 +319,19 @@ describe("the states between answering and offline", () => {
     expect(screen.queryByText("All read")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(state.refetched).toBe(1);
+  });
+
+  // The Notice already says it is Syndra's server and what to do: a failed Try again adds only
+  // what came back, never the Notice's sentence and next step again.
+  it("a failed Try again on that page does not repeat the Notice", () => {
+    state.health = undefined;
+    state.healthError = new Error("500");
+    state.again = { pending: false, error: new ApiError(500, { error: "INTERNAL", message: "Syndra's server had a problem." }), errorAt: Date.now() };
+    renderTarget();
+
+    const line = screen.getByRole("button", { name: "Try again" }).closest("div")!.querySelector("[data-try-again-said]")!;
+    expect(line).toHaveTextContent(/^Syndra's server had a problem\.$/);
+    expect(screen.getAllByText(/This says nothing about TrueNAS itself/)).toHaveLength(1);
   });
 });
 

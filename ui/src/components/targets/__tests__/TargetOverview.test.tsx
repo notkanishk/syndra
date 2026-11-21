@@ -81,6 +81,7 @@ vi.mock("@/lib/queries/useProjects", () => ({
 }));
 
 vi.mock("@/lib/queries/useTargets", async () => {
+  const { withRead } = await import("@/lib/queries/read");
   const actual = await vi.importActual<typeof import("@/lib/queries/useTargets")>(
     "@/lib/queries/useTargets",
   );
@@ -149,7 +150,7 @@ vi.mock("@/lib/queries/useTargets", async () => {
     useReconcileTarget: () => ({
       mutate: vi.fn(),
       isPending: false,
-      data: state.reconcile,
+      data: state.reconcile && withRead(state.reconcile as never),
       error: null,
     }),
     useResolveLogFinding: () => ({

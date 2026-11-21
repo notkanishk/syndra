@@ -11,7 +11,7 @@ import { Notice } from "@/components/ui/Notice";
 import { Select } from "@/components/ui/Select";
 import { Relative } from "@/components/ui/Time";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
-import { dataOf, ofRead, readOfQuery } from "@/lib/queries/read";
+import { dataOf, ofRead, readOfQuery, notRead as isNotRead } from "@/lib/queries/read";
 import { ApiError } from "@/lib/api-client";
 import { fieldsByRole, mappingFields, membershipNoun } from "@/lib/fields";
 import { schemaReason } from "@/components/states/SchemaState";
@@ -125,7 +125,7 @@ export function RoleMappingDialog({
   const valuesRead = readOfQuery(values);
   const list = dataOf(valuesRead);
   // Not read (design §13.6): no list, no "no groups", no date; the line says why and how to read again.
-  const notRead = valuesRead.state === "none";
+  const notRead = isNotRead(valuesRead);
   const valuesAt = valuesRead.state === "now" || valuesRead.state === "kept" ? valuesRead.takenAt : undefined;
   const noGroups = Boolean(list && list.values.length === 0);
   // A membership the system cannot list at all: Syndra can't check or manage a
@@ -243,7 +243,7 @@ export function RoleMappingDialog({
             )}
           </div>
 
-          {settingsRead.state !== "none" && settingsRead.state !== "pending" && (
+          {!isNotRead(settingsRead) && settingsRead.state !== "pending" && (
             <HomeChoice
               target={target}
               name={name}

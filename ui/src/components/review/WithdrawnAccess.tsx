@@ -26,10 +26,13 @@ import { WHAT_COL, WHO_COL, WhatSeat, WhoSeat } from "@/components/review/RowSea
 import { request } from "@/lib/api-client";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
+import type { Why } from "@/lib/queries/read";
+import { downWhy } from "@/components/targets/TargetReading";
+import { whyLine, type Reader } from "@/components/results/copy";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { sortByName } from "@/lib/sort";
 import { BINDING_CONFLICT, DECIDE_IT, LOOKING_UP_NEXT, decideAt, lookingUp, stoppedLine } from "@/lib/wait-reason";
-import { useStandingBindingConflicts, type StandingBindingConflicts } from "@/lib/queries/useTargets";
+import { useStandingBindingConflicts, useTargets, type StandingBindingConflicts } from "@/lib/queries/useTargets";
 
 /** The queue's columns, its headings' and every row's: who, what, where (from desktop), when, then the wide seat. */
 const COLS: Columns = [WHO_COL, WHAT_COL, "hidden desktop:block desktop:w-[130px] desktop:flex-none", NUMBER_COL];
@@ -486,17 +489,23 @@ function Row({ row, conflicts }: { row: UnconfirmedRevocation; conflicts: Standi
  * system answers that it applied it, so nobody reads the list as done. Syndra sends it by itself:
  * nothing for the reader to do here, and the age beside it is how long it has waited.
  */
-export function notYetAppliedLine(row: Pick<UnconfirmedRevocation, "target" | "recorded_at" | "created_at">, system: string): string {
+export function notYetAppliedLine(row: Pick<UnconfirmedRevocation, "target" | "recorded_at" | "created_at">, system: string, why?: Why): string {
   const at = formatShortDate(row.recorded_at ?? row.created_at);
-  return row.target === "zitadel"
-    ? `Recorded ${at}. Not yet applied in Zitadel; until it is, they keep the role there. Syndra applies it by itself.`
-    : `Recorded ${at}. Not yet applied on ${system}; until it is, the account there still works. Syndra applies it by itself when ${system} answers.`;
+  if (row.target === "zitadel") return `Recorded ${at}. Not yet applied in Zitadel; until it is, they keep the role there. Syndra applies it by itself.`;
+  // While the monitor holds the system down, §13.1's sentence says why it hasn't landed (design §13.4).
+  const because = why ? `: ${whyLine(why, system, OPERATOR)}` : ";";
+  const until = why ? "Until it is" : "until it is";
+  return `Recorded ${at}. Not yet applied on ${system}${because} ${until}, the account there still works. Syndra applies it by itself when ${system} answers.`;
 }
 
 function NotYetApplied({ row, system }: { row: UnconfirmedRevocation; system: string }) {
+  // The roster the system's name already came from: no read of its own.
+  const summary = useTargets().data?.find((t) => t.target === row.target);
   if (row.spent) return null;
-  return <span className="mt-1 text-fine leading-[1.5] text-faint">{notYetAppliedLine(row, system)}</span>;
+  return <span className="mt-1 text-fine leading-[1.5] text-faint">{notYetAppliedLine(row, system, downWhy(summary?.status, summary?.health))}</span>;
 }
+
+const OPERATOR: Reader = { audience: "operator", person: "" };
 
 /**
  * Why Syndra gave up: the reason, for a row that will not clear itself. A row still on the way

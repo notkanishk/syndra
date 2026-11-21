@@ -1051,6 +1051,7 @@ An operator's `app_unreachable` and `read_refused` say the add-on's own sentence
 | A revocation, on its reply: the word, then the backend's sentence | Recorded · Recorded. Not yet applied on {system}. Until it is, the account there still works. Syndra applies it by itself when {system} answers. |
 | The credential half of a revocation that may have landed | The credential may have been replaced. Syndra is checking; don't send it again. |
 | Withdrawn access, a row still on its way to a connected system | Recorded {date}. Not yet applied on {system}; until it is, the account there still works. Syndra applies it by itself when {system} answers. |
+| The same, while Syndra's checks hold {system} down (design §13.4) | Recorded {date}. Not yet applied on {system}: {§13.1's sentence} Until it is, the account there still works. Syndra applies it by itself when {system} answers. |
 | The same, for Zitadel | Recorded {date}. Not yet applied in Zitadel; until it is, they keep the role there. Syndra applies it by itself. |
 | Audit, a revocation that reached a connected system | A revocation reached {system}: it is in force there now |
 | Audit, a revocation that reached Zitadel | A revocation reached Zitadel: the role no longer signs them in |

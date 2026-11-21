@@ -380,13 +380,24 @@ describe("inside the add-on's cooldown", () => {
     expect(screen.queryByText("This list could not be read")).toBeNull();
   });
 
+  // Steady under the hand: a Read again inside the cooldown is told only to wait, so the rows read
+  // moments ago stay where they are and the strip counts the wait down.
+  it("a Read again told to wait keeps the rows on screen and counts down", async () => {
+    const view = renderDormant();
+    state.report = { ...state.report, read: { state: "none", reason: "cooldown", retry_after: 30 } };
+    view.rerender(tree());
+    expect(await screen.findByText(/can read again in 30 s/, { ignore: STATUS })).toBeInTheDocument();
+    expect(screen.getByLabelText("Select former-member")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Read again" })).toHaveAttribute("aria-disabled", "true");
+  });
+
   // Syndra keeps no copy (owner Q1): a Read again answered with nothing to give takes the list away,
   // and the line says why, never an empty list.
   it("a Read again answered with nothing to give says why in place of the list", async () => {
     const view = renderDormant();
-    state.report = { ...state.report, read: { state: "none", reason: "cooldown", retry_after: 30 } };
+    state.report = { ...state.report, read: { state: "none", reason: "addon_unreachable", cause: "no_answer" } };
     view.rerender(tree());
-    expect(await screen.findByText(/can read again in/, { ignore: STATUS })).toBeInTheDocument();
+    expect(await screen.findByText(/add-on/, { ignore: STATUS })).toBeInTheDocument();
     expect(screen.queryByLabelText("Select former-member")).toBeNull();
     expect(screen.queryByText("Nothing to tidy.")).toBeNull();
     expect(screen.queryByTestId("card-count")).toBeNull();

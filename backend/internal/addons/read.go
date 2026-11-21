@@ -1394,7 +1394,13 @@ func (r ReadReply) Activity() ActivityReport {
 		err = r.decodeShape(activityNeed, raw, &out)
 	}
 	if err != nil {
-		out = ActivityReport{Status: r.Status, Read: ReadOf(nil, r.notRead(err))}
+		read := ReadOf(nil, r.notRead(err))
+		if r.Status == http.StatusUnprocessableEntity {
+			// No bound account: an answer, not a log, dated when Syndra asked
+			// (answeredNow), so no reader dates it by its own clock.
+			read = ReadOf(answeredNow(r.Clock), Why{})
+		}
+		out = ActivityReport{Status: r.Status, Read: read}
 		out.Outcome, out.Err = r.failed(err)
 		return out
 	}

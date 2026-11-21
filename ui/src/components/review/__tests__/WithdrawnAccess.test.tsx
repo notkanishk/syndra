@@ -56,12 +56,14 @@ function listing(revocations: Row[], total?: { spent: number; queued: number }) 
 let payload: unknown = listing([]);
 // A system's standing findings, for the one read the page makes per system (7t-6).
 let findings: Array<{ subject_id: string; outcome: string }> = [];
+// The roster, as /targets answers it: the monitor's state for each system.
+let roster: Array<Record<string, unknown>> = [];
 
 vi.mock("@/lib/api-client", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api-client")>("@/lib/api-client");
   return {
     ...actual,
-    request: vi.fn(async (path: string) => (path.endsWith("/merge-findings") ? { findings } : payload)),
+    request: vi.fn(async (path: string) => (path.endsWith("/merge-findings") ? { findings } : path === "/targets" ? { targets: roster } : payload)),
   };
 });
 
@@ -80,6 +82,7 @@ const sectionTitles = () =>
 
 beforeEach(() => {
   payload = listing([row("r1", false)]);
+  roster = [];
 });
 
 describe("what has not gone away yet", () => {
@@ -124,6 +127,18 @@ describe("a revocation recorded and not yet applied", () => {
     payload = listing([row("r1", false, { target: "truenas", recorded_at: "2026-11-20T09:00:00Z" })]);
     await renderPage();
     expect(screen.getByText(/^Recorded 20 Nov\. Not yet applied on .+; until it is, the account there still works\./)).toBeInTheDocument();
+  });
+
+  // Design §13.4: while the monitor holds the system down, the row carries §13.1's sentence for why.
+  it("says why it hasn't landed while its system is down", async () => {
+    roster = [{ target: "truenas", name: "TrueNAS", status: "addon_unreachable", health: { state: "addon_unreachable", cause: "no_answer", recent: [] } }];
+    payload = listing([row("r1", false, { target: "truenas", recorded_at: "2026-11-20T09:00:00Z" })]);
+    await renderPage();
+    expect(
+      await screen.findByText(
+        /^Recorded 20 Nov\. Not yet applied on .+: Syndra can't reach .+'s add-on\. Check that its container is running\. Syndra keeps trying\. Until it is, the account there still works\./,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("says the role is kept in Zitadel until it lands", async () => {

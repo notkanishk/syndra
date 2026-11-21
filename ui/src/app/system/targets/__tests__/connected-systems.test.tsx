@@ -135,6 +135,16 @@ describe("connected systems", () => {
     expect(screen.queryByText("last known")).toBeNull();
   });
 
+  // A count from the add-on's kept copy says when it was read: never a bare number from a copy.
+  it("dates a count drawn from a kept copy", () => {
+    state.targets = [target()];
+    state.inventory = { bound: 48, unmanaged: [], read: { state: "kept", taken_at: new Date(Date.now() - 5 * 60_000).toISOString(), reason: "cached" } };
+    render(<ConnectedSystemsPage />);
+
+    expect(screen.getByText("48")).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.tagName === "SPAN" && /^Read 5 min ago$/.test(el.textContent ?? ""))).toBeTruthy();
+  });
+
   // Design §13.3: with the add-on down nobody gets a copy, so the row has no count, never a 0 or a
   // "last known" one.
   it("shows no count once the add-on stops answering, and says it was not read", () => {

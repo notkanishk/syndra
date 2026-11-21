@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
-import { readFrom, type Answered, type WireRead } from "@/lib/queries/read";
+import { readFrom, type Answered, type WireRead, notRead } from "@/lib/queries/read";
 import type { OneShotSecret } from "@/lib/secret";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
@@ -54,7 +54,7 @@ export function useDormantAccounts(target: string | undefined) {
     queryFn: () => readFrom<DormantReport>(`/targets/${target}/accounts/dormant`),
     enabled: Boolean(target),
     select: (r): Answered<DormantReport> =>
-      r.state === "none" ? r : { ...r, data: { ...r.data, accounts: sortByName(r.data.accounts ?? [], (a) => a.display_name || a.account, (a) => a.account) } },
+      notRead(r) ? r : { ...r, data: { ...r.data, accounts: sortByName(r.data.accounts ?? [], (a) => a.display_name || a.account, (a) => a.account) } },
   });
 }
 

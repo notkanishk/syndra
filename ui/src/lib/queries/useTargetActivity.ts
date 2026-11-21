@@ -5,8 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useReadAgain } from "@/lib/queries/fresh";
 import { readFrom, type WireRead } from "@/lib/queries/read";
 
-/** The activity log as a `Read`; "no account here" is a reading, not a failure. */
-const readActivity = (path: string) => readFrom<TargetActivity>(path, { answeredBare: (b) => b.no_account === true });
+/** The activity log as a `Read`; "no account here" is a reading, dated by the backend, not a failure. */
+const readActivity = (path: string) => readFrom<TargetActivity>(path);
 
 /**
  * What a target's OWN audit log holds for one person.
@@ -24,7 +24,7 @@ const readActivity = (path: string) => readFrom<TargetActivity>(path, { answered
 export interface TargetActivity {
   target: string;
   subject: string;
-  /** Absent with `no_account`, the one reply that is a fact and not a read. */
+  /** With `no_account` too: a reading now, dated when Syndra asked. */
   read?: WireRead;
   /**
    * This person has nothing bound on the target: a positive fact, read as

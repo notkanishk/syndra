@@ -7,7 +7,7 @@ import type { EntitlementField } from "@/lib/fields";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
 import { useReadAgain } from "./fresh";
-import { readFrom, readOf, type Answered, type WireRead } from "./read";
+import { readFrom, readOf, withRead, type Answered, type WithRead, type WireRead } from "./read";
 
 /**
  * The add-on roster and the reads hanging off it.
@@ -343,7 +343,8 @@ export function useAdoptAccount(target: string) {
 export function useReconcileTarget(target: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: () => request<TargetReconcileResult>(`/targets/${target}/reconcile`, { method: "POST" }),
+    // The pass's read, built once here: every reader takes its wait and state from the `Read`.
+    mutationFn: async () => withRead(await request<TargetReconcileResult>(`/targets/${target}/reconcile`, { method: "POST" })),
     onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }
@@ -554,6 +555,9 @@ export interface StaleBinding {
   /** Syndra's record of the binding as this read saw it; sent back with a release. */
   version?: string;
 }
+
+/** A reconcile pass as `useReconcileTarget` gives it: its `read` a `Read`. */
+export type TargetReconcilePass = WithRead<TargetReconcileResult>;
 
 export interface TargetReconcileResult {
   target: string;

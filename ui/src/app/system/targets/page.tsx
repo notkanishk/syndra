@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { versionLabel } from "@/lib/format";
-import { dataOf, ofRead, readOfQuery } from "@/lib/queries/read";
+import { dataOf, notRead, ofRead, readOfQuery } from "@/lib/queries/read";
 import {
   useMergeFindings,
   useTargetHealth,
@@ -165,7 +165,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
   const read = readOfQuery(inventory);
   // A count only from a read (design §13.6): a read with nothing to give is "Not read", never 0.
   const bound = ofRead(read, (d) => d.bound);
-  const unread = read.state === "none";
+  const unread = notRead(read);
   // The product and its version, whatever the operator named the system.
   const said = health.data ? dataOf(health.data.addon) : undefined;
   const product = said?.product ? `${said.product} ${versionLabel(said.product, said.product_version)}`.trim() : null;
@@ -273,12 +273,20 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
         ) : bound === undefined ? (
           <span className="text-body text-faint">Not yet</span>
         ) : (
-          <span className={`text-body ${answering ? "" : "text-muted"}`}>
-            {bound}
-            <span className="text-small text-muted tablet:hidden">
-              {bound === 1 ? " person" : " people"}
+          <>
+            <span className={`text-body ${answering ? "" : "text-muted"}`}>
+              {bound}
+              <span className="text-small text-muted tablet:hidden">
+                {bound === 1 ? " person" : " people"}
+              </span>
             </span>
-          </span>
+            {/* The add-on's kept copy (design §13.3): the count says when it was read. */}
+            {read.state === "kept" && (
+              <span className="text-fine text-faint">
+                Read <Relative iso={read.takenAt} />
+              </span>
+            )}
+          </>
         )}
       </span>
 

@@ -26,13 +26,9 @@ vi.mock("@/lib/queries/useTargets", () => ({
 }));
 
 vi.mock("@/lib/queries/useTargetActivity", () => ({
-  // As the hook answers: "no account here" a reading now, anything else a Read of its `read`.
+  // As the hook answers: a Read of the reply's `read` (the backend dates "no account here" too).
   useTargetActivity: () => ({
-    data: !state.activity
-      ? undefined
-      : state.activity.no_account
-        ? { state: "now", data: state.activity, takenAt: new Date().toISOString() }
-        : readOf(state.activity.read, state.activity, state.arrived || Date.now()),
+    data: state.activity && readOf(state.activity.read, state.activity, state.arrived || Date.now()),
     isLoading: false,
     isError: false,
   }),
@@ -89,7 +85,7 @@ describe("the target's own log, beside Syndra's", () => {
   // target — not a failed read, and must never read as an error the way
   // `unreachable` does.
   it("reads a missing account as neutral, not as a failed read", async () => {
-    state.activity = { target: "truenas", subject: "u1", no_account: true };
+    state.activity = { target: "truenas", subject: "u1", no_account: true, read: { state: "now", taken_at: "2026-11-22T09:00:00Z" } };
     renderTab();
 
     await waitFor(() =>

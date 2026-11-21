@@ -31,7 +31,7 @@ import { HOME_ROOT, useTargetReach, useTargetReachAgain, useTargetSettings, type
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
 import { ReadAgainError, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
-import { ofRead, readOfQuery } from "@/lib/queries/read";
+import { ofRead, readOfQuery, notRead } from "@/lib/queries/read";
 import { UserName } from "@/components/names";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
@@ -120,7 +120,7 @@ export function MappingManagement({ target }: { target: string }) {
           caption={opens.state === "now" ? <OpensNote name={name} takenAt={opens.takenAt} /> : undefined}
           action={<AddMappingButton target={target} first={(mappings.data ?? []).length === 0} />}
         />
-        {(opens.state === "kept" || opens.state === "none") && (
+        {(opens.state === "kept" || notRead(opens)) && (
           // What each group opens is a copy, or was not read: the one place to say why and read it again.
           <div className="px-5 pb-3">
             <ReadFreshness subject="What each group opens" read={opens} system={name} onRefresh={reachAgain.press} />

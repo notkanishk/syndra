@@ -1,5 +1,6 @@
 "use client";
 
+import { notRead } from "@/lib/queries/read";
 import { formatDecimal } from "@/lib/locale";
 import type { ReactNode } from "react";
 
@@ -148,7 +149,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
     const readable = Boolean(storage);
     const noAnswer = "didn't answer when this page asked. This page reads it again on your next visit.";
     // Nothing read: the why is said once above the body (OfflineNotice or NotReadLine), and these two rows aren't drawn.
-    const drawRead = Boolean(view.read) && view.read?.state !== "none";
+    const drawRead = Boolean(view.read) && !notRead(view.read);
     const folders = (storage?.places ?? []).filter((p) => !p.home);
     if (drawRead && readable && drawsHome(view)) drawn = [view.home?.used_bytes];
     body = (
@@ -214,7 +215,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
       <OfflineNotice view={view}>
         {name}&apos;s access hasn&apos;t changed, and their folders open again when it answers.
       </OfflineNotice>
-      {view.read?.state === "none" && !down(view) && (
+      {notRead(view.read) && !down(view) && (
         <NotReadLine why={view.read.why} system={label} reader={{ audience: "operator", person: name }} className="px-5 pb-3" />
       )}
       {body}
@@ -223,7 +224,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
           <UsageUnread name={label} some={usageShown(drawn)} reader={{ audience: "operator", person: name }} />
         </div>
       )}
-      {view.read && view.read.state !== "none" && (
+      {view.read && !notRead(view.read) && (
         <Reads reads={view.read.data.reads} skip={OWN_READS} name={label} reader={{ audience: "operator", person: name }} />
       )}
     </Card>

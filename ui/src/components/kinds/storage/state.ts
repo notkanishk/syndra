@@ -1,3 +1,4 @@
+import { notRead } from "@/lib/queries/read";
 import { accountField } from "@/lib/fields";
 import { isStorage } from "@/lib/nav";
 import type { MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
@@ -36,7 +37,7 @@ export function stateOf(view: MyTargetView): State {
   if (!view.account) return "waiting";
   // Asked first (design §13.6): a system that cannot be read says so, and nobody
   // is told to set a password on it (the form would be refused, nothing sent).
-  if (!view.read || view.read.state === "none") return "unread";
+  if (!view.read || notRead(view.read)) return "unread";
   const storage = view.read.data.storage;
   if (storage?.needs_new_password) return "restored";
   if (view.credential.needs_re_enrolment) return "reenrol";
@@ -66,7 +67,7 @@ export function needsPassword(view: MyTargetView): boolean {
 export const down = (view: MyTargetView) => view.health === "addon_unreachable" || view.health === "app_unreachable";
 
 /** The add-on's storage status, only under a read that has data (design §13.6). */
-export const storageOf = (view: MyTargetView) => (view.read && view.read.state !== "none" ? view.read.data.storage : undefined);
+export const storageOf = (view: MyTargetView) => (view.read && !notRead(view.read) ? view.read.data.storage : undefined);
 
 /** The usage a member's card draws for one place: only a place they can change. */
 export function drawnUsage(place: StoragePlace): StoragePlace["usage"] {

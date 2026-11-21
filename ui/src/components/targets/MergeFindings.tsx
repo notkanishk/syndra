@@ -669,17 +669,19 @@ function ConflictDecision({
   function check() {
     const before = finding.last_seen_at;
     run.mutate(undefined, {
-      onSuccess: (pass) =>
+      onSuccess: (pass) => {
+        // A pass skipped inside the cooldown carries its wait on its read (design §13.3).
+        const wait = pass.read.state === "now" ? undefined : pass.read.why.retryAfter;
         setChecked({
           before,
           at: Date.now(),
-          // A pass skipped inside the cooldown carries its wait on its read (design §13.3).
-          retry: pass.halted && pass.read.retry_after ? pass.read.retry_after : undefined,
+          retry: pass.halted ? wait : undefined,
           stopped:
-            pass.halted && !pass.read.retry_after
+            pass.halted && !wait
               ? checkStopped(pass.detail ?? (pass.reason ? whyNotChecked(pass.reason, name) : `${name} could not be read.`))
               : undefined,
-        }),
+        });
+      },
     });
   }
 

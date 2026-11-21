@@ -83,6 +83,10 @@ export function readOf<T>(wire: WireRead | undefined, data: T, since?: number): 
   return { state: "kept", data, takenAt: wire.taken_at, why: whyOf({ reason: REASON.cached, ...wire }, since) };
 }
 
+/** A reply whose `read` dates the reply itself (a reconcile pass): its `read` built once, by `readOf`. */
+export type WithRead<B extends { read: WireRead }> = Omit<B, "read"> & { read: Answered<undefined> };
+export const withRead = <B extends { read: WireRead }>(body: B): WithRead<B> => ({ ...body, read: readOf(body.read, undefined, Date.now()) });
+
 /** A 503 `TARGET_NOT_READ` as the read it is (`none`, with its why); undefined for any other failure. */
 export function notReadOf(error: unknown, since?: number): { state: "none"; why: Why } | undefined {
   if (!(error instanceof ApiError) || error.code !== TARGET_NOT_READ) return undefined;
@@ -97,15 +101,9 @@ export function notReadOf(error: unknown, since?: number): { state: "none"; why:
  * `TARGET_NOT_READ` as `none`. Any other failure (Syndra's own) still throws,
  * so the query's `error` is Syndra's and never the add-on's.
  */
-export async function readFrom<T extends { read?: WireRead }>(
-  path: string,
-  { init, answeredBare }: { init?: Parameters<typeof request>[1]; answeredBare?: (body: T) => boolean } = {},
-): Promise<Answered<T>> {
+export async function readFrom<T extends { read?: WireRead }>(path: string, init?: Parameters<typeof request>[1]): Promise<Answered<T>> {
   try {
     const body = await request<T>(path, init);
-    // A reply the add-on answered with a fact and no read to date (the activity log's "no account
-    // here"): a reading now, dated when it arrived, as the backend dates a reply whose schema dates nothing.
-    if (answeredBare?.(body)) return { state: "now", data: body, takenAt: new Date().toISOString() };
     return readOf(body.read, body, Date.now());
   } catch (e) {
     const none = notReadOf(e, Date.now());
@@ -118,6 +116,9 @@ export async function readFrom<T extends { read?: WireRead }>(
 export function readOfQuery<T>(q: { data?: Answered<T> }): Read<T> {
   return q.data ?? PENDING;
 }
+
+/** A read that did not happen: nothing to show, count or date. */
+export const notRead = <T,>(read: Read<T> | undefined): read is { state: "none"; why: Why } => read?.state === "none";
 
 /** `f` of the data when there is any: a count or a list exists only for a read that has data. */
 export function ofRead<T, U>(read: Read<T>, f: (data: T) => U): U | undefined {

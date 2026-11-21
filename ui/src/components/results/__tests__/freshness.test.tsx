@@ -58,6 +58,19 @@ describe("a read refused inside the cooldown with nothing kept", () => {
   });
   const nothing = cooling();
 
+  // The page's one region speaks a wait only while its button is there to wait.
+  it("clears the page's region when the counting button goes", () => {
+    const view = show([nothing]);
+    const region = () => document.querySelector(STATUS)!;
+    expect(region().textContent).toBe(cooldownLine(NAME, 20));
+    view.rerender(
+      <ReadAgainProvider value={{ press: vi.fn() }}>
+        <Reads reads={[]} name={NAME} reader={MEMBER} />
+      </ReadAgainProvider>,
+    );
+    expect(region().textContent).toBe("");
+  });
+
   it("says so with the countdown, and is not an outage", () => {
     const { container } = show([nothing]);
     expect(screen.getByText(cooldownLine(NAME, 20), { ignore: STATUS })).toBeInTheDocument();

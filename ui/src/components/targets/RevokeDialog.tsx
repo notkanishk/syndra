@@ -2,7 +2,7 @@
 
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
-import { describeFailure, sentence, UNCONFIRMED, UNCONFIRMED_NEXT } from "@/lib/outcome";
+import { describeFailure, NOTHING_TO_DO, sentence, UNCONFIRMED, UNCONFIRMED_NEXT } from "@/lib/outcome";
 import { useState } from "react";
 
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
@@ -101,7 +101,8 @@ export function RevokeDialog({
               kind: "queued",
               sendsItself: true,
               message: result.detail,
-              ...(result.rotated ? {} : { next: rotationNext(result.rotation) }),
+              // Replaced: the reply already says Syndra applies it by itself, so the step is only that.
+              next: result.rotated ? NOTHING_TO_DO : rotationNext(result.rotation),
             }}
           />
         </div>

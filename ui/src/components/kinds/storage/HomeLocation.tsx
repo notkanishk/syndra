@@ -15,7 +15,7 @@ import { useSystemNames } from "@/lib/queries/useFieldSchema";
 import { HOME_ROOT, useSetTargetSetting, useTargetHomes, useTargetSettings, type TargetSetting } from "@/lib/queries/useTargets";
 import { sortByName } from "@/lib/sort";
 import { NotReadLine } from "@/components/ui/ReadFreshness";
-import { ofRead, readOfQuery } from "@/lib/queries/read";
+import { ofRead, readOfQuery, notRead } from "@/lib/queries/read";
 
 /**
  * Where home folders go, on the system's setup card (A-03 §1): the row, and
@@ -65,7 +65,7 @@ export function HomeLocationRow({
     }
     // Not read from the system (design §13.1): who is not answering and what to check, in the line's
     // own words, with Try again in the row's seat. No "Not chosen yet": nothing was read to say so.
-    if (read.state === "none") {
+    if (notRead(read)) {
       return (
         <SettingRow
           label="Home folders"

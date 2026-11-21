@@ -672,6 +672,15 @@ describe("how old the storage read is", () => {
     vi.unstubAllGlobals();
   });
 
+  // A kept copy with no storage.status line of its own still says when it was read: its folders,
+  // usage and "Full." are never drawn undated.
+  it("dates a kept copy that carries no dated line of its own", () => {
+    state.targets = [view({ read: { state: "kept", takenAt: twoMinAgo, why: { reason: "cached" }, data: { storage: STORE, reads: [] } } })];
+    renderStorage();
+    expect(screen.getByText(/TrueNAS was read 2 min ago/)).toBeTruthy();
+    expect(screen.getByText("waddle_share")).toBeTruthy();
+  });
+
   it("says a read moments ago with nothing kept is that, and the button waits", () => {
     state.targets = [view(copy(undefined, 20))];
     renderStorage();

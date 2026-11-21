@@ -49,7 +49,8 @@ export function useRehearseEntitlements(target: string) {
     mutationFn: (input: { subjectIds: string[]; acknowledgeScope?: boolean }) =>
       // A plan is a read of the system: with nothing to read it is `none`, never an empty plan.
       readFrom<EntitlementPlan>(`/targets/${target}/entitlements/rehearse`, {
-        init: { method: "POST", body: { subject_ids: input.subjectIds, acknowledge_scope: input.acknowledgeScope ?? false } },
+        method: "POST",
+        body: { subject_ids: input.subjectIds, acknowledge_scope: input.acknowledgeScope ?? false },
       }),
   });
 }

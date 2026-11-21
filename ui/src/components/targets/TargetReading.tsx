@@ -1,7 +1,7 @@
 import { STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { whyLine, type Reader } from "@/components/results/copy";
 import { formatClock } from "@/lib/format";
-import { REASON } from "@/lib/queries/read";
+import { REASON, type Why } from "@/lib/queries/read";
 import type { HealthState, TargetStatus } from "@/lib/queries/useTargets";
 
 /**
@@ -69,6 +69,13 @@ function missedRun(recent: HealthState["recent"]): number {
   return n;
 }
 
+/** The monitor's why for a system it holds down (design §13.2), in §13.1's terms; undefined while it answers. */
+export function downWhy(status: TargetStatus | undefined, health: HealthState | undefined): Why | undefined {
+  if (status === "addon_unreachable") return { reason: REASON.addonUnreachable, cause: health?.cause, retryAfter: health?.retry_after };
+  if (status === "app_unreachable") return { reason: REASON.appUnreachable };
+  return undefined;
+}
+
 export function targetReading({
   status,
   health,
@@ -88,7 +95,7 @@ export function targetReading({
         tone: health?.cause === "no_key" ? "danger" : "warn",
         word: SYSTEM_WORDS.addonNotAnswering,
         line: since ? `Since ${since}` : undefined,
-        sentence: `${since ? `Since ${since}. ` : ""}${whyLine({ reason: REASON.addonUnreachable, cause: health?.cause, retryAfter: health?.retry_after }, name, OPERATOR)} Changes for ${name} wait until it answers.`,
+        sentence: `${since ? `Since ${since}. ` : ""}${whyLine(downWhy(status, health)!, name, OPERATOR)} Changes for ${name} wait until it answers.`,
         pips: true,
       };
     // The add-on answers, and says it cannot reach the system behind it.
@@ -97,7 +104,7 @@ export function targetReading({
         tone: "warn",
         word: SYSTEM_WORDS.notAnswering,
         line: since ? `Since ${since}` : undefined,
-        sentence: `${since ? `Since ${since}. ` : ""}${whyLine({ reason: REASON.appUnreachable }, name, OPERATOR)} Changes for ${name} wait until it answers.`,
+        sentence: `${since ? `Since ${since}. ` : ""}${whyLine(downWhy(status, health)!, name, OPERATOR)} Changes for ${name} wait until it answers.`,
         pips: true,
       };
     case "checking": {

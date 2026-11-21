@@ -224,10 +224,11 @@ export function describeAction(
   action: string,
   /** The roster's name for a system (useSystemNames): the one path for names. */
   nameOf: (target: string) => string,
-  /** The row's details, for the one action whose words depend on them (`revocation.landed`). */
+  /** The row's details, for the actions whose words depend on them (`revocation.landed`, `propagation.retried`). */
   details?: Record<string, unknown>,
 ): { verb: string; template?: string; passive?: string; destructive: boolean } {
   if (action === REVOCATION_LANDED && typeof details?.target === "string" && details.target) return landedWords(details.target, nameOf);
+  if (action === "propagation.retried" && details?.outcome === "not_sent") return NOT_SENT_WORDS;
   const known = AUDIT_ACTIONS[action];
   if (known) {
     return {
@@ -289,6 +290,17 @@ export function describeAction(
  * list's own word. Zitadel's is a role that no longer signs them in; an add-on's names its system.
  */
 const REVOCATION_LANDED = "revocation.landed";
+
+/**
+ * An automatic try where nothing went out (`propagation.retried`, outcome `not_sent`): the system
+ * wasn't answering, the change was put back, no try was spent. Never "Sent ... again".
+ */
+const NOT_SENT_WORDS = {
+  verb: "Held back a change on its own: the system wasn't answering, so nothing went out. Syndra will try again",
+  template: "Held back a change for {} on its own: the system wasn't answering, so nothing went out. Syndra will try again",
+  passive: "A change to their access was held back: the system wasn't answering, so nothing went out. Syndra will try again",
+  destructive: false,
+};
 
 function landedWords(target: string, nameOf: (target: string) => string) {
   if (target === "zitadel") {

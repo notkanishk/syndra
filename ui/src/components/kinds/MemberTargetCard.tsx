@@ -1,5 +1,6 @@
 "use client";
 
+import { notRead } from "@/lib/queries/read";
 import { MemberActions } from "@/components/actions/MemberAction";
 import { MEMBER } from "@/components/results/copy";
 import { Reads } from "@/components/results/ReadResult";
@@ -49,12 +50,12 @@ const SYNDRA_MAKES_IT = `${NOTHING_TO_DO} Syndra makes it.`;
 
 export function CoreMemberCard({ view, untitled = false }: CardProps) {
   const name = view.name;
-  const addon = view.read && view.read.state !== "none" ? view.read.data : undefined;
+  const addon = view.read && !notRead(view.read) ? view.read.data : undefined;
   return (
     <Card>
       {!untitled && <CardHeader title={name} />}
       {/* A system that can't be read says why, once, in the member's one sentence (design §13.1). */}
-      {view.read?.state === "none" && <NotReadLine why={view.read.why} system={name} reader={MEMBER} className="mx-5 mt-[18px]" />}
+      {notRead(view.read) && <NotReadLine why={view.read.why} system={name} reader={MEMBER} className="mx-5 mt-[18px]" />}
       <CardRow first className="flex-wrap">
         {view.account ? (
           <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-small">{view.account.username}</span>

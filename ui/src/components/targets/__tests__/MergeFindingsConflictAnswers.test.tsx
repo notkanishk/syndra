@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MergeFindings } from "@/components/targets/MergeFindings";
-import type { MergeFinding, ResolveFindingInput, TargetReconcileResult } from "@/lib/queries/useTargets";
+import type { MergeFinding, ResolveFindingInput, TargetReconcilePass, TargetReconcileResult } from "@/lib/queries/useTargets";
 
 // 7t-7: the three more answers to a binding conflict (owner ruling 17 Nov 2026). Each shows only
 // where it can work, each says in the decision form what happens, and Check again waits out the
@@ -19,6 +19,7 @@ const state = {
 };
 
 vi.mock("@/lib/queries/useTargets", async () => {
+  const { withRead } = await import("@/lib/queries/read");
   const actual = await vi.importActual<typeof import("@/lib/queries/useTargets")>("@/lib/queries/useTargets");
   return {
     ...actual,
@@ -32,9 +33,9 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
     }),
     useReconcileTarget: () => ({
-      mutate: (_: undefined, opts?: { onSuccess?: (pass: TargetReconcileResult) => void }) => {
+      mutate: (_: undefined, opts?: { onSuccess?: (pass: TargetReconcilePass) => void }) => {
         state.checks++;
-        opts?.onSuccess?.(state.pass);
+        opts?.onSuccess?.(withRead(state.pass));
       },
       isPending: false,
       error: null,

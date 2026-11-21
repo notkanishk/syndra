@@ -1,5 +1,6 @@
 "use client";
 
+import { notRead } from "@/lib/queries/read";
 import { ActivityList } from "@/components/results/ActivityList";
 import { RecordsList } from "@/components/results/RecordsList";
 import { StatusMeters } from "@/components/results/StatusMeters";
@@ -80,7 +81,7 @@ export function Reads({ reads, skip = [], ...props }: { reads?: ReadView[]; skip
       {(reads ?? []).map((read) =>
         skip.includes(read.operation) ? (
           // A raw answer (a string) has no age to say; any other read does, or its why.
-          !(read.read.state !== "none" && typeof read.read.data === "string") && (
+          !(!notRead(read.read) && typeof read.read.data === "string") && (
             <div key={read.operation} className="row-divider px-5 py-3">
               <ReadLine read={read} {...props} />
             </div>

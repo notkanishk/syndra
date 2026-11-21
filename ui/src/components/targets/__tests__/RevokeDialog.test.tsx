@@ -153,6 +153,9 @@ describe("revoking access on a target", () => {
     expect(screen.queryByText(/Partly done/)).toBeNull();
     // Syndra applies it by itself: no Send step is offered.
     expect(screen.queryByText(/Waiting for you to send/)).toBeNull();
+    // The reply says it applies by itself; the step is only that, never said twice.
+    expect(screen.getByText("Nothing for you to do.")).toBeInTheDocument();
+    expect(screen.queryByText(/Syndra sends it on its own/)).toBeNull();
   });
 
   // The credential half that did not land is named with its own next step, never as a failed revocation.

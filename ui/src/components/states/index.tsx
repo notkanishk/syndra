@@ -1,5 +1,6 @@
 "use client";
 
+import { notRead } from "@/lib/queries/read";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
@@ -367,7 +368,7 @@ export function ListStates({
   if (fading) return <div className="tint-out pointer-events-none">{skeleton ?? <RowSkeleton />}</div>;
   // Never read (N23): no skeleton, no empty state, no rows.
   if (isNeverRead(error)) return <NeverRead />;
-  if (read?.state === "none") return null;
+  if (notRead(read)) return null;
   if (error) return <ErrorState title={errorTitle} error={error} onRetry={onRetry} fine={fine} bare />;
   if (isEmpty) return <>{empty}</>;
   // `arrive`, applied at the one place every list in the product already

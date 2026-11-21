@@ -1,5 +1,6 @@
 "use client";
 
+import { notRead } from "@/lib/queries/read";
 import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
 import { useEffect, useState } from "react";
 
@@ -96,9 +97,13 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
   const notice = pausedNotice(view, label);
   // The usage Folders draws, place by place: what the unread-usage notice below stands beside.
   const drawn = hasAccount && storage?.places_readable ? (storage.places ?? []).map(drawnUsage) : [];
+  // The add-on's kept copy (design §13.3): the card recedes, as an operator's does, and is dated.
+  // Its storage.status line below dates it when the reply carries one; otherwise the strip does.
+  const kept = view.read?.state === "kept";
+  const datedBelow = kept && view.read?.state === "kept" && (view.read.data.reads ?? []).some((r) => OWN_READS.includes(r.operation));
 
   return (
-    <Card>
+    <Card stale={kept}>
       <div className="flex flex-col gap-2 px-5 pt-5">
         <span className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
           <span className="type-card-title">{label}</span>
@@ -114,7 +119,9 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
         <p className="measure text-body leading-[1.55] text-muted [text-wrap:pretty]">{body}</p>
         {aside && <span className="text-small text-faint">{aside}</span>}
         {/* Why it couldn't be read, in the member's one sentence (design §13.1), with Read again; a cooldown counts down. */}
-        {view.read?.state === "none" && <ReadFreshness read={view.read} system={label} reader={MEMBER} onRefresh={again} />}
+        {view.read && (notRead(view.read) || (kept && !datedBelow)) && (
+          <ReadFreshness read={view.read} subject={label} system={label} reader={MEMBER} onRefresh={again} />
+        )}
         {state === "none" && (
           <ArrowLink href="/requests?ask" className="mt-1 self-start">
             Ask for access in Requests
@@ -155,7 +162,7 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
           </div>
 
           {/* Nothing read: the line above says why once; no folders, no addresses, no usage. */}
-          {view.read?.state !== "none" && (
+          {!notRead(view.read) && (
           <Folders
             view={view}
             state={state}
@@ -202,7 +209,7 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
           <UsageUnread name={label} some={usageShown(drawn)} reader={MEMBER} />
         </div>
       )}
-      {view.read && view.read.state !== "none" && <Reads reads={view.read.data.reads} skip={OWN_READS} name={label} reader={MEMBER} />}
+      {view.read && !notRead(view.read) && <Reads reads={view.read.data.reads} skip={OWN_READS} name={label} reader={MEMBER} />}
     </Card>
   );
 }
@@ -276,7 +283,7 @@ function copyFor(state: State, label: string, view: MyTargetView): [string, stri
       // One sentence for both outages (design §13.1): which box is down is not the member's to fix.
       return [
         "Couldn't check your account just now",
-        view.read?.state === "none"
+        notRead(view.read)
           ? "Your access hasn't changed."
           : `${label} didn't say whether your account works. Your access hasn't changed; this page reads it again on your next visit.`,
         "",

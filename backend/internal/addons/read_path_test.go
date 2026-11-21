@@ -289,6 +289,11 @@ func TestARefusedReadCarriesItsStatus(t *testing.T) {
 	if act.Outcome != OutcomeRejected || act.Status != http.StatusUnprocessableEntity {
 		t.Fatalf("a refused read: %+v", act)
 	}
+	// No bound account is an answer: dated by Syndra when it asked, so the page
+	// never dates it by the browser's clock.
+	if act.Read.State != ReadNow || act.Read.TakenAt == nil || act.Read.TakenAt.IsZero() {
+		t.Fatalf("a 422 is answered now and dated, got %+v", act.Read)
+	}
 }
 
 // quota_read is carried, never dropped: a storage profile whose usage could

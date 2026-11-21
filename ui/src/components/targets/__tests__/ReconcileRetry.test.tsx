@@ -28,6 +28,7 @@ const passes = vi.hoisted(() => ({ answers: [] as object[], sent: 0 }));
 
 vi.mock("@/lib/queries/useTargets", async () => {
   const React = await import("react");
+  const { withRead } = await import("@/lib/queries/read");
   const idle = () => ({ data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() });
   const inert = () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, error: null, data: undefined, reset: vi.fn() });
   return {
@@ -59,8 +60,9 @@ vi.mock("@/lib/queries/useTargets", async () => {
             return;
           }
           setError(null);
-          setData(answer);
-          opts?.onSuccess?.(answer);
+          const pass = withRead(answer as never);
+          setData(pass);
+          opts?.onSuccess?.(pass);
         },
       };
     },

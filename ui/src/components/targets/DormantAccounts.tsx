@@ -4,7 +4,7 @@ import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
 import { NOTHING_TO_DO, cooldownNext, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { formatBytes, formatSignIn } from "@/lib/format";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 
@@ -21,10 +21,11 @@ import {
   useDormantAccounts,
   useSweepDormant,
   type DormantAccount,
+  type DormantReport,
   type SweepResult,
 } from "@/lib/queries/useDormant";
 import { cooldownOf, useCountdown, useRetryOnce } from "@/lib/queries/fresh";
-import { ofRead, readOfQuery } from "@/lib/queries/read";
+import { ofRead, readOfQuery, REASON, type Read, notRead } from "@/lib/queries/read";
 import { retryingLine } from "@/components/results/copy";
 import { sortByName } from "@/lib/sort";
 import { oneShot } from "@/lib/secret";
@@ -59,10 +60,20 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   // One result slot, cleared by the press before it writes (A-22 G23).
   const [result, setResult] = useState<{ outcome: Outcome; word: string } | null>(null);
 
-  // The list always reads the system itself, never a copy (owner Q1): a read with nothing to give,
-  // a cooldown included, is `none`, said once by the read line with its way to read again; no
-  // count, no rows, no empty state, no "nothing was changed".
-  const read = readOfQuery(dormant);
+  // The list always reads the system itself, never a copy (owner Q1): a read with nothing to give
+  // is `none`, said once by the read line with its way to read again; no count, no rows, no empty
+  // state, no "nothing was changed". One exception keeps the hand steady: a Read again answered
+  // only "wait" (cooldown) says nothing new about the rows read moments ago, so those rows stay,
+  // dated by their own read, and the strip counts the wait down. They go when a real no-copy answer comes.
+  const answered = readOfQuery(dormant);
+  const onScreen = useRef<Read<DormantReport> | undefined>(undefined);
+  const waitOnly = notRead(answered) && answered.why.reason === REASON.cooldown;
+  if (answered.state === "now") onScreen.current = answered;
+  else if (notRead(answered) && !waitOnly) onScreen.current = undefined;
+  const read: Read<DormantReport> =
+    waitOnly && onScreen.current?.state === "now"
+      ? { state: "kept", data: onScreen.current.data, takenAt: onScreen.current.takenAt, why: answered.why }
+      : answered;
   const accounts = ofRead(read, (d) => d.accounts) ?? [];
   const name = nameOf(target);
   const byName = (list: DormantAccount[]) => sortByName(list, (a) => a.account, (a) => a.account);

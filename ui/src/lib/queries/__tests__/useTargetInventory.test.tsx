@@ -12,6 +12,7 @@ import { useMyStorage, usePersonTargets } from "@/lib/queries/useMyStorage";
 import { useTargetActivity } from "@/lib/queries/useTargetActivity";
 import {
   useMappableValues,
+  useReconcileTarget,
   useTargetHealth,
   useTargetHomes,
   useTargetInventory,
@@ -88,6 +89,34 @@ describe("every add-on read hook answers a Read", () => {
       plan = await (result.current as UseMutationResult<Answered<unknown>, unknown, { subjectIds: string[] }>).mutateAsync({ subjectIds: ["u-cena"] });
     });
     expectNone(plan);
+  });
+
+  // One builder of the pass's read: the hook, by readOf. A reader never parses the wire `read`.
+  it("a reconcile pass skipped in the cooldown carries its read as a Read, its wait on its why", async () => {
+    reply = () =>
+      new Response(
+        JSON.stringify({ target: "truenas", queued: 0, halted: true, read: { state: "kept", taken_at: "2026-11-22T09:00:00Z", reason: "cooldown", retry_after: 30 } }),
+        { status: 200 },
+      );
+    const { Wrap } = wrapper();
+    const { result } = renderHook(() => useReconcileTarget("truenas"), { wrapper: Wrap });
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+    const read = result.current.data?.read;
+    expect(read?.state).toBe("kept");
+    if (read?.state !== "kept") return;
+    expect(read.takenAt).toBe("2026-11-22T09:00:00Z");
+    expect(read.why).toMatchObject({ reason: "cooldown", retryAfter: 30 });
+  });
+
+  // "No account here" is a reading the backend dates: the browser's clock never dates it.
+  it("the activity log's no-account answer is dated by the backend", async () => {
+    reply = () => new Response(JSON.stringify({ target: "truenas", subject: "u-cena", no_account: true, read: { state: "now", taken_at: "2026-11-22T09:00:00Z" } }), { status: 200 });
+    const { Wrap } = wrapper();
+    const { result } = renderHook(() => useTargetActivity("truenas", "u-cena"), { wrapper: Wrap });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data).toMatchObject({ state: "now", takenAt: "2026-11-22T09:00:00Z" });
   });
 
   it("the health route keeps Syndra's own records beside an add-on part that is none", async () => {

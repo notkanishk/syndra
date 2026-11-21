@@ -1,13 +1,13 @@
 package handlers
 
 import (
-	"os"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 

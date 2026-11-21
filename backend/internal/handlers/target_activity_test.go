@@ -112,12 +112,12 @@ func TestTargetActivity_NoBoundAccountIsNotAFailure(t *testing.T) {
 			Outcome: addons.OutcomeRejected,
 			Status:  http.StatusUnprocessableEntity,
 			Err:     errors.New("addon returned 422"),
-			Read:    addons.ReadOf(nil, addons.Why{Reason: addons.ReasonReadRefused}),
+			Read:    addons.ReadOf(&addons.Observation{TakenAt: time.Date(2026, 11, 22, 9, 0, 0, 0, time.UTC), Current: true}, addons.Why{}),
 		}
 	})
 
 	rr := activityRequest("?subject=u1")
-	if rr.Code != http.StatusOK || rr.Body.String() != `{"no_account":true,"subject":"u1","target":"truenas"}`+"\n" {
+	if rr.Code != http.StatusOK || rr.Body.String() != `{"no_account":true,"read":{"state":"now","taken_at":"2026-11-22T09:00:00Z"},"subject":"u1","target":"truenas"}`+"\n" {
 		t.Fatalf("expected 200 no_account and nothing else, got %d: %s", rr.Code, rr.Body.String())
 	}
 }

@@ -9,7 +9,7 @@ import { ToBody } from "@/components/ui/Modal";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { whyLine } from "@/components/results/copy";
 import { ApiError } from "@/lib/api-client";
-import { TARGET_NOT_READ, type Answered } from "@/lib/queries/read";
+import { TARGET_NOT_READ, type Answered, notRead } from "@/lib/queries/read";
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
 import {
   useApplyEntitlements,
@@ -93,7 +93,7 @@ export function ConvergeEntitlements({
         onRehearse={async (acknowledgeScope) => {
           const result = await rehearse.mutateAsync({ subjectIds, acknowledgeScope });
           // Nothing to compute against (design §13.3): the why is the dialog's refusal, never an empty plan.
-          if (result.state === "none") {
+          if (notRead(result)) {
             throw new ApiError(503, { error: TARGET_NOT_READ, message: whyLine(result.why, nameOf(target), { audience: "operator", person: "" }) });
           }
           setPlan(result);
