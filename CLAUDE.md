@@ -74,6 +74,15 @@ Scale depth to the task: a one-line typo fix does not need a full spec revision,
 
 ## Agent skills
 
+### Building
+
+Building a decided change follows `docs/agents/build-workflow.md`. That file covers:
+- a fresh `syndra-builder` for each build or fix round;
+- Opus for logic, Sonnet for CSS and docs;
+- side-by-side visuals before a build;
+- the loop limits;
+- one branch at a time on `globals.css`.
+
 ### Issue tracker
 
 Work is tracked in OpenSpec (`openspec/NEXT.md` + `changes/*/tasks.md`), never public GitHub Issues. See `docs/agents/issue-tracker.md`.
