@@ -3754,7 +3754,7 @@ end to end) found no missing function; three regressions with one root cause
 ## 8. Reachability (owner, 21 Nov 2026)
 
 Verbatim: "reachability to add-on and how to handle it should be standard part
-of contract 2". Design §13. Survey: `reachability-survey.md` (21 Nov 2026), its
+of contract 2". Design §13. Survey: `research/reachability-survey.md` (21 Nov 2026), its
 §7 ranks the 15 inconsistencies this slice closes. All on `feat/addon-contract`;
 nothing merges to main alone. Each PR: elegant, standard, careful; one source,
 one path; mutation-check every guard; Opus review after.

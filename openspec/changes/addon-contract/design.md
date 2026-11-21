@@ -2127,7 +2127,7 @@ observed, so not stated).
 
 ### 13.3 One reply for every read
 
-Every backend route that answers from an add-on (survey §3, rows 1–5, 8–13,
+Every backend route that answers from an add-on (`research/reachability-survey.md` §3, rows 1–5, 8–13,
 15–16) carries one member, `read`, and no route carries `read: false`,
 `readable`, `halted`-as-data, `read_at` or `last_known`:
 
