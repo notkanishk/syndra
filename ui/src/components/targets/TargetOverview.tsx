@@ -56,6 +56,7 @@ import {
   useReleaseBinding,
   useSetLifecycle,
   useTargetHealth,
+  useTargetHealthAgain,
   useResolveLogFinding,
   useTargetInventory,
   useTargetInventoryAgain,
@@ -82,6 +83,8 @@ export function TargetOverview({ target }: { target: string }) {
   const nameOf = useSystemNames();
   const roster = useTargets();
   const health = useTargetHealth(target);
+  // A failed read is pressed again live (`?fresh=true`), never answered from the copy that failed.
+  const healthAgain = useTargetHealthAgain(target);
   const findings = useMergeFindings(target);
   const inventory = useTargetInventory(target);
   const registered = (roster.data ?? []).find((t) => t.target === target);
@@ -204,7 +207,7 @@ export function TargetOverview({ target }: { target: string }) {
               tone="danger"
               blocking
               title={`This page for ${name} could not be read.`}
-              action={{ label: "Try again", onClick: () => health.refetch() }}
+              action={{ label: "Try again", onClick: () => void healthAgain.press().catch(() => {}) }}
               next="Press Try again. If it keeps failing, ask whoever runs the Syndra server."
             >
               Syndra&rsquo;s server did not answer when this page asked for it. This says nothing about{" "}

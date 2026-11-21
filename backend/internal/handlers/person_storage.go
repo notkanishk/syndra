@@ -155,7 +155,7 @@ func describePersonTarget(r *http.Request, target, subject string, hasProject bo
 		roleLimits(&home, set, limit)
 		home.Own = ownHomeLimit(r, subject, target, limit.Name, now)
 		storage := view.Storage
-		if storage == nil && view.Health == addons.HealthOffline {
+		if storage == nil && (view.Health == addons.StateAddonUnreachable || view.Health == addons.StateAppUnreachable) {
 			view.LastKnown = recalledStorage(target, subject)
 			if view.LastKnown != nil {
 				storage = &view.LastKnown.Storage

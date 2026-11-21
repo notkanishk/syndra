@@ -456,34 +456,43 @@ const (
 )
 
 // Halt is why a /subjects read concludes nothing at all, with the add-on's own
-// sentence when it refused it; halted false when the read may be shown. The
-// one mapping, used by the reconcile pass, the inventory and /homes, and
-// ahead of any cooldown or stale label: an outdated add-on stays outdated
-// inside its cooldown.
+// sentence where it gave one; halted false when the read may be shown. Used by
+// the reconcile pass, the inventory and /homes, and ahead of any cooldown or
+// stale label: an outdated add-on stays outdated inside its cooldown.
 //
-//   - An add-on older than attribution (no `conflicts`) says whose no account
-//     is: addon_outdated, which waiting never ends; it has to be updated.
-//   - STORE_UNREADABLE is the add-on's own records failing while the target
-//     may be fine: read_refused, something to fix rather than wait out, and
-//     the add-on's sentence carries the next step.
-//   - A fresh read refused inside the cooldown with nothing to serve is no
-//     outage: read_stale, readable again in RetryAfter seconds.
-//   - Every other failure, answered or not (NO_CURRENT_READ,
-//     TARGET_UNREADABLE, a timeout), is the target not read:
-//     target_unreachable, which the pages word with the system's name and
-//     their own next step.
+// An add-on older than attribution (no `conflicts`) is addon_outdated, which
+// waiting never ends. Everything else is Unread's (design §13.1), in the
+// reconciliation row's words: read_refused, a cooldown's read_stale, and the
+// two outages, addon_unreachable and app_unreachable, never one word for both.
 func (r SubjectsResult) Halt() (reason, detail string, halted bool) {
 	switch {
 	case r.Outdated:
 		return db.UnreconciledAddonOutdated, "", true
 	case r.Outcome == OutcomeSucceeded:
 		return "", "", false
-	case r.Code == CodeStoreUnreadable:
-		return db.UnreconciledReadRefused, r.Detail, true
-	case r.RetryAfter > 0:
-		return db.UnreconciledStaleRead, "", true
 	}
-	return db.UnreconciledUnreachable, "", true
+	why := Unread(r.reply())
+	switch why.Reason {
+	case ReasonReadRefused:
+		return db.UnreconciledReadRefused, r.Detail, true
+	case ReasonCooldown:
+		return db.UnreconciledStaleRead, "", true
+	case ReasonAddonOutdated:
+		return db.UnreconciledAddonOutdated, "", true
+	case ReasonAppUnreachable:
+		return db.UnreconciledAppUnreachable, r.Detail, true
+	}
+	return db.UnreconciledAddonUnreachable, "", true
+}
+
+// reply is the CallResponse Unread reads, from what a SubjectsResult keeps of
+// it: RetryAfter is set only for a cooldown (cooldownOf).
+func (r SubjectsResult) reply() CallResponse {
+	resp := CallResponse{Outcome: r.Outcome, Status: r.Status, Err: r.Err, Code: r.Code, RetryAfter: r.RetryAfter}
+	if r.RetryAfter > 0 && r.Code == "" {
+		resp.Code = codeFreshReadCooldown
+	}
+	return resp
 }
 
 // Attribution says whether target's add-on is older than attribution (7t-3),
@@ -497,12 +506,12 @@ func (r SubjectsResult) Halt() (reason, detail string, halted bool) {
 // interval the add-on itself sets for reading its app again, so a page loaded
 // over and over never turns into a stream of reads at an add-on that does not
 // answer. While it is still unknown, why is the reason that read could not
-// say (Halt; the last one tried, or target_unreachable before any), and the
+// say (Halt; the last one tried, or addon_unreachable before any), and the
 // caller shows nothing as anybody's.
 func Attribution(ctx context.Context, target string) (outdated bool, why string) {
 	a, err := Get(target)
 	if err != nil {
-		return false, db.UnreconciledUnreachable
+		return false, db.UnreconciledAddonUnreachable
 	}
 	if a.attribution.Load() == attributionUnknown && a.attributionAsk.TryLock() {
 		if last := a.attributionAskedAt.Load(); last == 0 || time.Since(time.Unix(0, last)) >= FreshCooldown(target) {
@@ -522,7 +531,7 @@ func Attribution(ctx context.Context, target string) (outdated bool, why string)
 	if last := a.attributionWhy.Load(); last != nil {
 		return false, *last
 	}
-	return false, db.UnreconciledUnreachable
+	return false, db.UnreconciledAddonUnreachable
 }
 
 // CooledDown reports a fresh read the add-on would not make yet, inside its
@@ -698,24 +707,42 @@ type TargetHealth struct {
 	Outcome Outcome `json:"-"`
 	Status  int     `json:"-"`
 	Err     error   `json:"-"`
+	// Why is Unread of the reply: the probe's miss, which side and why.
+	Why Why `json:"-"`
 }
 
-// Health reads one add-on's own account of itself.
+// Health reads one add-on's own account of itself, live, for an operator's
+// "Check now".
 //
 // Served by the add-on even when its target is unreachable, deliberately: a
 // health endpoint that fails whole because one of five reads failed tells an
 // operator nothing about the other four, which are the ones that would have
 // explained it.
 //
-// Every read is also counted by the health monitor (HealthOf), so whoever made
-// it — a member's page, an operator's, the periodic probe — moves one count.
-func Health(ctx context.Context, target string) TargetHealth {
+// It does not feed the monitor. Only the monitor's own probe (probe, from
+// ProbeAll every probeInterval) counts toward failureThreshold, as only the
+// kubelet's periodic probe counts toward a Kubernetes probe's: a person
+// pressing Check now, or ten open tabs, never speeds up the three-miss rule.
+func Health(ctx context.Context, target string) TargetHealth { return readHealth(ctx, target) }
+
+// probe is the monitor's read: Health, folded into the target's state and
+// kept as its last answer (LastHealth).
+func probe(ctx context.Context, target string) {
+	if _, err := Get(target); err != nil {
+		return
+	}
+	monitor.observe(target, readHealth(ctx, target), timeNow().UTC())
+}
+
+// LastHealth is the monitor's last probe of a target: what a page shows
+// between probes, so no page read reaches the add-on. Unreached with no error
+// before the first probe (HealthOf says checking). A target not registered is
+// never probed, so it says why, as a live read (Health) does.
+func LastHealth(target string) TargetHealth {
 	if _, err := Get(target); err != nil {
 		return TargetHealth{Outcome: OutcomeUnreached, Err: err}
 	}
-	h := readHealth(ctx, target)
-	observeHealth(target, h)
-	return h
+	return monitor.last(target)
 }
 
 func readHealth(ctx context.Context, target string) TargetHealth {
@@ -727,18 +754,16 @@ func readHealth(ctx context.Context, target string) TargetHealth {
 	// any differently from another call — it goes through the same record. An
 	// operator watching a target come back reads this; letting it bypass the
 	// breaker would make the surface disagree with what every other call gets.
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/health"})
-	if err != nil {
-		return TargetHealth{Outcome: OutcomeUnreached, Err: err}
-	}
-
-	out := TargetHealth{Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err}
+	// An open breaker is a miss with the cause that opened it (Unread).
+	resp, _ := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/health"})
+	out := TargetHealth{Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err, Why: Unread(resp)}
 	if resp.Outcome != OutcomeSucceeded {
 		return out
 	}
 	var wire healthWire
 	if err := DecodeReply(resp.Body, &wire); err != nil {
-		out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode health: %w", target, err)
+		resp.Outcome, resp.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode health: %w: %w", target, ErrUnreadableReply, err)
+		out.Outcome, out.Err, out.Why = resp.Outcome, resp.Err, Unread(resp)
 		return out
 	}
 	return wire.view(target, resp.Status, resp.Clock)
@@ -814,6 +839,7 @@ func SetLifecycle(ctx context.Context, target, state, reason, actor string) (map
 	if resp.Outcome != OutcomeSucceeded {
 		return nil, fmt.Errorf("addon %s: lifecycle change refused (%d): %v", target, resp.Status, resp.Err)
 	}
+	monitor.setLifecycle(target, state)
 	var out map[string]any
 	if err := DecodeReply(resp.Body, &out); err != nil {
 		return nil, fmt.Errorf("addon %s: decode lifecycle: %w", target, err)

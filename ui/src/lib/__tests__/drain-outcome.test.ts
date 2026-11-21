@@ -117,6 +117,32 @@ describe("a send with more than one connected system", () => {
     expect(out.detail).toMatch(/waiting for you to send/i);
   });
 
+  // 8b fix round 2: an add-on set to read-only is not one that didn't answer.
+  // The halt names the operator's switch and the step back.
+  it("a system in maintenance is named by its switch, never as not answering", () => {
+    const passes = [
+      { target: "zitadel", applied: 3, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: false },
+      { target: "truenas", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: true, reason: "read_only", waiting: 2 },
+    ];
+    const both = named(result({ applied: 3, halted: true, reason: "read_only", halted_target: "truenas", passes }));
+    expect(both.message).toContain("TrueNAS is set to read-only, so its 2 are still here.");
+    expect(both.message).not.toContain("didn't answer");
+    expect(both.detail).toMatch(/Make active under Maintenance/);
+    const alone = named(result({ halted: true, reason: "draining", halted_target: "truenas", passes: [passes[1]] }));
+    expect(alone.message).toBe("TrueNAS is set to finish up. Nothing was sent.");
+    expect(alone.next).toMatch(/Make active under Maintenance/);
+  });
+
+  // 8b fix round 3: revocations go again on their own once the switch is
+  // active, so "send again" is said only of what the reader must send.
+  it("the step back from maintenance leaves revocations to the background drain", () => {
+    const halt = result({ halted: true, reason: "read_only", halted_target: "truenas" });
+    expect(named(halt, true).next).toBe(
+      "Press Make active under Maintenance on its page. Revocations then go on their own; send the rest again.",
+    );
+    expect(named(halt, false).next).toBe("Press Make active under Maintenance on its page, then send again.");
+  });
+
   // Browser pass, 8 Nov: TrueNAS switched off with nothing of its own queued.
   // The send now reports its pass as not halted, and the outcome is one true
   // card: sent, nothing waiting, no system named as skipped.

@@ -83,14 +83,11 @@ type targetSummary struct {
 	CircuitOpen bool `json:"circuit_open"`
 	// LastError is why the last manifest read failed, when one did.
 	LastError string `json:"last_error,omitempty"`
-	// Health is the confirmed reachability (addons.HealthOf): offline only
-	// after three failed reads in a row, unknown until Syndra can tell.
+	// Health is the monitor's state (addons.HealthOf, design §13.2): an outage
+	// only after three missed probes in a row, checking until the first.
 	Health addons.HealthState `json:"health"`
-	// Status is the one reading the row and the header show, decided here so
-	// no screen can rank them differently (A-01): cannot_connect, then
-	// offline, then waiting_to_retry, then checking, then answering. The
-	// breaker used to win over everything, which sent an operator to the
-	// Syndra server while TrueNAS itself was down.
+	// Status is Health's state, the one reading the row and the header show:
+	// answering, addon_unreachable, app_unreachable or checking.
 	Status string `json:"status"`
 	// Project is the Zitadel project this system serves, nil until chosen.
 	// Shown read-only on Connected systems; a nil one is that row's Needs you.
@@ -205,7 +202,17 @@ func writeCooledDown(w http.ResponseWriter, retryAfter int, msg string) {
 
 func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 	target := r.PathValue("target")
-	health := addonsHealth(r.Context(), target)
+	// The page's poll reads the monitor's last probe, never the add-on: open
+	// tabs must not load it or move the monitor (design §13.2). Only "Check
+	// now" (?fresh=true, wantsFresh) reads live, and that read is not counted.
+	// A live answer says so (`live`): its reachable and detail are this read,
+	// while health and status stay the monitor's last probe, so the two may
+	// differ and the page can tell which is which.
+	live := wantsFresh(r)
+	health := addonsLastHealth(target)
+	if live {
+		health = addonsHealth(r.Context(), target)
+	}
 
 	// The anchor's finding, if it is carrying one, travels with the health of
 	// the target it is about — and it travels whether or not the add-on is
@@ -232,6 +239,9 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 			"health":    addonsHealthOf(target),
 			"status":    liveStatus(target),
 		}
+		if live {
+			body["live"] = true
+		}
 		if anchored && anchor.Compromised() {
 			body["log_anchor"] = anchor
 		}
@@ -242,7 +252,7 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 	// Merged rather than nested under a second request, because the operator's
 	// question is one question: is this target all right.
 	merged := targetHealthWithAnchor{TargetHealth: health,
-		Health: addonsHealthOf(target), Status: liveStatus(target)}
+		Health: addonsHealthOf(target), Status: liveStatus(target), Live: live}
 	if anchored {
 		merged.LogAnchor = &anchor
 	}
@@ -260,6 +270,9 @@ type targetHealthWithAnchor struct {
 	Health addons.HealthState `json:"health"`
 	// Status is the same ranked reading the roster row shows, read now.
 	Status string `json:"status"`
+	// Live is a "Check now" answer: the reading above is a live read of the
+	// add-on, and Health and Status are still the monitor's.
+	Live bool `json:"live,omitempty"`
 }
 
 func describeTarget(ctx context.Context, reg addons.Registration, transport addons.TransportCredential) targetSummary {
@@ -291,42 +304,14 @@ func describeTarget(ctx context.Context, reg addons.Registration, transport addo
 	return s
 }
 
-// targetStatus ranks the readings that can be true at once (A-01, "which
-// reading wins"): what an operator must look at first comes first.
-func targetStatus(s targetSummary) string {
-	return statusOf(s.TransportStatus == "error", s.Health, s.CircuitOpen)
-}
-
-func statusOf(cannotSign bool, health addons.HealthState, circuitOpen bool) string {
-	switch {
-	case cannotSign:
-		return "cannot_connect"
-	case health.Status == addons.HealthOffline:
-		return "offline"
-	case circuitOpen:
-		return "waiting_to_retry"
-	case health.Status == addons.HealthUnknown:
-		return "checking"
-	default:
-		return "answering"
-	}
-}
+// targetStatus is the monitor's state (design §13.2): the roster reads it and
+// ranks nothing of its own. A credential that does not load is the monitor's
+// no_key, and an open breaker is the cause that opened it.
+func targetStatus(s targetSummary) string { return string(s.Health.State) }
 
 // liveStatus is targetStatus for one target, read now, for the system page:
 // the roster is cached for minutes and a status must not be.
-func liveStatus(target string) string {
-	cannotSign := false
-	for _, tc := range addonsTransportCredentials() {
-		if tc.Target == target && tc.Status == "error" {
-			cannotSign = true
-		}
-	}
-	circuitOpen := false
-	if a, err := addonsGet(target); err == nil {
-		circuitOpen = a.CircuitOpen()
-	}
-	return statusOf(cannotSign, addonsHealthOf(target), circuitOpen)
-}
+func liveStatus(target string) string { return string(addonsHealthOf(target).State) }
 
 func errText(err error) string {
 	if err == nil {

@@ -118,6 +118,8 @@ export interface TargetHealth {
   health?: HealthState;
   /** The same ranked reading the roster row shows, read now. */
   status?: TargetStatus;
+  /** A "Try again" answer: reachable and detail are a live read, `health` and `status` still the monitor's. */
+  live?: boolean;
   lifecycle?: string;
   lifecycle_note?: string;
   in_flight?: number;
@@ -171,6 +173,10 @@ export function useTargetHealth(target: string | undefined) {
     refetchInterval: 30_000,
   });
 }
+
+/** "Try again" on the health page: the same GET, read live from the add-on (`?fresh=true`). */
+export const useTargetHealthAgain = (target: string) =>
+  useReadAgain<TargetHealth>(["targets", target, "health"], `/targets/${target}/health`);
 
 /**
  * Clearing a tamper finding by adopting the head that produced it.

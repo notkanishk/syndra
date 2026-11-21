@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -38,7 +40,9 @@ type addonHarness struct {
 	stale    []string
 	requeued []string
 	released []string
-	attempts int
+	// deferredFor is how long each deferred row waits before it is due.
+	deferredFor []time.Duration
+	attempts    int
 	// bases is what the drain recorded as the target's observed state. The
 	// assertions on it are mostly negative: an apply the add-on could not read
 	// back must record NOTHING here.
@@ -69,7 +73,12 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 		}
 		return rows, nil
 	}))
-	t.Cleanup(swap(&addonReachable, func(context.Context, string) bool { return h.reachable }))
+	t.Cleanup(swap(&addonState, func(string) addons.HealthState {
+		if h.reachable {
+			return addons.HealthState{State: addons.StateAnswering}
+		}
+		return addons.HealthState{State: addons.StateAddonUnreachable, Cause: addons.CauseNoAnswer}
+	}))
 	t.Cleanup(swap(&saveMergeFinding, func(_ context.Context, f db.MergeFinding) error {
 		h.findings = append(h.findings, f)
 		return nil
@@ -115,8 +124,9 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 		h.attempts++
 		return h.attempts, nil
 	}
-	t.Cleanup(swap(&release, func(_ context.Context, id, _ string) error {
+	t.Cleanup(swap(&deferRow, func(_ context.Context, id, _ string, after time.Duration) error {
 		h.released = append(h.released, id)
+		h.deferredFor = append(h.deferredFor, after)
 		return nil
 	}))
 	return h
@@ -423,7 +433,7 @@ func TestTheAddonDrainProbesBeforeItSpendsARetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Halted || res.Reason != "target_unreachable" {
+	if !res.Halted || res.Reason != "addon_unreachable" {
 		t.Fatalf("want a clean halt, got %+v", res)
 	}
 	if len(h.dispatched) != 0 || len(h.requeued) != 0 || len(h.failed) != 0 {
@@ -469,7 +479,7 @@ func TestAnUnansweredTargetIsSkippedOnlyWhenItHasChangesWaiting(t *testing.T) {
 			if pass.Target != "truenas" || pass.Halted != tc.halted || pass.Waiting != tc.waiting {
 				t.Fatalf("the pass must say whether it halted and how many it left: %+v", pass)
 			}
-			if tc.halted && (res.Reason != "target_unreachable" || res.HaltedTarget != "truenas") {
+			if tc.halted && (res.Reason != "addon_unreachable" || res.HaltedTarget != "truenas") {
 				t.Fatalf("a halt names its target and reason: %+v", res)
 			}
 		})
@@ -611,28 +621,16 @@ func TestAZitadelOutageDoesNotHoldAnAddOnTarget(t *testing.T) {
 	}
 }
 
-// The pre-flight probes the TARGET, not the add-on in front of it.
-//
-// The add-on is a separate container and stays up throughout a NAS outage, so a
-// manifest read — which is how this was probed — answered "reachable" while
-// nothing behind it was. A whole batch went through: twenty-one rows, twenty-one
-// round trips, twenty-one outcomes nobody could confirm, all to learn what one
-// call establishes.
-func TestThePreflightProbesTheTargetRatherThanTheAddon(t *testing.T) {
+// The pre-flight reads the health monitor, the one owner of "reachable"
+// (design §13.2), whose probe is the add-on's /health: the TARGET, not merely
+// the add-on's own process (a manifest read answered while the NAS was off).
+func TestThePreflightReadsTheMonitor(t *testing.T) {
 	src, err := os.ReadFile("deps.go")
 	if err != nil {
 		t.Fatalf("read source: %v", err)
 	}
-	probe := regexp.MustCompile(`(?s)addonReachable = func\(ctx context\.Context, target string\) bool \{(.*?)\n\t\}`).
-		FindStringSubmatch(string(src))
-	if probe == nil {
-		t.Fatal("the pre-flight is gone; if it moved, move this guard with it")
-	}
-	if !strings.Contains(probe[1], "Reachable") {
-		t.Error("the pre-flight must read the target's reachability, not merely that the add-on answered")
-	}
-	if strings.Contains(probe[1], "addons.Refresh") {
-		t.Error("a manifest read proves only that the add-on's own process is up")
+	if !regexp.MustCompile(`addonState\s*=\s*addons\.HealthOf\n`).Match(src) {
+		t.Error("the pre-flight must be the monitor's state, not a probe of its own")
 	}
 }
 
@@ -838,5 +836,63 @@ func TestAnAppliedLimitIsInTheBase(t *testing.T) {
 	}
 	if len(h.bases) != 1 || string(h.bases[0].Base["home_quota"]) != `["5368709120"]` {
 		t.Fatalf("the base must hold the limit the target reported: %+v", h.bases)
+	}
+}
+
+// A row answered with a reachability cause spends no attempt (design §13.4):
+// nothing went out, so ten passes against a closed port leave it queued with
+// attempts at 0, never "out of retries". A shape refusal still spends one.
+func TestAnOutageSpendsNoAttempt(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	closed := addons.CallResponse{Outcome: addons.OutcomeUnreached,
+		Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Err: closed.Err, Why: addons.Unread(closed)}
+	for range 10 {
+		if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if h.attempts != 0 || len(h.requeued) != 0 || len(h.failed) != 0 || len(h.released) != 10 {
+		t.Fatalf("an outage must leave the row queued with no attempt spent: attempts %d requeued %v failed %v released %d",
+			h.attempts, h.requeued, h.failed, len(h.released))
+	}
+
+	shape := addons.CallResponse{Outcome: addons.OutcomeUnreached, Status: 400, ShapeRefusal: true}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Status: 400, Why: addons.Unread(shape)}
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if h.attempts != 1 {
+		t.Fatalf("a shape refusal still spends an attempt, got %d", h.attempts)
+	}
+}
+
+// A row nothing went out for is deferred, not merely released: due again
+// after the monitor's next probe, or the add-on's Retry-After when that is
+// later, so the background drain (ClaimDueRetries) sends it by itself
+// (design §13.4). Both "nothing went out" cases take that one path.
+func TestARowNothingWentOutForIsDueAgainBySelf(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	closed := addons.CallResponse{Outcome: addons.OutcomeUnreached,
+		Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Err: closed.Err, Why: addons.Unread(closed)}
+	DrainAddon(context.Background(), "truenas")
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, LifecycleRefusal: true,
+		Why: addons.Why{Reason: addons.ReasonReadRefused, RetryAfter: 600}}
+	DrainAddon(context.Background(), "truenas")
+	want := []time.Duration{addons.ProbeInterval(), 600 * time.Second}
+	if len(h.deferredFor) != 2 || h.deferredFor[0] != want[0] || h.deferredFor[1] != want[1] || h.attempts != 0 {
+		t.Fatalf("deferred for %v (want %v), attempts %d", h.deferredFor, want, h.attempts)
+	}
+}
+
+// A target registered since the last probe is checking: the drain halts with
+// a word the pages say (addon_unreachable), never "checking".
+func TestACheckingTargetHaltsAsAddonUnreachable(t *testing.T) {
+	stubAddonDrain(t, addonRow("o1"))
+	t.Cleanup(swap(&addonState, func(string) addons.HealthState { return addons.HealthState{State: addons.StateChecking} }))
+	res, _ := DrainAddon(context.Background(), "truenas")
+	if !res.Halted || res.Reason != addons.ReasonAddonUnreachable {
+		t.Fatalf("want an addon_unreachable halt, got %+v", res)
 	}
 }

@@ -5,8 +5,11 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"syndra/internal/addons"
 )
 
 func swapCheckObservation(v func(context.Context) error) func() {
@@ -75,5 +78,37 @@ func TestStatsRetentionRunsWithoutCollection(t *testing.T) {
 	}
 	if !strings.Contains(string(src), "\n\tgo statsPruneSched.Start(ctx)\n") {
 		t.Error("main does not start the retention runner unconditionally")
+	}
+}
+
+// The first probe runs before the listener serves (design §13.2): a restart
+// does not forget an outage, and no page meets "checking" for a target Syndra
+// has had since it started. startHealthProbes returns only once it is done,
+// and main calls it before net.Listen.
+func TestTheStartupProbeRunsBeforeTheListenerServes(t *testing.T) {
+	reg, probe := addonsRegistered, probeAll
+	t.Cleanup(func() { addonsRegistered, probeAll = reg, probe })
+	addonsRegistered = func() []addons.Registration { return []addons.Registration{{Target: "wwe"}} }
+	var done atomic.Bool
+	probeAll = func(context.Context) error {
+		time.Sleep(50 * time.Millisecond)
+		done.Store(true)
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	startHealthProbes(ctx)
+	if !done.Load() {
+		t.Fatal("startHealthProbes returned before its first probe finished")
+	}
+
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)[strings.Index(string(src), "func main()"):]
+	probeAt, listenAt := strings.Index(body, "startHealthProbes(ctx)"), strings.Index(body, "net.Listen(")
+	if probeAt < 0 || listenAt < 0 || probeAt > listenAt {
+		t.Fatalf("main must run startHealthProbes before net.Listen (probe at %d, listen at %d)", probeAt, listenAt)
 	}
 }

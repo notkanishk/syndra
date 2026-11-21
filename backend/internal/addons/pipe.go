@@ -85,22 +85,24 @@ func (a *Addon) send(ctx context.Context, s sendSpec) (CallResponse, error) {
 			} else {
 				body, err := withJSONField(s.Body, "fresh", true)
 				if err != nil {
-					return refuse(err)
+					return refuse(fmt.Errorf("%w: %w", errNotPrepared, err))
 				}
 				s.Body = body
 			}
 		}
 	}
-	if !s.SkipBreaker && !a.br.allow(timeNow()) {
-		return refuse(fmt.Errorf("%w: %s", ErrCircuitOpen, a.Registration.Target))
+	if !s.SkipBreaker {
+		if opener, left, open := a.br.opened(timeNow()); open {
+			return refuse(&CircuitOpenError{Target: a.Registration.Target, Opener: opener, RetryAfter: left})
+		}
 	}
 	cred, err := credentialFor(a.Registration)
 	if err != nil {
-		return refuse(fmt.Errorf("addon %s: %w", a.Registration.Target, err))
+		return refuse(fmt.Errorf("addon %s: %w: %w", a.Registration.Target, errNoTransport, err))
 	}
 	if s.Claim != nil {
 		if err := s.Claim(ctx); err != nil {
-			return refuse(err)
+			return refuse(fmt.Errorf("%w: %w", errNotPrepared, err))
 		}
 	}
 	resp := doAuthenticated(ctx, cred, s.Method, a.Registration.BaseURL+s.Path, s.Body, callTimeout)

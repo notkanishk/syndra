@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -78,8 +79,8 @@ func drainAddonPass(ctx context.Context, target string) (DrainResult, error) {
 	// a single call establishes — and an exhausted budget is terminal, so the
 	// rows an operator approved would be failed by the target being switched
 	// off rather than left queued for it coming back.
-	if !addonReachable(ctx, target) {
-		return unanswered(ctx, target, "target_unreachable"), nil
+	if reason := haltReason(addonState(target)); reason != "" {
+		return unanswered(ctx, target, reason), nil
 	}
 
 	rows, err := claimPending(ctx, target, claimBatch)
@@ -225,15 +226,11 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		// failed row during exactly the window an operator is least able to
 		// notice.
 		//
-		// RELEASED rather than requeued, so it spends no retry. Nothing was
+		// DEFERRED rather than requeued, so it spends no retry. Nothing was
 		// attempted — the add-on declined before doing anything — and a window
 		// long enough to be worth having would otherwise exhaust the budget of
 		// every queued row and halt the drain on rows that were never sent.
-		if err := release(ctx, row.ID, systemName(ctx, row.Target)+" is not taking changes right now"); err != nil {
-			res.settleFailure(row.ID, "release", err)
-			return false
-		}
-		res.Requeued++
+		res.deferUnsent(ctx, row, systemName(ctx, row.Target)+" is not taking changes right now", resp.Why.RetryAfter)
 
 	case resp.Outcome == addons.OutcomeRejected:
 		// The add-on validated the call and refused; it did not act. Terminal,
@@ -258,6 +255,11 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			return false
 		}
 		res.Failed++
+
+	case resp.Outcome == addons.OutcomeUnreached && resp.Why.Unreachable():
+		// Nothing went out because a side was down (design §13.4): no attempt
+		// is spent, so an outage never makes a row "out of retries".
+		res.deferUnsent(ctx, row, unreachedWhy(systemName(ctx, row.Target), resp), resp.Why.RetryAfter)
 
 	case resp.Outcome == addons.OutcomeUnreached:
 		if row.Attempts >= maxRetries {
@@ -295,6 +297,19 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		res.persistErr(row.ID, "dispatch", errIndeterminate)
 	}
 	return false
+}
+
+// deferUnsent is the one path for a send where nothing went out: pending
+// again with no attempt spent, due after the add-on's Retry-After or the
+// monitor's next probe, whichever is later, so the background drain sends it
+// by itself (design §13.4: "Syndra sends it later by itself").
+func (res *DrainResult) deferUnsent(ctx context.Context, row models.PendingPropagation, why string, retryAfter int) {
+	after := max(time.Duration(retryAfter)*time.Second, addons.ProbeInterval())
+	if err := deferRow(ctx, row.ID, why, after); err != nil {
+		res.settleFailure(row.ID, "defer", err)
+		return
+	}
+	res.Requeued++
 }
 
 var errIndeterminate = errors.New("the call was sent and the answer was lost; whether it applied is unknown")

@@ -121,7 +121,7 @@ func handleMemberAction(w http.ResponseWriter, r *http.Request) {
 	case view.Lifecycle == "draining" || view.Lifecycle == "read_only":
 		jsonErrorResponse(w, http.StatusConflict, "TARGET_PAUSED", "Changes on that system are paused. Nothing was done.")
 		return
-	case !view.Reachable:
+	case view.Health != addons.StateAnswering:
 		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREACHABLE", "That system is not answering right now. Nothing went out.")
 		return
 	}

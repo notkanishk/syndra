@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/extcall"
 	"syndra/internal/models"
@@ -278,6 +279,30 @@ func unanswered(ctx context.Context, target, reason string) DrainResult {
 		return DrainResult{}
 	}
 	return DrainResult{Halted: true, Reason: reason, Waiting: n}
+}
+
+// haltReason is why an add-on pass does not send, "" when it may. A target
+// not answering halts on the monitor's state, and checking (no probe yet) is
+// addon_unreachable, Syndra holding no answer from the add-on (design §13.1),
+// so the halt is one the pages say rather than a word of its own. An answering
+// target an operator put in maintenance (draining, read_only) halts on that
+// switch: it would refuse every row, so sending each due row every pass only
+// moves them about. The rows wait unsent, no attempt spent, until it is made
+// active. An empty lifecycle is a contract-1 answer and is not a switch. Any
+// other word is read_only, as the add-on reads a state it does not know: the
+// halt reason is one the pages say, never a word of the add-on's own.
+func haltReason(st addons.HealthState) string {
+	switch {
+	case st.State == addons.StateChecking:
+		return addons.ReasonAddonUnreachable
+	case !st.Answering():
+		return string(st.State)
+	case st.Lifecycle == "", st.Lifecycle == "active":
+		return ""
+	case st.Lifecycle == "draining":
+		return "draining"
+	}
+	return "read_only"
 }
 
 // pruneAfterDrain is the retention work, run once per drain rather than once

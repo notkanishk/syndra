@@ -144,7 +144,11 @@ func TestACooldownIsNeverABreakerFailure(t *testing.T) {
 }
 
 func TestRetryAfterIsReadAsDelaySeconds(t *testing.T) {
-	for header, want := range map[string]int{"17": 17, "": 0, "soon": 0, "-3": 0, "Wed, 21 Oct 2015 07:28:00 GMT": 0} {
+	for header, want := range map[string]int{"17": 17, "": 0, "soon": 0, "-3": 0, "Wed, 21 Oct 2015 07:28:00 GMT": 0,
+		// Capped where it is read: a huge wait wraps time.Duration or overflows
+		// the defer's make_interval, which leaves the row in flight.
+		"3600": 3600, "3601": 3600, "31536000": 3600, "9223372036854775807": 3600, "99999999999999999999": 3600,
+		"-99999999999999999999": 0} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			if header != "" {
 				w.Header().Set("Retry-After", header)

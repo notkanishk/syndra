@@ -348,7 +348,7 @@ func TestAnUnreachableTargetRecordsTheOutage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReconcileAddon: %v", err)
 	}
-	if !res.Halted || res.Reason != db.UnreconciledUnreachable {
+	if !res.Halted || res.Reason != db.UnreconciledAddonUnreachable {
 		t.Fatalf("want the outage recorded: %+v", res)
 	}
 	if len(res.Unmanaged) != 0 {

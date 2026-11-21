@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -229,7 +230,7 @@ func TestDrainRevocations_OneTargetsOutageDoesNotStopAnother(t *testing.T) {
 	if len(applied) != 1 || applied[0] != "r1" {
 		t.Fatalf("Zitadel's revoke must still land while the add-on is down, got %v", applied)
 	}
-	if !res.Halted || res.HaltedTarget != "truenas" || res.Reason != "target_unreachable" {
+	if !res.Halted || res.HaltedTarget != "truenas" || res.Reason != "addon_unreachable" {
 		t.Errorf("the unreachable target must be named rather than folded into a total: %+v", res)
 	}
 }
@@ -252,6 +253,86 @@ func TestDrainRevocations_UnreachableAddonWithNothingQueuedIsNotAHalt(t *testing
 		}
 		if res.Halted != tc.halted {
 			t.Errorf("waiting=%d: halted=%v, want %v: %+v", tc.waiting, res.Halted, tc.halted, res)
+		}
+	}
+}
+
+// A row deferred when nothing went out (attempts 0, not_before set) that the
+// runner later sends is an automatic try like any other: the history says
+// Syndra sent it on its own, try 1.
+func TestDrainRevocations_AuditsADeferredRowItSends(t *testing.T) {
+	stubAddonDrain(t)
+	t.Cleanup(swap(&registeredAddons, func() []addons.Registration { return []addons.Registration{{Target: "truenas"}} }))
+	due := time.Now().Add(-time.Minute)
+	t.Cleanup(swap(&claimRevocations, func(_ context.Context, target string, _ int) ([]models.PendingPropagation, error) {
+		if target == db.TargetZitadel {
+			return nil, nil
+		}
+		row := addonRow("lock-1")
+		row.NotBefore = &due
+		return []models.PendingPropagation{row}, nil
+	}))
+	var action string
+	var audited map[string]any
+	insertAudit = func(_ context.Context, _, _, act, _ string, details any) error {
+		action, audited = act, details.(map[string]any)
+		return nil
+	}
+	if _, err := DrainRevocations(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if action != "propagation.retried" || audited["try"] != 1 || audited["outcome"] != "applied" {
+		t.Fatalf("a deferred row sent on its own must be audited as try 1, got %q %v", action, audited)
+	}
+}
+
+// An add-on an operator set to read-only or draining refuses every change, so
+// neither the runner nor the operator's Send sends its rows: the pass halts
+// on the switch, says how many wait, and spends nothing.
+func TestAddonPassesHaltOnTheMaintenanceSwitch(t *testing.T) {
+	for _, lifecycle := range []string{"read_only", "draining"} {
+		h := stubAddonDrain(t, addonRow("o1"))
+		t.Cleanup(swap(&registeredAddons, func() []addons.Registration { return []addons.Registration{{Target: "truenas"}} }))
+		t.Cleanup(swap(&claimRevocations, func(_ context.Context, target string, _ int) ([]models.PendingPropagation, error) {
+			if target == db.TargetZitadel {
+				return nil, nil
+			}
+			return []models.PendingPropagation{addonRow("lock-1")}, nil
+		}))
+		t.Cleanup(swap(&addonState, func(string) addons.HealthState {
+			return addons.HealthState{State: addons.StateAnswering, Lifecycle: lifecycle}
+		}))
+		t.Cleanup(swap(&countPendingFor, func(context.Context, string) (int, error) { return 2, nil }))
+
+		bg, err := DrainRevocations(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		op, err := DrainAddon(context.Background(), "truenas")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(h.dispatched) != 0 {
+			t.Fatalf("%s: nothing may be sent to a target in maintenance, sent %d", lifecycle, len(h.dispatched))
+		}
+		if !bg.Halted || bg.Reason != lifecycle || bg.HaltedTarget != "truenas" {
+			t.Errorf("%s runner: want a halt on the switch naming truenas, got %+v", lifecycle, bg)
+		}
+		if !op.Halted || op.Reason != lifecycle {
+			t.Errorf("%s send: want a halt on the switch, got %+v", lifecycle, op)
+		}
+		if op.Waiting != 2 {
+			t.Errorf("%s: the halt must say how many wait, got %+v", lifecycle, op)
+		}
+	}
+}
+
+// A lifecycle word Syndra does not know halts as read_only, as the add-on
+// reads one: the reason is a word the pages say, not the add-on's own.
+func TestAnUnknownLifecycleHaltsAsReadOnly(t *testing.T) {
+	for in, want := range map[string]string{"": "", "active": "", "draining": "draining", "read_only": "read_only", "readonly": "read_only"} {
+		if got := haltReason(addons.HealthState{State: addons.StateAnswering, Lifecycle: in}); got != want {
+			t.Errorf("haltReason(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

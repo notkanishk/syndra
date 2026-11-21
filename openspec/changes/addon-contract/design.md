@@ -2089,8 +2089,12 @@ down". `target_unreachable` (one word for seven causes) is retired, and
 | timeout, reset or cut-off reply after the request went out | add-on | `timeout` | "{system}'s add-on started answering and stopped. Syndra keeps trying. If it lasts, read the add-on's log." |
 | a 5xx with no registered code, an undecodable body | add-on | `fault` | "{system}'s add-on answered with an error it didn't explain. Read the add-on's log." |
 | breaker open | add-on | the cause that opened it | that cause's sentence, then "Syndra tries again in {n} s." |
+| Syndra cannot load the add-on's shared secret; nothing was sent | add-on | `no_key` | "Syndra can't load {system}'s shared secret. Check Syndra's secret file." Spends no attempt. |
 | `TARGET_UNREACHABLE`; `health.reachable: false`; `stale.reason: unreachable` | app | — | the add-on's sentence, else "{system}'s add-on is running but can't reach {product}. Check that {product} is on." |
 | `NO_CURRENT_READ`, `TARGET_UNREADABLE` | app | — | the add-on's sentence, else "{product} didn't give its add-on an answer it could use. Check {product}, then read again." |
+
+*`no_key` added 21 Nov 2026 from the 8b review; a secret Syndra cannot load is
+Syndra's fault, not a wrong host.*
 
 A member reads one sentence for both classes, because which box is down is
 not theirs to fix: "{system} can't be read right now. Nothing for you to do."

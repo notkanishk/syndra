@@ -17,8 +17,8 @@ import (
 // on both paths: one failed read is not an outage, and the page must be able to
 // say which it is looking at.
 func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
-	health, healthOf, anchor := addonsHealth, addonsHealthOf, dbGetLogAnchor
-	t.Cleanup(func() { addonsHealth, addonsHealthOf, dbGetLogAnchor = health, healthOf, anchor })
+	health, healthOf, anchor := addonsLastHealth, addonsHealthOf, dbGetLogAnchor
+	t.Cleanup(func() { addonsLastHealth, addonsHealthOf, dbGetLogAnchor = health, healthOf, anchor })
 	dbGetLogAnchor = func(context.Context, string) (db.LogAnchor, bool, error) { return db.LogAnchor{}, false, nil }
 	since := time.Date(2026, 10, 14, 9, 40, 0, 0, time.UTC)
 
@@ -33,11 +33,11 @@ func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
 		status string
 	}{
 		{"answering", addons.TargetHealth{Reachable: true, Outcome: addons.OutcomeSucceeded},
-			addons.HealthState{Status: addons.HealthOnline, CheckedAt: since}, "answering"},
+			addons.HealthState{State: addons.StateAnswering, CheckedAt: since}, "answering"},
 		{"down", addons.TargetHealth{Outcome: addons.OutcomeUnreached, Err: errors.New("no route")},
-			addons.HealthState{Status: addons.HealthOffline, CheckedAt: since.Add(time.Minute), ReachableSince: &since}, "offline"},
+			addons.HealthState{State: addons.StateAddonUnreachable, Cause: addons.CauseNoAnswer, CheckedAt: since.Add(time.Minute), Since: &since}, "addon_unreachable"},
 	} {
-		addonsHealth = func(context.Context, string) addons.TargetHealth { return tc.live }
+		addonsLastHealth = func(string) addons.TargetHealth { return tc.live }
 		addonsHealthOf = func(string) addons.HealthState { return tc.state }
 
 		r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/health", nil)
@@ -52,38 +52,82 @@ func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
 		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
-		if body.Health.Status != tc.state.Status {
-			t.Errorf("%s: want health %s, got %s (%s)", tc.name, tc.state.Status, body.Health.Status, rr.Body.String())
+		if body.Health.State != tc.state.State || body.Health.Cause != tc.state.Cause {
+			t.Errorf("%s: want health %s, got %s (%s)", tc.name, tc.state.State, body.Health.State, rr.Body.String())
 		}
 		if body.Status != tc.status {
 			t.Errorf("%s: the system page reads the same ranked status as the roster, want %s, got %q", tc.name, tc.status, body.Status)
 		}
-		if tc.state.ReachableSince != nil && (body.Health.ReachableSince == nil || !body.Health.ReachableSince.Equal(since)) {
+		if tc.state.Since != nil && (body.Health.Since == nil || !body.Health.Since.Equal(since)) {
 			t.Errorf("%s: an outage carries when it began: %s", tc.name, rr.Body.String())
 		}
 	}
 }
 
-// One reading wins, in A-01's order. The breaker never outranks an outage:
-// that sent an operator to the Syndra server while TrueNAS itself was down.
-func TestOneReadingWinsInDesignsOrder(t *testing.T) {
-	off := addons.HealthState{Status: addons.HealthOffline}
-	on := addons.HealthState{Status: addons.HealthOnline}
-	unknown := addons.HealthState{Status: addons.HealthUnknown}
-	for _, tc := range []struct {
-		name string
-		s    targetSummary
-		want string
-	}{
-		{"key fails beats everything", targetSummary{TransportStatus: "error", CircuitOpen: true, Health: off}, "cannot_connect"},
-		{"offline beats the breaker", targetSummary{CircuitOpen: true, Health: off}, "offline"},
-		{"breaker while checks answer", targetSummary{CircuitOpen: true, Health: on}, "waiting_to_retry"},
-		{"breaker beats checking", targetSummary{CircuitOpen: true, Health: unknown}, "waiting_to_retry"},
-		{"can't tell yet", targetSummary{Health: unknown}, "checking"},
-		{"answering", targetSummary{Health: on}, "answering"},
+// The roster's status is the monitor's state and nothing ranks over it
+// (design §13.2): a key that does not load is the monitor's no_key, an
+// open breaker is the cause that opened it.
+func TestTheRosterStatusIsTheMonitorsState(t *testing.T) {
+	for _, st := range []addons.ReachState{addons.StateAnswering, addons.StateAddonUnreachable, addons.StateAppUnreachable, addons.StateChecking} {
+		s := targetSummary{TransportStatus: "error", CircuitOpen: true, Health: addons.HealthState{State: st}}
+		if got := targetStatus(s); got != string(st) {
+			t.Errorf("want %s, got %s", st, got)
+		}
+	}
+}
+
+// The page's poll reads the monitor's last probe and never the add-on; only
+// "Check now" (?fresh=true) reads live (design §13.2).
+func TestThePagePollNeverReadsTheAddon(t *testing.T) {
+	live, last, anchor := addonsHealth, addonsLastHealth, dbGetLogAnchor
+	t.Cleanup(func() { addonsHealth, addonsLastHealth, dbGetLogAnchor = live, last, anchor })
+	dbGetLogAnchor = func(context.Context, string) (db.LogAnchor, bool, error) { return db.LogAnchor{}, false, nil }
+	reads := 0
+	addonsHealth = func(context.Context, string) addons.TargetHealth {
+		reads++
+		return addons.TargetHealth{Reachable: true, Outcome: addons.OutcomeSucceeded}
+	}
+	addonsLastHealth = func(string) addons.TargetHealth {
+		return addons.TargetHealth{Reachable: true, Outcome: addons.OutcomeSucceeded}
+	}
+	for _, url := range []string{"/api/v1/targets/truenas/health", "/api/v1/targets/truenas/health?fresh=true"} {
+		r := httptest.NewRequest(http.MethodGet, url, nil)
+		r.SetPathValue("target", "truenas")
+		handleTargetHealth(httptest.NewRecorder(), r)
+	}
+	if reads != 1 {
+		t.Fatalf("want one live read, for Check now only; got %d", reads)
+	}
+}
+
+// A "Check now" answer says it is live, reachable or not, so a live reading
+// that differs from the monitor's can be told apart; a poll's never does.
+func TestALiveHealthReadSaysItIsLive(t *testing.T) {
+	live, last, healthOf, anchor := addonsHealth, addonsLastHealth, addonsHealthOf, dbGetLogAnchor
+	t.Cleanup(func() { addonsHealth, addonsLastHealth, addonsHealthOf, dbGetLogAnchor = live, last, healthOf, anchor })
+	dbGetLogAnchor = func(context.Context, string) (db.LogAnchor, bool, error) { return db.LogAnchor{}, false, nil }
+	addonsHealthOf = func(string) addons.HealthState { return addons.HealthState{State: addons.StateAddonUnreachable} }
+	addonsLastHealth = func(string) addons.TargetHealth { return addons.TargetHealth{Outcome: addons.OutcomeUnreached} }
+	for _, now := range []addons.TargetHealth{
+		{Reachable: true, Outcome: addons.OutcomeSucceeded},
+		{Outcome: addons.OutcomeUnreached, Err: errors.New("no route")},
 	} {
-		if got := targetStatus(tc.s); got != tc.want {
-			t.Errorf("%s: want %s, got %s", tc.name, tc.want, got)
+		addonsHealth = func(context.Context, string) addons.TargetHealth { return now }
+		for url, want := range map[string]bool{"/api/v1/targets/truenas/health": false, "/api/v1/targets/truenas/health?fresh=true": true} {
+			r := httptest.NewRequest(http.MethodGet, url, nil)
+			r.SetPathValue("target", "truenas")
+			rr := httptest.NewRecorder()
+			handleTargetHealth(rr, r)
+			var body struct {
+				Live   bool               `json:"live"`
+				Health addons.HealthState `json:"health"`
+			}
+			if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if body.Live != want || body.Health.State != addons.StateAddonUnreachable {
+				t.Errorf("%s (reachable %v): live %v want %v, health %s: %s", url, now.Reachable, body.Live, want, body.Health.State, rr.Body.String())
+			}
 		}
 	}
 }

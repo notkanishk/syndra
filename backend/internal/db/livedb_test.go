@@ -61,6 +61,20 @@ func liveDB(t *testing.T) context.Context {
 		if liveErr = livePool.Ping(context.Background()); liveErr != nil {
 			return
 		}
+		// This harness truncates propagation_outbox around every case, so it
+		// owns the database for the whole run: `go test ./...` runs packages
+		// in parallel, and another package's live test (propagation's
+		// addon_defer_live_test.go takes the same lock) would lose its rows
+		// mid-test. The lock is held on one connection until this process
+		// exits, which is when Postgres lets it go.
+		owner, err := livePool.Acquire(context.Background())
+		if err != nil {
+			liveErr = err
+			return
+		}
+		if _, liveErr = owner.Exec(context.Background(), `SELECT pg_advisory_lock(hashtext('syndra live-db tests'))`); liveErr != nil {
+			return
+		}
 
 		path := os.Getenv("SYNDRA_TEST_MIGRATIONS")
 		if path == "" {

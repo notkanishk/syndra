@@ -59,3 +59,24 @@ func TestDeliverChange_ARoleThatWaitsOutranksARetry(t *testing.T) {
 		t.Fatalf("WaitReason = %q, want role_waits", got)
 	}
 }
+
+// A row deferred when nothing went out has a next try and no attempt spent
+// (db.DeferPropagation). Home counts it as retrying (db retryingRow), so the
+// outcome must too: its next try, try 1, and never "nothing sends it".
+func TestDeliverChange_ADeferredRowShowsItsNextTryAndIsNotUnsent(t *testing.T) {
+	deliveryFixture(t, "")
+	svcDrainBatch = func(_ context.Context, ids []string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{Requeued: len(ids)}, nil
+	}
+	next := time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
+	svcGetPendingRows = func(context.Context) ([]models.PendingPropagation, error) {
+		return []models.PendingPropagation{{ID: "r1", Status: "pending", OpType: "add", Attempts: 0, NotBefore: &next}}, nil
+	}
+	d := DeliverChange(context.Background(), planned([]string{"r1"}, nil))
+	if r := d.Drain.Retry; r == nil || r.State != extcall.RetryRetrying || r.Try != 1 || !r.NextTry.Equal(next) {
+		t.Fatalf("Retry = %+v, want retrying, try 1, next %v", r, next)
+	}
+	if n := d.Unsent(); n != 0 {
+		t.Fatalf("Unsent = %d, want 0: the drain sends it at its next try", n)
+	}
+}

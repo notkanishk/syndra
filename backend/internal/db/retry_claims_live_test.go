@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"testing"
+	"time"
 )
 
 // The background retry claim and the operator's Send, against a real
@@ -229,5 +230,58 @@ func TestScheduleRetry_AHaltedSendGetsANextTry(t *testing.T) {
 		if err := PG.QueryRow(ctx, `SELECT attempts FROM propagation_outbox WHERE id = $1`, id).Scan(&n); err != nil || n != want {
 			t.Fatalf("row %s left alone: attempts %d (want %d) err %v", id, n, want, err)
 		}
+	}
+}
+
+// A row nothing went out for (design §13.4) is deferred: pending again with no
+// attempt spent, counted as retrying, and the background drain's once due.
+// Released with no not_before, it waited for an operator's Send instead.
+func TestDeferPropagation_SpendsNoAttemptAndIsTheBackgroundDrains(t *testing.T) {
+	ctx := liveDB(t)
+	id := outboxRow(t, ctx, "u-defer", "community", "", 0, "")
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET status='in_flight', started_at=NOW() WHERE id=$1`, id); err != nil {
+		t.Fatalf("send it: %v", err)
+	}
+	before, _, err := CountRetries(ctx, "op-a@example.org")
+	if err != nil {
+		t.Fatalf("CountRetries: %v", err)
+	}
+	if err := DeferPropagation(ctx, id, "TrueNAS could not be reached", 0); err != nil {
+		t.Fatalf("DeferPropagation: %v", err)
+	}
+	after, _, err := CountRetries(ctx, "op-a@example.org")
+	if err != nil {
+		t.Fatalf("CountRetries: %v", err)
+	}
+	if after[TargetZitadel] != before[TargetZitadel]+1 {
+		t.Errorf("a deferred row is retrying: %v, was %v", after, before)
+	}
+	got, err := ClaimDueRetries(ctx, TargetZitadel, 100)
+	if err != nil {
+		t.Fatalf("ClaimDueRetries: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != id || got[0].Attempts != 0 {
+		t.Fatalf("the background drain claims the deferred row with no attempt spent, got %+v", got)
+	}
+}
+
+// The longest wait an add-on can hand a defer (addons.maxRetryAfter, an hour)
+// settles: the row is pending again, never left in flight by make_interval.
+func TestDeferPropagation_TheLongestRetryAfterSettles(t *testing.T) {
+	ctx := liveDB(t)
+	id := outboxRow(t, ctx, "u-defer-long", "community", "", 0, "")
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET status='in_flight', started_at=NOW() WHERE id=$1`, id); err != nil {
+		t.Fatalf("send it: %v", err)
+	}
+	if err := DeferPropagation(ctx, id, "TrueNAS is not taking changes right now", time.Hour); err != nil {
+		t.Fatalf("DeferPropagation: %v", err)
+	}
+	var status string
+	var wait float64
+	if err := PG.QueryRow(ctx, `SELECT status, EXTRACT(EPOCH FROM not_before - NOW()) FROM propagation_outbox WHERE id=$1`, id).Scan(&status, &wait); err != nil {
+		t.Fatal(err)
+	}
+	if status != "pending" || wait < 3590 || wait > 3600 {
+		t.Fatalf("status %q due in %.0f s, want pending in about an hour", status, wait)
 	}
 }

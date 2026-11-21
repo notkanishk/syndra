@@ -297,20 +297,22 @@ func TestAnUnreadableStoreIsARefusedReadNeverAnOutage(t *testing.T) {
 		t.Fatalf("the inventory must say the same: %+v", inv)
 	}
 
-	// Every other failure is TrueNAS not read, answered in a code or not
-	// (NO_CURRENT_READ: it could not be read and the add-on holds no copy):
-	// target_unreachable, which the pages word with the system's name and their
-	// own next step; never read_refused, whose words are about the add-on's
-	// records.
-	for _, read := range []addons.SubjectsResult{
-		{Outcome: addons.OutcomeUnreached},
-		{Outcome: addons.OutcomeUnreached, Status: 503, Code: "TARGET_UNREACHABLE", Detail: "TrueNAS did not answer."},
-		{Outcome: addons.OutcomeIndeterminate, Status: 503, Code: "NO_CURRENT_READ", Detail: "TrueNAS could not be read."},
-		{Outcome: addons.OutcomeIndeterminate, Status: 502, Code: "TARGET_UNREADABLE"},
-		{Outcome: addons.OutcomeIndeterminate, Status: 502},
+	// Every other failure is one of the two outages, never read_refused,
+	// whose words are about the add-on's records (design §13.1): the add-on
+	// saying it cannot read TrueNAS is app_unreachable with its own sentence;
+	// no answer, or an uncoded 5xx, is addon_unreachable.
+	for _, tc := range []struct {
+		read          addons.SubjectsResult
+		reason, words string
+	}{
+		{addons.SubjectsResult{Outcome: addons.OutcomeUnreached}, db.UnreconciledAddonUnreachable, ""},
+		{addons.SubjectsResult{Outcome: addons.OutcomeUnreached, Status: 503, Code: "TARGET_UNREACHABLE", Detail: "TrueNAS did not answer."}, db.UnreconciledAppUnreachable, "TrueNAS did not answer."},
+		{addons.SubjectsResult{Outcome: addons.OutcomeIndeterminate, Status: 503, Code: "NO_CURRENT_READ", Detail: "TrueNAS could not be read."}, db.UnreconciledAppUnreachable, "TrueNAS could not be read."},
+		{addons.SubjectsResult{Outcome: addons.OutcomeIndeterminate, Status: 502, Code: "TARGET_UNREADABLE"}, db.UnreconciledAppUnreachable, ""},
+		{addons.SubjectsResult{Outcome: addons.OutcomeIndeterminate, Status: 502}, db.UnreconciledAddonUnreachable, ""},
 	} {
-		if reason, words, halted := read.Halt(); !halted || reason != db.UnreconciledUnreachable || words != "" {
-			t.Errorf("%+v: got %q %q, want target_unreachable", read, reason, words)
+		if reason, words, halted := tc.read.Halt(); !halted || reason != tc.reason || words != tc.words {
+			t.Errorf("%+v: got %q %q, want %s %q", tc.read, reason, words, tc.reason, tc.words)
 		}
 	}
 }
