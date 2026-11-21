@@ -1,0 +1,9 @@
+{
+  "detector": {
+    "ignoreRules": [
+      "dark-glow"
+    ],
+    "ignoreFiles": [],
+    "ignoreValues": []
+  }
+}

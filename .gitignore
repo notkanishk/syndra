@@ -92,3 +92,8 @@ ui/ds-bundle/
 ui/.design-sync/.cache/
 ui/.design-sync/learnings/
 ui/.design-sync/node_modules
+
+# impeccable design tooling: captures of staging/prod show real people; never commit them.
+# The shared detector config is the owner's decisions, so it is kept.
+/.impeccable/*
+!/.impeccable/config.json
