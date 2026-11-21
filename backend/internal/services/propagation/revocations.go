@@ -91,7 +91,7 @@ func DrainRevocations(ctx context.Context) (DrainResult, error) {
 		if st := addonState(target); !st.Answering() {
 			// A target with nothing of its own queued was not skipped:
 			// unanswered says so, as the operator's pass does.
-			res.merge(target, unanswered(ctx, target, string(st.State)))
+			res.merge(target, unanswered(ctx, target, haltReason(st)))
 			continue
 		}
 		rows, err := claimRevocations(ctx, target, claimBatch)

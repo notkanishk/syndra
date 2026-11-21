@@ -29,7 +29,8 @@ var (
 
 	// dialTimeout and tlsHandshakeTimeout bound the two steps before a request
 	// is written (design §13.5): a dead address is known in 3 s, not 30.
-	// Read when an add-on's client is built (newAddonClient).
+	// tlsHandshakeTimeout is read when an add-on's client is built
+	// (newAddonClient); dialTimeout on every dial (addonDial).
 	dialTimeout         = 3 * time.Second
 	tlsHandshakeTimeout = 5 * time.Second
 

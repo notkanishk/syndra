@@ -932,21 +932,22 @@ func backoffSchedule() []float64 {
 	return out
 }
 
-// ReleasePropagation returns a row to pending WITHOUT spending a retry.
-//
-// For the one case where nothing was attempted: the target declined before
-// doing anything, because an operator put it into a maintenance window. A
-// requeue would spend an attempt and record a dispatch failure for a dispatch
-// that never happened — and a long enough window would exhaust the budget of
-// every queued row and halt the drain on rows that were never even sent.
+// DeferPropagation returns a row to pending WITHOUT spending a retry, due
+// again after `after`: the one path for every send where nothing went out
+// (design §13.4), a side being down or an operator's maintenance window. A
+// requeue would spend an attempt for a dispatch that never happened, and a
+// long outage would exhaust every queued row's budget. not_before is what
+// makes it the background drain's (ClaimDueRetries, retryingRow): Syndra sends
+// it later by itself, and Pending changes counts it as retrying.
 //
 // Guarded by `status='in_flight'` like every other settle, so a row terminated
 // while its dispatch was out is not returned to pending on a target that no
 // longer exists.
-func ReleasePropagation(ctx context.Context, id, reason string) error {
-	return settleOne(ctx, "release propagation", id,
-		`UPDATE propagation_outbox SET status='pending', last_error=$2, started_at=NULL
-		 WHERE id=$1 AND status='in_flight'`, reason)
+func DeferPropagation(ctx context.Context, id, reason string, after time.Duration) error {
+	return settleOne(ctx, "defer propagation", id,
+		`UPDATE propagation_outbox SET status='pending', last_error=$2, started_at=NULL,
+		 not_before = NOW() + make_interval(secs => $3)
+		 WHERE id=$1 AND status='in_flight'`, reason, after.Seconds())
 }
 
 // GetPendingPropagations returns rows still in flight (pending or in_flight),
@@ -973,7 +974,8 @@ func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, e
 const HaltRetrying = "retrying"
 
 // retryingRow is a pending row the background drain will send again on its
-// own: tried, given a next try, and not waiting for the operator. It is the
+// own: given a next try (a requeue after a send, or a deferral when nothing
+// went out, so attempts may be 0), and not waiting for the operator. It is the
 // same rule as ClaimDueRetries plus the revocations the revocation claim
 // retries, which is every withdrawal that does not wait.
 //
@@ -981,7 +983,7 @@ const HaltRetrying = "retrying"
 // so a role marked to wait AFTER its change was sent still shows a next try
 // on its Pending changes row, while this count and the claim hold it. Stamp
 // such rows when a role is marked, if that corner ever matters.
-const retryingRow = `status = 'pending' AND attempts > 0 AND not_before IS NOT NULL
+const retryingRow = `status = 'pending' AND not_before IS NOT NULL
 	AND wait_reason IS DISTINCT FROM 'role_waits' AND wait_reason IS DISTINCT FROM 'manual'
 	AND NOT EXISTS (SELECT 1 FROM role_waits w WHERE w.project_id = propagation_outbox.project_id
 	                AND w.role_key = ANY(propagation_outbox.role_keys))`

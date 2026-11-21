@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/extcall"
 	"syndra/internal/models"
@@ -278,6 +279,17 @@ func unanswered(ctx context.Context, target, reason string) DrainResult {
 		return DrainResult{}
 	}
 	return DrainResult{Halted: true, Reason: reason, Waiting: n}
+}
+
+// haltReason is an add-on pass's halt reason for a target that is not
+// answering: the monitor's state, and checking (no probe yet) is
+// addon_unreachable, Syndra holding no answer from the add-on (design §13.1),
+// so the halt is one the pages say rather than a word of its own.
+func haltReason(st addons.HealthState) string {
+	if st.State == addons.StateChecking {
+		return addons.ReasonAddonUnreachable
+	}
+	return string(st.State)
 }
 
 // pruneAfterDrain is the retention work, run once per drain rather than once

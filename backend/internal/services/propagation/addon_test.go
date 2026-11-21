@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -39,7 +40,9 @@ type addonHarness struct {
 	stale    []string
 	requeued []string
 	released []string
-	attempts int
+	// deferredFor is how long each deferred row waits before it is due.
+	deferredFor []time.Duration
+	attempts    int
 	// bases is what the drain recorded as the target's observed state. The
 	// assertions on it are mostly negative: an apply the add-on could not read
 	// back must record NOTHING here.
@@ -121,8 +124,9 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 		h.attempts++
 		return h.attempts, nil
 	}
-	t.Cleanup(swap(&release, func(_ context.Context, id, _ string) error {
+	t.Cleanup(swap(&deferRow, func(_ context.Context, id, _ string, after time.Duration) error {
 		h.released = append(h.released, id)
+		h.deferredFor = append(h.deferredFor, after)
 		return nil
 	}))
 	return h
@@ -860,5 +864,35 @@ func TestAnOutageSpendsNoAttempt(t *testing.T) {
 	}
 	if h.attempts != 1 {
 		t.Fatalf("a shape refusal still spends an attempt, got %d", h.attempts)
+	}
+}
+
+// A row nothing went out for is deferred, not merely released: due again
+// after the monitor's next probe, or the add-on's Retry-After when that is
+// later, so the background drain (ClaimDueRetries) sends it by itself
+// (design §13.4). Both "nothing went out" cases take that one path.
+func TestARowNothingWentOutForIsDueAgainBySelf(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	closed := addons.CallResponse{Outcome: addons.OutcomeUnreached,
+		Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Err: closed.Err, Why: addons.Unread(closed)}
+	DrainAddon(context.Background(), "truenas")
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, LifecycleRefusal: true,
+		Why: addons.Why{Reason: addons.ReasonReadRefused, RetryAfter: 600}}
+	DrainAddon(context.Background(), "truenas")
+	want := []time.Duration{addons.ProbeInterval(), 600 * time.Second}
+	if len(h.deferredFor) != 2 || h.deferredFor[0] != want[0] || h.deferredFor[1] != want[1] || h.attempts != 0 {
+		t.Fatalf("deferred for %v (want %v), attempts %d", h.deferredFor, want, h.attempts)
+	}
+}
+
+// A target registered since the last probe is checking: the drain halts with
+// a word the pages say (addon_unreachable), never "checking".
+func TestACheckingTargetHaltsAsAddonUnreachable(t *testing.T) {
+	stubAddonDrain(t, addonRow("o1"))
+	t.Cleanup(swap(&addonState, func(string) addons.HealthState { return addons.HealthState{State: addons.StateChecking} }))
+	res, _ := DrainAddon(context.Background(), "truenas")
+	if !res.Halted || res.Reason != addons.ReasonAddonUnreachable {
+		t.Fatalf("want an addon_unreachable halt, got %+v", res)
 	}
 }

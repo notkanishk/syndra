@@ -202,7 +202,13 @@ func writeCooledDown(w http.ResponseWriter, retryAfter int, msg string) {
 
 func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 	target := r.PathValue("target")
-	health := addonsHealth(r.Context(), target)
+	// The page's poll reads the monitor's last probe, never the add-on: open
+	// tabs must not load it or move the monitor (design §13.2). Only "Check
+	// now" (?fresh=true, wantsFresh) reads live, and that read is not counted.
+	health := addonsLastHealth(target)
+	if wantsFresh(r) {
+		health = addonsHealth(r.Context(), target)
+	}
 
 	// The anchor's finding, if it is carrying one, travels with the health of
 	// the target it is about — and it travels whether or not the add-on is
@@ -290,7 +296,7 @@ func describeTarget(ctx context.Context, reg addons.Registration, transport addo
 
 // targetStatus is the monitor's state (design §13.2): the roster reads it and
 // ranks nothing of its own. A credential that does not load is the monitor's
-// wrong_host, and an open breaker is the cause that opened it.
+// no_key, and an open breaker is the cause that opened it.
 func targetStatus(s targetSummary) string { return string(s.Health.State) }
 
 // liveStatus is targetStatus for one target, read now, for the system page:

@@ -17,8 +17,8 @@ import (
 // on both paths: one failed read is not an outage, and the page must be able to
 // say which it is looking at.
 func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
-	health, healthOf, anchor := addonsHealth, addonsHealthOf, dbGetLogAnchor
-	t.Cleanup(func() { addonsHealth, addonsHealthOf, dbGetLogAnchor = health, healthOf, anchor })
+	health, healthOf, anchor := addonsLastHealth, addonsHealthOf, dbGetLogAnchor
+	t.Cleanup(func() { addonsLastHealth, addonsHealthOf, dbGetLogAnchor = health, healthOf, anchor })
 	dbGetLogAnchor = func(context.Context, string) (db.LogAnchor, bool, error) { return db.LogAnchor{}, false, nil }
 	since := time.Date(2026, 10, 14, 9, 40, 0, 0, time.UTC)
 
@@ -37,7 +37,7 @@ func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
 		{"down", addons.TargetHealth{Outcome: addons.OutcomeUnreached, Err: errors.New("no route")},
 			addons.HealthState{State: addons.StateAddonUnreachable, Cause: addons.CauseNoAnswer, CheckedAt: since.Add(time.Minute), Since: &since}, "addon_unreachable"},
 	} {
-		addonsHealth = func(context.Context, string) addons.TargetHealth { return tc.live }
+		addonsLastHealth = func(string) addons.TargetHealth { return tc.live }
 		addonsHealthOf = func(string) addons.HealthState { return tc.state }
 
 		r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/health", nil)
@@ -65,7 +65,7 @@ func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
 }
 
 // The roster's status is the monitor's state and nothing ranks over it
-// (design §13.2): a key that does not load is the monitor's wrong_host, an
+// (design §13.2): a key that does not load is the monitor's no_key, an
 // open breaker is the cause that opened it.
 func TestTheRosterStatusIsTheMonitorsState(t *testing.T) {
 	for _, st := range []addons.ReachState{addons.StateAnswering, addons.StateAddonUnreachable, addons.StateAppUnreachable, addons.StateChecking} {
@@ -73,5 +73,29 @@ func TestTheRosterStatusIsTheMonitorsState(t *testing.T) {
 		if got := targetStatus(s); got != string(st) {
 			t.Errorf("want %s, got %s", st, got)
 		}
+	}
+}
+
+// The page's poll reads the monitor's last probe and never the add-on; only
+// "Check now" (?fresh=true) reads live (design §13.2).
+func TestThePagePollNeverReadsTheAddon(t *testing.T) {
+	live, last, anchor := addonsHealth, addonsLastHealth, dbGetLogAnchor
+	t.Cleanup(func() { addonsHealth, addonsLastHealth, dbGetLogAnchor = live, last, anchor })
+	dbGetLogAnchor = func(context.Context, string) (db.LogAnchor, bool, error) { return db.LogAnchor{}, false, nil }
+	reads := 0
+	addonsHealth = func(context.Context, string) addons.TargetHealth {
+		reads++
+		return addons.TargetHealth{Reachable: true, Outcome: addons.OutcomeSucceeded}
+	}
+	addonsLastHealth = func(string) addons.TargetHealth {
+		return addons.TargetHealth{Reachable: true, Outcome: addons.OutcomeSucceeded}
+	}
+	for _, url := range []string{"/api/v1/targets/truenas/health", "/api/v1/targets/truenas/health?fresh=true"} {
+		r := httptest.NewRequest(http.MethodGet, url, nil)
+		r.SetPathValue("target", "truenas")
+		handleTargetHealth(httptest.NewRecorder(), r)
+	}
+	if reads != 1 {
+		t.Fatalf("want one live read, for Check now only; got %d", reads)
 	}
 }

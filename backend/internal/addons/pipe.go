@@ -85,7 +85,7 @@ func (a *Addon) send(ctx context.Context, s sendSpec) (CallResponse, error) {
 			} else {
 				body, err := withJSONField(s.Body, "fresh", true)
 				if err != nil {
-					return refuse(err)
+					return refuse(fmt.Errorf("%w: %w", errNotPrepared, err))
 				}
 				s.Body = body
 			}
@@ -102,7 +102,7 @@ func (a *Addon) send(ctx context.Context, s sendSpec) (CallResponse, error) {
 	}
 	if s.Claim != nil {
 		if err := s.Claim(ctx); err != nil {
-			return refuse(err)
+			return refuse(fmt.Errorf("%w: %w", errNotPrepared, err))
 		}
 	}
 	resp := doAuthenticated(ctx, cred, s.Method, a.Registration.BaseURL+s.Path, s.Body, callTimeout)

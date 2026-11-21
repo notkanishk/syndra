@@ -33,7 +33,7 @@ func TestUnreadNamesWhoIsDownAndWhy(t *testing.T) {
 		{"handshake timeout", CallResponse{Outcome: OutcomeUnreached, Err: errors.New("net/http: TLS handshake timeout")}, ReasonAddonUnreachable, CauseNoAnswer, false},
 		{"pinned key mismatch", CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("wrap: %w", pinMismatchError{target: "truenas"})}, ReasonAddonUnreachable, CauseWrongHost, false},
 		{"certificate error", CallResponse{Outcome: OutcomeUnreached, Err: &tls.CertificateVerificationError{Err: errors.New("x")}}, ReasonAddonUnreachable, CauseWrongHost, false},
-		{"no key loaded", CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon truenas: %w: %w", errNoTransport, errors.New("secret file is empty"))}, ReasonAddonUnreachable, CauseWrongHost, false},
+		{"no key loaded", CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon truenas: %w: %w", errNoTransport, errors.New("secret file is empty"))}, ReasonAddonUnreachable, CauseNoKey, false},
 		{"timeout after sending", CallResponse{Outcome: OutcomeIndeterminate, Err: context.DeadlineExceeded}, ReasonAddonUnreachable, CauseTimeout, false},
 		{"reply cut off", CallResponse{Outcome: OutcomeIndeterminate, Status: 200, Err: io.ErrUnexpectedEOF}, ReasonAddonUnreachable, CauseTimeout, false},
 		{"uncoded 500", CallResponse{Outcome: OutcomeIndeterminate, Status: 500}, ReasonAddonUnreachable, CauseFault, false},
@@ -48,6 +48,10 @@ func TestUnreadNamesWhoIsDownAndWhy(t *testing.T) {
 		{"shape refusal", CallResponse{Outcome: OutcomeUnreached, Status: 400, ShapeRefusal: true}, ReasonAddonOutdated, "", false},
 		{"feature not declared", CallResponse{Outcome: OutcomeUnreached, Err: ErrFeatureNotDeclared}, ReasonAddonOutdated, "", false},
 		{"Syndra's own refusal", CallResponse{Outcome: OutcomeUnreached, Err: ErrNoCallRecord}, ReasonReadRefused, "", false},
+		{"TARGET_CHANGED", CallResponse{Outcome: OutcomeUnreached, Status: 503, Code: CodeTargetChanged, Body: problem(CodeTargetChanged), RetryAfter: 5}, ReasonReadRefused, "", true},
+		{"TARGET_UNREADABLE as 429", CallResponse{Outcome: OutcomeUnreached, Status: 429, Code: codeTargetUnreadable, Body: problem(codeTargetUnreadable)}, ReasonAppUnreachable, "", true},
+		{"coded 503", CallResponse{Outcome: OutcomeIndeterminate, Status: 503, Code: "APPLY_FAILED", Body: problem("APPLY_FAILED")}, ReasonReadRefused, "", true},
+		{"call record not written", CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %w", errNotPrepared, errors.New("db down"))}, ReasonReadRefused, "", false},
 		{"a 4xx about the request", CallResponse{Outcome: OutcomeRejected, Status: 404, Code: "NO_SUCH_SETTING"}, ReasonReadRefused, "", false},
 	} {
 		got := Unread(tc.resp)
@@ -249,5 +253,69 @@ func TestAnApplyToAClosedPortSaysNoAnswer(t *testing.T) {
 	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", CallID: "call-1", Fingerprint: "fp-1", Subject: "sub-1"})
 	if resp.Outcome != OutcomeUnreached || !resp.Why.Unreachable() || resp.Why.Cause != CauseNoAnswer {
 		t.Fatalf("want unreached addon_unreachable no_answer, got %s %+v (%v)", resp.Outcome, resp.Why, resp.Err)
+	}
+}
+
+// Syndra failing before it sends (its call record did not write) is its own
+// refusal, read_refused: never no_answer, which would spend no attempt and
+// count as a monitor miss.
+func TestAClaimThatFailsIsNotAnOutage(t *testing.T) {
+	recorder(t, http.StatusOK)
+	a, _ := Get("truenas")
+	resp, _ := a.send(context.Background(), sendSpec{Method: http.MethodPut, Path: "/settings/home_root", Write: true,
+		Claim: func(context.Context) error { return errors.New("db down") }, Body: []byte(`{}`)})
+	if w := Unread(resp); w.Reason != ReasonReadRefused || w.Unreachable() {
+		t.Fatalf("a failed claim is Syndra's own refusal, got %+v (%v)", w, resp.Err)
+	}
+}
+
+// TARGET_CHANGED is the add-on working and its app moving under it: a busy app
+// never opens the breaker and takes the target away from everybody.
+func TestTargetChangedNeverOpensTheBreaker(t *testing.T) {
+	withBreaker(t, 3, breakerCooldown)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = fmt.Fprintf(w, `{"code":%q,"detail":"TrueNAS changed while it was read."}`, CodeTargetChanged)
+	}))
+	t.Cleanup(srv.Close)
+	signedAddon(t, srv.URL, "a-changed-secret")
+	a, _ := Get("truenas")
+	for range breakerThreshold + 2 {
+		_, _ = a.send(context.Background(), sendSpec{Method: http.MethodGet, Path: "/subjects"})
+	}
+	if a.CircuitOpen() {
+		t.Error("TARGET_CHANGED answers opened the breaker")
+	}
+}
+
+// Over TLS the dot is the dial's alone: the server is asked for
+// "truenas-addon" (SNI, RFC 6066 §3: no trailing dot) while the resolver was
+// asked for "truenas-addon.".
+func TestTLSNamesTheHostWithoutTheDot(t *testing.T) {
+	sni := make(chan string, 1)
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	srv.TLS = &tls.Config{GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
+		sni <- hi.ServerName
+		return nil, nil
+	}}
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+	_, port, _ := net.SplitHostPort(strings.TrimPrefix(srv.URL, "https://"))
+	var asked string
+	orig := addonDial
+	addonDial = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		asked = addr
+		return orig(ctx, network, net.JoinHostPort("127.0.0.1", port))
+	}
+	t.Cleanup(func() { addonDial = orig })
+	client := newAddonClient(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec // the test server's own certificate
+	resp, err := client.Get("https://truenas-addon:" + port + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if got := <-sni; got != "truenas-addon" || asked != "truenas-addon.:"+port {
+		t.Fatalf("SNI %q (want truenas-addon), dial %q (want truenas-addon.:%s)", got, asked, port)
 	}
 }

@@ -45,9 +45,12 @@ const (
 	// timeout. Nothing reached the add-on.
 	CauseNoAnswer = "no_answer"
 	// CauseWrongHost: something answered at the address and is not the add-on
-	// registered here (the pinned key, a certificate error), or Syndra holds no
-	// key for it.
+	// registered here (the pinned key, a certificate error).
 	CauseWrongHost = "wrong_host"
+	// CauseNoKey: Syndra cannot load the add-on's shared secret, so nothing was
+	// sent. Syndra's fault, not the add-on's: its next step is Syndra's secret
+	// file (added 21 Nov 2026 from the 8b review).
+	CauseNoKey = "no_key"
 	// CauseTimeout: the request went out and the answer stopped (a timeout, a
 	// reset, a reply cut off).
 	CauseTimeout = "timeout"
@@ -69,8 +72,13 @@ const (
 )
 
 // errNoTransport is Syndra holding no usable key for the add-on (its secret
-// did not load): wrong_host, whose next step is the address and the secret.
+// did not load): no_key, whose next step is Syndra's secret file.
 var errNoTransport = errors.New("addon: no transport material")
+
+// errNotPrepared is Syndra failing to make the call before sending it (its
+// call record did not write, its body did not build): Syndra's own refusal,
+// read_refused, never an outage.
+var errNotPrepared = errors.New("addon: the call could not be prepared")
 
 // CircuitOpenError is a call the backend's breaker refused (design §13.2): what
 // opened it and the time left. errors.Is(err, ErrCircuitOpen) holds.
@@ -102,12 +110,19 @@ func Unread(r CallResponse) Why {
 	switch {
 	case r.ShapeRefusal:
 		return Why{Reason: ReasonAddonOutdated}
-	case r.Code == CodeStoreUnreadable, r.Code == codeLifecycleRefusal:
-		return Why{Reason: ReasonReadRefused, Detail: problemDetail(r.Body)}
+	case r.Code == CodeStoreUnreadable, r.Code == codeLifecycleRefusal, r.Code == CodeTargetChanged:
+		// TARGET_CHANGED: the app changed while the add-on read it. Answered,
+		// so not an outage: a queued row spends an attempt and backs off.
+		return Why{Reason: ReasonReadRefused, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter}
+	case r.Code == codeTargetUnreachable, r.Code == codeNoCurrentRead, r.Code == codeTargetUnreadable:
+		// Before 429: TARGET_UNREADABLE may come as one, and it is the app.
+		return Why{Reason: ReasonAppUnreachable, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter}
 	case r.Code == codeFreshReadCooldown, r.Status == 429:
 		return Why{Reason: ReasonCooldown, RetryAfter: max(1, r.RetryAfter)}
-	case r.Code == codeTargetUnreachable, r.Code == codeNoCurrentRead, r.Code == codeTargetUnreadable:
-		return Why{Reason: ReasonAppUnreachable, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter}
+	case r.Code != "":
+		// Any other registered code is the add-on explaining itself, whatever
+		// its status: only a 5xx with no code is a fault.
+		return Why{Reason: ReasonReadRefused, Detail: problemDetail(r.Body)}
 	case r.Status == 0:
 		return unsent(r)
 	case r.Status >= 200 && r.Status < 300:
@@ -129,10 +144,13 @@ func unsent(r CallResponse) Why {
 	switch {
 	case errors.Is(r.Err, ErrFeatureNotDeclared):
 		return Why{Reason: ReasonAddonOutdated}
-	case errors.Is(r.Err, ErrNoCallRecord), errors.Is(r.Err, ErrNoFingerprint), errors.Is(r.Err, ErrFreshOutOfScope):
+	case errors.Is(r.Err, ErrNoCallRecord), errors.Is(r.Err, ErrNoFingerprint), errors.Is(r.Err, ErrFreshOutOfScope),
+		errors.Is(r.Err, errNotPrepared):
 		// Syndra's own refusal before anything left: not an outage.
 		return Why{Reason: ReasonReadRefused}
-	case wrongHost(r.Err), errors.Is(r.Err, errNoTransport):
+	case errors.Is(r.Err, errNoTransport):
+		return Why{Reason: ReasonAddonUnreachable, Cause: CauseNoKey}
+	case wrongHost(r.Err):
 		return Why{Reason: ReasonAddonUnreachable, Cause: CauseWrongHost}
 	case r.Outcome == OutcomeIndeterminate:
 		return Why{Reason: ReasonAddonUnreachable, Cause: CauseTimeout}

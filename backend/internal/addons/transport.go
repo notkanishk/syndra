@@ -501,8 +501,8 @@ const (
 )
 
 // CodeTargetChanged is the target changing while the add-on read it: nothing was judged and
-// nothing sent, so it is unreached like TARGET_UNREACHABLE (classifyStatus), and only its words
-// differ where a person is told (handlers).
+// nothing sent, so it is unreached (classifyStatus). Not an outage: Unread says read_refused,
+// and the breaker does not count it.
 const CodeTargetChanged = "TARGET_CHANGED"
 
 // CodeStoreUnreadable is the add-on's own local store failing to read: the
@@ -715,7 +715,11 @@ func (b *breaker) record(now time.Time, resp CallResponse) {
 	// 429) is the same: the add-on answering on purpose. Counted, five presses
 	// of "Read again" would open the breaker and take the target away from
 	// everybody for its cooldown.
-	if resp.LifecycleRefusal || resp.Code == codeFreshReadCooldown {
+	//
+	// TARGET_CHANGED is the same again: the add-on read its app and the app
+	// moved under it. The add-on is working; counted, a busy app would take the
+	// target away from everybody.
+	if resp.LifecycleRefusal || resp.Code == codeFreshReadCooldown || resp.Code == CodeTargetChanged {
 		return
 	}
 	b.failures++

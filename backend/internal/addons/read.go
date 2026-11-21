@@ -711,23 +711,33 @@ type TargetHealth struct {
 	Why Why `json:"-"`
 }
 
-// Health reads one add-on's own account of itself.
+// Health reads one add-on's own account of itself, live, for an operator's
+// "Check now".
 //
 // Served by the add-on even when its target is unreachable, deliberately: a
 // health endpoint that fails whole because one of five reads failed tells an
 // operator nothing about the other four, which are the ones that would have
 // explained it.
 //
-// Every read is also counted by the health monitor (HealthOf), so whoever made
-// it — a member's page, an operator's, the periodic probe — moves one count.
-func Health(ctx context.Context, target string) TargetHealth {
+// It does not feed the monitor. Only the monitor's own probe (probe, from
+// ProbeAll every probeInterval) counts toward failureThreshold, as only the
+// kubelet's periodic probe counts toward a Kubernetes probe's: a person
+// pressing Check now, or ten open tabs, never speeds up the three-miss rule.
+func Health(ctx context.Context, target string) TargetHealth { return readHealth(ctx, target) }
+
+// probe is the monitor's read: Health, folded into the target's state and
+// kept as its last answer (LastHealth).
+func probe(ctx context.Context, target string) {
 	if _, err := Get(target); err != nil {
-		return TargetHealth{Outcome: OutcomeUnreached, Err: err}
+		return
 	}
-	h := readHealth(ctx, target)
-	monitor.observe(target, h, timeNow().UTC())
-	return h
+	monitor.observe(target, readHealth(ctx, target), timeNow().UTC())
 }
+
+// LastHealth is the monitor's last probe of a target: what a page shows
+// between probes, so no page read reaches the add-on. Unreached with no error
+// before the first probe (HealthOf says checking).
+func LastHealth(target string) TargetHealth { return monitor.last(target) }
 
 func readHealth(ctx context.Context, target string) TargetHealth {
 	a, err := Get(target)

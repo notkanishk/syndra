@@ -514,8 +514,11 @@ var (
 	// request time rather than trusted from start-up.
 	addonsTransportCredentials = addons.TransportCredentials
 	addonsGet                  = addons.Get
-	addonsHealth               = addons.Health
-	addonsHealthOf             = addons.HealthOf
+	// addonsHealth is the live read, for "Check now" (?fresh=true) only;
+	// addonsLastHealth is the monitor's last probe, what every poll reads.
+	addonsHealth     = addons.Health
+	addonsLastHealth = addons.LastHealth
+	addonsHealthOf   = addons.HealthOf
 	// How a member reaches a target, for the instructions on their own page.
 	addonsConnection = addons.ConnectionFor
 	// A target's kind, product and entitlement schema as last accepted, read

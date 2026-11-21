@@ -77,6 +77,7 @@ type healthRecord struct {
 	firstMissAt time.Time
 	lifecycle   string
 	recent      []string
+	last        TargetHealth // the last probe's answer (LastHealth)
 }
 
 // healthMonitor holds every target's state in memory. Nothing is persisted: a
@@ -92,8 +93,7 @@ func newHealthMonitor() *healthMonitor {
 	return &healthMonitor{records: map[string]*healthRecord{}, startedAt: time.Now().UTC()}
 }
 
-// monitor is fed by every Health read: the probe, and the operator's own read
-// of a target's health.
+// monitor is fed by the probe alone (probe, from ProbeAll).
 var monitor = newHealthMonitor()
 
 // observe folds one probe into the target's state. A probe answered with
@@ -108,7 +108,7 @@ func (m *healthMonitor) observe(target string, h TargetHealth, at time.Time) {
 		r = &healthRecord{state: StateChecking}
 		m.records[target] = r
 	}
-	r.checkedAt = at
+	r.checkedAt, r.last = at, h
 	ok := h.Outcome == OutcomeSucceeded && h.Reachable
 	result := "missed"
 	if ok {
@@ -191,6 +191,15 @@ func (m *healthMonitor) state(target string, now time.Time) HealthState {
 	return st
 }
 
+func (m *healthMonitor) last(target string) TargetHealth {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if r := m.records[target]; r != nil {
+		return r.last
+	}
+	return TargetHealth{Outcome: OutcomeUnreached}
+}
+
 // HealthOf is the monitor's State of a target (design §13.2).
 func HealthOf(target string) HealthState { return monitor.state(target, timeNow().UTC()) }
 
@@ -203,7 +212,7 @@ func ProbeAll(ctx context.Context) error {
 		wg.Go(func() {
 			ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 			defer cancel()
-			Health(ctx, reg.Target)
+			probe(ctx, reg.Target)
 		})
 	}
 	wg.Wait()

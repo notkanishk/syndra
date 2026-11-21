@@ -1,7 +1,10 @@
 package addons
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -147,5 +150,28 @@ func TestZeroTimesAreOmittedFromTheWire(t *testing.T) {
 		if strings.Contains(string(b), k) {
 			t.Fatalf("%s must be omitted when unset, got %s", k, b)
 		}
+	}
+}
+
+// Only the monitor's own probe counts (Kubernetes: only the kubelet's periodic
+// probe counts toward failureThreshold). Pages and "Check now" read Health, and
+// however many of them there are, the monitor does not move; one probe does.
+func TestOnlyTheProbeMovesTheMonitor(t *testing.T) {
+	m := monitor
+	monitor = newHealthMonitor()
+	t.Cleanup(func() { monitor = m })
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := srv.URL
+	srv.Close() // a closed port
+	signedAddon(t, url, "a-poll-secret")
+	for range failureThreshold + 1 {
+		Health(context.Background(), "truenas")
+	}
+	if st := HealthOf("truenas"); st.State != StateChecking || len(st.Recent) != 0 {
+		t.Fatalf("live reads moved the monitor: %+v", st)
+	}
+	_ = ProbeAll(context.Background())
+	if st := HealthOf("truenas"); st.State != StateAddonUnreachable || LastHealth("truenas").Why.Cause != CauseNoAnswer {
+		t.Fatalf("the probe decides from checking and keeps its answer: %+v %+v", st, LastHealth("truenas"))
 	}
 }

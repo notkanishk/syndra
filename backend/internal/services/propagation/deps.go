@@ -75,9 +75,9 @@ var (
 	// markSending stamps an add-on row's started_at as its calls go out
 	// (dispatchEntitlement), not when its batch was claimed.
 	markSending = db.MarkPropagationSending
-	// release returns a row to pending without spending a retry, for the one
-	// case where nothing was attempted at all.
-	release = db.ReleasePropagation
+	// deferRow returns a row to pending without spending a retry, due again
+	// later, for every send where nothing went out (deferUnsent).
+	deferRow = db.DeferPropagation
 
 	// reconcileLedger prunes direct_role_grants to match the desired state an
 	// applied revoke/replace established in Zitadel (revoke removes the named

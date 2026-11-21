@@ -231,3 +231,35 @@ func TestScheduleRetry_AHaltedSendGetsANextTry(t *testing.T) {
 		}
 	}
 }
+
+// A row nothing went out for (design §13.4) is deferred: pending again with no
+// attempt spent, counted as retrying, and the background drain's once due.
+// Released with no not_before, it waited for an operator's Send instead.
+func TestDeferPropagation_SpendsNoAttemptAndIsTheBackgroundDrains(t *testing.T) {
+	ctx := liveDB(t)
+	id := outboxRow(t, ctx, "u-defer", "community", "", 0, "")
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET status='in_flight', started_at=NOW() WHERE id=$1`, id); err != nil {
+		t.Fatalf("send it: %v", err)
+	}
+	before, _, err := CountRetries(ctx, "op-a@example.org")
+	if err != nil {
+		t.Fatalf("CountRetries: %v", err)
+	}
+	if err := DeferPropagation(ctx, id, "TrueNAS could not be reached", 0); err != nil {
+		t.Fatalf("DeferPropagation: %v", err)
+	}
+	after, _, err := CountRetries(ctx, "op-a@example.org")
+	if err != nil {
+		t.Fatalf("CountRetries: %v", err)
+	}
+	if after[TargetZitadel] != before[TargetZitadel]+1 {
+		t.Errorf("a deferred row is retrying: %v, was %v", after, before)
+	}
+	got, err := ClaimDueRetries(ctx, TargetZitadel, 100)
+	if err != nil {
+		t.Fatalf("ClaimDueRetries: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != id || got[0].Attempts != 0 {
+		t.Fatalf("the background drain claims the deferred row with no attempt spent, got %+v", got)
+	}
+}
