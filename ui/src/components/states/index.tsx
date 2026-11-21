@@ -104,7 +104,7 @@ export function EmptyState({
   guidance,
   action,
   resolved = false,
-  bloom = false,
+  glow = false,
   lift = false,
   closes = false,
   plate,
@@ -114,7 +114,7 @@ export function EmptyState({
   action?: { label: string; href: string } | { label: string; onClick: () => void };
   resolved?: boolean;
   /** The reader's own act just emptied it (S13): the lime dot's ember opens once (A-25 moment 7); at rest it only holds its glow. */
-  bloom?: boolean;
+  glow?: boolean;
   /** The list just emptied in front of the reader: the line rises into its place. */
   lift?: boolean;
   /**
@@ -136,7 +136,7 @@ export function EmptyState({
       <div className="flex min-w-0 flex-1 flex-col justify-center gap-2.5">
       <div className="isolate flex items-center gap-2.5">
         {resolved && (
-          <StatusDot tone="healthy" ember bloom={bloom} />
+          <StatusDot tone="healthy" ember glow={glow} />
         )}
         <div className={closes ? "type-section-title" : "type-empty-title"}>{title}</div>
       </div>

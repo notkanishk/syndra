@@ -40,7 +40,7 @@ export function AllClear({
   /** The caller opens a card around it (AllClearCard), so the line need not open its own space. */
   inCard?: boolean;
 }) {
-  const line = <EmptyState resolved lift={emptied} bloom={emptied && byReader} title={title} guidance={guidance} />;
+  const line = <EmptyState resolved lift={emptied} glow={emptied && byReader} title={title} guidance={guidance} />;
   // Its space is opened by the card around it when it sits in one (AllClearCard); alone, here.
   return emptied && !inCard ? <UnfoldOnArrival>{line}</UnfoldOnArrival> : line;
 }

@@ -27,6 +27,28 @@ describe("an all-clear blooms only after the operator's own act", () => {
     });
     rerender({ rows: [] });
     expect(result.current.cleared?.mine).not.toBeNull();
+    expect(result.current.glow).toBe(true);
+  });
+
+  it("opens the ember in the moment of the clearing only: a later remount of the same clearing is not a second opening", async () => {
+    const qc = makeQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: qc }, children);
+    const { result, rerender } = renderHook(({ rows }) => useQueueCleared(rows, true, true), {
+      initialProps: { rows: [A] },
+      wrapper,
+    });
+    await act(async () => {
+      await qc.getMutationCache().build(qc, { mutationFn: async () => "ok" }).execute(undefined);
+    });
+    rerender({ rows: [] });
+    expect(result.current.glow).toBe(true);
+    // A read fails and then a good one lands, seconds later: the empty state remounts. The clearing is still
+    // theirs (the count and the time), but the light has had its one opening.
+    act(() => void vi.advanceTimersByTime(5_000));
+    rerender({ rows: [] });
+    expect(result.current.cleared?.mine).not.toBeNull();
+    expect(result.current.glow).toBe(false);
   });
 
   it("does not claim one that empties on a read nobody caused, or that arrived empty", () => {
@@ -42,9 +64,9 @@ describe("an all-clear blooms only after the operator's own act", () => {
   });
 });
 
-describe("EmptyState's bloom", () => {
-  it("draws the bloom and the lift only when asked, and the plain arrival otherwise", () => {
-    const own = render(<EmptyState resolved lift bloom title="Done." />);
+describe("EmptyState's glow", () => {
+  it("draws the ember's opening and the lift only when asked, and the plain arrival otherwise", () => {
+    const own = render(<EmptyState resolved lift glow title="Done." />);
     expect(own.container.querySelector(".ember-open")).toBeTruthy();
     expect(own.container.querySelector(".lift-in")).toBeTruthy();
     own.unmount();

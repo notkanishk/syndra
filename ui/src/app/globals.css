@@ -1177,7 +1177,7 @@
    wins over it. Unlayered, it beat every layer whatever its specificity, and a filled button's edge
    lit in the accent on an accent fill (review, 20 Nov 2026). */
 @layer base {
-  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light, .trail-answer, .dot-glow) {
+  :where(.hour-light, .lit-card, .rim, .card, .panel, .syndra-mark, .place-light, .trail-light, .dot-glow) {
     --pool-c: var(--accent);
     --pool-stops: color-mix(in srgb, var(--pool-c) var(--pool-k), transparent),
       color-mix(in srgb, var(--pool-c) calc(var(--pool-k) * 0.74), transparent) 20%,
@@ -1427,18 +1427,19 @@
   }
 }
 
-/* A dot's own light (A-25 moment 7, the ember): a pool of the dot's colour at 44%, 17px out from the
-   6px dot (20px from its centre, so it is spent inside any card the dot sits in), falling to nothing
-   on the one light's stops: it has no edge. Under the words, never a fill behind them: the pool is
-   behind its parent's content (a caller isolates the row), or, for `glow-once`, over the dot alone.
-   `ember` holds it at 0.8, at rest. `ember-open` opens it once, beside the state's lift-in. `glow-once`
-   is the same light for a change that went well, opening once and gone. Reduced motion: the ember at
-   rest, no opening, and no glow-once at all. Forced colours: no light drawn. */
+/* A dot's own light (A-25 moment 7, the ember): a pool of the dot's colour at 44% of the hour's weight, 17px
+   out from the 6px dot (20px from its centre, so it is spent inside any card the dot sits in), falling to
+   nothing on the one light's stops: it has no edge. Light is never in front of words: the pool is behind its
+   parent's content, so every caller isolates the line the dot sits in (`isolate`), and nothing here lifts it.
+   `ember` holds it at 0.8, at rest. `ember-open` opens it once, beside the state's lift-in. `glow-once` is
+   the same light for a change that went well (a copy, an outcome, a read, a read step the trail's lamp
+   reaches), opening once and gone. Reduced motion: the ember at rest, no opening, and no glow-once at all.
+   Forced colours: no light drawn. A stale card's ring never wears it. */
 @utility dot-glow {
   position: relative;
   /* The dot's own colour, unless it names one (the mark's dot does). */
   --pool-c: var(--dot-light, currentColor);
-  --pool-k: 44%;
+  --pool-k: calc(44% * var(--hour-weight));
 
   &::before {
     content: "";
@@ -1451,9 +1452,6 @@
   }
   &.ember::before {
     opacity: 0.8;
-  }
-  &.glow-once {
-    isolation: isolate;
   }
   @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
     &.ember-open::before {
@@ -1960,6 +1958,7 @@ html.theme-fading *::after {
   .syndra-mark {
     --mark-size: 22px;
     position: relative;
+    isolation: isolate;
     display: flex;
     flex: none;
     align-items: center;
@@ -2220,29 +2219,9 @@ html.theme-fading *::after {
       transparent
     );
   }
-  /* A read dot's answer as the lamp reaches it: its own lime glow (the ember's light, --healthy at 44%,
-     17px out from the 6px dot) opens once and is gone, under the words. Never on a ring. */
-  .trail-answer {
-    --pool-c: var(--healthy);
-    --pool-k: 44%;
-    &::after {
-      content: "";
-      position: absolute;
-      inset: -17px;
-      z-index: -1;
-      background: radial-gradient(closest-side, var(--pool-stops));
-      opacity: 0;
-    }
-  }
-  @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
-    .trail-answer::after {
-      animation: answer var(--duration-flash) var(--ease-flash) both;
-    }
-  }
   @media (forced-colors: active) {
     .trail-light,
-    .trail-path,
-    .trail-answer::after {
+    .trail-path {
       display: none;
     }
   }
@@ -2273,6 +2252,10 @@ html.theme-fading *::after {
   &[data-stale] [data-dot] {
     background-color: transparent;
     @apply dot-ring;
+  }
+  /* A ring is not a fresh read: it never wears a light, whatever a caller passed. */
+  &[data-stale] [data-dot]::before {
+    display: none;
   }
   &[data-recedes] {
     transition-property: background-color, border-color, box-shadow;

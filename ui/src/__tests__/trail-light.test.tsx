@@ -57,7 +57,7 @@ const carried = (root: HTMLElement) =>
 /** The lamp's centre, from the list's top: the first dot, and the sum of its moves. */
 const lampAt = () => px(light()!, "--trail-y") + carried(light()!);
 const moves = () => Number(light()!.dataset.moves);
-const answered = () => dots().map((d) => d.classList.contains("trail-answer"));
+const answered = () => dots().map((d) => d.classList.contains("glow-once"));
 /**
  * Time passing, a millisecond at a time by default: React answers a timer as it fires in a browser, so each
  * timer the answer sets is set at the time it really is, not at the end of a long jump.
@@ -214,7 +214,7 @@ describe("carried home", () => {
     expect(answered()).toEqual([true, true, false]);
     // Its glow is the ember's light, opening once: a keyframe set of its own, not `bloom`'s disc.
     expect(css).toMatch(/@keyframes answer \{\s*from \{\s*opacity: 0;\s*scale: 0\.3;\s*\}\s*30% \{\s*opacity: 1;\s*\}\s*to \{\s*opacity: 0;\s*scale: 1;/);
-    expect(css).toMatch(/\.trail-answer::after \{\s*animation: answer var\(--duration-flash\) var\(--ease-flash\) both;/);
+    expect(css).toMatch(/&\.glow-once::before \{\s*animation: answer var\(--duration-flash\) var\(--ease-flash\) both;/);
   });
 
   it("does not breathe while it walks; it breathes only once it has landed on a step not yet read", () => {
@@ -379,7 +379,8 @@ describe("carried home", () => {
   });
 
   it("is not drawn under forced colours: no lamp, no line, no glow", () => {
-    expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.trail-light,\s*\.trail-path,\s*\.trail-answer::after \{\s*display: none;/);
+    expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.trail-light,\s*\.trail-path \{\s*display: none;/);
+    expect(css).toMatch(/@media \(forced-colors: active\) \{\s*&::before \{\s*display: none;/);
   });
 });
 
@@ -532,7 +533,7 @@ describe("its place: inside the result's card (rule 1)", () => {
   it("is the card's only when it holds a trail", () => {
     const { container } = render(<ActionOutcome outcome={{ kind: "applied", message: "Done" }} word="Given" />);
     expect(container.querySelector("[data-trail-room]")).toBeNull();
-    expect(container.querySelector(".isolate")).toBeNull();
+    expect(container.firstElementChild).not.toHaveClass("isolate");
   });
 
   it("lies under every line in the card: the card is its layer, not the list", () => {

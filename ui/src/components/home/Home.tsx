@@ -254,8 +254,7 @@ export function Home({ session, door = false }: { session: SessionUser; door?: b
   });
   // Home emptied in front of the reader (A-24 §4.1): the all-clear lifts, and its dot blooms when it was
   // their own act (a write of theirs that landed in the last 30s). Home's work is one queue for this.
-  const { cleared } = useQueueCleared(calm ? NO_WORK : WORK, !loading && !error, true, advanced);
-  const mine = Boolean(cleared?.mine);
+  const { cleared, glow } = useQueueCleared(calm ? NO_WORK : WORK, !loading && !error, true, advanced);
   // The list closes, the vivid ending, at most once a day on this device and only by their own hand.
   // Decided in render, so the title is never drawn one size and then another.
   const closes = cleared?.mine ? closesOnce(cleared.mine.at) : false;
@@ -502,7 +501,7 @@ export function Home({ session, door = false }: { session: SessionUser; door?: b
           <EmptyState
             resolved
             lift={cleared !== null}
-            bloom={mine}
+            glow={glow}
             closes={closes}
             plate="shut"
             title="Nothing here needs you."

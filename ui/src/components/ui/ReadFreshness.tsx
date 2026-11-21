@@ -295,8 +295,8 @@ export function ReadFreshness({
           reading that is neither healthy nor broken: the read answered, and
           the target could not confirm it. */}
       {/* The dot and the sentence wrap as one, so a long sentence never leaves the dot alone on its line. */}
-      <span className="flex min-w-0 items-start gap-2">
-      <StatusDot data-freshness-dot="" tone={tone.dot.tone} ring={tone.dot.ring} bloom={blooming} className="mt-[0.5em]" />
+      <span className="isolate flex min-w-0 items-start gap-2">
+      <StatusDot data-freshness-dot="" tone={tone.dot.tone} ring={tone.dot.ring} glow={blooming} className="mt-[0.5em]" />
       {/* The new line crossfades in over the old one when a read the reader asked for lands (S17). */}
       <Crossfade id={blooming ? `landed:${landed}` : "read"}>
         <span id={lineId} className={tone.text}>

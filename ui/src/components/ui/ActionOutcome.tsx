@@ -125,9 +125,9 @@ export function ActionOutcome({
         role={grave ? "alert" : "status"}
         className={`flex flex-col gap-1 ${className}`}
       >
-        <span className="inline-flex items-center gap-2 text-small font-semibold text-ink">
+        <span className="isolate inline-flex items-center gap-2 text-small font-semibold text-ink">
           {/* It went well, because of you, and you are looking: the one dot that blooms (S4). */}
-          <StatusDot tone={dotTone(outcome)} bloom={outcome.kind === "applied"} />
+          <StatusDot tone={dotTone(outcome)} glow={outcome.kind === "applied"} />
           {word}
         </span>
         {/* Queued: why it waits, then the step left — the word above already
@@ -155,7 +155,7 @@ export function ActionOutcome({
         {waitsForSend(outcome) ? (
           <NextStep person={person} />
         ) : (
-          <span className="inline-flex items-center gap-2 text-small font-semibold text-ink">
+          <span className="isolate inline-flex items-center gap-2 text-small font-semibold text-ink">
             <StatusDot tone={dotTone(outcome)} />
             {word}
           </span>
@@ -185,8 +185,8 @@ export function ActionOutcome({
         grave ? "border-danger-line bg-surface-1" : "border-line-strong bg-surface-1"
       } ${className}`}
     >
-      <div className="flex items-center gap-2.5">
-        <StatusDot tone={dotTone(outcome)} bloom={celebrates} />
+      <div className="isolate flex items-center gap-2.5">
+        <StatusDot tone={dotTone(outcome)} glow={celebrates} />
         <span className="font-display text-title text-ink">
           {word}
         </span>

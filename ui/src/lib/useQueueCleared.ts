@@ -2,10 +2,18 @@
 
 import { useRef, useState } from "react";
 
+import { FLASH_MS } from "@/lib/motion/still";
 import { ownActWithin } from "@/lib/query-client";
 
 /** A send started this long ago, whose queue then empties, is this operator's. */
 const MINE_WITHIN_MS = 30_000;
+
+/**
+ * The ember opens once, in the moment of the clearing (A-25 moment 7): the lift and the flash, and a little
+ * more for a list that fades first. An empty state that remounts later (a failed read, then a good one) is
+ * the same clearing seen again, never a second opening.
+ */
+const GLOW_WITHIN_MS = 2 * FLASH_MS;
 
 export interface QueueCleared<T> {
   /** What was in the queue when it emptied: it is what fades. */
@@ -22,7 +30,7 @@ export interface QueueCleared<T> {
  * click, not guessed: `beginSend` marks the start of this operator's send and
  * `failedSend` takes it back, so a queue that empties under someone else's
  * send, or a cancel, is never claimed as ours. Anything that empties it is
- * `cleared`; only `mine` earns the bloom and a count.
+ * `cleared`; only `mine` earns the count, and `glow` (the ember's one opening) while it is still the moment.
  *
  * A queue with no single "send" (the operator decides row by row) passes
  * `anyOwnAct`: then any write of the operator's own, landed in the last 30s,
@@ -60,8 +68,12 @@ export function useQueueCleared<T>(items: T[], ready: boolean, anyOwnAct = false
     setCleared({ items: seen, mine });
   }
 
+  // Only `glow` opens the ember, and only inside the clearing's own moment; `mine` still says whose it was.
+  const glow = cleared?.mine != null && Date.now() - Date.parse(cleared.mine.at) < GLOW_WITHIN_MS;
+
   return {
     cleared,
+    glow,
     beginSend: (count: number) => {
       sending.current = { count, at: Date.now() };
     },

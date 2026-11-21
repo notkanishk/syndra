@@ -206,7 +206,7 @@ function PlanFold({ group, plan, system }: { group: PlanGroup; plan: BulkPlan; s
           title={group.heading}
           count={group.count}
           dot={group.dot}
-          bloom={group.bloom}
+          glow={group.bloom}
           note={group.note}
           href={group.link ? "/governance/pending" : undefined}
         />

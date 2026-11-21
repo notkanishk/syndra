@@ -74,17 +74,41 @@ export function detect({ tablet = 720 } = {}) {
     return (pc ? pc + " > " : "") + s;
   };
   const txt = (el) => (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
-  const clipRect = (el) => {
-    let r = { l: -1e9, t: -1e9, r: 1e9, b: 1e9 };
+  // What clips `el`, per side. A scroller moves its content, so it clips only on the sides it cannot scroll
+  // past (its top at scrollTop 0, its foot at the end...) when `release` is set, and what lies beyond it
+  // clips the scroller, not the content, on the sides it releases (A-25 §2 rule 1).
+  const clipRect = (el, release = false) => {
+    const r = { l: -1e9, t: -1e9, r: 1e9, b: 1e9 };
+    const free = { l: false, t: false, r: false, b: false };
     for (let a = el; a && a !== document.body; a = a.parentElement) {
       const s = getComputedStyle(a);
-      if (s.overflowX !== "visible" || s.overflowY !== "visible") {
-        const b = a.getBoundingClientRect();
-        r = { l: Math.max(r.l, b.left), t: Math.max(r.t, b.top), r: Math.min(r.r, b.right), b: Math.min(r.b, b.bottom) };
-      }
+      if (s.overflowX === "visible" && s.overflowY === "visible") continue;
+      const b = a.getBoundingClientRect();
+      const scrolls = (v) => v === "auto" || v === "scroll";
+      const lets = release
+        ? {
+            l: scrolls(s.overflowX) && a.scrollLeft > 0,
+            t: scrolls(s.overflowY) && a.scrollTop > 0,
+            r: scrolls(s.overflowX) && a.scrollLeft + a.clientWidth < a.scrollWidth - 1,
+            b: scrolls(s.overflowY) && a.scrollTop + a.clientHeight < a.scrollHeight - 1,
+          }
+        : free;
+      if (!free.l && !lets.l) r.l = Math.max(r.l, b.left);
+      if (!free.t && !lets.t) r.t = Math.max(r.t, b.top);
+      if (!free.r && !lets.r) r.r = Math.min(r.r, b.right);
+      if (!free.b && !lets.b) r.b = Math.min(r.b, b.bottom);
+      for (const k of "ltrb") if (lets[k]) free[k] = true;
     }
     return r;
   };
+  // How far a light's box (`box`) lies past an edge (`edge`), side by side, more than half a pixel.
+  const pastEdge = (box, edge) =>
+    [
+      ["left", edge.l - box.l],
+      ["top", edge.t - box.t],
+      ["right", box.r - edge.r],
+      ["bottom", box.b - edge.b],
+    ].filter(([, by]) => by > 0.5);
   const textRects = (el, own) => {
     const out = [];
     const nodes = own ? [...el.childNodes].filter((n) => n.nodeType === 3) : [];
@@ -406,12 +430,7 @@ export function detect({ tablet = 720 } = {}) {
     const box = { l: m.left + parseFloat(glow.left), t: m.top + parseFloat(glow.top), r: m.right - parseFloat(glow.right), b: m.bottom - parseFloat(glow.bottom) };
     const clip = clipRect(mark);
     const edge = { l: Math.max(clip.l, 0), t: Math.max(clip.t, 0), r: Math.min(clip.r, innerWidth), b: Math.min(clip.b, innerHeight) };
-    const past = [
-      ["left", edge.l - box.l],
-      ["top", edge.t - box.t],
-      ["right", box.r - edge.r],
-      ["bottom", box.b - edge.b],
-    ].filter(([, by]) => by > 0.5);
+    const past = pastEdge(box, edge);
     for (const [side, by] of past) lamp.push(`the lamp's glow is cut ${by.toFixed(1)}px at its ${side} (${sel(mark)})`);
   }
 
@@ -426,22 +445,7 @@ export function detect({ tablet = 720 } = {}) {
     if (glow.content === "none" || glow.display === "none") continue;
     const m = dot.getBoundingClientRect();
     const box = { l: m.left + parseFloat(glow.left), t: m.top + parseFloat(glow.top), r: m.right - parseFloat(glow.right), b: m.bottom - parseFloat(glow.bottom) };
-    // A box that scrolls moves its content, so on that axis it is the end of the line: what clips beyond it
-    // clips the scroller, not the light (the shell's column is the window's height, its scroller inside it).
-    // Before it, only `hidden` and `clip` end the light.
-    const clip = { l: -1e9, t: -1e9, r: 1e9, b: 1e9 };
-    let doneX = false;
-    let doneY = false;
-    for (let a = dot; a && a !== document.body; a = a.parentElement) {
-      const o = getComputedStyle(a);
-      const b = a.getBoundingClientRect();
-      const cutX = !doneX && (o.overflowX === "hidden" || o.overflowX === "clip");
-      const cutY = !doneY && (o.overflowY === "hidden" || o.overflowY === "clip");
-      if (cutX) (clip.l = Math.max(clip.l, b.left)), (clip.r = Math.min(clip.r, b.right));
-      if (cutY) (clip.t = Math.max(clip.t, b.top)), (clip.b = Math.min(clip.b, b.bottom));
-      if (o.overflowX === "auto" || o.overflowX === "scroll") doneX = true;
-      if (o.overflowY === "auto" || o.overflowY === "scroll") doneY = true;
-    }
+    const clip = clipRect(dot, true);
     const room = dot.closest(".card");
     const rr = room ? room.getBoundingClientRect() : null;
     const edge = {
@@ -450,12 +454,7 @@ export function detect({ tablet = 720 } = {}) {
       r: Math.min(clip.r, innerWidth, rr ? rr.left + room.clientLeft + room.clientWidth : innerWidth),
       b: Math.min(clip.b, rr ? rr.top + room.clientTop + room.clientHeight : 1e9),
     };
-    const past = [
-      ["left", edge.l - box.l],
-      ["top", edge.t - box.t],
-      ["right", box.r - edge.r],
-      ["bottom", box.b - edge.b],
-    ].filter(([, by]) => by > 0.5);
+    const past = pastEdge(box, edge);
     for (const [side, by] of past) ember.push(`the ember's light is cut ${by.toFixed(1)}px at its ${side} (${sel(dot)})`);
   }
 
@@ -491,12 +490,7 @@ export function detect({ tablet = 720 } = {}) {
     const left = r.left + room.clientLeft;
     const top = r.top + room.clientTop - room.scrollTop;
     const inside = { l: left, t: top, r: left + room.clientWidth, b: top + room.scrollHeight };
-    const past = [
-      ["left", inside.l - p.left],
-      ["top", inside.t - p.top],
-      ["right", p.right - inside.r],
-      ["bottom", p.bottom - inside.b],
-    ].filter(([, by]) => by > 0.5);
+    const past = pastEdge({ l: p.left, t: p.top, r: p.right, b: p.bottom }, inside);
     for (const [side, by] of past) place.push(`your place's light reaches ${by.toFixed(1)}px past its room at the ${side} (${sel(room)})`);
   }
 
@@ -534,12 +528,7 @@ export function detect({ tablet = 720 } = {}) {
     const r = room.getBoundingClientRect();
     const left = r.left + room.clientLeft;
     const top = r.top + room.clientTop;
-    const past = [
-      ["left", left - p.left],
-      ["top", top - p.top],
-      ["right", p.right - (left + room.clientWidth)],
-      ["bottom", p.bottom - (top + room.clientHeight)],
-    ].filter(([, by]) => by > 0.5);
+    const past = pastEdge({ l: p.left, t: p.top, r: p.right, b: p.bottom }, { l: left, t: top, r: left + room.clientWidth, b: top + room.clientHeight });
     for (const [side, by] of past) trail.push(`a change's light reaches ${by.toFixed(1)}px past its card's ${side} (${sel(room)})`);
   }
 

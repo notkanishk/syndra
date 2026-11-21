@@ -30,9 +30,9 @@ export function CopiedSeat({
       </span>
       <span
         aria-hidden={!done}
-        className={`inline-flex items-center gap-2 motion-tint ${done ? "opacity-100" : "opacity-0"}`}
+        className={`isolate inline-flex items-center gap-2 motion-tint ${done ? "opacity-100" : "opacity-0"}`}
       >
-        {dot && <StatusDot tone="healthy" bloom={done} />}
+        {dot && <StatusDot tone="healthy" glow={done} />}
         {word}
       </span>
     </span>

@@ -394,6 +394,7 @@ Both are in the prototype behind a switch. They differ only in the curve of each
 - **Still form.** The ember at rest.
 - **Never.** Behind words: it is the dot's own light. Not on a search that missed or a read that failed (neither is `resolved`).
 - **Cost.** S. `EmptyState`'s `resolved` dot (`components/states/index.tsx:133-139`).
+- **The former bloom dots (built).** The six dots that bloomed (a copy, an outcome, a refreshed read, the mark's welcome, a fold heading, a storage row) now take the same edgeless light, once, and it reaches 17px where the old disc reached 9px. The code review judged this faithful to "replaces bloom".
 - **Dial.** Quiet: as built. **Warm, accepted, last:** the ember.
 
 ---

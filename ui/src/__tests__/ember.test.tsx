@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
-
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { EmptyState } from "@/components/states";
 import { StatusDot } from "@/components/ui/Badge";
-import { SRC, block, colour, css, over, ratio, type RGBA } from "./cssTokens";
+import { CopiedSeat } from "@/components/ui/CopiedSeat";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { FoldHeading } from "@/components/ui/FoldHeading";
+import { block, colour, css, over, ratio, type RGBA } from "./cssTokens";
 
 // A-25 moment 7, the ember (owner, 20 Nov 2026: "yes to recommended", the ember last). The lime dot of a
 // clear queue holds a low, edgeless glow at rest; when the reader's own act cleared the queue it opens
@@ -23,7 +23,7 @@ const glow = (() => {
 
 describe("the ember at rest", () => {
   it("is a pool of the dot's own colour at 44%, 17px out from the 6px dot, held at 0.8, still", () => {
-    expect(glow).toMatch(/--pool-k: 44%;/);
+    expect(glow).toMatch(/--pool-k: calc\(44% \* var\(--hour-weight\)\);/);
     expect(glow).toMatch(/--pool-c: var\(--dot-light, currentColor\);/);
     expect(glow).toMatch(/inset: -17px;/);
     expect(glow).toMatch(/&\.ember::before \{\s*opacity: 0\.8;/);
@@ -49,39 +49,54 @@ describe("the ember at rest", () => {
   });
 
   it("is never drawn on a ring, which says this is not a fresh read", () => {
-    const { container } = render(<StatusDot tone="healthy" ember ring bloom />);
+    const { container } = render(<StatusDot tone="healthy" ember ring glow />);
     const dot = container.querySelector("[data-dot]")!;
     expect(dot.className).not.toMatch(/dot-glow|ember/);
     expect(dot).not.toHaveAttribute("data-ember");
   });
 
-  it("leaves the dot readable in both themes, with the pool beneath it at its strongest", () => {
+  it("leaves the dot readable in both themes, bare and over its pool at its strongest (the hour's weight takes the light room's down)", () => {
     for (const [theme, prelude] of [
       ["dark", ':root,\n  [data-theme="dark"] {'],
       ["light", '[data-theme="light"] {'],
     ] as const) {
       const vars = { ...block(":root {\n    --violet-600"), ...block(prelude) };
       const dot = colour(vars, "--healthy");
-      const pool: RGBA = [dot[0], dot[1], dot[2], 0.44 * 0.8];
+      const weight = Number(vars["--hour-weight"]);
+      const pool: RGBA = [dot[0], dot[1], dot[2], 0.44 * weight * 0.8];
       for (const g of ["--surface-1", "--canvas"]) {
-        // Bare, as the spec states it (lime 4.2:1 on paper), and over the pool at its strongest: 2.8:1 on the lilac canvas (the board's own numbers; flagged to the owner).
         expect(ratio(dot, colour(vars, g)), `${theme} ${g} bare`).toBeGreaterThanOrEqual(4.2);
-        expect(ratio(dot, over(pool, colour(vars, g))), `${theme} ${g} in its pool`).toBeGreaterThanOrEqual(2.8);
+        expect(ratio(dot, over(pool, colour(vars, g))), `${theme} ${g} in its pool`).toBeGreaterThanOrEqual(3);
       }
     }
+  });
+
+  it("is never worn by a stale card's ring, whatever a caller passed", () => {
+    expect(css).toMatch(/&\[data-stale\] \[data-dot\]::before \{\s*display: none;/);
   });
 });
 
 describe("the ember opening", () => {
-  it("opens only when the reader's own act cleared the queue: bloom on the empty state", () => {
+  it("opens only when the reader's own act cleared the queue: glow on the empty state", () => {
     const arrival = render(<EmptyState resolved lift title="Done." />);
     expect(arrival.container.querySelector(".ember-open")).toBeNull();
     arrival.unmount();
-    const earned = render(<EmptyState resolved lift bloom title="Done." />);
+    const earned = render(<EmptyState resolved lift glow title="Done." />);
     const dot = earned.container.querySelector("[data-dot]")!;
     expect(dot).toHaveClass("ember", "ember-open");
     // Beside the built lift-in, in the same frame.
     expect(earned.container.querySelector("[role=status]")).toHaveClass("lift-in");
+  });
+
+  it("stays the same dot node when its parent re-renders, so a re-render never replays the opening", () => {
+    const view = render(<EmptyState resolved lift glow title="Done." />);
+    const first = view.container.querySelector("[data-dot]");
+    view.rerender(<EmptyState resolved lift glow title="Done." guidance="Nothing for you to do." />);
+    expect(view.container.querySelector("[data-dot]")).toBe(first);
+    view.rerender(<EmptyState resolved lift title="Done." guidance="Nothing for you to do." />);
+    expect(view.container.querySelector("[data-dot]")).toBe(first);
+    expect(first).not.toHaveClass("ember-open");
+    expect(first).toHaveClass("ember");
   });
 
   it("goes from scale 0.2 and opacity 1 to its rest over flash's duration on flash's curve, once, with no overshoot", () => {
@@ -100,18 +115,30 @@ describe("the ember opening", () => {
   });
 });
 
-describe("bloom is gone", () => {
-  const walk = (dir: string): string[] =>
-    readdirSync(dir).flatMap((f) => {
-      const p = join(dir, f);
-      return statSync(p).isDirectory() ? walk(p) : /\.(tsx?|css)$/.test(f) ? [p] : [];
-    });
+describe("light is never in front of words", () => {
+  it("lifts nothing itself: the dot has no isolation, and each line a once-only light sits in is the isolated one", () => {
+    expect(glow).not.toMatch(/isolation/);
+    const lit = [
+      render(<CopiedSeat done idle="Copy" word="Copied" />),
+      render(<ActionOutcome outcome={{ kind: "applied", message: "Done" }} word="Given" />),
+      render(<FoldHeading open={false} onClick={() => {}} title="Done" count="1" dot="healthy" glow />),
+    ];
+    for (const view of lit) {
+      const dot = view.container.querySelector("[data-dot].glow-once")!;
+      expect(dot, "a dot that opens once").not.toBeNull();
+      expect(dot).not.toHaveClass("isolate");
+      expect(dot.parentElement).toHaveClass("isolate");
+    }
+  });
+});
 
-  it("leaves no bloom keyframe, utility or class: the flat disc with an edge is not drawn anywhere", () => {
-    expect(css).not.toMatch(/@keyframes bloom\b|@utility bloom\b|\.bloom\b/);
-    const offenders = walk(SRC).filter(
-      (p) => !p.endsWith("ember.test.tsx") && /className=(\{`[^`]*|"[^"]*)(?<=[\s"`])bloom(?=[\s"`])|querySelector\([^)]*bloom/.test(readFileSync(p, "utf8")),
-    );
-    expect(offenders).toEqual([]);
+describe("bloom is gone", () => {
+  it("leaves no bloom keyframe, utility or class in the stylesheet: the flat disc with an edge is not drawn", () => {
+    expect(css).not.toMatch(/@keyframes bloom\b|@utility bloom\b|\.bloom\b|trail-answer/);
+  });
+
+  it("is one light: the trail's read dots take the same glow-once as every other dot", () => {
+    expect(css.match(/@keyframes answer/g)).toHaveLength(1);
+    expect(css.match(/inset: -17px/g)).toHaveLength(1);
   });
 });

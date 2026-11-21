@@ -230,7 +230,7 @@ export function UnexplainedAccess() {
     return { who, what };
   }, [resolver]);
   // The queue emptied in front of this operator, by their own act (S13): its all-clear rises and blooms once.
-  const clearedByMe = useQueueCleared(returned, !drift.isLoading && !drift.error, true).cleared?.mine != null;
+  const clearedByMe = useQueueCleared(returned, !drift.isLoading && !drift.error, true).glow;
   const items = useMemo(
     () =>
       applyDriftFilters(returned, filters).filter((item) =>
@@ -459,7 +459,7 @@ export function UnexplainedAccess() {
               resolved
               plate="shut"
               lift={clearedByMe}
-              bloom={clearedByMe}
+              glow={clearedByMe}
             />
           )}
         </Card>

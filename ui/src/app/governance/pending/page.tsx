@@ -141,7 +141,7 @@ export default function PendingChangesPage() {
   const shown = leaving.rows;
   const groups = groupByCascade(shown);
   // S13: a queue that empties while you watch says so once.
-  const { cleared, beginSend, failedSend } = useQueueCleared(
+  const { cleared, glow, beginSend, failedSend } = useQueueCleared(
     rows,
     !pending.isLoading && !pending.error,
   );
@@ -275,7 +275,7 @@ export default function PendingChangesPage() {
               rules={rules.data}
               onFolded={() => setFolded(true)}
             />
-            {folded && <EverythingSent mine={cleared.mine} />}
+            {folded && <EverythingSent mine={cleared.mine} glow={glow} />}
           </>
         ) : (
           <div {...leaving.listProps}>
@@ -567,12 +567,12 @@ function ClearedGroups({
  * The queue has emptied (S13). One line says so; a queue someone else sent (or
  * that was cancelled away) says it without a count or a time it cannot know.
  */
-function EverythingSent({ mine }: { mine: { count: number; at: string } | null }) {
+function EverythingSent({ mine, glow }: { mine: { count: number; at: string } | null; glow: boolean }) {
   return (
     <EmptyState
       resolved
       lift
-      bloom={mine !== null}
+      glow={glow}
       title="Everything has reached Zitadel."
       action={{ label: "Change history", href: "/operations/cascades" }}
       guidance={

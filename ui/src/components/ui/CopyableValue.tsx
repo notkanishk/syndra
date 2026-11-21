@@ -155,9 +155,9 @@ export function CopyableValue({
           {word.rendered && (
             <span
               aria-hidden
-              className={`inline-flex select-none items-center gap-2 ${word.leaving ? "tint-out" : "tint-in"}`}
+              className={`isolate inline-flex select-none items-center gap-2 ${word.leaving ? "tint-out" : "tint-in"}`}
             >
-              <StatusDot tone="healthy" bloom={copied} />
+              <StatusDot tone="healthy" glow={copied} />
               Copied
             </span>
           )}
