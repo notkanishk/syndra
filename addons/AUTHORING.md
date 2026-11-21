@@ -2654,8 +2654,11 @@ happened:
 Once a stop has been tried, the kit runs the matching start, whether the
 stop failed, hung or the run was interrupted: a stop that failed half-way
 may have stopped something anyway. So each hook MUST be safe to run twice
-and safe to run when there is nothing to do (`rm -f`, not `rm`). Each hook
-is killed, with everything it started, after 2 minutes, and fails.
+and safe to run when there is nothing to do (`rm -f`, not `rm`). Hooks MUST
+be non-interactive (no password prompts): a hook that waits on the terminal
+is killed at the timeout. Each hook is killed, with everything it started,
+after 2 minutes, and fails. Hooks need a Unix shell: they run by `sh -c`,
+and on any other system the kit refuses them.
 
 With them it runs:
 

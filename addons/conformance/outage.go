@@ -221,8 +221,9 @@ func (k *kit) addonRestart() {
 	// Once a stop is tried the add-on is started again, failed or not.
 	err := k.cfg.StopAddon(k.ctx)
 	errStart := k.cfg.StartAddon(context.WithoutCancel(k.ctx))
-	if !c.expect(err == nil, "-stop-addon failed: %v", err) || !c.expect(errStart == nil, "-start-addon failed: %v", errStart) {
-		return
+	stopOK := c.expect(err == nil, "-stop-addon failed: %v", err)
+	if startOK := c.expect(errStart == nil, "-start-addon failed: %v", errStart); !stopOK || !startOK {
+		return // both said: a failed stop never hides a failed start
 	}
 	if after := k.ok(c, k.subjectsRead(false), "subjects.json"); after != nil && after["current"] == false {
 		stale, _ := after["stale"].(map[string]any)

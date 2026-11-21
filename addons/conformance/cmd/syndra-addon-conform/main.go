@@ -110,17 +110,16 @@ func shell(flag, command string, timeout time.Duration) func(context.Context) er
 	if strings.TrimSpace(command) == "" {
 		return nil
 	}
+	if noHooks != "" {
+		fail(flag + ": " + noHooks)
+	}
 	return func(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		fmt.Fprintf(os.Stderr, "kit: running %s %s\n", flag, command)
 		cmd := exec.CommandContext(ctx, "sh", "-c", command)
 		cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
-		// Its own process group, killed whole: a child the shell started
-		// never outlives the hook, and a terminal's Ctrl-C reaches the kit,
-		// which still puts back what it stopped, not the hook.
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+		ownGroup(cmd)
 		cmd.WaitDelay = time.Second
 		err := cmd.Run()
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

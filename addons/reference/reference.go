@@ -141,15 +141,15 @@ func (a *Addon) serves(feature string) bool { return slices.Contains(a.cfg.Featu
 // add the check there when an app's values or operations need it.
 func (a *Addon) down() bool { return a.cfg.Down != nil && a.cfg.Down() }
 
-// reach is one real read of the app, begun at at: it says whether the app
-// answered, and records it, as health's reachable and, when it did,
-// last_read_at. The caller holds a.mu.
+// reach is one real call to the app, begun at at: it says whether the app
+// answered and, when it did, records it as last_read_at. /health makes its own,
+// so reachable is never what an older read found. The caller holds a.mu.
 func (a *Addon) reach(at string) bool {
-	a.appDown = a.down()
-	if !a.appDown {
-		a.readAt = at
+	if a.down() {
+		return false
 	}
-	return !a.appDown
+	a.readAt = at
+	return true
 }
 
 // unreachable is the reply of a request that could reach nothing: nothing was
@@ -177,7 +177,6 @@ type Addon struct {
 	logHead   string
 	logCount  int
 	readAt    string             // health.last_read_at: when a read of the app last succeeded; "" before the first
-	appDown   bool               // health.reachable, negated: the last read of the app failed (reach)
 	fresh     freshState         // feature freshness: the mirror and the read in flight
 	loans     map[string]*loan   // feature calls: by item id
 	intents   map[string]*intent // feature calls: an open checkout, by subject
@@ -295,7 +294,7 @@ func (a *Addon) health(*http.Request, []byte) reply {
 	defer a.mu.Unlock()
 	busy := a.busy()
 	h := map[string]any{
-		"reachable": !a.appDown, "product": "reference", "product_version": "1.0.0", "version_tested": true,
+		"reachable": a.reach(now()), "product": "reference", "product_version": "1.0.0", "version_tested": true,
 		"credential_expiry": "none", "circuit_open": false,
 		"lifecycle": a.lifecycle, "lifecycle_note": a.reason, "in_flight": busy, "drained": busy == 0,
 		"log_head": a.logHead, "log_records": a.logCount, "checked_at": now(),

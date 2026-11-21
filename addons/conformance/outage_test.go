@@ -262,6 +262,26 @@ func TestAFailedStopStillStarts(t *testing.T) {
 	}
 }
 
+// A failed -stop-addon never hides a failed -start-addon: both are said.
+func TestAFailedStopAndStartAreBothSaid(t *testing.T) {
+	url, _ := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret)}, nil, nil, nil)
+	cfg := config(url, false)
+	cfg.StopAddon = func(context.Context) error { return errors.New("stop broke") }
+	cfg.StartAddon = func(context.Context) error { return errors.New("start broke") }
+	r, _ := Run(context.Background(), cfg)
+	for _, res := range r.Results {
+		if res.ID != "outage.restart" {
+			continue
+		}
+		detail := strings.Join(res.Detail, "\n")
+		if !strings.Contains(detail, "stop broke") || !strings.Contains(detail, "start broke") {
+			t.Errorf("outage.restart said %q; want both the stop's and the start's failure", detail)
+		}
+		return
+	}
+	t.Fatal("no outage.restart result")
+}
+
 // A cooldown longer than the kit waits skips freshness.unreachable, and only
 // it: the other outage checks run on plain reads, or fail under
 // -require-outage without the app hooks.
