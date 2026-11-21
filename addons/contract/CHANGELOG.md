@@ -11,9 +11,11 @@ Still major 2 before its release, so nothing is kept for old callers.
 `/health`, and nothing read is no copy, so an error). `REACH_NEVER_READ` is
 gone, folded into `NO_CURRENT_READ`, which now means "the add-on holds
 nothing to serve"; with `TARGET_UNREACHABLE` (no request reached the app)
-these are the only answers of a read with no copy, the problem and nothing
-else. `TARGET_UNREACHABLE` is the add-on's wire code only; Syndra never
-answers it on its own API. The guide gains "When Syndra cannot reach you"
+these are the answers of a read with no copy (a cooldown with nothing to
+serve stays `FRESH_READ_COOLDOWN`, and `/subjects` keeps `STORE_UNREADABLE`),
+the problem and nothing else. `TARGET_UNREACHABLE` is the add-on's wire code
+only; the rule is that Syndra never answers it on its own API, landing in
+8c/8d (the backend still sends it today). The guide gains "When Syndra cannot reach you"
 (what Syndra does while the add-on is down; nothing is asked of the add-on
 but to come back with its mirror and its call records), `health.reachable`
 as the kit checks it, and the kit's outage hooks (`-stop-app`, `-start-app`,

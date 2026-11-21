@@ -27,7 +27,7 @@ The add-on SHALL read each enabled SMB share's root and first-level folder ACLs,
 
 #### Scenario: The NAS can't be read
 - **WHEN** a read fails after one succeeded
-- **THEN** the last read is served with `current: false`, and with none the answer is `REACH_NEVER_READ`
+- **THEN** the last read is served with `current: false`, and with none the answer is `NO_CURRENT_READ`
 
 ### Requirement: One home location per system
 A role SHALL say only whether it gives a home folder (`home: "true"`) and its default limit; any other `home` value SHALL be refused. Where homes go SHALL be one setting per system, `home_root`, which SHALL only be set to a first-level folder of an enabled SMB share that is a dataset of its own and not hidden, as read from the NAS at the time it is set. Each person's home SHALL be `<home_root>/<account name>`. Changing `home_root` SHALL move nothing. With no `home_root`, no home SHALL be made and the outcome SHALL say why. Of several limits, the highest SHALL apply.

@@ -566,7 +566,10 @@ not an observation. The rules the schemas cannot express:
   constant), so the answer arrives.
 - **Nothing to serve is an error, not an empty list.** With no earlier read
   to answer from, the read MUST answer one of two errors, as `handleSubjects`
-  in `addons/truenas/server.go` does, and no other: 503 `TARGET_UNREACHABLE`
+  in `addons/truenas/server.go` does, with two exceptions that keep their
+  own code: a cooldown with nothing to serve is 429 `FRESH_READ_COOLDOWN`
+  (below), and a store the add-on cannot read on `/subjects` is
+  `STORE_UNREADABLE` (design §13.1 keeps it). Otherwise: 503 `TARGET_UNREACHABLE`
   with `Retry-After` when no request reached the app (nothing was sent), 503
   `NO_CURRENT_READ` when the add-on holds nothing to serve for any other
   reason (the app answered with a failure, or it has not been read since the
@@ -626,8 +629,9 @@ add-on that declares `freshness`:
   since it started, never decreasing while it runs (it may start again at
   0, like an OpenMetrics counter), so that the kit can prove the rules
   above;
-- MUST answer 429 `FRESH_READ_COOLDOWN` (`Retry-After` the seconds left) or
-  503 `TARGET_UNREACHABLE`, only when it has nothing at all to serve;
+- MUST answer 429 `FRESH_READ_COOLDOWN` (`Retry-After` the seconds left),
+  503 `TARGET_UNREACHABLE` or 503 `NO_CURRENT_READ`, only when it has nothing
+  at all to serve;
 - SHOULD forget its copy, its cooldown and any read under way on every
   write it makes, so a person waiting on their own change sees it on the
   next read without asking for a fresh one: a read arriving after a write
@@ -708,8 +712,9 @@ Schema: `v2/schema/health.json`.
   say whether a real call to the app just succeeded, not whether the add-on
   is up. With the app stopped, `reachable` MUST be `false` after one fresh
   read and `last_read_at` MUST NOT move; with it back, `reachable` MUST be
-  `true` and a fresh read `current: true`. The kit checks exactly this
-  (`outage.health`, [Validating](#13-validating-before-you-ask-to-be-connected)).
+  `true` and a fresh read `current: true`. The kit will check exactly this
+  (`outage.health`, [Validating](#13-validating-before-you-ask-to-be-connected));
+  built in 8f, until then the kit does not take your app down.
 - `circuit_open` MUST be `true` while the add-on's own breaker is holding
   back its calls to the app (backing off to avoid a lockout or overload).
   It is distinct from `reachable: false`, so an operator does not look at
@@ -2363,7 +2368,10 @@ unanswered connection, a name that does not resolve, a key that is not the
 one registered, a reply cut off, or a 5xx with no registered code. Only
 Syndra can know that.
 
-What Syndra does while it cannot reach you:
+What Syndra does while it cannot reach you. *This is the design, built in
+8b-8d; today Syndra keeps a last storage and mappable-values copy
+(`lastStorage`, `lastMappableValues`), counts a missed attempt against a
+queued change, and the first probe after a start does not yet decide.*
 
 - It asks `GET /health` every 30 seconds. Three missed probes in a row mark
   the add-on unreachable; one answer marks it back. The first probe after
@@ -2376,8 +2384,8 @@ What Syndra does while it cannot reach you:
   attempt that never reached you is not counted against the change. A
   revocation is recorded in Syndra at once and shown as not yet applied on
   your system until you answer `succeeded` to it.
-- Writes a person asks for now (adopt, release, a setting, the lifecycle, a
-  password, a physical operation) are refused at once, saying nothing went
+- Writes a person asks for now (adopt, release, a setting, the lifecycle, the
+  dormant removal, a password, a physical operation) are refused at once, saying nothing went
   out. Nothing is queued for them; the person asks again.
 
 Nothing is asked of you during the outage. When you come back you MUST
@@ -2633,13 +2641,18 @@ signed `POST /operations/{id}` for each operation the registry gives
 
 ### The outage checks
 
+*Built in 8f; until then the kit has no `-stop-app` flag and no `outage.*`
+checks, and `freshness.unreachable` is still always skipped.*
+
 The kit takes your app and your add-on down only through commands you give
 it, each run by the shell and expected to return once the change has
 happened:
 
 - `-stop-app <command>` and `-start-app <command>` make the app
   unreachable from your add-on and bring it back. The reference add-on's
-  fake app is switched by a file, so its hooks are `touch` and `rm`.
+  fake app is meant to be switched by a file, so its hooks would be `touch`
+  and `rm`; built in 8f, until then it is switched in process by
+  `Config.Down` (test-only), which the kit cannot reach.
 - `-stop-addon <command>` and `-start-addon <command>` stop your add-on and
   start it again, its disk kept.
 

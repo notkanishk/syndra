@@ -938,7 +938,7 @@ settings with the full §5 rules.
   from `addons/truenas/transport.go` copied, not imported #ready-for-agent
 - [x] 4.2 `addons/conformance`: the binary in design §7, every check in the
   table, `pass|fail|skip` with the MUST it enforces, JSON and text report,
-  non-zero on a MUST failure, `--mutate` gated, reads only without it #ready-for-agent
+  non-zero on a MUST failure, `-mutate` gated, reads only without it #ready-for-agent
 - [x] 4.3 CI: the kit runs against the reference add-on on every push
   (`ci.yml` job `addon-conformance`); the job is required for `ci-ok` #ready-for-agent
   - *Done (13 Nov 2026, slice 7g):* the end-to-end step also starts a second
@@ -978,7 +978,7 @@ settings with the full §5 rules.
   code. The guide states the rule meanwhile (The one create) #needs-triage
 - [ ] 4.5 Reads-only run against production TrueNAS from the app host;
   report attached to this change #ready-for-human
-- [ ] 4.6 `--mutate` run against staging TrueNAS with a throwaway subject,
+- [ ] 4.6 `-mutate` run against staging TrueNAS with a throwaway subject,
   against the **v2** add-on before 1.10; report attached; the kit's last
   line names the one disabled, labelled account it leaves (removal disables,
   never deletes) #ready-for-human
@@ -3763,7 +3763,7 @@ one path; mutation-check every guard; Opus review after.
 - [x] 8a The contract says it (files and guide only, no code).
   - `schema/common/stale.json`: `reason` is `cached | cooldown | unreachable`; `draining` and `never_read` removed, fixtures updated.
   - `registry/errors.json`: `REACH_NEVER_READ` removed; `NO_CURRENT_READ` means "the add-on holds nothing to serve"; `TARGET_UNREACHABLE` says it is the add-on's wire code only.
-  - `addons/AUTHORING.md`: a section "When Syndra cannot reach you" (what Syndra does, that nothing is asked of the add-on but to come back with its mirror and call records); the two no-copy codes and nothing else; the `--stop-app`/`--start-app`/`--stop-addon`/`--start-addon` hooks; `health.reachable` as the kit now checks it.
+  - `addons/AUTHORING.md`: a section "When Syndra cannot reach you" (what Syndra does, that nothing is asked of the add-on but to come back with its mirror and call records); the two no-copy codes and nothing else; the `-stop-app`/`-start-app`/`-stop-addon`/`-start-addon` hooks; `health.reachable` as the kit now checks it.
   - `CHANGELOG.md` entry; design §4's `stale` line and §6's health paragraph point at §13.
   - *Built (21 Nov 2026):* as listed. The kit's hooks are written `-stop-app` and so on, the guide's one-dash style for every kit flag (Go's `flag` takes both). One code line beyond the files: the TrueNAS `/reach` answers `NO_CURRENT_READ` where it answered `REACH_NEVER_READ`, because `TestEveryCodeTheAddOnWritesIsInTheRegistry` refuses a code the registry dropped; the rest of 8g is untouched. Both validating ends refuse `stale.reason` `never_read` and `draining` (`TestSchemasRefuseWhatTheyShould`, `TestV2SchemasRefuseWhatTheyShould`); mutation-checked by restoring the old enum, red on both. The guide describes the outage hooks and checks 8f builds.
 - [ ] 8b Transport and monitor (backend; design §13.1, §13.2, §13.5). `ready-for-agent`
@@ -3797,12 +3797,12 @@ one path; mutation-check every guard; Opus review after.
   - Guards, mutation-checked: an add-on hook not returning `Read` fails; a fixture of each no-copy reply rendered on every consumer shows no "0", no empty state, no date (`getByText` over the three).
   - Layout check: these pages make no new read, so the recorded tape replays; say so in the PR.
 - [ ] 8f The kit takes things down (kit + reference add-on; design §13.7). `ready-for-agent`
-  - `--stop-app`, `--start-app`, `--stop-addon`, `--start-addon` (a command each; a missing hook reports "not checked"; `--require-outage` makes that a failure, and CI passes it).
+  - `-stop-app`, `-start-app`, `-stop-addon`, `-start-addon` (a command each; a missing hook reports "not checked"; `-require-outage` makes that a failure, and CI passes it).
   - Reference add-on: `REFERENCE_APP_DOWN_FILE` switches `Config.Down` at run time (test binary only).
   - Checks `outage.health`, `outage.kept`, `outage.none`, `outage.write`, `outage.restart`; `freshness.unreachable` is no longer skipped.
   - `noFalseZero` walker on every reply of a run. Mutation-check against the reference: an empty `subjects: []` in a 503, a zero `taken_at`, `current: false` without `stale`, each red.
 - [ ] 8g TrueNAS add-on conforms, then staging. `ready-for-human` (staging deploy needs the owner's OK: same real NAS; the add-on there is `read_only`)
-  - `reach.go`: `REACH_NEVER_READ` becomes `NO_CURRENT_READ`; no `draining`/`never_read`; kit green with the app hooks against a stub NAS.
+  - `addons/truenas/reach.go` (the rename is done by 8a): a not-sent failure is labelled `NO_CURRENT_READ` instead of `TARGET_UNREACHABLE`, because `handleReach` checks `errNeverRead` before `ErrNotSent` (`:525`); a failed groups read with no copy answers `TARGET_UNREADABLE` (`:530`); kit green with the app hooks against a stub NAS.
   - Staging, by hand: stop the add-on container and expect `no_answer` on the roster inside 90 s (not `wrong_host`: this is the proof of the absolute-name rule, which is inferred from Docker's resolver), no page with a 0, an empty state or a date; start it and expect `answering` on the next probe. Then point the add-on at a dead NAS address and expect `app_unreachable` with kept copies dated.
   - Layout check against staging in both outage states.
 - [ ] 8h (owner's, after 8g) Open questions of the 21 Nov grill round, recorded here with their answers; any "no" reopens the slice it names. `ready-for-human`
