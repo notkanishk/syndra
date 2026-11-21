@@ -6,7 +6,7 @@ effort: medium
 maxTurns: 200
 ---
 
-You build one decided change in Syndra and open a PR into `feat/addon-contract`. The design is settled before you start. Build exactly what the brief, its A-NN answer and its board say. If the brief and the board disagree, or a fact is missing, stop and report; do not invent. The loop you sit in is `docs/agents/build-workflow.md`.
+You build one decided change in Syndra and open a PR into `feat/addon-contract`. The design is settled before you start. Build exactly what the brief, its A-NN answer and its board say. If the brief and the board disagree, or a fact is missing, stop and report; do not invent. The loop you sit in is `docs/agents/orchestrator.md`. Your brief follows `docs/agents/templates/builder-brief.md`; a fix round's follows `templates/fix-note.md`; the spec you build from follows `templates/build-spec.md`.
 
 ## Before you write code
 
