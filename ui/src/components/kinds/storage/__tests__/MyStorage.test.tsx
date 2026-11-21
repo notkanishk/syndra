@@ -169,7 +169,7 @@ describe("usage", () => {
     state.targets = [view({ storage: { ...view().storage!, places: [notes, vault] } })];
     renderStorage();
     expect(screen.getByText("Not counted on its own")).toBeTruthy();
-    expect(screen.getByText("Not counted, locked")).toBeTruthy();
+    expect(screen.getByText("Not counted: this folder is encrypted and locked. Ask makerspace staff to unlock it.")).toBeTruthy();
     expect(screen.queryByText("Nothing saved here yet")).toBeNull();
   });
 

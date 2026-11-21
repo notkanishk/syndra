@@ -89,6 +89,50 @@ func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
 	}
 }
 
+// A home the add-on could not count (locked) has no use, never 0 B, and the
+// others keep theirs: one locked home affects only itself.
+func TestALockedHomeHasNoUseAndTheOthersKeepTheirs(t *testing.T) {
+	bindings, resolve, inForce, all, homes, shape := dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsAcceptedShape
+	t.Cleanup(func() {
+		dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsAcceptedShape = bindings, resolve, inForce, all, homes, shape
+	})
+	addonsAcceptedShape = func(context.Context, string) (addons.Shape, error) {
+		return addons.Shape{Kind: "storage", EntitlementSchema: truenasSchema}, nil
+	}
+	dbListTargetBindings = func(context.Context, string) ([]db.TargetBinding, error) {
+		return []db.TargetBinding{{SubjectID: "u-charlotte", Username: "charlotte"}, {SubjectID: "u-booker", Username: "booker"}}, nil
+	}
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{}, nil
+	}
+	dbAllowancesInForce = func(context.Context, string, string) ([]db.Allowance, error) { return nil, nil }
+	dbAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) { return nil, nil }
+	addonsReadHomes = func(context.Context, string, bool) addons.Homes {
+		return addons.Homes{Read: true, UsageRead: true, Homes: []addons.HomeUsage{
+			{Username: "charlotte", Subject: "u-charlotte", Home: "/mnt/p/main/home_dir/charlotte", UsedBytes: 0, NotCounted: "locked"},
+			{Username: "booker", Subject: "u-booker", Home: "/mnt/p/main/home_dir/booker", UsedBytes: 400},
+		}}
+	}
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/homes", nil)
+	r.SetPathValue("target", "truenas")
+	rr := httptest.NewRecorder()
+	handleTargetHomes(rr, r)
+	var body struct {
+		UsageRead bool          `json:"usage_read"`
+		Accounts  []accountHome `json:"accounts"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil || len(body.Accounts) != 2 {
+		t.Fatalf("%d %s", rr.Code, rr.Body.String())
+	}
+	booker, charlotte := body.Accounts[0], body.Accounts[1]
+	if charlotte.UsedBytes != nil {
+		t.Errorf("a locked home reads %d bytes, want no use", *charlotte.UsedBytes)
+	}
+	if !body.UsageRead || booker.UsedBytes == nil || *booker.UsedBytes != 400 {
+		t.Errorf("the home beside a locked one: usage_read %v, %v", body.UsageRead, booker.UsedBytes)
+	}
+}
+
 // "No limit" is the largest limit, as the add-on applies it: beside a 20 GB
 // role it wins, and it never reads as a 0-byte limit the folder is "over".
 func TestNoLimitIsTheLargestRolesLimit(t *testing.T) {

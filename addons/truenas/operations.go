@@ -643,7 +643,7 @@ type ActivityReport struct {
 // so a kept result is never changed.
 func (r ActivityReport) observed(o Observed) any { r.Observed = o; return &r }
 func (r StorageStatus) observed(o Observed) any {
-	r.Observed = o.with(r.placesSeen)
+	r.Observed = o.with(r.placesSeen).with(r.quotaSeen)
 	return &r
 }
 

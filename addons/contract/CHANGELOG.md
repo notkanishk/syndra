@@ -9,10 +9,14 @@ Still major 2 before its release. A storage `Place` the person can change
 MAY carry `not_counted` in place of `usage` when the target itself is why
 it has no figure, never for a read that failed: `folder` (a plain folder in
 a dataset it shares with what lies beside it, which the target does not
-count on its own) or `locked` (an encrypted dataset in it whose key is not
-loaded). A plain folder no longer makes `quota_read` false: it has no table
-that could have been read. Schema: `profiles/storage/reach.json` (`Place`).
-No fixture changed.
+count on its own) or `locked` (the place's own dataset is encrypted and its
+key is not loaded). A plain folder no longer makes `quota_read` false: it has
+no table that could have been read, and neither does a locked dataset inside
+a share: it affects only itself (owner, 21 Nov 2026), so the rest of the
+share is counted. A `/homes` row MAY carry `not_counted: "locked"` the same
+way: that home's `used_bytes` is not a reading, and `quota_read` stays true
+for the others. Schema: `profiles/storage/reach.json` (`Place`),
+`profiles/storage/homes.json` (a home's `not_counted`). No fixture changed.
 
 ## Every statistics gap says its kind (slice 7s, 18 Nov 2026)
 

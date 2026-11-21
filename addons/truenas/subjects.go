@@ -334,10 +334,17 @@ func (s *server) groupsOf(username string) (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	memberOf := make(map[string]bool, len(accounts[0].Groups)+1)
-	ids := accounts[0].Groups
-	if primary, ok := primaryGroupID(accounts[0].Group); ok {
-		ids = append(ids, primary)
+	return memberOfNames(accounts[0].Group, accounts[0].Groups, names), nil
+}
+
+// memberOfNames is the names of the groups an account is in, primary group
+// included, by groupIndex's names: what an audit list is compared against
+// (shareAudit.watches).
+func memberOfNames(primary json.RawMessage, groups []apiID, names map[string]string) map[string]bool {
+	memberOf := make(map[string]bool, len(groups)+1)
+	ids := groups
+	if id, ok := primaryGroupID(primary); ok {
+		ids = append(ids, id)
 	}
 	for _, id := range ids {
 		if name, ok := names[id.String()]; ok {
@@ -347,7 +354,33 @@ func (s *server) groupsOf(username string) (map[string]bool, error) {
 		// the same reason readSubjects skips one: it is a group no list this is
 		// compared against could ever have named.
 	}
-	return memberOf, nil
+	return memberOf
+}
+
+// smbMemberships is, for every account that can connect over SMB (smb on,
+// not locked), the names of the groups it is in: who a share's auditing has
+// to watch to record everyone (shareAudit.recordsEveryone). One user read and
+// one group read.
+func (s *server) smbMemberships() ([]map[string]bool, error) {
+	var accounts []struct {
+		Group  json.RawMessage `json:"group"` // as groupsOf reads it
+		Groups []apiID         `json:"groups"`
+	}
+	if err := s.nas.call("user.query",
+		[]any{[]any{[]any{"smb", "=", true}, []any{"locked", "=", false}},
+			map[string]any{"select": []string{"group", "groups"}}},
+		&accounts); err != nil {
+		return nil, err
+	}
+	names, _, _, err := s.groupIndex()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]bool, 0, len(accounts))
+	for _, a := range accounts {
+		out = append(out, memberOfNames(a.Group, a.Groups, names))
+	}
+	return out, nil
 }
 
 // primaryGroupID reads the id out of whichever form the release answers with.

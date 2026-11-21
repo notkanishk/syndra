@@ -283,6 +283,10 @@ type HomeUsage struct {
 	Home       string `json:"home"`
 	UsedBytes  int64  `json:"used_bytes"`
 	QuotaBytes int64  `json:"quota_bytes,omitempty"`
+	// NotCounted is "locked" for a home whose dataset is encrypted with its
+	// key not loaded: its use is unknown, UsedBytes 0 is not a reading, and
+	// the list is still whole (a locked home affects only itself).
+	NotCounted string `json:"not_counted,omitempty"`
 }
 
 // HomesResponse is every account with a home folder in a share Syndra
@@ -359,9 +363,12 @@ func (s *server) readHomes() (HomesResponse, error) {
 			continue
 		}
 		h := HomeUsage{Username: sub.Username, AccountID: accountID(sub.UID), Subject: at.subjectOf[rowOf(&sub)], Home: sub.Home}
-		// Read as the member's card reads it (homeUsage). One not read, a
-		// locked one included, makes the list partial: never a 0.
-		if u, _ := homeUsage(mounts, sub.Home, sub.UID, tableOf); u == nil {
+		// Read as the member's card reads it (homeUsage). One not read makes
+		// the list partial; a locked one is that home's alone (owner, 21 Nov
+		// 2026): never a 0.
+		if u, locked := homeUsage(mounts, sub.Home, sub.UID, tableOf); locked {
+			h.NotCounted = notCountedLocked
+		} else if u == nil {
 			out.QuotaRead = false
 		} else {
 			h.UsedBytes, h.QuotaBytes = u.UsedBytes, u.QuotaBytes

@@ -858,6 +858,8 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | When the last count ran (the totals card's end row) | Last counted {age} |
 | The totals card's step, on a system whose metrics include a per-person one (a system with none ends on "Nothing for you to do.") | Nothing for you to do. Who used what is in Insights. |
 | The same, on a storage system (the owner's ruling of 18 Nov 2026; the storage kind supplies it, `kinds/storage/captions.ts`, so no other kind says "share") | Nothing for you to do. Who used each share is in Insights. |
+| The member's storage card: a place they can change that TrueNAS does not count on its own (`not_counted: "folder"`, `kinds/storage/captions.ts`) | Not counted on its own |
+| The same, a folder that is encrypted and whose key is not loaded (`not_counted: "locked"`): said as the folder, never as their account, with who can unlock it (section 1, "Ask makerspace staff" is a next step; never "the NAS") | Not counted: this folder is encrypted and locked. Ask makerspace staff to unlock it. |
 | Its link, to Insights, Usage at this system | Open Usage |
 | Accounts Syndra does not manage, one | {n} account Syndra does not manage also used it. It is in the totals. |
 | Accounts Syndra does not manage, several | {n} accounts Syndra does not manage also used it. They are in the totals. |

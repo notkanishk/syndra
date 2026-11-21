@@ -31,6 +31,8 @@ type statsNAS struct {
 	rows  []map[string]any
 	down  bool
 	reads int // audit.query calls
+	// smbDown refuses only the read of every SMB account (smbMemberships).
+	smbDown bool
 }
 
 func (n *statsNAS) Call(method string, timeout int64, params any) (json.RawMessage, error) {
@@ -38,6 +40,9 @@ func (n *statsNAS) Call(method string, timeout int64, params any) (json.RawMessa
 	defer n.mu.Unlock()
 	if n.down {
 		return nil, errors.New("connection refused")
+	}
+	if n.smbDown && method == "user.query" && strings.Contains(fmt.Sprint(params), "[smb = true]") {
+		return errorEnvelope("[EFAULT] the accounts could not be read"), nil // refused, so the connection stays up
 	}
 	if method != "audit.query" {
 		return n.fakeRPC.Call(method, timeout, params)
@@ -247,6 +252,54 @@ func TestAShareNotAuditedForEveryoneIsAGapNotAZero(t *testing.T) {
 		if p.Dimensions["share"] != "main" {
 			t.Errorf("a value where auditing was off: %+v", p)
 		}
+	}
+}
+
+// TrueNAS 25.10 refuses SMB auditing with both lists empty, so the owner
+// turned it on for main (21 Nov 2026) watching builtin_users. A share records
+// everyone when every account that can connect over SMB is watched, by the
+// rule a member's own coverage uses: a list that narrows nobody is counted,
+// one that leaves an SMB account out is a gap, and accounts that cannot be
+// read are a gap saying so, never counted.
+func TestAShareRecordsEveryoneWhenItWatchesEverySMBAccount(t *testing.T) {
+	inBuiltin := `"groups":[41]`
+	for _, tc := range []struct {
+		name       string
+		watch      string
+		ignore     string
+		seth       string // Seth's groups
+		smbDown    bool
+		counted    bool
+		reasonText string
+	}{
+		{"every SMB account in the watched group", `["builtin_users"]`, `[]`, inBuiltin, false, true, ""},
+		{"one SMB account outside it", `["builtin_users"]`, `[]`, `"groups":[]`, false, false, reasonAudited.text},
+		{"an ignored group holds an SMB account", `[]`, `["staff"]`, `"groups":[41,51]`, false, false, reasonAudited.text},
+		{"both lists empty", `[]`, `[]`, `"groups":[]`, true, true, ""},
+		{"the accounts cannot be read", `["builtin_users"]`, `[]`, inBuiltin, true, false, reasonNAS.text},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, nas, at := statsServer(t)
+			nas.users = strings.Replace(strings.Replace(statsUsers, `"groups":[]`, inBuiltin, 1), `"groups":[]`, tc.seth, 1)
+			nas.shares = strings.Replace(statsShares, `"audit":{"enable":true,"watch_list":[],"ignore_list":[]}`,
+				`"audit":{"enable":true,"watch_list":`+tc.watch+`,"ignore_list":`+tc.ignore+`}`, 1)
+			nas.smbDown = tc.smbDown
+			nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "s1")
+			s.collectStatsOnce()
+			*at = day0.Add(24 * time.Hour)
+			s.collectStatsOnce()
+			first, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
+			var why string
+			for _, g := range first.Gaps {
+				if g.Dimensions["share"] == "main" {
+					why = g.Reason()
+				}
+			}
+			_, has := onDay(points, "2026-11-09", "", "main")
+			if has != tc.counted || why != tc.reasonText {
+				t.Errorf("main counted %v (want %v), gap %q (want %q)", has, tc.counted, why, tc.reasonText)
+			}
+		})
 	}
 }
 
@@ -782,7 +835,7 @@ func TestASharesDatasetsStopAtItsFolder(t *testing.T) {
 	u := usageUnder(mounts, "/mnt/tank/share", func(d string) map[int64]PlaceUsage {
 		read[d] = true
 		return map[int64]PlaceUsage{1: {UsedBytes: 1}}
-	}, nil)
+	})
 	if !read["tank/share"] || !read["tank/share/x"] || read["tank/share2"] || read["tank/share2/x"] || u.ByUID[1] != 2 {
 		t.Errorf("share read %v, counted %d: want share and share/x only", read, u.ByUID[1])
 	}
@@ -805,9 +858,10 @@ func lockedAt(name string) string {
 
 // A locked dataset inside a share (encrypted, its key not loaded) answers no
 // mountpoint, so a count by mountpoint left it out of the share's sum with no
-// gap at all. It is found by its name, never read, and makes the share's
-// figure partial, said to be because it is locked: live, on the card, and
-// collected.
+// gap at all. It is found by its name and never read. It affects only itself
+// (owner, 21 Nov 2026): the share is counted without it, with a gap naming it
+// as locked; on the card the share's figure is everyone's other bytes, read
+// whole, and only the place that is that dataset says locked.
 func TestALockedNestedDatasetIsNeverZero(t *testing.T) {
 	s, nas, _ := nestedStatsServer(t)
 	nas.answers["pool.dataset.query"] = lockedAt("tank/main/quack")
@@ -823,8 +877,14 @@ func TestALockedNestedDatasetIsNeverZero(t *testing.T) {
 	if !said {
 		t.Errorf("main's gaps %+v, want one naming quack as locked", page.Gaps)
 	}
-	if _, err := metersOf(s, 3051); err == nil || !strings.Contains(err.Error(), "main") {
-		t.Errorf("the live read passed main off as whole with quack locked: %v", err)
+	meters, err := metersOf(s, 3051)
+	if err != nil {
+		t.Errorf("a locked folder made the whole card partial: %v", err)
+	}
+	for _, m := range meters {
+		if m.Label == "main" && m.Used != 67036288+2500 {
+			t.Errorf("live main %d, want everything but quack, as collected", m.Used)
+		}
 	}
 	staff := []apiID{{raw: json.RawMessage("51")}}
 	places, _, err := placesOf(s, 3051, staff, "/mnt/tank/main/home_dir/rey_mysterio")
@@ -835,6 +895,9 @@ func TestALockedNestedDatasetIsNeverZero(t *testing.T) {
 		if p.Folder == "quack" && (p.Usage != nil || p.NotCounted != notCountedLocked) {
 			t.Errorf("quack on the card %+v, want not counted, locked", p)
 		}
+		if p.Folder == "waddle" && (p.Usage == nil || p.Usage.UsedBytes != 67036288) {
+			t.Errorf("waddle beside a locked quack %+v, want counted", p)
+		}
 	}
 	for _, params := range nas.params {
 		if args, ok := params.([]any); ok && len(args) > 0 && args[0] == "tank/main/quack" {
@@ -843,41 +906,114 @@ func TestALockedNestedDatasetIsNeverZero(t *testing.T) {
 	}
 }
 
-// A locked home answers no mountpoint, so its folder resolved to the dataset
-// around it, where its owner has no row: it read 0, as a whole read. It is
-// "not counted, locked" on the card, /homes is partial, and the collector
-// does not sample it: never 0.
-func TestALockedHomeIsNotCountedNotZero(t *testing.T) {
-	s, nas, _ := nestedStatsServer(t)
-	nas.answers["pool.dataset.query"] = lockedAt("tank/main/home_dir/rey_mysterio")
-	home := "/mnt/tank/main/home_dir/rey_mysterio"
-	places, _, err := placesOf(s, 3051, nil, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var found bool
-	for _, p := range places {
-		if p.Home {
-			found = true
-			if p.Usage != nil || p.NotCounted != notCountedLocked {
-				t.Errorf("the locked home on the card %+v, want not counted, locked", p)
+// A locked home affects only that home (owner, 21 Nov 2026): it alone is
+// "not counted, locked" on its card and on /homes; every other home is
+// counted, /homes is whole, nobody else's card is partial, everyone else's
+// home series has its day, and only the total is partial, its gap saying
+// where the locked folder is without naming its account. Locked by its own
+// dataset or by its parent's (homeDatasets, one rule for the card, /homes
+// and the collector).
+func TestALockedHomeAffectsOnlyThatHome(t *testing.T) {
+	for _, locked := range []string{"tank/main/home_dir/rey_mysterio", "tank/main/home_dir"} {
+		t.Run(locked, func(t *testing.T) {
+			s, nas, at := nestedStatsServer(t)
+			if err := s.store.PutBinding(Binding{SubjectID: "sub-seth", Username: "seth_rollins", UID: 3077, UIDKind: uidKindAccount}); err != nil {
+				t.Fatal(err)
 			}
+			nas.answers["pool.dataset.query"] = lockedAt(locked)
+			lockedHome := locked == "tank/main/home_dir/rey_mysterio" // else every home in home_dir is locked
+			home := "/mnt/tank/main/home_dir/rey_mysterio"
+			places, _, err := placesOf(s, 3051, nil, home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var found bool
+			for _, p := range places {
+				if p.Home {
+					found = true
+					if p.Usage != nil || p.NotCounted != notCountedLocked {
+						t.Errorf("the locked home on the card %+v, want not counted, locked", p)
+					}
+				}
+			}
+			if !found {
+				t.Fatalf("no home place: %s", describe(places))
+			}
+			homes, err := s.readHomes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !homes.QuotaRead {
+				t.Errorf("/homes partial for one locked home: %+v", homes.Homes)
+			}
+			for _, h := range homes.Homes {
+				wantLocked := h.Username == "rey_mysterio" || !lockedHome // home_dir locked locks every home in it
+				if (h.NotCounted == notCountedLocked) != wantLocked {
+					t.Errorf("/homes %s: not_counted %q", h.Username, h.NotCounted)
+				}
+				if h.Username == "seth_rollins" && lockedHome && h.UsedBytes != 400 {
+					t.Errorf("Seth's home beside a locked one %d, want 400", h.UsedBytes)
+				}
+			}
+			if _, err := metersOf(s, 3077); err != nil {
+				t.Errorf("Seth's card is partial for Rey's locked home: %v", err)
+			}
+
+			s.collectStatsOnce()
+			*at = day0.Add(24 * time.Hour) // the day closes
+			s.collectStatsOnce()
+			page, got, raw := allStats(t, s, metricHomeBytes, day0.Add(-time.Hour))
+			if v, ok := onDay(got, "2026-11-09", "sub-rey", ""); ok {
+				t.Errorf("the collector sampled a locked home as %d", v)
+			}
+			if lockedHome {
+				if v, ok := onDay(got, "2026-11-09", "sub-seth", ""); !ok || v != 400 {
+					t.Errorf("Seth's home series lost the day for Rey's locked home: %d %v", v, ok)
+				}
+				if v, _ := onDay(got, "2026-11-09", "", ""); v != 400 {
+					t.Errorf("the total %d, want home_dir's 400 without Rey's", v)
+				}
+			}
+			var said bool
+			for _, g := range page.Gaps {
+				if g.Kind() == kindUnread && strings.Contains(g.Start, "2026-11-09") {
+					said = said || strings.Contains(g.Reason(), "a home folder in main › home_dir (locked)")
+					if g.Reason() == reasonDark.text {
+						t.Errorf("the day went dark for one locked home: %+v", g)
+					}
+				}
+			}
+			if !said {
+				t.Errorf("home gaps %+v, want the total partial, naming where the locked home is", page.Gaps)
+			}
+			if strings.Contains(string(raw), "rey_mysterio") {
+				t.Errorf("a home's account name is on the wire: %s", raw)
+			}
+		})
+	}
+}
+
+// A share whose own dataset is locked is a gap, and today's earlier sample of
+// it is dropped, never kept as if the share still read so.
+func TestALockedShareDropsTodaysSample(t *testing.T) {
+	s, nas, at := nestedStatsServer(t)
+	s.collectStatsOnce() // open read: a sample
+	*at = day0.Add(time.Hour)
+	// The pool's root is mounted, as on a real NAS: a locked share is placed inside it by its name.
+	nas.answers["pool.dataset.query"] = `[{"name":"tank","mountpoint":"/mnt/tank"},` + lockedAt("tank/open")[1:]
+	s.collectStatsOnce()
+	page, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
+	for _, p := range used {
+		if p.Dimensions["share"] == "open" {
+			t.Errorf("open keeps a sample after it locked: %+v", p)
 		}
 	}
-	if !found {
-		t.Fatalf("no home place: %s", describe(places))
+	var said bool
+	for _, g := range page.Gaps {
+		said = said || g.Dimensions["share"] == "open" && g.Kind() == kindUnread && g.Reason() == reasonLocked.text
 	}
-	homes, err := s.readHomes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if homes.QuotaRead {
-		t.Errorf("/homes read whole with Rey's home locked: %+v", homes.Homes)
-	}
-	s.collectStatsOnce()
-	_, got, _ := allStats(t, s, metricHomeBytes, day0.Add(-time.Hour))
-	if v, ok := onDay(got, "2026-11-09", "sub-rey", ""); ok {
-		t.Errorf("the collector sampled a locked home as %d", v)
+	if !said {
+		t.Errorf("open's gaps %+v, want it locked", page.Gaps)
 	}
 }
 
@@ -912,7 +1048,7 @@ func TestTheCardsPlacesAreItsMetersAndHomes(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := "/mnt/tank/main/home_dir/rey_mysterio"
-	c, err := s.countFor(3051, home)
+	c, err := s.countFor(3051, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -999,48 +1135,112 @@ func TestAPlainFolderNeverMakesTheReadPartial(t *testing.T) {
 	}
 }
 
-// A card load reads each table at most once, and never another member's home:
-// with a share of N per-user homes it makes the same NAS reads for any N.
-func TestACardLoadsReadsDoNotGrowWithTheHomes(t *testing.T) {
-	quotaReads := func(n int) int {
-		s, nas := cardServer(t)
-		datasets := `{"name":"tank/main","mountpoint":"/mnt/tank/main"},{"name":"tank/main/waddle","mountpoint":"/mnt/tank/main/waddle"},` +
-			`{"name":"tank/main/quack","mountpoint":"/mnt/tank/main/quack"},{"name":"tank/main/home_dir","mountpoint":"/mnt/tank/main/home_dir"},` +
-			`{"name":"tank/open","mountpoint":"/mnt/tank/open"},{"name":"tank/scratch","mountpoint":"/mnt/tank/scratch"}`
-		users := []string{`{"id":11,"username":"rey_mysterio","uid":3051,"locked":false,"smb":true,"groups":[51],"home":"/mnt/tank/main/home_dir/rey_mysterio"}`}
-		for i := range n {
-			name := fmt.Sprintf("jobber_%d", i)
-			datasets += `,{"name":"tank/main/home_dir/` + name + `","mountpoint":"/mnt/tank/main/home_dir/` + name + `"}`
-			users = append(users, fmt.Sprintf(`{"id":%d,"username":"%s","uid":%d,"locked":false,"smb":true,"groups":[],"home":"/mnt/tank/main/home_dir/%s"}`, 100+i, name, 3100+i, name))
-		}
-		datasets += `,{"name":"tank/main/home_dir/rey_mysterio","mountpoint":"/mnt/tank/main/home_dir/rey_mysterio"}`
-		nas.answers["pool.dataset.query"] = "[" + datasets + "]"
-		nas.users = "[" + strings.Join(users, ",") + "]"
-		before := len(nas.calls)
-		if _, _, err := s.storageStatus(OperationRequest{Subject: "sub-rey"}); err != nil {
+// homesServer is cardServer with n more members, each with a home that is a
+// dataset of its own in home_dir, each bound, and Rey's 1 GiB inside
+// jobber_0's home (a group-writable home, or files copied with their owner
+// kept): Rey's, never another member's to drop.
+func homesServer(t *testing.T, n int) (*server, *statsNAS) {
+	t.Helper()
+	s, nas := cardServer(t)
+	datasets := `{"name":"tank/main","mountpoint":"/mnt/tank/main"},{"name":"tank/main/waddle","mountpoint":"/mnt/tank/main/waddle"},` +
+		`{"name":"tank/main/quack","mountpoint":"/mnt/tank/main/quack"},{"name":"tank/main/home_dir","mountpoint":"/mnt/tank/main/home_dir"},` +
+		`{"name":"tank/open","mountpoint":"/mnt/tank/open"},{"name":"tank/scratch","mountpoint":"/mnt/tank/scratch"},` +
+		`{"name":"tank/main/home_dir/rey_mysterio","mountpoint":"/mnt/tank/main/home_dir/rey_mysterio"}`
+	users := []string{`{"id":11,"username":"rey_mysterio","uid":3051,"locked":false,"smb":true,"groups":[51],"home":"/mnt/tank/main/home_dir/rey_mysterio"}`}
+	for i := range n {
+		name := fmt.Sprintf("jobber_%d", i)
+		datasets += `,{"name":"tank/main/home_dir/` + name + `","mountpoint":"/mnt/tank/main/home_dir/` + name + `"}`
+		users = append(users, fmt.Sprintf(`{"id":%d,"username":"%s","uid":%d,"locked":false,"smb":true,"groups":[],"home":"/mnt/tank/main/home_dir/%s"}`, 100+i, name, 3100+i, name))
+		nas.answers["pool.dataset.get_quota tank/main/home_dir/"+name] = fmt.Sprintf(`[{"id":%d,"used_bytes":10}]`, 3100+i)
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-" + name, Username: name, UID: int64(3100 + i), UIDKind: uidKindAccount}); err != nil {
 			t.Fatal(err)
 		}
-		reads := 0
-		for i, m := range nas.calls[before:] {
-			if m == "pool.dataset.get_quota" {
-				reads++
-				if args := nas.params[before+i].([]any); strings.HasPrefix(args[0].(string), "tank/main/home_dir/jobber") {
-					t.Errorf("another member's home was read: %v", args[0])
-				}
-			}
-		}
-		return reads
 	}
-	few, many := quotaReads(2), quotaReads(40)
-	// main, waddle, quack, home_dir, Rey's home, open, scratch: each once.
-	if few != many || many != 7 {
-		t.Errorf("table reads %d with 2 homes, %d with 40: want 7 for any number", few, many)
+	nas.answers["pool.dataset.get_quota tank/main/home_dir/jobber_0"] = `[{"id":3100,"used_bytes":10},{"id":3051,"used_bytes":1073741824}]`
+	nas.answers["pool.dataset.query"] = "[" + datasets + "]"
+	nas.users = "[" + strings.Join(users, ",") + "]"
+	return s, nas
+}
+
+// Every dataset is counted, other members' homes included: Rey's 1 GiB in
+// jobber_0's home is on his meter, his place and his collected series, and
+// the live figure is the collected one. A heuristic that skipped other
+// homes dropped it and called the read whole.
+func TestBytesInAnotherMembersHomeAreCounted(t *testing.T) {
+	s, _ := homesServer(t, 2)
+	s.collectStatsOnce()
+	_, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
+	res, _, err := s.storageStatus(OperationRequest{Subject: "sub-rey"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := res.Result.(*StorageStatus)
+	if !st.QuotaRead {
+		t.Fatalf("Rey's card partial: %+v", st.Meters)
+	}
+	collected, _ := onDay(used, "2026-11-09", "sub-rey", "main")
+	want := int64(67036288 + 5 + 2500 + 1073741824)
+	for _, m := range st.Meters {
+		if m.Label == "main" && (m.Used != want || m.Used != collected) {
+			t.Errorf("Rey on main: live %d, collected %d, want %d (his bytes in jobber_0's home counted)", m.Used, collected, want)
+		}
+	}
+	for _, p := range st.Places {
+		if p.Share == "main" && p.Folder == "" && (p.Usage == nil || p.Usage.UsedBytes != want) {
+			t.Errorf("Rey's main place %+v, want %d", p.Usage, want)
+		}
+	}
+}
+
+// The tables behind members' cards are one shared copy per dataset: M
+// members' card loads within the copy's freshness read each dataset once,
+// whatever the number of homes; a later load is dated by the copy's read,
+// never by now; past freshMaxAge the next load reads them again.
+func TestCardLoadsShareOneReadPerDataset(t *testing.T) {
+	const homes = 12
+	s, nas := homesServer(t, homes)
+	start := time.Now().Add(-time.Hour).UTC().Truncate(time.Second) // apart from the wall clock that dates the reply
+	now := at(s, start)
+	quotaReads := func() int { return strings.Count(strings.Join(nas.calls, " "), "pool.dataset.get_quota") }
+	datasets := 7 + homes // main, waddle, quack, home_dir, open, scratch, Rey's home, and each jobber's
+	members := []string{"sub-rey", "sub-jobber_0", "sub-jobber_3", "sub-jobber_7", "sub-jobber_11"}
+	load := func(subject string) Observed {
+		t.Helper()
+		rr := postOperation(t, s, "storage.status", `{"call_id":"read-`+subject+`","operation":"storage.status","subject":"`+subject+`"}`)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("storage.status %s: %d %s", subject, rr.Code, rr.Body)
+		}
+		var out struct{ Result Observed }
+		_ = json.Unmarshal(rr.Body.Bytes(), &out)
+		return out.Result
+	}
+	before := quotaReads()
+	load(members[0])
+	if got := quotaReads() - before; got != datasets {
+		t.Errorf("the first card load read %d tables, want each of %d once", got, datasets)
+	}
+	*now = start.Add(2 * time.Minute) // inside freshMaxAge
+	before = quotaReads()
+	for _, m := range members[1:] {
+		o := load(m)
+		if o.Current || o.TakenAt != rfc3339(start) || o.Stale == nil || o.Stale.Reason != "cached" {
+			t.Errorf("%s's card %+v %+v, want dated by the copy's read at %s, not current", m, o, o.Stale, rfc3339(start))
+		}
+	}
+	if got := quotaReads() - before; got != 0 {
+		t.Errorf("%d more card loads read %d tables, want none: the copy is fresh", len(members)-1, got)
+	}
+	*now = start.Add(freshMaxAge + time.Second)
+	before = quotaReads()
+	load("sub-jobber_1") // a member whose own card has no copy yet
+	if got := quotaReads() - before; got != datasets {
+		t.Errorf("past freshMaxAge a load read %d tables, want each of %d again", got, datasets)
 	}
 }
 
 // metersOf is storage.status's meters for uid, a member with no home.
 func metersOf(s *server, uid int64) ([]Meter, error) {
-	c, err := s.countFor(uid, "")
+	c, err := s.countFor(uid, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1049,7 +1249,7 @@ func metersOf(s *server, uid int64) ([]Meter, error) {
 
 // placesOf is storage.status's places for uid, counted as it counts them.
 func placesOf(s *server, uid int64, groups []apiID, home string) ([]Place, Observed, error) {
-	c, err := s.countFor(uid, home)
+	c, err := s.countFor(uid, false)
 	if err != nil {
 		return nil, Observed{}, err
 	}

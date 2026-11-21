@@ -1067,6 +1067,10 @@ type HomeUsage struct {
 	Home       string `json:"home"`
 	UsedBytes  int64  `json:"used_bytes"`
 	QuotaBytes int64  `json:"quota_bytes,omitempty"`
+	// NotCounted is "locked" for a home the add-on could not count (its
+	// dataset encrypted, its key not loaded): UsedBytes is then not a
+	// reading, and the other homes are still whole.
+	NotCounted string `json:"not_counted,omitempty"`
 }
 
 // Homes is every home folder on a target: a view built from homesWire. Read
