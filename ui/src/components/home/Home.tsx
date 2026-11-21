@@ -1254,11 +1254,10 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
           >
             <div className="flex-1 text-body">
               <strong className="font-semibold">{nameOf(t.target)}</strong> hasn&rsquo;t been
-              read since <Relative iso={t.since} />.
-              <span className="text-faint">
-                {" "}
+              read since <span className="whitespace-nowrap"><Relative iso={t.since} />.</span>
+              <div className="mt-1 text-faint" data-testid="unvouched-caveat">
                 Nothing found on it means nothing was looked at, not that it is clean.
-              </span>
+              </div>
               {t.reason && (
                 <div className="mt-1 text-small text-faint">{whyNotChecked(t.reason)}</div>
               )}
