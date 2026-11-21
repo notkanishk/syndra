@@ -133,7 +133,7 @@
         503
       ],
       "retry": "backoff",
-      "meaning": "The target could not be read and the add-on holds no mirror to serve instead."
+      "meaning": "The add-on holds nothing to serve: no read of the target it could answer from, whether the target answered with a failure or has not been read since the add-on started. A read whose request never reached the target is TARGET_UNREACHABLE instead. With TARGET_UNREACHABLE these are the answers of a read that carries current and has no copy, except a cooldown with nothing to serve (FRESH_READ_COOLDOWN) and, on /subjects, a store the add-on cannot read (STORE_UNREADABLE)."
     },
     "NO_SUCH_SETTING": {
       "title": "No such setting",
@@ -181,14 +181,6 @@
       ],
       "retry": "never",
       "meaning": "The plan carries more subjects than limits.subjects_per_plan; the limit is in the body."
-    },
-    "REACH_NEVER_READ": {
-      "title": "Reach never read",
-      "statuses": [
-        503
-      ],
-      "retry": "backoff",
-      "meaning": "The folder permissions have not been read since the add-on started."
     },
     "REASON_REQUIRED": {
       "title": "Reason required",
@@ -244,7 +236,7 @@
         503
       ],
       "retry": "retry_after",
-      "meaning": "The target could not be reached and nothing was sent to it: a read has nothing to serve, and a write (apply, a write operation, PUT /settings) did nothing, so Syndra keeps it queued. Only a failure that certainly reached nothing qualifies; a write that may have reached the target is APPLY_FAILED or OPERATION_FAILED with a 5xx. Retry-After is present. Never a lifecycle refusal."
+      "meaning": "The target could not be reached and nothing was sent to it: a read has nothing to serve, and a write (apply, a write operation, PUT /settings) did nothing, so Syndra keeps it queued. Only a failure that certainly reached nothing qualifies; a write that may have reached the target is APPLY_FAILED or OPERATION_FAILED with a 5xx. Retry-After is present. Never a lifecycle refusal. The add-on's wire code only: the rule is that Syndra never answers it on its own API, landing in 8c/8d (the backend still sends it today)."
     },
     "TARGET_UNREADABLE": {
       "title": "Target unreadable",

@@ -35,7 +35,6 @@ const (
 	CodeOperationMismatch        = "OPERATION_MISMATCH"
 	CodePlanStale                = "PLAN_STALE"
 	CodePlanTooLarge             = "PLAN_TOO_LARGE"
-	CodeReachNeverRead           = "REACH_NEVER_READ"
 	CodeReasonRequired           = "REASON_REQUIRED"
 	CodeSettingNotSaved          = "SETTING_NOT_SAVED"
 	CodeSettingsUnreadable       = "SETTINGS_UNREADABLE"
@@ -77,7 +76,6 @@ var problems = map[string]problemKind{
 	CodeOperationMismatch:        {"Operation mismatch", "never"},
 	CodePlanStale:                {"Plan stale", "replan"},
 	CodePlanTooLarge:             {"Plan too large", "never"},
-	CodeReachNeverRead:           {"Reach never read", "backoff"},
 	CodeReasonRequired:           {"Reason required", "never"},
 	CodeSettingNotSaved:          {"Setting not saved", "backoff"},
 	CodeSettingsUnreadable:       {"Settings unreadable", "backoff"},

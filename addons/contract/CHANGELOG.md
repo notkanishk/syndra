@@ -3,6 +3,29 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## When Syndra cannot reach you (slice 8a, 21 Nov 2026)
+
+Still major 2 before its release, so nothing is kept for old callers.
+`stale.reason` is `cached`, `cooldown` or `unreachable`: `draining` and
+`never_read` are gone (no add-on sent them; a lifecycle is said by
+`/health`, and nothing read is no copy, so an error). `REACH_NEVER_READ` is
+gone, folded into `NO_CURRENT_READ`, which now means "the add-on holds
+nothing to serve"; with `TARGET_UNREACHABLE` (no request reached the app)
+these are the answers of a read with no copy (a cooldown with nothing to
+serve stays `FRESH_READ_COOLDOWN`, and `/subjects` keeps `STORE_UNREADABLE`),
+the problem and nothing else. `TARGET_UNREACHABLE` is the add-on's wire code
+only; the rule is that Syndra never answers it on its own API, landing in
+8c/8d (the backend still sends it today). The guide gains "When Syndra cannot reach you"
+(what Syndra does while the add-on is down; nothing is asked of the add-on
+but to come back with its mirror and its call records), `health.reachable`
+as the kit will check it, and the kit's outage hooks (`-stop-app`,
+`-start-app`, `-stop-addon`, `-start-addon`) with the checks they will run
+(both built in 8f). The TrueNAS
+add-on's `/reach` answers `NO_CURRENT_READ` before its first read.
+Schema: `common/stale.json` (`reason`). Registry: `errors.json`
+(`REACH_NEVER_READ` removed; `NO_CURRENT_READ`, `TARGET_UNREACHABLE`
+meanings). No fixture changed.
+
 ## A gap over the totals only, or over one person (PR 246, 21 Nov 2026)
 
 Still major 2 before its release. A `/stats` gap MAY carry `scope: "total"`:

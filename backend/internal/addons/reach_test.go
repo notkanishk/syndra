@@ -36,7 +36,7 @@ func TestReadReachDecodesTheAnswerAndSaysWhenNothingWasRead(t *testing.T) {
 		t.Fatalf("interns = %v %v", p, ok)
 	}
 
-	status, body = http.StatusServiceUnavailable, `{"error":"REACH_NEVER_READ"}`
+	status, body = http.StatusServiceUnavailable, `{"error":"NO_CURRENT_READ"}`
 	if got := ReadReach(context.Background(), "truenas", false); got.Read {
 		t.Fatalf("a refusal read as an answer: %+v", got)
 	}

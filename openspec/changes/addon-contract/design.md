@@ -555,7 +555,8 @@ against a mirror, the defect that comment exists to prevent. On every reply
 the table marks with a `stale` column, whenever `current` is `false` the
 reply carries `stale`, and the invariant is
 **`current == false` ⇔ `stale` present**:
-`stale: {reason: cached | cooldown | unreachable | draining | never_read, retry_after: 20, note: "The laser PC has been off since 18:00"}`
+`stale: {reason: cached | cooldown | unreachable, retry_after: 20, note: "The laser PC has been off since 18:00"}`
+(§13.1: nothing read is no copy, an error, never a `stale` reason)
 (`retry_after` in integer seconds, mirroring the `Retry-After` header;
 every *declared* duration in a manifest or registry is ISO 8601, `PT30S`,
 `P90D`). `stale` is a core reply object (a reply may always carry more),
@@ -832,7 +833,9 @@ Health keeps the target-level states: `reachable`, `lifecycle`
 `credential_scopes[]` (§4) and `credential_expiry` generalised from
 `key_expires_at`/`key_expiry` (`set|none|unrecorded`). `last_read_at`,
 `checked_at` and `log_records` are pinned with their types (the inventory
-found `uint64` vs `int64` and a field with no counterpart).
+found `uint64` vs `int64` and a field with no counterpart). What
+`reachable` means, and that Syndra's health monitor alone computes it, is
+§13.2; the kit's check of it is `outage.health` (§13.7).
 
 **Rejected: an enum of product states in the core** (`password_unset`,
 `credential_unenrolled`, `pending_sso`). Each is one product's word, the next
@@ -909,8 +912,8 @@ add-on's `standing`, the roles that reach it and any hold.
 `addons/conformance`: a Go module, one binary.
 
 ```
-syndra-addon-conform --url https://addon.example.org:8443 --target truenas --secret-file ./secret \
-                     [--subject conformance-<run>] [--email conformance-<run>@example.org] [--mutate]
+syndra-addon-conform -url https://addon.example.org:8443 -target truenas -secret-file ./secret \
+                     [-subject conformance-<run>] [-email conformance-<run>@example.org] [-mutate]
 ```
 
 It speaks the real transport (derived keys from `transport_derivation.json`),
@@ -919,7 +922,7 @@ registries, the fixtures; `addons/contract` is an embed-only module that
 exposes those files and no Go type, so §1's rejection of a shared types
 module stands, and only the kit imports it; there is no override flag), and reports every check as `pass | fail | skip`
 with the MUST it enforces. Non-zero exit on any MUST failure. Without
-`--mutate` it runs reads only; with it, it creates and converges one
+`-mutate` it runs reads only; with it, it creates and converges one
 throwaway subject, always named `conformance-...`, refusing to touch a subject
 that already exists (the `record-truenas-fixtures.sh` rule; the plan is read by
 the presence of `account_id`, `standing` or `conflict`, never by their value)
@@ -940,7 +943,7 @@ keep, and it does not pretend to.
 | plan | shape; fingerprint per subject; effect in the closed set; above `limits.subjects_per_plan` → 422 `PLAN_TOO_LARGE` with the limit (the backend chunks and acknowledges, §11; the add-on only refuses) |
 | plan = apply | the plan's effect and consequence for the kit subject equal the apply's |
 | fingerprint | apply without one → `FINGERPRINT_REQUIRED`; with a wrong one → `PLAN_STALE`, nothing written (`log_records` unchanged) |
-| replay | same `call_id`, same identity → byte-identical reply, `log_records` unchanged, **even with a different `plan_id` and `fingerprint`** and, for `password.set`, a different password (the replay is answered before the fingerprint check and secret params are outside the identity, §5); same `call_id`, different identity (another subject, another `desired`) → 422 `CALL_ID_REUSED`; a refused call (`read_only` → 503) then the same `call_id` after `active` → executed, not the old refusal (only 2xx is recorded); a replay after 29 days still answers (skipped unless `--clock` is given) |
+| replay | same `call_id`, same identity → byte-identical reply, `log_records` unchanged, **even with a different `plan_id` and `fingerprint`** and, for `password.set`, a different password (the replay is answered before the fingerprint check and secret params are outside the identity, §5); same `call_id`, different identity (another subject, another `desired`) → 422 `CALL_ID_REUSED`; a refused call (`read_only` → 503) then the same `call_id` after `active` → executed, not the old refusal (only 2xx is recorded); a replay after 29 days still answers (skipped unless `-clock` is given; the flag is not built yet) |
 | read-back | `observed` of the apply equals the subject's `state` on the next `/subjects` |
 | withdraw-only | `desired = {account: false}` for a subject with no account → `no_change`, no account created; for an **existing** account → the account off and every membership unchanged |
 | channel follows account | `desired = {account: false, channel: true}` → observed channel false |
@@ -960,7 +963,7 @@ Two things the kit does not claim: that the add-on never follows a 3xx
 Syndra talks to nothing but the add-on (a backend guard test, §11).
 
 **Versioned with the contract.** The kit's module is tagged with the
-contract major and minor-less feature set it knows; `--url` against an add-on
+contract major and minor-less feature set it knows; `-url` against an add-on
 declaring a newer feature prints it as `skip: unknown feature`, never `fail`.
 The kit is the one place the schema validator must exist; the two ends'
 suites also use it because a fixture that validates in CI is cheaper than one
@@ -973,7 +976,7 @@ on every push, which is what keeps the kit honest when the contract moves.
 The reference add-on is also the guide's worked example, so the example is
 executable and conformant by construction.
 
-**Against the real NAS**, the kit runs on staging with `--mutate` under an
+**Against the real NAS**, the kit runs on staging with `-mutate` under an
 operator's hand (`ready-for-human`); against production, reads only.
 
 ## 8. The author's guide: `addons/AUTHORING.md`
@@ -1802,7 +1805,7 @@ Kit checks under `stats` (skipped when the feature is absent):
 | idempotent | the same `(metric, since)` twice → the same points at or before the watermark, and the same final gaps |
 | gaps | every gap has `start < end`, a `reason`, and only declared dimensions; a gap at or before the watermark is unchanged on the next collection |
 | no people in dimensions | no dimension value equals the username or `account_id` of the account the kit created (`stats.no-people`, a MUST); none equals those of any other account `/subjects` lists (`stats.no-people.ids`, warn: a service account may share a resource's name) |
-| unbound | with `--mutate`, usage by an account the kit created *outside* the binding (where the target allows it) appears in the total and in `unbound.accounts`, never as a per-subject point |
+| unbound | with `-mutate`, usage by an account the kit created *outside* the binding (where the target allows it) appears in the total and in `unbound.accounts`, never as a per-subject point |
 | buffer | `since` older than the buffer → a gap from `since` to the oldest point with the buffer reason, and points still answer |
 | page size | no reply page exceeds `constants.max_reply_bytes`; a keyset cursor continues it with no duplicate and no omission across two pages |
 
@@ -2247,7 +2250,7 @@ that cannot be read. A guard test fails on an add-on hook not returning `Read`.
 
 ### 13.7 Conformance
 
-**The kit stops the app.** `--stop-app` and `--start-app` take a command
+**The kit stops the app.** `-stop-app` and `-start-app` take a command
 each (the reference's fake app is switched by a file, so the hooks are `touch`
 and `rm`). CI requires them; against a real system a missing hook reports "not
 checked", never "pass". `freshness.unreachable` stops being a permanent skip.
@@ -2262,7 +2265,7 @@ checked", never "pass". `freshness.unreachable` stops being a permanent skip.
   the RFC 9457 problem and nothing else.
 - `outage.write`: an apply answers `TARGET_UNREACHABLE` with `Retry-After`,
   and `GET /calls/{id}` shows nothing recorded.
-- `outage.restart` (`--stop-addon`, `--start-addon`): the `/subjects` mirror
+- `outage.restart` (`-stop-addon`, `-start-addon`): the `/subjects` mirror
   answers as `cached` with its original `taken_at`, and a call made before the
   stop still answers on `GET /calls/{id}` (at most once, §5).
 - One walker, `noFalseZero`, on every reply of the run: a `0`, an empty list,
@@ -2354,7 +2357,7 @@ same day ("do what fable recommends"). Nothing is open.
    no profile*, not `kind` absent, because an absent kind would have let
    the `edit:space` denylist never fire for the one target that can unlock
    doors.
-8. **The kit's `--mutate` run against staging TrueNAS** with a throwaway
+8. **The kit's `-mutate` run against staging TrueNAS** with a throwaway
    subject, operator's hand. Recommend yes, once per contract change.
    **Accepted 10 Nov 2026.**
 9. **Unlisted values preserved as a MUST with no knob** (§3). Recommend the

@@ -565,10 +565,16 @@ not an observation. The rules the schemas cannot express:
   `backend/internal/addons/deps.go`; a Syndra setting, not a contract
   constant), so the answer arrives.
 - **Nothing to serve is an error, not an empty list.** With no earlier read
-  to answer from, the read MUST answer an error, as `handleSubjects` in
-  `addons/truenas/server.go` does: 503 `TARGET_UNREACHABLE` with
-  `Retry-After` when no request reached the app (nothing was sent), 503
-  `NO_CURRENT_READ` when the app was asked and the read failed. An empty
+  to answer from, the read MUST answer one of two errors, as `handleSubjects`
+  in `addons/truenas/server.go` does, with two exceptions that keep their
+  own code: a cooldown with nothing to serve is 429 `FRESH_READ_COOLDOWN`
+  (below), and a store the add-on cannot read on `/subjects` is
+  `STORE_UNREADABLE` (design §13.1 keeps it). Otherwise: 503 `TARGET_UNREACHABLE`
+  with `Retry-After` when no request reached the app (nothing was sent), 503
+  `NO_CURRENT_READ` when the add-on holds nothing to serve for any other
+  reason (the app answered with a failure, or it has not been read since the
+  add-on started). The body is the problem and nothing else: no `0`, no
+  empty list, no date. "Not read yet" is never a `stale` reason. An empty
   list says the app holds none. `/values` has no `current`, so when it cannot read it
   MUST answer `TARGET_UNREADABLE`: 503 when the app could not be reached,
   429 when it is rate-limiting, 502 when it answered with a failure.
@@ -623,8 +629,9 @@ add-on that declares `freshness`:
   since it started, never decreasing while it runs (it may start again at
   0, like an OpenMetrics counter), so that the kit can prove the rules
   above;
-- MUST answer 429 `FRESH_READ_COOLDOWN` (`Retry-After` the seconds left) or
-  503 `TARGET_UNREACHABLE`, only when it has nothing at all to serve;
+- MUST answer 429 `FRESH_READ_COOLDOWN` (`Retry-After` the seconds left),
+  503 `TARGET_UNREACHABLE` or 503 `NO_CURRENT_READ`, only when it has nothing
+  at all to serve;
 - SHOULD forget its copy, its cooldown and any read under way on every
   write it makes, so a person waiting on their own change sees it on the
   next read without asking for a fresh one: a read arriving after a write
@@ -703,7 +710,11 @@ Schema: `v2/schema/health.json`.
 
 - The add-on MUST serve it while the app is unreachable. `reachable` MUST
   say whether a real call to the app just succeeded, not whether the add-on
-  is up.
+  is up. With the app stopped, `reachable` MUST be `false` after one fresh
+  read and `last_read_at` MUST NOT move; with it back, `reachable` MUST be
+  `true` and a fresh read `current: true`. The kit will check exactly this
+  (`outage.health`, [Validating](#13-validating-before-you-ask-to-be-connected));
+  built in 8f, until then the kit does not take your app down.
 - `circuit_open` MUST be `true` while the add-on's own breaker is holding
   back its calls to the app (backing off to avoid a lockout or overload).
   It is distinct from `reachable: false`, so an operator does not look at
@@ -2345,6 +2356,43 @@ it a text input that a barcode scanner can type into, never a picker.
   writes answer `TARGET_UNREACHABLE`
   ([Writes while the app is unreachable](#writes-while-the-app-is-unreachable)),
   and Syndra's queue holds the change until the app answers.
+- **When the add-on is down**, see the next section.
+
+### When Syndra cannot reach you
+
+Two outages, said apart. *The app is unreachable* when your add-on answers
+and says it cannot read its app: only you can know that, so your sentence
+(`detail`, `stale.note`) is what the operator reads first. *The add-on is
+unreachable* when Syndra holds no usable answer from you: a refused or
+unanswered connection, a name that does not resolve, a key that is not the
+one registered, a reply cut off, or a 5xx with no registered code. Only
+Syndra can know that.
+
+What Syndra does while it cannot reach you. *This is the design, built in
+8b-8d; today Syndra keeps a last storage and mappable-values copy
+(`lastStorage`, `lastMappableValues`), counts a missed attempt against a
+queued change, and the first probe after a start does not yet decide.*
+
+- It asks `GET /health` every 30 seconds. Three missed probes in a row mark
+  the add-on unreachable; one answer marks it back. The first probe after
+  Syndra starts decides either way, so a restart of Syndra forgets nothing.
+- Reads: Syndra keeps no copy of your replies. While you are unreachable it
+  does not call you; every page that reads you says it cannot read the
+  system, with no figure, list or date, and a member is told there is
+  nothing for them to do.
+- Queued writes (applies, withdrawals, revocations) stay queued, and an
+  attempt that never reached you is not counted against the change. A
+  revocation is recorded in Syndra at once and shown as not yet applied on
+  your system until you answer `succeeded` to it.
+- Writes a person asks for now (adopt, release, a setting, the lifecycle,
+  the dormant removal, a password, a physical operation) are refused at once,
+  saying nothing went out. Nothing is queued for them; the person asks again.
+
+Nothing is asked of you during the outage. When you come back you MUST
+answer as before: `/subjects` from your mirror as `stale.reason: cached`
+with its original `taken_at` (never a new date for an old read), and
+`GET /calls/{call_id}` for every call made before you stopped, within
+`constants.call_memory` ([Physical operations](#physical-operations-and-get-callscall_id-feature-calls)).
 
 ## 10. Kinds
 
@@ -2375,7 +2423,7 @@ and `v2/fixtures/homes.json`. Both are observations and follow
 `current` check reads both. `/reach` answers what each group opens (shares,
 folders, access) and what everyone can reach; the TrueNAS add-on serves it
 from a five-minute cache as `stale.reason: cached`, and 503
-`REACH_NEVER_READ` before its first read. `/homes` answers every home folder
+`NO_CURRENT_READ` before its first read. `/homes` answers every home folder
 and its use against its limit, Syndra's "how much now"; `quota_read: false`
 says the limits could not be read while the folders were, a partial read and
 not a stale one. Each home carries `subject` exactly as `/subjects` would
@@ -2591,6 +2639,45 @@ Against production, the kit runs reads only: GET routes, `/plan`, and
 signed `POST /operations/{id}` for each operation the registry gives
 `effect: read`, all of which write nothing by contract.
 
+### The outage checks
+
+*Built in 8f; until then the kit has no `-stop-app` flag and no `outage.*`
+checks, and `freshness.unreachable` is still always skipped.*
+
+The kit takes your app and your add-on down only through commands you give
+it, each run by the shell and expected to return once the change has
+happened:
+
+- `-stop-app <command>` and `-start-app <command>` make the app
+  unreachable from your add-on and bring it back. The reference add-on's
+  fake app is meant to be switched by a file, so its hooks would be `touch`
+  and `rm`; built in 8f, until then it is switched in process by
+  `Config.Down` (test-only), which the kit cannot reach.
+- `-stop-addon <command>` and `-start-addon <command>` stop your add-on and
+  start it again, its disk kept.
+
+With them it runs:
+
+- `outage.health`: with the app stopped, `/health` and `/capabilities`
+  still answer, `reachable` is `false` after one fresh read and
+  `last_read_at` does not move; with it back, `reachable: true` and a fresh
+  read is `current: true`.
+- `outage.kept` and `outage.none`: a read with a copy answers it
+  (`current: false`, `stale.reason: unreachable`, the copy's own
+  `taken_at`); a read without one answers 503 `TARGET_UNREACHABLE` or
+  `NO_CURRENT_READ`, the problem and nothing else.
+- `outage.write`: an apply answers `TARGET_UNREACHABLE` with `Retry-After`,
+  and `GET /calls/{call_id}` shows nothing recorded for it.
+- `outage.restart` (the add-on hooks): `/subjects` answers from your mirror
+  as `cached` with its original `taken_at`, and a call made before the stop
+  still answers on `GET /calls/{call_id}`.
+
+On every reply of the run, outage or not, a no-copy reply carrying a `0`,
+an empty list, `""` or a zero date fails, and so does a zero `taken_at`
+anywhere, and `current: false` without `stale`. A CI run MUST give the app
+hooks. Against a real system a check whose hook is missing is reported "not
+checked", never "pass".
+
 ### What the kit cannot check
 
 A green kit is not every MUST. These cannot be seen from outside, so your
@@ -2608,10 +2695,10 @@ own tests carry them:
 - the binding table for the life of the account, and call records for
   `constants.call_memory`, both surviving a restart (`replay.29d` skips);
 - concurrency: `CALL_IN_PROGRESS`, and serialised writes to a shared set;
-- an outage: on reads the last value as `stale.reason: unreachable`, or
-  `TARGET_UNREACHABLE` or `NO_CURRENT_READ` with nothing to serve; on writes
-  `TARGET_UNREACHABLE` against `APPLY_FAILED`, and `unverified` on a failed read-back
-  (the kit cannot take your app down);
+- an outage without its hooks ([The outage checks](#the-outage-checks)),
+  and, with them, the failures only your app can produce:
+  `TARGET_UNREACHABLE` against `APPLY_FAILED` on a write that may have
+  reached it, and `unverified` on a failed read-back;
 - lookup before create after a crash between the create and its record;
 - that a value outside the managed set survives an apply (`state` never
   shows it, so only the add-on's own test sees it:

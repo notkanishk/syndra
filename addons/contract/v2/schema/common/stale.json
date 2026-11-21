@@ -10,11 +10,9 @@
       "enum": [
         "cached",
         "cooldown",
-        "unreachable",
-        "draining",
-        "never_read"
+        "unreachable"
       ],
-      "description": "cached: answered from the add-on's mirror. cooldown: a fresh read was asked for inside the cooldown. unreachable: the target could not be read. draining: the add-on is not accepting work. never_read: nothing has been read since the add-on started."
+      "description": "cached: answered from the add-on's mirror. cooldown: a fresh read was asked for inside the cooldown. unreachable: the target could not be read now, so this is the last read. Nothing read at all is no copy: an error (NO_CURRENT_READ or TARGET_UNREACHABLE), never a stale reply."
     },
     "retry_after": {
       "type": "integer",
