@@ -131,8 +131,8 @@
    * `type-*` roles below read the display steps. The display steps take one
    * step down below the tablet breakpoint (the phone block in `@layer base`),
    * instead of growing with the window: a desktop no longer gets the largest
-   * size because it is wider than 1080. 12.5 is the floor (A-09). Q1 and Q3,
-   * recommended, pending owner: the scale is these eight numbers. */
+   * size because it is wider than 1080. 12.5 is the floor (A-09). Settled by
+   * the owner on 21 Nov 2026 (Q1 and Q3): the scale is these eight numbers. */
   /* Tailwind's own steps (text-xs … text-9xl) go: a namespace set to `initial` is
      cleared (Tailwind v4, "Using a custom theme"), so `text-sm` renders nothing
      rather than a ninth size beside the scale. */
@@ -163,7 +163,7 @@
   --control-md: 36px; /* a page header's and a dialog footer's button */
 
   /* The page: sentences 60ch, the page 1280, a field 400. The frame is centred
-     between the rail and the window's edge (Q2, recommended, pending owner),
+     between the rail and the window's edge (Q2, settled by the owner on 21 Nov 2026),
      and the top bar's row and the section band take the same frame through
      --page-x, so the breadcrumb stays over the title. 100cqw is the content
      column (AppShell makes it the size container). At 1440 the content is
@@ -207,7 +207,7 @@
    * an arbitrary step on a scale.
    *
    *   below 720px   phone   — single column, tab bar, dialogs become sheets
-   *   720–1080px    tablet  — rail returns collapsed to 64px, up to three
+   *   720–1080px    tablet  — rail returns at 252px, up to three
    *                           table columns, sheets become dialogs again.
    *                           Still touch: targets stay 44px.
    *   above 1080px  desktop — the product as it already is, unchanged
@@ -580,10 +580,12 @@
       --touch-nav-height: calc(69px + env(safe-area-inset-bottom));
 
       /* A phone keeps the layout it had (D-1 §8): the density is for a window,
-         and a phone was already sized for a thumb. The display steps take their
-         one step down (a phone already had 26 for a page, 22 for a heading),
-         and every density token a phone reads holds the value it had before
-         D-1, so the shared parts read one token at every width and a phone
+         and a phone was already sized for a thumb. Only the display steps
+         (--text-display, --text-page) take one step down, to 28 and 26. The
+         card and empty-state title, --text-title, is a density token, not a
+         display step: it is 17 on a desktop and holds the 19 a phone had
+         before D-1 (the rule is "a phone keeps its layout", not "smaller").
+         Every density token a phone reads holds the value it had before D-1, so the shared parts read one token at every width and a phone
          never sees the desktop's numbers. `design-system.test.ts` holds these. */
       --text-display: 28px;
       --text-page: 26px;
@@ -648,13 +650,13 @@
        in light; these sit a little above. A label is as strong as faint text
        and reads as structure by its case and tracking, not by being fainter.
        Text drawn with its own alpha keeps the same floors: 0.56 dark, 0.66
-       light (checked by globals-contrast.test.ts). */
+       light (checked by contrast.test.ts). */
     --muted: rgba(243, 245, 239, 0.7);
     --faint: rgba(243, 245, 239, 0.56);
     --label: var(--faint);
 
-    /* Fill and text differ, and must: --violet-500 is the pill you press,
-       --violet-400 is the tone that stays legible as 13px text on #141612. */
+    /* Fill and text differ, and must: --violet-500 is the brand tone (`--accent`; a button fills with
+       `--accent-dense`), --violet-400 is the tone that stays legible as 13px text on #141612. */
     --accent: var(--violet-500);
     --accent-text: var(--violet-400);
     --accent-ink: var(--on-violet);

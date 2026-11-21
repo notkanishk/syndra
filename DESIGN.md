@@ -426,7 +426,7 @@ Near-black with a green cast in the dark room, white cards on a lilac ground in 
 - **Label** (600, 12.5px, 0.1em, uppercase): a column heading or a micro-label. The rail's group heading is the same at 0.13em.
 
 ### Named Rules
-**The Eight Steps Rule.** The scale is these eight sizes, each about 1.27 times the one below. Tailwind's own text steps are cleared, so there is no ninth. The steps do not grow with the window. (`globals.css` marks the scale "recommended, pending owner".)
+**The Eight Steps Rule.** The scale is these eight sizes, each about 1.27 times the one below. Tailwind's own text steps are cleared, so there is no ninth. The steps do not grow with the window. (Settled by the owner on 21 Nov 2026.)
 
 **The Floor Rule.** Nothing is set under 12.5px.
 
