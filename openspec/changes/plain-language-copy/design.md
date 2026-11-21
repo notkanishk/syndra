@@ -603,10 +603,10 @@ network storage server".
 | Fact | To staff | To a member |
 |---|---|---|
 | a role held via a bundle | "Via Lab Tech (bundle)" | "Because you're in Lab Tech" |
-| access expiring | "Expires 12 Sep" | "Ends 12 Sep — ask before then if you still need it" |
+| access expiring | "Ends 12 Sep" | "Ends 12 Sep. Ask before then if you still need it." |
 | a hold | "On hold until 3 Oct: safety refresher" | "Paused. Makerspace staff will look again on 3 Oct. If you think this is a mistake, ask them and mention the reason shown here." |
-| a queued change | "Waiting to be sent to TrueNAS" | "Your TrueNAS access is on its way. It usually takes a few minutes." |
-| the sign-in service | "Zitadel" | "Zitadel" — marked up, so the definition is one tap away |
+| a queued change | "Waiting for you to send →" | "On its way. Given 15 Oct. It starts working once makerspace staff send it." |
+| the sign-in service | "Zitadel" | "Zitadel", marked up so the definition is one tap away |
 
 Members never meet *operator*, *drift*, *cascade*, *outbox* or *reconcile*:
 those name work they do not do. They do meet the products they use, by name.

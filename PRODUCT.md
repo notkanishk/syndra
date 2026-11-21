@@ -43,7 +43,7 @@ Success, in the owner's words: on arrival the first screen answers "what is this
 - **One source each.** Tokens live only in `ui/src/app/globals.css`, navigation only in `ui/src/lib/nav.ts`, and a setting has one write place. Both themes are authored in full; a component never holds a hex (`CLAUDE.md`, "Key Conventions"; RULES).
 - **Vocabulary.** One word per thing, for everybody (copy guide §6). Revoke, Remove, Retire and Delete each mean one act; counts say "people"; service accounts are not people (RULES).
 - **Messages.** Nothing is a toast and nothing times out. Each kind of message has one part that carries it (RULES G20 to G31).
-- **Not decided here.** The type scale and the page frame are marked "recommended, pending owner" in `globals.css` (the Density block). They are recorded as shipped, not as settled.
+- **Settled.** The eight-step type scale and the centred 1280 frame (the Density block in `globals.css`) were settled by the owner on 21 Nov 2026.
 
 ## Brand Commitments
 
