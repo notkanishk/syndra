@@ -2384,9 +2384,9 @@ queued change, and the first probe after a start does not yet decide.*
   attempt that never reached you is not counted against the change. A
   revocation is recorded in Syndra at once and shown as not yet applied on
   your system until you answer `succeeded` to it.
-- Writes a person asks for now (adopt, release, a setting, the lifecycle, the
-  dormant removal, a password, a physical operation) are refused at once, saying nothing went
-  out. Nothing is queued for them; the person asks again.
+- Writes a person asks for now (adopt, release, a setting, the lifecycle,
+  the dormant removal, a password, a physical operation) are refused at once,
+  saying nothing went out. Nothing is queued for them; the person asks again.
 
 Nothing is asked of you during the outage. When you come back you MUST
 answer as before: `/subjects` from your mirror as `stale.reason: cached`

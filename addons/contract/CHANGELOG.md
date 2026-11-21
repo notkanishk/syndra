@@ -18,8 +18,9 @@ only; the rule is that Syndra never answers it on its own API, landing in
 8c/8d (the backend still sends it today). The guide gains "When Syndra cannot reach you"
 (what Syndra does while the add-on is down; nothing is asked of the add-on
 but to come back with its mirror and its call records), `health.reachable`
-as the kit checks it, and the kit's outage hooks (`-stop-app`, `-start-app`,
-`-stop-addon`, `-start-addon`) with the checks they run. The TrueNAS
+as the kit will check it, and the kit's outage hooks (`-stop-app`,
+`-start-app`, `-stop-addon`, `-start-addon`) with the checks they will run
+(both built in 8f). The TrueNAS
 add-on's `/reach` answers `NO_CURRENT_READ` before its first read.
 Schema: `common/stale.json` (`reason`). Registry: `errors.json`
 (`REACH_NEVER_READ` removed; `NO_CURRENT_READ`, `TARGET_UNREACHABLE`
