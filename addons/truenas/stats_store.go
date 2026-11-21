@@ -57,6 +57,20 @@ type statsMeta struct {
 	// digest of a name the NAS no longer resolves. Never on the wire; only
 	// its count is.
 	Unbound map[string][]string `json:"unbound,omitempty"`
+	// Recording is, per share, the instant its coverage began: the first
+	// collection of an unbroken chain that each saw its auditing record
+	// everyone (storage.sessions only). A day is counted only from its
+	// first midnight at or after it: nothing before was observed recorded.
+	Recording map[string]time.Time `json:"recording,omitempty"`
+	// LastSeen is, per share, the last collection that saw it record
+	// everyone, and Every the STATS_COLLECT_EVERY it ran under: a sighting
+	// more than 3 x the larger of that and the current one after it breaks
+	// the chain, so changing the setting never does.
+	LastSeen map[string]time.Time     `json:"last_seen,omitempty"`
+	Every    map[string]time.Duration `json:"every,omitempty"`
+	// Before is, per share, the reason the days before Recording are gaps
+	// when it is not reasonNotYet: reasonNAS or reasonUnwatched.
+	Before map[string]string `json:"before,omitempty"`
 }
 
 func statsBucket(tx *bolt.Tx, metric string) *bolt.Bucket {

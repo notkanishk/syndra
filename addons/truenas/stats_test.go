@@ -33,6 +33,8 @@ type statsNAS struct {
 	reads int // audit.query calls
 	// smbDown refuses only the read of every SMB account (smbMemberships).
 	smbDown bool
+	// auditDown refuses only audit.query: the share settings are still read.
+	auditDown bool
 }
 
 func (n *statsNAS) Call(method string, timeout int64, params any) (json.RawMessage, error) {
@@ -46,6 +48,9 @@ func (n *statsNAS) Call(method string, timeout int64, params any) (json.RawMessa
 	}
 	if method != "audit.query" {
 		return n.fakeRPC.Call(method, timeout, params)
+	}
+	if n.auditDown {
+		return errorEnvelope("[EFAULT] the audit log could not be read"), nil
 	}
 	n.reads++
 	q := params.([]any)[0].(map[string]any)
@@ -112,7 +117,9 @@ func statsServer(t *testing.T) (*server, *statsNAS, *time.Time) {
 	s.nas = newNAS(func() (rpc, error) { return nas, nil }, []string{"25.04"})
 	s.nas.version, s.nas.probed, s.nas.selfName = "25.04.2", true, "syndra"
 	at := day0
-	s.stats = statsClock{zone: kolkata, now: func() time.Time { return at }}
+	// Collected daily: the tests step a day at a time, so a chain breaks
+	// only past two days without a sighting.
+	s.stats = statsClock{zone: kolkata, now: func() time.Time { return at }, every: 24 * time.Hour}
 	// Bound by uid, under the name the account had when it was bound. A rename is followed by number
 	// only for a number this add-on hands out (never reused), so the fixture's range holds 3051 and
 	// 3077; an adopted account outside the range is a conflict instead (binding_uid_test.go).
@@ -120,7 +127,302 @@ func statsServer(t *testing.T) (*server, *statsNAS, *time.Time) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-rey", Username: "rey_old_name", UID: 3051, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
+	// main has been seen recording everyone since the log's oldest row: the
+	// tests of what is counted count from their first run.
+	recordingSince(t, s, map[string]time.Time{"main": time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)})
 	return s, nas, &at
+}
+
+// recordingSince stores, as a collection would have, from when each share
+// was seen recording everyone (statsMeta.Recording), each last seen now.
+// nil stores none.
+func recordingSince(t *testing.T, s *server, since map[string]time.Time) {
+	t.Helper()
+	meta, _, err := s.store.StatsMeta(metricSessions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta.Recording, meta.LastSeen = since, map[string]time.Time{}
+	for name := range since {
+		meta.LastSeen[name] = s.stats.clock()
+	}
+	if err := s.store.PutStats(metricSessions, meta, nil, s.stats.oldest(s.stats.clock())); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// mainOn is main's total on a day, and the reason of main's gap over it.
+func mainOn(t *testing.T, s *server, day string) (int64, bool, string) {
+	t.Helper()
+	first, points, _ := allStats(t, s, metricSessions, day0.AddDate(0, 0, -7))
+	v, counted := onDay(points, day, "", "main")
+	var why string
+	for _, g := range first.Gaps {
+		start, _ := time.Parse(time.RFC3339, g.Start)
+		end, _ := time.Parse(time.RFC3339, g.End)
+		at := s.stats.midnight(day)
+		if g.Dimensions["share"] == "main" && !start.After(at) && end.After(at) {
+			why = g.Reason()
+		}
+	}
+	return v, counted, why
+}
+
+// A share is counted only from the first collection that saw its auditing
+// record everyone: the log cannot say whom it left out before. Observed live
+// on 21 Nov 2026: the owner widened main's watch list at 17:25Z, and the
+// next collection counted the whole day as recorded. The day it began on
+// stays a gap with the same reason; the next day is counted.
+func TestASharesDayIsCountedOnlyFromWhenItWasSeenRecordingEveryone(t *testing.T) {
+	s, nas, at := statsServer(t)
+	recordingSince(t, s, nil)
+	inBuiltin := `"groups":[41]`
+	nas.users = strings.Replace(statsUsers, `"groups":[]`, inBuiltin, 1) // Seth is not watched
+	nas.shares = strings.Replace(statsShares, `"audit":{"enable":true,"watch_list":[],"ignore_list":[]}`,
+		`"audit":{"enable":true,"watch_list":["builtin_users"],"ignore_list":[]}`, 1)
+	nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "before")
+	s.collectStatsOnce() // 9 Nov 10:00: main leaves Seth out
+	nas.users = strings.ReplaceAll(statsUsers, `"groups":[]`, inBuiltin)
+	*at = day0.Add(7 * time.Hour)
+	s.collectStatsOnce() // 17:00: now it records everyone
+	nas.connect(day0.Add(8*time.Hour), "rey_mysterio", "main", "after")
+	nas.connect(day0.Add(20*time.Hour), "rey_mysterio", "main", "next day")
+	*at = day0.Add(24 * time.Hour)
+	s.collectStatsOnce()
+	*at = day0.Add(48 * time.Hour)
+	s.collectStatsOnce()
+	if v, counted, why := mainOn(t, s, "2026-11-09"); counted || why != reasonNotYet.text {
+		t.Errorf("9 Nov, the day main began recording everyone: counted %v (%d), gap %q; want a gap saying %q", counted, v, why, reasonNotYet.text)
+	}
+	if v, _, why := mainOn(t, s, "2026-11-10"); v != 1 || why != "" {
+		t.Errorf("10 Nov, recorded in full: %d, gap %q; want 1 and no gap", v, why)
+	}
+}
+
+// After a restart the stored instants stand, when coverage began and when it
+// was last seen: the day it began on is still a gap, and the add-on does not
+// take its own start for a new one, nor its stop for a break.
+func TestARestartKeepsWhenRecordingBegan(t *testing.T) {
+	s, nas, at := statsServer(t)
+	recordingSince(t, s, nil)
+	s.collectStatsOnce() // 9 Nov 10:00: main seen recording everyone
+	path := s.store.db.Path()
+	s.store.Close()
+	store, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	s.store = store
+	nas.connect(day0.Add(time.Hour), "rey_mysterio", "main", "s0")
+	nas.connect(day0.Add(20*time.Hour), "rey_mysterio", "main", "s1")
+	*at = day0.Add(24 * time.Hour)
+	s.collectStatsOnce()
+	meta, _, _ := s.store.StatsMeta(metricSessions)
+	if got := meta.Recording["main"]; !got.Equal(day0) {
+		t.Errorf("main recording since %v after a restart, want %v", got, day0)
+	}
+	if got := meta.LastSeen["main"]; !got.Equal(day0.Add(24 * time.Hour)) {
+		t.Errorf("main last seen %v after a restart, want the run after it", got)
+	}
+	*at = day0.Add(48 * time.Hour)
+	s.collectStatsOnce()
+	if _, counted, _ := mainOn(t, s, "2026-11-09"); counted {
+		t.Error("9 Nov counted after a restart: recording began at 10:00 that day")
+	}
+	if v, _, _ := mainOn(t, s, "2026-11-10"); v != 1 {
+		t.Errorf("10 Nov is %d, want 1", v)
+	}
+}
+
+// Narrowing a share's auditing ends its coverage when it is seen: widening
+// it again later that day begins it again then, so that day is a gap.
+func TestNarrowingAuditingEndsCoverage(t *testing.T) {
+	s, nas, at := statsServer(t)
+	s.collectStatsOnce() // 9 Nov: main recorded everyone all along
+	*at = day0.Add(24 * time.Hour)
+	narrowed := strings.Replace(statsShares, `"audit":{"enable":true,"watch_list":[],"ignore_list":[]}`,
+		`"audit":{"enable":true,"watch_list":["lab_makers"],"ignore_list":[]}`, 1)
+	nas.shares = narrowed
+	s.collectStatsOnce() // 10 Nov 10:00: narrowed
+	nas.shares = statsShares
+	*at = day0.Add(28 * time.Hour)
+	s.collectStatsOnce() // 14:00: everyone again
+	nas.connect(day0.Add(30*time.Hour), "rey_mysterio", "main", "s1")
+	nas.connect(day0.Add(40*time.Hour), "rey_mysterio", "main", "s2")
+	*at = day0.Add(48 * time.Hour)
+	s.collectStatsOnce()
+	*at = day0.Add(72 * time.Hour)
+	s.collectStatsOnce()
+	if v, counted, why := mainOn(t, s, "2026-11-10"); counted || why != reasonNotYet.text {
+		t.Errorf("10 Nov, narrowed then widened: counted %v (%d), gap %q; want a gap saying %q", counted, v, why, reasonNotYet.text)
+	}
+	if v, _, _ := mainOn(t, s, "2026-11-11"); v != 1 {
+		t.Errorf("11 Nov is %d, want 1", v)
+	}
+}
+
+// A store written before the add-on kept the instant has none: coverage
+// begins with this run, never before it, so the days it catches up are gaps.
+func TestNoStoredInstantIsNeverBackdated(t *testing.T) {
+	s, nas, at := statsServer(t)
+	meta, _, _ := s.store.StatsMeta(metricSessions)
+	meta.Recording, meta.Watermark, meta.HeldFrom = nil, "2026-11-08", "2026-11-01"
+	if err := s.store.PutStats(metricSessions, meta, nil, s.stats.oldest(*at)); err != nil {
+		t.Fatal(err)
+	}
+	nas.connect(day0.Add(-30*time.Hour), "rey_mysterio", "main", "s1") // 8 Nov
+	nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "s2")    // 9 Nov
+	s.collectStatsOnce()
+	*at = day0.Add(24 * time.Hour)
+	s.collectStatsOnce()
+	for _, day := range []string{"2026-11-08", "2026-11-09"} {
+		if v, counted, why := mainOn(t, s, day); counted || why != reasonNotYet.text {
+			t.Errorf("%s with no instant stored: counted %v (%d), gap %q; want a gap saying %q", day, counted, v, why, reasonNotYet.text)
+		}
+	}
+}
+
+// Unread SMB accounts are no sighting of a share they narrow, and fail the
+// run like any unread NAS: the watermark holds, so the day is recounted, and
+// the time rule alone decides. One unread run keeps main's chain; unread for
+// longer than three runs, it breaks, and the days before the new start say
+// the NAS could not be read.
+func TestUnreadSMBAccountsAreNoSighting(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		runs []int // hours after 9 Nov 10:00; the middle ones cannot read the accounts
+		want []check
+	}{
+		{"one unread run keeps the chain", []int{0, 5, 24, 48}, []check{{"2026-11-09", true, ""}, {"2026-11-10", true, ""}}},
+		{"unread for longer than three runs breaks it", []int{0, 24, 48, 72, 96, 120, 144},
+			[]check{{"2026-11-10", false, reasonNAS.text}, {"2026-11-13", false, reasonNAS.text}, {"2026-11-15", true, ""}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, nas, at := statsServer(t)
+			recordingSince(t, s, map[string]time.Time{"main": day0.Add(-48 * time.Hour)})
+			nas.users = strings.ReplaceAll(statsUsers, `"groups":[]`, `"groups":[41]`) // everyone watched
+			nas.shares = strings.Replace(statsShares, `"audit":{"enable":true,"watch_list":[],"ignore_list":[]}`,
+				`"audit":{"enable":true,"watch_list":["builtin_users"],"ignore_list":[]}`, 1)
+			for d := 0; d <= 6; d++ {
+				nas.connect(day0.Add(time.Duration(24*d+2)*time.Hour), "rey_mysterio", "main", fmt.Sprint("s", d))
+			}
+			for i, h := range tc.runs {
+				nas.smbDown = i > 0 && i < len(tc.runs)-2
+				*at = day0.Add(time.Duration(h) * time.Hour)
+				s.collectStatsOnce()
+			}
+			checkMain(t, s, tc.want)
+		})
+	}
+}
+
+type check struct {
+	day     string
+	counted bool
+	why     string
+}
+
+func checkMain(t *testing.T, s *server, want []check) {
+	t.Helper()
+	for _, w := range want {
+		if v, counted, why := mainOn(t, s, w.day); counted != w.counted || why != w.why {
+			t.Errorf("%s: counted %v (%d), gap %q; want counted %v, gap %q", w.day, counted, v, why, w.counted, w.why)
+		}
+	}
+}
+
+// One rule breaks the chain: a sighting more than 3*STATS_COLLECT_EVERY
+// (here a day) after the last, the larger of the setting then and now,
+// whatever the cause. The scheduler waits a day after each run ends, so one
+// skipped run lands a little past two days and must not break it. The
+// collector runs daily at 10:00 from 9 Nov, with a session on each day after.
+func TestTheChainBreaksOnlyOnAGapInSightings(t *testing.T) {
+	h, late := time.Hour, 10*time.Second
+	ghost := func(s *server, gone bool) {
+		if !gone {
+			corrupt(t, s, bucketBindings, "sub-ghost")
+			return
+		}
+		if err := s.store.db.Update(func(tx *bolt.Tx) error { return tx.Bucket(bucketBindings).Delete([]byte("sub-ghost")) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		name   string
+		runs   []time.Duration // after 9 Nov 10:00
+		before func(s *server, n *statsNAS, run int)
+		want   []check
+	}{
+		{"a stop longer than three runs leaves the stopped days unwatched", []time.Duration{0, 96 * h, 120 * h, 144 * h}, nil,
+			[]check{{"2026-11-10", false, reasonUnwatched.text}, {"2026-11-12", false, reasonUnwatched.text},
+				{"2026-11-13", false, reasonUnwatched.text}, {"2026-11-14", true, ""}}},
+		{"one skipped run, a little past two days, keeps counting", []time.Duration{0, 48*h + late, 72*h + late}, nil,
+			[]check{{"2026-11-10", true, ""}, {"2026-11-11", true, ""}}},
+		{"two skipped runs break it", []time.Duration{0, 72*h + late, 96*h + late}, nil,
+			[]check{{"2026-11-10", false, reasonUnwatched.text}, {"2026-11-12", false, reasonUnwatched.text}, {"2026-11-13", true, ""}}},
+		{"a run that saw the settings but not the log keeps the chain", []time.Duration{0, 30 * h, 60 * h, 90 * h, 120 * h},
+			func(_ *server, n *statsNAS, run int) { n.mu.Lock(); n.auditDown = run == 1 || run == 2; n.mu.Unlock() },
+			[]check{{"2026-11-10", true, ""}, {"2026-11-11", true, ""}, {"2026-11-12", true, ""}}},
+		{"unread bindings for longer than three runs are the NAS, not unwatched", []time.Duration{0, 24 * h, 48 * h, 72 * h, 96 * h, 120 * h, 144 * h},
+			func(s *server, _ *statsNAS, run int) {
+				if run == 1 || run == 5 {
+					ghost(s, run == 5)
+				}
+			},
+			[]check{{"2026-11-10", false, reasonNAS.text}, {"2026-11-13", false, reasonNAS.text}, {"2026-11-15", true, ""}}},
+		{"shortening the setting never breaks the chain", append([]time.Duration{0}, hourly(30, 50)...),
+			func(s *server, _ *statsNAS, run int) {
+				if run == 1 {
+					s.stats.every = h
+				}
+			},
+			[]check{{"2026-11-10", true, ""}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, nas, at := statsServer(t)
+			for d := 1; d <= 6; d++ {
+				nas.connect(day0.Add(time.Duration(24*d-4)*time.Hour), "rey_mysterio", "main", fmt.Sprint("s", d))
+			}
+			for i, after := range tc.runs {
+				if tc.before != nil {
+					tc.before(s, nas, i)
+				}
+				*at = day0.Add(after)
+				s.collectStatsOnce()
+			}
+			checkMain(t, s, tc.want)
+		})
+	}
+}
+
+// hourly is a run each hour from hour from to hour to, after 9 Nov 10:00.
+func hourly(from, to int) (runs []time.Duration) {
+	for h := from; h <= to; h++ {
+		runs = append(runs, time.Duration(h)*time.Hour)
+	}
+	return runs
+}
+
+// A store written before LastSeen existed has a Recording and no sighting:
+// coverage restarts with the first run that reads it, never kept from the
+// stored instant, and the day it restarts on is not yet seen, not unwatched.
+func TestAStoreWithoutLastSeenRestartsCoverage(t *testing.T) {
+	s, nas, at := statsServer(t)
+	meta, _, _ := s.store.StatsMeta(metricSessions)
+	meta.LastSeen = nil // Recording stands, from the log's oldest row (statsServer)
+	if err := s.store.PutStats(metricSessions, meta, nil, s.stats.oldest(*at)); err != nil {
+		t.Fatal(err)
+	}
+	nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "s1")
+	nas.connect(day0.Add(20*time.Hour), "rey_mysterio", "main", "s2")
+	s.collectStatsOnce()
+	*at = day0.Add(24 * time.Hour)
+	s.collectStatsOnce()
+	if meta, _, _ := s.store.StatsMeta(metricSessions); !meta.Recording["main"].Equal(day0) {
+		t.Errorf("main recording since %v, want the first run after the upgrade, %v", meta.Recording["main"], day0)
+	}
+	checkMain(t, s, []check{{"2026-11-09", false, reasonNotYet.text}, {"2026-11-10", true, ""}})
 }
 
 type statsPage struct {
@@ -283,7 +585,6 @@ func TestAShareRecordsEveryoneWhenItWatchesEverySMBAccount(t *testing.T) {
 		{"one SMB account outside it", `["builtin_users"]`, `[]`, `"groups":[]`, "", false, false, reasonAudited.text},
 		{"an ignored group holds an SMB account", `[]`, `["staff"]`, `"groups":[41,51]`, "", false, false, reasonAudited.text},
 		{"both lists empty", `[]`, `[]`, `"groups":[]`, "", true, true, ""},
-		{"the accounts cannot be read", `["builtin_users"]`, `[]`, inBuiltin, "", true, false, reasonNAS.text},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, nas, at := statsServer(t)
@@ -293,6 +594,9 @@ func TestAShareRecordsEveryoneWhenItWatchesEverySMBAccount(t *testing.T) {
 			}
 			nas.shares = strings.Replace(statsShares, `"audit":{"enable":true,"watch_list":[],"ignore_list":[]}`,
 				`"audit":{"enable":true,"watch_list":`+tc.watch+`,"ignore_list":`+tc.ignore+`}`, 1)
+			if tc.smbDown { // no share narrows, so nothing reads the accounts (unread: TestUnreadSMBAccountsAreNoSighting)
+				nas.shares = strings.Replace(nas.shares, `"watch_list":["lab_makers"]`, `"watch_list":[]`, 1)
+			}
 			nas.smbDown = tc.smbDown
 			nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "s1")
 			s.collectStatsOnce()
@@ -315,8 +619,9 @@ func TestAShareRecordsEveryoneWhenItWatchesEverySMBAccount(t *testing.T) {
 
 // While the NAS cannot be read nothing moves: the watermark stays, the days
 // since the last read are one gap, a gauge's dark day becomes a final gap
-// once the NAS answers, and the sessions of the dark days are read from the
-// log then, filling the window.
+// once the NAS answers, and so do the sessions of the dark days: an outage
+// longer than three runs broke the chain of runs that saw a share record
+// everyone.
 func TestTheWatermarkIsHeldWhileTheNASIsDown(t *testing.T) {
 	s, nas, at := statsServer(t)
 	s.collectStatsOnce() // 9 Nov
@@ -347,19 +652,22 @@ func TestTheWatermarkIsHeldWhileTheNASIsDown(t *testing.T) {
 	s.nas.mu.Lock()
 	s.nas.failures, s.nas.openUntil, s.nas.lastTry = 0, time.Time{}, time.Time{} // the breaker's own cooldown, not this test's
 	s.nas.mu.Unlock()
+	*at = day0.Add(74 * time.Hour) // 12 Nov, more than three runs after main was last seen
 	s.collectStatsOnce()
 	back, points, _ := allStats(t, s, metricSessions, since)
-	if back.Watermark != "2026-11-11T00:00:00+05:30" || slices.ContainsFunc(back.Gaps, func(g StatGap) bool { return g.Reason() == reasonNAS.text }) {
+	if back.Watermark != "2026-11-12T00:00:00+05:30" || slices.ContainsFunc(back.Gaps, func(g StatGap) bool { return g.Reason() == reasonNAS.text && g.Dimensions == nil }) {
 		t.Errorf("back up: watermark %s, gaps %+v; want the start of today and the failure gap withdrawn", back.Watermark, back.Gaps)
 	}
-	if v, _ := onDay(points, "2026-11-10", "sub-rey", "main"); v != 1 {
-		t.Errorf("the dark day's session was not read from the log once the NAS answered: %+v", points)
+	// The outage broke main's chain: the dark day is a gap saying the NAS
+	// could not be read, never counted on a guess that auditing stayed whole.
+	if v, counted, why := mainOn(t, s, "2026-11-10"); counted || why != reasonNAS.text {
+		t.Errorf("the dark day: counted %v (%d), gap %q; want a gap saying %q (%+v)", counted, v, why, reasonNAS.text, points)
 	}
 	used, _, _ := allStats(t, s, metricUsedBytes, since)
 	if !slices.ContainsFunc(used.Gaps, func(g StatGap) bool {
-		return g.Reason() == reasonDark.text && g.Start == "2026-11-10T00:00:00+05:30" && g.End == "2026-11-11T00:00:00+05:30"
+		return g.Reason() == reasonDark.text && g.Start == "2026-11-10T00:00:00+05:30" && g.End == "2026-11-12T00:00:00+05:30"
 	}) {
-		t.Errorf("used_bytes on the dark day: gaps %+v, want a final gap: a level cannot be read after the fact", used.Gaps)
+		t.Errorf("used_bytes on the dark days: gaps %+v, want a final gap: a level cannot be read after the fact", used.Gaps)
 	}
 }
 
@@ -1392,7 +1700,7 @@ func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
 			"2026-04-04T00:00:00-03:00", "2026-04-05T00:00:00-04:00", "2026-04-06T00:00:00-04:00"},
 	} {
 		s, nas, at := statsServer(t)
-		s.stats.zone = santiago
+		s.stats.zone, s.stats.every = santiago, 3*24*time.Hour // a run every three days: one chain
 		run := func(now time.Time) {
 			*at = now
 			done := make(chan struct{})
@@ -1422,7 +1730,9 @@ func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
 
 // An outage longer than the NAS keeps its audit log: the days it purged,
 // and the day of the oldest row it kept (part-purged, perhaps), are a final
-// gap, never zeros; counting goes on from the day after.
+// gap, never zeros. The days after are gaps too, saying the NAS could not be
+// read: the outage broke the chain that saw main record everyone, so it
+// counts again from the run that sees it next.
 func TestAnOutageLongerThanTheLogIsKeptIsAGapNotZeros(t *testing.T) {
 	s, nas, at := statsServer(t)
 	nas.connect(day0.Add(time.Hour), "rey_mysterio", "main", "before")
@@ -1465,8 +1775,8 @@ func TestAnOutageLongerThanTheLogIsKeptIsAGapNotZeros(t *testing.T) {
 		}
 	}
 	for _, day := range []string{"2026-11-16", "2026-11-18"} {
-		if v, _ := onDay(points, day, "sub-rey", "main"); v != 1 {
-			t.Errorf("%s counted %d after the boundary, want 1: %+v", day, v, points)
+		if v, counted, why := mainOn(t, s, day); counted || why != reasonNAS.text {
+			t.Errorf("%s after the boundary: counted %v (%d), gap %q; want a gap saying %q", day, counted, v, why, reasonNAS.text)
 		}
 	}
 }

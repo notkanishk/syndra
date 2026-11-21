@@ -2559,7 +2559,20 @@ has the full map.
   `audit.query` per run), `storage.home_bytes` (home folder use, against
   `home_quota`) and `storage.used_bytes` (use per share), each owned by the
   account's uid, never its name. A share whose auditing does not record
-  everyone is a gap, never a zero. The collector runs every
+  everyone is a gap, never a zero. A share's day counts only inside an
+  unbroken chain of collections that each saw it record everyone, begun at or
+  before that day's midnight. One rule: the chain breaks only when the share
+  is seen narrowed or no longer enabled, or when a sighting comes more than
+  3 x `STATS_COLLECT_EVERY` (the larger of the setting then and now) after
+  the last, whatever kept the runs between from seeing it; a run that cannot
+  read the SMB accounts a narrowed share needs, or the bindings, fails like
+  any unread NAS, and one that read the share settings but not the log still
+  counts as a sighting. The next collection that sees everyone begins it
+  again at its own time; the days before say "The NAS could not be read"
+  (after a failed run), "Not counted: Syndra wasn't watching this share then"
+  (after no run), or, after narrowing, on a first sighting or on the first
+  run after an upgrade, "Not counted: this share wasn't
+  yet seen recording everyone". The collector runs every
   `STATS_COLLECT_EVERY` (`PT1H`; `0` switches it off), reads only, and keeps
   its days in the add-on's bbolt store, in the container's `TZ`
   (`collectStats` in `addons/truenas/stats_collect.go`).
