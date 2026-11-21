@@ -208,6 +208,9 @@ func TestSchemasRefuseWhatTheyShould(t *testing.T) {
 		{"wrong contract version", "plan_request.json", "plan_request.json", set("contract_version", 1)},
 		{"negative log_records", "health.json", "health.json", set("log_records", -1)},
 		{"timestamp that is not RFC 3339", "subjects.json", "subjects.json", set("taken_at", "yesterday")},
+		// nothing read is no copy, an error; a lifecycle is said by /health (design §13.1)
+		{"stale never_read", "subjects.json", "subjects_stale.json", func(d map[string]any) { d["stale"].(map[string]any)["reason"] = "never_read" }},
+		{"stale draining", "subjects.json", "subjects_stale.json", func(d map[string]any) { d["stale"].(map[string]any)["reason"] = "draining" }},
 		{"effect outside the closed set", "apply_ok.json", "apply_response.json", set("effect", "maybe")},
 		{"a 200 apply that is blocked", "apply_ok.json", "apply_response.json", set("effect", "blocked")},
 		{"account_id without standing", "apply_ok.json", "apply_response.json", set("standing", nil)},

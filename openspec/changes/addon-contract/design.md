@@ -555,7 +555,8 @@ against a mirror, the defect that comment exists to prevent. On every reply
 the table marks with a `stale` column, whenever `current` is `false` the
 reply carries `stale`, and the invariant is
 **`current == false` ⇔ `stale` present**:
-`stale: {reason: cached | cooldown | unreachable | draining | never_read, retry_after: 20, note: "The laser PC has been off since 18:00"}`
+`stale: {reason: cached | cooldown | unreachable, retry_after: 20, note: "The laser PC has been off since 18:00"}`
+(§13.1: nothing read is no copy, an error, never a `stale` reason)
 (`retry_after` in integer seconds, mirroring the `Retry-After` header;
 every *declared* duration in a manifest or registry is ISO 8601, `PT30S`,
 `P90D`). `stale` is a core reply object (a reply may always carry more),
@@ -832,7 +833,9 @@ Health keeps the target-level states: `reachable`, `lifecycle`
 `credential_scopes[]` (§4) and `credential_expiry` generalised from
 `key_expires_at`/`key_expiry` (`set|none|unrecorded`). `last_read_at`,
 `checked_at` and `log_records` are pinned with their types (the inventory
-found `uint64` vs `int64` and a field with no counterpart).
+found `uint64` vs `int64` and a field with no counterpart). What
+`reachable` means, and that Syndra's health monitor alone computes it, is
+§13.2; the kit's check of it is `outage.health` (§13.7).
 
 **Rejected: an enum of product states in the core** (`password_unset`,
 `credential_unenrolled`, `pending_sso`). Each is one product's word, the next

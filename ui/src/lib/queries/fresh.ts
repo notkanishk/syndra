@@ -27,8 +27,8 @@ export interface Stale {
 }
 
 /**
- * The reasons this UI draws, as the add-on says them (the others, draining and
- * never read, draw as any copy does). Named here, never written as a
+ * The reasons this UI draws, as the add-on says them: the contract's three
+ * (`common/stale.json`). Named here, never written as a
  * quoted value after `reason:`, which the repo guard reads as a fixed reason Syndra writes.
  */
 export const STALE = { cached: "cached", cooldown: "cooldown", unreachable: "unreachable" } as const;

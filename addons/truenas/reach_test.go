@@ -300,7 +300,7 @@ func TestReachFallsBackToTheLastReadAndSaysSo(t *testing.T) {
 
 	never := testServer(t, &fakeRPC{groups: reachGroups, shares: fake.shares,
 		answers: fake.answers, refuse: map[string]string{"filesystem.getacl": "[EACCES] no"}})
-	if rr, _ := getReach(t, never); rr.Code != http.StatusServiceUnavailable || !strings.Contains(rr.Body.String(), "REACH_NEVER_READ") {
+	if rr, _ := getReach(t, never); rr.Code != http.StatusServiceUnavailable || !strings.Contains(rr.Body.String(), "NO_CURRENT_READ") {
 		t.Fatalf("never read: %d %s", rr.Code, rr.Body.String())
 	}
 }

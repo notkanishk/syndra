@@ -523,7 +523,7 @@ func (s *server) handleReach(w http.ResponseWriter, r *http.Request, _ []byte) {
 		return
 	}
 	if errors.Is(err, errNeverRead) {
-		writeError(w, http.StatusServiceUnavailable, CodeReachNeverRead,
+		writeError(w, http.StatusServiceUnavailable, CodeNoCurrentRead,
 			"The folder permissions have not been read since the add-on started.", nil)
 		return
 	}

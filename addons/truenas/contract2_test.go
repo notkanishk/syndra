@@ -296,6 +296,9 @@ func TestV2SchemasRefuseWhatTheyShould(t *testing.T) {
 		{"an in_doubt call carrying a reply", "call.json", "call_in_doubt.json", v2Edit("reply", map[string]any{"outcome": "succeeded"})},
 		{"an unknown call carrying a reply", "call.json", "call_unknown.json", v2Edit("reply", map[string]any{"outcome": "succeeded"})},
 		{"a call state outside the three", "call.json", "call.json", v2Edit("state", "done")},
+		// nothing read is no copy, an error; a lifecycle is said by /health (design §13.1)
+		{"stale never_read", "subjects.json", "subjects_stale.json", v2Edit("reason", "never_read", "stale")},
+		{"stale draining", "subjects.json", "subjects_stale.json", v2Edit("reason", "draining", "stale")},
 		{"an outcome outside the vocabulary", "operation_response.json", "operation_response_no_change.json", v2Edit("outcome", "conflict")},
 		{"LIMIT_REACHED without its count", "error.json", "error_limit_reached.json", v2Edit("count", nil)},
 		{"LIMIT_REACHED without its unit", "error.json", "error_limit_reached.json", v2Edit("unit", nil)},
@@ -462,7 +465,7 @@ func TestV2SchemasAcceptWhatTheyShould(t *testing.T) {
 		{"a stats page with no points and one gap", "stats.json", "stats.json", v2Edit("points", []any{})},
 		{"an apply outcome for a subject with no account has neither account_id nor standing", "apply_response.json", "apply_response.json", v2Also(v2Edit("account_id", nil), v2Edit("standing", nil))},
 		{"a stale reply that says only why", "subjects.json", "subjects_stale.json", v2Also(v2Edit("retry_after", nil, "stale"), v2Edit("note", nil, "stale"))},
-		{"every stale reason", "subjects.json", "subjects_stale.json", v2Edit("reason", "never_read", "stale")},
+		{"a stale reply that says unreachable", "subjects.json", "subjects_stale.json", v2Edit("reason", "unreachable", "stale")},
 		{"standing with only the required keys", "subjects.json", "subjects.json", v2Also(v2Edit("note", nil, "subjects", 0, "standing"), v2Edit("next", nil, "subjects", 0, "standing"))},
 		{"a call that is unknown carries no reply", "call.json", "call.json", v2Also(v2Edit("state", "unknown"), v2Edit("reply", nil))},
 		{"a redacted recorded call carries no reply", "call.json", "call.json", v2Edit("reply", nil)},

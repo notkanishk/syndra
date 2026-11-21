@@ -3760,11 +3760,12 @@ of contract 2". Design §13. Survey: `research/reachability-survey.md` (21 Nov 2
 nothing merges to main alone. Each PR: elegant, standard, careful; one source,
 one path; mutation-check every guard; Opus review after.
 
-- [ ] 8a The contract says it (files and guide only, no code). `ready-for-agent`
+- [x] 8a The contract says it (files and guide only, no code).
   - `schema/common/stale.json`: `reason` is `cached | cooldown | unreachable`; `draining` and `never_read` removed, fixtures updated.
   - `registry/errors.json`: `REACH_NEVER_READ` removed; `NO_CURRENT_READ` means "the add-on holds nothing to serve"; `TARGET_UNREACHABLE` says it is the add-on's wire code only.
   - `addons/AUTHORING.md`: a section "When Syndra cannot reach you" (what Syndra does, that nothing is asked of the add-on but to come back with its mirror and call records); the two no-copy codes and nothing else; the `--stop-app`/`--start-app`/`--stop-addon`/`--start-addon` hooks; `health.reachable` as the kit now checks it.
   - `CHANGELOG.md` entry; design §4's `stale` line and §6's health paragraph point at §13.
+  - *Built (21 Nov 2026):* as listed. The kit's hooks are written `-stop-app` and so on, the guide's one-dash style for every kit flag (Go's `flag` takes both). One code line beyond the files: the TrueNAS `/reach` answers `NO_CURRENT_READ` where it answered `REACH_NEVER_READ`, because `TestEveryCodeTheAddOnWritesIsInTheRegistry` refuses a code the registry dropped; the rest of 8g is untouched. Both validating ends refuse `stale.reason` `never_read` and `draining` (`TestSchemasRefuseWhatTheyShould`, `TestV2SchemasRefuseWhatTheyShould`); mutation-checked by restoring the old enum, red on both. The guide describes the outage hooks and checks 8f builds.
 - [ ] 8b Transport and monitor (backend; design §13.1, §13.2, §13.5). `ready-for-agent`
   - `credentials.go`: `net.Dialer{Timeout: 3s}`, `TLSHandshakeTimeout: 5s`, constants in `deps.go`. Test: a blackholed address is `unreached` inside 4 s.
   - The dial resolves the registered host as an absolute name (root dot appended in `DialContext` unless an IP literal); URL, `Host` and SNI unchanged. Test: the resolver is asked for `name.`, an IP literal is untouched, the signed request is byte-identical.
