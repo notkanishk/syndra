@@ -309,6 +309,69 @@ func TestNothingToServeAndNothingSentIsTargetUnreachable(t *testing.T) {
 	}
 }
 
+// Every read with nothing kept answers one of design §13's two codes, by what
+// the NAS did: TARGET_UNREACHABLE when no request reached it, NO_CURRENT_READ
+// when it answered with a failure or its socket died under the read. Never
+// TARGET_UNREADABLE, a 502 or OPERATION_FAILED, which Syndra reads as the
+// add-on refusing rather than the app down (8g). A read operation's lookup
+// keeps the two unreachable states; an answered refusal there is its own.
+func TestEveryReadWithNothingToServeAnswersOneOfTwoCodes(t *testing.T) {
+	reads := map[string]func(*server) *httptest.ResponseRecorder{
+		"/subjects": func(s *server) *httptest.ResponseRecorder { rr, _ := getSubjects(t, s, true); return rr },
+		"/reach":    func(s *server) *httptest.ResponseRecorder { rr, _ := getReach(t, s); return rr },
+		"/homes": func(s *server) *httptest.ResponseRecorder {
+			rr := httptest.NewRecorder()
+			s.handleHomes(rr, httptest.NewRequest(http.MethodGet, "/homes?fresh=true", nil), nil)
+			return rr
+		},
+		"storage.status": func(s *server) *httptest.ResponseRecorder {
+			return postOperation(t, s, "storage.status", `{"call_id":"c-1","operation":"storage.status","subject":"sub-1","fresh":true}`)
+		},
+	}
+	refuseAll := map[string]string{}
+	for m := range readMethods {
+		refuseAll[m] = "[EACCES] no"
+	}
+	for _, tc := range []struct {
+		nas    string
+		breaks func(*server, *fakeRPC)
+		code   string
+		skip   string
+	}{
+		{"nothing sent", func(s *server, _ *fakeRPC) {
+			s.nas = newNAS(func() (rpc, error) { return nil, errors.New("dial tcp: connect: connection refused") }, []string{"25.04"})
+		}, CodeTargetUnreachable, ""},
+		{"the socket died", func(_ *server, f *fakeRPC) {
+			f.err = errors.New("websocket: close 1006 (abnormal closure): unexpected EOF")
+		}, CodeNoCurrentRead, ""},
+		{"the NAS refused", func(_ *server, f *fakeRPC) { f.refuse = refuseAll }, CodeNoCurrentRead, "storage.status"},
+	} {
+		for route, read := range reads {
+			if route == tc.skip {
+				continue
+			}
+			t.Run(tc.nas+" "+route, func(t *testing.T) {
+				fake := reachFake()
+				fake.users = fixtureUsers
+				s := testServer(t, fake)
+				if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
+					t.Fatal(err)
+				}
+				tc.breaks(s, fake)
+				rr := read(s)
+				var p struct{ Code string }
+				_ = json.Unmarshal(rr.Body.Bytes(), &p)
+				if rr.Code != http.StatusServiceUnavailable || p.Code != tc.code {
+					t.Fatalf("want 503 %s, got %d %s", tc.code, rr.Code, rr.Body)
+				}
+				if tc.code == CodeTargetUnreachable && rr.Header().Get("Retry-After") == "" {
+					t.Error("TARGET_UNREACHABLE without Retry-After")
+				}
+			})
+		}
+	}
+}
+
 // /plan is never cooled down and never answered from the copy: straight after
 // a fresh /subjects it reads the NAS and is current.
 func TestPlanAfterAFreshReadIsCurrent(t *testing.T) {

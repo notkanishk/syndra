@@ -518,13 +518,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 		// drift sweep would act on it. TARGET_UNREACHABLE when no request
 		// reached the NAS (B3), NO_CURRENT_READ when it answered and failed.
 		log.Printf("[SUBJECTS] live read failed (%v) and no snapshot is available", err)
-		if errors.Is(err, ErrNotSent) {
-			writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
-				"The NAS could not be reached and there is no earlier read to answer from.", nil)
-			return
-		}
-		writeError(w, http.StatusServiceUnavailable, CodeNoCurrentRead,
-			"The NAS could not be read and there is no earlier read to answer from.", nil)
+		writeNotRead(w, err)
 		return
 	}
 	// The mirror holds no limits: they are read live or not reported.

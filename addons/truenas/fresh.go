@@ -318,3 +318,19 @@ func writeCooldown(w http.ResponseWriter, err error) bool {
 	writeError(w, http.StatusTooManyRequests, CodeFreshReadCooldown, e.Error(), nil)
 	return true
 }
+
+// writeNotRead answers a read the NAS failed with nothing kept to serve
+// (guide, "Nothing to serve is an error, not an empty list"; design §13.3):
+// 503 TARGET_UNREACHABLE when no request reached it, NO_CURRENT_READ for any
+// other failure. The problem and nothing else. The two exceptions keep their
+// own codes and are answered first: the cooldown (writeCooldown) and the
+// add-on's own store (STORE_UNREADABLE).
+func writeNotRead(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrNotSent) {
+		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
+			"The NAS could not be reached, and there is no earlier read to answer from.", nil)
+		return
+	}
+	writeError(w, http.StatusServiceUnavailable, CodeNoCurrentRead,
+		"The NAS could not be read, and there is no earlier read to answer from.", nil)
+}

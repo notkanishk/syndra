@@ -2664,6 +2664,10 @@ happened:
 - `-stop-addon <command>` and `-start-addon <command>` stop your add-on and
   start it again, its disk kept.
 
+"Happened" is as your add-on sees it: one that waits between its attempts
+to reach the app needs `-start-app` to wait that out too (the TrueNAS
+add-on dials at most every 15 s, so its start hook ends in a `sleep`).
+
 Once a stop has been tried, the kit runs the matching start, whether the
 stop failed, hung or the run was interrupted: a stop that failed half-way
 may have stopped something anyway. So each hook MUST be safe to run twice
@@ -2700,7 +2704,7 @@ a `0`, an empty list, `""` or a zero date, and any reply with a zero
 `taken_at`, or `current: false` without `stale`. A CI run MUST give the app
 hooks and `-require-outage`, which fails the outage checks when either app
 hook is missing (`-start-app "rm -f …"` beside `-stop-app "touch …"`, as
-Syndra's CI runs the reference). Against a real system a check whose hook is
+Syndra's CI runs the reference, and the TrueNAS add-on over a stub NAS). Against a real system a check whose hook is
 missing is reported "not checked", a skip, never "pass". The add-on hooks
 stay optional: an add-on that keeps no disk, as the reference, cannot pass
 `outage.restart`.

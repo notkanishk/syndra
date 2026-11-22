@@ -348,6 +348,9 @@ func (s *server) operatedAccount(subject string, who *caller) (resolved, int, er
 	r, bound, err := s.resolveLive(subject, who)
 	switch {
 	case err != nil:
+		if who != nil {
+			err = readBeforeWrite(err) // a write's lookup: resolveLive reads the NAS before any write
+		}
 		status, refusal := liveRefusal(err)
 		return resolved{}, status, refusal
 	case !bound:

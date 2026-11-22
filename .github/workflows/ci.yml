@@ -20,6 +20,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # The TrueNAS add-on's tests that run the conformance kit against it: they
+  # run in addon-conformance, beside the reference's kit run, and nowhere else.
+  TRUENAS_KIT_TESTS: ^TestThe(ConformanceKit|Kit|AddonCallTool)
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -64,7 +69,7 @@ jobs:
           go-version-file: addons/truenas/go.mod
           cache-dependency-path: addons/truenas/go.sum
       - run: go vet ./...
-      - run: go test -count=1 ./...
+      - run: go test -count=1 -skip "$TRUENAS_KIT_TESTS" ./...
 
   # The conformance kit (addons/conformance) against the reference add-on
   # (addons/reference), with the contract embedded from addons/contract, whose
@@ -82,7 +87,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: addons/conformance/go.mod
-          cache-dependency-path: addons/conformance/go.sum
+          cache-dependency-path: |
+            addons/conformance/go.sum
+            addons/truenas/go.sum
       - name: the request decoder both add-ons share
         working-directory: addons/strictjson
         run: go vet ./... && go test -count=1 ./...
@@ -127,6 +134,15 @@ jobs:
           kit
           # item-0002: the run before leaves item-0001 checked out to its subject.
           kit -mutate -mutate-settings -item item-0002 -subject "conformance-ci-all-settings-$GITHUB_RUN_ID"
+      # The TrueNAS add-on, in process with its real routes, authenticator and
+      # derived key, over a stub NAS behind its own dialer seam (stubNAS in
+      # conformance_test.go): every kit run, reads and -mutate, with the app
+      # hooks and -require-outage, the stub switched off by a file as the
+      # reference's fake app is. Nothing here reaches a NAS.
+      - name: the kit against the TrueNAS add-on over a stub NAS, outage included
+        working-directory: addons/truenas
+        timeout-minutes: 8
+        run: go test -count=1 -run "$TRUENAS_KIT_TESTS" .
 
   ui:
     runs-on: ubuntu-latest

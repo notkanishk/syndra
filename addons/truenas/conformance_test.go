@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"os"
@@ -45,11 +46,46 @@ func conformanceKit(t *testing.T) string {
 	return bin
 }
 
+// kitAddon is one add-on the kit runs against, and the file whose presence
+// switches its stub NAS off: the app hooks are touch and rm, as the
+// reference's are.
+type kitAddon struct{ url, nasOff string }
+
+// stubNAS is the NAS fake behind the add-on's own dialer seam (rpc in nas.go),
+// switched off by a file. Off, a dial is refused and a call on a session
+// already open fails on its socket, as a NAS that went away does: everything
+// above the seam (the session, ErrNotSent, the breaker, the fresher) runs as
+// it does against TrueNAS. ponytail: the seam, not a websocket server; the
+// fake answers Go-typed params the wire would turn into float64 and []any.
+type stubNAS struct {
+	*mutatingRPC
+	off string
+}
+
+func (n stubNAS) down() bool {
+	_, err := os.Stat(n.off)
+	return err == nil
+}
+
+func (n stubNAS) Call(method string, timeout int64, params any) (json.RawMessage, error) {
+	if n.down() {
+		return nil, errors.New("failed to send call: use of closed network connection")
+	}
+	return n.mutatingRPC.Call(method, timeout, params)
+}
+
+func (n stubNAS) dial() (rpc, error) {
+	if n.down() {
+		return nil, errors.New("failed to connect: connection refused")
+	}
+	return n, nil
+}
+
 // kitAddOn is the add-on as main.go builds it, over a NAS fake that holds the
 // accounts a run creates and changes: one member account already there, the
 // shares and folders of reachFake, and homeRoot as the place chosen for home
 // folders ("" for none chosen, as on a NAS where nobody has chosen one yet).
-func kitAddOn(t *testing.T, homeRoot string) string {
+func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 	t.Helper()
 	fake := reachFake()
 	fake.users = `[{"username":"rey_mysterio","id":11,"uid":3051,"locked":false,"smb":true,"groups":[51],"home":"/var/empty"}]`
@@ -66,7 +102,8 @@ func kitAddOn(t *testing.T, homeRoot string) string {
 	fake.answers["pool.dataset.get_quota tank/open"] = `[]`
 	m := &mutatingRPC{fakeRPC: *fake, folders: []string{kitHomeRoot}}
 	s := testServer(t, &m.fakeRPC)
-	s.nas = newNAS(func() (rpc, error) { return m, nil }, []string{"25.04"})
+	nas := stubNAS{m, filepath.Join(t.TempDir(), "nas-off")}
+	s.nas = newNAS(nas.dial, []string{"25.04"})
 	s.nas.version, s.nas.probed = "25.04.2", true
 	s.nas.selfName, s.nas.selfUID = "syndra", 3001 // auth.me has named the add-on's own account, as after its first probe
 	key, err := deriveHMACKey([]byte(kitSecret), kitTarget)
@@ -103,7 +140,7 @@ func kitAddOn(t *testing.T, homeRoot string) string {
 	// safe for more, and nothing here needs more.
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
-	return srv.URL
+	return kitAddon{srv.URL, nas.off}
 }
 
 type kitReport struct {
@@ -117,13 +154,19 @@ type kitReport struct {
 	} `json:"results"`
 }
 
-func runKit(t *testing.T, bin, url string, args ...string) kitReport {
+// runKit runs the kit as CI must: with the app hooks and -require-outage
+// (guide, "The outage checks"). The NAS back, the add-on dials it again only
+// once its reconnect floor has passed since the dial that failed, so the
+// start hook waits that out: until then the app is not back for the add-on.
+func runKit(t *testing.T, bin string, a kitAddon, args ...string) kitReport {
 	t.Helper()
 	secret := filepath.Join(t.TempDir(), "secret")
 	if err := os.WriteFile(secret, []byte(kitSecret), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(bin, append([]string{"-url", url, "-target", kitTarget, "-secret-file", secret, "-json", "-"}, args...)...)
+	cmd := exec.Command(bin, append([]string{"-url", a.url, "-target", kitTarget, "-secret-file", secret, "-json", "-",
+		"-require-outage", "-stop-app", "touch '" + a.nasOff + "'",
+		"-start-app", fmt.Sprintf("rm -f '%s' && sleep %d", a.nasOff, int(reconnectCooldown/time.Second)+1)}, args...)...)
 	out, err := cmd.Output()
 	var r kitReport
 	if jerr := json.Unmarshal(out, &r); jerr != nil {
@@ -148,11 +191,11 @@ func TestTheConformanceKitPassesThisAddOn(t *testing.T) {
 		t.Skip("no go toolchain to build the kit with")
 	}
 	bin := conformanceKit(t)
-	url := kitAddOn(t, kitHomeRoot)
+	addon := kitAddOn(t, kitHomeRoot)
 
-	reads := runKit(t, bin, url)
-	mutate := runKit(t, bin, url, "-mutate", "-subject", "conformance-truenas-1")
-	settings := runKit(t, bin, url, "-mutate", "-mutate-settings", "-subject", "conformance-truenas-2")
+	reads := runKit(t, bin, addon)
+	mutate := runKit(t, bin, addon, "-mutate", "-subject", "conformance-truenas-1")
+	settings := runKit(t, bin, addon, "-mutate", "-mutate-settings", "-subject", "conformance-truenas-2")
 	for _, r := range []kitReport{reads, mutate, settings} {
 		if r.Pass == 0 {
 			t.Errorf("a %s run passed nothing, so it proved nothing", r.Mode)
@@ -164,7 +207,7 @@ func TestTheConformanceKitPassesThisAddOn(t *testing.T) {
 		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "calls.unknown", "calls.recorded",
 		"stats.descriptors", "stats.points", "stats.totals", "stats.since", "stats.idempotent", "stats.gaps",
 		"stats.unbound", "stats.buffer", "stats.page-size", "stats.no-people", "stats.no-people.ids",
-		"adopt.shown", "adopt.not-shown", "release.not-shown"} {
+		"adopt.shown", "adopt.not-shown", "release.not-shown", "outage.health", "outage.write", "outage.kept", "no-false-zero"} {
 		ran := false
 		for _, res := range mutate.Results {
 			if res.ID == id {
@@ -230,7 +273,7 @@ func TestTheAddonCallToolIsAcceptedByThisAddOn(t *testing.T) {
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build the tool: %v\n%s", err, out)
 	}
-	url := kitAddOn(t, "")
+	url := kitAddOn(t, "").url
 	secret := filepath.Join(t.TempDir(), "secret")
 	if err := os.WriteFile(secret, []byte(kitSecret), 0o600); err != nil {
 		t.Fatal(err)

@@ -222,6 +222,10 @@ func (s *server) readNow(w http.ResponseWriter, name string, req OperationReques
 			writeTornRead(w)
 			return
 		}
+		if errors.Is(of.err, ErrTargetUnreachable) {
+			writeNotRead(w, of.err)
+			return
+		}
 		writeError(w, of.status, CodeOperationFailed, of.err.Error(), nil)
 		return
 	}
