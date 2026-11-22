@@ -23,7 +23,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { ArriveList, Crossfade, FOLD_MS, LeavingRow, TINT_MS, UnfoldOnArrival, Unfold, useExitPhase, useFlashOnChange, useLeavingRows } from "@/lib/motion";
 import { useLongWait } from "@/lib/useLongWait";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
-import { sendsNext } from "@/lib/drain-outcome";
+import { busyNext } from "@/lib/drain-outcome";
 
 import { ADOPT_STAYS, SERVICE_STOPPED, STORAGE_OPERATION_LABEL, UNAUDITED_LABEL, UnauditedShares, serviceName } from "@/components/kinds/storage/readings";
 
@@ -1031,7 +1031,7 @@ function ConnectionNotices({
   if (busySince) {
     notices.push(
       <Reading key="busy" tone="warn" label={`${name} has been busy since ${formatWhen(busySince)}`}>
-        No change was sent. {sendsNext(auto, `${name} answers`)}
+        No change was sent. {busyNext(auto, name)}
       </Reading>,
     );
   }

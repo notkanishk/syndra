@@ -49,7 +49,7 @@ func sendsNext(system string, row models.PendingPropagation) string {
 	if AutoRetry() && !waitsForYou(row) {
 		return "Syndra sends it again by itself."
 	}
-	return "Once " + system + " answers, press Send on Pending changes to try again."
+	return "Once " + system + " is free, press Send on Pending changes to try again."
 }
 
 // RowRetry is where an unresolved row stands, or nil when there is nothing to

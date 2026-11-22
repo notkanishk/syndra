@@ -119,7 +119,7 @@ export function describeDrain(
           tone: "warning",
           message: `${stalled ?? "The connected system"} ${busy(result)}; nothing was sent.`,
           detail: "Nothing counts against the retry limit.",
-          next: sendsNext(auto, stalled && `${stalled} answers`),
+          next: busyNext(auto, stalled),
         };
       // Design §13.1: who is not answering, the add-on or the system behind it, never one word.
       case "addon_unreachable":
@@ -281,7 +281,7 @@ function haltDetail(reason: string | undefined, system: string | undefined, wait
     case "draining":
       return `${its} still waiting, and nothing counts against the retry limit. ${maintenanceNext(auto)}`;
     case "busy":
-      return `${its} still waiting, and nothing counts against the retry limit. ${sendsNext(auto, system && `${system} answers`)}`;
+      return `${its} still waiting, and nothing counts against the retry limit. ${busyNext(auto, system)}`;
     default:
       return "The rest of the queue went through.";
   }
@@ -320,6 +320,13 @@ export function sendsNext(auto: AutoRetry, when?: string): string {
   const step = auto ? "revocations go on their own; send the rest again." : "press Send on Pending changes to try again.";
   return when ? `Once ${when}, ${step}` : step.charAt(0).toUpperCase() + step.slice(1);
 }
+
+/**
+ * The step after a busy halt, one source for the toast, the pass detail and
+ * the target page. Busy is not down: the system answered, so the wait is for
+ * it to be free, never for it to answer.
+ */
+export const busyNext = (auto: AutoRetry, system?: string): string => sendsNext(auto, system && `${system} is free`);
 
 /** The step back from maintenance: make it active, then who sends next. */
 const maintenanceNext = (auto: AutoRetry): string =>

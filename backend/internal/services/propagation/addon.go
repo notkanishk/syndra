@@ -347,15 +347,18 @@ func unsentDelay(retryAfter int) time.Duration {
 const busyHaltAfter = 30 * time.Minute
 
 // busyGap is the longest quiet after a busy answer that still counts as one
-// run: twice the later of the background drain's tick and the row's deferral
-// (unsentDelay), since the row is asked again at the first tick past its
-// deferral, a little late by however long the calls take. A longer quiet means
-// nobody asked: the row was settled elsewhere or the queue emptied.
-func busyGap(after time.Duration) time.Duration { return 2 * max(DrainEvery(), after) }
+// run: the row comes due its deferral (unsentDelay) after the answer, and the
+// background drain asks it at its first tick past that, so the next answer is
+// at most a tick plus the deferral away, a little late by however long the
+// calls take. Twice that is the slack. With the drain off it is twice the
+// deferral. A longer quiet means nobody asked: the row was settled elsewhere
+// or the queue emptied.
+func busyGap(after time.Duration) time.Duration { return 2 * (DrainEvery() + after) }
 
 // busyRun is one target's unbroken run of TARGET_BUSY answers: when it began,
-// and when it ends unless another busy answer comes (busyGap past the latest).
-type busyRun struct{ since, due time.Time }
+// its latest answer, and when it ends unless another busy answer comes
+// (busyGap past the latest).
+type busyRun struct{ since, last, due time.Time }
 
 // busySince holds each target's busy run, until its next other answer or its
 // due time passes.
@@ -384,20 +387,22 @@ func noteBusy(target string, busy bool, after time.Duration) time.Time {
 	if !ok || now.After(run.due) {
 		run.since = now
 	}
-	run.due = now.Add(busyGap(after))
+	run.last, run.due = now, now.Add(busyGap(after))
 	busySince.at[target] = run
 	return run.since
 }
 
-// BusyHalted is when target began answering busy, once that run is past
-// busyHaltAfter and still going (not past its due time); nil
-// otherwise. The target page says it.
+// BusyHalted is when target began answering busy, once its pass has halted:
+// the run's latest answer came past busyHaltAfter, the moment DrainAddon
+// halts, and the run is still going (not past its due time); nil otherwise.
+// The target page says it. A run merely old by the clock has not halted: with
+// a long Retry-After its next answer may be an hour away.
 func BusyHalted(target string) *time.Time {
 	busySince.Lock()
 	defer busySince.Unlock()
 	run, ok := busySince.at[target]
 	now := busyClock()
-	if !ok || now.After(run.due) || now.Sub(run.since) <= busyHaltAfter {
+	if !ok || now.After(run.due) || run.last.Sub(run.since) <= busyHaltAfter {
 		return nil
 	}
 	return &run.since

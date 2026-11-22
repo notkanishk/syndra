@@ -414,7 +414,7 @@ describe("one target's page", () => {
 
     expect(screen.getByText(/TrueNAS has been busy since /)).toBeTruthy();
     expect(
-      screen.getByText("No change was sent. Once TrueNAS answers, revocations go on their own; send the rest again."),
+      screen.getByText("No change was sent. Once TrueNAS is free, revocations go on their own; send the rest again."),
     ).toBeTruthy();
   });
 
@@ -427,7 +427,7 @@ describe("one target's page", () => {
     state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
-    expect(screen.getByText("No change was sent. Once TrueNAS answers, press Send on Pending changes to try again.")).toBeTruthy();
+    expect(screen.getByText("No change was sent. Once TrueNAS is free, press Send on Pending changes to try again.")).toBeTruthy();
     expect(screen.queryByText(/revocations go on their own|keeps trying/)).toBeNull();
   });
 
