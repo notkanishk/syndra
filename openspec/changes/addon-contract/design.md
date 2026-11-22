@@ -2152,8 +2152,8 @@ observed, so not stated).
   add-on not yet listening stays `checking` (task #89).
 - The breaker (5 failures, 30 s, half-open; Nygard, *Release It!*) stays
   transport protection, not a second opinion: an open breaker is a cause the
-  monitor reports, and it remembers the cause that opened it. It counts only
-  the add-on failing to answer: an answer of `app_unreachable` (the add-on
+  monitor reports, and it remembers the cause that opened it. It counts the
+  add-on failing to answer or failing itself: an answer of `app_unreachable` (the add-on
   saying its app is down) is the add-on working, and, like `TARGET_BUSY`,
   neither counts nor clears, so an open breaker's cause is always an
   `addon_unreachable` one.
