@@ -315,6 +315,74 @@ func TestTargetBusyNeverOpensTheBreaker(t *testing.T) {
 	}
 }
 
+// An add-on answering that its app is down (TARGET_UNREACHABLE,
+// NO_CURRENT_READ, TARGET_UNREADABLE: app_unreachable) is the add-on working,
+// so it never opens the breaker; the monitor owns app_unreachable. Opened, a
+// page read during an app outage named a stale opener instead (health.get,
+// addon_unreachable/no_answer, on the 8g staging run, 22 Nov 2026).
+func TestAnAppOutageAnswerNeverOpensTheBreaker(t *testing.T) {
+	for _, code := range []string{codeTargetUnreachable, codeNoCurrentRead, codeTargetUnreadable} {
+		withBreaker(t, 3, breakerCooldown)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = fmt.Fprintf(w, `{"code":%q,"detail":"TrueNAS did not answer."}`, code)
+		}))
+		signedAddon(t, srv.URL, "an-app-down-secret")
+		a, _ := Get("truenas")
+		var sys SystemReport
+		for range breakerThreshold + 2 {
+			sys = SystemHealth(context.Background(), "truenas", "operator-1")
+		}
+		srv.Close()
+		if a.CircuitOpen() {
+			t.Errorf("%s answers opened the breaker", code)
+		}
+		if sys.Read.Reason != ReasonAppUnreachable {
+			t.Errorf("%s: system health read as %+v, want app_unreachable", code, sys.Read)
+		}
+	}
+}
+
+// Nor does it clear the count, as TARGET_BUSY does not: the code is the
+// add-on's to send, so a broken add-on alternating 5xx with it would keep the
+// breaker shut for ever. The answer pauses the count; the probe's 2xx clears.
+func TestAnAppOutageAnswerDoesNotClearTheBreaker(t *testing.T) {
+	b := &breaker{}
+	now := time.Unix(1_700_000_000, 0)
+	for range breakerThreshold - 1 {
+		b.record(now, CallResponse{Outcome: OutcomeIndeterminate, Status: 500})
+		b.record(now, CallResponse{Outcome: OutcomeUnreached, Status: 503, Code: codeTargetUnreachable})
+	}
+	b.record(now, CallResponse{Outcome: OutcomeIndeterminate, Status: 500})
+	if b.allow(now) {
+		t.Fatal("app-outage answers reset the count a failing add-on is accumulating")
+	}
+}
+
+// The staging sequence: app-outage answers, then the monitor's one probe
+// refused while the add-on restarts. That one refusal alone must not open the
+// breaker, so the next read still says app_unreachable, never the refused
+// dial's no_answer for the cooldown.
+func TestOneRefusedProbeDuringAnAppOutageDoesNotOpenTheBreaker(t *testing.T) {
+	withBreaker(t, 3, breakerCooldown)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = fmt.Fprintf(w, `{"code":%q,"detail":"TrueNAS did not answer."}`, codeTargetUnreachable)
+	}))
+	t.Cleanup(srv.Close)
+	signedAddon(t, srv.URL, "a-restart-secret")
+	a, _ := Get("truenas")
+	for range breakerThreshold - 1 {
+		SystemHealth(context.Background(), "truenas", "operator-1")
+	}
+	a.br.record(timeNow(), CallResponse{Outcome: OutcomeUnreached, Err: errors.New("dial tcp: connection refused")})
+	if sys := SystemHealth(context.Background(), "truenas", "operator-1"); sys.Read.Reason != ReasonAppUnreachable {
+		t.Errorf("after one refused probe, system health read as %+v, want app_unreachable", sys.Read)
+	}
+}
+
 // Over TLS the dot is the dial's alone: the server is asked for
 // "truenas-addon" (SNI, RFC 6066 §3: no trailing dot) while the resolver was
 // asked for "truenas-addon.".

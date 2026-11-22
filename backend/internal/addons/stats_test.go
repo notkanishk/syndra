@@ -276,7 +276,7 @@ func TestReadStatsAsksForOneMetricAndNeverFresh(t *testing.T) {
 }
 
 // A coded /stats answer is the add-on answering on purpose about its own
-// data: five metrics answering 503 NO_CURRENT_READ leave the breaker shut.
+// data: five metrics answering 503 STORE_UNREADABLE leave the breaker shut.
 // /stats only — the same answer on /subjects still counts — and a transport
 // failure on /stats still counts, and the open breaker is still consulted
 // before the next /stats is sent.
@@ -289,9 +289,10 @@ func TestACodedStatsAnswerIsNeverABreakerFailure(t *testing.T) {
 		if abort.Load() {
 			panic(http.ErrAbortHandler) // the connection drops: a transport failure
 		}
+		// Not an app-outage code: those never count, on any route.
 		w.Header().Set("Content-Type", "application/problem+json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"type":"about:blank","title":"Not read yet","status":503,"code":"NO_CURRENT_READ"}`))
+		_, _ = w.Write([]byte(`{"type":"about:blank","title":"Store unreadable","status":503,"code":"STORE_UNREADABLE"}`))
 	}))
 	t.Cleanup(srv.Close)
 	signedAddon(t, srv.URL, "a-test-secret")
@@ -305,14 +306,14 @@ func TestACodedStatsAnswerIsNeverABreakerFailure(t *testing.T) {
 		}
 	}
 	if a.CircuitOpen() {
-		t.Fatal("five metrics answering NO_CURRENT_READ opened the breaker")
+		t.Fatal("five metrics answering STORE_UNREADABLE opened the breaker")
 	}
 
 	for range breakerThreshold {
 		Subjects(context.Background(), "truenas", false)
 	}
 	if !a.CircuitOpen() {
-		t.Fatal("NO_CURRENT_READ on /subjects no longer counts")
+		t.Fatal("STORE_UNREADABLE on /subjects no longer counts")
 	}
 
 	signedAddon(t, srv.URL, "a-test-secret") // a fresh breaker

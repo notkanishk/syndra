@@ -704,7 +704,7 @@ func (b *breaker) record(now time.Time, resp CallResponse) {
 	// everybody; clearing, a broken add-on answering /stats with a code would
 	// hide its failures elsewhere. A transport failure, a timeout, an uncoded
 	// 5xx on /stats still counts, and a 2xx still clears. /stats only: a coded
-	// refusal on any other route is recorded as ever.
+	// refusal on any other route is recorded as below.
 	if resp.StatsRefusal {
 		return
 	}
@@ -732,12 +732,24 @@ func (b *breaker) record(now time.Time, resp CallResponse) {
 	// moved under it. The add-on is working; counted, a busy app would take the
 	// target away from everybody. So is TARGET_BUSY: a busy queue or app is
 	// never an outage.
-	if resp.LifecycleRefusal || resp.Code == codeFreshReadCooldown || resp.Code == CodeTargetChanged || resp.Code == codeTargetBusy {
+	//
+	// So is the add-on answering that its app is down (Unread's
+	// app_unreachable: TARGET_UNREACHABLE, NO_CURRENT_READ, TARGET_UNREADABLE).
+	// The breaker guards against a dead add-on, and this one answered; the
+	// monitor owns app_unreachable. Counted, every page read in an app outage
+	// pushed the count to the threshold, and the next stray failure (a probe
+	// refused while the add-on restarted) opened the breaker in its own name:
+	// pages read addon_unreachable/no_answer for the cooldown while the add-on
+	// answered (the 8g staging run, 22 Nov 2026).
+	if resp.LifecycleRefusal || resp.Code == codeFreshReadCooldown || resp.Code == CodeTargetChanged || resp.Code == codeTargetBusy ||
+		Unread(resp).Reason == ReasonAppUnreachable {
 		return
 	}
 	b.failures++
 	if b.failures >= breakerThreshold {
 		b.openUntil = now.Add(breakerCooldown)
+		// Never app_unreachable (skipped above), so the opener is always an
+		// addon_unreachable cause.
 		if b.opener = Unread(resp); !b.opener.Unreachable() {
 			b.opener = Why{Reason: ReasonAddonUnreachable, Cause: CauseFault}
 		}
