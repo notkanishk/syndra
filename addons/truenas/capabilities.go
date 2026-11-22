@@ -281,13 +281,15 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 	field := r.PathValue("field")
 	switch field {
 	case FieldGroup:
-		groups, err := s.readGroups()
+		groups, err := s.readGroups(r.Context())
 		if err != nil {
 			// Unreadable, which is not the same as empty. 503 rather than an
 			// empty enumerable list: the backend fails open on a read it could
 			// not make, and an empty list would make it fail closed on every
 			// mapping while the target is down.
-			writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's groups could not be read.", nil)
+			if !writeBusy(w, err) {
+				writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's groups could not be read.", nil)
+			}
 			return
 		}
 		out := ValuesResponse{Field: field, Values: []string{}, Enumerable: true}

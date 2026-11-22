@@ -494,17 +494,17 @@ func TestTargetReadsCountsEveryReadAndNoWrite(t *testing.T) {
 	fake := &fakeRPC{users: fixtureUsers, groups: fixtureGroups}
 	s := testServer(t, fake)
 	var out []nasGroup
-	if err := s.nas.call("group.query", []any{}, &out); err != nil { // and the session's probes, each a read
+	if err := s.nas.call(t.Context(), "group.query", []any{}, &out); err != nil { // and the session's probes, each a read
 		t.Fatal(err)
 	}
 	before := s.nas.reads.Load()
-	if err := s.nas.call("group.query", []any{}, &out); err != nil {
+	if err := s.nas.call(t.Context(), "group.query", []any{}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := s.nas.reads.Load() - before; got != 1 {
 		t.Errorf("one read counted %d", got)
 	}
-	_ = s.nas.sendWrite("user.update", []any{1, map[string]any{}}, nil)
+	_ = s.nas.sendWrite(t.Context(), "user.update", []any{1, map[string]any{}}, nil)
 	if got := s.nas.reads.Load() - before; got != 1 {
 		t.Errorf("a write was counted as a read: %d", got)
 	}

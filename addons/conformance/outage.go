@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -32,6 +33,15 @@ func (k *kit) outage() {
 // blames the add-on for the app (the 8g staging run, 22 Nov 2026).
 const healthWithin = 3 * time.Second
 
+// readWithin is how soon each read operation must answer while the app
+// hangs: under Syndra's 30 s call timeout (callTimeout,
+// backend/internal/addons/deps.go), with a margin for the network. A read
+// that waits on a hanging app longer than Syndra waits on the add-on answers
+// nobody, and Syndra blames the add-on for the app (health.get on the 8g
+// staging rerun, 22 Nov 2026). A variable only so the kit's own tests can
+// shorten it.
+var readWithin = 25 * time.Second
+
 // recentReadWindow is how old an answer from the app may be and still make
 // /health say reachable when its own call gets no answer in time (design
 // §13.2): a call queued behind a long one is not an outage. hangSettle waits
@@ -45,7 +55,8 @@ const (
 // appHang hangs the app (-hang-app): it answers nothing and refuses nothing,
 // as a blackholed address does. Past hangSettle, /health answers within
 // healthWithin with reachable false, twice running, so a first /health that left a call or a
-// lock behind it is seen too; with the app back the add-on reads it again.
+// lock behind it is seen too; each read operation answers within readWithin,
+// its kept copy or a no-copy code; with the app back the add-on reads it again.
 func (k *kit) appHang() {
 	c := k.at("outage.hang")
 	if k.cfg.HangApp == nil || k.cfg.StartApp == nil {
@@ -67,9 +78,31 @@ func (k *kit) appHang() {
 		began := time.Now()
 		ex := k.send(request{method: http.MethodGet, target: "/health"})
 		took := time.Since(began)
+		// Busy is a read or operation answer only: Syndra counts any non-OK
+		// /health as a monitor miss, so a hanging app is reachable false.
+		c.expect(ex.code() != "TARGET_BUSY", "/health %d with the app hanging answered TARGET_BUSY; /health never answers busy, it answers 200 with reachable false", i+1)
 		if h := k.ok(c, ex, "health.json"); h != nil {
 			c.expect(took < healthWithin, "/health %d with the app hanging answered after %s; it must answer within %s, under Syndra's 5 s probe", i+1, took.Round(time.Millisecond), healthWithin)
 			c.expect(h["reachable"] == false, "/health %d with the app hanging answered reachable %v; a call that got no answer did not succeed", i+1, h["reachable"])
+		}
+	}
+	for _, id := range k.readOps() {
+		began := time.Now()
+		ex := k.send(request{method: http.MethodPost, target: "/operations/" + id,
+			body: k.operationBody(id, k.callID(), map[string]any{}), schema: "operation_request.json"})
+		took := time.Since(began)
+		if !c.expect(ex.err == nil && took < readWithin, "%s with the app hanging answered after %s (%v); a read answers within %s, under Syndra's 30 s call timeout", id, took.Round(time.Millisecond), ex.err, readWithin) {
+			continue
+		}
+		result, _ := ex.doc()["result"].(map[string]any)
+		switch {
+		case ex.status == http.StatusOK:
+			c.expect(result["current"] == false, "%s with the app hanging answered 200 with current %v; with the app hanging a read answers its kept copy, current false, or a no-copy code", id, result["current"])
+		case ex.status == http.StatusUnprocessableEntity && ex.code() == "OPERATION_FAILED" && *k.c.operations[id].Subject:
+			// No account for the kit's subject: answered about the request, in time (results).
+		default:
+			c.expect(ex.status == http.StatusServiceUnavailable && slices.Contains(noCopy, ex.code()),
+				"%s with the app hanging answered %d %s; with no copy, want 503 %s", id, ex.status, ex.code(), strings.Join(noCopy, ", "))
 		}
 	}
 }
@@ -226,8 +259,8 @@ func (k *kit) outageRead(kept, none *check, ex *exchange, copyAt string, fresh b
 			"%s with the app stopped answered taken_at %s; the copy was taken at %s", ex, str(doc, "taken_at"), copyAt)
 		return
 	}
-	if !none.expect(ex.err == nil && ex.status == http.StatusServiceUnavailable && (ex.code() == "TARGET_UNREACHABLE" || ex.code() == "NO_CURRENT_READ"),
-		"%s with the app stopped answered %d %s (%v); with no copy, want 503 TARGET_UNREACHABLE or NO_CURRENT_READ", ex, ex.status, ex.code(), ex.err) {
+	if !none.expect(ex.err == nil && ex.status == http.StatusServiceUnavailable && slices.Contains(stoppedNoCopy, ex.code()),
+		"%s with the app stopped answered %d %s (%v); with no copy, want 503 %s (a stopped app is down, not busy)", ex, ex.status, ex.code(), ex.err, strings.Join(stoppedNoCopy, ", ")) {
 		return
 	}
 	var extra []string
@@ -293,7 +326,16 @@ func (k *kit) addonRestart() {
 
 // nothingToServe are the codes of a read that has no value to answer: a reply
 // carrying one carries no figure, list or date.
-var nothingToServe = []string{"TARGET_UNREACHABLE", "NO_CURRENT_READ", "TARGET_UNREADABLE", "FRESH_READ_COOLDOWN", "STORE_UNREADABLE"}
+var nothingToServe = []string{"TARGET_UNREACHABLE", "NO_CURRENT_READ", "TARGET_BUSY", "TARGET_UNREADABLE", "FRESH_READ_COOLDOWN", "STORE_UNREADABLE"}
+
+// noCopy are the codes of a read with no copy while the app is down or
+// hangs: nothing reached it, nothing is held, or it was busy (TARGET_BUSY,
+// not an outage, added 22 Nov 2026 from the 8g staging run).
+var noCopy = []string{"TARGET_UNREACHABLE", "NO_CURRENT_READ", "TARGET_BUSY"}
+
+// stoppedNoCopy are noCopy without TARGET_BUSY: a stopped app answers nothing,
+// so it is down, never busy (outage.none).
+var stoppedNoCopy = []string{"TARGET_UNREACHABLE", "NO_CURRENT_READ"}
 
 // noFalseZero walks one reply: with nothing to serve it carries no 0, empty
 // list, "" or zero date; no reply carries a zero taken_at, or current false

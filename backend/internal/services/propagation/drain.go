@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -57,6 +58,9 @@ type DrainResult struct {
 	// prefix on Reason: the reason strings are matched by callers and read by
 	// operators, and folding two facts into one string makes both harder to use.
 	HaltedTarget string `json:"halted_target,omitempty"`
+	// BusySince is, on a pass halted as busy, when its target began answering
+	// busy without a break.
+	BusySince *time.Time `json:"busy_since,omitempty"`
 	// Passes reports what each target's own dispatcher did, because the summed
 	// counters above cannot say WHICH target halted — and that is the whole of
 	// what an operator does next. A drain that reported `halted: zitadel_offline`
@@ -122,6 +126,8 @@ type PassResult struct {
 	Halted    bool   `json:"halted"`
 	Reason    string `json:"reason,omitempty"`
 	Waiting   int    `json:"waiting,omitempty"`
+	// BusySince as DrainResult's.
+	BusySince *time.Time `json:"busy_since,omitempty"`
 }
 
 // merge folds one target's pass into the combined result.
@@ -139,10 +145,10 @@ func (r *DrainResult) merge(target string, p DrainResult) {
 	r.Passes = append(r.Passes, PassResult{
 		Target: target, Applied: p.Applied, Failed: p.Failed, Requeued: p.Requeued,
 		Abandoned: p.Abandoned, Errored: p.Errored, Exhausted: p.Exhausted,
-		Halted: p.Halted, Reason: p.Reason, Waiting: p.Waiting,
+		Halted: p.Halted, Reason: p.Reason, Waiting: p.Waiting, BusySince: p.BusySince,
 	})
 	if p.Halted && !r.Halted {
-		r.Halted, r.Reason, r.HaltedTarget = true, p.Reason, target
+		r.Halted, r.Reason, r.HaltedTarget, r.BusySince = true, p.Reason, target, p.BusySince
 	}
 	for id, cause := range p.Refused {
 		if r.Refused == nil {

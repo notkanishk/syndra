@@ -36,7 +36,7 @@ func TestTheSessionIsReusedAcrossCalls(t *testing.T) {
 	n := newNAS(d.dial, []string{"25.04"})
 
 	for range 5 {
-		if _, err := n.SystemVersion(); err != nil {
+		if _, err := n.SystemVersion(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -52,7 +52,7 @@ func TestTheReconnectCooldownBoundsLoginAttempts(t *testing.T) {
 	n.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
 
 	for range 20 {
-		_, _ = n.SystemVersion()
+		_, _ = n.SystemVersion(t.Context())
 	}
 	if d.dials != 1 {
 		t.Fatalf("twenty calls during an outage must cost one login attempt, got %d", d.dials)
@@ -67,7 +67,7 @@ func TestARateLimitOpensTheCircuitImmediately(t *testing.T) {
 	n := newNAS(d.dial, []string{"25.04"})
 	n.now = func() time.Time { return now }
 
-	if _, err := n.SystemVersion(); err == nil {
+	if _, err := n.SystemVersion(t.Context()); err == nil {
 		t.Fatal("the call must fail")
 	}
 	if !n.CircuitOpen() {
@@ -78,7 +78,7 @@ func TestARateLimitOpensTheCircuitImmediately(t *testing.T) {
 	// opened because of a lockout has certainly cleared it before allowing again.
 	before := d.dials
 	now = now.Add(breakerCooldown - time.Minute)
-	if _, err := n.SystemVersion(); err == nil {
+	if _, err := n.SystemVersion(t.Context()); err == nil {
 		t.Fatal("the call must still fail")
 	}
 	if d.dials != before {
@@ -89,7 +89,7 @@ func TestARateLimitOpensTheCircuitImmediately(t *testing.T) {
 	now = now.Add(2 * time.Minute)
 	d.err = nil
 	d.rpc = &fakeRPC{version: "25.04.2"}
-	if _, err := n.SystemVersion(); err != nil {
+	if _, err := n.SystemVersion(t.Context()); err != nil {
 		t.Fatalf("the circuit must allow again after the cooldown: %v", err)
 	}
 	if n.CircuitOpen() {
@@ -103,7 +103,7 @@ func TestARateLimitOpensTheCircuitImmediately(t *testing.T) {
 	n.drop()
 	d.err = errors.New("connection refused")
 	now = now.Add(reconnectCooldown + time.Second)
-	if _, err := n.SystemVersion(); err == nil {
+	if _, err := n.SystemVersion(t.Context()); err == nil {
 		t.Fatal("the call must fail")
 	}
 	if n.CircuitOpen() {
@@ -119,7 +119,7 @@ func TestRepeatedFailuresOpenTheCircuit(t *testing.T) {
 	n.now = func() time.Time { return now }
 
 	for range breakerThreshold {
-		_, _ = n.SystemVersion()
+		_, _ = n.SystemVersion(t.Context())
 		// Past the reconnect cooldown, so each call is a real attempt.
 		now = now.Add(reconnectCooldown + time.Second)
 	}

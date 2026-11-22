@@ -24,7 +24,7 @@ import (
 // were right. It was the TYPES that disagreed.
 //
 // So this reads the add-on's own source for the struct behind every
-// `nas.call(...)`, and asserts each json tag against `truenas_observed.json`:
+// `nas.call(ctx, ...)`, and asserts each json tag against `truenas_observed.json`:
 // the key exists on the target, and the Go type can hold what the target puts
 // in it. It also fails on a method decoded here that the recorder never asked
 // about — an unrecorded read is a fixture that cannot disagree with anything.
@@ -94,7 +94,7 @@ func loadRecording(t *testing.T) map[string]recordedRead {
 	return out
 }
 
-// decodeSite is one `nas.call("method", …, &target)` with an inline struct
+// decodeSite is one `nas.call(ctx, "method", …, &target)` with an inline struct
 // behind the target.
 type decodeSite struct {
 	Method string
@@ -140,21 +140,21 @@ func findDecodeSites(t *testing.T) []decodeSite {
 						return true
 					}
 					call, ok := n.(*ast.CallExpr)
-					if !ok || len(call.Args) != 3 {
+					if !ok || len(call.Args) != 4 {
 						return true
 					}
 					sel, ok := call.Fun.(*ast.SelectorExpr)
 					if !ok || sel.Sel.Name != "call" {
 						return true
 					}
-					lit, ok := call.Args[0].(*ast.BasicLit)
+					lit, ok := call.Args[1].(*ast.BasicLit)
 					if !ok || lit.Kind != token.STRING {
 						// A method chosen at runtime. Allowed only where
 						// nothing is decoded — see the exemption test below.
 						return true
 					}
 					method := strings.Trim(lit.Value, `"`)
-					unary, ok := call.Args[2].(*ast.UnaryExpr)
+					unary, ok := call.Args[3].(*ast.UnaryExpr)
 					if !ok || unary.Op != token.AND {
 						return true
 					}
@@ -376,18 +376,18 @@ func TestADynamicMethodNameDecodesNothingStructured(t *testing.T) {
 		for _, file := range pkg.Files {
 			ast.Inspect(file, func(n ast.Node) bool {
 				call, ok := n.(*ast.CallExpr)
-				if !ok || len(call.Args) != 3 {
+				if !ok || len(call.Args) != 4 {
 					return true
 				}
 				sel, ok := call.Fun.(*ast.SelectorExpr)
 				if !ok || sel.Sel.Name != "call" {
 					return true
 				}
-				if _, literal := call.Args[0].(*ast.BasicLit); literal {
+				if _, literal := call.Args[1].(*ast.BasicLit); literal {
 					return true
 				}
 				// Dynamic. The destination must be something with no shape.
-				unary, ok := call.Args[2].(*ast.UnaryExpr)
+				unary, ok := call.Args[3].(*ast.UnaryExpr)
 				if !ok {
 					return true
 				}

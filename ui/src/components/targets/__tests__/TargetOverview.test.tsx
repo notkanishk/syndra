@@ -397,6 +397,18 @@ describe("one target's page", () => {
     expect(screen.getByText(/run\/secrets\/addon\/truenas\.key/)).toBeTruthy();
   });
 
+  // 8g fix round 3: busy past half an hour stops the send, and the page says
+  // since when, even while the system reads as not reachable.
+  it("says a system busy past the limit, and since when", () => {
+    state.roster = [{ ...summary([]), busy_since: "2026-11-22T10:00:00Z" }];
+    state.health = { reachable: false, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
+    renderTarget();
+
+    expect(screen.getByText(/TrueNAS has been busy since /)).toBeTruthy();
+    expect(screen.getByText(/Nothing was sent\. Syndra keeps trying by itself\./)).toBeTruthy();
+  });
+
   it("does not claim a transport fault when the secret loads", () => {
     state.roster = [{ ...summary([]), transport_status: "ok" }];
     state.health = { reachable: true, lifecycle: "active" };

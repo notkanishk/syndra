@@ -45,7 +45,7 @@ func TestBuiltinGroupsAreNeverOffered(t *testing.T) {
 
 func TestBuiltinGroupIsNotReportedOnASubject(t *testing.T) {
 	s := testServer(t, &fakeRPC{users: fixtureUsers, groups: groupsWithAdmin})
-	snap, err := s.readSubjects()
+	snap, err := s.readSubjects(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestATruncatedGroupReadIsAnError(t *testing.T) {
 	if rr, _ := valuesOf(t, s, FieldGroup); rr.Code == http.StatusOK {
 		t.Fatal("half a list offered as the whole one")
 	}
-	if _, err := s.readSubjects(); !errors.Is(err, errGroupsTruncated) {
+	if _, err := s.readSubjects(t.Context()); !errors.Is(err, errGroupsTruncated) {
 		t.Fatalf("convergence must refuse a partial group index, got %v", err)
 	}
 }

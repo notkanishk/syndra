@@ -224,7 +224,7 @@ func TestAMembersPlacesAreTheirOwnGroupsWithHomeFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, _, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
+	res, _, err := s.storageStatus(t.Context(), OperationRequest{Subject: "sub-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestAGroupThatOpensNothingLeavesTheMemberAnEmptyReadList(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "ida", UID: 200002, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
-	res, _, err := s.storageStatus(OperationRequest{Subject: "sub-2"})
+	res, _, err := s.storageStatus(t.Context(), OperationRequest{Subject: "sub-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func TestAccessGivenBackNeedsANewPassword(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount, WantsSMB: &want}); err != nil {
 		t.Fatal(err)
 	}
-	res, _, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
+	res, _, err := s.storageStatus(t.Context(), OperationRequest{Subject: "sub-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +333,7 @@ func TestAccessGivenBackNeedsANewPassword(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount, WantsSMB: &off}); err != nil {
 		t.Fatal(err)
 	}
-	res, _, _ = s.storageStatus(OperationRequest{Subject: "sub-1"})
+	res, _, _ = s.storageStatus(t.Context(), OperationRequest{Subject: "sub-1"})
 	if st := res.Result.(*StorageStatus); st.NeedsNewPassword || !st.Usable || st.Standing == nil || !st.Standing.Usable || st.Standing.WaitingOn != "none" {
 		t.Fatalf("SMB that isn't wanted was reported as waiting for a password: %+v", st)
 	}

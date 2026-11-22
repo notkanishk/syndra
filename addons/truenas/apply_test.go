@@ -381,7 +381,7 @@ func withFingerprint(t *testing.T, s *server, body string) string {
 	if err := json.Unmarshal([]byte(body), &req); err != nil {
 		return body
 	}
-	current, _, _, _, _, err := s.locate(req)
+	current, _, _, _, _, err := s.locate(t.Context(), req)
 	if err != nil {
 		// The target is unreadable in this test; the request never gets as far
 		// as the comparison, so any value will do.
@@ -574,7 +574,7 @@ func TestACollidingUnboundAccountHaltsAndSurfacesTheDecision(t *testing.T) {
 		t.Fatal("and nothing may be bound")
 	}
 	// adoptable is a promise about account.adopt: it succeeds.
-	if _, status, err := s.adoptAccount(OperationRequest{Operation: "account.adopt", Subject: "sub-1", Actor: "op1", CallID: "a1",
+	if _, status, err := s.adoptAccount(t.Context(), OperationRequest{Operation: "account.adopt", Subject: "sub-1", Actor: "op1", CallID: "a1",
 		Params: map[string]any{"username": "charlotte"}}); status != http.StatusOK {
 		t.Fatalf("adoptable, so account.adopt must succeed, got %d %v", status, err)
 	}
@@ -690,7 +690,7 @@ func TestAReusedUsernameIsNotThisSubjectsAccount(t *testing.T) {
 		!strings.Contains(out.Consequence, "adopt that account only if it is theirs") {
 		t.Fatalf("held by another person: want a non-adoptable conflict, release first, got %+v", out)
 	}
-	if _, status, _ := s.adoptAccount(OperationRequest{Operation: "account.adopt", Subject: "sub-1", Actor: "op1", CallID: "a1",
+	if _, status, _ := s.adoptAccount(t.Context(), OperationRequest{Operation: "account.adopt", Subject: "sub-1", Actor: "op1", CallID: "a1",
 		Params: map[string]any{"username": "charlotte"}}); status != http.StatusConflict {
 		t.Fatalf("account.adopt must refuse to move a person to someone else's account, got %d", status)
 	}
@@ -878,7 +878,7 @@ func TestAPlanThatCannotReadIsRefusedNotBlocked(t *testing.T) {
 	// the plan answers 200 for every subject and leaves the stat to the apply,
 	// as it leaves the group check. A 5xx here aborts the whole target's drift.
 	s, m := homeServer(t, existing, nil, nil)
-	snap, err := s.readSubjects()
+	snap, err := s.readSubjects(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1308,7 +1308,7 @@ func TestAReadBackAsksForOneAccount(t *testing.T) {
 	s, rpc := applyServer(t, `[{"username":"charlotte","uid":5500,"locked":false,"smb":true,"groups":[42]},
 		{"username":"brock","uid":5501,"locked":false,"smb":true,"groups":[42]}]`)
 
-	got, err := s.readBack("brock")
+	got, err := s.readBack(t.Context(), "brock")
 	if err != nil || got == nil || got.Username != "brock" {
 		t.Fatalf("readBack(brock) = %+v, %v", got, err)
 	}
@@ -1330,7 +1330,7 @@ func TestAReadBackAsksForOneAccount(t *testing.T) {
 	if !sawFilter {
 		t.Fatal("no user.query was recorded")
 	}
-	if _, err := s.readBack("nobody"); !errors.Is(err, ErrTargetRefused) {
+	if _, err := s.readBack(t.Context(), "nobody"); !errors.Is(err, ErrTargetRefused) {
 		t.Fatalf("an account that is not there must be refused, got %v", err)
 	}
 }
@@ -1388,7 +1388,7 @@ func TestTheFingerprintComesFromTheReadAndNotFromTheRequest(t *testing.T) {
 	// The invariant, stated as the next plan would: the fingerprint this apply
 	// reports must equal the one a fresh read produces. Under the projection it
 	// equalled a fingerprint of the request, and no read anywhere agreed with it.
-	after, err := s.readBack("charlotte")
+	after, err := s.readBack(t.Context(), "charlotte")
 	if err != nil {
 		t.Fatalf("read back: %v", err)
 	}

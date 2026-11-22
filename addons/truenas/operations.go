@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -123,7 +124,7 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 		// A read is never recorded, held or reuse-checked: a read that happens
 		// again is a read, Syndra sends one call_id for every read it makes,
 		// and a 30-day copy of a health report is a copy nobody will ask for.
-		s.readNow(w, name, req)
+		s.readNow(r.Context(), w, name, req)
 		return
 	}
 	if strings.TrimSpace(req.Subject) == "" {
@@ -157,19 +158,23 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 			writeError(w, http.StatusUnprocessableEntity, CodeOperationFailed, why, nil)
 			return
 		}
-		s.operateNow(w, name, req)
+		s.operateNow(r.Context(), w, name, req)
 	})
 }
 
 // operateNow runs one operation and answers it.
-func (s *server) operateNow(w http.ResponseWriter, name string, req OperationRequest) {
-	result, status, err := s.runOperation(name, req)
+func (s *server) operateNow(ctx context.Context, w http.ResponseWriter, name string, req OperationRequest) {
+	result, status, err := s.runOperation(ctx, name, req)
 	switch {
 	case errors.Is(err, ErrNotSent) && !readOperation(name):
 		// A write that never left this add-on: nothing happened, the same
 		// answer an apply gives (handleApply).
-		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
-			"The NAS could not be reached, so nothing was sent to it.", nil)
+		writeNotSent(w, err,
+			"The NAS could not be reached, so nothing was sent to it.")
+		return
+	case errors.Is(err, ErrTargetUnreachable) && readOperation(name):
+		// A read with nothing to serve: the answer /subjects gives (§4).
+		writeNotRead(w, err)
 		return
 	case errors.Is(err, errNotLogged):
 		// The same answer an apply gives (applyNow).
@@ -196,14 +201,14 @@ func (s *server) operateNow(w http.ResponseWriter, name string, req OperationReq
 // or a read of the NAS now when fresh asks or the copy is old, one per subject
 // and parameters. health.get's own result carries no `current`, so a copy of
 // it could never say it is one: it is read live every time, like /values.
-func (s *server) readNow(w http.ResponseWriter, name string, req OperationRequest) {
+func (s *server) readNow(ctx context.Context, w http.ResponseWriter, name string, req OperationRequest) {
 	if name == "health.get" {
-		s.operateNow(w, name, req)
+		s.operateNow(ctx, w, name, req)
 		return
 	}
 	params, _ := json.Marshal(publicParams(name, req.Params))
 	val, obs, err := s.fresh.read(name+":"+req.Subject+":"+string(params), req.Fresh, func() (any, time.Time, error) {
-		res, status, err := s.runOperation(name, req)
+		res, status, err := s.runOperation(ctx, name, req)
 		if err != nil {
 			return nil, time.Time{}, opFailure{status, err}
 		}
@@ -269,7 +274,7 @@ func opCaller(name string, req OperationRequest) caller {
 func failedWrite(err error, what string) error {
 	switch {
 	case errors.Is(err, ErrNotSent):
-		return ErrNotSent
+		return keepBusy(err, ErrNotSent)
 	case errors.Is(err, errNotLogged):
 		return errNotLogged
 	case errors.Is(err, ErrTargetRefused), errors.Is(err, ErrRateLimited):
@@ -301,24 +306,24 @@ func readOperation(name string) bool {
 	return false
 }
 
-func (s *server) runOperation(name string, req OperationRequest) (OperationResult, int, error) {
+func (s *server) runOperation(ctx context.Context, name string, req OperationRequest) (OperationResult, int, error) {
 	switch name {
 	case "password.set":
-		return s.setPassword(req)
+		return s.setPassword(ctx, req)
 	case "password.rotate":
-		return s.rotatePassword(req)
+		return s.rotatePassword(ctx, req)
 	case "account.purge":
-		return s.purgeAccount(req)
+		return s.purgeAccount(ctx, req)
 	case "account.adopt":
-		return s.adoptAccount(req)
+		return s.adoptAccount(ctx, req)
 	case "account.release":
 		return s.releaseAccount(req)
 	case "activity.get":
-		return s.smbActivity(req)
+		return s.smbActivity(ctx, req)
 	case "storage.status":
-		return s.storageStatus(req)
+		return s.storageStatus(ctx, req)
 	case "health.get":
-		return s.targetHealth(req)
+		return s.targetHealth(ctx, req)
 	}
 	// Unknown ids fail closed. The backend's policy is the authority on what
 	// exists and this is the second gate, not the first.
@@ -335,13 +340,13 @@ func (s *server) runOperation(name string, req OperationRequest) (OperationResul
 // Plaintext is mandatory. No TrueNAS API accepts an NT or unix hash, which is
 // why Syndra's vault stops storing them: a hash it could store is a hash this
 // could not use.
-func (s *server) setPassword(req OperationRequest) (OperationResult, int, error) {
+func (s *server) setPassword(ctx context.Context, req OperationRequest) (OperationResult, int, error) {
 	password, err := requireSecret(req.Params, "password")
 	if err != nil {
 		return OperationResult{}, http.StatusBadRequest, err
 	}
 	who := opCaller("password.set", req)
-	r, status, err := s.operatedAccount(req.Subject, &who)
+	r, status, err := s.operatedAccount(ctx, req.Subject, &who)
 	if err != nil {
 		return OperationResult{}, status, err
 	}
@@ -365,7 +370,7 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 	if smb, known := s.desiredSMB(req.Subject); known && smb {
 		update["smb"] = true
 	}
-	if err := s.send(who, "user.update", []any{r.Account.ID, update}, nil); err != nil {
+	if err := s.send(ctx, who, "user.update", []any{r.Account.ID, update}, nil); err != nil {
 		// A sentence an operator can read, not the security boundary. The
 		// client wrapper already classifies rather than wraps, so the target's
 		// own text — built from a call whose parameters include the password —
@@ -507,9 +512,9 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 // The credential half of a revocation. Established SMB sessions survive until
 // they reconnect — TrueNAS exposes no session-close method at all — which is
 // why the operator surface must say so rather than implying immediacy.
-func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, error) {
+func (s *server) rotatePassword(ctx context.Context, req OperationRequest) (OperationResult, int, error) {
 	who := opCaller("password.rotate", req)
-	r, status, err := s.operatedAccount(req.Subject, &who)
+	r, status, err := s.operatedAccount(ctx, req.Subject, &who)
 	if err != nil {
 		return OperationResult{}, status, err
 	}
@@ -522,7 +527,7 @@ func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, err
 	// authentication disabled. A rotation deliberately does NOT touch `smb` —
 	// it is the credential half of a revocation, and turning share access on
 	// during one would be the opposite of what it is for.
-	if err := s.send(who, "user.update", []any{r.Account.ID,
+	if err := s.send(ctx, who, "user.update", []any{r.Account.ID,
 		map[string]any{"password": minted, "password_disabled": false}}, nil); err != nil {
 		return OperationResult{}, statusFor(err), failedWrite(err, "rotation")
 	}
@@ -559,13 +564,13 @@ func mintCredential() (string, error) {
 // being handed target credentials, and it has no good source — either somebody
 // types a personal admin password into a form, or a shared key lives in a
 // password manager until it ends up in a browser.
-func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error) {
+func (s *server) purgeAccount(ctx context.Context, req OperationRequest) (OperationResult, int, error) {
 	elevated, err := requireSecret(req.Params, "elevated_key")
 	if err != nil {
 		return OperationResult{}, http.StatusBadRequest, err
 	}
 	who := opCaller("account.purge", req)
-	r, status, err := s.operatedAccount(req.Subject, &who)
+	r, status, err := s.operatedAccount(ctx, req.Subject, &who)
 	if err != nil {
 		return OperationResult{}, status, err
 	}
@@ -589,7 +594,7 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	// elevated credential must not outlive the single call it was injected for,
 	// and reusing the shared session would leave a delete-capable connection
 	// open for everything else this add-on does.
-	client, err := s.elevated(elevated)
+	client, err := dialBounded(ctx, func() (rpc, error) { return s.elevated(elevated) }, nasDialTimeout)
 	if err != nil {
 		return OperationResult{}, http.StatusBadGateway, fmt.Errorf("the elevated session could not be established")
 	}
@@ -597,7 +602,7 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 
 	// Through the seam like every write, on its own session: callOnce, not send.
 	if err := s.mutate(who, "user.delete", func() error {
-		return callOnce(client, "user.delete", []any{r.Account.ID}, nil)
+		return callOnce(ctx, client, "user.delete", []any{r.Account.ID}, nil)
 	}); err != nil {
 		return OperationResult{}, statusFor(err), failedWrite(err, "deletion")
 	}
@@ -693,9 +698,9 @@ func statusToken(s string) string {
 }
 
 // smbActivity reads the audit log and says what it could not see.
-func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error) {
+func (s *server) smbActivity(ctx context.Context, req OperationRequest) (OperationResult, int, error) {
 	// A read: resolved, never rewritten (operatedAccount).
-	r, status, err := s.operatedAccount(req.Subject, nil)
+	r, status, err := s.operatedAccount(ctx, req.Subject, nil)
 	if err != nil {
 		return OperationResult{}, status, err
 	}
@@ -735,7 +740,7 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 			"query-options": map[string]any{"limit": activityLimit + 1, "order_by": []string{"-message_timestamp"}},
 		},
 	}
-	if err := s.nas.call("audit.query", query, &rows); err != nil {
+	if err := s.nas.call(ctx, "audit.query", query, &rows); err != nil {
 		return OperationResult{}, statusFor(err), fmt.Errorf("the audit log could not be read")
 	}
 
@@ -747,7 +752,7 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 	}
 	// With the shares unread, no service is a known share, so no event names
 	// one: an empty resource, never a name the add-on cannot place.
-	shares, _ := s.enabledShares()
+	shares, _ := s.enabledShares(ctx)
 	for _, r := range rows {
 		report.Events = append(report.Events, ActivityEvent{
 			At:       time.Unix(r.Timestamp, 0).UTC().Format(time.RFC3339),
@@ -760,7 +765,7 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 	}
 	// Reported whether or not there were events, because the case that matters
 	// is the empty one.
-	if blind, err := s.sharesNotWatching(r.Account.Username); err != nil {
+	if blind, err := s.sharesNotWatching(ctx, r.Account.Username); err != nil {
 		report.Uncovered = []string{"(the audit coverage of the shares could not be read, so coverage is unknown)"}
 	} else {
 		report.Uncovered = append([]string{}, blind...)
@@ -882,7 +887,7 @@ func (sh shareAudit) watches(memberOf map[string]bool) bool {
 }
 
 // readShareAudit reads every SMB share's audit settings.
-func (s *server) readShareAudit() ([]shareAudit, error) {
+func (s *server) readShareAudit(ctx context.Context) ([]shareAudit, error) {
 	var shares []struct {
 		Name  string `json:"name"`
 		Audit struct {
@@ -891,7 +896,7 @@ func (s *server) readShareAudit() ([]shareAudit, error) {
 			IgnoreList []string `json:"ignore_list"`
 		} `json:"audit"`
 	}
-	if err := s.nas.call("sharing.smb.query", []any{[]any{}, map[string]any{"select": []string{"name", "audit"}}}, &shares); err != nil {
+	if err := s.nas.call(ctx, "sharing.smb.query", []any{[]any{}, map[string]any{"select": []string{"name", "audit"}}}, &shares); err != nil {
 		return nil, err
 	}
 	out := make([]shareAudit, 0, len(shares))
@@ -913,8 +918,8 @@ func (s *server) readShareAudit() ([]shareAudit, error) {
 // about the deployment, not about anybody. `sharesNotWatching` is the
 // member-level one and answers differently — a share can be switched on and
 // still record nothing for a given person.
-func (s *server) unauditedShares() ([]string, error) {
-	shares, err := s.readShareAudit()
+func (s *server) unauditedShares(ctx context.Context) ([]string, error) {
+	shares, err := s.readShareAudit(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -937,12 +942,12 @@ func (s *server) unauditedShares() ([]string, error) {
 // "nobody was watching this member". That is the one distinction the field
 // exists to make, and it was inverted the moment the setting it depends on
 // stopped being uniformly off.
-func (s *server) sharesNotWatching(username string) ([]string, error) {
-	shares, err := s.readShareAudit()
+func (s *server) sharesNotWatching(ctx context.Context, username string) ([]string, error) {
+	shares, err := s.readShareAudit(ctx)
 	if err != nil {
 		return nil, err
 	}
-	memberOf, err := s.groupsOf(username)
+	memberOf, err := s.groupsOf(ctx, username)
 	if err != nil {
 		return nil, err
 	}
@@ -1024,7 +1029,7 @@ type ServiceState struct {
 }
 
 // targetHealth composes four sources and degrades per source.
-func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error) {
+func (s *server) targetHealth(ctx context.Context, req OperationRequest) (OperationResult, int, error) {
 	h := TargetHealth{}
 	sources := []struct {
 		name   string
@@ -1109,10 +1114,14 @@ func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error
 			return nil
 		}},
 	}
+	var unreached []error // the sources the NAS gave no answer for
 	for _, source := range sources {
 		var raw json.RawMessage
-		if err := s.nas.call(source.method, source.params, &raw); err != nil {
+		if err := s.nas.call(ctx, source.method, source.params, &raw); err != nil {
 			h.Degraded = append(h.Degraded, source.name)
+			if errors.Is(err, ErrTargetUnreachable) {
+				unreached = append(unreached, err)
+			}
 			continue
 		}
 		// A source that ANSWERED and could not be understood is degraded too.
@@ -1128,6 +1137,18 @@ func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error
 	// rather than "four things are wrong with it". Counted against the table
 	// rather than against a literal, so adding a fifth source cannot quietly
 	// turn this into a check that never fires.
+	//
+	// With no answer from any source it is a read with nothing to serve, as
+	// /subjects answers it (§4, §13.1): TARGET_UNREACHABLE when no request
+	// reached the NAS, NO_CURRENT_READ when one went out and got no answer.
+	if len(unreached) == len(sources) {
+		for _, err := range unreached {
+			if !errors.Is(err, ErrNotSent) {
+				return OperationResult{}, http.StatusServiceUnavailable, err
+			}
+		}
+		return OperationResult{}, http.StatusServiceUnavailable, unreached[0]
+	}
 	if len(h.Degraded) == len(sources) {
 		return OperationResult{}, http.StatusServiceUnavailable, fmt.Errorf("the target answered none of the health reads")
 	}
@@ -1238,7 +1259,7 @@ func noAdoptableAccount(username string) error {
 // the next convergence, which is the operator's next decision and not this one's
 // side effect — an adoption that also converged would apply a diff nobody was
 // shown, on an account whose contents nobody has looked at yet.
-func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error) {
+func (s *server) adoptAccount(ctx context.Context, req OperationRequest) (OperationResult, int, error) {
 	username, _ := req.Params["username"].(string)
 	username = strings.TrimSpace(username)
 	if username == "" {
@@ -1279,7 +1300,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		return OperationResult{}, status, refusal
 	} else if bound {
 		who := opCaller("account.adopt", req)
-		r, _, err := s.resolveLive(req.Subject, &who)
+		r, _, err := s.resolveLive(ctx, req.Subject, &who)
 		if err != nil {
 			status, refusal := liveRefusal(err)
 			return OperationResult{}, status, refusal
@@ -1338,7 +1359,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 	// Read from the target rather than trusted from the request. The inventory
 	// the operator was looking at is a snapshot, and an account deleted or
 	// renamed since would otherwise be bound by name to nothing.
-	snap, err := s.readSubjects()
+	snap, err := s.readSubjects(ctx)
 	if err != nil {
 		return OperationResult{}, statusFor(err), err
 	}

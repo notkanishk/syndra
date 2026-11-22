@@ -2092,9 +2092,14 @@ down". `target_unreachable` (one word for seven causes) is retired, and
 | Syndra cannot load the add-on's shared secret; nothing was sent | add-on | `no_key` | "Syndra can't load {system}'s shared secret. Check Syndra's secret file." Spends no attempt. |
 | `TARGET_UNREACHABLE`; `health.reachable: false`; `stale.reason: unreachable` | app | — | the add-on's sentence, else "{system}'s add-on is running but can't reach {product}. Check that {product} is on." |
 | `NO_CURRENT_READ`, `TARGET_UNREADABLE` | app | — | the add-on's sentence, else "{product} didn't give its add-on an answer it could use. Check {product}, then read again." |
+| `TARGET_BUSY`; `stale.reason: busy` | not an outage: `busy` | — | "{product} is busy right now. Try again in {n} s." No breaker opens, and a queued row waits `Retry-After` with no attempt spent; busy without a break for over 30 minutes halts the send for that system (`busy`, "{system} has been busy since {time}"). A read or operation answer only: `/health` never answers it, and the monitor counts every non-OK `/health` answer as a miss. |
 
 *`no_key` added 21 Nov 2026 from the 8b review; a secret Syndra cannot load is
-Syndra's fault, not a wrong host.*
+Syndra's fault, not a wrong host.* *`busy` added 22 Nov 2026 from the 8g
+staging run; a busy add-on queue or busy app is not an outage. The add-on
+answers `TARGET_BUSY` (503, `Retry-After`, nothing sent) when a request gave
+up waiting in its queue to the app, had too little time left to connect or
+ask in full, or ran out on an app that still answers its ping.*
 
 A member reads one sentence for both classes, because which box is down is
 not theirs to fix: "{system} can't be read right now. Nothing for you to do."
@@ -2124,6 +2129,22 @@ observed, so not stated).
   within the deadline, within the last 10 s, so a check queued behind a long
   call is not an outage; an app that refuses is false at once. The kit
   waits past the 10 s before `outage.hang` judges (`hangSettle`).
+- A read operation answers within 25 s even while the app hangs, under
+  Syndra's 30 s call timeout: its kept copy, or the no-copy code
+  (`TARGET_UNREACHABLE`, `NO_CURRENT_READ`, `TARGET_BUSY`), never a wait Syndra outlasts
+  and reads as `addon_unreachable` (`outage.hang`; `health.get` on the 8g
+  staging rerun, 22 Nov 2026). A composite read (`health.get`) with every
+  source unanswered is a read with nothing to serve, as `/subjects` is. The
+  25 s is one deadline from the request's start, shared by every step in
+  it, never a sum of per-step bounds. Only silence is an outage: a call
+  that ran out its time while the app still answers a ping is a busy app,
+  and fails that call alone; one with the ping unanswered too holds the
+  next calls back for the reconnect floor. Background work no request
+  waits on keeps each call short too (the TrueNAS collector pages
+  `audit.query` to about 5 s a call), so a `/health` ping queued behind it
+  waits one short call and each answer keeps the last read recent; its
+  longer per-call bound is a ceiling only. A busy queue or a busy app is
+  `TARGET_BUSY`, never an outage (§13.1).
 - Hysteresis by a Kubernetes probe's defaults (`failureThreshold: 3`,
   `successThreshold: 1`). From `checking` one answer decides, as Envoy's
   active health checking does for a new host, but an outage takes the same

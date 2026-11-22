@@ -630,8 +630,8 @@ add-on that declares `freshness`:
   0, like an OpenMetrics counter), so that the kit can prove the rules
   above;
 - MUST answer 429 `FRESH_READ_COOLDOWN` (`Retry-After` the seconds left),
-  503 `TARGET_UNREACHABLE` or 503 `NO_CURRENT_READ`, only when it has nothing
-  at all to serve;
+  503 `TARGET_UNREACHABLE`, 503 `NO_CURRENT_READ` or 503 `TARGET_BUSY`, only
+  when it has nothing at all to serve;
 - SHOULD forget its copy, its cooldown and any read under way on every
   write it makes, so a person waiting on their own change sees it on the
   next read without asking for a fresh one: a read arriving after a write
@@ -726,6 +726,39 @@ Schema: `v2/schema/health.json`.
   not an outage; an app that refuses is `false` at once. The kit waits 12 s
   after hanging the app before it asks. The TrueNAS add-on uses 2 s
   (`healthReachWithin`) and 10 s (`recentReadCounts`).
+- Every read operation MUST answer within 25 s, even while the app hangs:
+  its kept copy (`current: false`) or, with none, 503 `TARGET_UNREACHABLE`,
+  `NO_CURRENT_READ` or `TARGET_BUSY`. Syndra waits 30 s for an operation; an answer after
+  that reaches nobody, and Syndra reads your add-on as down, not the app.
+  Give each request one deadline from its start, under 25 s, shared by
+  every step in it (the wait for a connection, the connect, the wait for
+  your turn on it, each call), so their sum cannot outlast it. After a
+  connect that got no answer in time, or a call that got none while the
+  app answers no ping either, fail the next calls at once for a while
+  rather than wait again: a read made of several calls must wait once, not
+  once per call (`outage.hang`). A call that ran out its time while the
+  app still answers pings is a busy app, not an outage: fail that call and
+  keep going. A busy app, or a busy queue of your own, is never an outage;
+  only silence is. A request that gives up waiting for its turn on the
+  connection, that has too little of its time left to connect or ping in
+  full (so does not try), or whose call ran out while the app answers its
+  ping, SHOULD answer 503 `TARGET_BUSY` with `Retry-After`: a read with no
+  copy, or a write that sent nothing. Syndra opens no breaker for it. Never
+  from `/health`: it is a read or operation answer only, and the monitor
+  counts any non-OK `/health` answer as a miss. A kept copy served then
+  says `stale.reason: busy`. A write
+  that went out and ran out its time may have acted, and stays a 5xx. Keep
+  every call to the app short, background work included: page a long read
+  so one call stays well under the 10 s a recent answer counts, so a
+  `/health` queued behind it waits one short call and reads reachable. Work
+  no request waits on (a background collector) may give its calls a longer
+  bound, as a ceiling only. The TrueNAS add-on uses 24 s for a request
+  (`requestWithin`), 8 s for a session (`nasDialTimeout`: connect, TLS,
+  handshake and login), 15 s for a call (`callTimeout`), 5 s for its ping
+  (`pingTimeout`), 5 s as each collector call's target (`statsCallTarget`,
+  which sizes its `audit.query` pages), 60 s as their ceiling
+  (`collectCallTimeout`) and its 15 s reconnect floor
+  (`reconnectCooldown`).
 - `circuit_open` MUST be `true` while the add-on's own breaker is holding
   back its calls to the app (backing off to avoid a lockout or overload).
   It is distinct from `reachable: false`, so an operator does not look at
@@ -1817,12 +1850,12 @@ Schema: `v2/schema/error.json`; every code: `v2/registry/errors.json`.
 | 2xx to an operation with no `outcome`, or one outside `common/outcome.json` (or `no_change` without `calls`) | **possibly acted**, as a 5xx: absence is never a value |
 | `LIFECYCLE_REFUSAL` (by code alone) | not reached: a maintenance window; it waits |
 | `CONTRACT_VERSION_MISMATCH`, `UNKNOWN_REQUEST_FIELD`, or 404 `UNKNOWN_ROUTE` (or no code) on a feature route | not reached, and the manifest is read again: the add-on is not the one Syndra thought |
-| `CALL_IN_PROGRESS`, `TARGET_UNREACHABLE`, `TARGET_CHANGED`, any 429 | not reached; the change stays queued and is asked again later |
+| `CALL_IN_PROGRESS`, `TARGET_UNREACHABLE`, `TARGET_BUSY`, `TARGET_CHANGED`, any 429 | not reached; the change stays queued and is asked again later |
 | 408, any other 5xx | **possibly acted**: never resent automatically, and shown to a person |
 | any other 4xx | it checked the request and did nothing; the change is dropped |
 
 So the add-on MUST answer a 4xx only when it wrote nothing, and SHOULD
-answer a write with a 5xx (other than `TARGET_UNREACHABLE`, `TARGET_CHANGED` and
+answer a write with a 5xx (other than `TARGET_UNREACHABLE`, `TARGET_BUSY`, `TARGET_CHANGED` and
 `LIFECYCLE_REFUSAL`) only when it cannot tell whether the app acted: a 5xx
 sent before any write costs an operator a check for nothing. Which 5xx is
 yours; Syndra reads them alike.
@@ -2549,9 +2582,9 @@ has the full map.
   (`DeriveUsername` in `addons/truenas/username.go`).
 - Plan and apply share `decide` (`addons/truenas/apply.go`). `/subjects`
   answers its copy (`cached`, `cooldown`) or a read of the NAS now, the last
-  read with `stale.reason: unreachable` when the NAS cannot be read, and with
-  nothing to serve 503 `TARGET_UNREACHABLE` (nothing was sent) or
-  `NO_CURRENT_READ` ([Fresh reads](#fresh-reads-feature-freshness)).
+  read with `stale.reason: unreachable` when the NAS cannot be read (`busy`
+  when it is busy), and with nothing to serve 503 `TARGET_UNREACHABLE`
+  (nothing was sent), `TARGET_BUSY` (`ErrBusy`) or `NO_CURRENT_READ` ([Fresh reads](#fresh-reads-feature-freshness)).
 - Version gate on `TRUENAS_SUPPORTED_MAJORS`, recorded in
   `addons/contract/truenas_observed.json`. Credential: a dedicated user with
   `ACCOUNT_WRITE`, `READONLY_ADMIN`, `SYSTEM_AUDIT_READ`, never `FULL_ADMIN`.
@@ -2701,12 +2734,14 @@ With them it runs:
   read is `current: true`.
 - `outage.hang`: with the app hanging for 12 s (past the 10 s a recent
   answer counts), `/health` answers within 3 s with `reachable: false`,
-  twice running; with it back, `reachable: true` and a
-  fresh read is `current: true`.
+  twice running, never `TARGET_BUSY`, and each read operation you declare
+  answers within 25 s with its kept copy or 503 `TARGET_UNREACHABLE`, `NO_CURRENT_READ` or `TARGET_BUSY`; with
+  it back, `reachable: true` and a fresh read is `current: true`.
 - `outage.kept` and `outage.none`: a read with a copy answers it
   (`current: false`, `stale.reason: unreachable`, the copy's own
   `taken_at`); a read without one answers 503 `TARGET_UNREACHABLE` or
-  `NO_CURRENT_READ`, the problem and nothing else.
+  `NO_CURRENT_READ`, the problem and nothing else. A stopped app is down,
+  never busy, so `TARGET_BUSY` fails `outage.none`.
 - `outage.write`: an apply answers `TARGET_UNREACHABLE` with `Retry-After`,
   and `GET /calls/{call_id}` shows nothing recorded for it.
 - `outage.restart` (the add-on hooks): `/subjects` answers from your mirror
@@ -2718,7 +2753,7 @@ With them it runs:
   unreachable`, never an error.
 
 On every reply of the run, outage or not, `no-false-zero` fails a reply with
-nothing to serve (`TARGET_UNREACHABLE`, `NO_CURRENT_READ`,
+nothing to serve (`TARGET_UNREACHABLE`, `NO_CURRENT_READ`, `TARGET_BUSY`,
 `TARGET_UNREADABLE`, `FRESH_READ_COOLDOWN`, `STORE_UNREADABLE`) that carries
 a `0`, an empty list, `""` or a zero date, and any reply with a zero
 `taken_at`, or `current: false` without `stale`. A CI run MUST give the app

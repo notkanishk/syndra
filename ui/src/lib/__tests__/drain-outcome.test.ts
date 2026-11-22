@@ -133,6 +133,23 @@ describe("a send with more than one connected system", () => {
     expect(alone.next).toMatch(/Make active under Maintenance/);
   });
 
+  // 8g fix round 3: a system busy for over half an hour halts its send as
+  // busy, not down, says since when, and asks nothing of the reader.
+  it("a system busy past the limit is named busy since, never as not answering", () => {
+    const since = "2026-11-22T10:00:00Z";
+    const passes = [
+      { target: "zitadel", applied: 3, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: false },
+      { target: "truenas", applied: 0, failed: 0, requeued: 1, abandoned: 0, errored: 0, halted: true, reason: "busy", busy_since: since },
+    ];
+    const both = named(result({ applied: 3, halted: true, reason: "busy", halted_target: "truenas", busy_since: since, passes }));
+    expect(both.message).toMatch(/TrueNAS has been busy since .+, so its changes are still here\./);
+    expect(both.message).not.toContain("didn't answer");
+    expect(both.detail).toContain("Syndra keeps trying by itself");
+    const alone = named(result({ halted: true, reason: "busy", halted_target: "truenas", busy_since: since, passes: [passes[1]] }));
+    expect(alone.message).toMatch(/^TrueNAS has been busy since .+; nothing was sent\.$/);
+    expect(alone.sendsItself).toBe(true);
+  });
+
   // 8b fix round 3: revocations go again on their own once the switch is
   // active, so "send again" is said only of what the reader must send.
   it("the step back from maintenance leaves revocations to the background drain", () => {

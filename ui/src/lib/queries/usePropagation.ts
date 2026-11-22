@@ -93,6 +93,8 @@ export interface DrainResult {
    * string, because the reasons are matched by callers as well as read.
    */
   halted_target?: string;
+  /** On a pass halted as `busy`: when its system began answering busy without a break. */
+  busy_since?: string;
   /**
    * One entry per target the drain ran a pass for.
    *
@@ -121,6 +123,8 @@ export interface DrainPass {
    * all. Absent when the count could not be read.
    */
   waiting?: number;
+  /** As DrainResult's. */
+  busy_since?: string;
 }
 
 const KEYS = {

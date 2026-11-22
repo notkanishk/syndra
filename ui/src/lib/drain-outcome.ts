@@ -1,4 +1,5 @@
 import { DRAIN_UNKNOWN_NEXT, type ActionOutcome, type AutoRetry, type OutcomeKind } from "@/lib/outcome";
+import { formatWhen } from "@/lib/format";
 import type { DrainResult } from "@/lib/queries/usePropagation";
 
 export type DrainTone = "success" | "warning" | "error" | "info";
@@ -80,7 +81,7 @@ export function describeDrain(
     return {
       tone: "warning",
       message: `${[went, ...rest].filter(Boolean).join(". ")}. ${halted
-        .map((pass) => `${nameOf(pass.target)} ${maintenance(pass.reason) ?? "didn't answer"}`)
+        .map((pass) => `${nameOf(pass.target)} ${maintenance(pass.reason) ?? busy(pass) ?? "didn't answer"}`)
         .join(" and ")}, so ${still} ${left === 1 ? "is" : "are"} still here.`,
       detail: haltDetail(result.reason, stalled, left || undefined, auto),
     };
@@ -112,6 +113,13 @@ export function describeDrain(
           message: `${stalled ?? "The connected system"} ${maintenance(result.reason)}. Nothing was sent.`,
           detail: MAINTENANCE_DETAIL,
           next: maintenanceNext(auto),
+        };
+      case "busy":
+        return {
+          tone: "warning",
+          sendsItself: true,
+          message: `${stalled ?? "The connected system"} ${busy(result)}; nothing was sent.`,
+          detail: BUSY_DETAIL,
         };
       // Design §13.1: who is not answering, the add-on or the system behind it, never one word.
       case "addon_unreachable":
@@ -272,6 +280,8 @@ function haltDetail(reason: string | undefined, system: string | undefined, wait
     case "read_only":
     case "draining":
       return `${its} still waiting, and nothing counts against the retry limit. ${maintenanceNext(auto)}`;
+    case "busy":
+      return `${its} still waiting. ${BUSY_DETAIL}`;
     default:
       return "The rest of the queue went through.";
   }
@@ -287,6 +297,17 @@ function maintenance(reason: string | undefined): string | undefined {
   if (reason === "draining") return "is set to finish up";
   return undefined;
 }
+
+/**
+ * A pass halted because its system has answered busy for over half an hour
+ * (backend propagation busyHaltAfter): not down, and nothing was sent.
+ * undefined for any other reason.
+ */
+function busy(pass: { reason?: string; busy_since?: string }): string | undefined {
+  return pass.reason === "busy" ? `has been busy since ${formatWhen(pass.busy_since)}` : undefined;
+}
+
+const BUSY_DETAIL = "Syndra keeps trying by itself, and nothing counts against the retry limit.";
 
 const MAINTENANCE_DETAIL = "It refuses every change until it is active again, so Syndra holds them. Nothing counts against the retry limit.";
 /**

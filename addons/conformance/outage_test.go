@@ -79,6 +79,18 @@ func TestEachOutageCheckFailsOnABadReply(t *testing.T) {
 				}
 				return reply
 			}},
+		// A stopped app is down, never busy (8g fix round 3).
+		{name: "a stopped app with no copy answered busy", want: []string{"outage.none"},
+			rewrite: func(r *http.Request, reply []byte, down bool) []byte {
+				if down && r.URL.Path == "/subjects" {
+					return edit(reply, func(m map[string]any) {
+						if _, problem := m["code"]; problem {
+							m["code"], m["title"], m["type"] = "TARGET_BUSY", "Target busy", "urn:syndra:addon:error:TARGET_BUSY"
+						}
+					})
+				}
+				return reply
+			}},
 		{name: "an apply refused without Retry-After", mutate: true, want: []string{"outage.write"},
 			header: func(r *http.Request, h http.Header, down bool) {
 				if down && r.URL.Path == "/apply" {
@@ -374,17 +386,31 @@ func TestARestartThatRedatesTheCopyFails(t *testing.T) {
 	}
 }
 
-// outage.hang, watched both ways: the reference answers /health within its
-// bound while its app hangs, and passes; a /health that waits on the hanging
-// app past healthWithin, or says reachable while it hangs, fails; one that
+// outage.hang, watched both ways: the reference answers /health and its
+// read operations within their bounds while its app hangs, and passes; a
+// /health that waits on the hanging app past healthWithin, a read operation
+// that waits past readWithin, or a /health that says reachable while it
+// hangs, fails; one that
 // counts an answer from within recentReadWindow passes, because the kit
 // waits past it (hangSettle); without -hang-app under -require-outage it
 // fails as not checked.
 func TestOutageHangFailsAHealthThatWaitsOnTheApp(t *testing.T) {
+	// Short, so the read that waits past it costs the run 2 s, not 25.
+	was := readWithin
+	readWithin = 2 * time.Second
+	t.Cleanup(func() { readWithin = was }) // after the parallel subtests, unlike a defer
 	// hungFor is how long the app has been hanging, zero while it is not.
 	slow := func(r *http.Request, reply []byte, hungFor time.Duration) []byte {
 		if hungFor > 0 && r.URL.Path == "/health" {
 			time.Sleep(healthWithin)
+		}
+		return reply
+	}
+	// A read operation that waits on the hanging app past readWithin: what
+	// health.get did on the 8g staging rerun, so Syndra gave up on the add-on.
+	slowRead := func(r *http.Request, reply []byte, hungFor time.Duration) []byte {
+		if hungFor > 0 && r.URL.Path == "/operations/health.get" {
+			time.Sleep(readWithin)
 		}
 		return reply
 	}
@@ -402,6 +428,25 @@ func TestOutageHangFailsAHealthThatWaitsOnTheApp(t *testing.T) {
 		}
 		return reply
 	}
+	// A read with no copy answered busy: not an outage, and a no-copy code
+	// (TARGET_BUSY, 8g fix round 2, 22 Nov 2026).
+	busy := func(r *http.Request, reply []byte, hungFor time.Duration) []byte {
+		if hungFor > 0 && strings.HasPrefix(r.URL.Path, "/operations/") {
+			return edit(reply, func(m map[string]any) {
+				if _, problem := m["code"]; problem {
+					m["code"], m["title"], m["type"] = "TARGET_BUSY", "Target busy", "urn:syndra:addon:error:TARGET_BUSY"
+				}
+			})
+		}
+		return reply
+	}
+	// /health answering busy: a read or operation answer only (8g fix round 3).
+	busyHealth := func(r *http.Request, reply []byte, hungFor time.Duration) []byte {
+		if hungFor > 0 && r.URL.Path == "/health" {
+			return edit(reply, func(m map[string]any) { m["code"] = "TARGET_BUSY" })
+		}
+		return reply
+	}
 	for name, tc := range map[string]struct {
 		rewrite func(*http.Request, []byte, time.Duration) []byte
 		noHook  bool
@@ -409,8 +454,11 @@ func TestOutageHangFailsAHealthThatWaitsOnTheApp(t *testing.T) {
 	}{
 		"the reference":                     {want: "pass"},
 		"a health that waits on the app":    {rewrite: slow, want: "fail"},
+		"a read that waits on the app":      {rewrite: slowRead, want: "fail"},
 		"reachable while the app hangs":     {rewrite: says, want: "fail"},
 		"reachable on a recent answer":      {rewrite: recent, want: "pass"},
+		"a read with no copy answered busy": {rewrite: busy, want: "pass"},
+		"a health that answered busy":       {rewrite: busyHealth, want: "fail"},
 		"no -hang-app under require-outage": {noHook: true, want: "fail"},
 	} {
 		t.Run(name, func(t *testing.T) {

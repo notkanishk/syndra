@@ -112,8 +112,7 @@ func (d *deleteRecorder) Call(method string, _ int64, params any) (json.RawMessa
 	}
 	return envelope(`null`), nil
 }
-func (d *deleteRecorder) Ping() (string, error) { return "pong", nil }
-func (d *deleteRecorder) Close() error          { return nil }
+func (d *deleteRecorder) Close() error { return nil }
 
 // writesTo is every account write the session sent, by record id, with the elevated deletes.
 func writesTo(m *mutatingRPC, del *deleteRecorder) []string {
@@ -335,7 +334,7 @@ func TestEveryCallerResolvesOneIdentity(t *testing.T) {
 
 				// The views over a read (standing, statistics, adoption's check): exactly the account
 				// named is bound, the holder of a conflict never.
-				snap, err := s.readSubjects()
+				snap, err := s.readSubjects(t.Context())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -548,7 +547,7 @@ func TestTwoBindingsOnOneAccountGiveItToNeither(t *testing.T) {
 			t.Errorf("conflict %d: %+v", i, *cf.BindingConflict)
 		}
 	}
-	snap, err := s.readSubjects()
+	snap, err := s.readSubjects(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -893,7 +892,7 @@ func TestAdoptAnswersAnUnreadableBindingAsEveryOperationDoes(t *testing.T) {
 func TestALegacyReplyNeverShowsTheHolderOfAReusedNumber(t *testing.T) {
 	c := idCases[5] // out of range, bob's number held by eve
 	s, m := c.server(t)
-	snap, err := s.readSubjects()
+	snap, err := s.readSubjects(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -925,7 +924,7 @@ func TestStorageStatusReadsTheResolvedAccountsPlaces(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte_old", UID: 200001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
-	res, status, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
+	res, status, err := s.storageStatus(t.Context(), OperationRequest{Subject: "sub-1"})
 	if err != nil || status != 0 && status != http.StatusOK {
 		t.Fatalf("%d %v", status, err)
 	}

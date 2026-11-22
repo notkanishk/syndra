@@ -40,8 +40,7 @@ func (r *recordedRPC) Call(string, int64, any) (json.RawMessage, error) {
 	r.calls++
 	return json.RawMessage(r.response), nil
 }
-func (r *recordedRPC) Ping() (string, error) { return "pong", nil }
-func (r *recordedRPC) Close() error          { return nil }
+func (r *recordedRPC) Close() error { return nil }
 
 func recordedNAS(response string) *NAS {
 	n := newNAS(func() (rpc, error) { return &recordedRPC{response: response}, nil }, []string{"25.04"})
@@ -56,7 +55,7 @@ func TestAResultIsReadFromInsideTheEnvelope(t *testing.T) {
 	n := recordedNAS(recordedVersionResponse)
 	n.probed = false
 
-	v, err := n.SystemVersion()
+	v, err := n.SystemVersion(t.Context())
 	if err != nil {
 		t.Fatalf("a real response must decode: %v", err)
 	}
@@ -76,7 +75,7 @@ func TestAResultIsReadFromInsideTheEnvelope(t *testing.T) {
 func TestARefusalIsAFailureEvenWhenNoResultIsWanted(t *testing.T) {
 	n := recordedNAS(recordedRefusalResponse)
 
-	err := n.sendWrite("user.update", []any{1, map[string]any{"password": "x"}}, nil)
+	err := n.sendWrite(t.Context(), "user.update", []any{1, map[string]any{"password": "x"}}, nil)
 	if err == nil {
 		t.Fatal("a refused mutation must not be reported as applied")
 	}
@@ -91,7 +90,7 @@ func TestARefusalIsAFailureEvenWhenNoResultIsWanted(t *testing.T) {
 func TestTheTargetsOwnErrorTextNeverLeavesTheClient(t *testing.T) {
 	n := recordedNAS(recordedRefusalResponse)
 
-	err := n.sendWrite("user.update", []any{1, map[string]any{"password": "x"}}, nil)
+	err := n.sendWrite(t.Context(), "user.update", []any{1, map[string]any{"password": "x"}}, nil)
 	if err == nil {
 		t.Fatal("the call must fail")
 	}
@@ -110,7 +109,7 @@ func TestTheTargetsOwnErrorTextNeverLeavesTheClient(t *testing.T) {
 // the least optional thing to notice.
 func TestTheElevatedCallReadsItsRefusalToo(t *testing.T) {
 	c := &recordedRPC{response: recordedRefusalResponse}
-	if err := callOnce(c, "user.delete", []any{1}, nil); !errors.Is(err, ErrTargetRefused) {
+	if err := callOnce(t.Context(), c, "user.delete", []any{1}, nil); !errors.Is(err, ErrTargetRefused) {
 		t.Fatalf("want a refusal, got %v", err)
 	}
 }
@@ -137,7 +136,7 @@ func TestTheVersionIsReProbedOnANewConnection(t *testing.T) {
 	answering = true
 	at = at.Add(reconnectCooldown + time.Second)
 
-	if err := n.call("user.query", []any{}, nil); err != nil {
+	if err := n.call(t.Context(), "user.query", []any{}, nil); err != nil {
 		t.Fatalf("the call must succeed once the target answers: %v", err)
 	}
 	if ok, why := n.MajorSupported(); !ok {
@@ -156,7 +155,7 @@ func TestAFailedProbeIsRetriedOnACooldownRatherThanEveryCall(t *testing.T) {
 	n.now = func() time.Time { return at }
 
 	for range 5 {
-		_ = n.call("user.query", []any{}, nil)
+		_ = n.call(t.Context(), "user.query", []any{}, nil)
 	}
 	// Five calls, one probe attempt: the probe and the calls themselves.
 	if c.calls != 6 {
@@ -170,7 +169,7 @@ func TestAFailedProbeIsRetriedOnACooldownRatherThanEveryCall(t *testing.T) {
 	// becomes usable without a reconnect.
 	at = at.Add(probeCooldown + time.Second)
 	before := c.calls
-	_ = n.call("user.query", []any{}, nil)
+	_ = n.call(t.Context(), "user.query", []any{}, nil)
 	// Three: the idle-liveness probe, the retried version probe, and the call.
 	// The clock moved past `idleProbeAfter` to get here, so the session is by
 	// definition one that has been sitting unused — which is exactly when it
@@ -221,7 +220,7 @@ func TestARealVersionStringPassesTheSupportedGate(t *testing.T) {
 		return &recordedRPC{response: `{"jsonrpc":"2.0","id":1,"result":"TrueNAS-25.10.5"}`}, nil
 	}, []string{"25.04", "25.10", "26.04"})
 	n.probed = false
-	if _, err := n.SystemVersion(); err != nil {
+	if _, err := n.SystemVersion(t.Context()); err != nil {
 		t.Fatalf("version read: %v", err)
 	}
 	ok, note := n.MajorSupported()
@@ -267,8 +266,7 @@ func (r *idleDyingRPC) Call(method string, _ int64, _ any) (json.RawMessage, err
 		return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":null}`), nil
 	}
 }
-func (r *idleDyingRPC) Ping() (string, error) { return "pong", nil }
-func (r *idleDyingRPC) Close() error          { return nil }
+func (r *idleDyingRPC) Close() error { return nil }
 
 func TestAnIdleSessionIsProvenBeforeItIsUsed(t *testing.T) {
 	clock := time.Unix(1_700_000_000, 0).UTC()
@@ -280,7 +278,7 @@ func TestAnIdleSessionIsProvenBeforeItIsUsed(t *testing.T) {
 	n.now = func() time.Time { return clock }
 
 	var v string
-	if err := n.call("system.version", []any{}, &v); err != nil {
+	if err := n.call(t.Context(), "system.version", []any{}, &v); err != nil {
 		t.Fatalf("the first call must work: %v", err)
 	}
 
@@ -288,7 +286,7 @@ func TestAnIdleSessionIsProvenBeforeItIsUsed(t *testing.T) {
 	// a target page in, and the gap between two scheduled sweeps.
 	clock = clock.Add(5 * time.Minute)
 
-	if err := n.call("system.version", []any{}, &v); err != nil {
+	if err := n.call(t.Context(), "system.version", []any{}, &v); err != nil {
 		t.Fatalf("a target that is answering must not read as unreachable: %v", err)
 	}
 	if v != "25.10.5" {
@@ -315,7 +313,7 @@ func TestALiveSessionIsNotProbed(t *testing.T) {
 	var v string
 	for i := 0; i < 3; i++ {
 		clock = clock.Add(time.Second)
-		if err := n.call("system.version", []any{}, &v); err != nil {
+		if err := n.call(t.Context(), "system.version", []any{}, &v); err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}
 	}
@@ -337,8 +335,7 @@ func (r *proofDroppedRPC) Call(method string, _ int64, _ any) (json.RawMessage, 
 	}
 	return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":"pong"}`), nil
 }
-func (r *proofDroppedRPC) Ping() (string, error) { return "pong", nil }
-func (r *proofDroppedRPC) Close() error          { r.closed = true; return nil }
+func (r *proofDroppedRPC) Close() error { r.closed = true; return nil }
 
 // A session proven live while a concurrent failure dropped it is not handed
 // back: session() dials a fresh one rather than return the closed client.
@@ -352,11 +349,11 @@ func TestAProvenSessionDroppedMeanwhileIsNotReturned(t *testing.T) {
 	n = newNAS(func() (rpc, error) { c := dials[0]; dials = dials[1:]; return c, nil }, []string{"25.10"})
 	n.now = func() time.Time { return clock }
 
-	if _, err := n.session(); err != nil {
+	if _, err := n.session(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	clock = clock.Add(5 * time.Minute) // idle: the next session() proves it
-	got, err := n.session()
+	got, err := n.session(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

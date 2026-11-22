@@ -67,6 +67,8 @@ func ReadOf(o *Observation, why Why) ReadState {
 		switch s.Reason {
 		case StaleCooldown:
 			kept.Reason = ReasonCooldown
+		case ReasonBusy: // common/stale.json's busy, the same word
+			kept.Reason = ReasonBusy
 		case staleUnreachable:
 			kept.Reason = ReasonAppUnreachable
 		}

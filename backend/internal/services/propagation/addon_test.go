@@ -57,6 +57,10 @@ type addonHarness struct {
 func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarness {
 	t.Helper()
 	stubDrainDeps(t)
+	// No busy run carries over from another test (busySince is per process).
+	busySince.Lock()
+	clear(busySince.at)
+	busySince.Unlock()
 	h := &addonHarness{
 		reachable: true,
 		failed:    map[string]string{},
@@ -945,5 +949,87 @@ func TestACheckingHaltNamesTheLastMissAndNeverAnUnseenCause(t *testing.T) {
 		if got := haltReason(addons.HealthState{State: addons.StateChecking, LastMiss: tc.miss}); got != tc.want {
 			t.Errorf("checking after %q: halt %q, want %q", tc.miss, got, tc.want)
 		}
+	}
+}
+
+// busyResp is the add-on answering 503 TARGET_BUSY to an apply.
+func busyResp() addons.ApplyResponse {
+	r := addons.CallResponse{Outcome: addons.OutcomeUnreached, Status: 503, Code: "TARGET_BUSY", RetryAfter: 5}
+	return addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Code: r.Code, Why: addons.Unread(r)}
+}
+
+// A busy target is not an outage and not a failure: nothing went out, so the
+// row is deferred like an unsent one, no attempt spent, and its last_error
+// says busy, not unreachable (8g fix round 3).
+func TestABusyApplySpendsNoAttemptAndIsDeferred(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = busyResp()
+	var why string
+	t.Cleanup(swap(&deferRow, func(_ context.Context, id, w string, after time.Duration) error {
+		h.released, why = append(h.released, id), w
+		h.deferredFor = append(h.deferredFor, after)
+		return nil
+	}))
+	res, _ := DrainAddon(context.Background(), "truenas")
+	if h.attempts != 0 || len(h.requeued) != 0 || len(h.released) != 1 || res.Halted {
+		t.Fatalf("busy: attempts %d, requeued %v, deferred %v, %+v; want deferred, nothing spent", h.attempts, h.requeued, h.released, res)
+	}
+	if want := "TrueNAS was busy; nothing was sent. Syndra sends it again by itself."; why != want {
+		t.Fatalf("last_error %q, want %q", why, want)
+	}
+}
+
+// A target busy without a break for more than busyHaltAfter halts its pass
+// as busy, saying since when; under it, rows only defer; any other answer
+// clears the run (8g fix round 3).
+func TestABusyTargetHaltsAfterHalfAnHourAndClearsOnAnotherAnswer(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"), addonRow("o2"))
+	now := time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC)
+	t.Cleanup(swap(&busyClock, func() time.Time { return now }))
+	var why string
+	t.Cleanup(swap(&deferRow, func(_ context.Context, id, w string, _ time.Duration) error {
+		h.released, why = append(h.released, id), w
+		return nil
+	}))
+	h.resp = busyResp()
+	pass := func() DrainResult {
+		h.released = nil
+		res, err := DrainAddon(context.Background(), "truenas")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	if res := pass(); res.Halted || len(h.released) != 2 {
+		t.Fatalf("busy from now: want both deferred, no halt, got %+v, deferred %v", res, h.released)
+	}
+	start := now
+	now = now.Add(busyHaltAfter)
+	if res := pass(); res.Halted {
+		t.Fatalf("busy for exactly the limit: want no halt, got %+v", res)
+	}
+	now = now.Add(time.Second)
+	res := pass()
+	if !res.Halted || res.Reason != addons.ReasonBusy || res.BusySince == nil || !res.BusySince.Equal(start) || len(h.released) != 1 {
+		t.Fatalf("busy past the limit: want a busy halt since %v after one row, got %+v, deferred %v", start, res, h.released)
+	}
+	if !strings.HasPrefix(why, "TrueNAS has been busy since ") || !strings.HasSuffix(why, "; nothing was sent. Syndra keeps trying by itself.") {
+		t.Fatalf("halted last_error %q", why)
+	}
+	if h.attempts != 0 {
+		t.Fatalf("busy spent %d attempts", h.attempts)
+	}
+	if got := BusyHalted("truenas"); got == nil || !got.Equal(start) {
+		t.Fatalf("the target page must say busy since %v, got %v", start, got)
+	}
+	// One other answer ends the run; the next busy starts the half hour again.
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded}
+	pass()
+	if got := BusyHalted("truenas"); got != nil {
+		t.Fatalf("a normal answer must clear the target page's busy, got %v", got)
+	}
+	h.resp = busyResp()
+	if res := pass(); res.Halted {
+		t.Fatalf("a normal answer must clear the busy run, got %+v", res)
 	}
 }

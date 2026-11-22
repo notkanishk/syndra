@@ -944,6 +944,8 @@ func TestALifecycleRefusalIsQueuedAndLeavesTheTargetHealthy(t *testing.T) {
 			"the add-on declined before doing anything, so the row stays queued and resumes"},
 		{"a target the add-on cannot reach", http.StatusServiceUnavailable, "TARGET_UNREACHABLE", OutcomeUnreached, false, false,
 			"nothing was done and it is asked again; it is not a maintenance window"},
+		{"a busy target", http.StatusServiceUnavailable, "TARGET_BUSY", OutcomeUnreached, false, false,
+			"nothing was sent and it is asked again; a busy queue is not an outage"},
 		{"the target changed while it was read", http.StatusServiceUnavailable, "TARGET_CHANGED", OutcomeUnreached, false, false,
 			"nothing was judged or sent; it is asked again, never parked as possibly acted"},
 		{"an add-on that fell over", http.StatusServiceUnavailable, "APPLY_FAILED", OutcomeIndeterminate, false, false,

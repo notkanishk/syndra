@@ -55,6 +55,7 @@ func TestReadOfDatesOnlyAReading(t *testing.T) {
 		{"app down", &Observation{TakenAt: at, Stale: &Stale{Reason: "unreachable"}}, ReadKept, ReasonAppUnreachable, 0, true},
 		{"cooldown", &Observation{TakenAt: at, Stale: &Stale{Reason: StaleCooldown, RetryAfter: &retry}}, ReadKept, ReasonCooldown, 9, true},
 		{"cached", &Observation{TakenAt: at, Stale: &Stale{Reason: "cached"}}, ReadKept, ReasonCached, 0, true},
+		{"busy", &Observation{TakenAt: at, Stale: &Stale{Reason: "busy", RetryAfter: &retry}}, ReadKept, ReasonBusy, 9, true},
 	} {
 		s := ReadOf(tc.o, Why{})
 		if s.State != tc.state || s.Reason != tc.why || s.RetryAfter != tc.retryAfter || (s.TakenAt != nil) != tc.dated {

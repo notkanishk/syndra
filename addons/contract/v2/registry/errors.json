@@ -222,6 +222,14 @@
       "retry": "backoff",
       "meaning": "The add-on's local store could not be read."
     },
+    "TARGET_BUSY": {
+      "title": "Target busy",
+      "statuses": [
+        503
+      ],
+      "retry": "retry_after",
+      "meaning": "The target is busy, never down: the add-on's line to it stayed taken for the request's time, too little of that time was left to connect or ask in full, or the target answered that it is alive but did not answer this call in time. A read has nothing current to serve and no copy; a write did nothing, so Syndra keeps it queued. Retry-After is present. Not an outage: Syndra opens no breaker for it, and a queued change waits without spending a try. A read or operation answer only: /health never answers TARGET_BUSY, and the monitor counts every non-OK /health answer as a miss. Never for a write that may have reached the target, which is APPLY_FAILED or OPERATION_FAILED with a 5xx."
+    },
     "TARGET_CHANGED": {
       "title": "Target changed",
       "statuses": [

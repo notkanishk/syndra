@@ -106,8 +106,7 @@ func (h hungRPC) Call(string, int64, any) (json.RawMessage, error) {
 	<-h.release
 	return nil, errors.New("read tcp: i/o timeout")
 }
-func (h hungRPC) Ping() (string, error) { _, err := h.Call("core.ping", 0, nil); return "", err }
-func (hungRPC) Close() error            { return nil }
+func (hungRPC) Close() error { return nil }
 
 // healthInTime is decodeHealth with its own deadline: a /health that hangs
 // fails here, with an assertion, rather than at the go test timeout.
@@ -178,8 +177,8 @@ func TestHealthCountsARecentAnswerWhileTheSessionIsBusy(t *testing.T) {
 			hung := hungRPC{make(chan struct{})}
 			s.nas = newNAS(func() (rpc, error) { return hung, nil }, []string{"25.04"})
 			s.nas.client, s.nas.probed, s.nas.lastRead = hung, true, time.Now().Add(-tc.age)
-			s.nas.callMu.Lock() // a long call in flight
-			t.Cleanup(func() { s.nas.callMu.Unlock(); close(hung.release) })
+			s.nas.line <- struct{}{} // a long call in flight
+			t.Cleanup(func() { s.nas.leave(); close(hung.release) })
 			if h := healthInTime(t, s); h.Reachable != tc.want {
 				t.Errorf("reachable %v with the session busy and the last answer %v old; want %v", h.Reachable, tc.age, tc.want)
 			}

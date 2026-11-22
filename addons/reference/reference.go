@@ -145,8 +145,8 @@ var OptionalFeatures = []string{"freshness", "calls", "stats"}
 func (a *Addon) serves(feature string) bool { return slices.Contains(a.cfg.Features, feature) }
 
 // down says whether the app cannot be reached now (Config.Down).
-// ponytail: /values and the member operations still answer while it is down;
-// add the check there when an app's values or operations need it.
+// ponytail: /values and the write operations still answer while it is down;
+// add the check there when an app's values or writes need it.
 func (a *Addon) down() bool { return a.cfg.Down != nil && a.cfg.Down() || a.hung() }
 
 // hung says the app answers nothing now (Config.Hang).
@@ -765,6 +765,11 @@ func (a *Addon) operation(r *http.Request, body []byte) reply {
 	}
 	if req.Preview != nil && !checkout {
 		return problem(400, "BAD_REQUEST", "Only a physical operation has a preview.", nil)
+	}
+	if (name == "health.get" || name == "holdings.list") && a.down() {
+		// A read of the app with the app down or hanging: nothing to serve,
+		// at once (the kit's outage.hang).
+		return unreachable()
 	}
 	switch name {
 	case "item.checkout":

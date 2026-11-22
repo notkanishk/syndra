@@ -136,7 +136,7 @@ func TestAnUnknownOwnAccountIsAskedForAgain(t *testing.T) {
 
 	var rows []json.RawMessage
 	for i := 0; i < 2 && func() bool { _, _, ok := s.nas.Self(); return !ok }(); i++ {
-		_ = s.nas.call("user.query", []any{[]any{}, map[string]any{}}, &rows)
+		_ = s.nas.call(t.Context(), "user.query", []any{[]any{}, map[string]any{}}, &rows)
 	}
 	if name, uid, ok := s.nas.Self(); !ok || name != "syndra" || uid != 3001 {
 		t.Fatalf("the own account must be read on a later call, got %q %d %t", name, uid, ok)

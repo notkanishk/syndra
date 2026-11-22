@@ -245,7 +245,7 @@ func (f *fresher) fallback(key string, err error) (any, Observed, error) {
 	if !kept {
 		return nil, Observed{}, err
 	}
-	return k.val, Observed{TakenAt: rfc3339(k.at), Stale: unreachableSince(k.at)}, nil
+	return k.val, Observed{TakenAt: rfc3339(k.at), Stale: staleSince(k.at, err)}, nil
 }
 
 // refusal is a failure that is a decision about the request (an operation's
@@ -319,6 +319,32 @@ func writeCooldown(w http.ResponseWriter, err error) bool {
 	return true
 }
 
+// busyRetryAfter is a busy answer's wait, in seconds: one short call
+// (statsCallTarget) ahead in line.
+const busyRetryAfter = 5
+
+// writeBusy answers a busy NAS (ErrBusy): 503 TARGET_BUSY with Retry-After,
+// never an outage. Only for a read, or a write that sent nothing: a write
+// that went out and ran out its time may have acted (APPLY_FAILED). False
+// when err is not one.
+func writeBusy(w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, ErrBusy) {
+		return false
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(busyRetryAfter))
+	writeError(w, http.StatusServiceUnavailable, CodeTargetBusy,
+		"The NAS is busy right now, so this was not read or changed. Try again in "+strconv.Itoa(busyRetryAfter)+" s.", nil)
+	return true
+}
+
+// writeNotSent answers a write that sent nothing: TARGET_BUSY when the NAS
+// was busy, TARGET_UNREACHABLE with detail otherwise.
+func writeNotSent(w http.ResponseWriter, err error, detail string) {
+	if !writeBusy(w, err) {
+		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable, detail, nil)
+	}
+}
+
 // writeNotRead answers a read the NAS failed with nothing kept to serve
 // (guide, "Nothing to serve is an error, not an empty list"; design §13.3):
 // 503 TARGET_UNREACHABLE when no request reached it, NO_CURRENT_READ for any
@@ -326,6 +352,9 @@ func writeCooldown(w http.ResponseWriter, err error) bool {
 // own codes and are answered first: the cooldown (writeCooldown) and the
 // add-on's own store (STORE_UNREADABLE).
 func writeNotRead(w http.ResponseWriter, err error) {
+	if writeBusy(w, err) {
+		return
+	}
 	if errors.Is(err, ErrNotSent) {
 		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
 			"The NAS could not be reached, and there is no earlier read to answer from.", nil)

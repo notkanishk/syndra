@@ -242,8 +242,7 @@ func orEmptyList(s string) string {
 	}
 	return s
 }
-func (f *fakeRPC) Ping() (string, error) { return "pong", f.err }
-func (f *fakeRPC) Close() error          { return nil }
+func (f *fakeRPC) Close() error { return nil }
 
 func testServer(t *testing.T, fake *fakeRPC) *server {
 	t.Helper()
@@ -696,7 +695,7 @@ func TestTheOperatingSystemsOwnAccountsAreNotReported(t *testing.T) {
 	}
 	s := testServer(t, rpc)
 
-	snap, err := s.readSubjects()
+	snap, err := s.readSubjects(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -718,7 +717,7 @@ func TestASystemUIDIsExcludedEvenWithoutTheBuiltinFlag(t *testing.T) {
 	}
 	s := testServer(t, rpc)
 
-	snap, err := s.readSubjects()
+	snap, err := s.readSubjects(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -736,7 +735,7 @@ func TestRootCannotBeAdopted(t *testing.T) {
 	}
 	s := testServer(t, rpc)
 
-	_, status, err := s.adoptAccount(OperationRequest{
+	_, status, err := s.adoptAccount(t.Context(), OperationRequest{
 		Operation: "account.adopt", Subject: "u1", Actor: "op1", CallID: "c1",
 		Params: map[string]any{"username": "root"},
 	})
@@ -762,7 +761,7 @@ func TestTruncationIsDecidedBeforeSystemAccountsAreDropped(t *testing.T) {
 	rpc := &fakeRPC{users: "[" + strings.Join(rows, ",") + "]", groups: fixtureGroups}
 	s := testServer(t, rpc)
 
-	snap, err := s.readSubjects()
+	snap, err := s.readSubjects(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

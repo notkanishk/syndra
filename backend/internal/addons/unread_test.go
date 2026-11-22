@@ -45,6 +45,7 @@ func TestUnreadNamesWhoIsDownAndWhy(t *testing.T) {
 		{"TARGET_UNREADABLE", CallResponse{Outcome: OutcomeIndeterminate, Status: 502, Code: codeTargetUnreadable, Body: problem(codeTargetUnreadable)}, ReasonAppUnreachable, "", true},
 		{"STORE_UNREADABLE", CallResponse{Outcome: OutcomeIndeterminate, Status: 500, Code: CodeStoreUnreadable, Body: problem(CodeStoreUnreadable)}, ReasonReadRefused, "", true},
 		{"cooldown", CallResponse{Outcome: OutcomeUnreached, Status: 429, Code: codeFreshReadCooldown, RetryAfter: 9}, ReasonCooldown, "", false},
+		{"TARGET_BUSY", CallResponse{Outcome: OutcomeUnreached, Status: 503, Code: codeTargetBusy, Body: problem(codeTargetBusy), RetryAfter: 5}, ReasonBusy, "", true},
 		{"shape refusal", CallResponse{Outcome: OutcomeUnreached, Status: 400, ShapeRefusal: true}, ReasonAddonOutdated, "", false},
 		{"feature not declared", CallResponse{Outcome: OutcomeUnreached, Err: ErrFeatureNotDeclared}, ReasonAddonOutdated, "", false},
 		{"Syndra's own refusal", CallResponse{Outcome: OutcomeUnreached, Err: ErrNoCallRecord}, ReasonReadRefused, "", false},
@@ -286,6 +287,31 @@ func TestTargetChangedNeverOpensTheBreaker(t *testing.T) {
 	}
 	if a.CircuitOpen() {
 		t.Error("TARGET_CHANGED answers opened the breaker")
+	}
+}
+
+// TARGET_BUSY is the add-on's queue to its app, or the app, busy: never an
+// outage, so it never opens the breaker (8g fix round 2, 22 Nov 2026).
+func TestTargetBusyNeverOpensTheBreaker(t *testing.T) {
+	withBreaker(t, 3, breakerCooldown)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Retry-After", "5")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = fmt.Fprintf(w, `{"code":%q,"detail":"The NAS is busy right now."}`, codeTargetBusy)
+	}))
+	t.Cleanup(srv.Close)
+	signedAddon(t, srv.URL, "a-busy-secret")
+	a, _ := Get("truenas")
+	var last CallResponse
+	for range breakerThreshold + 2 {
+		last, _ = a.send(context.Background(), sendSpec{Method: http.MethodGet, Path: "/subjects"})
+	}
+	if a.CircuitOpen() {
+		t.Error("TARGET_BUSY answers opened the breaker")
+	}
+	if w := Unread(last); w.Reason != ReasonBusy || w.Unreachable() || w.RetryAfter != 5 || last.Outcome != OutcomeUnreached {
+		t.Errorf("TARGET_BUSY read as %+v, outcome %s; want busy, not an outage, 5 s, unreached", w, last.Outcome)
 	}
 }
 

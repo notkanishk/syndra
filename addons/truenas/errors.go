@@ -39,6 +39,7 @@ const (
 	CodeSettingNotSaved          = "SETTING_NOT_SAVED"
 	CodeSettingsUnreadable       = "SETTINGS_UNREADABLE"
 	CodeStoreUnreadable          = "STORE_UNREADABLE"
+	CodeTargetBusy               = "TARGET_BUSY"
 	CodeTargetChanged            = "TARGET_CHANGED"
 	CodeTargetUnreachable        = "TARGET_UNREACHABLE"
 	CodeTargetUnreadable         = "TARGET_UNREADABLE"
@@ -80,6 +81,7 @@ var problems = map[string]problemKind{
 	CodeSettingNotSaved:          {"Setting not saved", "backoff"},
 	CodeSettingsUnreadable:       {"Settings unreadable", "backoff"},
 	CodeStoreUnreadable:          {"Store unreadable", "backoff"},
+	CodeTargetBusy:               {"Target busy", "retry_after"},
 	CodeTargetChanged:            {"Target changed", "retry_after"},
 	CodeTargetUnreachable:        {"Target unreachable", "retry_after"},
 	CodeTargetUnreadable:         {"Target unreadable", "backoff"},

@@ -587,7 +587,7 @@ func problemDetail(body []byte) string {
 //     (design §11). A plain BAD_REQUEST — a missing call_id or subject — stays
 //     rejected, or a malformed row would requeue for ever.
 //   - CALL_IN_PROGRESS: the same call is executing now; this copy did nothing.
-//   - TARGET_UNREACHABLE, TARGET_CHANGED, 429: it did not act and expects to be
+//   - TARGET_UNREACHABLE, TARGET_BUSY, TARGET_CHANGED, 429: it did not act and expects to be
 //     asked again (TARGET_CHANGED: the target changed while it was read, so
 //     nothing was judged or sent).
 //   - 408, 5xx: it may have acted. A 500 raised after a partial mutation looks
@@ -603,7 +603,7 @@ func classifyStatus(status int, code string) (outcome Outcome, lifecycle, shape 
 		return OutcomeUnreached, true, false
 	case code == codeContractVersionMismatch || code == codeUnknownRequestField:
 		return OutcomeUnreached, false, true
-	case code == codeCallInProgress || code == codeTargetUnreachable || code == CodeTargetChanged || status == http.StatusTooManyRequests:
+	case code == codeCallInProgress || code == codeTargetUnreachable || code == codeTargetBusy || code == CodeTargetChanged || status == http.StatusTooManyRequests:
 		return OutcomeUnreached, false, false
 	case status == http.StatusRequestTimeout || status >= 500:
 		return OutcomeIndeterminate, false, false
@@ -730,8 +730,9 @@ func (b *breaker) record(now time.Time, resp CallResponse) {
 	//
 	// TARGET_CHANGED is the same again: the add-on read its app and the app
 	// moved under it. The add-on is working; counted, a busy app would take the
-	// target away from everybody.
-	if resp.LifecycleRefusal || resp.Code == codeFreshReadCooldown || resp.Code == CodeTargetChanged {
+	// target away from everybody. So is TARGET_BUSY: a busy queue or app is
+	// never an outage.
+	if resp.LifecycleRefusal || resp.Code == codeFreshReadCooldown || resp.Code == CodeTargetChanged || resp.Code == codeTargetBusy {
 		return
 	}
 	b.failures++
