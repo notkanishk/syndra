@@ -287,7 +287,9 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 			// empty enumerable list: the backend fails open on a read it could
 			// not make, and an empty list would make it fail closed on every
 			// mapping while the target is down.
-			writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's groups could not be read.", nil)
+			if !writeBusy(w, err) {
+				writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's groups could not be read.", nil)
+			}
 			return
 		}
 		out := ValuesResponse{Field: field, Values: []string{}, Enumerable: true}

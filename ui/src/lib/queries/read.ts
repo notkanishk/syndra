@@ -52,6 +52,7 @@ export const PENDING: Read<never> = { state: "pending" };
 export const REASON = {
   cached: "cached",
   cooldown: "cooldown",
+  busy: "busy",
   addonUnreachable: "addon_unreachable",
   appUnreachable: "app_unreachable",
   readRefused: "read_refused",

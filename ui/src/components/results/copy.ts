@@ -91,6 +91,8 @@ export function whyLine(why: Why, system: string, who: Reader, product = system)
   if (why.message) return why.message;
   const { reason, cause, detail, retryAfter } = why;
   if (reason === REASON.cooldown) return `${system} was read moments ago. Read it again in ${Math.max(1, retryAfter ?? 1)} s.`;
+  // Not an outage: the add-on's queue or the app was busy (TARGET_BUSY). A member reads the system's name.
+  if (reason === REASON.busy) return `${who.audience === "member" ? system : product} is busy right now. Try again in ${Math.max(1, retryAfter ?? 1)} s.`;
   if (who.audience === "member") {
     return reason === REASON.addonUnreachable || reason === REASON.appUnreachable
       ? `${system} can't be read right now. ${NOTHING_TO_DO}`

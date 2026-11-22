@@ -169,8 +169,8 @@ func (s *server) operateNow(ctx context.Context, w http.ResponseWriter, name str
 	case errors.Is(err, ErrNotSent) && !readOperation(name):
 		// A write that never left this add-on: nothing happened, the same
 		// answer an apply gives (handleApply).
-		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
-			"The NAS could not be reached, so nothing was sent to it.", nil)
+		writeNotSent(w, err,
+			"The NAS could not be reached, so nothing was sent to it.")
 		return
 	case errors.Is(err, ErrTargetUnreachable) && readOperation(name):
 		// A read with nothing to serve: the answer /subjects gives (§4).
@@ -274,7 +274,7 @@ func opCaller(name string, req OperationRequest) caller {
 func failedWrite(err error, what string) error {
 	switch {
 	case errors.Is(err, ErrNotSent):
-		return ErrNotSent
+		return keepBusy(err, ErrNotSent)
 	case errors.Is(err, errNotLogged):
 		return errNotLogged
 	case errors.Is(err, ErrTargetRefused), errors.Is(err, ErrRateLimited):

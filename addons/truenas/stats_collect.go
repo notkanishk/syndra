@@ -45,10 +45,25 @@ import (
 
 var (
 	// statsAuditPage and statsAuditPages bound what one run asks of the
-	// NAS's audit log: 50 pages of 1000 rows. Variables only so a test can
-	// make a page small.
-	statsAuditPage  = 1000
-	statsAuditPages = 50
+	// NAS's audit log: pages of statsAuditPage rows, 50 000 rows a run.
+	// A page is what a busy NAS answers within statsCallTarget, so no one
+	// collector call holds the session long (8g fix round 2, 22 Nov 2026).
+	// Variables only so a test can make a page small.
+	statsAuditPage  = int(statsCallTarget/time.Second) * statsAuditRowsPerSecond
+	statsAuditPages = 50_000 / statsAuditPage
+)
+
+const (
+	// statsCallTarget is how long one collector call should take on a busy
+	// NAS, well under recentReadCounts (10 s). The session's calls go one at
+	// a time, so a /health ping queued behind a page waits at most one, and
+	// each page's answer keeps the last read fresh: /health reads reachable
+	// while the NAS is busy. collectCallTimeout stays only as the ceiling.
+	statsCallTarget = 5 * time.Second
+	// statsAuditRowsPerSecond is the slowest rate a busy NAS is taken to page
+	// its SMB audit log at. ponytail: an assumption, not a measurement; read
+	// one page's time on staging (read-only) and set it from that.
+	statsAuditRowsPerSecond = 40
 )
 
 // collectStats runs the collector now and then every `every` until ctx ends.

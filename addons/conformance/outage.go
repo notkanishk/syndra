@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -97,8 +98,8 @@ func (k *kit) appHang() {
 		case ex.status == http.StatusUnprocessableEntity && ex.code() == "OPERATION_FAILED" && *k.c.operations[id].Subject:
 			// No account for the kit's subject: answered about the request, in time (results).
 		default:
-			c.expect(ex.status == http.StatusServiceUnavailable && (ex.code() == "TARGET_UNREACHABLE" || ex.code() == "NO_CURRENT_READ"),
-				"%s with the app hanging answered %d %s; with no copy, want 503 TARGET_UNREACHABLE or NO_CURRENT_READ", id, ex.status, ex.code())
+			c.expect(ex.status == http.StatusServiceUnavailable && slices.Contains(noCopy, ex.code()),
+				"%s with the app hanging answered %d %s; with no copy, want 503 %s", id, ex.status, ex.code(), strings.Join(noCopy, ", "))
 		}
 	}
 }
@@ -255,8 +256,8 @@ func (k *kit) outageRead(kept, none *check, ex *exchange, copyAt string, fresh b
 			"%s with the app stopped answered taken_at %s; the copy was taken at %s", ex, str(doc, "taken_at"), copyAt)
 		return
 	}
-	if !none.expect(ex.err == nil && ex.status == http.StatusServiceUnavailable && (ex.code() == "TARGET_UNREACHABLE" || ex.code() == "NO_CURRENT_READ"),
-		"%s with the app stopped answered %d %s (%v); with no copy, want 503 TARGET_UNREACHABLE or NO_CURRENT_READ", ex, ex.status, ex.code(), ex.err) {
+	if !none.expect(ex.err == nil && ex.status == http.StatusServiceUnavailable && slices.Contains(noCopy, ex.code()),
+		"%s with the app stopped answered %d %s (%v); with no copy, want 503 %s", ex, ex.status, ex.code(), ex.err, strings.Join(noCopy, ", ")) {
 		return
 	}
 	var extra []string
@@ -322,7 +323,12 @@ func (k *kit) addonRestart() {
 
 // nothingToServe are the codes of a read that has no value to answer: a reply
 // carrying one carries no figure, list or date.
-var nothingToServe = []string{"TARGET_UNREACHABLE", "NO_CURRENT_READ", "TARGET_UNREADABLE", "FRESH_READ_COOLDOWN", "STORE_UNREADABLE"}
+var nothingToServe = []string{"TARGET_UNREACHABLE", "NO_CURRENT_READ", "TARGET_BUSY", "TARGET_UNREADABLE", "FRESH_READ_COOLDOWN", "STORE_UNREADABLE"}
+
+// noCopy are the codes of a read with no copy while the app is down or
+// hangs: nothing reached it, nothing is held, or it was busy (TARGET_BUSY,
+// not an outage, added 22 Nov 2026 from the 8g staging run).
+var noCopy = []string{"TARGET_UNREACHABLE", "NO_CURRENT_READ", "TARGET_BUSY"}
 
 // noFalseZero walks one reply: with nothing to serve it carries no 0, empty
 // list, "" or zero date; no reply carries a zero taken_at, or current false

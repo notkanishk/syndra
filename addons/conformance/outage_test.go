@@ -416,6 +416,18 @@ func TestOutageHangFailsAHealthThatWaitsOnTheApp(t *testing.T) {
 		}
 		return reply
 	}
+	// A read with no copy answered busy: not an outage, and a no-copy code
+	// (TARGET_BUSY, 8g fix round 2, 22 Nov 2026).
+	busy := func(r *http.Request, reply []byte, hungFor time.Duration) []byte {
+		if hungFor > 0 && strings.HasPrefix(r.URL.Path, "/operations/") {
+			return edit(reply, func(m map[string]any) {
+				if _, problem := m["code"]; problem {
+					m["code"], m["title"], m["type"] = "TARGET_BUSY", "Target busy", "urn:syndra:addon:error:TARGET_BUSY"
+				}
+			})
+		}
+		return reply
+	}
 	for name, tc := range map[string]struct {
 		rewrite func(*http.Request, []byte, time.Duration) []byte
 		noHook  bool
@@ -426,6 +438,7 @@ func TestOutageHangFailsAHealthThatWaitsOnTheApp(t *testing.T) {
 		"a read that waits on the app":      {rewrite: slowRead, want: "fail"},
 		"reachable while the app hangs":     {rewrite: says, want: "fail"},
 		"reachable on a recent answer":      {rewrite: recent, want: "pass"},
+		"a read with no copy answered busy": {rewrite: busy, want: "pass"},
 		"no -hang-app under require-outage": {noHook: true, want: "fail"},
 	} {
 		t.Run(name, func(t *testing.T) {

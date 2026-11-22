@@ -388,7 +388,8 @@ type SubjectsResponse struct {
 }
 
 // Stale is why a read reply is not current (common/stale.json): `unreachable`
-// when the live read failed and the last one answers, `cached` when /reach
+// when the live read failed and the last one answers, `busy` when it failed
+// because the NAS was busy (staleSince), `cached` when /reach
 // serves its five-minute cache on purpose (a deliberate mirror answer is never
 // current, design §4).
 type Stale struct {
@@ -397,7 +398,14 @@ type Stale struct {
 	Note       string `json:"note,omitempty"`
 }
 
-func unreachableSince(at time.Time) *Stale {
+// staleSince is the last read, at, served because the live read failed
+// with err: `busy` when the NAS was busy (ErrBusy), never an outage, else
+// `unreachable`.
+func staleSince(at time.Time, err error) *Stale {
+	if errors.Is(err, ErrBusy) {
+		return &Stale{Reason: "busy", RetryAfter: busyRetryAfter,
+			Note: "The NAS is busy right now; this is the last read, from " + at.UTC().Format(time.RFC3339) + "."}
+	}
 	return &Stale{Reason: "unreachable",
 		Note: "The NAS could not be read just now; this is the last read, from " + at.UTC().Format(time.RFC3339) + "."}
 }
@@ -587,7 +595,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 	}
 	writeJSON(w, http.StatusOK, SubjectsResponse{
 		Subjects: read.views, Conflicts: read.conflicts, Truncated: read.truncated,
-		Observed: Observed{TakenAt: rfc3339(cached.TakenAt), Stale: unreachableSince(cached.TakenAt)},
+		Observed: Observed{TakenAt: rfc3339(cached.TakenAt), Stale: staleSince(cached.TakenAt, err)},
 	})
 }
 

@@ -3,6 +3,23 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## A busy add-on queue or app is not an outage (slice 8g, 22 Nov 2026)
+
+Added from the 8g staging run. `TARGET_BUSY` (503, `retry_after`,
+`Retry-After` present) is a request that gave up waiting for its turn on the
+add-on's connection to the app, had too little of its time left to connect
+or ask in full (so did not try), or ran out on an app that still answers its
+ping: a read with nothing current and no copy, or a write that sent nothing.
+Syndra reads it as `busy`, never an outage: no breaker opens, no monitor
+miss is counted, the change stays queued. A write that went out and ran out
+its time may have acted and stays a 5xx. `stale.reason` gains `busy`: a kept
+copy served because the app was busy. The kit's `outage.hang`, `outage.none`
+and `no-false-zero` take `TARGET_BUSY` as a no-copy code. The guide asks
+an add-on to keep every call to its app short, background work included,
+so a `/health` queued behind one waits one short call. Schema:
+`common/stale.json` (`reason`). Registry: `errors.json` (`TARGET_BUSY`). No
+fixture changed.
+
 ## /health answers in time when the app hangs (slice 8g, 22 Nov 2026)
 
 `/health` MUST answer within 3 s while the app hangs (answers nothing,

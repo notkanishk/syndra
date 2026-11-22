@@ -480,7 +480,8 @@ func (r SubjectsResult) Halt() (reason, detail string, halted bool) {
 	switch why.Reason {
 	case ReasonReadRefused:
 		return db.UnreconciledReadRefused, r.Detail, true
-	case ReasonCooldown:
+	case ReasonCooldown, ReasonBusy:
+		// Busy is a wait, as a cooldown is: read_stale, never an outage.
 		return db.UnreconciledStaleRead, "", true
 	case ReasonAddonOutdated:
 		return db.UnreconciledAddonOutdated, "", true

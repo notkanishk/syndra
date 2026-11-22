@@ -530,10 +530,10 @@ func lookupRefusal(err error) error {
 		return errTornRead
 	case errors.Is(err, ErrNotSent):
 		// Nothing was asked, so nothing was done: kept, so the reply says so.
-		return ErrNotSent
+		return keepBusy(err, ErrNotSent)
 	case errors.Is(err, ErrTargetUnreachable):
-		// Asked, and no answer came: the NAS is down, never the account gone.
-		return ErrTargetUnreachable
+		// Asked, and no answer came: the NAS is down or busy, never the account gone.
+		return keepBusy(err, ErrTargetUnreachable)
 	case errors.Is(err, errAmbiguousAccount):
 		detail, next := ambiguityWords()
 		return errors.New(detail + " " + next)

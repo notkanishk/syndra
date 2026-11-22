@@ -121,6 +121,14 @@ var (
 	// ErrTargetUnreachable alone, because by then the request may have been
 	// read and acted on. Only this one lets a write answer TARGET_UNREACHABLE.
 	ErrNotSent = fmt.Errorf("%w: nothing was sent", ErrTargetUnreachable)
+	// ErrBusy is a NAS that is busy, never an outage: this add-on's one line
+	// to it stayed taken for the request's whole time, too little of the
+	// request's time was left to dial or ping in full, or a call ran out its
+	// time on a session that still answers core.ping. Wrapped with ErrNotSent
+	// when nothing was sent; alone (with ErrTargetUnreachable) when a call went
+	// out, which a write still answers as "may have acted". Answered
+	// TARGET_BUSY (writeBusy). A busy NAS is not an outage; only silence is.
+	ErrBusy = errors.New("the NAS is busy")
 	// ErrNoSuchPath is a refusal whose errname is ENOENT: the path asked about
 	// does not exist. Still a refusal (errors.Is ErrTargetRefused), told apart
 	// because "this folder is free" is a decision a home folder rests on.
@@ -224,10 +232,14 @@ func withCallLimit(ctx context.Context, d time.Duration) context.Context {
 }
 
 // seconds is limit, cut to what is left of ctx's deadline, in the whole
-// seconds the client's Call takes. Under 1 there is no time to ask.
+// seconds the client's Call takes. Under 1 there is no time to ask, and a
+// context already ended has none either.
 // ponytail: the client's timeout is whole seconds and it takes no context, so
 // a call cannot end mid-second or be cancelled, only not begun.
 func seconds(ctx context.Context, limit time.Duration) int64 {
+	if ctx.Err() != nil {
+		return 0
+	}
 	if d, ok := ctx.Deadline(); ok {
 		limit = min(limit, time.Until(d))
 	}
@@ -242,7 +254,7 @@ func (n *NAS) lineUp(ctx context.Context) error {
 	case n.line <- struct{}{}:
 		return nil
 	case <-ctx.Done():
-		return fmt.Errorf("%w: the session stayed busy for the request's whole time", ErrNotSent)
+		return fmt.Errorf("%w: %w: the session stayed busy for the request's whole time", ErrNotSent, ErrBusy)
 	}
 }
 
@@ -265,7 +277,7 @@ func (n *NAS) session(ctx context.Context) (rpc, error) {
 		case <-ch:
 		case <-ctx.Done():
 			n.mu.Lock()
-			return nil, fmt.Errorf("%w: no session within the request's time", ErrNotSent)
+			return nil, fmt.Errorf("%w: %w: no session within the request's time", ErrNotSent, ErrBusy)
 		}
 		n.mu.Lock()
 	}
@@ -303,15 +315,20 @@ func (n *NAS) session(ctx context.Context) (rpc, error) {
 	if since := n.now().Sub(n.lastTry); since < n.floor {
 		return nil, fmt.Errorf("%w: waiting out the reconnect cooldown", ErrNotSent)
 	}
-	if d, ok := ctx.Deadline(); ok && !time.Now().Before(d) {
-		return nil, fmt.Errorf("%w: no time left to connect", ErrNotSent)
+	if d, ok := ctx.Deadline(); ok && time.Until(d) < n.dialWithin {
+		// Too little of the request's time is left for a dial in full: not
+		// tried, so nothing is counted and the floor is not armed. A dial cut
+		// short would fail on our clock, not the NAS's, and read as an outage.
+		return nil, fmt.Errorf("%w: %w: too little time left to connect", ErrNotSent, ErrBusy)
 	}
-	n.lastTry = n.now()
 
 	var c rpc
 	var err error
 	n.offLock(func() { c, err = dialBounded(ctx, n.dial, n.dialWithin) })
 	if err != nil {
+		// Only a dial that really failed, within its full bound or on a
+		// network error, arms the floor.
+		n.lastTry = n.now()
 		n.recordFailureLocked(err)
 		return nil, fmt.Errorf("%w: %v", ErrNotSent, err)
 	}
@@ -392,18 +409,23 @@ func (n *NAS) proven(ctx context.Context, c rpc) (bool, error) {
 	defer n.leave()
 	asked, answered := n.ping(ctx, c)
 	if !asked {
-		return false, fmt.Errorf("%w: no time left to prove the session", ErrNotSent)
+		// Not asked, so nothing learned: the session is kept, and nothing is lost.
+		return false, fmt.Errorf("%w: %w: too little time left to prove the session", ErrNotSent, ErrBusy)
 	}
 	return answered, nil
 }
 
-// ping asks c for core.ping within the ping bound and what is left of ctx;
-// asked is false when no time was left to. The caller holds the line.
+// ping asks c for core.ping within the ping bound; asked is false when less
+// than the whole bound is left of ctx, or ctx has ended. A ping cut short
+// would fail on our clock and read as silence. The caller holds the line.
 //
 // Any answer at all counts, including a refusal. What is being established is
 // that the socket is still there, and a target that can refuse a call is a
 // target that received one.
 func (n *NAS) ping(ctx context.Context, c rpc) (asked, answered bool) {
+	if d, ok := ctx.Deadline(); ok && time.Until(d) < n.pingWithin {
+		return false, false
+	}
 	secs := seconds(ctx, n.pingWithin)
 	if secs < 1 {
 		return false, false
@@ -649,7 +671,7 @@ func (n *NAS) roundTrip(ctx context.Context, method string, params any, out any)
 //
 // A call that got no answer within its bound is asked about once: the same
 // session gets a core.ping. An answer is a busy NAS, kept, and arms nothing
-// (errBusy); none is silence, and only silence arms the reconnect floor
+// (ErrBusy); none is silence, and only silence arms the reconnect floor
 // (lost). A busy NAS is not an outage; only silence is.
 func (n *NAS) invoke(ctx context.Context, c rpc, method string, params any) (json.RawMessage, error) {
 	if err := n.lineUp(ctx); err != nil {
@@ -662,7 +684,7 @@ func (n *NAS) invoke(ctx context.Context, c rpc, method string, params any) (jso
 	}
 	secs := seconds(ctx, limit)
 	if secs < 1 {
-		return nil, fmt.Errorf("%w: no time left to ask %s", ErrNotSent, method)
+		return nil, fmt.Errorf("%w: %w: no time left to ask %s", ErrNotSent, ErrBusy, method)
 	}
 	began := time.Now()
 	raw, err := c.Call(method, secs, params)
@@ -672,7 +694,7 @@ func (n *NAS) invoke(ctx context.Context, c rpc, method string, params any) (jso
 	if method != "core.ping" {
 		switch asked, answered := n.ping(ctx, c); {
 		case answered:
-			return nil, fmt.Errorf("%w: %w", errBusy, err)
+			return nil, fmt.Errorf("%w: no answer in time from a NAS that answers core.ping: %w", ErrBusy, err)
 		case !asked:
 			return raw, err // no time to tell busy from silent: dropped, not lost
 		}
@@ -681,19 +703,16 @@ func (n *NAS) invoke(ctx context.Context, c rpc, method string, params any) (jso
 	return raw, err
 }
 
-// errBusy is a call that ran out its time on a session that still answers
-// core.ping: unreachable for this call (a write behind it may have landed),
-// and the session is kept.
-var errBusy = errors.New("no answer in time from a NAS that answers core.ping")
-
 // classify is classifyNASError plus the bookkeeping each outcome implies, for
 // a failure on the shared session: a transport error or an answered refusal.
 func (n *NAS) classify(err error) error {
 	switch {
 	case errors.Is(err, ErrNotSent):
 		return err // nothing went out: the session is as it was
-	case errors.Is(err, errBusy):
-		return ErrTargetUnreachable // the session answered its ping: kept
+	case errors.Is(err, ErrBusy):
+		// Sent, and the session answered its ping: kept. Unreachable for this
+		// call (a write behind it may have landed), and busy.
+		return fmt.Errorf("%w: %w", ErrTargetUnreachable, ErrBusy)
 	}
 	classified := classifyNASError(err)
 	switch classified {
@@ -1029,10 +1048,21 @@ func dialTrueNAS(url, apiKey string, verifyTLS bool) dialer {
 	}
 }
 
+// keepBusy is sentinel, still busy when err was (ErrBusy): a caller that
+// answers with a sentinel in place of the NAS's text keeps the one fact
+// TARGET_BUSY is answered from.
+func keepBusy(err, sentinel error) error {
+	if errors.Is(err, ErrBusy) {
+		return fmt.Errorf("%w: %w", sentinel, ErrBusy)
+	}
+	return sentinel
+}
+
 // readBeforeWrite is a read's failure as the write waiting on it answers it.
 // No write has been sent yet, so a read that could not reach the NAS, even
 // one whose request went out on a session that then died, leaves nothing
-// sent: ErrNotSent, which lets the write answer TARGET_UNREACHABLE.
+// sent: ErrNotSent, which lets the write answer TARGET_UNREACHABLE
+// (TARGET_BUSY when the read was busy).
 func readBeforeWrite(err error) error {
 	if errors.Is(err, ErrTargetUnreachable) && !errors.Is(err, ErrNotSent) {
 		return fmt.Errorf("%w: %w", ErrNotSent, err)

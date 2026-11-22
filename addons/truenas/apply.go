@@ -657,8 +657,8 @@ func (s *server) applyNow(ctx context.Context, w http.ResponseWriter, req ApplyR
 		// the change queued. Every failure after a write was sent stays
 		// APPLY_FAILED, a 5xx that says "may have acted": createAndConverge
 		// drops ErrNotSent from those (acted).
-		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
-			"The NAS could not be reached, so nothing was sent to it.", nil)
+		writeNotSent(w, err,
+			"The NAS could not be reached, so nothing was sent to it.")
 	case errors.Is(err, errTornRead):
 		// TrueNAS changed mid-read: nothing judged, nothing sent, queued again (TARGET_CHANGED).
 		writeTornRead(w)

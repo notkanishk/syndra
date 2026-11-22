@@ -1037,12 +1037,15 @@ Two outages, never one word: the add-on itself (only Syndra can know it) and the
 | operator | read_refused | — | — | {system}'s add-on didn't take this. Read the add-on's log. |
 | operator | addon_outdated | — | — | {system}'s add-on doesn't offer this. Update the add-on. |
 | operator | cooldown | — | {n} | {system} was read moments ago. Read it again in {n} s. |
+| operator | busy | — | {n} | {product} is busy right now. Try again in {n} s. |
 | member read | addon_unreachable, app_unreachable | — | — | {system} can't be read right now. Nothing for you to do. |
 | member read | read_refused, addon_outdated | — | — | {system} can't be read right now. Ask makerspace staff. |
+| member read | busy | — | {n} | {system} is busy right now. Try again in {n} s. |
 | member write | addon_unreachable, app_unreachable | — | — | Nothing went out. {system} isn't answering right now. Try again when {system} answers. |
 | member write | read_refused, addon_outdated | — | — | Nothing went out. {system} can't do this right now. Ask makerspace staff. |
+| member write | busy | — | {n} | Nothing went out. {system} is busy right now. Try again in {n} s. |
 
-An operator's `app_unreachable` and `read_refused` say the add-on's own sentence instead, when it gave one. An operator's write where nothing went out is "Nothing went out." before the sentence above, and "Try again when {system} answers." after it for either outage. `unusable` is the add-on's `NO_CURRENT_READ` or `TARGET_UNREADABLE` with no words of its own; it reaches the page only inside a 503's message.
+`busy` (added 22 Nov 2026 from the 8g staging run; a busy add-on queue or busy app is not an outage) is the add-on's `TARGET_BUSY`, or a kept copy it served as `busy`: nothing was sent, nothing is down, and the wait is the add-on's `Retry-After`. An operator's `app_unreachable` and `read_refused` say the add-on's own sentence instead, when it gave one. An operator's write where nothing went out is "Nothing went out." before the sentence above, and "Try again when {system} answers." after it for either outage. `unusable` is the add-on's `NO_CURRENT_READ` or `TARGET_UNREADABLE` with no words of its own; it reaches the page only inside a 503's message.
 
 | Where | Says |
 |---|---|

@@ -127,6 +127,13 @@ func whySentence(system, product string, why addons.Why, member bool) string {
 		return system + "'s add-on is running but can't reach " + product + ". Check that " + product + " is on."
 	case addons.ReasonCooldown:
 		return system + " was read moments ago. Read it again in " + strconv.Itoa(max(1, why.RetryAfter)) + " s."
+	case addons.ReasonBusy:
+		// Not an outage: the add-on's queue or the app was busy, and nothing was sent.
+		name := product
+		if member {
+			name = system
+		}
+		return name + " is busy right now. Try again in " + strconv.Itoa(max(1, why.RetryAfter)) + " s."
 	case addons.ReasonAddonOutdated:
 		return system + "'s add-on doesn't offer this. Update the add-on."
 	}

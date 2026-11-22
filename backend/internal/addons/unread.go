@@ -19,8 +19,8 @@ import (
 // (only the add-on can know it, so Detail is its own sentence). The other three
 // are not outages: read_refused (the add-on answered and did not serve the read,
 // something to fix rather than wait out), cooldown (a fresh read refused inside
-// the add-on's cooldown) and addon_outdated (the add-on does not speak what was
-// asked).
+// the add-on's cooldown), busy (the add-on or its app busy: TARGET_BUSY) and
+// addon_outdated (the add-on does not speak what was asked).
 type Why struct {
 	Reason string `json:"reason"`
 	Cause  string `json:"cause,omitempty"`
@@ -40,6 +40,11 @@ const (
 	ReasonAppUnreachable   = "app_unreachable"
 	ReasonReadRefused      = "read_refused"
 	ReasonCooldown         = "cooldown"
+	// ReasonBusy is the add-on answering TARGET_BUSY: its queue to the app,
+	// or the app, busy (added 22 Nov 2026 from the 8g staging run). Never an
+	// outage: it opens no breaker, counts no monitor miss, and a queued row
+	// waits RetryAfter.
+	ReasonBusy = "busy"
 	ReasonAddonOutdated    = "addon_outdated"
 )
 
@@ -73,6 +78,7 @@ func (w Why) Unreachable() bool {
 const (
 	codeNoCurrentRead    = "NO_CURRENT_READ"
 	codeTargetUnreadable = "TARGET_UNREADABLE"
+	codeTargetBusy       = "TARGET_BUSY"
 )
 
 // errNoTransport is Syndra holding no usable key for the add-on (its secret
@@ -118,6 +124,8 @@ func Unread(r CallResponse) Why {
 		// TARGET_CHANGED: the app changed while the add-on read it. Answered,
 		// so not an outage: a queued row spends an attempt and backs off.
 		return Why{Reason: ReasonReadRefused, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter}
+	case r.Code == codeTargetBusy:
+		return Why{Reason: ReasonBusy, Detail: problemDetail(r.Body), RetryAfter: max(1, r.RetryAfter)}
 	case r.Code == codeTargetUnreachable, r.Code == codeNoCurrentRead, r.Code == codeTargetUnreadable:
 		// Before 429: TARGET_UNREADABLE may come as one, and it is the app.
 		return Why{Reason: ReasonAppUnreachable, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter,

@@ -113,8 +113,11 @@ func (s *server) putHomeRoot(ctx context.Context, w http.ResponseWriter, req put
 		if errors.Is(err, ErrNotSent) {
 			// Nothing was sent, and nothing is stored until the place is
 			// checked: the one code Syndra reads as "nothing happened".
-			writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
-				"The NAS could not be reached, so the place could not be checked and nothing was changed.", nil)
+			writeNotSent(w, err,
+				"The NAS could not be reached, so the place could not be checked and nothing was changed.")
+			return
+		}
+		if err != nil && writeBusy(w, err) {
 			return
 		}
 		if err != nil {

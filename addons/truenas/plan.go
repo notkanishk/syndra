@@ -106,14 +106,16 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 	// the target, and the fingerprint carried into the apply is what settles
 	// that at the moment of writing.
 	current := true
-	snap, err := s.readSubjects(r.Context())
-	if err != nil {
+	snap, readErr := s.readSubjects(r.Context())
+	if readErr != nil {
 		cached, found, cacheErr := s.store.GetSnapshot()
 		if cacheErr != nil || !found {
 			// Nothing current and nothing remembered. Refused rather than
 			// planned against an empty world, which would read as "everybody
 			// needs an account creating".
-			writeError(w, statusFor(err), CodeTargetUnreadable, err.Error(), nil)
+			if !writeBusy(w, readErr) {
+				writeError(w, statusFor(readErr), CodeTargetUnreadable, readErr.Error(), nil)
+			}
 			return
 		}
 		snap, current = cached, false
@@ -137,7 +139,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		Truncated: snap.Truncated,
 	}
 	if !current {
-		out.Stale = unreachableSince(snap.TakenAt)
+		out.Stale = staleSince(snap.TakenAt, readErr)
 	}
 	for _, subject := range req.Subjects {
 		outcome, err := s.planOne(r.Context(), subject, ix, at, claimed, snap, current)

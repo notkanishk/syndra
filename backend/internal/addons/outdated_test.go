@@ -121,6 +121,7 @@ func TestHaltSaysWhatTheReplySaysAheadOfTheCooldown(t *testing.T) {
 			Stale: &Stale{Reason: StaleCooldown, RetryAfter: &retry}}, db.UnreconciledAddonOutdated},
 		{"store unreadable", SubjectsResult{Outcome: OutcomeIndeterminate, Code: CodeStoreUnreadable, RetryAfter: 5}, db.UnreconciledReadRefused},
 		{"cooldown, nothing to serve", SubjectsResult{Outcome: OutcomeUnreached, RetryAfter: 20}, db.UnreconciledStaleRead},
+		{"busy, nothing to serve", SubjectsResult{Outcome: OutcomeUnreached, Status: 503, Code: codeTargetBusy, RetryAfter: 5}, db.UnreconciledStaleRead},
 		{"not answered", SubjectsResult{Outcome: OutcomeUnreached}, db.UnreconciledAddonUnreachable},
 		{"the app down", SubjectsResult{Outcome: OutcomeUnreached, Status: 503, Code: codeTargetUnreachable}, db.UnreconciledAppUnreachable},
 	} {
