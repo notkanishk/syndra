@@ -1058,16 +1058,53 @@ func TestABusyRunGoesStaleAfterAQuietGap(t *testing.T) {
 	if BusyHalted("truenas") == nil {
 		t.Fatal("a run asked every probe past the half hour must halt")
 	}
-	now = now.Add(busyGap(addons.ProbeInterval()))
+	// At a 1 min tick and a 30 s deferral the run holds 3 min past its latest
+	// answer, and not a second more.
+	last := now.Add(-addons.ProbeInterval())
+	now = last.Add(3 * time.Minute)
+	if BusyHalted("truenas") == nil {
+		t.Fatal("a run asked 3 min ago must still say halted")
+	}
+	now = now.Add(time.Second)
 	if got := BusyHalted("truenas"); got != nil {
-		t.Fatalf("a run nobody asked about for %v must not say halted, got %v", busyGap(addons.ProbeInterval()), got)
+		t.Fatalf("a run nobody asked about for 3 min 1 s must not say halted, got %v", got)
 	}
 	res, _ := DrainAddon(context.Background(), "truenas")
 	if res.Halted {
 		t.Fatalf("a busy answer after a quiet gap must start a new run, got %+v", res)
 	}
-	if got := noteBusy("truenas", true, addons.ProbeInterval()); !got.Equal(now) {
+	if got := noteBusy("truenas", true, addons.ProbeInterval()).since; !got.Equal(now) {
 		t.Fatalf("new run since %v, want %v", got, now)
+	}
+}
+
+// The drain and the target page decide the halt from one answer's time: a
+// lookup that takes a moment between the answer and the decision must not
+// halt a pass the page does not call halted (PR 262 review P2).
+func TestABusyHaltIsDecidedFromTheAnswerNotALaterClock(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	start := time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC)
+	now := start
+	t.Cleanup(swap(&busyClock, func() time.Time { return now }))
+	t.Cleanup(swap(&deferRow, func(context.Context, string, string, time.Duration) error { return nil }))
+	t.Cleanup(swap(&systemName, func(context.Context, string) string {
+		now = now.Add(time.Second)
+		return "TrueNAS"
+	}))
+	h.resp = busyResp()
+	for now.Sub(start) < busyHaltAfter {
+		if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+			t.Fatal(err)
+		}
+		now = now.Add(addons.ProbeInterval())
+	}
+	now = start.Add(busyHaltAfter)
+	res, err := DrainAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page := BusyHalted("truenas") != nil; res.Halted || page {
+		t.Fatalf("an answer exactly at the limit halts nothing: drain halted %v, page halted %v", res.Halted, page)
 	}
 }
 

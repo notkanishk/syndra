@@ -205,7 +205,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		Desired: intent.Desired(),
 	})
 	busy := resp.Outcome == addons.OutcomeUnreached && resp.Why.Reason == addons.ReasonBusy
-	since := noteBusy(intent.Target, busy, unsentDelay(resp.Why.RetryAfter))
+	run := noteBusy(intent.Target, busy, unsentDelay(resp.Why.RetryAfter))
 
 	switch {
 	case resp.Outcome == addons.OutcomeSucceeded:
@@ -269,13 +269,13 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		// pass, as the maintenance switch does: one row asks each pass, and its
 		// first other answer clears it.
 		why := unreachedWhy(systemName(ctx, row.Target), row, resp)
-		halt := busyClock().Sub(since) > busyHaltAfter
+		halt := run.halted()
 		if halt {
-			why = busyHaltWhy(systemName(ctx, row.Target), since, row)
+			why = busyHaltWhy(systemName(ctx, row.Target), run.since, row)
 		}
 		res.deferUnsent(ctx, row, why, resp.Why.RetryAfter)
 		if halt {
-			res.Halted, res.Reason, res.BusySince = true, addons.ReasonBusy, &since
+			res.Halted, res.Reason, res.BusySince = true, addons.ReasonBusy, &run.since
 		}
 		return halt
 
@@ -360,6 +360,11 @@ func busyGap(after time.Duration) time.Duration { return 2 * (DrainEvery() + aft
 // (busyGap past the latest).
 type busyRun struct{ since, last, due time.Time }
 
+// halted is whether the run's latest answer came past busyHaltAfter: the one
+// rule DrainAddon halts by and BusyHalted reports, read from the answer's
+// time, never a later clock.
+func (r busyRun) halted() bool { return r.last.Sub(r.since) > busyHaltAfter }
+
 // busySince holds each target's busy run, until its next other answer or its
 // due time passes.
 //
@@ -373,14 +378,14 @@ var busySince = struct {
 }{at: map[string]busyRun{}}
 
 // noteBusy records one answer from target, its row deferred by after, and
-// returns when its unbroken run of busy answers began (zero when this answer
-// was not busy).
-func noteBusy(target string, busy bool, after time.Duration) time.Time {
+// returns its unbroken run of busy answers (zero when this answer was not
+// busy).
+func noteBusy(target string, busy bool, after time.Duration) busyRun {
 	busySince.Lock()
 	defer busySince.Unlock()
 	if !busy {
 		delete(busySince.at, target)
-		return time.Time{}
+		return busyRun{}
 	}
 	now := busyClock()
 	run, ok := busySince.at[target]
@@ -389,7 +394,7 @@ func noteBusy(target string, busy bool, after time.Duration) time.Time {
 	}
 	run.last, run.due = now, now.Add(busyGap(after))
 	busySince.at[target] = run
-	return run.since
+	return run
 }
 
 // BusyHalted is when target began answering busy, once its pass has halted:
@@ -402,7 +407,7 @@ func BusyHalted(target string) *time.Time {
 	defer busySince.Unlock()
 	run, ok := busySince.at[target]
 	now := busyClock()
-	if !ok || now.After(run.due) || run.last.Sub(run.since) <= busyHaltAfter {
+	if !ok || now.After(run.due) || !run.halted() {
 		return nil
 	}
 	return &run.since
@@ -412,7 +417,7 @@ func BusyHalted(target string) *time.Time {
 // busyHaltAfter, the time in the deployment's zone.
 func busyHaltWhy(system string, since time.Time, row models.PendingPropagation) string {
 	return system + " has been busy since " + since.In(clock.Loc).Format("15:04 on 2 Jan 2006") +
-		"; nothing was sent. " + sendsNext(system, row)
+		"; nothing was sent. " + busyNext(system, row)
 }
 
 var errIndeterminate = errors.New("the call was sent and the answer was lost; whether it applied is unknown")
@@ -432,7 +437,7 @@ func (res *DrainResult) settleFailure(id, step string, err error) {
 func unreachedWhy(system string, row models.PendingPropagation, resp addons.ApplyResponse) string {
 	if resp.Why.Reason == addons.ReasonBusy {
 		// The add-on's queue or its app was busy: reached, not down, nothing sent.
-		return system + " was busy; nothing was sent. " + sendsNext(system, row)
+		return system + " was busy; nothing was sent. " + busyNext(system, row)
 	}
 	if resp.Code == addons.CodeTargetChanged {
 		// The add-on read the target and it changed underneath: reached, and still nothing sent.
