@@ -107,6 +107,20 @@ func (k *kit) appHang() {
 	}
 }
 
+// readsStayDeclared holds an outage to the manifest: every read declared
+// available stays available. A read answers the outage itself (a copy or a
+// no-copy code); withdrawn, Syndra refuses it unsent and blames the add-on
+// for the app (health.get on the 8g staging run, 22 Nov 2026: the add-on
+// started with the NAS down, read no version, and withdrew its reads).
+func (k *kit) readsStayDeclared(c *check, caps *exchange, when string) {
+	for _, op := range objects(caps.doc()["operations"]) {
+		id := str(op, "id")
+		if available, _ := op["available"].(bool); slices.Contains(k.readOps(), id) && !available {
+			c.fail("GET /capabilities %s withdrew the read %s (%s); a read stays available and answers the outage itself", when, id, str(op, "unavailable_reason"))
+		}
+	}
+}
+
 // notChecked marks checks whose hooks were not given.
 func (k *kit) notChecked(hooks string, require bool, ids ...string) {
 	for _, id := range ids {
@@ -197,6 +211,7 @@ func (k *kit) appDown() {
 	h0 := k.ok(health, k.send(request{method: http.MethodGet, target: "/health"}), "health.json")
 	caps := k.send(request{method: http.MethodGet, target: "/capabilities"})
 	health.expect(caps.err == nil && caps.status == http.StatusOK, "GET /capabilities with the app stopped answered %d (%v); it still answers", caps.status, caps.err)
+	k.readsStayDeclared(health, caps, "with the app stopped")
 
 	during := k.readNow(live)
 	k.outageRead(kept, none, during, copyAt, live)

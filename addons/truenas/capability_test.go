@@ -206,11 +206,40 @@ func TestAnUntestedMajorOutranksTheMethodProbe(t *testing.T) {
 			}
 			continue
 		}
+		if readOperation(op.ID) {
+			continue // a read is never withdrawn for the version; its absent method still withdraws it
+		}
 		if op.Available {
 			t.Errorf("%s must be unavailable on an untested major", op.ID)
 		}
 		if !strings.Contains(op.UnavailableReason, "27.10") {
 			t.Errorf("%s: the version reason must win, got %q", op.ID, op.UnavailableReason)
 		}
+	}
+}
+
+// An add-on that started while its NAS was down has read no version, and a
+// read is never withdrawn for a version (registry errors.json:
+// TARGET_VERSION_UNSUPPORTED is "a mutation against" one). Withdrawn, the
+// backend refuses health.get before sending it and calls the add-on
+// unreachable for the NAS (the staging run, 22 Nov 2026 19:12Z). Sent, it
+// answers the outage the contract way: 503 TARGET_UNREACHABLE.
+func TestAnUnreadVersionWithdrawsNoRead(t *testing.T) {
+	s, _ := applyServer(t, `[]`)
+	s.nas = newNAS(func() (rpc, error) { return nil, errors.New("dial tcp: i/o timeout") }, []string{"25.04"})
+
+	for _, op := range operationSet(s) {
+		if readOperation(op.ID) && !op.Available {
+			t.Errorf("%s withdrawn before the version was read: %q", op.ID, op.UnavailableReason)
+		}
+		if op.ID == "password.set" && op.Available {
+			t.Error("a write must wait for the version")
+		}
+	}
+	rr := postOperation(t, s, "health.get", `{"call_id":"c1","subject":""}`)
+	var p struct{ Code string }
+	_ = json.Unmarshal(rr.Body.Bytes(), &p)
+	if rr.Code != http.StatusServiceUnavailable || p.Code != CodeTargetUnreachable || rr.Header().Get("Retry-After") == "" {
+		t.Fatalf("health.get with the NAS never reached answered %d %s; want 503 %s with Retry-After: %s", rr.Code, p.Code, CodeTargetUnreachable, rr.Body)
 	}
 }

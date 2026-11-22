@@ -52,6 +52,7 @@ func TestUnreadNamesWhoIsDownAndWhy(t *testing.T) {
 		{"TARGET_CHANGED", CallResponse{Outcome: OutcomeUnreached, Status: 503, Code: CodeTargetChanged, Body: problem(CodeTargetChanged), RetryAfter: 5}, ReasonReadRefused, "", true},
 		{"TARGET_UNREADABLE as 429", CallResponse{Outcome: OutcomeUnreached, Status: 429, Code: codeTargetUnreadable, Body: problem(codeTargetUnreadable)}, ReasonAppUnreachable, "", true},
 		{"coded 503", CallResponse{Outcome: OutcomeIndeterminate, Status: 503, Code: "APPLY_FAILED", Body: problem("APPLY_FAILED")}, ReasonReadRefused, "", true},
+		{"an operation the add-on withdrew", CallResponse{Outcome: OutcomeUnreached, Err: &ErrOperationUnavailable{Target: "truenas", ID: "health.get", Reason: "the target version has not been read yet"}}, ReasonReadRefused, "", true},
 		{"call record not written", CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %w", errNotPrepared, errors.New("db down"))}, ReasonReadRefused, "", false},
 		{"a 4xx about the request", CallResponse{Outcome: OutcomeRejected, Status: 404, Code: "NO_SUCH_SETTING"}, ReasonReadRefused, "", false},
 	} {

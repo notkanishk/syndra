@@ -2313,7 +2313,9 @@ and `rm`). CI requires them; against a real system a missing hook reports "not
 checked", never "pass". `freshness.unreachable` stops being a permanent skip.
 
 - `outage.health`: with the app stopped `/health` and the manifest still
-  answer, `reachable` is `false` after one fresh read and `last_read_at` does
+  answer, every read the manifest declared available stays available (a read
+  answers the outage itself; a withdrawn one the backend refuses unsent and
+  reads as `addon_unreachable`, 23 Nov 2026), `reachable` is `false` after one fresh read and `last_read_at` does
   not move; restarted, `reachable: true` and a fresh read is `current: true`.
   The first kit check of what `health.reachable` means.
 - `outage.kept` / `outage.none`: a read with a copy answers it

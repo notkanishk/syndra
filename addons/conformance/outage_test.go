@@ -91,6 +91,20 @@ func TestEachOutageCheckFailsOnABadReply(t *testing.T) {
 				}
 				return reply
 			}},
+		// The 8g staging rerun (22 Nov 2026): the NAS down, health.get withdrawn.
+		{name: "a read withdrawn while the app is down", want: []string{"outage.health"},
+			rewrite: func(r *http.Request, reply []byte, down bool) []byte {
+				if down && r.URL.Path == "/capabilities" {
+					return edit(reply, func(m map[string]any) {
+						for _, op := range m["operations"].([]any) {
+							if op := op.(map[string]any); op["id"] == "health.get" {
+								op["available"], op["unavailable_reason"] = false, "the target version has not been read yet"
+							}
+						}
+					})
+				}
+				return reply
+			}},
 		{name: "an apply refused without Retry-After", mutate: true, want: []string{"outage.write"},
 			header: func(r *http.Request, h http.Header, down bool) {
 				if down && r.URL.Path == "/apply" {

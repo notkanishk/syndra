@@ -156,9 +156,14 @@ func Unread(r CallResponse) Why {
 // unsent is a reply with no status: nothing came back.
 func unsent(r CallResponse) Why {
 	var held *HeldError
+	var withdrawn *ErrOperationUnavailable
 	switch {
 	case errors.As(r.Err, &held):
 		return held.Why
+	case errors.As(r.Err, &withdrawn):
+		// The add-on's manifest withdrew it, with its reason: it answered, so
+		// not an outage (health.get on staging, 22 Nov 2026, read as one).
+		return Why{Reason: ReasonReadRefused, Detail: withdrawn.Reason}
 	case errors.Is(r.Err, ErrFeatureNotDeclared):
 		return Why{Reason: ReasonAddonOutdated}
 	case errors.Is(r.Err, ErrNoCallRecord), errors.Is(r.Err, ErrNoFingerprint), errors.Is(r.Err, ErrFreshOutOfScope),
