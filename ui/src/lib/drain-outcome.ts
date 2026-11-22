@@ -117,9 +117,9 @@ export function describeDrain(
       case "busy":
         return {
           tone: "warning",
-          sendsItself: true,
           message: `${stalled ?? "The connected system"} ${busy(result)}; nothing was sent.`,
-          detail: BUSY_DETAIL,
+          detail: "Nothing counts against the retry limit.",
+          next: busyNext(auto, stalled),
         };
       // Design §13.1: who is not answering, the add-on or the system behind it, never one word.
       case "addon_unreachable":
@@ -281,7 +281,7 @@ function haltDetail(reason: string | undefined, system: string | undefined, wait
     case "draining":
       return `${its} still waiting, and nothing counts against the retry limit. ${maintenanceNext(auto)}`;
     case "busy":
-      return `${its} still waiting. ${BUSY_DETAIL}`;
+      return `${its} still waiting, and nothing counts against the retry limit. ${busyNext(auto, system)}`;
     default:
       return "The rest of the queue went through.";
   }
@@ -307,15 +307,27 @@ function busy(pass: { reason?: string; busy_since?: string }): string | undefine
   return pass.reason === "busy" ? `has been busy since ${formatWhen(pass.busy_since)}` : undefined;
 }
 
-const BUSY_DETAIL = "Syndra keeps trying by itself, and nothing counts against the retry limit.";
-
 const MAINTENANCE_DETAIL = "It refuses every change until it is active again, so Syndra holds them. Nothing counts against the retry limit.";
 /**
- * The step back from maintenance. With the background drain on, revocations
- * go again on their own once it is active, so only the rest are the reader's
- * to send; with it off or unknown, sending again covers everything.
+ * Who sends a held change next, once `when` (one source for maintenance, busy
+ * and the target page). With the background drain on, revocations go again on
+ * their own and the rest are the reader's to send (a halt leaves them
+ * untouched, and a change held for the reader is never sent on its own); with
+ * it off or unknown, every change is. No `when` (the system is not named):
+ * the step alone, never "once it answers".
  */
+export function sendsNext(auto: AutoRetry, when?: string): string {
+  const step = auto ? "revocations go on their own; send the rest again." : "press Send on Pending changes to try again.";
+  return when ? `Once ${when}, ${step}` : step.charAt(0).toUpperCase() + step.slice(1);
+}
+
+/**
+ * The step after a busy halt, one source for the toast, the pass detail and
+ * the target page. Busy is not down: the system answered, so the wait is for
+ * it to be free, never for it to answer.
+ */
+export const busyNext = (auto: AutoRetry, system?: string): string => sendsNext(auto, system && `${system} is free`);
+
+/** The step back from maintenance: make it active, then who sends next. */
 const maintenanceNext = (auto: AutoRetry): string =>
-  auto
-    ? "Press Make active under Maintenance on its page. Revocations then go on their own; send the rest again."
-    : "Press Make active under Maintenance on its page, then send again.";
+  `Press Make active under Maintenance on its page. ${sendsNext(auto, "it is active")}`;

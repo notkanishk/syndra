@@ -134,7 +134,9 @@ describe("a send with more than one connected system", () => {
   });
 
   // 8g fix round 3: a system busy for over half an hour halts its send as
-  // busy, not down, says since when, and asks nothing of the reader.
+  // busy, not down, and says since when. Who sends next is said only when
+  // true (PR 261 review): revocations on their own with the drain on, the
+  // reader's Send for everything with it off.
   it("a system busy past the limit is named busy since, never as not answering", () => {
     const since = "2026-11-22T10:00:00Z";
     const passes = [
@@ -144,10 +146,19 @@ describe("a send with more than one connected system", () => {
     const both = named(result({ applied: 3, halted: true, reason: "busy", halted_target: "truenas", busy_since: since, passes }));
     expect(both.message).toMatch(/TrueNAS has been busy since .+, so its changes are still here\./);
     expect(both.message).not.toContain("didn't answer");
-    expect(both.detail).toContain("Syndra keeps trying by itself");
-    const alone = named(result({ halted: true, reason: "busy", halted_target: "truenas", busy_since: since, passes: [passes[1]] }));
-    expect(alone.message).toMatch(/^TrueNAS has been busy since .+; nothing was sent\.$/);
-    expect(alone.sendsItself).toBe(true);
+    expect(both.detail).toContain("Once TrueNAS is free, revocations go on their own; send the rest again.");
+    expect(named(result({ applied: 3, halted: true, reason: "busy", halted_target: "truenas", busy_since: since, passes }), false).detail).toContain(
+      "Once TrueNAS is free, press Send on Pending changes to try again.",
+    );
+    const alone = result({ halted: true, reason: "busy", halted_target: "truenas", busy_since: since, passes: [passes[1]] });
+    expect(named(alone).message).toMatch(/^TrueNAS has been busy since .+; nothing was sent\.$/);
+    expect(named(alone).sendsItself).toBeUndefined();
+    expect(named(alone, true).next).toBe("Once TrueNAS is free, revocations go on their own; send the rest again.");
+    expect(named(alone, false).next).toBe("Once TrueNAS is free, press Send on Pending changes to try again.");
+    // PR 262 review: no system named, no "once it answers"; the step alone.
+    const nameless = result({ halted: true, reason: "busy", busy_since: since });
+    expect(named(nameless, false).next).toBe("Press Send on Pending changes to try again.");
+    expect(named(nameless, true).next).toBe("Revocations go on their own; send the rest again.");
   });
 
   // 8b fix round 3: revocations go again on their own once the switch is
@@ -155,9 +166,11 @@ describe("a send with more than one connected system", () => {
   it("the step back from maintenance leaves revocations to the background drain", () => {
     const halt = result({ halted: true, reason: "read_only", halted_target: "truenas" });
     expect(named(halt, true).next).toBe(
-      "Press Make active under Maintenance on its page. Revocations then go on their own; send the rest again.",
+      "Press Make active under Maintenance on its page. Once it is active, revocations go on their own; send the rest again.",
     );
-    expect(named(halt, false).next).toBe("Press Make active under Maintenance on its page, then send again.");
+    expect(named(halt, false).next).toBe(
+      "Press Make active under Maintenance on its page. Once it is active, press Send on Pending changes to try again.",
+    );
   });
 
   // Browser pass, 8 Nov: TrueNAS switched off with nothing of its own queued.

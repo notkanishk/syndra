@@ -9,6 +9,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 // 7t-3: a blocked apply carrying the add-on's binding conflict, for a subject
@@ -248,7 +249,7 @@ func TestUnreachedReasonsNameTheSystem(t *testing.T) {
 		"":                       "TrueNAS could not be reached",
 		addons.CodeTargetChanged: "TrueNAS changed while Syndra was reading it",
 	} {
-		if got := unreachedWhy("TrueNAS", addons.ApplyResponse{Code: code}); got != want {
+		if got := unreachedWhy("TrueNAS", models.PendingPropagation{}, addons.ApplyResponse{Code: code}); got != want {
 			t.Errorf("%q: got %q, want %q", code, got, want)
 		}
 	}

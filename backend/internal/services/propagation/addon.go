@@ -205,7 +205,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		Desired: intent.Desired(),
 	})
 	busy := resp.Outcome == addons.OutcomeUnreached && resp.Why.Reason == addons.ReasonBusy
-	since := noteBusy(intent.Target, busy)
+	run := noteBusy(intent.Target, busy, unsentDelay(resp.Why.RetryAfter))
 
 	switch {
 	case resp.Outcome == addons.OutcomeSucceeded:
@@ -268,21 +268,21 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		// target busy without a break for longer than busyHaltAfter halts the
 		// pass, as the maintenance switch does: one row asks each pass, and its
 		// first other answer clears it.
-		why := unreachedWhy(systemName(ctx, row.Target), resp)
-		halt := busyClock().Sub(since) > busyHaltAfter
+		why := unreachedWhy(systemName(ctx, row.Target), row, resp)
+		halt := run.halted()
 		if halt {
-			why = busyHaltWhy(systemName(ctx, row.Target), since)
+			why = busyHaltWhy(systemName(ctx, row.Target), run.since, row)
 		}
 		res.deferUnsent(ctx, row, why, resp.Why.RetryAfter)
 		if halt {
-			res.Halted, res.Reason, res.BusySince = true, addons.ReasonBusy, &since
+			res.Halted, res.Reason, res.BusySince = true, addons.ReasonBusy, &run.since
 		}
 		return halt
 
 	case resp.Outcome == addons.OutcomeUnreached && resp.Why.Unreachable():
 		// Nothing went out because a side was down (design §13.4): no attempt
 		// is spent, so an outage never makes a row "out of retries".
-		res.deferUnsent(ctx, row, unreachedWhy(systemName(ctx, row.Target), resp), resp.Why.RetryAfter)
+		res.deferUnsent(ctx, row, unreachedWhy(systemName(ctx, row.Target), row, resp), resp.Why.RetryAfter)
 
 	case resp.Outcome == addons.OutcomeUnreached:
 		if row.Attempts >= maxRetries {
@@ -290,7 +290,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			// drain follows, and for the same reason: a row left non-terminal
 			// at the head of the queue is one every later pass re-claims and
 			// halts on, which stops everything behind it without saying so.
-			reason := fmt.Sprintf("out of retries after %d attempts: %s", row.Attempts, unreachedWhy(systemName(ctx, row.Target), resp))
+			reason := fmt.Sprintf("out of retries after %d attempts: %s", row.Attempts, unreachedWhy(systemName(ctx, row.Target), row, resp))
 			if err := markFailed(ctx, row.ID, reason); err != nil {
 				res.settleFailure(row.ID, "mark failed", err)
 				return false
@@ -299,7 +299,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			res.Exhausted++
 			return false
 		}
-		if _, err := requeue(ctx, row.ID, unreachedWhy(systemName(ctx, row.Target), resp)); err != nil {
+		if _, err := requeue(ctx, row.ID, unreachedWhy(systemName(ctx, row.Target), row, resp)); err != nil {
 			res.settleFailure(row.ID, "requeue", err)
 			return false
 		}
@@ -327,8 +327,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 // monitor's next probe, whichever is later, so the background drain sends it
 // by itself (design §13.4: "Syndra sends it later by itself").
 func (res *DrainResult) deferUnsent(ctx context.Context, row models.PendingPropagation, why string, retryAfter int) {
-	after := max(time.Duration(retryAfter)*time.Second, addons.ProbeInterval())
-	if err := deferRow(ctx, row.ID, why, after); err != nil {
+	if err := deferRow(ctx, row.ID, why, unsentDelay(retryAfter)); err != nil {
 		res.settleFailure(row.ID, "defer", err)
 		return
 	}
@@ -336,54 +335,89 @@ func (res *DrainResult) deferUnsent(ctx context.Context, row models.PendingPropa
 	res.Deferred++
 }
 
+// unsentDelay is how long a send where nothing went out waits: the add-on's
+// Retry-After (at most an hour, addons maxRetryAfter) or the monitor's next
+// probe, whichever is later.
+func unsentDelay(retryAfter int) time.Duration {
+	return max(time.Duration(retryAfter)*time.Second, addons.ProbeInterval())
+}
+
 // busyHaltAfter is how long a target may answer busy without a break before
 // its pass halts (busy).
 const busyHaltAfter = 30 * time.Minute
 
-// busySince holds when each target first answered TARGET_BUSY, until its next
-// other answer.
+// busyGap is the longest quiet after a busy answer that still counts as one
+// run: the row comes due its deferral (unsentDelay) after the answer, and the
+// background drain asks it at its first tick past that, so the next answer is
+// at most a tick plus the deferral away, a little late by however long the
+// calls take. Twice that is the slack. With the drain off it is twice the
+// deferral. A longer quiet means nobody asked: the row was settled elsewhere
+// or the queue emptied.
+func busyGap(after time.Duration) time.Duration { return 2 * (DrainEvery() + after) }
+
+// busyRun is one target's unbroken run of TARGET_BUSY answers: when it began,
+// its latest answer, and when it ends unless another busy answer comes
+// (busyGap past the latest).
+type busyRun struct{ since, last, due time.Time }
+
+// halted is whether the run's latest answer came past busyHaltAfter: the one
+// rule DrainAddon halts by and BusyHalted reports, read from the answer's
+// time, never a later clock.
+func (r busyRun) halted() bool { return r.last.Sub(r.since) > busyHaltAfter }
+
+// busySince holds each target's busy run, until its next other answer or its
+// due time passes.
 //
 // ponytail: in memory, so a restart starts the half hour again; that only
-// delays the halt. A column if the halt must survive restarts.
+// delays the halt. A column if the halt must survive restarts. Targets are
+// removed only by configuration at startup (addons.Init), so a restart also
+// clears a removed target's entry; the map holds at most one per target.
 var busySince = struct {
 	sync.Mutex
-	at map[string]time.Time
-}{at: map[string]time.Time{}}
+	at map[string]busyRun
+}{at: map[string]busyRun{}}
 
-// noteBusy records one answer from target and returns when its unbroken run
-// of busy answers began (zero when this answer was not busy).
-func noteBusy(target string, busy bool) time.Time {
+// noteBusy records one answer from target, its row deferred by after, and
+// returns its unbroken run of busy answers (zero when this answer was not
+// busy).
+func noteBusy(target string, busy bool, after time.Duration) busyRun {
 	busySince.Lock()
 	defer busySince.Unlock()
 	if !busy {
 		delete(busySince.at, target)
-		return time.Time{}
+		return busyRun{}
 	}
-	since, ok := busySince.at[target]
-	if !ok {
-		since = busyClock()
-		busySince.at[target] = since
+	now := busyClock()
+	run, ok := busySince.at[target]
+	if !ok || now.After(run.due) {
+		run.since = now
 	}
-	return since
+	run.last, run.due = now, now.Add(busyGap(after))
+	busySince.at[target] = run
+	return run
 }
 
-// BusyHalted is when target began answering busy, once that run is past
-// busyHaltAfter and its pass halts; nil otherwise. The target page says it.
+// BusyHalted is when target began answering busy, once its pass has halted:
+// the run's latest answer came past busyHaltAfter, the moment DrainAddon
+// halts, and the run is still going (not past its due time); nil otherwise.
+// The target page says it. A run merely old by the clock has not halted: with
+// a long Retry-After its next answer may be an hour away.
 func BusyHalted(target string) *time.Time {
 	busySince.Lock()
 	defer busySince.Unlock()
-	since, ok := busySince.at[target]
-	if !ok || busyClock().Sub(since) <= busyHaltAfter {
+	run, ok := busySince.at[target]
+	now := busyClock()
+	if !ok || now.After(run.due) || !run.halted() {
 		return nil
 	}
-	return &since
+	return &run.since
 }
 
 // busyHaltWhy is a row's last_error once its target has been busy past
 // busyHaltAfter, the time in the deployment's zone.
-func busyHaltWhy(system string, since time.Time) string {
+func busyHaltWhy(system string, since time.Time, row models.PendingPropagation) string {
 	return system + " has been busy since " + since.In(clock.Loc).Format("15:04 on 2 Jan 2006") +
-		"; nothing was sent. Syndra keeps trying by itself."
+		"; nothing was sent. " + busyNext(system, row)
 }
 
 var errIndeterminate = errors.New("the call was sent and the answer was lost; whether it applied is unknown")
@@ -400,10 +434,10 @@ func (res *DrainResult) settleFailure(id, step string, err error) {
 // guide's voice: the system by its name (system, addons.SystemNameOf), never "the target".
 // TARGET_CHANGED is unreached like TARGET_UNREACHABLE (addons.classifyStatus, one path); only
 // the reason differs. It lands in last_error, which the pages show.
-func unreachedWhy(system string, resp addons.ApplyResponse) string {
+func unreachedWhy(system string, row models.PendingPropagation, resp addons.ApplyResponse) string {
 	if resp.Why.Reason == addons.ReasonBusy {
 		// The add-on's queue or its app was busy: reached, not down, nothing sent.
-		return system + " was busy; nothing was sent. Syndra sends it again by itself."
+		return system + " was busy; nothing was sent. " + busyNext(system, row)
 	}
 	if resp.Code == addons.CodeTargetChanged {
 		// The add-on read the target and it changed underneath: reached, and still nothing sent.

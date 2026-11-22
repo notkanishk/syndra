@@ -76,8 +76,8 @@ func TestHandleListPendingPropagations_RetriesSayWhatReallyHappens(t *testing.T)
 		t.Errorf("the give-ups are listed for the asking person: %v (asked %q)", got["gave_up"], asked)
 	}
 
-	propagation.SetAutoRetry(false)
-	t.Cleanup(func() { propagation.SetAutoRetry(true) })
+	propagation.SetDrainEvery(0)
+	t.Cleanup(func() { propagation.SetDrainEvery(time.Minute) })
 	if due := read()["due"].(models.PendingPropagation); due.Retry == nil || due.Retry.State != "waiting" || due.Retry.NextTry != nil {
 		t.Errorf("with the background drain off nothing sends it again: want waiting, got %+v", due.Retry)
 	}
