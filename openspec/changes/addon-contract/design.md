@@ -2152,7 +2152,11 @@ observed, so not stated).
   add-on not yet listening stays `checking` (task #89).
 - The breaker (5 failures, 30 s, half-open; Nygard, *Release It!*) stays
   transport protection, not a second opinion: an open breaker is a cause the
-  monitor reports, and it remembers the cause that opened it.
+  monitor reports, and it remembers the cause that opened it. It counts the
+  add-on failing to answer or failing itself: an answer of `app_unreachable` (the add-on
+  saying its app is down) is the add-on working, and, like `TARGET_BUSY`,
+  neither counts nor clears, so an open breaker's cause is always an
+  `addon_unreachable` one.
 - Readers, all of the same value: the drain's pre-flight (replacing its own
   live probe), the member view (replacing `view.Reachable` and `health: ""`),
   the roster (replacing `cannot_connect/offline/waiting_to_retry`), and page

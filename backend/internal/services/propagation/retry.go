@@ -43,7 +43,7 @@ func waitsForYou(row models.PendingPropagation) bool {
 	return row.WaitReason == db.WaitReasonRoleWaits || row.WaitReason == db.WaitReasonManual
 }
 
-// busyNext is who sends row again after nothing went out, the one sentence
+// busyNext is who sends a busy row again (the system answered busy; nothing went out), the one sentence
 // for it: Syndra by itself only when the background drain runs and claims it.
 func busyNext(system string, row models.PendingPropagation) string {
 	if AutoRetry() && !waitsForYou(row) {
