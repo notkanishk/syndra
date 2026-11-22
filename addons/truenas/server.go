@@ -261,6 +261,15 @@ type Health struct {
 // kit is 3 s (AUTHORING.md, GET /health). Keep it under both.
 const healthReachWithin = 2 * time.Second
 
+// recentReadCounts is how old a NAS answer may be and still count as reachable
+// when /health's own ping runs out of time. The session is one socket and its
+// calls go one at a time (callMu), so the ping can queue behind an audit.query
+// page or a get_quota for up to callTimeoutSeconds while the NAS is busy and
+// fine; a miss then reads as app_unreachable on the backend's first probe
+// after a restart. §13.2: a call that succeeded within the last few seconds
+// counts. A NAS that hangs still reads false once its last answer is older.
+const recentReadCounts = 10 * time.Second
+
 // within answers fn's result, or done false once ctx ends first. fn runs on,
 // and its late answer is dropped: a NAS call cannot be cancelled, only not
 // waited for. Each ends by its own timeouts (nas.go): session() dials for one
@@ -308,7 +317,8 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 	// Bounded: a NAS that hangs is not reachable, and says so in time.
 	ctx, cancel := context.WithTimeout(r.Context(), healthReachWithin)
 	defer cancel()
-	h.Reachable, _ = within(ctx, func() bool { _, err := s.nas.Ping(); return err == nil })
+	reachable, answered := within(ctx, func() bool { _, err := s.nas.Ping(); return err == nil })
+	h.Reachable = reachable || !answered && time.Since(s.nas.LastRead()) <= recentReadCounts
 	if t := s.nas.LastRead(); !t.IsZero() {
 		formatted := t.UTC().Format(time.RFC3339)
 		h.LastReadAt = &formatted

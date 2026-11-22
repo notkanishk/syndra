@@ -127,7 +127,8 @@ type Config struct {
 	Down func() bool
 	// Hang is test-only: while it answers true the app answers nothing, as a
 	// blackholed address does, rather than refusing. /health's call to it
-	// waits out its bound (healthReachWithin) and says reachable: false; every
+	// waits out its bound (healthReachWithin) and says reachable: false once
+	// its last answer is older than recentReadWindow; every
 	// other route finds it down at once. The binary hangs it when the down file
 	// holds "hang", so the kit's -hang-app is printf hang into it.
 	Hang func() bool
@@ -158,6 +159,19 @@ func (a *Addon) hung() bool { return a.cfg.Hang != nil && a.cfg.Hang() }
 // when it is the app. 2 s leaves room for TLS and the network under the
 // guide's 3 s (AUTHORING.md, GET /health).
 const healthReachWithin = 2 * time.Second
+
+// recentReadWindow: when /health's own call gets no answer in time, an answer
+// from the app within this window still counts as reachable (design §13.2),
+// so a call queued behind a long one is not an outage. The kit's outage.hang
+// waits past it before judging.
+const recentReadWindow = 10 * time.Second
+
+// readRecently says the app last answered within recentReadWindow. The caller
+// holds a.mu.
+func (a *Addon) readRecently() bool {
+	t, err := time.Parse(time.RFC3339Nano, a.readAt)
+	return err == nil && time.Since(t) <= recentReadWindow
+}
 
 // reach is one real call to the app, begun at at: it says whether the app
 // answered and, when it did, records it as last_read_at. /health makes its own,
@@ -320,8 +334,9 @@ func (a *Addon) health(r *http.Request, _ []byte) reply {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	busy := a.busy()
+	reachable := a.reach(at) || a.hung() && a.readRecently()
 	h := map[string]any{
-		"reachable": a.reach(at), "product": "reference", "product_version": "1.0.0", "version_tested": true,
+		"reachable": reachable, "product": "reference", "product_version": "1.0.0", "version_tested": true,
 		"credential_expiry": "none", "circuit_open": false,
 		"lifecycle": a.lifecycle, "lifecycle_note": a.reason, "in_flight": busy, "drained": busy == 0,
 		"log_head": a.logHead, "log_records": a.logCount, "checked_at": now(),

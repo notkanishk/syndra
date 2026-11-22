@@ -32,9 +32,19 @@ func (k *kit) outage() {
 // blames the add-on for the app (the 8g staging run, 22 Nov 2026).
 const healthWithin = 3 * time.Second
 
+// recentReadWindow is how old an answer from the app may be and still make
+// /health say reachable when its own call gets no answer in time (design
+// §13.2): a call queued behind a long one is not an outage. hangSettle waits
+// past it, with a margin, before outage.hang judges, so an add-on that counts
+// its last answer is not failed for the read the kit made just before.
+const (
+	recentReadWindow = 10 * time.Second
+	hangSettle       = recentReadWindow + 2*time.Second
+)
+
 // appHang hangs the app (-hang-app): it answers nothing and refuses nothing,
-// as a blackholed address does. /health answers within healthWithin with
-// reachable false, twice running, so a first /health that left a call or a
+// as a blackholed address does. Past hangSettle, /health answers within
+// healthWithin with reachable false, twice running, so a first /health that left a call or a
 // lock behind it is seen too; with the app back the add-on reads it again.
 func (k *kit) appHang() {
 	c := k.at("outage.hang")
@@ -46,6 +56,11 @@ func (k *kit) appHang() {
 	err := k.cfg.HangApp(k.ctx)
 	defer func() { k.appBack(c, err == nil && k.ctx.Err() == nil, live) }()
 	if !c.expect(err == nil, "-hang-app failed: %v", err) {
+		return
+	}
+	select {
+	case <-time.After(hangSettle):
+	case <-k.ctx.Done():
 		return
 	}
 	for i := range 2 {

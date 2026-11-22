@@ -323,3 +323,44 @@ func TestALiveSessionIsNotProbed(t *testing.T) {
 		t.Fatalf("a session in constant use must never be probed, got %d probes", live.pings)
 	}
 }
+
+// proofDroppedRPC answers the idle proof, but a call that failed meanwhile has
+// dropped (and closed) it, as one running while session() has the lock off.
+type proofDroppedRPC struct {
+	onPing func()
+	closed bool
+}
+
+func (r *proofDroppedRPC) Call(method string, _ int64, _ any) (json.RawMessage, error) {
+	if method == "core.ping" && r.onPing != nil {
+		r.onPing()
+	}
+	return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":"pong"}`), nil
+}
+func (r *proofDroppedRPC) Ping() (string, error) { return "pong", nil }
+func (r *proofDroppedRPC) Close() error          { r.closed = true; return nil }
+
+// A session proven live while a concurrent failure dropped it is not handed
+// back: session() dials a fresh one rather than return the closed client.
+func TestAProvenSessionDroppedMeanwhileIsNotReturned(t *testing.T) {
+	clock := time.Unix(1_700_000_000, 0).UTC()
+	var n *NAS
+	first := &proofDroppedRPC{}
+	first.onPing = func() { n.drop() }
+	second := &proofDroppedRPC{}
+	dials := []rpc{first, second}
+	n = newNAS(func() (rpc, error) { c := dials[0]; dials = dials[1:]; return c, nil }, []string{"25.10"})
+	n.now = func() time.Time { return clock }
+
+	if _, err := n.session(); err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(5 * time.Minute) // idle: the next session() proves it
+	got, err := n.session()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != second || !first.closed {
+		t.Fatalf("session() returned the dropped client (closed %v) rather than a fresh one", first.closed)
+	}
+}

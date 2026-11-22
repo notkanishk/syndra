@@ -285,8 +285,8 @@ func unanswered(ctx context.Context, target, reason string) DrainResult {
 }
 
 // haltReason is why an add-on pass does not send, "" when it may. A target
-// not answering halts on the monitor's state, and checking (no probe yet) is
-// addon_unreachable, Syndra holding no answer from the add-on (design §13.1),
+// not answering halts on the monitor's state, and checking (no probe answered
+// yet, up to three missed) is addon_unreachable, Syndra holding no answer from the add-on (design §13.1),
 // so the halt is one the pages say rather than a word of its own. An answering
 // target an operator put in maintenance (draining, read_only) halts on that
 // switch: it would refuse every row, so sending each due row every pass only

@@ -199,7 +199,9 @@ func (n *NAS) session() (rpc, error) {
 		}
 		c, live := n.client, false
 		n.offLock(func() { live = n.proven(c) })
-		if live {
+		// Re-checked: a call that failed while the lock was off may have
+		// dropped and closed c, and a closed client is not a live one.
+		if live && n.client == c {
 			n.lastRead = n.now()
 			return c, nil
 		}

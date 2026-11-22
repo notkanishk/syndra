@@ -237,8 +237,8 @@ func TestProbeAllProbesInParallelEachBounded(t *testing.T) {
 		t.Fatalf("two hanging add-ons took %v; in parallel they cost one probe timeout", took)
 	}
 	for _, target := range []string{"truenas", "printers"} {
-		if st := HealthOf(target); st.State != StateAddonUnreachable || st.Cause != CauseTimeout {
-			t.Errorf("%s: a hung probe from checking is addon_unreachable timeout, got %+v", target, st)
+		if state, cause := missOf(LastHealth(target)); state != StateAddonUnreachable || cause != CauseTimeout {
+			t.Errorf("%s: a hung probe is a miss as addon_unreachable timeout, got %s %q", target, state, cause)
 		}
 	}
 }

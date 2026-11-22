@@ -14,16 +14,19 @@ import (
 //
 // failureThreshold is a Kubernetes probe's default (about 90 s at the 30 s
 // probe); its successThreshold default, 1, is one answer clearing an outage.
-// From checking the first probe decides either way, as Envoy's active health
-// checking does for a new host.
+// From checking, one answer decides, but an outage takes the same three misses
+// as from answering: a restart that probes an add-on not yet listening, or a
+// NAS busy for one probe, is not an outage, and checking is the honest word
+// until it is one (task #89).
 const failureThreshold = 3
 
 // ReachState is what the monitor can say of one target.
 type ReachState string
 
 const (
-	// StateChecking: no probe yet. The first ProbeAll runs before the listener
-	// serves, so only a target registered since is seen here.
+	// StateChecking: no probe answered yet, and fewer than failureThreshold
+	// missed in a row. The first ProbeAll runs before the listener serves, so
+	// an add-on that answers it is never seen here.
 	StateChecking ReachState = "checking"
 	// StateAnswering: the add-on answered its last probe with reachable true
 	// (or has missed fewer than failureThreshold in a row since).
@@ -131,8 +134,8 @@ func (m *healthMonitor) observe(target string, h TargetHealth, at time.Time) {
 		r.misses++
 		next, cause = missOf(h)
 		r.retryAt = at.Add(max(probeInterval, time.Duration(h.Why.RetryAfter)*time.Second))
-		if r.state == StateAnswering && r.misses < failureThreshold {
-			next, cause = StateAnswering, ""
+		if (r.state == StateAnswering || r.state == StateChecking) && r.misses < failureThreshold {
+			next, cause = r.state, ""
 		}
 	}
 	if next == r.state && cause == r.cause {

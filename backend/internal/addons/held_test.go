@@ -10,7 +10,7 @@ import (
 )
 
 // holdDown makes the monitor hold target addon_unreachable (design §13.2:
-// from checking, the first probe decides).
+// from checking, failureThreshold misses).
 func holdDown(t *testing.T, target string) {
 	t.Helper()
 	m := monitor
@@ -18,7 +18,9 @@ func holdDown(t *testing.T, target string) {
 	t.Cleanup(func() { monitor = m })
 	// wrong_host, not no_answer: the fallback for a reply with no status is
 	// no_answer, so only another cause shows the monitor's why travelling.
-	monitor.observe(target, TargetHealth{Outcome: OutcomeUnreached, Why: Why{Reason: ReasonAddonUnreachable, Cause: CauseWrongHost}}, timeNow().UTC())
+	for range failureThreshold {
+		monitor.observe(target, TargetHealth{Outcome: OutcomeUnreached, Why: Why{Reason: ReasonAddonUnreachable, Cause: CauseWrongHost}}, timeNow().UTC())
+	}
 }
 
 // Design §13.4: an interactive write to a system the monitor holds
@@ -54,7 +56,10 @@ func TestAnAppOutageIsNotHeld(t *testing.T) {
 	m := monitor
 	monitor = newHealthMonitor()
 	t.Cleanup(func() { monitor = m })
-	monitor.observe("truenas", probeAppOff, timeNow().UTC())
+	observeSeq(monitor, "truenas", timeNow().UTC(), probeAppOff, probeAppOff, probeAppOff)
+	if st := HealthOf("truenas"); st.State != StateAppUnreachable {
+		t.Fatalf("three app misses are app_unreachable, got %+v", st)
+	}
 	if _, held := Held("truenas"); held {
 		t.Fatal("app_unreachable is the add-on's to answer, not refused undialed")
 	}

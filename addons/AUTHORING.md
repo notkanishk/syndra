@@ -720,8 +720,12 @@ Schema: `v2/schema/health.json`.
   Syndra's probe waits 5 s; a `/health` that waits longer on the app is read
   as your add-on down, not the app. Every other call `/health` waits on is
   bounded by the same deadline, and none may leave a lock held that the next
-  `/health` waits behind (`outage.hang`). The TrueNAS add-on uses 2 s
-  (`healthReachWithin`).
+  `/health` waits behind (`outage.hang`). `reachable` is true when a call
+  to the app succeeded now or, when that call gets no answer within the
+  deadline, within the last 10 s, so a check queued behind a long call is
+  not an outage; an app that refuses is `false` at once. The kit waits 12 s
+  after hanging the app before it asks. The TrueNAS add-on uses 2 s
+  (`healthReachWithin`) and 10 s (`recentReadCounts`).
 - `circuit_open` MUST be `true` while the add-on's own breaker is holding
   back its calls to the app (backing off to avoid a lockout or overload).
   It is distinct from `reachable: false`, so an operator does not look at
@@ -2695,8 +2699,9 @@ With them it runs:
   still answer, `reachable` is `false` after one fresh read and
   `last_read_at` does not move; with it back, `reachable: true` and a fresh
   read is `current: true`.
-- `outage.hang`: with the app hanging, `/health` answers within 3 s with
-  `reachable: false`, twice running; with it back, `reachable: true` and a
+- `outage.hang`: with the app hanging for 12 s (past the 10 s a recent
+  answer counts), `/health` answers within 3 s with `reachable: false`,
+  twice running; with it back, `reachable: true` and a
   fresh read is `current: true`.
 - `outage.kept` and `outage.none`: a read with a copy answers it
   (`current: false`, `stale.reason: unreachable`, the copy's own
