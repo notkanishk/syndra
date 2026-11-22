@@ -320,7 +320,7 @@ func (s *server) handleHomes(w http.ResponseWriter, r *http.Request, _ []byte) {
 		return
 	}
 	if err != nil {
-		writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's accounts or shares could not be read.", nil)
+		writeNotRead(w, err)
 		return
 	}
 	out := val.(HomesResponse)

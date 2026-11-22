@@ -184,10 +184,6 @@ type shareRead struct {
 	mounts datasetMap
 }
 
-// errNeverRead is a NAS whose folder permissions can't be read now and that
-// fresh.go holds no earlier read of: there is no last-known answer.
-var errNeverRead = errors.New("the folder permissions have not been read yet")
-
 // reachRead is one read of who opens what: the groups, and the folder ACLs
 // they are named in.
 type reachRead struct {
@@ -206,7 +202,7 @@ func (s *server) reach(fresh bool) (reachRead, Observed, error) {
 		}
 		acls, err := s.readSharesACLs()
 		if err != nil {
-			return nil, time.Time{}, fmt.Errorf("%w: %w", errNeverRead, err)
+			return nil, time.Time{}, err
 		}
 		return reachRead{acls, groups}, time.Now(), nil
 	})
@@ -522,13 +518,8 @@ func (s *server) handleReach(w http.ResponseWriter, r *http.Request, _ []byte) {
 	if writeCooldown(w, err) {
 		return
 	}
-	if errors.Is(err, errNeverRead) {
-		writeError(w, http.StatusServiceUnavailable, CodeNoCurrentRead,
-			"The folder permissions have not been read since the add-on started.", nil)
-		return
-	}
 	if err != nil {
-		writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's groups could not be read.", nil)
+		writeNotRead(w, err)
 		return
 	}
 	nobody := principals{} // an account in no group: what everyone@ alone opens

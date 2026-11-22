@@ -1120,3 +1120,33 @@ func TestAnUnreadableBindingIsTheAddOnsFaultNotNoAccount(t *testing.T) {
 		}
 	}
 }
+
+// A write whose lookup died on its socket sent no write: the apply and a
+// write operation answer TARGET_UNREACHABLE with Retry-After, which Syndra
+// reads as nothing sent (design §13.4), never APPLY_FAILED or
+// OPERATION_FAILED, read as "may have acted" (kit outage.write, 8g).
+func TestAWriteWhoseLookupDiedSentNothing(t *testing.T) {
+	for _, name := range []string{"apply", "password.set"} {
+		t.Run(name, func(t *testing.T) {
+			s, m := opServer(t)
+			apply := withContractVersion(t, withFingerprint(t, s,
+				`{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":{"enabled":false}}`))
+			_, records := s.log.Head()
+			m.fakeRPC.err = errors.New("websocket: close 1006 (abnormal closure): unexpected EOF")
+			rr := httptest.NewRecorder()
+			if name == "apply" {
+				s.handleApply(rr, httptest.NewRequest(http.MethodPost, "/apply", strings.NewReader(apply)), []byte(apply))
+			} else {
+				rr = postOperation(t, s, name, `{"call_id":"c1","subject":"sub-1","actor":"sub-1","params":{"password":"`+theSecret+`"}}`)
+			}
+			var p struct{ Code string }
+			_ = json.Unmarshal(rr.Body.Bytes(), &p)
+			if rr.Code != http.StatusServiceUnavailable || p.Code != CodeTargetUnreachable || rr.Header().Get("Retry-After") == "" {
+				t.Fatalf("want 503 TARGET_UNREACHABLE with Retry-After, got %d %q %s", rr.Code, rr.Header().Get("Retry-After"), rr.Body)
+			}
+			if _, now := s.log.Head(); now != records || len(m.updates)+len(m.creates) != 0 {
+				t.Errorf("a write went out: log %d -> %d records, %d updates, %d creates", records, now, len(m.updates), len(m.creates))
+			}
+		})
+	}
+}

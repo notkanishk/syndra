@@ -805,3 +805,14 @@ func dialTrueNAS(url, apiKey string, verifyTLS bool) dialer {
 		return c, nil
 	}
 }
+
+// readBeforeWrite is a read's failure as the write waiting on it answers it.
+// No write has been sent yet, so a read that could not reach the NAS, even
+// one whose request went out on a session that then died, leaves nothing
+// sent: ErrNotSent, which lets the write answer TARGET_UNREACHABLE.
+func readBeforeWrite(err error) error {
+	if errors.Is(err, ErrTargetUnreachable) && !errors.Is(err, ErrNotSent) {
+		return fmt.Errorf("%w: %w", ErrNotSent, err)
+	}
+	return err
+}

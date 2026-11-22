@@ -33,8 +33,13 @@ on the member). Its store (`state.db`) writes each binding's `account_id`
 beside its `uid` and each recorded call's identity digest beside what contract
 1 wrote, so a contract-1 binary rolled back onto it reads it unchanged.
 `conformance_test.go` runs the conformance kit (`../conformance`) against it,
-over its real transport and a fake NAS: reads only, `-mutate`, and
-`-mutate -mutate-settings`, with no MUST failing.
+over its real transport and a stub NAS behind its dialer: reads only,
+`-mutate`, and `-mutate -mutate-settings`, with no MUST failing, each run
+with the app hooks and `-require-outage` (CI's addon-conformance job). The
+stub is off while a file exists, so the hooks are `touch` and `rm -f`. Against
+a real NAS, `-start-app` returns only once the add-on can dial again: it
+waits out the 15 s floor between its dial attempts (`reconnectCooldown` in
+`nas.go`), or the read after it still finds the NAS unreachable.
 
 Eight operations: `password.set` (the only one a member drives),
 `password.rotate`, `account.adopt`, `account.release`, `account.purge`,

@@ -695,6 +695,7 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 	}
 
 	current, binding, conflict, truncated, adopt, err := s.locate(req)
+	err = readBeforeWrite(err) // locate only reads the NAS
 	if errors.Is(err, errNoIdentityToDeriveFrom) && noAccountToSwitchOff(nil, desired) {
 		// No binding, so no account of theirs here, and nothing to make: the
 		// identity is only needed to name a new account. What the plan said.
