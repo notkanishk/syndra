@@ -743,8 +743,10 @@ Schema: `v2/schema/health.json`.
   connection, that has too little of its time left to connect or ping in
   full (so does not try), or whose call ran out while the app answers its
   ping, SHOULD answer 503 `TARGET_BUSY` with `Retry-After`: a read with no
-  copy, or a write that sent nothing. Syndra opens no breaker and counts no
-  miss for it. A kept copy served then says `stale.reason: busy`. A write
+  copy, or a write that sent nothing. Syndra opens no breaker for it. Never
+  from `/health`: it is a read or operation answer only, and the monitor
+  counts any non-OK `/health` answer as a miss. A kept copy served then
+  says `stale.reason: busy`. A write
   that went out and ran out its time may have acted, and stays a 5xx. Keep
   every call to the app short, background work included: page a long read
   so one call stays well under the 10 s a recent answer counts, so a
@@ -2732,13 +2734,14 @@ With them it runs:
   read is `current: true`.
 - `outage.hang`: with the app hanging for 12 s (past the 10 s a recent
   answer counts), `/health` answers within 3 s with `reachable: false`,
-  twice running, and each read operation you declare answers within 25 s
-  with its kept copy or 503 `TARGET_UNREACHABLE`, `NO_CURRENT_READ` or `TARGET_BUSY`; with
+  twice running, never `TARGET_BUSY`, and each read operation you declare
+  answers within 25 s with its kept copy or 503 `TARGET_UNREACHABLE`, `NO_CURRENT_READ` or `TARGET_BUSY`; with
   it back, `reachable: true` and a fresh read is `current: true`.
 - `outage.kept` and `outage.none`: a read with a copy answers it
   (`current: false`, `stale.reason: unreachable`, the copy's own
-  `taken_at`); a read without one answers 503 `TARGET_UNREACHABLE`,
-  `NO_CURRENT_READ` or `TARGET_BUSY`, the problem and nothing else.
+  `taken_at`); a read without one answers 503 `TARGET_UNREACHABLE` or
+  `NO_CURRENT_READ`, the problem and nothing else. A stopped app is down,
+  never busy, so `TARGET_BUSY` fails `outage.none`.
 - `outage.write`: an apply answers `TARGET_UNREACHABLE` with `Retry-After`,
   and `GET /calls/{call_id}` shows nothing recorded for it.
 - `outage.restart` (the add-on hooks): `/subjects` answers from your mirror

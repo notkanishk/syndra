@@ -42,10 +42,11 @@ const (
 	ReasonCooldown         = "cooldown"
 	// ReasonBusy is the add-on answering TARGET_BUSY: its queue to the app,
 	// or the app, busy (added 22 Nov 2026 from the 8g staging run). Never an
-	// outage: it opens no breaker, counts no monitor miss, and a queued row
-	// waits RetryAfter.
-	ReasonBusy = "busy"
-	ReasonAddonOutdated    = "addon_outdated"
+	// outage: it opens no breaker, and a queued row waits RetryAfter with no
+	// attempt spent. A read or operation answer only: /health never answers
+	// it, and the monitor counts any non-OK /health answer as a miss.
+	ReasonBusy          = "busy"
+	ReasonAddonOutdated = "addon_outdated"
 )
 
 // Causes of addon_unreachable: what the pipe saw (design §13.1's table).

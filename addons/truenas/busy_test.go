@@ -141,6 +141,54 @@ func TestABusyNASAnswersTargetBusy(t *testing.T) {
 	}
 }
 
+// slowWriteRPC is a busy NAS that took a write and ran out its time on it,
+// while its ping answers: every other call is passed on.
+type slowWriteRPC struct{ rpc }
+
+func (r slowWriteRPC) Call(method string, timeoutSeconds int64, params any) (json.RawMessage, error) {
+	if method == "user.update" || method == "user.create" {
+		time.Sleep(time.Duration(timeoutSeconds) * time.Second)
+		return nil, errors.New("call timed out")
+	}
+	return r.rpc.Call(method, timeoutSeconds, params)
+}
+
+// A write that went out on a busy NAS and ran out its time may have acted,
+// so it answers APPLY_FAILED or OPERATION_FAILED, never TARGET_BUSY, even
+// though the ping answered (8g fix round 3).
+func TestAWriteSentOnABusyNASIsNeverTargetBusy(t *testing.T) {
+	for name, tc := range map[string]struct {
+		code string
+		send func(*testing.T, *server) *httptest.ResponseRecorder
+	}{
+		"an apply": {code: CodeApplyFailed, send: func(t *testing.T, s *server) *httptest.ResponseRecorder {
+			body := withContractVersion(t, withFingerprint(t, s,
+				`{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":{"enabled":false}}`))
+			rr := httptest.NewRecorder()
+			s.withBudget(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				s.handleApply(w, r, []byte(body))
+			})).ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/apply", strings.NewReader(body)))
+			return rr
+		}},
+		"a write operation": {code: CodeOperationFailed, send: func(t *testing.T, s *server) *httptest.ResponseRecorder {
+			return postWithin(t, s, "password.set", `{"call_id":"c1","subject":"sub-1","actor":"sub-1","params":{"password":"`+theSecret+`"}}`)
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s, nas := opServer(t)
+			s.nas.callWithin = time.Second
+			s.nas.client, s.nas.probed, s.nas.lastRead = slowWriteRPC{nas}, true, time.Now()
+			rr := tc.send(t, s)
+			var p struct{ Code string }
+			_ = json.Unmarshal(rr.Body.Bytes(), &p)
+			if rr.Code < 500 || p.Code != tc.code {
+				t.Fatalf("answered %s; want a 5xx %s, never %s", problemOf(rr), tc.code, CodeTargetBusy)
+			}
+		})
+	}
+}
+
 // holdTheLine gives the wire to a long call (the collector's page) until
 // release, on a live session, and gives the request 1 s.
 func holdTheLine(_ *testing.T, s *server, release chan struct{}) string {

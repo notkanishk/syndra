@@ -83,6 +83,9 @@ type targetSummary struct {
 	CircuitOpen bool `json:"circuit_open"`
 	// LastError is why the last manifest read failed, when one did.
 	LastError string `json:"last_error,omitempty"`
+	// BusySince is when the system began answering busy, set only once the
+	// send has halted for it (propagation.BusyHalted).
+	BusySince *time.Time `json:"busy_since,omitempty"`
 	// Health is the monitor's state (addons.HealthOf, design §13.2): an outage
 	// only after three missed probes in a row, checking until the first.
 	Health addons.HealthState `json:"health"`
@@ -166,6 +169,7 @@ func handleListTargets(w http.ResponseWriter, r *http.Request) {
 	for _, reg := range registrations {
 		s := describeTarget(r.Context(), reg, transport[reg.Target])
 		s.Name, s.NameFrom = systemName(r.Context(), reg.Target)
+		s.BusySince = propagationBusyHalted(reg.Target)
 		if id, ok := projects[reg.Target]; ok {
 			s.Project = &targetProjectRef{ID: id, Name: names[id]}
 		}

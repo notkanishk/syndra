@@ -12,6 +12,7 @@ package propagation
 
 import (
 	"context"
+	"time"
 
 	"errors"
 	"fmt"
@@ -165,6 +166,9 @@ var (
 	// monitor's own probe is a /health on the add-on, which reads the TARGET,
 	// and its three-miss rule is the one every other reader follows.
 	addonState = addons.HealthOf
+
+	// busyClock is when a TARGET_BUSY answer came, for the busy halt (busySince).
+	busyClock = time.Now
 
 	// Which targets the drain has a dispatcher for, beyond the built-in one.
 	// A seam because the alternative is a drain test that can only ever see

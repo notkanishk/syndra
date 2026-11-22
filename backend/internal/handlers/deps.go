@@ -53,6 +53,8 @@ var (
 	// one delivery (whether a write waits for you is the plan's, task 1.9).
 	svcDeliverChange = services.DeliverChange
 	svcDrainAddon    = propagation.DrainAddon
+	// propagationBusyHalted says on the target page that its send halted busy.
+	propagationBusyHalted = propagation.BusyHalted
 
 	dbCreateAccessRequestOfKind = db.CreateAccessRequestOfKind
 	dbGetAccessRequestByID      = db.GetAccessRequestByID

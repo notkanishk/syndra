@@ -78,6 +78,9 @@ func (k *kit) appHang() {
 		began := time.Now()
 		ex := k.send(request{method: http.MethodGet, target: "/health"})
 		took := time.Since(began)
+		// Busy is a read or operation answer only: Syndra counts any non-OK
+		// /health as a monitor miss, so a hanging app is reachable false.
+		c.expect(ex.code() != "TARGET_BUSY", "/health %d with the app hanging answered TARGET_BUSY; /health never answers busy, it answers 200 with reachable false", i+1)
 		if h := k.ok(c, ex, "health.json"); h != nil {
 			c.expect(took < healthWithin, "/health %d with the app hanging answered after %s; it must answer within %s, under Syndra's 5 s probe", i+1, took.Round(time.Millisecond), healthWithin)
 			c.expect(h["reachable"] == false, "/health %d with the app hanging answered reachable %v; a call that got no answer did not succeed", i+1, h["reachable"])
@@ -256,8 +259,8 @@ func (k *kit) outageRead(kept, none *check, ex *exchange, copyAt string, fresh b
 			"%s with the app stopped answered taken_at %s; the copy was taken at %s", ex, str(doc, "taken_at"), copyAt)
 		return
 	}
-	if !none.expect(ex.err == nil && ex.status == http.StatusServiceUnavailable && slices.Contains(noCopy, ex.code()),
-		"%s with the app stopped answered %d %s (%v); with no copy, want 503 %s", ex, ex.status, ex.code(), ex.err, strings.Join(noCopy, ", ")) {
+	if !none.expect(ex.err == nil && ex.status == http.StatusServiceUnavailable && slices.Contains(stoppedNoCopy, ex.code()),
+		"%s with the app stopped answered %d %s (%v); with no copy, want 503 %s (a stopped app is down, not busy)", ex, ex.status, ex.code(), ex.err, strings.Join(stoppedNoCopy, ", ")) {
 		return
 	}
 	var extra []string
@@ -329,6 +332,10 @@ var nothingToServe = []string{"TARGET_UNREACHABLE", "NO_CURRENT_READ", "TARGET_B
 // hangs: nothing reached it, nothing is held, or it was busy (TARGET_BUSY,
 // not an outage, added 22 Nov 2026 from the 8g staging run).
 var noCopy = []string{"TARGET_UNREACHABLE", "NO_CURRENT_READ", "TARGET_BUSY"}
+
+// stoppedNoCopy are noCopy without TARGET_BUSY: a stopped app answers nothing,
+// so it is down, never busy (outage.none).
+var stoppedNoCopy = []string{"TARGET_UNREACHABLE", "NO_CURRENT_READ"}
 
 // noFalseZero walks one reply: with nothing to serve it carries no 0, empty
 // list, "" or zero date; no reply carries a zero taken_at, or current false

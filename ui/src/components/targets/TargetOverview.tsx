@@ -9,6 +9,7 @@ import {
   isUnconfirmed,
   nextStep,
   isNothingSent,
+  NOTHING_TO_DO,
   notDoneWord,
   outcomeFromError,
   sentence,
@@ -60,7 +61,7 @@ import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
-import { formatBytes, formatClock, formatShortDate, personLine, versionLabel, whyNotChecked } from "@/lib/format";
+import { formatBytes, formatClock, formatShortDate, formatWhen, personLine, versionLabel, whyNotChecked } from "@/lib/format";
 import { useCountdown, useRetryOnce } from "@/lib/queries/fresh";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
@@ -262,6 +263,7 @@ export function TargetOverview({ target }: { target: string }) {
                   transportError={
                     registered?.transport_status === "error" ? registered.transport_error : undefined
                   }
+                  busySince={registered?.busy_since}
                 />
                 <SystemHealth target={target} stale={notRead} />
               </CardGrid>
@@ -913,11 +915,13 @@ function ReachCard({
   health,
   isLoading,
   transportError,
+  busySince,
 }: {
   target: string;
   health: TargetHealthReply | undefined;
   isLoading: boolean;
   transportError?: string;
+  busySince?: string;
 }) {
   const nameOf = useSystemNames();
   const name = nameOf(target);
@@ -996,7 +1000,7 @@ function ReachCard({
       >
         {detail}
       </Reading>
-      <ConnectionNotices target={target} health={said} />
+      <ConnectionNotices target={target} health={said} busySince={busySince} />
     </Card>
   );
 }
@@ -1010,15 +1014,26 @@ function ReachCard({
 function ConnectionNotices({
   target,
   health,
+  busySince,
 }: {
   target: string;
   health: TargetHealth | undefined;
+  /** Set when the send stopped because the system has been busy for over half an hour (backend propagation busyHaltAfter). */
+  busySince?: string;
 }) {
   const nameOf = useSystemNames();
   const name = nameOf(target);
-  if (!health?.reachable) return null;
-
   const notices: React.ReactNode[] = [];
+
+  // Busy is not down: the add-on answers, so it is said whatever the reach.
+  if (busySince) {
+    notices.push(
+      <Reading key="busy" tone="warn" label={`${name} has been busy since ${formatWhen(busySince)}`}>
+        Nothing was sent. Syndra keeps trying by itself. {NOTHING_TO_DO}
+      </Reading>,
+    );
+  }
+  if (!health?.reachable) return notices.length ? <>{notices}</> : null;
 
   if (health.in_flight !== undefined && health.in_flight > 0) {
     notices.push(

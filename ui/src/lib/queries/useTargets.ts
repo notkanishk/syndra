@@ -84,6 +84,8 @@ export interface TargetSummary {
   /** Why the add-on's latest manifest was not accepted (a contract it does
    * not speak, a field whose meaning changed); the last good one stays. */
   last_error?: string;
+  /** When the system began answering busy, set only once the send has stopped for it (over half an hour). */
+  busy_since?: string;
   /** What the add-on's manifest says that Syndra does not use, as
    * `path: value`, quoted and capped: shown raw, never acted on. */
   also_says?: string[];

@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"syndra/internal/addons"
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services/merge"
@@ -202,6 +204,8 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		CallID:  row.ID,
 		Desired: intent.Desired(),
 	})
+	busy := resp.Outcome == addons.OutcomeUnreached && resp.Why.Reason == addons.ReasonBusy
+	since := noteBusy(intent.Target, busy)
 
 	switch {
 	case resp.Outcome == addons.OutcomeSucceeded:
@@ -257,6 +261,23 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 			return false
 		}
 		res.Failed++
+
+	case busy:
+		// Not an outage and not a failure: the add-on's queue or its app was
+		// busy and nothing went out, so no attempt is spent (design §13.1). A
+		// target busy without a break for longer than busyHaltAfter halts the
+		// pass, as the maintenance switch does: one row asks each pass, and its
+		// first other answer clears it.
+		why := unreachedWhy(systemName(ctx, row.Target), resp)
+		halt := busyClock().Sub(since) > busyHaltAfter
+		if halt {
+			why = busyHaltWhy(systemName(ctx, row.Target), since)
+		}
+		res.deferUnsent(ctx, row, why, resp.Why.RetryAfter)
+		if halt {
+			res.Halted, res.Reason, res.BusySince = true, addons.ReasonBusy, &since
+		}
+		return halt
 
 	case resp.Outcome == addons.OutcomeUnreached && resp.Why.Unreachable():
 		// Nothing went out because a side was down (design §13.4): no attempt
@@ -315,6 +336,56 @@ func (res *DrainResult) deferUnsent(ctx context.Context, row models.PendingPropa
 	res.Deferred++
 }
 
+// busyHaltAfter is how long a target may answer busy without a break before
+// its pass halts (busy).
+const busyHaltAfter = 30 * time.Minute
+
+// busySince holds when each target first answered TARGET_BUSY, until its next
+// other answer.
+//
+// ponytail: in memory, so a restart starts the half hour again; that only
+// delays the halt. A column if the halt must survive restarts.
+var busySince = struct {
+	sync.Mutex
+	at map[string]time.Time
+}{at: map[string]time.Time{}}
+
+// noteBusy records one answer from target and returns when its unbroken run
+// of busy answers began (zero when this answer was not busy).
+func noteBusy(target string, busy bool) time.Time {
+	busySince.Lock()
+	defer busySince.Unlock()
+	if !busy {
+		delete(busySince.at, target)
+		return time.Time{}
+	}
+	since, ok := busySince.at[target]
+	if !ok {
+		since = busyClock()
+		busySince.at[target] = since
+	}
+	return since
+}
+
+// BusyHalted is when target began answering busy, once that run is past
+// busyHaltAfter and its pass halts; nil otherwise. The target page says it.
+func BusyHalted(target string) *time.Time {
+	busySince.Lock()
+	defer busySince.Unlock()
+	since, ok := busySince.at[target]
+	if !ok || busyClock().Sub(since) <= busyHaltAfter {
+		return nil
+	}
+	return &since
+}
+
+// busyHaltWhy is a row's last_error once its target has been busy past
+// busyHaltAfter, the time in the deployment's zone.
+func busyHaltWhy(system string, since time.Time) string {
+	return system + " has been busy since " + since.In(clock.Loc).Format("15:04 on 2 Jan 2006") +
+		"; nothing was sent. Syndra keeps trying by itself."
+}
+
 var errIndeterminate = errors.New("the call was sent and the answer was lost; whether it applied is unknown")
 
 // settleFailure records a state write that did not land, distinguishing a row
@@ -330,6 +401,10 @@ func (res *DrainResult) settleFailure(id, step string, err error) {
 // TARGET_CHANGED is unreached like TARGET_UNREACHABLE (addons.classifyStatus, one path); only
 // the reason differs. It lands in last_error, which the pages show.
 func unreachedWhy(system string, resp addons.ApplyResponse) string {
+	if resp.Why.Reason == addons.ReasonBusy {
+		// The add-on's queue or its app was busy: reached, not down, nothing sent.
+		return system + " was busy; nothing was sent. Syndra sends it again by itself."
+	}
 	if resp.Code == addons.CodeTargetChanged {
 		// The add-on read the target and it changed underneath: reached, and still nothing sent.
 		return system + " changed while Syndra was reading it"

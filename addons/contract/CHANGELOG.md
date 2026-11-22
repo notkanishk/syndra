@@ -10,11 +10,14 @@ Added from the 8g staging run. `TARGET_BUSY` (503, `retry_after`,
 add-on's connection to the app, had too little of its time left to connect
 or ask in full (so did not try), or ran out on an app that still answers its
 ping: a read with nothing current and no copy, or a write that sent nothing.
-Syndra reads it as `busy`, never an outage: no breaker opens, no monitor
-miss is counted, the change stays queued. A write that went out and ran out
+Syndra reads it as `busy`, never an outage: no breaker opens and the
+change stays queued with no try spent. It is a read or operation answer
+only: `/health` never answers it (the kit checks), and the monitor counts
+every non-OK `/health` answer as a miss. A write that went out and ran out
 its time may have acted and stays a 5xx. `stale.reason` gains `busy`: a kept
-copy served because the app was busy. The kit's `outage.hang`, `outage.none`
-and `no-false-zero` take `TARGET_BUSY` as a no-copy code. The guide asks
+copy served because the app was busy. The kit's `outage.hang` and `no-false-zero`
+take `TARGET_BUSY` as a no-copy code; `outage.none` refuses it, a stopped
+app being down, not busy. The guide asks
 an add-on to keep every call to its app short, background work included,
 so a `/health` queued behind one waits one short call. Schema:
 `common/stale.json` (`reason`). Registry: `errors.json` (`TARGET_BUSY`). No
