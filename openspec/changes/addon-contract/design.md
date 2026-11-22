@@ -2116,9 +2116,19 @@ observed, so not stated).
 - Probe: `GET /health` every 30 s, targets in parallel, 5 s each. A failed
   probe is `addon_unreachable` with its cause; an answered one with
   `reachable: false` is `app_unreachable`. No longer one "miss".
+- `/health` answers within 3 s even while the app hangs: the add-on's own
+  call to the app has a shorter deadline and answers `reachable: false` when
+  it expires, so a hanging app is never read as the add-on down
+  (`outage.hang`; the 8g staging run, 22 Nov 2026). `reachable` is true
+  when a call to the app succeeded now or, when that call gets no answer
+  within the deadline, within the last 10 s, so a check queued behind a long
+  call is not an outage; an app that refuses is false at once. The kit
+  waits past the 10 s before `outage.hang` judges (`hangSettle`).
 - Hysteresis by a Kubernetes probe's defaults (`failureThreshold: 3`,
-  `successThreshold: 1`). From `checking` the first probe decides either way,
-  as Envoy's active health checking does for a new host.
+  `successThreshold: 1`). From `checking` one answer decides, as Envoy's
+  active health checking does for a new host, but an outage takes the same
+  three misses as from `answering`: a restart whose first probe finds the
+  add-on not yet listening stays `checking` (task #89).
 - The breaker (5 failures, 30 s, half-open; Nygard, *Release It!*) stays
   transport protection, not a second opinion: an open breaker is a cause the
   monitor reports, and it remembers the cause that opened it.
@@ -2128,7 +2138,8 @@ observed, so not stated).
   reads, which no longer issue a health read per load and, while the state is
   `addon_unreachable`, answer "no copy" from the monitor without dialing.
 - **A restart does not forget.** The first `ProbeAll` runs before the
-  listener serves, so `checking` is seen only for a target registered since.
+  listener serves, so `checking` is seen only for a target registered since
+  or one whose add-on has not answered yet (fewer than three misses).
   Nothing is persisted.
 - Each state change is logged once, OpenTelemetry's `error.type` the cause.
 

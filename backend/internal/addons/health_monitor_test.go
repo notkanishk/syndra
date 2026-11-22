@@ -55,21 +55,38 @@ func TestThreeMissesAreUnreachableOneSuccessRecovers(t *testing.T) {
 	}
 }
 
-// From checking the first probe decides either way, and since is absent: the
-// state was already so when Syndra first looked, so when it began is unknown.
-func TestTheFirstProbeDecidesFromChecking(t *testing.T) {
+// From checking one answer decides, and since is absent: the state was
+// already so when Syndra first looked, so when it began is unknown. An outage
+// takes three misses, as from answering (task #89): a restart whose first
+// probe found the add-on not yet listening stays checking, then answers.
+func TestFromCheckingOneAnswerDecidesAndThreeMissesMakeAnOutage(t *testing.T) {
 	m := newHealthMonitor()
 	if st := m.state("truenas", t0); st.State != StateChecking {
 		t.Fatalf("never probed is checking, got %+v", st)
 	}
 	m.observe("truenas", probeNoAns, t0)
-	if st := m.state("truenas", t0); st.State != StateAddonUnreachable || st.Since != nil {
-		t.Fatalf("one miss from checking is unreachable, since not observed: %+v", st)
+	if st := m.state("truenas", t0); st.State != StateChecking || st.MissedSince == nil {
+		t.Fatalf("one miss from checking stays checking, the miss counted: %+v", st)
 	}
-	m2 := newHealthMonitor()
-	m2.observe("truenas", probeOK, t0)
-	if st := m2.state("truenas", t0); st.State != StateAnswering || st.Since != nil {
-		t.Fatalf("one answer from checking is answering, since not observed: %+v", st)
+	if st := m.state("truenas", t0); st.LastMiss != StateAddonUnreachable {
+		t.Fatalf("a miss from checking carries its class: %+v", st)
+	}
+	m.observe("truenas", probeOK, t0.Add(30*time.Second))
+	if st := m.state("truenas", t0); st.State != StateAnswering || st.Since != nil {
+		t.Fatalf("an answer after a miss from checking is answering, since not observed: %+v", st)
+	}
+
+	for name, miss := range map[string]TargetHealth{"addon": probeNoAns, "app": probeAppOff} {
+		m := newHealthMonitor()
+		observeSeq(m, "truenas", t0, miss, miss)
+		if st := m.state("truenas", t0); st.State != StateChecking {
+			t.Fatalf("%s: two misses from checking are not an outage, got %+v", name, st)
+		}
+		m.observe("truenas", miss, t0.Add(time.Minute))
+		want, _ := missOf(miss)
+		if st := m.state("truenas", t0); st.State != want || st.Since != nil {
+			t.Fatalf("%s: the third miss from checking is %s, since not observed: %+v", name, want, st)
+		}
 	}
 }
 
@@ -96,8 +113,8 @@ func TestAProbeTheBreakerRefusedCarriesTheOpeningCause(t *testing.T) {
 	open := CallResponse{Outcome: OutcomeUnreached,
 		Err: &CircuitOpenError{Target: "truenas", Opener: Why{Reason: ReasonAddonUnreachable, Cause: CauseWrongHost}, RetryAfter: 50 * time.Second}}
 	h := TargetHealth{Outcome: OutcomeUnreached, Err: open.Err, Why: Unread(open)}
-	m.observe("truenas", h, t0)
-	st := m.state("truenas", t0)
+	observeSeq(m, "truenas", t0, h, h, h)
+	st := m.state("truenas", t0.Add(time.Minute))
 	if st.State != StateAddonUnreachable || st.Cause != CauseWrongHost || st.RetryAfter != 50 {
 		t.Fatalf("want wrong_host, retry in 50 s, got %+v", st)
 	}
@@ -171,7 +188,9 @@ func TestOnlyTheProbeMovesTheMonitor(t *testing.T) {
 	if st := HealthOf("truenas"); st.State != StateChecking || len(st.Recent) != 0 {
 		t.Fatalf("live reads moved the monitor: %+v", st)
 	}
-	_ = ProbeAll(context.Background())
+	for range failureThreshold {
+		_ = ProbeAll(context.Background())
+	}
 	if st := HealthOf("truenas"); st.State != StateAddonUnreachable || LastHealth("truenas").Why.Cause != CauseNoAnswer {
 		t.Fatalf("the probe decides from checking and keeps its answer: %+v %+v", st, LastHealth("truenas"))
 	}
@@ -206,5 +225,46 @@ func TestAnAnsweredLifecycleSwitchMovesTheMonitorAtOnce(t *testing.T) {
 	}
 	if h := LastHealth("truenas"); h.Lifecycle != "active" {
 		t.Fatalf("the Maintenance card would show %q", h.Lifecycle)
+	}
+}
+
+// The two halves of one bound. An add-on's /health answers within 3 s while
+// its app hangs (AUTHORING.md, GET /health; the kit's outage.hang), under
+// probeTimeout, so a hanging app is named app_unreachable; a /health that
+// outlasts the probe is the add-on not answering, addon_unreachable timeout,
+// which is what the 8g staging run saw when the TrueNAS add-on's /health
+// waited on a blackholed NAS (22 Nov 2026).
+func TestAHealthSlowedByTheAppIsTheAppWithinTheBound(t *testing.T) {
+	const addonHealthWithin = 3 * time.Second // AUTHORING.md's bound at the kit
+	for name, tc := range map[string]struct {
+		took  time.Duration
+		state ReachState
+		cause string
+	}{
+		"within the add-on's bound": {addonHealthWithin - 100*time.Millisecond, StateAppUnreachable, ""},
+		"past the probe":            {probeTimeout + time.Second, StateAddonUnreachable, CauseTimeout},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := monitor
+			monitor = newHealthMonitor()
+			t.Cleanup(func() { monitor = m })
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				select {
+				case <-time.After(tc.took):
+				case <-r.Context().Done():
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"reachable":false,"product":"TrueNAS","lifecycle":"active","log_head":"h","credential_expiry":"none"}`))
+			}))
+			t.Cleanup(srv.Close)
+			signedAddon(t, srv.URL, "a-probe-secret")
+			_ = ProbeAll(context.Background())
+			// One probe's miss, as the monitor names it (an outage takes
+			// failureThreshold of them).
+			if state, cause := missOf(LastHealth("truenas")); state != tc.state || cause != tc.cause {
+				t.Fatalf("a /health that took %v: got %s %q, want %s %q (%+v)", tc.took, state, cause, tc.state, tc.cause, LastHealth("truenas"))
+			}
+		})
 	}
 }

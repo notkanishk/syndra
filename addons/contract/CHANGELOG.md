@@ -3,6 +3,21 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## /health answers in time when the app hangs (slice 8g, 22 Nov 2026)
+
+`/health` MUST answer within 3 s while the app hangs (answers nothing,
+rather than refusing): its call to the app gets its own shorter deadline
+and answers `reachable: false` when that expires, and no lock it leaves
+held may delay the next `/health`. `reachable` is true when a call to the
+app succeeded now or, when that call gets no answer within the deadline,
+within the last 10 s, so a call queued behind a long one is not an outage;
+an app that refuses is false at once. The kit checks it as `outage.hang`,
+run with the new `-hang-app <command>` hook: it hangs the app, waits 12 s
+(past the 10 s), then asks `/health` twice, each within 3 s. And
+`-require-outage` now requires `-hang-app` too: a third-party CI
+that passes `-require-outage` must add the hook, or `outage.hang` fails.
+No schema, registry entry or fixture changed.
+
 ## When Syndra cannot reach you (slice 8a, 21 Nov 2026)
 
 Still major 2 before its release, so nothing is kept for old callers.

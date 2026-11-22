@@ -61,7 +61,11 @@ type Config struct {
 	// its disk kept. Each returns once the change has happened. Without a
 	// pair its outage checks are not checked: a skip, never a pass.
 	StopApp, StartApp, StopAddon, StartAddon func(context.Context) error
-	// RequireOutage makes a missing StopApp or StartApp a failure (CI).
+	// HangApp makes the app answer nothing, never refuse, as a blackholed
+	// address does; StartApp brings it back. Without it outage.hang is not
+	// checked.
+	HangApp func(context.Context) error
+	// RequireOutage makes a missing StopApp, StartApp or HangApp a failure (CI).
 	RequireOutage bool
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -250,6 +251,41 @@ type Health struct {
 	TargetReads uint64 `json:"target_reads"`
 }
 
+// healthReachWithin bounds every call /health makes to the NAS. A health
+// endpoint answers fast and bounds each dependency it checks (the Kubernetes
+// probe guidance; the health-check API pattern). Syndra's probe gives /health
+// 5 s (probeTimeout, backend/internal/addons/deps.go), and a /health that
+// waited out a blackholed NAS's dial answered after it, so the backend
+// blamed the add-on for the NAS (the 8g staging run, 22 Nov 2026). 2 s
+// leaves the rest of the 5 for TLS and the network; the guide's bound at the
+// kit is 3 s (AUTHORING.md, GET /health). Keep it under both.
+const healthReachWithin = 2 * time.Second
+
+// recentReadCounts is how old a NAS answer may be and still count as reachable
+// when /health's own ping runs out of time. The session is one socket and its
+// calls go one at a time (callMu), so the ping can queue behind an audit.query
+// page or a get_quota for up to callTimeoutSeconds while the NAS is busy and
+// fine; a miss then reads as app_unreachable on the backend's first probe
+// after a restart. §13.2: a call that succeeded within the last few seconds
+// counts. A NAS that hangs still reads false once its last answer is older.
+const recentReadCounts = 10 * time.Second
+
+// within answers fn's result, or done false once ctx ends first. fn runs on,
+// and its late answer is dropped: a NAS call cannot be cancelled, only not
+// waited for. Each ends by its own timeouts (nas.go): session() dials for one
+// caller at a time, and those waiting on it answer at once on the reconnect
+// cooldown when the dial fails.
+func within[T any](ctx context.Context, fn func() T) (v T, done bool) {
+	got := make(chan T, 1)
+	go func() { got <- fn() }()
+	select {
+	case v = <-got:
+		return v, true
+	case <-ctx.Done():
+		return v, false
+	}
+}
+
 // handleHealth composes the operator shape, degrading per source rather than
 // failing whole.
 //
@@ -278,9 +314,11 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 
 	// A real call, not a cached opinion. Reachability that reports the last
 	// known answer is the field most likely to be wrong exactly when it is read.
-	if _, err := s.nas.Ping(); err == nil {
-		h.Reachable = true
-	}
+	// Bounded: a NAS that hangs is not reachable, and says so in time.
+	ctx, cancel := context.WithTimeout(r.Context(), healthReachWithin)
+	defer cancel()
+	reachable, answered := within(ctx, func() bool { _, err := s.nas.Ping(); return err == nil })
+	h.Reachable = reachable || !answered && time.Since(s.nas.LastRead()) <= recentReadCounts
 	if t := s.nas.LastRead(); !t.IsZero() {
 		formatted := t.UTC().Format(time.RFC3339)
 		h.LastReadAt = &formatted
@@ -299,8 +337,13 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 	// only when the target is answering — a share list that could not be read
 	// is reported as unreadable rather than as "nothing is unaudited".
 	if h.Reachable {
-		if shares, err := s.unauditedShares(); err == nil {
-			h.SharesReadable, h.UnauditedShares = true, shares
+		type read struct {
+			shares []string
+			err    error
+		}
+		got, done := within(ctx, func() read { shares, err := s.unauditedShares(); return read{shares, err} })
+		if done && got.err == nil {
+			h.SharesReadable, h.UnauditedShares = true, got.shares
 		}
 	}
 	if snap, found, err := s.store.GetSnapshot(); err == nil && found {

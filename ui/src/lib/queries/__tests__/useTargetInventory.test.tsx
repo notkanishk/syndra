@@ -103,6 +103,8 @@ describe("every add-on read hook answers a Read", () => {
     await act(async () => {
       await result.current.mutateAsync();
     });
+    // mutateAsync resolves before the observer re-renders the hook: wait for the settled state.
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
     const read = result.current.data?.read;
     expect(read?.state).toBe("kept");
     if (read?.state !== "kept") return;

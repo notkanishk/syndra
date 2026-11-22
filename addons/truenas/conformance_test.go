@@ -55,8 +55,11 @@ type kitAddon struct{ url, nasOff string }
 // switched off by a file. Off, a dial is refused and a call on a session
 // already open fails on its socket, as a NAS that went away does: everything
 // above the seam (the session, ErrNotSent, the breaker, the fresher) runs as
-// it does against TrueNAS. ponytail: the seam, not a websocket server; the
-// fake answers Go-typed params the wire would turn into float64 and []any.
+// it does against TrueNAS. Holding "hang", the file makes it a blackholed NAS
+// instead: a dial or a call answers nothing until the file goes, then times
+// out, as the 8g staging run's unroutable address did (22 Nov 2026). ponytail:
+// the seam, not a websocket server; the fake answers Go-typed params the wire
+// would turn into float64 and []any.
 type stubNAS struct {
 	*mutatingRPC
 	off string
@@ -67,16 +70,43 @@ func (n stubNAS) down() bool {
 	return err == nil
 }
 
+func (n stubNAS) hung() bool {
+	b, err := os.ReadFile(n.off)
+	return err == nil && strings.TrimSpace(string(b)) == "hang"
+}
+
+// gone is what the NAS answers now: nothing (after waiting out a hang), or
+// the failure of a NAS that is not there.
+func (n stubNAS) gone(failure string) error {
+	if !n.down() {
+		return nil
+	}
+	if n.hung() {
+		for n.hung() {
+			time.Sleep(20 * time.Millisecond)
+		}
+		return errors.New("dial tcp: i/o timeout")
+	}
+	return errors.New(failure)
+}
+
 func (n stubNAS) Call(method string, timeout int64, params any) (json.RawMessage, error) {
-	if n.down() {
-		return nil, errors.New("failed to send call: use of closed network connection")
+	if err := n.gone("failed to send call: use of closed network connection"); err != nil {
+		return nil, err
 	}
 	return n.mutatingRPC.Call(method, timeout, params)
 }
 
+func (n stubNAS) Ping() (string, error) {
+	if err := n.gone("failed to send call: use of closed network connection"); err != nil {
+		return "", err
+	}
+	return n.mutatingRPC.Ping()
+}
+
 func (n stubNAS) dial() (rpc, error) {
-	if n.down() {
-		return nil, errors.New("failed to connect: connection refused")
+	if err := n.gone("failed to connect: connection refused"); err != nil {
+		return nil, err
 	}
 	return n, nil
 }
@@ -165,7 +195,7 @@ func runKit(t *testing.T, bin string, a kitAddon, args ...string) kitReport {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(bin, append([]string{"-url", a.url, "-target", kitTarget, "-secret-file", secret, "-json", "-",
-		"-require-outage", "-stop-app", "touch '" + a.nasOff + "'",
+		"-require-outage", "-stop-app", "touch '" + a.nasOff + "'", "-hang-app", "printf hang > '" + a.nasOff + "'",
 		"-start-app", fmt.Sprintf("rm -f '%s' && sleep %d", a.nasOff, int(reconnectCooldown/time.Second)+1)}, args...)...)
 	out, err := cmd.Output()
 	var r kitReport
@@ -207,7 +237,7 @@ func TestTheConformanceKitPassesThisAddOn(t *testing.T) {
 		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "calls.unknown", "calls.recorded",
 		"stats.descriptors", "stats.points", "stats.totals", "stats.since", "stats.idempotent", "stats.gaps",
 		"stats.unbound", "stats.buffer", "stats.page-size", "stats.no-people", "stats.no-people.ids",
-		"adopt.shown", "adopt.not-shown", "release.not-shown", "outage.health", "outage.write", "outage.kept", "no-false-zero"} {
+		"adopt.shown", "adopt.not-shown", "release.not-shown", "outage.health", "outage.hang", "outage.write", "outage.kept", "no-false-zero"} {
 		ran := false
 		for _, res := range mutate.Results {
 			if res.ID == id {

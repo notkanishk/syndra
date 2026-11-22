@@ -50,6 +50,7 @@ func main() {
 	cfg := reference.Config{Target: *target, Secret: []byte(secret), Features: features, Defects: set}
 	if downFile := os.Getenv("REFERENCE_APP_DOWN_FILE"); downFile != "" {
 		cfg.Down = func() bool { _, err := os.Stat(downFile); return err == nil }
+		cfg.Hang = func() bool { b, err := os.ReadFile(downFile); return err == nil && strings.TrimSpace(string(b)) == "hang" }
 	}
 	addon, err := reference.New(cfg)
 	if err != nil {

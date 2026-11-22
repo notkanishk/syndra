@@ -110,11 +110,23 @@ export function targetReading({
     case "checking": {
       // The API omits a start time it does not have: no check yet, and no clock to name.
       const started = health?.started_at ? formatClock(health.started_at) : null;
+      // From checking, an answer makes it answering and the third miss in a row makes it
+      // not answering, so every check in the run is a miss.
+      const run = missedRun(recent);
+      if (run > 0) {
+        return {
+          tone: "neutral",
+          word: "Checking",
+          line: `Missed ${run} check${run === 1 ? "" : "s"} since restart`,
+          sentence: `${name} hasn't answered the last ${run === 1 ? "check" : `${run} checks`} yet. Syndra decides after 3 in a row, 30 seconds apart. Nothing for you to do yet: this page then says answering or not answering.`,
+          pips: true,
+        };
+      }
       return {
         tone: "neutral",
         word: "Checking",
         line: started ? `No check since restart, ${started}` : "Not checked yet",
-        sentence: `${started ? `Syndra restarted at ${started} and hasn't` : "Syndra hasn't"} heard from ${name} since. This clears at its first answer, within about 90 seconds.`,
+        sentence: `Not checked yet since Syndra restarted${started ? ` at ${started}` : ""}. Syndra checks every 30 seconds. Nothing for you to do.`,
         pips: true,
       };
     }

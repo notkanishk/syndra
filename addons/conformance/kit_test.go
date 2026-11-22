@@ -126,6 +126,15 @@ func withApp(cfg Config, down *atomic.Bool) Config {
 	return cfg
 }
 
+// withHang gives cfg the app hooks over down, and -hang-app over hang, as the
+// binary's printf hang into the down file does; the start ends both.
+func withHang(cfg Config, down, hang *atomic.Bool) Config {
+	cfg = withApp(cfg, down)
+	cfg.HangApp = func(context.Context) error { hang.Store(true); return nil }
+	cfg.StartApp = func(context.Context) error { down.Store(false); hang.Store(false); return nil }
+	return cfg
+}
+
 func run(t *testing.T, cfg Config) *Report {
 	t.Helper()
 	r, err := Run(context.Background(), cfg)
@@ -180,9 +189,9 @@ const leftOne = `one disabled account "conformance-self-test" (account_id 1002) 
 // does not check yet. A check that quietly skipped against the reference
 // would be a check nobody runs, so the skips are pinned too.
 func TestTheCleanReferencePassesEveryCheck(t *testing.T) {
-	var down atomic.Bool
-	url, seen := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: down.Load}, nil, nil, nil)
-	r := run(t, withApp(config(url, true), &down))
+	var down, hang atomic.Bool
+	url, seen := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: down.Load, Hang: hang.Load}, nil, nil, nil)
+	r := run(t, withHang(config(url, true), &down, &hang))
 	for _, f := range failures(r) {
 		t.Errorf("%s failed against the clean reference: %v", f.ID, f.Detail)
 	}

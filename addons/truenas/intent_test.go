@@ -357,7 +357,7 @@ func TestEveryNASWriteGoesThroughTheSeam(t *testing.T) {
 		"sendWrite": {"send"},
 		"roundTrip": {"call", "sendWrite"},
 		"invoke":    {"roundTrip"},
-		"Call":      {"invoke", "provenLocked", "callOnce"},
+		"Call":      {"invoke", "proven", "callOnce"},
 		"callOnce":  {"purgeAccount"},
 	}
 	fset := token.NewFileSet()

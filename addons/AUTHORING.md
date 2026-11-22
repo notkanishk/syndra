@@ -714,6 +714,18 @@ Schema: `v2/schema/health.json`.
   read and `last_read_at` MUST NOT move; with it back, `reachable` MUST be
   `true` and a fresh read `current: true`. The kit will check exactly this
   (`outage.health`, [The outage checks](#the-outage-checks)).
+- `/health` MUST answer within 3 s, even while the app hangs (answers
+  nothing, rather than refusing): give your call to the app its own
+  deadline, under 3 s, and answer `reachable: false` when it expires.
+  Syndra's probe waits 5 s; a `/health` that waits longer on the app is read
+  as your add-on down, not the app. Every other call `/health` waits on is
+  bounded by the same deadline, and none may leave a lock held that the next
+  `/health` waits behind (`outage.hang`). `reachable` is true when a call
+  to the app succeeded now or, when that call gets no answer within the
+  deadline, within the last 10 s, so a check queued behind a long call is
+  not an outage; an app that refuses is `false` at once. The kit waits 12 s
+  after hanging the app before it asks. The TrueNAS add-on uses 2 s
+  (`healthReachWithin`) and 10 s (`recentReadCounts`).
 - `circuit_open` MUST be `true` while the add-on's own breaker is holding
   back its calls to the app (backing off to avoid a lockout or overload).
   It is distinct from `reachable: false`, so an operator does not look at
@@ -2661,6 +2673,10 @@ happened:
   unreachable from your add-on and bring it back. The reference add-on's
   fake app is off while the file `REFERENCE_APP_DOWN_FILE` names exists,
   so its hooks are `touch` and `rm`.
+- `-hang-app <command>` makes the app hang: it answers nothing and refuses
+  nothing, as a blackholed address does. `-start-app` brings it back. The
+  reference's fake app hangs while that file holds `hang`, so its hook is
+  `printf hang > …`.
 - `-stop-addon <command>` and `-start-addon <command>` stop your add-on and
   start it again, its disk kept.
 
@@ -2683,6 +2699,10 @@ With them it runs:
   still answer, `reachable` is `false` after one fresh read and
   `last_read_at` does not move; with it back, `reachable: true` and a fresh
   read is `current: true`.
+- `outage.hang`: with the app hanging for 12 s (past the 10 s a recent
+  answer counts), `/health` answers within 3 s with `reachable: false`,
+  twice running; with it back, `reachable: true` and a
+  fresh read is `current: true`.
 - `outage.kept` and `outage.none`: a read with a copy answers it
   (`current: false`, `stale.reason: unreachable`, the copy's own
   `taken_at`); a read without one answers 503 `TARGET_UNREACHABLE` or
@@ -2702,8 +2722,9 @@ nothing to serve (`TARGET_UNREACHABLE`, `NO_CURRENT_READ`,
 `TARGET_UNREADABLE`, `FRESH_READ_COOLDOWN`, `STORE_UNREADABLE`) that carries
 a `0`, an empty list, `""` or a zero date, and any reply with a zero
 `taken_at`, or `current: false` without `stale`. A CI run MUST give the app
-hooks and `-require-outage`, which fails the outage checks when either app
-hook is missing (`-start-app "rm -f …"` beside `-stop-app "touch …"`, as
+hooks and `-require-outage`, which fails the outage checks when an app
+hook is missing (`-start-app "rm -f …"` beside `-stop-app "touch …"` and
+`-hang-app "printf hang > …"`, as
 Syndra's CI runs the reference, and the TrueNAS add-on over a stub NAS). Against a real system a check whose hook is
 missing is reported "not checked", a skip, never "pass". The add-on hooks
 stay optional: an add-on that keeps no disk, as the reference, cannot pass

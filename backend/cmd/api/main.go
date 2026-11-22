@@ -556,7 +556,9 @@ func main() {
 
 	// Target health (design §13.2): one probe of every add-on now, before the
 	// listener serves, so a restart does not forget an outage and no page
-	// meets "checking"; then every 30 s. Read-only, and never awaited at
+	// meets "checking" for an add-on that answers it; one that misses stays
+	// "checking" until it answers or misses three (failureThreshold); then
+	// every 30 s. Read-only, and never awaited at
 	// shutdown: an abandoned read changes nothing.
 	startHealthProbes(ctx)
 
