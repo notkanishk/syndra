@@ -1058,16 +1058,50 @@ func TestABusyRunGoesStaleAfterAQuietGap(t *testing.T) {
 	if BusyHalted("truenas") == nil {
 		t.Fatal("a run asked every probe past the half hour must halt")
 	}
-	now = now.Add(busyGap())
+	now = now.Add(busyGap(addons.ProbeInterval()))
 	if got := BusyHalted("truenas"); got != nil {
-		t.Fatalf("a run nobody asked about for %v must not say halted, got %v", busyGap(), got)
+		t.Fatalf("a run nobody asked about for %v must not say halted, got %v", busyGap(addons.ProbeInterval()), got)
 	}
 	res, _ := DrainAddon(context.Background(), "truenas")
 	if res.Halted {
 		t.Fatalf("a busy answer after a quiet gap must start a new run, got %+v", res)
 	}
-	if got := noteBusy("truenas", true); !got.Equal(now) {
+	if got := noteBusy("truenas", true, addons.ProbeInterval()); !got.Equal(now) {
 		t.Fatalf("new run since %v, want %v", got, now)
+	}
+}
+
+// At the background drain's real cadence, a tick a minute with each answer a
+// little late by however long its call took, a busy run holds unbroken: it
+// halts past the half hour, and the target page's busy reading holds steady
+// between ticks (PR 262 review P1: a gap of 2x the probe broke the run on any
+// call slower than the last).
+func TestABusyRunHoldsAtTheDrainsCadence(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	start := time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC)
+	now := start
+	t.Cleanup(swap(&busyClock, func() time.Time { return now }))
+	t.Cleanup(swap(&deferRow, func(context.Context, string, string, time.Duration) error { return nil }))
+	h.resp = busyResp()
+	tick := DrainEvery()
+	halts := 0
+	for k := 0; halts < 5; k++ {
+		now = start.Add(time.Duration(k)*tick + time.Duration(k%2)*100*time.Millisecond)
+		res, err := DrainAddon(context.Background(), "truenas")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if past := now.Sub(start) > busyHaltAfter; res.Halted != past {
+			t.Fatalf("tick %d (%v in): halted %v, want %v", k, now.Sub(start), res.Halted, past)
+		}
+		if !res.Halted {
+			continue
+		}
+		halts++
+		now = start.Add(time.Duration(k+1)*tick - time.Millisecond)
+		if got := BusyHalted("truenas"); got == nil || !got.Equal(start) {
+			t.Fatalf("just before tick %d: the target page must say busy since %v, got %v", k+1, start, got)
+		}
 	}
 }
 
@@ -1078,7 +1112,7 @@ func TestBusyCopySaysWhoSendsItNext(t *testing.T) {
 	if got, want := unreachedWhy("TrueNAS", addonRow("o1"), busy), "TrueNAS was busy; nothing was sent. Syndra sends it again by itself."; got != want {
 		t.Fatalf("auto: %q, want %q", got, want)
 	}
-	const yours = "TrueNAS was busy; nothing was sent. Send it again from Pending changes once TrueNAS answers."
+	const yours = "TrueNAS was busy; nothing was sent. Once TrueNAS answers, press Send on Pending changes to try again."
 	for _, reason := range []string{db.WaitReasonRoleWaits, db.WaitReasonManual} {
 		row := addonRow("o1")
 		row.WaitReason = reason
@@ -1086,12 +1120,12 @@ func TestBusyCopySaysWhoSendsItNext(t *testing.T) {
 			t.Fatalf("%s row: %q, want %q", reason, got, yours)
 		}
 	}
-	SetAutoRetry(false)
-	t.Cleanup(func() { SetAutoRetry(true) })
+	SetDrainEvery(0)
+	t.Cleanup(func() { SetDrainEvery(time.Minute) })
 	if got := unreachedWhy("TrueNAS", addonRow("o1"), busy); got != yours {
 		t.Fatalf("drain off: %q, want %q", got, yours)
 	}
-	if got := busyHaltWhy("TrueNAS", time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC), addonRow("o1")); !strings.HasSuffix(got, "; nothing was sent. Send it again from Pending changes once TrueNAS answers.") {
+	if got := busyHaltWhy("TrueNAS", time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC), addonRow("o1")); !strings.HasSuffix(got, "; nothing was sent. Once TrueNAS answers, press Send on Pending changes to try again.") {
 		t.Fatalf("halted, drain off: %q", got)
 	}
 }

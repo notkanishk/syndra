@@ -205,7 +205,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 		Desired: intent.Desired(),
 	})
 	busy := resp.Outcome == addons.OutcomeUnreached && resp.Why.Reason == addons.ReasonBusy
-	since := noteBusy(intent.Target, busy)
+	since := noteBusy(intent.Target, busy, unsentDelay(resp.Why.RetryAfter))
 
 	switch {
 	case resp.Outcome == addons.OutcomeSucceeded:
@@ -327,8 +327,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 // monitor's next probe, whichever is later, so the background drain sends it
 // by itself (design §13.4: "Syndra sends it later by itself").
 func (res *DrainResult) deferUnsent(ctx context.Context, row models.PendingPropagation, why string, retryAfter int) {
-	after := max(time.Duration(retryAfter)*time.Second, addons.ProbeInterval())
-	if err := deferRow(ctx, row.ID, why, after); err != nil {
+	if err := deferRow(ctx, row.ID, why, unsentDelay(retryAfter)); err != nil {
 		res.settleFailure(row.ID, "defer", err)
 		return
 	}
@@ -336,21 +335,30 @@ func (res *DrainResult) deferUnsent(ctx context.Context, row models.PendingPropa
 	res.Deferred++
 }
 
+// unsentDelay is how long a send where nothing went out waits: the add-on's
+// Retry-After (at most an hour, addons maxRetryAfter) or the monitor's next
+// probe, whichever is later.
+func unsentDelay(retryAfter int) time.Duration {
+	return max(time.Duration(retryAfter)*time.Second, addons.ProbeInterval())
+}
+
 // busyHaltAfter is how long a target may answer busy without a break before
 // its pass halts (busy).
 const busyHaltAfter = 30 * time.Minute
 
-// busyGap is the longest quiet between two busy answers that still counts as
-// one run. Busy rows are asked again every probe (deferUnsent), so a longer
-// quiet means nobody asked: the row was settled elsewhere or the queue emptied.
-func busyGap() time.Duration { return 2 * addons.ProbeInterval() }
+// busyGap is the longest quiet after a busy answer that still counts as one
+// run: twice the later of the background drain's tick and the row's deferral
+// (unsentDelay), since the row is asked again at the first tick past its
+// deferral, a little late by however long the calls take. A longer quiet means
+// nobody asked: the row was settled elsewhere or the queue emptied.
+func busyGap(after time.Duration) time.Duration { return 2 * max(DrainEvery(), after) }
 
-// busyRun is one target's unbroken run of TARGET_BUSY answers: when it began
-// and when the latest came.
-type busyRun struct{ since, last time.Time }
+// busyRun is one target's unbroken run of TARGET_BUSY answers: when it began,
+// and when it ends unless another busy answer comes (busyGap past the latest).
+type busyRun struct{ since, due time.Time }
 
-// busySince holds each target's busy run, until its next other answer or a
-// quiet longer than busyGap.
+// busySince holds each target's busy run, until its next other answer or its
+// due time passes.
 //
 // ponytail: in memory, so a restart starts the half hour again; that only
 // delays the halt. A column if the halt must survive restarts. Targets are
@@ -361,9 +369,10 @@ var busySince = struct {
 	at map[string]busyRun
 }{at: map[string]busyRun{}}
 
-// noteBusy records one answer from target and returns when its unbroken run
-// of busy answers began (zero when this answer was not busy).
-func noteBusy(target string, busy bool) time.Time {
+// noteBusy records one answer from target, its row deferred by after, and
+// returns when its unbroken run of busy answers began (zero when this answer
+// was not busy).
+func noteBusy(target string, busy bool, after time.Duration) time.Time {
 	busySince.Lock()
 	defer busySince.Unlock()
 	if !busy {
@@ -372,23 +381,23 @@ func noteBusy(target string, busy bool) time.Time {
 	}
 	now := busyClock()
 	run, ok := busySince.at[target]
-	if !ok || now.Sub(run.last) > busyGap() {
+	if !ok || now.After(run.due) {
 		run.since = now
 	}
-	run.last = now
+	run.due = now.Add(busyGap(after))
 	busySince.at[target] = run
 	return run.since
 }
 
 // BusyHalted is when target began answering busy, once that run is past
-// busyHaltAfter and still going (a busy answer within busyGap); nil
+// busyHaltAfter and still going (not past its due time); nil
 // otherwise. The target page says it.
 func BusyHalted(target string) *time.Time {
 	busySince.Lock()
 	defer busySince.Unlock()
 	run, ok := busySince.at[target]
 	now := busyClock()
-	if !ok || now.Sub(run.last) > busyGap() || now.Sub(run.since) <= busyHaltAfter {
+	if !ok || now.After(run.due) || now.Sub(run.since) <= busyHaltAfter {
 		return nil
 	}
 	return &run.since

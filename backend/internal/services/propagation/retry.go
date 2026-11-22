@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"sync/atomic"
+	"time"
 
 	"syndra/internal/db"
 	"syndra/internal/extcall"
@@ -18,18 +19,23 @@ func RetryRule() extcall.Policy {
 	return p
 }
 
-// autoRetry is whether the background drain runs on this server
-// (REVOCATION_DRAIN_ENABLED, cmd/api). Off, nothing sends a change again on
-// its own, so no row may say "Syndra sends it again at 14:05".
-var autoRetry atomic.Bool
+// drainEvery is how often the background drain runs on this server
+// (REVOCATION_DRAIN_INTERVAL, cmd/api), zero when it is off
+// (REVOCATION_DRAIN_ENABLED). Off, nothing sends a change again on its own,
+// so no row may say "Syndra sends it again at 14:05".
+var drainEvery atomic.Int64
 
-func init() { autoRetry.Store(true) }
+func init() { drainEvery.Store(int64(time.Minute)) }
 
-// SetAutoRetry records whether the background drain runs. Called once at start.
-func SetAutoRetry(on bool) { autoRetry.Store(on) }
+// SetDrainEvery records how often the background drain runs, zero when it is
+// off. Called once at start.
+func SetDrainEvery(d time.Duration) { drainEvery.Store(int64(d)) }
+
+// DrainEvery is how often the background drain runs here, zero when it is off.
+func DrainEvery() time.Duration { return time.Duration(drainEvery.Load()) }
 
 // AutoRetry reports whether Syndra sends a change again on its own here.
-func AutoRetry() bool { return autoRetry.Load() }
+func AutoRetry() bool { return DrainEvery() > 0 }
 
 // waitsForYou is a row the background drain never sends again on its own
 // (db.ClaimDueRetries): it waits for the operator's Send.
@@ -43,7 +49,7 @@ func sendsNext(system string, row models.PendingPropagation) string {
 	if AutoRetry() && !waitsForYou(row) {
 		return "Syndra sends it again by itself."
 	}
-	return "Send it again from Pending changes once " + system + " answers."
+	return "Once " + system + " answers, press Send on Pending changes to try again."
 }
 
 // RowRetry is where an unresolved row stands, or nil when there is nothing to

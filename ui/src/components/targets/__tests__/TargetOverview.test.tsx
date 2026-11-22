@@ -427,7 +427,7 @@ describe("one target's page", () => {
     state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
     renderTarget();
 
-    expect(screen.getByText("No change was sent. Send it again from Pending changes once TrueNAS answers.")).toBeTruthy();
+    expect(screen.getByText("No change was sent. Once TrueNAS answers, press Send on Pending changes to try again.")).toBeTruthy();
     expect(screen.queryByText(/revocations go on their own|keeps trying/)).toBeNull();
   });
 

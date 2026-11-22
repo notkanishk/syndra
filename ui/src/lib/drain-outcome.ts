@@ -119,7 +119,7 @@ export function describeDrain(
           tone: "warning",
           message: `${stalled ?? "The connected system"} ${busy(result)}; nothing was sent.`,
           detail: "Nothing counts against the retry limit.",
-          next: sendsNext(auto, `${stalled ?? "it"} answers`),
+          next: sendsNext(auto, stalled && `${stalled} answers`),
         };
       // Design §13.1: who is not answering, the add-on or the system behind it, never one word.
       case "addon_unreachable":
@@ -281,7 +281,7 @@ function haltDetail(reason: string | undefined, system: string | undefined, wait
     case "draining":
       return `${its} still waiting, and nothing counts against the retry limit. ${maintenanceNext(auto)}`;
     case "busy":
-      return `${its} still waiting, and nothing counts against the retry limit. ${sendsNext(auto, `${system ?? "it"} answers`)}`;
+      return `${its} still waiting, and nothing counts against the retry limit. ${sendsNext(auto, system && `${system} answers`)}`;
     default:
       return "The rest of the queue went through.";
   }
@@ -313,10 +313,13 @@ const MAINTENANCE_DETAIL = "It refuses every change until it is active again, so
  * and the target page). With the background drain on, revocations go again on
  * their own and the rest are the reader's to send (a halt leaves them
  * untouched, and a change held for the reader is never sent on its own); with
- * it off or unknown, every change is.
+ * it off or unknown, every change is. No `when` (the system is not named):
+ * the step alone, never "once it answers".
  */
-export const sendsNext = (auto: AutoRetry, when: string): string =>
-  auto ? `Once ${when}, revocations go on their own; send the rest again.` : `Send it again from Pending changes once ${when}.`;
+export function sendsNext(auto: AutoRetry, when?: string): string {
+  const step = auto ? "revocations go on their own; send the rest again." : "press Send on Pending changes to try again.";
+  return when ? `Once ${when}, ${step}` : step.charAt(0).toUpperCase() + step.slice(1);
+}
 
 /** The step back from maintenance: make it active, then who sends next. */
 const maintenanceNext = (auto: AutoRetry): string =>

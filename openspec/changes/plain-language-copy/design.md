@@ -1058,5 +1058,11 @@ Two outages, never one word: the add-on itself (only Syndra can know it) and the
 | The same, for Zitadel | Recorded {date}. Not yet applied in Zitadel; until it is, they keep the role there. Syndra applies it by itself. |
 | Audit, a revocation that reached a connected system | A revocation reached {system}: it is in force there now |
 | Audit, a revocation that reached Zitadel | A revocation reached Zitadel: the role no longer signs them in |
+| A send halted because {system} has been busy for over half an hour (backend `busyHaltAfter`), the word on the target page | {system} has been busy since {time} |
+| The same: the step, background drain on (`sendsNext`, `drain-outcome.ts`) | Once {system} answers, revocations go on their own; send the rest again. |
+| The same: the step, background drain off (`REVOCATION_DRAIN_ENABLED=false`), or a change held for you | Once {system} answers, press Send on Pending changes to try again. |
+| The same, a row's reason (backend `busyHaltWhy`) | {system} has been busy since {time}; nothing was sent. {the step: "Syndra sends it again by itself." when the drain runs and claims it, else the one above} |
+
+The busy step names the system or says nothing of it: with no name it is the step alone ("Press Send on Pending changes to try again."), never "once it answers". Busy is not down, so it never says "isn't answering".
 | Home, a system not checked because its add-on did not answer | Its add-on did not answer when Syndra last tried. Check that the add-on is running. |
 | Home, a system not checked because its app did not | Its add-on answered and could not reach the system behind it. Check that the system is on. |

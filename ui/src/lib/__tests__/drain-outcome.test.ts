@@ -148,13 +148,17 @@ describe("a send with more than one connected system", () => {
     expect(both.message).not.toContain("didn't answer");
     expect(both.detail).toContain("Once TrueNAS answers, revocations go on their own; send the rest again.");
     expect(named(result({ applied: 3, halted: true, reason: "busy", halted_target: "truenas", busy_since: since, passes }), false).detail).toContain(
-      "Send it again from Pending changes once TrueNAS answers.",
+      "Once TrueNAS answers, press Send on Pending changes to try again.",
     );
     const alone = result({ halted: true, reason: "busy", halted_target: "truenas", busy_since: since, passes: [passes[1]] });
     expect(named(alone).message).toMatch(/^TrueNAS has been busy since .+; nothing was sent\.$/);
     expect(named(alone).sendsItself).toBeUndefined();
     expect(named(alone, true).next).toBe("Once TrueNAS answers, revocations go on their own; send the rest again.");
-    expect(named(alone, false).next).toBe("Send it again from Pending changes once TrueNAS answers.");
+    expect(named(alone, false).next).toBe("Once TrueNAS answers, press Send on Pending changes to try again.");
+    // PR 262 review: no system named, no "once it answers"; the step alone.
+    const nameless = result({ halted: true, reason: "busy", busy_since: since });
+    expect(named(nameless, false).next).toBe("Press Send on Pending changes to try again.");
+    expect(named(nameless, true).next).toBe("Revocations go on their own; send the rest again.");
   });
 
   // 8b fix round 3: revocations go again on their own once the switch is
@@ -165,7 +169,7 @@ describe("a send with more than one connected system", () => {
       "Press Make active under Maintenance on its page. Once it is active, revocations go on their own; send the rest again.",
     );
     expect(named(halt, false).next).toBe(
-      "Press Make active under Maintenance on its page. Send it again from Pending changes once it is active.",
+      "Press Make active under Maintenance on its page. Once it is active, press Send on Pending changes to try again.",
     );
   });
 
