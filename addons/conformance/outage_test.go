@@ -374,9 +374,11 @@ func TestARestartThatRedatesTheCopyFails(t *testing.T) {
 	}
 }
 
-// outage.hang, watched both ways: the reference answers /health within its
-// bound while its app hangs, and passes; a /health that waits on the hanging
-// app past healthWithin, or says reachable while it hangs, fails; one that
+// outage.hang, watched both ways: the reference answers /health and its
+// read operations within their bounds while its app hangs, and passes; a
+// /health that waits on the hanging app past healthWithin, a read operation
+// that waits past readWithin, or a /health that says reachable while it
+// hangs, fails; one that
 // counts an answer from within recentReadWindow passes, because the kit
 // waits past it (hangSettle); without -hang-app under -require-outage it
 // fails as not checked.
@@ -385,6 +387,14 @@ func TestOutageHangFailsAHealthThatWaitsOnTheApp(t *testing.T) {
 	slow := func(r *http.Request, reply []byte, hungFor time.Duration) []byte {
 		if hungFor > 0 && r.URL.Path == "/health" {
 			time.Sleep(healthWithin)
+		}
+		return reply
+	}
+	// A read operation that waits on the hanging app past readWithin: what
+	// health.get did on the 8g staging rerun, so Syndra gave up on the add-on.
+	slowRead := func(r *http.Request, reply []byte, hungFor time.Duration) []byte {
+		if hungFor > 0 && r.URL.Path == "/operations/health.get" {
+			time.Sleep(readWithin)
 		}
 		return reply
 	}
@@ -409,6 +419,7 @@ func TestOutageHangFailsAHealthThatWaitsOnTheApp(t *testing.T) {
 	}{
 		"the reference":                     {want: "pass"},
 		"a health that waits on the app":    {rewrite: slow, want: "fail"},
+		"a read that waits on the app":      {rewrite: slowRead, want: "fail"},
 		"reachable while the app hangs":     {rewrite: says, want: "fail"},
 		"reachable on a recent answer":      {rewrite: recent, want: "pass"},
 		"no -hang-app under require-outage": {noHook: true, want: "fail"},

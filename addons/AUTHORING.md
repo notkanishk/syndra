@@ -726,6 +726,17 @@ Schema: `v2/schema/health.json`.
   not an outage; an app that refuses is `false` at once. The kit waits 12 s
   after hanging the app before it asks. The TrueNAS add-on uses 2 s
   (`healthReachWithin`) and 10 s (`recentReadCounts`).
+- Every read operation MUST answer within 25 s, even while the app hangs:
+  its kept copy (`current: false`) or, with none, 503 `TARGET_UNREACHABLE`
+  or `NO_CURRENT_READ`. Syndra waits 30 s for an operation; an answer after
+  that reaches nobody, and Syndra reads your add-on as down, not the app.
+  Bound each connect to the app and each call, so that one of each fits
+  inside 25 s, and after a connect or a call that got no answer in time,
+  fail the next calls at once for a while rather than wait again: a read
+  made of several calls must wait once, not once per call (`outage.hang`).
+  The TrueNAS add-on uses 8 s for a session (`nasDialTimeout`: connect,
+  TLS, handshake and login), 15 s for a call (`callTimeoutSeconds`) and its
+  15 s reconnect floor (`reconnectCooldown`).
 - `circuit_open` MUST be `true` while the add-on's own breaker is holding
   back its calls to the app (backing off to avoid a lockout or overload).
   It is distinct from `reachable: false`, so an operator does not look at
@@ -2701,8 +2712,9 @@ With them it runs:
   read is `current: true`.
 - `outage.hang`: with the app hanging for 12 s (past the 10 s a recent
   answer counts), `/health` answers within 3 s with `reachable: false`,
-  twice running; with it back, `reachable: true` and a
-  fresh read is `current: true`.
+  twice running, and each read operation you declare answers within 25 s
+  with its kept copy or 503 `TARGET_UNREACHABLE` or `NO_CURRENT_READ`; with
+  it back, `reachable: true` and a fresh read is `current: true`.
 - `outage.kept` and `outage.none`: a read with a copy answers it
   (`current: false`, `stale.reason: unreachable`, the copy's own
   `taken_at`); a read without one answers 503 `TARGET_UNREACHABLE` or

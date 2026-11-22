@@ -317,7 +317,7 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 	// Bounded: a NAS that hangs is not reachable, and says so in time.
 	ctx, cancel := context.WithTimeout(r.Context(), healthReachWithin)
 	defer cancel()
-	reachable, answered := within(ctx, func() bool { _, err := s.nas.Ping(); return err == nil })
+	reachable, answered := within(ctx, func() bool { return s.nas.Ping() == nil })
 	h.Reachable = reachable || !answered && time.Since(s.nas.LastRead()) <= recentReadCounts
 	if t := s.nas.LastRead(); !t.IsZero() {
 		formatted := t.UTC().Format(time.RFC3339)

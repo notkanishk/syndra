@@ -347,7 +347,7 @@ func TestTheReadPathRefusesAWrite(t *testing.T) {
 // with the one function allowed to take it: a NAS write only from send, the
 // purge's own session only inside a mutate, and the raw client only from the
 // three places that already hold to the rule (invoke under call and sendWrite,
-// the ping, and callOnce). And every change to the store's bindings or
+// the ping's core.ping and the session's proof, and callOnce). And every change to the store's bindings or
 // settings is made only inside a mutate, whatever asked for it.
 func TestEveryNASWriteGoesThroughTheSeam(t *testing.T) {
 	inMutateOnly := map[string]bool{
@@ -356,7 +356,7 @@ func TestEveryNASWriteGoesThroughTheSeam(t *testing.T) {
 	allowed := map[string][]string{
 		"sendWrite": {"send"},
 		"roundTrip": {"call", "sendWrite"},
-		"invoke":    {"roundTrip"},
+		"invoke":    {"roundTrip", "Ping"},
 		"Call":      {"invoke", "proven", "callOnce"},
 		"callOnce":  {"purgeAccount"},
 	}

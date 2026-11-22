@@ -171,6 +171,10 @@ func (s *server) operateNow(w http.ResponseWriter, name string, req OperationReq
 		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
 			"The NAS could not be reached, so nothing was sent to it.", nil)
 		return
+	case errors.Is(err, ErrTargetUnreachable) && readOperation(name):
+		// A read with nothing to serve: the answer /subjects gives (§4).
+		writeNotRead(w, err)
+		return
 	case errors.Is(err, errNotLogged):
 		// The same answer an apply gives (applyNow).
 		writeError(w, http.StatusInternalServerError, CodeOperationFailed, notLoggedDetail, nil)
@@ -589,7 +593,7 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	// elevated credential must not outlive the single call it was injected for,
 	// and reusing the shared session would leave a delete-capable connection
 	// open for everything else this add-on does.
-	client, err := s.elevated(elevated)
+	client, err := dialBounded(func() (rpc, error) { return s.elevated(elevated) }, nasDialTimeout)
 	if err != nil {
 		return OperationResult{}, http.StatusBadGateway, fmt.Errorf("the elevated session could not be established")
 	}
@@ -1109,10 +1113,14 @@ func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error
 			return nil
 		}},
 	}
+	var unreached []error // the sources the NAS gave no answer for
 	for _, source := range sources {
 		var raw json.RawMessage
 		if err := s.nas.call(source.method, source.params, &raw); err != nil {
 			h.Degraded = append(h.Degraded, source.name)
+			if errors.Is(err, ErrTargetUnreachable) {
+				unreached = append(unreached, err)
+			}
 			continue
 		}
 		// A source that ANSWERED and could not be understood is degraded too.
@@ -1128,6 +1136,18 @@ func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error
 	// rather than "four things are wrong with it". Counted against the table
 	// rather than against a literal, so adding a fifth source cannot quietly
 	// turn this into a check that never fires.
+	//
+	// With no answer from any source it is a read with nothing to serve, as
+	// /subjects answers it (§4, §13.1): TARGET_UNREACHABLE when no request
+	// reached the NAS, NO_CURRENT_READ when one went out and got no answer.
+	if len(unreached) == len(sources) {
+		for _, err := range unreached {
+			if !errors.Is(err, ErrNotSent) {
+				return OperationResult{}, http.StatusServiceUnavailable, err
+			}
+		}
+		return OperationResult{}, http.StatusServiceUnavailable, unreached[0]
+	}
 	if len(h.Degraded) == len(sources) {
 		return OperationResult{}, http.StatusServiceUnavailable, fmt.Errorf("the target answered none of the health reads")
 	}

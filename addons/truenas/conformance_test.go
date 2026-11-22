@@ -75,14 +75,15 @@ func (n stubNAS) hung() bool {
 	return err == nil && strings.TrimSpace(string(b)) == "hang"
 }
 
-// gone is what the NAS answers now: nothing (after waiting out a hang), or
-// the failure of a NAS that is not there.
-func (n stubNAS) gone(failure string) error {
+// gone is what the NAS answers now: nothing (after waiting out a hang, or
+// the wait's timeout when it has one, as the client's Call does), or the
+// failure of a NAS that is not there.
+func (n stubNAS) gone(failure string, timeout time.Duration) error {
 	if !n.down() {
 		return nil
 	}
 	if n.hung() {
-		for n.hung() {
+		for until := time.Now().Add(timeout); n.hung() && (timeout == 0 || time.Now().Before(until)); {
 			time.Sleep(20 * time.Millisecond)
 		}
 		return errors.New("dial tcp: i/o timeout")
@@ -91,21 +92,21 @@ func (n stubNAS) gone(failure string) error {
 }
 
 func (n stubNAS) Call(method string, timeout int64, params any) (json.RawMessage, error) {
-	if err := n.gone("failed to send call: use of closed network connection"); err != nil {
+	if err := n.gone("failed to send call: use of closed network connection", time.Duration(timeout)*time.Second); err != nil {
 		return nil, err
 	}
 	return n.mutatingRPC.Call(method, timeout, params)
 }
 
 func (n stubNAS) Ping() (string, error) {
-	if err := n.gone("failed to send call: use of closed network connection"); err != nil {
+	if err := n.gone("failed to send call: use of closed network connection", 0); err != nil {
 		return "", err
 	}
 	return n.mutatingRPC.Ping()
 }
 
 func (n stubNAS) dial() (rpc, error) {
-	if err := n.gone("failed to connect: connection refused"); err != nil {
+	if err := n.gone("failed to connect: connection refused", 0); err != nil {
 		return nil, err
 	}
 	return n, nil
@@ -134,6 +135,9 @@ func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 	s := testServer(t, &m.fakeRPC)
 	nas := stubNAS{m, filepath.Join(t.TempDir(), "nas-off")}
 	s.nas = newNAS(nas.dial, []string{"25.04"})
+	// Short bounds, so a hang costs the run a second, not nasDialTimeout and
+	// callTimeoutSeconds (TestNASBoundsFitUnderTheBackendsCallTimeout holds those).
+	s.nas.dialWithin, s.nas.callWithin = time.Second, 1
 	s.nas.version, s.nas.probed = "25.04.2", true
 	s.nas.selfName, s.nas.selfUID = "syndra", 3001 // auth.me has named the add-on's own account, as after its first probe
 	key, err := deriveHMACKey([]byte(kitSecret), kitTarget)

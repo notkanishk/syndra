@@ -32,6 +32,14 @@ func (k *kit) outage() {
 // blames the add-on for the app (the 8g staging run, 22 Nov 2026).
 const healthWithin = 3 * time.Second
 
+// readWithin is how soon each read operation must answer while the app
+// hangs: under Syndra's 30 s call timeout (callTimeout,
+// backend/internal/addons/deps.go), with a margin for the network. A read
+// that waits on a hanging app longer than Syndra waits on the add-on answers
+// nobody, and Syndra blames the add-on for the app (health.get on the 8g
+// staging rerun, 22 Nov 2026).
+const readWithin = 25 * time.Second
+
 // recentReadWindow is how old an answer from the app may be and still make
 // /health say reachable when its own call gets no answer in time (design
 // §13.2): a call queued behind a long one is not an outage. hangSettle waits
@@ -45,7 +53,8 @@ const (
 // appHang hangs the app (-hang-app): it answers nothing and refuses nothing,
 // as a blackholed address does. Past hangSettle, /health answers within
 // healthWithin with reachable false, twice running, so a first /health that left a call or a
-// lock behind it is seen too; with the app back the add-on reads it again.
+// lock behind it is seen too; each read operation answers within readWithin,
+// its kept copy or a no-copy code; with the app back the add-on reads it again.
 func (k *kit) appHang() {
 	c := k.at("outage.hang")
 	if k.cfg.HangApp == nil || k.cfg.StartApp == nil {
@@ -70,6 +79,25 @@ func (k *kit) appHang() {
 		if h := k.ok(c, ex, "health.json"); h != nil {
 			c.expect(took < healthWithin, "/health %d with the app hanging answered after %s; it must answer within %s, under Syndra's 5 s probe", i+1, took.Round(time.Millisecond), healthWithin)
 			c.expect(h["reachable"] == false, "/health %d with the app hanging answered reachable %v; a call that got no answer did not succeed", i+1, h["reachable"])
+		}
+	}
+	for _, id := range k.readOps() {
+		began := time.Now()
+		ex := k.send(request{method: http.MethodPost, target: "/operations/" + id,
+			body: k.operationBody(id, k.callID(), map[string]any{}), schema: "operation_request.json"})
+		took := time.Since(began)
+		if !c.expect(ex.err == nil && took < readWithin, "%s with the app hanging answered after %s (%v); a read answers within %s, under Syndra's 30 s call timeout", id, took.Round(time.Millisecond), ex.err, readWithin) {
+			continue
+		}
+		result, _ := ex.doc()["result"].(map[string]any)
+		switch {
+		case ex.status == http.StatusOK:
+			c.expect(result["current"] == false, "%s with the app hanging answered 200 with current %v; with the app hanging a read answers its kept copy, current false, or a no-copy code", id, result["current"])
+		case ex.status == http.StatusUnprocessableEntity && ex.code() == "OPERATION_FAILED" && *k.c.operations[id].Subject:
+			// No account for the kit's subject: answered about the request, in time (results).
+		default:
+			c.expect(ex.status == http.StatusServiceUnavailable && (ex.code() == "TARGET_UNREACHABLE" || ex.code() == "NO_CURRENT_READ"),
+				"%s with the app hanging answered %d %s; with no copy, want 503 TARGET_UNREACHABLE or NO_CURRENT_READ", id, ex.status, ex.code())
 		}
 	}
 }

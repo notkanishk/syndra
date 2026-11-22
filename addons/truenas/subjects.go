@@ -470,25 +470,28 @@ func ambiguityWords() (detail, next string) {
 		"Rename or remove one of them on TrueNAS, then try again."
 }
 
-// Ping is the reachability probe `/health` uses.
-func (n *NAS) Ping() (string, error) {
+// Ping is the reachability probe `/health` uses: `core.ping` through the one
+// call door, bounded by pingTimeoutSeconds, so a NAS gone silent arms the
+// reconnect floor here as on any call (invoke), and the reads queued behind
+// the ping wait 5 s, not the client's own 10.
+func (n *NAS) Ping() error {
 	c, err := n.session()
 	if err != nil {
-		return "", err
+		return err
 	}
-	// Through the same lock as every other call: `Ping` writes a request frame
-	// like any other, and a concurrent write is a panic rather than a race.
-	n.callMu.Lock()
-	res, err := c.Ping()
-	n.callMu.Unlock()
+	raw, err := n.invoke(c, "core.ping", []any{}, pingTimeoutSeconds)
 	if err != nil {
 		n.drop()
-		return "", fmt.Errorf("ping: %w", classifyNASError(err))
+		return fmt.Errorf("ping: %w", classifyNASError(err))
+	}
+	if _, refusal, err := splitEnvelope(raw); err != nil || refusal != nil {
+		n.drop()
+		return fmt.Errorf("ping: %w", ErrTargetUnreachable)
 	}
 	n.mu.Lock()
 	n.lastRead = n.now()
 	n.mu.Unlock()
-	return res, nil
+	return nil
 }
 
 // statusForLookup answers what a failed account lookup actually was.

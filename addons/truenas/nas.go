@@ -23,7 +23,20 @@ import (
 // performs shares the one session.
 
 const (
-	callTimeoutSeconds = 30
+	// callTimeoutSeconds bounds one call on the session. Under the backend's
+	// 30 s per-call timeout (callTimeout, backend/internal/addons/deps.go) with
+	// room for nasDialTimeout beside it: an add-on whose own wait on the NAS
+	// outlasts the backend's wait on the add-on answers to nobody, and the
+	// backend blames the add-on for the NAS (the 8g staging rerun, 22 Nov
+	// 2026: health.get answered addon_unreachable with the NAS blackholed).
+	callTimeoutSeconds = 15
+	// nasDialTimeout bounds getting a session: the TCP connect, TLS, the
+	// websocket handshake and the API-key login, together. The client sets
+	// none of its own for the connect and 45 s for the handshake, so a
+	// blackholed NAS held its first caller past the backend's 30 s. Together
+	// with one call it stays under the kit's 25 s for a read
+	// (AUTHORING.md, "The outage checks").
+	nasDialTimeout = 8 * time.Second
 	// pingTimeoutSeconds bounds the liveness probe. Short on purpose: it runs
 	// in front of somebody's page load, and a probe that takes as long as the
 	// call it is protecting has cost more than it saved.
@@ -31,6 +44,11 @@ const (
 	// reconnectCooldown is the floor between login attempts. Well under the
 	// rate limit even if every attempt failed, which is the point: the limit
 	// must be unreachable by this code, not merely usually avoided.
+	//
+	// A call that waited out its timeout arms it too (lost): the next caller would
+	// otherwise dial straight into the same silence, and a read composed of
+	// several calls (health.get) would wait once per call. Within the floor
+	// every call answers ErrNotSent at once.
 	reconnectCooldown = 15 * time.Second
 	// idleProbeAfter is how long a cached session may sit unused before it is
 	// treated as unproven rather than live.
@@ -128,6 +146,10 @@ type NAS struct {
 	// settling is closed when the caller proving or dialling the session is
 	// done; nil when none is. See offLock.
 	settling chan struct{}
+	// dialWithin and callWithin are nasDialTimeout and callTimeoutSeconds;
+	// fields so a test of a hanging NAS waits milliseconds, not seconds.
+	dialWithin time.Duration
+	callWithin int64
 
 	// callMu serialises the wire. The client writes its request frame with
 	// `conn.WriteJSON` outside its own mutex, and gorilla panics outright on a
@@ -174,7 +196,7 @@ func newNAS(dial dialer, supportedMajors []string) *NAS {
 	for _, v := range supportedMajors {
 		m[v] = true
 	}
-	return &NAS{dial: dial, supportedMajs: m, now: time.Now}
+	return &NAS{dial: dial, supportedMajs: m, now: time.Now, dialWithin: nasDialTimeout, callWithin: callTimeoutSeconds}
 }
 
 // session returns a live client, connecting if needed.
@@ -227,7 +249,7 @@ func (n *NAS) session() (rpc, error) {
 
 	var c rpc
 	var err error
-	n.offLock(func() { c, err = n.dial() })
+	n.offLock(func() { c, err = dialBounded(n.dial, n.dialWithin) })
 	if err != nil {
 		n.recordFailureLocked(err)
 		return nil, fmt.Errorf("%w: %v", ErrNotSent, err)
@@ -246,11 +268,37 @@ func (n *NAS) session() (rpc, error) {
 	return c, nil
 }
 
+// dialBounded is dial, given up after within. A dial cannot be cancelled,
+// only not waited for: it runs on, and a session it opens late is closed.
+// ponytail: the client takes no dialer or context, so the bound sits here
+// rather than in net.Dialer.Timeout and websocket.Dialer.HandshakeTimeout.
+func dialBounded(dial dialer, within time.Duration) (rpc, error) {
+	type dialled struct {
+		c   rpc
+		err error
+	}
+	got := make(chan dialled, 1)
+	go func() { c, err := dial(); got <- dialled{c, err} }()
+	t := time.NewTimer(within)
+	defer t.Stop()
+	select {
+	case d := <-got:
+		return d.c, d.err
+	case <-t.C:
+		go func() {
+			if d := <-got; d.c != nil {
+				_ = d.c.Close()
+			}
+		}()
+		return nil, fmt.Errorf("no session within %s", within)
+	}
+}
+
 // offLock runs fn, which talks to the target, with n.mu released. Called and
 // returning with n.mu held.
 //
 // The lock is never held across the wire. A dial to a blackholed NAS waits
-// out the OS's connect timeout and the 45 s websocket handshake, and held
+// out nasDialTimeout, and held
 // under n.mu that wait was every reader's: /health's version, breaker and
 // last_read_at sat behind it, and the backend's 5 s probe gave up and blamed
 // the add-on (the 8g staging run, 22 Nov 2026). Callers of session() still
@@ -417,6 +465,16 @@ func (n *NAS) CircuitOpen() bool {
 	return n.now().Before(n.openUntil)
 }
 
+// lost is drop for a session that went silent: the next dial waits out
+// the reconnect floor, and every call until then answers ErrNotSent at once
+// (reconnectCooldown).
+func (n *NAS) lost() {
+	n.drop()
+	n.mu.Lock()
+	n.lastTry = n.now()
+	n.mu.Unlock()
+}
+
 // drop closes and forgets the session so the next call reconnects.
 func (n *NAS) drop() {
 	n.mu.Lock()
@@ -467,7 +525,7 @@ func (n *NAS) roundTrip(method string, params any, out any) error {
 	}
 	n.ensureProbed()
 
-	raw, err := n.invoke(c, method, params)
+	raw, err := n.invoke(c, method, params, n.callWithin)
 	if err != nil {
 		return fmt.Errorf("%s: %w", method, n.classify(err))
 	}
@@ -504,10 +562,16 @@ func (n *NAS) roundTrip(method string, params any, out any) error {
 // on a concurrent write. The session lock is deliberately not reused for this:
 // that one is held while dialling, and a 30-second call must not block the
 // breaker check every other request makes.
-func (n *NAS) invoke(c rpc, method string, params any) (json.RawMessage, error) {
+func (n *NAS) invoke(c rpc, method string, params any, seconds int64) (json.RawMessage, error) {
 	n.callMu.Lock()
 	defer n.callMu.Unlock()
-	return c.Call(method, callTimeoutSeconds, params)
+	began := time.Now()
+	raw, err := c.Call(method, seconds, params)
+	if err != nil && time.Since(began) >= time.Duration(seconds)*time.Second {
+		// Silence, not a reset: the call waited out its whole timeout.
+		n.lost()
+	}
+	return raw, err
 }
 
 // classify is classifyNASError plus the bookkeeping each outcome implies, for

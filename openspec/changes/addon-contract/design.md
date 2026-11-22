@@ -2124,6 +2124,12 @@ observed, so not stated).
   within the deadline, within the last 10 s, so a check queued behind a long
   call is not an outage; an app that refuses is false at once. The kit
   waits past the 10 s before `outage.hang` judges (`hangSettle`).
+- A read operation answers within 25 s even while the app hangs, under
+  Syndra's 30 s call timeout: its kept copy, or the no-copy code
+  (`TARGET_UNREACHABLE`, `NO_CURRENT_READ`), never a wait Syndra outlasts
+  and reads as `addon_unreachable` (`outage.hang`; `health.get` on the 8g
+  staging rerun, 22 Nov 2026). A composite read (`health.get`) with every
+  source unanswered is a read with nothing to serve, as `/subjects` is.
 - Hysteresis by a Kubernetes probe's defaults (`failureThreshold: 3`,
   `successThreshold: 1`). From `checking` one answer decides, as Envoy's
   active health checking does for a new host, but an outage takes the same
