@@ -69,7 +69,7 @@ func TestARoleMakesAPrivateHomeFolder(t *testing.T) {
 	if u["home"] != homePlace || u["home_create"] != true || u["home_mode"] != "700" {
 		t.Fatalf("want TrueNAS's own private create in %s, got %v", homePlace, u)
 	}
-	if got, err := s.readBack("charlotte"); err != nil || got.Home != homePlace+"/charlotte" {
+	if got, err := s.readBack(t.Context(), "charlotte"); err != nil || got.Home != homePlace+"/charlotte" {
 		t.Fatalf("want the home at %s/charlotte, got %+v (%v)", homePlace, got, err)
 	}
 }

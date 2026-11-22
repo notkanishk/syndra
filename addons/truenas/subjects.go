@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -117,8 +118,8 @@ func (i apiID) known() bool { return i.String() != "" && i.String() != "null" }
 // Groups are resolved to names, because a gid means nothing to the backend's
 // resolver: mappings bind a role to a group NAME, and comparing a name against
 // a number would make every subject look like drift.
-func (s *server) readSubjects() (Snapshot, error) {
-	return s.readSubjectsWhere([]any{})
+func (s *server) readSubjects(ctx context.Context) (Snapshot, error) {
+	return s.readSubjectsWhere(ctx, []any{})
 }
 
 // readSubjectsWhere is the same read narrowed by `user.query` filters, for the
@@ -127,12 +128,12 @@ func (s *server) readSubjects() (Snapshot, error) {
 // scripts/lib/record-truenas.py). An exact lookup is not capped in any way that
 // matters: its Snapshot.Truncated is false unless the target sent more rows
 // than a lookup of a unique key can match.
-func (s *server) readSubjectsWhere(filters []any) (Snapshot, error) {
-	subjects, truncated, err := s.readAccountsWhere(filters)
+func (s *server) readSubjectsWhere(ctx context.Context, filters []any) (Snapshot, error) {
+	subjects, truncated, err := s.readAccountsWhere(ctx, filters)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	names, byName, builtin, err := s.groupIndex()
+	names, byName, builtin, err := s.groupIndex(ctx)
 	if err != nil {
 		// A read that cannot name groups is a read whose group sets are
 		// meaningless to the resolver. Reported as a failure rather than
@@ -150,7 +151,7 @@ func (s *server) readSubjectsWhere(filters []any) (Snapshot, error) {
 // readAccountsWhere reads the user table alone: every field but the group names, which need the
 // group table (nameGroups). Naming an account needs only its uid and name, so the identity lookup
 // (accountWhere) stops here, and an operation never waits on the group table it does not use.
-func (s *server) readAccountsWhere(filters []any) ([]Subject, bool, error) {
+func (s *server) readAccountsWhere(ctx context.Context, filters []any) ([]Subject, bool, error) {
 	var users []nasUser
 	// `select` names every field, and only these. The two hash fields are
 	// absent by construction rather than stripped afterwards — stripping is a
@@ -162,7 +163,7 @@ func (s *server) readAccountsWhere(filters []any) ([]Subject, bool, error) {
 			"limit":  subjectReadCap + 1,
 		},
 	}
-	if err := s.nas.call("user.query", query, &users); err != nil {
+	if err := s.nas.call(ctx, "user.query", query, &users); err != nil {
 		return nil, false, err
 	}
 
@@ -260,8 +261,8 @@ func withoutSystemAccounts(users []nasUser) []nasUser {
 // builtin names the machine's groups, so each caller decides what they mean to
 // it: the audit path counts them, everything that offers or writes leaves them
 // out.
-func (s *server) groupIndex() (byID map[string]string, byName map[string]apiID, builtin map[string]bool, err error) {
-	groups, err := s.readGroups()
+func (s *server) groupIndex(ctx context.Context) (byID map[string]string, byName map[string]apiID, builtin map[string]bool, err error) {
+	groups, err := s.readGroups(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -279,13 +280,13 @@ func (s *server) groupIndex() (byID map[string]string, byName map[string]apiID, 
 }
 
 // readGroups reads every group, refusing half a list.
-func (s *server) readGroups() ([]nasGroup, error) {
+func (s *server) readGroups(ctx context.Context) ([]nasGroup, error) {
 	var groups []nasGroup
 	query := []any{
 		[]any{},
 		map[string]any{"select": []string{"id", "gid", "group", "builtin"}, "limit": subjectReadCap + 1},
 	}
-	if err := s.nas.call("group.query", query, &groups); err != nil {
+	if err := s.nas.call(ctx, "group.query", query, &groups); err != nil {
 		return nil, fmt.Errorf("read groups: %w", err)
 	}
 	if len(groups) > subjectReadCap {
@@ -305,7 +306,7 @@ func (s *server) readGroups() ([]nasGroup, error) {
 // ponytail: two reads per activity call. `activity.get` is operator-initiated
 // and one-at-a-time; cache the group index beside the method list if a caller
 // ever makes this a loop.
-func (s *server) groupsOf(username string) (map[string]bool, error) {
+func (s *server) groupsOf(ctx context.Context, username string) (map[string]bool, error) {
 	var accounts []struct {
 		// The primary group is its OWN field and is not repeated in `groups`.
 		// Membership through it counts for both audit lists, so leaving it out
@@ -319,7 +320,7 @@ func (s *server) groupsOf(username string) (map[string]bool, error) {
 		Group  json.RawMessage `json:"group"`
 		Groups []apiID         `json:"groups"`
 	}
-	if err := s.nas.call("user.query",
+	if err := s.nas.call(ctx, "user.query",
 		[]any{[]any{[]any{"username", "=", username}},
 			map[string]any{"select": []string{"group", "groups"}}},
 		&accounts); err != nil {
@@ -330,7 +331,7 @@ func (s *server) groupsOf(username string) (map[string]bool, error) {
 	}
 
 	// Built-in groups included: an audit watch list can name one.
-	names, _, _, err := s.groupIndex()
+	names, _, _, err := s.groupIndex(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -361,18 +362,18 @@ func memberOfNames(primary json.RawMessage, groups []apiID, names map[string]str
 // not locked), the names of the groups it is in: who a share's auditing has
 // to watch to record everyone (shareAudit.recordsEveryone). One user read and
 // one group read.
-func (s *server) smbMemberships() ([]map[string]bool, error) {
+func (s *server) smbMemberships(ctx context.Context) ([]map[string]bool, error) {
 	var accounts []struct {
 		Group  json.RawMessage `json:"group"` // as groupsOf reads it
 		Groups []apiID         `json:"groups"`
 	}
-	if err := s.nas.call("user.query",
+	if err := s.nas.call(ctx, "user.query",
 		[]any{[]any{[]any{"smb", "=", true}, []any{"locked", "=", false}},
 			map[string]any{"select": []string{"group", "groups"}}},
 		&accounts); err != nil {
 		return nil, err
 	}
-	names, _, _, err := s.groupIndex()
+	names, _, _, err := s.groupIndex(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -423,11 +424,11 @@ func primaryGroupID(raw json.RawMessage) (apiID, bool) {
 //
 // ponytail: one extra group.query per apply that changes groups. Cache it
 // alongside the method list if apply volume ever makes that measurable.
-func (s *server) groupIDsFor(names []string) ([]apiID, error) {
+func (s *server) groupIDsFor(ctx context.Context, names []string) ([]apiID, error) {
 	if len(names) == 0 {
 		return []apiID{}, nil
 	}
-	_, byName, builtin, err := s.groupIndex()
+	_, byName, builtin, err := s.groupIndex(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -471,18 +472,17 @@ func ambiguityWords() (detail, next string) {
 }
 
 // Ping is the reachability probe `/health` uses: `core.ping` through the one
-// call door, bounded by pingTimeoutSeconds, so a NAS gone silent arms the
-// reconnect floor here as on any call (invoke), and the reads queued behind
-// the ping wait 5 s, not the client's own 10.
-func (n *NAS) Ping() error {
-	c, err := n.session()
+// call door, bounded by pingTimeout, so a NAS gone silent arms the reconnect
+// floor here as on any call (invoke), and the reads queued behind the ping
+// wait 5 s, not the client's own 10.
+func (n *NAS) Ping(ctx context.Context) error {
+	c, err := n.session(ctx)
 	if err != nil {
 		return err
 	}
-	raw, err := n.invoke(c, "core.ping", []any{}, pingTimeoutSeconds)
+	raw, err := n.invoke(withCallLimit(ctx, n.pingWithin), c, "core.ping", []any{})
 	if err != nil {
-		n.drop()
-		return fmt.Errorf("ping: %w", classifyNASError(err))
+		return fmt.Errorf("ping: %w", n.classify(err))
 	}
 	if _, refusal, err := splitEnvelope(raw); err != nil || refusal != nil {
 		n.drop()

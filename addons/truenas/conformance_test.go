@@ -98,13 +98,6 @@ func (n stubNAS) Call(method string, timeout int64, params any) (json.RawMessage
 	return n.mutatingRPC.Call(method, timeout, params)
 }
 
-func (n stubNAS) Ping() (string, error) {
-	if err := n.gone("failed to send call: use of closed network connection", 0); err != nil {
-		return "", err
-	}
-	return n.mutatingRPC.Ping()
-}
-
 func (n stubNAS) dial() (rpc, error) {
 	if err := n.gone("failed to connect: connection refused", 0); err != nil {
 		return nil, err
@@ -135,9 +128,10 @@ func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 	s := testServer(t, &m.fakeRPC)
 	nas := stubNAS{m, filepath.Join(t.TempDir(), "nas-off")}
 	s.nas = newNAS(nas.dial, []string{"25.04"})
-	// Short bounds, so a hang costs the run a second, not nasDialTimeout and
-	// callTimeoutSeconds (TestNASBoundsFitUnderTheBackendsCallTimeout holds those).
-	s.nas.dialWithin, s.nas.callWithin = time.Second, 1
+	// Short bounds, so a hang costs the run a second, not nasDialTimeout,
+	// callTimeout and pingTimeout (TestNASBoundsFitUnderTheBackendsCallTimeout
+	// holds those), and the floor after it kitFloor, not reconnectCooldown.
+	s.nas.dialWithin, s.nas.callWithin, s.nas.pingWithin, s.nas.floor = time.Second, time.Second, time.Second, kitFloor
 	s.nas.version, s.nas.probed = "25.04.2", true
 	s.nas.selfName, s.nas.selfUID = "syndra", 3001 // auth.me has named the add-on's own account, as after its first probe
 	key, err := deriveHMACKey([]byte(kitSecret), kitTarget)
@@ -153,7 +147,7 @@ func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 	// sightings alone: nothing here runs the timer.
 	s.stats = statsClock{zone: kolkata, every: time.Hour}
 	recordingSince(t, s, map[string]time.Time{"main": time.Now().AddDate(0, 0, -2)}) // main seen recording everyone before today
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	if homeRoot != "" {
 		if err := s.store.PutSetting(settingHomeRoot, Setting{Value: homeRoot, SetBy: "operator", SetAt: time.Now().UTC()}); err != nil {
 			t.Fatal(err)
@@ -176,6 +170,9 @@ func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 	t.Cleanup(srv.Close)
 	return kitAddon{srv.URL, nas.off}
 }
+
+// kitFloor is the add-on's reconnect floor in the kit runs (kitAddOn).
+const kitFloor = time.Second
 
 type kitReport struct {
 	Mode         string `json:"mode"`
@@ -200,7 +197,7 @@ func runKit(t *testing.T, bin string, a kitAddon, args ...string) kitReport {
 	}
 	cmd := exec.Command(bin, append([]string{"-url", a.url, "-target", kitTarget, "-secret-file", secret, "-json", "-",
 		"-require-outage", "-stop-app", "touch '" + a.nasOff + "'", "-hang-app", "printf hang > '" + a.nasOff + "'",
-		"-start-app", fmt.Sprintf("rm -f '%s' && sleep %d", a.nasOff, int(reconnectCooldown/time.Second)+1)}, args...)...)
+		"-start-app", fmt.Sprintf("rm -f '%s' && sleep %d", a.nasOff, int(kitFloor/time.Second)+1)}, args...)...)
 	out, err := cmd.Output()
 	var r kitReport
 	if jerr := json.Unmarshal(out, &r); jerr != nil {

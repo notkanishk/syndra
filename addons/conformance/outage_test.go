@@ -383,6 +383,10 @@ func TestARestartThatRedatesTheCopyFails(t *testing.T) {
 // waits past it (hangSettle); without -hang-app under -require-outage it
 // fails as not checked.
 func TestOutageHangFailsAHealthThatWaitsOnTheApp(t *testing.T) {
+	// Short, so the read that waits past it costs the run 2 s, not 25.
+	was := readWithin
+	readWithin = 2 * time.Second
+	t.Cleanup(func() { readWithin = was }) // after the parallel subtests, unlike a defer
 	// hungFor is how long the app has been hanging, zero while it is not.
 	slow := func(r *http.Request, reply []byte, hungFor time.Duration) []byte {
 		if hungFor > 0 && r.URL.Path == "/health" {

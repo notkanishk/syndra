@@ -2129,7 +2129,13 @@ observed, so not stated).
   (`TARGET_UNREACHABLE`, `NO_CURRENT_READ`), never a wait Syndra outlasts
   and reads as `addon_unreachable` (`outage.hang`; `health.get` on the 8g
   staging rerun, 22 Nov 2026). A composite read (`health.get`) with every
-  source unanswered is a read with nothing to serve, as `/subjects` is.
+  source unanswered is a read with nothing to serve, as `/subjects` is. The
+  25 s is one deadline from the request's start, shared by every step in
+  it, never a sum of per-step bounds. Only silence is an outage: a call
+  that ran out its time while the app still answers a ping is a busy app,
+  and fails that call alone; one with the ping unanswered too holds the
+  next calls back for the reconnect floor. Background work no request
+  waits on has a longer per-call bound of its own.
 - Hysteresis by a Kubernetes probe's defaults (`failureThreshold: 3`,
   `successThreshold: 1`). From `checking` one answer decides, as Envoy's
   active health checking does for a new host, but an outage takes the same

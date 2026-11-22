@@ -481,8 +481,7 @@ func (r *recordingRPC) Call(method string, _ int64, _ any) (json.RawMessage, err
 	r.onCall(method)
 	return envelope(`null`), nil
 }
-func (r *recordingRPC) Ping() (string, error) { return "pong", nil }
-func (r *recordingRPC) Close() error          { r.onClose(); return nil }
+func (r *recordingRPC) Close() error { r.onClose(); return nil }
 
 func mutationLogPath(t *testing.T, s *server) string {
 	t.Helper()
@@ -524,7 +523,7 @@ func TestTheClientWrapperNeverSurfacesTheTargetsOwnText(t *testing.T) {
 	m := &mutatingRPC{fakeRPC: fakeRPC{err: errors.New("update failed for password=" + theSecret)}}
 	n := newNAS(func() (rpc, error) { return m, nil }, []string{"25.04"})
 
-	err := n.sendWrite("user.update", []any{1, map[string]any{"password": theSecret}}, nil)
+	err := n.sendWrite(t.Context(), "user.update", []any{1, map[string]any{"password": theSecret}}, nil)
 	if err == nil {
 		t.Fatal("the failure must be reported")
 	}
@@ -623,8 +622,7 @@ type refusingRPC struct{}
 func (refusingRPC) Call(string, int64, any) (json.RawMessage, error) {
 	return errorEnvelope("[EPERM] user.delete: not permitted"), nil
 }
-func (refusingRPC) Ping() (string, error) { return "pong", nil }
-func (refusingRPC) Close() error          { return nil }
+func (refusingRPC) Close() error { return nil }
 
 // One namespace so a reused call id is always caught, and a type tag so a
 // cached result is never decoded as the wrong shape — which is an all-zero
@@ -784,14 +782,14 @@ func TestTheFakeAppliesTheFiltersTheLookupSends(t *testing.T) {
 		{"username":"seth","id":12,"uid":3002,"locked":false,"smb":true,"groups":[42]}
 	]`)
 
-	found, _, err := s.subjectWhere("uid", int64(3002))
+	found, _, err := s.subjectWhere(t.Context(), "uid", int64(3002))
 	if err != nil || found == nil {
 		t.Fatalf("a filtered lookup must find its row: %v", err)
 	}
 	if found.ID.String() != "12" {
 		t.Fatalf("want seth's record id, got %s", found.ID.String())
 	}
-	if found, _, err := s.subjectWhere("uid", int64(9999)); err != nil || found != nil {
+	if found, _, err := s.subjectWhere(t.Context(), "uid", int64(9999)); err != nil || found != nil {
 		t.Fatalf("want no account, got %+v %v", found, err)
 	}
 }
@@ -818,7 +816,7 @@ func TestAMissingBoundAccountIsRefusedRatherThanLeftUnknown(t *testing.T) {
 				Operation: op, Subject: "u1", Actor: "op1", CallID: "c-" + op,
 				Params: map[string]any{"password": "Correct-Horse-Battery-9!"},
 			}
-			_, status, err := s.runOperation(op, req)
+			_, status, err := s.runOperation(t.Context(), op, req)
 			if err == nil {
 				t.Fatal("want a refusal")
 			}
@@ -848,7 +846,7 @@ func TestAnAmbiguousBindingIsItsOwnRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, status, err := s.rotatePassword(OperationRequest{
+	_, status, err := s.rotatePassword(t.Context(), OperationRequest{
 		Operation: "password.rotate", Subject: "u1", Actor: "op1", CallID: "c1",
 	})
 	if err == nil {

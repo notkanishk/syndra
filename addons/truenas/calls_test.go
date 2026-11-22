@@ -188,7 +188,7 @@ func TestAContractOneEntryReplaysInContractTwoWords(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
-	snap, err := s.readSubjects()
+	snap, err := s.readSubjects(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestALegacyReplaysStandingSeesTheWaitForANewPassword(t *testing.T) {
 		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, UIDKind: uidKindAccount, WantsSMB: &wants}); err != nil {
 			t.Fatal(err)
 		}
-		snap, err := s.readSubjects()
+		snap, err := s.readSubjects(t.Context())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -482,14 +482,14 @@ func TestTwoAppliesForOneSubjectRunOneAtATime(t *testing.T) {
 			bCreating <- struct{}{}
 			return false
 		}
-		s.nas.callMu.Unlock()
+		s.nas.leave()
 		close(aStalled)
 		select {
 		case <-bCreating:
 			overlapped = true
 		case <-time.After(300 * time.Millisecond):
 		}
-		s.nas.callMu.Lock()
+		s.nas.line <- struct{}{}
 		return true
 	}
 

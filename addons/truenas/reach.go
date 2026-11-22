@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -194,13 +195,13 @@ type reachRead struct {
 // reach is who opens what, through the fresher (fresh.go): the copy unless
 // fresh asks for a read of the NAS now. A write that must be judged against
 // what is there reads readSharesACLs itself.
-func (s *server) reach(fresh bool) (reachRead, Observed, error) {
+func (s *server) reach(ctx context.Context, fresh bool) (reachRead, Observed, error) {
 	val, obs, err := s.fresh.read("reach", fresh, func() (any, time.Time, error) {
-		groups, err := s.readGroups()
+		groups, err := s.readGroups(ctx)
 		if err != nil {
 			return nil, time.Time{}, err
 		}
-		acls, err := s.readSharesACLs()
+		acls, err := s.readSharesACLs(ctx)
 		if err != nil {
 			return nil, time.Time{}, err
 		}
@@ -213,18 +214,18 @@ func (s *server) reach(fresh bool) (reachRead, Observed, error) {
 }
 
 // readSharesACLs reads each enabled share's root and first-level folders.
-func (s *server) readSharesACLs() (shareRead, error) {
-	shares, err := s.enabledShares()
+func (s *server) readSharesACLs(ctx context.Context) (shareRead, error) {
+	shares, err := s.enabledShares(ctx)
 	if err != nil {
 		return shareRead{}, err
 	}
-	datasets, err := s.datasetMounts()
+	datasets, err := s.datasetMounts(ctx)
 	if err != nil {
 		return shareRead{}, err
 	}
 	out := []aclPlace{}
 	for _, sh := range shares {
-		root, err := s.readACL(sh.Path)
+		root, err := s.readACL(ctx, sh.Path)
 		if err != nil {
 			return shareRead{}, err
 		}
@@ -235,12 +236,12 @@ func (s *server) readSharesACLs() (shareRead, error) {
 			Name string `json:"name"`
 			Path string `json:"path"`
 		}
-		if err := s.nas.call("filesystem.listdir", []any{sh.Path,
+		if err := s.nas.call(ctx, "filesystem.listdir", []any{sh.Path,
 			[]any{[]any{"type", "=", "DIRECTORY"}}, map[string]any{"select": []string{"name", "path"}}}, &dirs); err != nil {
 			return shareRead{}, fmt.Errorf("list %s: %w", sh.Name, err)
 		}
 		for _, d := range dirs {
-			p, err := s.readACL(d.Path)
+			p, err := s.readACL(ctx, d.Path)
 			if errors.Is(err, ErrNoSuchPath) {
 				continue // removed between the listing and the read
 			}
@@ -258,13 +259,13 @@ func (s *server) readSharesACLs() (shareRead, error) {
 //
 // ponytail: NFS4 only, which is what TrueNAS gives every SMB dataset by
 // default. Evaluate POSIX1E entries here if a share ever carries one.
-func (s *server) readACL(at string) (aclPlace, error) {
+func (s *server) readACL(ctx context.Context, at string) (aclPlace, error) {
 	var got struct {
 		ACLType string     `json:"acltype"`
 		GID     int64      `json:"gid"`
 		ACL     []aclEntry `json:"acl"`
 	}
-	if err := s.nas.call("filesystem.getacl", []any{at, false, false}, &got); err != nil {
+	if err := s.nas.call(ctx, "filesystem.getacl", []any{at, false, false}, &got); err != nil {
 		return aclPlace{}, fmt.Errorf("read the permissions of %s: %w", at, err)
 	}
 	p := aclPlace{path: at, ownerGID: got.GID}
@@ -310,9 +311,9 @@ func (s *server) considers(share string) bool {
 
 // enabledShares are the SMB shares a member can connect to, longest path
 // first so shareAt finds the innermost one. Only shares Syndra considers.
-func (s *server) enabledShares() ([]smbShare, error) {
+func (s *server) enabledShares(ctx context.Context) ([]smbShare, error) {
 	var all []smbShare
-	if err := s.nas.call("sharing.smb.query",
+	if err := s.nas.call(ctx, "sharing.smb.query",
 		[]any{[]any{}, map[string]any{"select": []string{"name", "path", "enabled"}}}, &all); err != nil {
 		return nil, fmt.Errorf("read shares: %w", err)
 	}
@@ -365,7 +366,7 @@ type datasetMap struct {
 // (not inherited) is still placed by its name, so it is looked for where its
 // name puts it, not where it would mount; if the real NAS answers its own
 // mountpoint even while locked, that answer is used instead (tasks 6.10m).
-func (s *server) datasetMounts() (datasetMap, error) {
+func (s *server) datasetMounts(ctx context.Context) (datasetMap, error) {
 	var rows []struct {
 		Name string `json:"name"`
 		// null for an unmounted dataset, a locked one likely (UNVERIFIED).
@@ -373,7 +374,7 @@ func (s *server) datasetMounts() (datasetMap, error) {
 		// shape-optional: UNVERIFIED, not in the recording yet (record-truenas.py now asks for it); TrueNAS's pool.dataset.query documents it on every dataset, true for an encrypted one whose key is not loaded.
 		Locked bool `json:"locked"`
 	}
-	if err := s.nas.call("pool.dataset.query", []any{[]any{}, map[string]any{"select": []string{"name", "mountpoint", "locked"}}}, &rows); err != nil {
+	if err := s.nas.call(ctx, "pool.dataset.query", []any{[]any{}, map[string]any{"select": []string{"name", "mountpoint", "locked"}}}, &rows); err != nil {
 		return datasetMap{}, fmt.Errorf("read datasets: %w", err)
 	}
 	out := datasetMap{at: make(map[string]string, len(rows)), locked: map[string]bool{}}
@@ -514,7 +515,7 @@ type ReachResponse struct {
 
 // handleReach answers what each group opens, for the mappings page.
 func (s *server) handleReach(w http.ResponseWriter, r *http.Request, _ []byte) {
-	read, obs, err := s.reach(wantsFresh(r))
+	read, obs, err := s.reach(r.Context(), wantsFresh(r))
 	if writeCooldown(w, err) {
 		return
 	}
@@ -537,8 +538,8 @@ func (s *server) handleReach(w http.ResponseWriter, r *http.Request, _ []byte) {
 // change, by count (nil when it could not be made: no usage at all). The
 // folder permissions come through the fresher like /reach (fresh asks for a
 // read of the NAS now), and the places are as fresh as that read says.
-func (s *server) memberPlaces(fresh bool, groupIDs []apiID, home string, count *memberCount) ([]Place, Observed, error) {
-	read, seen, err := s.reach(fresh)
+func (s *server) memberPlaces(ctx context.Context, fresh bool, groupIDs []apiID, home string, count *memberCount) ([]Place, Observed, error) {
+	read, seen, err := s.reach(ctx, fresh)
 	if err != nil {
 		return nil, Observed{}, err
 	}
@@ -565,14 +566,14 @@ func (s *server) memberPlaces(fresh bool, groupIDs []apiID, home string, count *
 
 // userQuotas reads one dataset's user quota table by uid, nil when it can't be
 // read.
-func (s *server) userQuotas(dataset string) map[int64]PlaceUsage {
+func (s *server) userQuotas(ctx context.Context, dataset string) map[int64]PlaceUsage {
 	var rows []struct {
 		ID        int64 `json:"id"`
 		UsedBytes int64 `json:"used_bytes"`
 		// shape-optional: TrueNAS omits `quota` for a uid with no limit set.
 		QuotaBytes int64 `json:"quota"`
 	}
-	if err := s.nas.call("pool.dataset.get_quota", []any{dataset, "USER"}, &rows); err != nil {
+	if err := s.nas.call(ctx, "pool.dataset.get_quota", []any{dataset, "USER"}, &rows); err != nil {
 		return nil
 	}
 	out := make(map[int64]PlaceUsage, len(rows))

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -47,7 +48,7 @@ func (s *server) homeRoot() (string, error) {
 	return v.Value, nil
 }
 
-func (s *server) homeRootView() (SettingView, error) {
+func (s *server) homeRootView(ctx context.Context) (SettingView, error) {
 	v, found, err := s.store.GetSetting(settingHomeRoot)
 	if err != nil {
 		return SettingView{}, err
@@ -57,14 +58,14 @@ func (s *server) homeRootView() (SettingView, error) {
 		at := v.SetAt
 		view.SetAt = &at
 	}
-	if places, labels, err := s.homePlaces(); err == nil {
+	if places, labels, err := s.homePlaces(ctx); err == nil {
 		view.Values, view.Labels, view.ValuesRead = places, labels, true
 	}
 	return view, nil
 }
 
-func (s *server) handleSettings(w http.ResponseWriter, _ *http.Request, _ []byte) {
-	view, err := s.homeRootView()
+func (s *server) handleSettings(w http.ResponseWriter, r *http.Request, _ []byte) {
+	view, err := s.homeRootView(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, CodeSettingsUnreadable, "The settings could not be read.", nil)
 		return
@@ -100,15 +101,15 @@ func (s *server) handlePutSetting(w http.ResponseWriter, r *http.Request, body [
 	// this body had no field for it). A replay answers what the first call
 	// answered and writes nothing.
 	identity := map[string]any{"name": settingHomeRoot, "value": req.Value}
-	s.once(w, req.CallID, kindSetting+settingHomeRoot, "", identity, func(w http.ResponseWriter) { s.putHomeRoot(w, req) })
+	s.once(w, req.CallID, kindSetting+settingHomeRoot, "", identity, func(w http.ResponseWriter) { s.putHomeRoot(r.Context(), w, req) })
 }
 
-func (s *server) putHomeRoot(w http.ResponseWriter, req putSettingRequest) {
+func (s *server) putHomeRoot(ctx context.Context, w http.ResponseWriter, req putSettingRequest) {
 	if req.Value != "" {
 		// A read of the NAS now, never the copy and never the last read: a
 		// place deleted a minute ago must not pass. Not kept: the write that
 		// follows forgets every copy anyway (server.mutate).
-		read, err := s.readSharesACLs()
+		read, err := s.readSharesACLs(ctx)
 		if errors.Is(err, ErrNotSent) {
 			// Nothing was sent, and nothing is stored until the place is
 			// checked: the one code Syndra reads as "nothing happened".
@@ -138,7 +139,7 @@ func (s *server) putHomeRoot(w http.ResponseWriter, req putSettingRequest) {
 		writeError(w, http.StatusInternalServerError, CodeSettingNotSaved, "The setting could not be stored.", nil)
 		return
 	}
-	view, err := s.homeRootView()
+	view, err := s.homeRootView(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, CodeSettingsUnreadable, "The settings could not be read back.", nil)
 		return

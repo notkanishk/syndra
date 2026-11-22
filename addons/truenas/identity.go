@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -41,12 +42,12 @@ func (s *server) idRange() (int64, int64) {
 // nextIdentity claims a number free as both a uid and a gid: one number for an
 // account and its personal group, which is what makes "who owns this" readable
 // from either.
-func (s *server) nextIdentity() (int64, error) {
+func (s *server) nextIdentity(ctx context.Context) (int64, error) {
 	floor, ceiling := s.idRange()
 	var users []struct {
 		UID int64 `json:"uid"`
 	}
-	if err := s.nas.call("user.query", []any{
+	if err := s.nas.call(ctx, "user.query", []any{
 		[]any{[]any{"uid", ">=", floor}, []any{"uid", "<=", ceiling}},
 		map[string]any{"select": []string{"uid"}, "order_by": []string{"-uid"}, "limit": 1},
 	}, &users); err != nil {
@@ -55,7 +56,7 @@ func (s *server) nextIdentity() (int64, error) {
 	var groups []struct {
 		GID int64 `json:"gid"`
 	}
-	if err := s.nas.call("group.query", []any{
+	if err := s.nas.call(ctx, "group.query", []any{
 		[]any{[]any{"gid", ">=", floor}, []any{"gid", "<=", ceiling}},
 		map[string]any{"select": []string{"gid"}, "order_by": []string{"-gid"}, "limit": 1},
 	}, &groups); err != nil {
@@ -80,14 +81,14 @@ func (s *server) nextIdentity() (int64, error) {
 // second apply that took it over as an orphan) would otherwise lose its
 // primary group. Writes for one subject run one at a time (calls.go, rule 5);
 // this holds even if that ever stops being so. A failed read keeps the group.
-func (s *server) undoGroup(who caller, name string, id apiID) {
+func (s *server) undoGroup(ctx context.Context, who caller, name string, id apiID) {
 	if !id.known() {
 		return
 	}
-	if still, _, empty := s.emptyGroupNamed(name); !empty || still.String() != id.String() {
+	if still, _, empty := s.emptyGroupNamed(ctx, name); !empty || still.String() != id.String() {
 		return
 	}
-	if err := s.send(who, "group.delete", []any{id}, nil); err != nil {
+	if err := s.send(ctx, who, "group.delete", []any{id}, nil); err != nil {
 		logStoreFailure("personal group cleanup", id.String(), err)
 	}
 }

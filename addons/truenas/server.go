@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -35,6 +36,8 @@ type server struct {
 	log       *MutationLog
 	life      *lifecycle
 	keyExpiry time.Time
+	// budget is requestWithin, or a test's shorter one (routes).
+	budget time.Duration
 	// keyNeverExpires is the operator saying so, rather than this add-on
 	// inferring it from an absent date. A key with no expiry and a key whose
 	// expiry nobody wrote down look identical from here, and only one of them
@@ -113,7 +116,19 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/", s.auth.authenticated(func(w http.ResponseWriter, _ *http.Request, _ []byte) {
 		writeError(w, http.StatusNotFound, CodeUnknownRoute, "This add-on has no such route.", nil)
 	}))
-	return mux
+	return s.withBudget(mux)
+}
+
+// withBudget gives every request one deadline from its start (requestWithin),
+// shared by every NAS step under it: the waits for the session and the wire,
+// the dial, the idle proof and each call. Their sum cannot outlast it,
+// however many calls a read makes.
+func (s *server) withBudget(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), cmp.Or(s.budget, requestWithin))
+		defer cancel()
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 // handleCapabilities serves the manifest.
@@ -263,8 +278,8 @@ const healthReachWithin = 2 * time.Second
 
 // recentReadCounts is how old a NAS answer may be and still count as reachable
 // when /health's own ping runs out of time. The session is one socket and its
-// calls go one at a time (callMu), so the ping can queue behind an audit.query
-// page or a get_quota for up to callTimeoutSeconds while the NAS is busy and
+// calls go one at a time (NAS.line), so the ping can queue behind an audit.query
+// page or a get_quota for up to collectCallTimeout while the NAS is busy and
 // fine; a miss then reads as app_unreachable on the backend's first probe
 // after a restart. §13.2: a call that succeeded within the last few seconds
 // counts. A NAS that hangs still reads false once its last answer is older.
@@ -317,7 +332,7 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 	// Bounded: a NAS that hangs is not reachable, and says so in time.
 	ctx, cancel := context.WithTimeout(r.Context(), healthReachWithin)
 	defer cancel()
-	reachable, answered := within(ctx, func() bool { return s.nas.Ping() == nil })
+	reachable, answered := within(ctx, func() bool { return s.nas.Ping(r.Context()) == nil })
 	h.Reachable = reachable || !answered && time.Since(s.nas.LastRead()) <= recentReadCounts
 	if t := s.nas.LastRead(); !t.IsZero() {
 		formatted := t.UTC().Format(time.RFC3339)
@@ -341,7 +356,7 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 			shares []string
 			err    error
 		}
-		got, done := within(ctx, func() read { shares, err := s.unauditedShares(); return read{shares, err} })
+		got, done := within(ctx, func() read { shares, err := s.unauditedShares(r.Context()); return read{shares, err} })
 		if done && got.err == nil {
 			h.SharesReadable, h.UnauditedShares = true, got.shares
 		}
@@ -528,7 +543,7 @@ func (s *server) attributed(subjects []Subject, limits map[int64]string, truncat
 // kept (the copy, labelled unreachable).
 func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte) {
 	val, obs, err := s.fresh.read("subjects", wantsFresh(r), func() (any, time.Time, error) {
-		snap, err := s.readSubjects()
+		snap, err := s.readSubjects(r.Context())
 		if err != nil {
 			return nil, time.Time{}, err
 		}
@@ -538,7 +553,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 			// which of the two matters.
 			log.Printf("[STORE] could not persist snapshot: %v", putErr)
 		}
-		read, err := s.attributed(snap.Subjects, s.homeLimits(snap.Subjects), snap.Truncated)
+		read, err := s.attributed(snap.Subjects, s.homeLimits(r.Context(), snap.Subjects), snap.Truncated)
 		return read, snap.TakenAt, err
 	})
 	if writeCooldown(w, err) {

@@ -335,7 +335,7 @@ func TestNoSecretIsInAnyIntentOrResult(t *testing.T) {
 func TestTheReadPathRefusesAWrite(t *testing.T) {
 	s, m := opServer(t)
 	w := watched(t, s, m)
-	if err := s.nas.call("user.update", []any{11, map[string]any{"locked": true}}, nil); err == nil {
+	if err := s.nas.call(t.Context(), "user.update", []any{11, map[string]any{"locked": true}}, nil); err == nil {
 		t.Fatal("call must refuse a write")
 	}
 	if len(w.writes) != 0 || len(m.updates) != 0 {
@@ -347,7 +347,8 @@ func TestTheReadPathRefusesAWrite(t *testing.T) {
 // with the one function allowed to take it: a NAS write only from send, the
 // purge's own session only inside a mutate, and the raw client only from the
 // three places that already hold to the rule (invoke under call and sendWrite,
-// the ping's core.ping and the session's proof, and callOnce). And every change to the store's bindings or
+// the liveness ping, and callOnce). Ping and ping reach the wire only with the
+// literal method "core.ping". And every change to the store's bindings or
 // settings is made only inside a mutate, whatever asked for it.
 func TestEveryNASWriteGoesThroughTheSeam(t *testing.T) {
 	inMutateOnly := map[string]bool{
@@ -357,9 +358,11 @@ func TestEveryNASWriteGoesThroughTheSeam(t *testing.T) {
 		"sendWrite": {"send"},
 		"roundTrip": {"call", "sendWrite"},
 		"invoke":    {"roundTrip", "Ping"},
-		"Call":      {"invoke", "proven", "callOnce"},
+		"Call":      {"invoke", "ping", "callOnce"},
 		"callOnce":  {"purgeAccount"},
 	}
+	// The callers that may send only core.ping, and the argument naming it.
+	pingOnly := map[string]int{"Ping": 2, "ping": 0}
 	fset := token.NewFileSet()
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -406,6 +409,9 @@ func TestEveryNASWriteGoesThroughTheSeam(t *testing.T) {
 				if places, guarded := allowed[callee]; guarded && !slices.Contains(places, fn.Name.Name) {
 					t.Errorf("%s: %s calls %s; only %v may", fset.Position(call.Pos()), fn.Name.Name, callee, places)
 				}
+				if at, only := pingOnly[fn.Name.Name]; only && allowed[callee] != nil && !literalPing(call, at) {
+					t.Errorf("%s: %s calls %s with a method other than the literal \"core.ping\"", fset.Position(call.Pos()), fn.Name.Name, callee)
+				}
 				if inMutateOnly[callee] && !enclosedBy(stack, inMutate) {
 					t.Errorf("%s: %s outside a mutate is a write with no intent", fset.Position(call.Pos()), callee)
 				}
@@ -413,6 +419,15 @@ func TestEveryNASWriteGoesThroughTheSeam(t *testing.T) {
 			})
 		}
 	}
+}
+
+// literalPing says the call's argument at is the string literal "core.ping".
+func literalPing(call *ast.CallExpr, at int) bool {
+	if at >= len(call.Args) {
+		return false
+	}
+	lit, ok := call.Args[at].(*ast.BasicLit)
+	return ok && lit.Value == `"core.ping"`
 }
 
 func calleeName(call *ast.CallExpr) string {
@@ -534,12 +549,13 @@ func silentNAS(t *testing.T) *truenas.Client {
 	return c
 }
 
-// oneSecond hands the client a one-second timeout, so its "call timed out"
-// arrives in a test's time rather than callTimeoutSeconds.
+// oneSecond hands the client at most a one-second timeout, so its "call
+// timed out" arrives in a test's time rather than callTimeout; a shorter
+// one it is given is honoured.
 type oneSecond struct{ *truenas.Client }
 
-func (c oneSecond) Call(method string, _ int64, params any) (json.RawMessage, error) {
-	return c.Client.Call(method, 1, params)
+func (c oneSecond) Call(method string, timeout int64, params any) (json.RawMessage, error) {
+	return c.Client.Call(method, min(timeout, 1), params)
 }
 
 // writesToTheWire answers reads from the fake and sends writes down the wire.
@@ -587,6 +603,33 @@ func TestATimedOutWriteIsUnknownNeverRefused(t *testing.T) {
 				t.Errorf("a timed-out write must be recorded unknown, got %+v", last)
 			}
 		})
+	}
+}
+
+// A write the real client timed out on, on a NAS that then answers no ping
+// either, is unknown, and silence arms the reconnect floor: the next write is
+// never sent and says so (TARGET_UNREACHABLE, Syndra's not_sent), at once,
+// rather than waiting out the same silence. Nothing of it reaches the wire or
+// the log: the read in front of it is refused first.
+func TestAfterASilentWriteTheNextIsNotSent(t *testing.T) {
+	s, m := opServer(t)
+	w := watched(t, s, writesToTheWire{rpc: m, wire: oneSecond{silentNAS(t)}})
+	s.nas.callWithin, s.nas.pingWithin = time.Second, time.Second // as oneSecond gives them
+	s.nas.client, s.nas.lastRead = w, time.Now()                  // a session had long ago: no dial's floor stands
+	body := `{"call_id":"%s","subject":"sub-1","params":{"password":"` + theSecret + `"}}`
+	postOperation(t, s, "password.set", fmt.Sprintf(body, "c1"))
+	if last := records(t, s); last[len(last)-1].Outcome != outcomeUnknown {
+		t.Fatalf("the timed-out write was recorded %+v; want unknown", last[len(last)-1])
+	}
+	logged := len(records(t, s))
+
+	began := time.Now()
+	rr := postOperation(t, s, "password.set", fmt.Sprintf(body, "c2"))
+	if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeTargetUnreachable || time.Since(began) > 100*time.Millisecond {
+		t.Fatalf("the next write answered %d %s after %s; want 503 TARGET_UNREACHABLE at once", rr.Code, rr.Body.String(), time.Since(began))
+	}
+	if len(w.writes) != 1 || len(records(t, s)) != logged {
+		t.Fatalf("the next write reached the wire %v or the log; nothing was sent", w.writes)
 	}
 }
 

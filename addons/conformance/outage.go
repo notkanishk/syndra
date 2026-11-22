@@ -37,8 +37,9 @@ const healthWithin = 3 * time.Second
 // backend/internal/addons/deps.go), with a margin for the network. A read
 // that waits on a hanging app longer than Syndra waits on the add-on answers
 // nobody, and Syndra blames the add-on for the app (health.get on the 8g
-// staging rerun, 22 Nov 2026).
-const readWithin = 25 * time.Second
+// staging rerun, 22 Nov 2026). A variable only so the kit's own tests can
+// shorten it.
+var readWithin = 25 * time.Second
 
 // recentReadWindow is how old an answer from the app may be and still make
 // /health say reachable when its own call gets no answer in time (design

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -105,7 +106,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 	// the target, and the fingerprint carried into the apply is what settles
 	// that at the moment of writing.
 	current := true
-	snap, err := s.readSubjects()
+	snap, err := s.readSubjects(r.Context())
 	if err != nil {
 		cached, found, cacheErr := s.store.GetSnapshot()
 		if cacheErr != nil || !found {
@@ -139,7 +140,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		out.Stale = unreachableSince(snap.TakenAt)
 	}
 	for _, subject := range req.Subjects {
-		outcome, err := s.planOne(subject, ix, at, claimed, snap, current)
+		outcome, err := s.planOne(r.Context(), subject, ix, at, claimed, snap, current)
 		switch {
 		case errors.Is(err, errStoreUnreadable):
 			writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, planStoreUnreadable, nil)
@@ -190,7 +191,7 @@ const (
 // folder's stat, as it skips the group check, and leaves both to the apply:
 // with the NAS down, one subject's home would otherwise turn the whole
 // stored-copy answer into a 5xx.
-func (s *server) planOne(req PlanSubject, ix accountIndex, at attribution, claimed map[string]string, snap Snapshot, live bool) (ApplyOutcome, error) {
+func (s *server) planOne(ctx context.Context, req PlanSubject, ix accountIndex, at attribution, claimed map[string]string, snap Snapshot, live bool) (ApplyOutcome, error) {
 	truncated := snap.Truncated
 	desired, err := s.decodeDesired(req.Desired)
 	var u unholdable
@@ -302,7 +303,7 @@ func (s *server) planOne(req PlanSubject, ix accountIndex, at attribution, claim
 
 	// The home and its limit, decided by the apply's own rules and reads, so
 	// the plan never promises a folder or a limit the apply would not make.
-	home, err := s.decideHome(desired, current.Username, current.Home, current.UID, live)
+	home, err := s.decideHome(ctx, desired, current.Username, current.Home, current.UID, live)
 	if err != nil {
 		// The target's read failing, as the apply answers it (converge): a
 		// retry, never `blocked`, which Syndra takes as the target refusing.
@@ -315,7 +316,7 @@ func (s *server) planOne(req PlanSubject, ix accountIndex, at attribution, claim
 	after := c.applyTo(*current)
 	// A limit that can't be read is not planned: the apply would fail to read
 	// it too, and planning it would queue a row every pass.
-	_, quota, quotaOwed, _ := s.quotaOwed(desired, after.Home, current.UID)
+	_, quota, quotaOwed, _ := s.quotaOwed(ctx, desired, after.Home, current.UID)
 
 	changes := c.writes()
 	if !changes && !quotaOwed {

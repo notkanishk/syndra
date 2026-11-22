@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -181,16 +182,16 @@ func TestASharesDayIsCountedOnlyFromWhenItWasSeenRecordingEveryone(t *testing.T)
 	nas.shares = strings.Replace(statsShares, `"audit":{"enable":true,"watch_list":[],"ignore_list":[]}`,
 		`"audit":{"enable":true,"watch_list":["builtin_users"],"ignore_list":[]}`, 1)
 	nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "before")
-	s.collectStatsOnce() // 9 Nov 10:00: main leaves Seth out
+	s.collectStatsOnce(t.Context()) // 9 Nov 10:00: main leaves Seth out
 	nas.users = strings.ReplaceAll(statsUsers, `"groups":[]`, inBuiltin)
 	*at = day0.Add(7 * time.Hour)
-	s.collectStatsOnce() // 17:00: now it records everyone
+	s.collectStatsOnce(t.Context()) // 17:00: now it records everyone
 	nas.connect(day0.Add(8*time.Hour), "rey_mysterio", "main", "after")
 	nas.connect(day0.Add(20*time.Hour), "rey_mysterio", "main", "next day")
 	*at = day0.Add(24 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.Add(48 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	if v, counted, why := mainOn(t, s, "2026-11-09"); counted || why != reasonNotYet.text {
 		t.Errorf("9 Nov, the day main began recording everyone: counted %v (%d), gap %q; want a gap saying %q", counted, v, why, reasonNotYet.text)
 	}
@@ -205,7 +206,7 @@ func TestASharesDayIsCountedOnlyFromWhenItWasSeenRecordingEveryone(t *testing.T)
 func TestARestartKeepsWhenRecordingBegan(t *testing.T) {
 	s, nas, at := statsServer(t)
 	recordingSince(t, s, nil)
-	s.collectStatsOnce() // 9 Nov 10:00: main seen recording everyone
+	s.collectStatsOnce(t.Context()) // 9 Nov 10:00: main seen recording everyone
 	path := s.store.db.Path()
 	s.store.Close()
 	store, err := OpenStore(path)
@@ -217,7 +218,7 @@ func TestARestartKeepsWhenRecordingBegan(t *testing.T) {
 	nas.connect(day0.Add(time.Hour), "rey_mysterio", "main", "s0")
 	nas.connect(day0.Add(20*time.Hour), "rey_mysterio", "main", "s1")
 	*at = day0.Add(24 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	meta, _, _ := s.store.StatsMeta(metricSessions)
 	if got := meta.Recording["main"]; !got.Equal(day0) {
 		t.Errorf("main recording since %v after a restart, want %v", got, day0)
@@ -226,7 +227,7 @@ func TestARestartKeepsWhenRecordingBegan(t *testing.T) {
 		t.Errorf("main last seen %v after a restart, want the run after it", got)
 	}
 	*at = day0.Add(48 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	if _, counted, _ := mainOn(t, s, "2026-11-09"); counted {
 		t.Error("9 Nov counted after a restart: recording began at 10:00 that day")
 	}
@@ -239,21 +240,21 @@ func TestARestartKeepsWhenRecordingBegan(t *testing.T) {
 // it again later that day begins it again then, so that day is a gap.
 func TestNarrowingAuditingEndsCoverage(t *testing.T) {
 	s, nas, at := statsServer(t)
-	s.collectStatsOnce() // 9 Nov: main recorded everyone all along
+	s.collectStatsOnce(t.Context()) // 9 Nov: main recorded everyone all along
 	*at = day0.Add(24 * time.Hour)
 	narrowed := strings.Replace(statsShares, `"audit":{"enable":true,"watch_list":[],"ignore_list":[]}`,
 		`"audit":{"enable":true,"watch_list":["lab_makers"],"ignore_list":[]}`, 1)
 	nas.shares = narrowed
-	s.collectStatsOnce() // 10 Nov 10:00: narrowed
+	s.collectStatsOnce(t.Context()) // 10 Nov 10:00: narrowed
 	nas.shares = statsShares
 	*at = day0.Add(28 * time.Hour)
-	s.collectStatsOnce() // 14:00: everyone again
+	s.collectStatsOnce(t.Context()) // 14:00: everyone again
 	nas.connect(day0.Add(30*time.Hour), "rey_mysterio", "main", "s1")
 	nas.connect(day0.Add(40*time.Hour), "rey_mysterio", "main", "s2")
 	*at = day0.Add(48 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.Add(72 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	if v, counted, why := mainOn(t, s, "2026-11-10"); counted || why != reasonNotYet.text {
 		t.Errorf("10 Nov, narrowed then widened: counted %v (%d), gap %q; want a gap saying %q", counted, v, why, reasonNotYet.text)
 	}
@@ -273,9 +274,9 @@ func TestNoStoredInstantIsNeverBackdated(t *testing.T) {
 	}
 	nas.connect(day0.Add(-30*time.Hour), "rey_mysterio", "main", "s1") // 8 Nov
 	nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "s2")    // 9 Nov
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.Add(24 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	for _, day := range []string{"2026-11-08", "2026-11-09"} {
 		if v, counted, why := mainOn(t, s, day); counted || why != reasonNotYet.text {
 			t.Errorf("%s with no instant stored: counted %v (%d), gap %q; want a gap saying %q", day, counted, v, why, reasonNotYet.text)
@@ -310,7 +311,7 @@ func TestUnreadSMBAccountsAreNoSighting(t *testing.T) {
 			for i, h := range tc.runs {
 				nas.smbDown = i > 0 && i < len(tc.runs)-2
 				*at = day0.Add(time.Duration(h) * time.Hour)
-				s.collectStatsOnce()
+				s.collectStatsOnce(t.Context())
 			}
 			checkMain(t, s, tc.want)
 		})
@@ -389,7 +390,7 @@ func TestTheChainBreaksOnlyOnAGapInSightings(t *testing.T) {
 					tc.before(s, nas, i)
 				}
 				*at = day0.Add(after)
-				s.collectStatsOnce()
+				s.collectStatsOnce(t.Context())
 			}
 			checkMain(t, s, tc.want)
 		})
@@ -416,9 +417,9 @@ func TestAStoreWithoutLastSeenRestartsCoverage(t *testing.T) {
 	}
 	nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "s1")
 	nas.connect(day0.Add(20*time.Hour), "rey_mysterio", "main", "s2")
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.Add(24 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	if meta, _, _ := s.store.StatsMeta(metricSessions); !meta.Recording["main"].Equal(day0) {
 		t.Errorf("main recording since %v, want the first run after the upgrade, %v", meta.Recording["main"], day0)
 	}
@@ -493,9 +494,9 @@ func TestSessionsAreCountedByUIDAndNoNameCrossesTheWire(t *testing.T) {
 	nas.shares = strings.TrimSuffix(statsShares, "]") +
 		`,{"name":"old","path":"/mnt/tank/old","enabled":false,"audit":{"enable":true,"watch_list":[],"ignore_list":[]}}]`
 	nas.connect(day0.Add(-10*time.Minute), "seth_rollins", "old", "s5")
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.Add(24 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 
 	since := day0.Add(-48 * time.Hour)
 	first, points, raw := allStats(t, s, metricSessions, since)
@@ -531,9 +532,9 @@ func TestSessionsAreCountedByUIDAndNoNameCrossesTheWire(t *testing.T) {
 // never a zero; two such shares keep a gap each on the same day.
 func TestAShareNotAuditedForEveryoneIsAGapNotAZero(t *testing.T) {
 	s, _, at := statsServer(t)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.Add(48 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	first, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
 	gapped := map[string]StatGap{}
 	for _, g := range first.Gaps {
@@ -599,9 +600,9 @@ func TestAShareRecordsEveryoneWhenItWatchesEverySMBAccount(t *testing.T) {
 			}
 			nas.smbDown = tc.smbDown
 			nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "s1")
-			s.collectStatsOnce()
+			s.collectStatsOnce(t.Context())
 			*at = day0.Add(24 * time.Hour)
-			s.collectStatsOnce()
+			s.collectStatsOnce(t.Context())
 			first, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
 			var why string
 			for _, g := range first.Gaps {
@@ -624,15 +625,15 @@ func TestAShareRecordsEveryoneWhenItWatchesEverySMBAccount(t *testing.T) {
 // everyone.
 func TestTheWatermarkIsHeldWhileTheNASIsDown(t *testing.T) {
 	s, nas, at := statsServer(t)
-	s.collectStatsOnce() // 9 Nov
+	s.collectStatsOnce(t.Context()) // 9 Nov
 	nas.mu.Lock()
 	nas.down = true
 	nas.mu.Unlock()
 	nas.connect(day0.Add(24*time.Hour), "rey_mysterio", "main", "dark")
 	*at = day0.Add(26 * time.Hour) // 10 Nov
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.Add(48 * time.Hour) // 11 Nov
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 
 	since := day0.Add(-time.Hour)
 	for _, m := range []string{metricSessions, metricUsedBytes} {
@@ -653,7 +654,7 @@ func TestTheWatermarkIsHeldWhileTheNASIsDown(t *testing.T) {
 	s.nas.failures, s.nas.openUntil, s.nas.lastTry = 0, time.Time{}, time.Time{} // the breaker's own cooldown, not this test's
 	s.nas.mu.Unlock()
 	*at = day0.Add(74 * time.Hour) // 12 Nov, more than three runs after main was last seen
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	back, points, _ := allStats(t, s, metricSessions, since)
 	if back.Watermark != "2026-11-12T00:00:00+05:30" || slices.ContainsFunc(back.Gaps, func(g StatGap) bool { return g.Reason() == reasonNAS.text && g.Dimensions == nil }) {
 		t.Errorf("back up: watermark %s, gaps %+v; want the start of today and the failure gap withdrawn", back.Watermark, back.Gaps)
@@ -680,12 +681,12 @@ func sameGap(a, b StatGap) bool {
 func TestAFinalDayNeverChangesAndSinceIsHonoured(t *testing.T) {
 	s, nas, at := statsServer(t)
 	nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "s1")
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.Add(24 * time.Hour)
-	s.collectStatsOnce() // 9 Nov is final now
+	s.collectStatsOnce(t.Context()) // 9 Nov is final now
 	nas.connect(day0.Add(-30*time.Minute), "rey_mysterio", "main", "late")
 	*at = day0.Add(48 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	_, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
 	if v, _ := onDay(points, "2026-11-09", "", "main"); v != 1 {
 		t.Errorf("9 Nov, final, now says %d; a final point keeps its value", v)
@@ -727,10 +728,10 @@ func TestGapsJoinNeverAcrossTheWatermarkOrAShare(t *testing.T) {
 // day before) is counted on its own day, as every other count Syndra keeps.
 func TestADayIsTheMakerspacesNotUTCs(t *testing.T) {
 	s, nas, at := statsServer(t)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	nas.connect(time.Date(2026, 11, 10, 0, 30, 0, 0, kolkata), "rey_mysterio", "main", "night")
 	*at = time.Date(2026, 11, 10, 9, 0, 0, 0, kolkata)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	_, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
 	if v, _ := onDay(points, "2026-11-10T00:00:00+05:30", "sub-rey", "main"); v != 1 {
 		t.Errorf("a session at 00:30 on 10 Nov was not counted on 10 Nov: %+v", points)
@@ -760,7 +761,7 @@ func TestPagesFollowOneAnotherUnderTheCeiling(t *testing.T) {
 			nas.connect(day0.AddDate(0, 0, d).Add(time.Duration(i)*time.Minute), "rey_mysterio", "main", fmt.Sprint(d, i))
 		}
 		*at = day0.AddDate(0, 0, d)
-		s.collectStatsOnce()
+		s.collectStatsOnce(t.Context())
 	}
 	since := day0.AddDate(0, 0, -1)
 	s.stats.pageBytes = 0
@@ -797,9 +798,9 @@ func mustTime(s string) time.Time { t, _ := time.Parse(time.RFC3339, s); return 
 // holds is answered with a gap for that window, then what it holds.
 func TestTheBufferDropsTheOldestAndSaysSo(t *testing.T) {
 	s, _, at := statsServer(t)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.AddDate(0, 0, 95)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	first, points, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
 	held := s.stats.oldest(*at)
 	if len(first.Gaps) == 0 || !sameGap(first.Gaps[0], gapOf("2026-11-09T00:00:00+05:30", s.stats.stamp(held), nil, reasonBuffer)) {
@@ -823,7 +824,7 @@ func TestTheAuditReadIsBoundedAndCatchesUp(t *testing.T) {
 	statsAuditPage, statsAuditPages = 2, 2
 	t.Cleanup(func() { statsAuditPage, statsAuditPages = page, pages })
 	s, nas, at := statsServer(t)
-	s.collectStatsOnce() // 9 Nov: the watermark begins here
+	s.collectStatsOnce(t.Context()) // 9 Nov: the watermark begins here
 	for d := range 3 {
 		for i := range 2 {
 			nas.connect(day0.AddDate(0, 0, d).Add(time.Duration(i)*time.Minute), "rey_mysterio", "main", fmt.Sprint(d, i))
@@ -831,7 +832,7 @@ func TestTheAuditReadIsBoundedAndCatchesUp(t *testing.T) {
 	}
 	*at = day0.AddDate(0, 0, 2)
 	nas.reads = 0
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	first, _, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
 	if nas.reads != 1+statsAuditPages { // the oldest row the log keeps, then the pages
 		t.Errorf("one run asked the audit log %d times, want at most 1+%d", nas.reads, statsAuditPages)
@@ -842,8 +843,8 @@ func TestTheAuditReadIsBoundedAndCatchesUp(t *testing.T) {
 		}) {
 		t.Errorf("capped run: watermark %s, gaps %+v; want 10 Nov and a gap from it", first.Watermark, first.Gaps)
 	}
-	s.collectStatsOnce()
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
+	s.collectStatsOnce(t.Context())
 	_, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
 	for _, day := range []string{"2026-11-09", "2026-11-10", "2026-11-11"} {
 		if v, _ := onDay(points, day, "", "main"); v != 2 {
@@ -859,9 +860,9 @@ func TestTheCollectorOnlyReads(t *testing.T) {
 	nas.connect(day0.Add(-time.Hour), "rey_mysterio", "main", "s1")
 	_, before := s.log.Head()
 	gen := s.fresh.gen
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.Add(24 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	if _, after := s.log.Head(); after != before {
 		t.Errorf("a collection moved log_records from %d to %d", before, after)
 	}
@@ -890,7 +891,7 @@ func TestStatsRefusals(t *testing.T) {
 		{"/stats?metric=storage.sessions&since=2026-11-01T00:00:00Z&cursor=e30", 400, CodeBadRequest},
 	} {
 		if tc.status != 503 {
-			s.collectStatsOnce()
+			s.collectStatsOnce(t.Context())
 		}
 		rr := httptest.NewRecorder()
 		s.handleStats(rr, httptest.NewRequest(http.MethodGet, tc.target, nil), nil)
@@ -905,7 +906,7 @@ func TestStatsRefusals(t *testing.T) {
 // with a home.
 func TestLevelsArePerShareAndPerHome(t *testing.T) {
 	s, _, _ := statsServer(t)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	_, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
 	// main reaches tank/main and the home_dir dataset inside it.
 	if v, _ := onDay(used, "2026-11-09", "", "main"); v != 9000+1300 {
@@ -959,10 +960,10 @@ func nestedStatsServer(t *testing.T) (*server, *statsNAS, *time.Time) {
 // reaches, each once; a home is its own dataset's.
 func TestCollectedLevelsAreWhatTheLiveReadSees(t *testing.T) {
 	s, _, _ := nestedStatsServer(t)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 
 	staff := []apiID{{raw: json.RawMessage("51")}}
-	live, _, err := placesOf(s, 3051, staff, "/mnt/tank/main/home_dir/rey_mysterio")
+	live, _, err := placesOf(t.Context(), s, 3051, staff, "/mnt/tank/main/home_dir/rey_mysterio")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1015,15 +1016,15 @@ func TestLiveAndCollectedStorageAreOneNumber(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-seth", Username: "seth_rollins", UID: 3077, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	_, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
 	_, home, _ := allStats(t, s, metricHomeBytes, day0.Add(-time.Hour))
-	homes, err := s.readHomes()
+	homes, err := s.readHomes(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	for uid, subject := range map[int64]string{3051: "sub-rey", 3077: "sub-seth"} {
-		meters, err := metersOf(s, uid)
+		meters, err := metersOf(t.Context(), s, uid)
 		if err != nil {
 			t.Fatalf("%s: %v", subject, err)
 		}
@@ -1068,9 +1069,9 @@ func TestAnUnreadableNestedDatasetIsAGapNotTheShare(t *testing.T) {
 		nas.refuse = map[string]string{}
 	}
 	nas.refuse["pool.dataset.get_quota tank/main/quack"] = "[EFAULT] tank/main/quack is locked"
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.Add(24 * time.Hour) // the day closes: its gap is final, not "could not be read that day"
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	page, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
 	if v, _ := onDay(used, "2026-11-09", "", "main"); v != 33344+67036288+10+400+2500 {
 		t.Errorf("main's total %d, want every readable dataset in it", v)
@@ -1092,7 +1093,7 @@ func TestAnUnreadableNestedDatasetIsAGapNotTheShare(t *testing.T) {
 			t.Errorf("main's gap %+v, want unread over every series, naming no folder", g)
 		}
 	}
-	meters, err := metersOf(s, 3051)
+	meters, err := metersOf(t.Context(), s, 3051)
 	if err == nil || !strings.Contains(err.Error(), "main") {
 		t.Errorf("the live read passed a partial share off as whole: %v", err)
 	}
@@ -1110,9 +1111,9 @@ func TestAPlainFolderShareNeverCountsItsParent(t *testing.T) {
 	s, nas, at := nestedStatsServer(t)
 	nas.shares = strings.TrimSuffix(statsShares, "]") +
 		`,{"name":"notes","path":"/mnt/tank/main/notes","enabled":true,"audit":{"enable":false,"watch_list":[],"ignore_list":[]}}]`
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	*at = day0.Add(24 * time.Hour)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	page, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
 	for _, p := range used {
 		if p.Dimensions["share"] == "notes" {
@@ -1136,7 +1137,7 @@ func TestAPlainFolderShareNeverCountsItsParent(t *testing.T) {
 			t.Errorf("notes' gap %+v, want %q", g, reasonFolder.text)
 		}
 	}
-	meters, err := metersOf(s, 3051)
+	meters, err := metersOf(t.Context(), s, 3051)
 	if err != nil {
 		t.Errorf("a plain folder made the live read partial: %v (it has no table to read)", err)
 	}
@@ -1188,7 +1189,7 @@ func lockedAt(name string) string {
 func TestALockedNestedDatasetIsNeverZero(t *testing.T) {
 	s, nas, _ := nestedStatsServer(t)
 	nas.answers["pool.dataset.query"] = lockedAt("tank/main/quack")
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	page, used, raw := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
 	if v, _ := onDay(used, "2026-11-09", "sub-rey", "main"); v != 67036288+2500 {
 		t.Errorf("Rey on main %d, want waddle and his home, quack not read", v)
@@ -1209,7 +1210,7 @@ func TestALockedNestedDatasetIsNeverZero(t *testing.T) {
 	if strings.Contains(string(raw), "quack") {
 		t.Errorf("a locked folder's name is on the wire: %s", raw)
 	}
-	meters, err := metersOf(s, 3051)
+	meters, err := metersOf(t.Context(), s, 3051)
 	if err != nil {
 		t.Errorf("a locked folder made the whole card partial: %v", err)
 	}
@@ -1219,7 +1220,7 @@ func TestALockedNestedDatasetIsNeverZero(t *testing.T) {
 		}
 	}
 	staff := []apiID{{raw: json.RawMessage("51")}}
-	places, _, err := placesOf(s, 3051, staff, "/mnt/tank/main/home_dir/rey_mysterio")
+	places, _, err := placesOf(t.Context(), s, 3051, staff, "/mnt/tank/main/home_dir/rey_mysterio")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1255,7 +1256,7 @@ func TestALockedHomeAffectsOnlyThatHome(t *testing.T) {
 			nas.answers["pool.dataset.query"] = lockedAt(locked)
 			lockedHome := locked == "tank/main/home_dir/rey_mysterio" // else every home in home_dir is locked
 			home := "/mnt/tank/main/home_dir/rey_mysterio"
-			places, _, err := placesOf(s, 3051, nil, home)
+			places, _, err := placesOf(t.Context(), s, 3051, nil, home)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1271,7 +1272,7 @@ func TestALockedHomeAffectsOnlyThatHome(t *testing.T) {
 			if !found {
 				t.Fatalf("no home place: %s", describe(places))
 			}
-			homes, err := s.readHomes()
+			homes, err := s.readHomes(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1287,13 +1288,13 @@ func TestALockedHomeAffectsOnlyThatHome(t *testing.T) {
 					t.Errorf("Seth's home beside a locked one %d, want 400", h.UsedBytes)
 				}
 			}
-			if _, err := metersOf(s, 3077); err != nil {
+			if _, err := metersOf(t.Context(), s, 3077); err != nil {
 				t.Errorf("Seth's card is partial for Rey's locked home: %v", err)
 			}
 
-			s.collectStatsOnce()
+			s.collectStatsOnce(t.Context())
 			*at = day0.Add(24 * time.Hour) // the day closes
-			s.collectStatsOnce()
+			s.collectStatsOnce(t.Context())
 			page, got, raw := allStats(t, s, metricHomeBytes, day0.Add(-time.Hour))
 			if v, ok := onDay(got, "2026-11-09", "sub-rey", ""); ok {
 				t.Errorf("the collector sampled a locked home as %d", v)
@@ -1366,11 +1367,11 @@ func TestALockedHomeAffectsOnlyThatHome(t *testing.T) {
 // it is dropped, never kept as if the share still read so.
 func TestALockedShareDropsTodaysSample(t *testing.T) {
 	s, nas, at := nestedStatsServer(t)
-	s.collectStatsOnce() // open read: a sample
+	s.collectStatsOnce(t.Context()) // open read: a sample
 	*at = day0.Add(time.Hour)
 	// The pool's root is mounted, as on a real NAS: a locked share is placed inside it by its name.
 	nas.answers["pool.dataset.query"] = `[{"name":"tank","mountpoint":"/mnt/tank"},` + lockedAt("tank/open")[1:]
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	page, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
 	for _, p := range used {
 		if p.Dimensions["share"] == "open" {
@@ -1409,15 +1410,15 @@ func cardServer(t *testing.T) (*server, *statsNAS) {
 // its own, said so.
 func TestTheCardsPlacesAreItsMetersAndHomes(t *testing.T) {
 	s, _ := cardServer(t)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	_, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
 	_, homeLevels, _ := allStats(t, s, metricHomeBytes, day0.Add(-time.Hour))
-	homes, err := s.readHomes()
+	homes, err := s.readHomes(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	home := "/mnt/tank/main/home_dir/rey_mysterio"
-	c, err := s.countFor(3051, false)
+	c, err := s.countFor(t.Context(), 3051, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1426,7 +1427,7 @@ func TestTheCardsPlacesAreItsMetersAndHomes(t *testing.T) {
 		t.Fatal(err)
 	}
 	staff := []apiID{{raw: json.RawMessage("51")}}
-	places, _, err := s.memberPlaces(true, staff, home, &c)
+	places, _, err := s.memberPlaces(t.Context(), true, staff, home, &c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1481,7 +1482,7 @@ func TestAPlainFolderNeverMakesTheReadPartial(t *testing.T) {
 			nas.answers["filesystem.getacl /mnt/tank/main/notes"] = aclJSON(0)
 		}
 		nas.users = strings.Replace(statsUsers, `"uid":3051,"locked":false,"smb":true,"groups":[]`, `"uid":3051,"locked":false,"smb":true,"groups":[51]`, 1)
-		res, _, err := s.storageStatus(OperationRequest{Subject: "sub-rey"})
+		res, _, err := s.storageStatus(t.Context(), OperationRequest{Subject: "sub-rey"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1537,9 +1538,9 @@ func homesServer(t *testing.T, n int) (*server, *statsNAS) {
 // homes dropped it and called the read whole.
 func TestBytesInAnotherMembersHomeAreCounted(t *testing.T) {
 	s, _ := homesServer(t, 2)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	_, used, _ := allStats(t, s, metricUsedBytes, day0.Add(-time.Hour))
-	res, _, err := s.storageStatus(OperationRequest{Subject: "sub-rey"})
+	res, _, err := s.storageStatus(t.Context(), OperationRequest{Subject: "sub-rey"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1608,8 +1609,8 @@ func TestCardLoadsShareOneReadPerDataset(t *testing.T) {
 }
 
 // metersOf is storage.status's meters for uid, a member with no home.
-func metersOf(s *server, uid int64) ([]Meter, error) {
-	c, err := s.countFor(uid, false)
+func metersOf(ctx context.Context, s *server, uid int64) ([]Meter, error) {
+	c, err := s.countFor(ctx, uid, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1617,12 +1618,12 @@ func metersOf(s *server, uid int64) ([]Meter, error) {
 }
 
 // placesOf is storage.status's places for uid, counted as it counts them.
-func placesOf(s *server, uid int64, groups []apiID, home string) ([]Place, Observed, error) {
-	c, err := s.countFor(uid, false)
+func placesOf(ctx context.Context, s *server, uid int64, groups []apiID, home string) ([]Place, Observed, error) {
+	c, err := s.countFor(ctx, uid, false)
 	if err != nil {
 		return nil, Observed{}, err
 	}
-	return s.memberPlaces(true, groups, home, &c)
+	return s.memberPlaces(ctx, true, groups, home, &c)
 }
 
 func TestStatsPagesFitTheContractsCeiling(t *testing.T) {
@@ -1704,7 +1705,7 @@ func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
 		run := func(now time.Time) {
 			*at = now
 			done := make(chan struct{})
-			go func() { s.collectStatsOnce(); close(done) }()
+			go func() { s.collectStatsOnce(t.Context()); close(done) }()
 			select {
 			case <-done:
 			case <-time.After(5 * time.Second):
@@ -1736,7 +1737,7 @@ func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
 func TestAnOutageLongerThanTheLogIsKeptIsAGapNotZeros(t *testing.T) {
 	s, nas, at := statsServer(t)
 	nas.connect(day0.Add(time.Hour), "rey_mysterio", "main", "before")
-	s.collectStatsOnce() // 9 Nov
+	s.collectStatsOnce(t.Context()) // 9 Nov
 	setDown := func(down bool) {
 		nas.mu.Lock()
 		nas.down = down
@@ -1747,7 +1748,7 @@ func TestAnOutageLongerThanTheLogIsKeptIsAGapNotZeros(t *testing.T) {
 		nas.connect(day0.AddDate(0, 0, d), "rey_mysterio", "main", fmt.Sprint("s", d))
 	}
 	*at = day0.AddDate(0, 0, 5)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 
 	nas.mu.Lock() // the NAS purges its log before 15 Nov 09:00
 	nas.rows = slices.DeleteFunc(nas.rows, func(r map[string]any) bool {
@@ -1759,7 +1760,7 @@ func TestAnOutageLongerThanTheLogIsKeptIsAGapNotZeros(t *testing.T) {
 	s.nas.failures, s.nas.openUntil, s.nas.lastTry = 0, time.Time{}, time.Time{}
 	s.nas.mu.Unlock()
 	*at = day0.AddDate(0, 0, 10) // 19 Nov
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 
 	first, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
 	want := gapOf("2026-11-09T00:00:00+05:30", "2026-11-16T00:00:00+05:30", nil, reasonPurged)
@@ -1788,14 +1789,14 @@ func TestADayTooBusyToCountIsAGapAndTheWatermarkMoves(t *testing.T) {
 	statsAuditPage, statsAuditPages = 2, 1
 	t.Cleanup(func() { statsAuditPage, statsAuditPages = page, pages })
 	s, nas, at := statsServer(t)
-	s.collectStatsOnce() // 9 Nov
+	s.collectStatsOnce(t.Context()) // 9 Nov
 	for i := range 3 {
 		nas.connect(day0.AddDate(0, 0, 1).Add(time.Duration(i)*time.Minute), "rey_mysterio", "main", fmt.Sprint("busy", i))
 	}
 	nas.connect(day0.AddDate(0, 0, 2), "rey_mysterio", "main", "quiet")
 	*at = day0.AddDate(0, 0, 2) // 11 Nov
 	for range 3 {
-		s.collectStatsOnce()
+		s.collectStatsOnce(t.Context())
 	}
 	first, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
 	want := gapOf("2026-11-10T00:00:00+05:30", "2026-11-11T00:00:00+05:30", nil, reasonOverfull)
@@ -1811,7 +1812,7 @@ func TestADayTooBusyToCountIsAGapAndTheWatermarkMoves(t *testing.T) {
 // gone by the day's last sample is not unbound that day.
 func TestALevelsUnboundIsTheLastSamples(t *testing.T) {
 	s, nas, _ := statsServer(t)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	for _, m := range []string{metricHomeBytes, metricUsedBytes} {
 		if first, _, _ := allStats(t, s, m, day0.Add(-time.Hour)); first.Unbound.Accounts != 1 {
 			t.Fatalf("%s: unbound.accounts %d, want 1 (Seth)", m, first.Unbound.Accounts)
@@ -1820,7 +1821,7 @@ func TestALevelsUnboundIsTheLastSamples(t *testing.T) {
 	nas.fakeRPC.answers["pool.dataset.get_quota tank/main"] = `[{"id":0,"used_bytes":7000},{"id":3051,"used_bytes":1200}]`
 	nas.fakeRPC.answers["pool.dataset.get_quota tank/open"] = `[]`
 	nas.fakeRPC.answers["pool.dataset.get_quota tank/main/home_dir"] = `[{"id":3051,"used_bytes":900,"quota":5000}]`
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	for _, m := range []string{metricHomeBytes, metricUsedBytes} {
 		if first, _, _ := allStats(t, s, m, day0.Add(-time.Hour)); first.Unbound.Accounts != 0 {
 			t.Errorf("%s: unbound.accounts %d after Seth's usage went, want 0", m, first.Unbound.Accounts)
@@ -1853,7 +1854,7 @@ func TestADayBeforeCountingBeganIsNotCollectedYet(t *testing.T) {
 	for _, metric := range []string{metricSessions, metricUsedBytes, metricHomeBytes} {
 		t.Run(metric, func(t *testing.T) {
 			s, _, at := statsServer(t)
-			s.collectStatsOnce()
+			s.collectStatsOnce(t.Context())
 			first, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -3))
 			want := s.stats.reasonBegan(s.stats.day(day0))
 			if !strings.HasPrefix(want, "Not collected yet: counting began on ") {
@@ -1865,7 +1866,7 @@ func TestADayBeforeCountingBeganIsNotCollectedYet(t *testing.T) {
 			// An add-on older than its buffer: the window splits at Began. Before it, never held,
 			// still began (the record's start is not lost); from it to what is held, dropped.
 			*at = day0.AddDate(0, 0, 95)
-			s.collectStatsOnce()
+			s.collectStatsOnce(t.Context())
 			later, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -3))
 			held := metaOf(t, s, metric).HeldFrom
 			if len(later.Gaps) < 2 ||
@@ -1900,7 +1901,7 @@ func TestEveryGapReasonHasAKind(t *testing.T) {
 // (kind required).
 func TestEveryGapGoesOutWithItsKind(t *testing.T) {
 	s, _, _ := statsServer(t)
-	s.collectStatsOnce()
+	s.collectStatsOnce(t.Context())
 	// A day stored by an older binary: its gap has no kind.
 	var legacy statDay
 	if err := json.Unmarshal(fmt.Appendf(nil, `{"gaps":[{"start":%q,"end":%q,"dimensions":{"share":"scratch"},"reason":%q}]}`, s.stats.stamp(s.stats.day(day0)), s.stats.stamp(nextDayKey(s.stats.day(day0))), reasonAudited.text), &legacy); err != nil {
@@ -1953,21 +1954,21 @@ func TestBeganIsTheFirstSuccessfulCollectionAndNeverChanges(t *testing.T) {
 		t.Run(metric, func(t *testing.T) {
 			s, nas, at := statsServer(t)
 			nas.down = true
-			s.collectStatsOnce()
+			s.collectStatsOnce(t.Context())
 			if m := metaOf(t, s, metric); m.Began != "" {
 				t.Fatalf("a failed first run is not the first collection, Began %q", m.Began)
 			}
 			nas.down = false
 			s.nas.lastTry = time.Time{} // the connection's reconnect cooldown is over
 			*at = day0.AddDate(0, 0, 1)
-			s.collectStatsOnce()
+			s.collectStatsOnce(t.Context())
 			first := s.stats.day(*at)
 			if m := metaOf(t, s, metric); m.Began != first || m.Version != statsMetaVersion {
 				t.Fatalf("Began %q version %d, want %q the first successful run, version %d", m.Began, m.Version, first, statsMetaVersion)
 			}
 			for _, move := range []time.Duration{24 * time.Hour, -48 * time.Hour, 24 * 100 * time.Hour} {
 				*at = at.Add(move)
-				s.collectStatsOnce()
+				s.collectStatsOnce(t.Context())
 				if m := metaOf(t, s, metric); m.Began != first {
 					t.Fatalf("after moving the clock %v, Began %q, want it to stay %q", move, m.Began, first)
 				}
@@ -1984,7 +1985,7 @@ func TestStateWithoutBeganIsMigratedOnce(t *testing.T) {
 		for _, trimmed := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/trimmed=%v", metric, trimmed), func(t *testing.T) {
 				s, _, at := statsServer(t)
-				s.collectStatsOnce()
+				s.collectStatsOnce(t.Context())
 				meta := metaOf(t, s, metric)
 				meta.Began, meta.Version = "", 0
 				if trimmed {
@@ -1992,7 +1993,7 @@ func TestStateWithoutBeganIsMigratedOnce(t *testing.T) {
 				}
 				putMeta(t, s, metric, meta)
 				*at = at.Add(time.Hour)
-				s.collectStatsOnce()
+				s.collectStatsOnce(t.Context())
 				got, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -200))
 				want := s.stats.reasonBegan(s.stats.day(day0))
 				if trimmed {
@@ -2008,9 +2009,9 @@ func TestStateWithoutBeganIsMigratedOnce(t *testing.T) {
 				// Never judged again: the clock moving back, so the old rule would now read
 				// the same HeldFrom the other way, changes nothing.
 				*at = day0.AddDate(0, 0, -30)
-				s.collectStatsOnce()
+				s.collectStatsOnce(t.Context())
 				*at = day0.AddDate(0, 0, 1)
-				s.collectStatsOnce()
+				s.collectStatsOnce(t.Context())
 				if again := metaOf(t, s, metric); again.Began != decided.Began {
 					t.Errorf("Began %q after the clock moved, was decided %q", again.Began, decided.Began)
 				}
@@ -2026,14 +2027,14 @@ func TestAVersionZeroMetaThatNeverCollectedBeginsAtItsFirstCollection(t *testing
 		t.Run(metric, func(t *testing.T) {
 			s, nas, at := statsServer(t)
 			nas.down = true
-			s.collectStatsOnce()
+			s.collectStatsOnce(t.Context())
 			meta := metaOf(t, s, metric)
 			meta.Version, meta.Began = 0, ""
 			putMeta(t, s, metric, meta)
 			nas.down = false
 			s.nas.lastTry = time.Time{}
 			*at = day0.AddDate(0, 0, 1)
-			s.collectStatsOnce()
+			s.collectStatsOnce(t.Context())
 			if m := metaOf(t, s, metric); m.Began != s.stats.day(*at) || m.Version != statsMetaVersion {
 				t.Fatalf("Began %q version %d, want the first collection %q", m.Began, m.Version, s.stats.day(*at))
 			}
@@ -2048,7 +2049,7 @@ func TestAWriteForgetsTheQuotaCopy(t *testing.T) {
 	s, nas, _ := nestedStatsServer(t)
 	used := func() int64 {
 		t.Helper()
-		table, _ := s.quotaTable("tank/main/waddle", false)
+		table, _ := s.quotaTable(t.Context(), "tank/main/waddle", false)
 		return table[3051].UsedBytes
 	}
 	if got := used(); got != 67036288 {

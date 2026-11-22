@@ -68,8 +68,7 @@ func (m *methodRPC) Call(method string, _ int64, _ any) (json.RawMessage, error)
 	}
 	return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":` + body + `}`), nil
 }
-func (m *methodRPC) Ping() (string, error) { return "pong", nil }
-func (m *methodRPC) Close() error          { return nil }
+func (m *methodRPC) Close() error { return nil }
 
 func systemHealthServer(t *testing.T, fails ...string) (*server, *methodRPC) {
 	t.Helper()
@@ -95,7 +94,7 @@ func systemHealthServer(t *testing.T, fails ...string) (*server, *methodRPC) {
 func TestSystemHealthReadsWhatTheTargetActuallyAnswers(t *testing.T) {
 	s, _ := systemHealthServer(t)
 
-	res, code, err := s.targetHealth(OperationRequest{})
+	res, code, err := s.targetHealth(t.Context(), OperationRequest{})
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %v", code, err)
 	}
@@ -149,7 +148,7 @@ func TestSystemHealthReadsWhatTheTargetActuallyAnswers(t *testing.T) {
 func TestSystemHealthDoesNotForwardHardwareIdentifiers(t *testing.T) {
 	s, _ := systemHealthServer(t)
 
-	res, _, err := s.targetHealth(OperationRequest{})
+	res, _, err := s.targetHealth(t.Context(), OperationRequest{})
 	if err != nil {
 		t.Fatalf("targetHealth: %v", err)
 	}
@@ -169,7 +168,7 @@ func TestSystemHealthDoesNotForwardHardwareIdentifiers(t *testing.T) {
 func TestOneFailedSourceDegradesByNameAndKeepsTheRest(t *testing.T) {
 	s, _ := systemHealthServer(t, "alert.list")
 
-	res, code, err := s.targetHealth(OperationRequest{})
+	res, code, err := s.targetHealth(t.Context(), OperationRequest{})
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("a partial read is still an answer, got %d: %v", code, err)
 	}
@@ -199,7 +198,7 @@ func TestADeadSessionDegradesEverythingAfterIt(t *testing.T) {
 	s, answering := systemHealthServer(t)
 	answering.deadAfter = "alert.list"
 
-	res, code, err := s.targetHealth(OperationRequest{})
+	res, code, err := s.targetHealth(t.Context(), OperationRequest{})
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("the source that answered first still answered, got %d: %v", code, err)
 	}
@@ -217,7 +216,7 @@ func TestADeadSessionDegradesEverythingAfterIt(t *testing.T) {
 func TestEveryFailedSourceIsAnUnreachableTarget(t *testing.T) {
 	s, _ := systemHealthServer(t, "system.info", "alert.list", "pool.query", "service.query")
 
-	_, code, err := s.targetHealth(OperationRequest{})
+	_, code, err := s.targetHealth(t.Context(), OperationRequest{})
 	if err == nil {
 		t.Fatal("want a refusal")
 	}
@@ -261,7 +260,7 @@ func TestAMalformedSourceIsDegradedRatherThanIgnored(t *testing.T) {
 				answering.answers[method] = `["not an object"]`
 			}
 
-			res, code, err := s.targetHealth(OperationRequest{})
+			res, code, err := s.targetHealth(t.Context(), OperationRequest{})
 			if err != nil || code != http.StatusOK {
 				t.Fatalf("the other sources still answered, got %d: %v", code, err)
 			}
@@ -283,7 +282,7 @@ func TestANullSourceIsNotAnEmptyOne(t *testing.T) {
 			s, answering := systemHealthServer(t)
 			answering.answers[method] = `null`
 
-			res, code, err := s.targetHealth(OperationRequest{})
+			res, code, err := s.targetHealth(t.Context(), OperationRequest{})
 			if err != nil || code != http.StatusOK {
 				t.Fatalf("want 200, got %d: %v", code, err)
 			}
@@ -318,7 +317,7 @@ func TestAnEmptyListIsAnAnswerAndNotADegradation(t *testing.T) {
 	s, answering := systemHealthServer(t)
 	answering.answers["alert.list"] = `[]`
 
-	res, _, err := s.targetHealth(OperationRequest{})
+	res, _, err := s.targetHealth(t.Context(), OperationRequest{})
 	if err != nil {
 		t.Fatalf("targetHealth: %v", err)
 	}
@@ -338,7 +337,7 @@ func TestEveryMalformedSourceIsAlsoAnUnreachableTarget(t *testing.T) {
 		answering.answers[m] = `null`
 	}
 
-	_, code, err := s.targetHealth(OperationRequest{})
+	_, code, err := s.targetHealth(t.Context(), OperationRequest{})
 	if err == nil {
 		t.Fatal("want a refusal")
 	}

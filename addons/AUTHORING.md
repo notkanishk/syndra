@@ -730,13 +730,20 @@ Schema: `v2/schema/health.json`.
   its kept copy (`current: false`) or, with none, 503 `TARGET_UNREACHABLE`
   or `NO_CURRENT_READ`. Syndra waits 30 s for an operation; an answer after
   that reaches nobody, and Syndra reads your add-on as down, not the app.
-  Bound each connect to the app and each call, so that one of each fits
-  inside 25 s, and after a connect or a call that got no answer in time,
-  fail the next calls at once for a while rather than wait again: a read
-  made of several calls must wait once, not once per call (`outage.hang`).
-  The TrueNAS add-on uses 8 s for a session (`nasDialTimeout`: connect,
-  TLS, handshake and login), 15 s for a call (`callTimeoutSeconds`) and its
-  15 s reconnect floor (`reconnectCooldown`).
+  Give each request one deadline from its start, under 25 s, shared by
+  every step in it (the wait for a connection, the connect, the wait for
+  your turn on it, each call), so their sum cannot outlast it. After a
+  connect that got no answer in time, or a call that got none while the
+  app answers no ping either, fail the next calls at once for a while
+  rather than wait again: a read made of several calls must wait once, not
+  once per call (`outage.hang`). A call that ran out its time while the
+  app still answers pings is a busy app, not an outage: fail that call and
+  keep going. Work no request waits on (a background collector) may give
+  its calls a longer bound. The TrueNAS add-on uses 24 s for a request
+  (`requestWithin`), 8 s for a session (`nasDialTimeout`: connect, TLS,
+  handshake and login), 15 s for a call (`callTimeout`), 5 s for its ping
+  (`pingTimeout`), 60 s for a collector's call (`collectCallTimeout`) and
+  its 15 s reconnect floor (`reconnectCooldown`).
 - `circuit_open` MUST be `true` while the add-on's own breaker is holding
   back its calls to the app (backing off to avoid a lockout or overload).
   It is distinct from `reachable: false`, so an operator does not look at

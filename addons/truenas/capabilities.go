@@ -281,7 +281,7 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 	field := r.PathValue("field")
 	switch field {
 	case FieldGroup:
-		groups, err := s.readGroups()
+		groups, err := s.readGroups(r.Context())
 		if err != nil {
 			// Unreadable, which is not the same as empty. 503 rather than an
 			// empty enumerable list: the backend fails open on a read it could

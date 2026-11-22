@@ -18,7 +18,7 @@ func TestAnAccountWithNoPasswordIsReportedAsNotYetUsable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, status, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
+	res, status, err := s.storageStatus(t.Context(), OperationRequest{Subject: "sub-1"})
 	if err != nil || status != 200 {
 		t.Fatalf("status=%d err=%v", status, err)
 	}
@@ -48,7 +48,7 @@ func TestALockedAccountIsNotUsableAndNotTheMembersToFix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, _, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
+	res, _, err := s.storageStatus(t.Context(), OperationRequest{Subject: "sub-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestAMissingAccountIsRefusedRatherThanReportedEmpty(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ghost", UID: 4999, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.storageStatus(OperationRequest{Subject: "sub-1"}); err == nil {
+	if _, _, err := s.storageStatus(t.Context(), OperationRequest{Subject: "sub-1"}); err == nil {
 		t.Fatal("a binding onto a missing account produced a status instead of a refusal")
 	}
 }
@@ -151,7 +151,7 @@ func TestAnUnreadQuotaTableMakesTheUsageUnread(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001, UIDKind: uidKindAccount}); err != nil {
 		t.Fatal(err)
 	}
-	res, status, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
+	res, status, err := s.storageStatus(t.Context(), OperationRequest{Subject: "sub-1"})
 	if err != nil || status != 200 {
 		t.Fatalf("status=%d err=%v", status, err)
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -129,7 +130,7 @@ func smbWaiting(current *Subject) string {
 // its quota table exactly as /subjects state reports it (homeLimits), so the
 // backend's merge base has the limit straight after an apply; left out when
 // the table could not be read (unknown, never "no limit").
-func (srv *server) observedFields(desired desiredState, s *Subject) map[string]any {
+func (srv *server) observedFields(ctx context.Context, desired desiredState, s *Subject) map[string]any {
 	state := entitlementState(s)
 	if state == nil {
 		return nil
@@ -141,7 +142,7 @@ func (srv *server) observedFields(desired desiredState, s *Subject) map[string]a
 		}
 	}
 	if desired.managed[FieldHomeQuota] {
-		if limit, read := srv.homeLimits([]Subject{*s})[s.UID]; read {
+		if limit, read := srv.homeLimits(ctx, []Subject{*s})[s.UID]; read {
 			out[FieldHomeQuota] = []string{limit}
 		}
 	}
@@ -628,12 +629,12 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 	// completed mutation as queued — and a re-plan's new fingerprint does not
 	// turn a replay into PLAN_STALE (calls.go).
 	identity := map[string]any{"subject": req.Subject, "desired": plainJSON(req.Desired)}
-	s.once(w, req.CallID, kindApply, req.Subject, identity, func(w http.ResponseWriter) { s.applyNow(w, req) })
+	s.once(w, req.CallID, kindApply, req.Subject, identity, func(w http.ResponseWriter) { s.applyNow(r.Context(), w, req) })
 }
 
 // applyNow is one apply that was not a replay, admitted by the lifecycle gate
 // and alone for its subject (once).
-func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
+func (s *server) applyNow(ctx context.Context, w http.ResponseWriter, req ApplyRequest) {
 	if supported, why := s.nas.MajorSupported(); !supported {
 		// A mutation against an untested major is refused, not attempted. Reads
 		// continue; this is the half that could break something.
@@ -641,7 +642,7 @@ func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 		return
 	}
 
-	outcome, status, err := s.applyOne(req)
+	outcome, status, err := s.applyOne(ctx, req)
 	switch {
 	case errors.Is(err, errStaleFingerprint):
 		// Its own code, because it is its own operator action. Every other
@@ -686,7 +687,7 @@ func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 }
 
 // applyOne is the convergence.
-func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
+func (s *server) applyOne(ctx context.Context, req ApplyRequest) (ApplyOutcome, int, error) {
 	desired, err := s.decodeDesired(req.Desired)
 	if err != nil {
 		// Not unholdable: where home folders go could not be read from the
@@ -694,7 +695,7 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		return blockedOr(req.Subject, err, http.StatusInternalServerError)
 	}
 
-	current, binding, conflict, truncated, adopt, err := s.locate(req)
+	current, binding, conflict, truncated, adopt, err := s.locate(ctx, req)
 	err = readBeforeWrite(err) // locate only reads the NAS
 	if errors.Is(err, errNoIdentityToDeriveFrom) && noAccountToSwitchOff(nil, desired) {
 		// No binding, so no account of theirs here, and nothing to make: the
@@ -742,7 +743,7 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		// and the plan ask it), so a blocked adoption binds nothing and its
 		// "Nothing was changed." is true.
 		if g := decide(current, desired, homeDecision{}).groups; g != nil {
-			if _, err := s.groupIDsFor(*g); err != nil {
+			if _, err := s.groupIDsFor(ctx, *g); err != nil {
 				return blockedOr(req.Subject, err, statusFor(err))
 			}
 		}
@@ -761,7 +762,7 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		}
 		// Then on as the create would have gone on: the desired fields onto
 		// the account, answered as a create.
-		out, status, err := s.converge(req, desired, current)
+		out, status, err := s.converge(ctx, req, desired, current)
 		s.rememberWishes(req, desired, out, err)
 		if err != nil {
 			// The binding landed; what failed came after it.
@@ -788,14 +789,14 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		if noAccountToSwitchOff(current, desired) {
 			return noAccountToSwitchOffOutcome(req.Subject), http.StatusOK, nil
 		}
-		out, status, err := s.createAndConverge(req, desired, binding)
+		out, status, err := s.createAndConverge(ctx, req, desired, binding)
 		s.rememberWishes(req, desired, out, err)
 		return out, status, err
 	}
 	// An off wish is on the binding before the lock is written: a lock left in doubt must not read
 	// as an account somebody else switched off.
 	s.rememberOffWish(req, desired)
-	out, status, err := s.converge(req, desired, current)
+	out, status, err := s.converge(ctx, req, desired, current)
 	s.rememberWishes(req, desired, out, err)
 	return out, status, err
 }
@@ -893,16 +894,16 @@ func (s *server) rememberWishes(req ApplyRequest, desired desiredState, out Appl
 // than acted on here, because it only matters where an ABSENCE is concluded.
 // The fifth says the account found is unbound and this subject's own, left by
 // a create in doubt (leftByCrashedCreate), for applyOne to bind.
-func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, bool, bool, error) {
+func (s *server) locate(ctx context.Context, req ApplyRequest) (*Subject, Binding, *BindingConflict, bool, bool, error) {
 	who := applyCaller(req)
-	r, bound, err := s.resolveLive(req.Subject, &who)
+	r, bound, err := s.resolveLive(ctx, req.Subject, &who)
 	if err != nil {
 		return nil, Binding{}, nil, false, false, err
 	}
 	if bound {
 		if r.Account != nil {
 			// The converge diffs and writes groups by name: the apply's one group read.
-			if err := s.nameGroupsOf(r.Account); err != nil {
+			if err := s.nameGroupsOf(ctx, r.Account); err != nil {
 				return nil, Binding{}, nil, false, false, err
 			}
 		}
@@ -934,7 +935,7 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		return ok && owner != req.Subject
 	})
 
-	existing, cut, err := s.subjectWhere("username", derived)
+	existing, cut, err := s.subjectWhere(ctx, "username", derived)
 	if err != nil {
 		return nil, Binding{}, nil, false, false, err
 	}
@@ -1028,7 +1029,7 @@ func applyCaller(req ApplyRequest) caller {
 }
 
 // converge brings an existing account onto the desired state.
-func (s *server) converge(req ApplyRequest, desired desiredState, current *Subject) (ApplyOutcome, int, error) {
+func (s *server) converge(ctx context.Context, req ApplyRequest, desired desiredState, current *Subject) (ApplyOutcome, int, error) {
 	who := applyCaller(req)
 	update := map[string]any{}
 	c := decide(current, desired, homeDecision{})
@@ -1038,7 +1039,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		// write in names against a read in ids is the asymmetry where an
 		// account lands in the wrong groups and the next read calls it
 		// converged.
-		ids, err := s.groupIDsFor(*c.groups)
+		ids, err := s.groupIDsFor(ctx, *c.groups)
 		if err != nil {
 			return blockedOr(req.Subject, err, statusFor(err))
 		}
@@ -1058,7 +1059,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	// The home folder rides in the same update, so one write and one read-back
 	// verify it. The rules (never moved, never removed, never someone else's)
 	// are home.go's; what is not done is said in the outcome.
-	home, err := s.decideHome(desired, current.Username, current.Home, current.UID, true)
+	home, err := s.decideHome(ctx, desired, current.Username, current.Home, current.UID, true)
 	if err != nil {
 		return ApplyOutcome{}, statusFor(err), err
 	}
@@ -1084,7 +1085,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	if !c.writes() {
 		// Nothing for user.update. The limit is its own call, and may still be
 		// owed.
-		quota, err := s.convergeQuota(who, desired, homeAfter, current.UID)
+		quota, err := s.convergeQuota(ctx, who, desired, homeAfter, current.UID)
 		if err != nil {
 			return ApplyOutcome{}, statusFor(err), err
 		}
@@ -1136,7 +1137,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		}, http.StatusOK, nil
 	}
 
-	if err := s.send(who, "user.update", []any{current.ID, update}, nil); err != nil {
+	if err := s.send(ctx, who, "user.update", []any{current.ID, update}, nil); err != nil {
 		return ApplyOutcome{}, statusFor(err), err
 	}
 
@@ -1161,7 +1162,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	//
 	// The same call the plan path already makes, so this is a second read per
 	// applied subject rather than a new class of work.
-	applied, err := s.readBack(current.Username)
+	applied, err := s.readBack(ctx, current.Username)
 	if err != nil {
 		// The write happened and its result is unknown. Reported as both of
 		// those things: the effect is `applied`, because it was, and nothing
@@ -1189,7 +1190,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		}, http.StatusOK, nil
 	}
 
-	quota, err := s.convergeQuota(who, desired, homeAfter, current.UID)
+	quota, err := s.convergeQuota(ctx, who, desired, homeAfter, current.UID)
 	if err != nil {
 		// The account update landed; the limit did not. Said, not swallowed:
 		// the next pass sets it.
@@ -1214,12 +1215,12 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		AccountID:   accountID(applied.UID),
 		Standing:    desired.standingOf(applied),
 		Fingerprint: fingerprintSubject(applied),
-		Observed:    s.observedFields(desired, applied),
+		Observed:    s.observedFields(ctx, desired, applied),
 	}, http.StatusOK, nil
 }
 
 // createAndConverge makes the account as part of the convergence.
-func (s *server) createAndConverge(req ApplyRequest, desired desiredState, binding Binding) (ApplyOutcome, int, error) {
+func (s *server) createAndConverge(ctx context.Context, req ApplyRequest, desired desiredState, binding Binding) (ApplyOutcome, int, error) {
 	who := applyCaller(req)
 	if !ValidUsername(binding.Username) {
 		return ApplyOutcome{}, http.StatusUnprocessableEntity,
@@ -1229,7 +1230,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	want := decide(nil, desired, homeDecision{})
 	var groupIDs []apiID
 	if want.groups != nil {
-		ids, err := s.groupIDsFor(*want.groups)
+		ids, err := s.groupIDsFor(ctx, *want.groups)
 		if err != nil {
 			return blockedOr(req.Subject, err, statusFor(err))
 		}
@@ -1271,7 +1272,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	// One number, from this add-on's own range, for the account and its
 	// personal group (identity.go). The group is made first so the account
 	// can be created in it; if the account is refused, the group goes too.
-	id, err := s.nextIdentity()
+	id, err := s.nextIdentity(ctx)
 	if err != nil {
 		return ApplyOutcome{}, statusFor(err), err
 	}
@@ -1282,7 +1283,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	// attempt's write. An answer (a refusal, a rate limit) or nothing sent at
 	// all means this attempt wrote nothing.
 	createMayHaveLanded := false
-	if err := s.send(who, "group.create", []any{map[string]any{
+	if err := s.send(ctx, who, "group.create", []any{map[string]any{
 		"name": binding.Username, "gid": id, "smb": false,
 	}}, &groupID); err != nil {
 		createMayHaveLanded = errors.Is(err, ErrTargetUnreachable) && !errors.Is(err, ErrNotSent)
@@ -1290,7 +1291,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		// earlier attempt left, and ours to take; anything else is somebody's,
 		// and the refusal stands. Its number becomes the account's too, so the
 		// pair stays one number (identity.go).
-		orphan, gid, ok := s.emptyGroupNamed(binding.Username)
+		orphan, gid, ok := s.emptyGroupNamed(ctx, binding.Username)
 		if !ok {
 			return ApplyOutcome{}, statusFor(err), fmt.Errorf("make %s's personal group: %w", binding.Username, err)
 		}
@@ -1316,13 +1317,13 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 			}
 			return ApplyOutcome{}, statusFor(err), err
 		}
-		s.undoGroup(who, binding.Username, groupID)
+		s.undoGroup(ctx, who, binding.Username, groupID)
 		return acted(err)
 	}
 
 	// The home, when one role gives one and its folder is free. Decided before
 	// the account exists, so a folder that is there at all is someone else's.
-	home, err := s.decideHome(desired, binding.Username, "", -1, true)
+	home, err := s.decideHome(ctx, desired, binding.Username, "", -1, true)
 	if err != nil {
 		return failed(err)
 	}
@@ -1333,14 +1334,14 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	}
 
 	var recordID apiID
-	if err := s.send(who, "user.create", []any{create}, &recordID); err != nil {
+	if err := s.send(ctx, who, "user.create", []any{create}, &recordID); err != nil {
 		return failed(err)
 	}
 	// `user.create` answers with the RECORD key, not the unix uid, and the
 	// binding recognises an account by its uid across a rename. Read back
 	// rather than assumed: a fingerprint computed from a state this add-on
 	// invented is a fingerprint the next plan verifies against nothing.
-	created, readErr := s.readBack(binding.Username)
+	created, readErr := s.readBack(ctx, binding.Username)
 	// The account exists whether or not it could be read back, so the binding
 	// is recorded either way: left out, the next apply finds the name unbound
 	// and halts as a conflict over an account this add-on made. The uid is the
@@ -1372,7 +1373,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	if home.path != "" {
 		detail += " Home folder created at " + home.path + "."
 	}
-	if quota, err := s.convergeQuota(who, desired, home.path, created.UID); err != nil {
+	if quota, err := s.convergeQuota(ctx, who, desired, home.path, created.UID); err != nil {
 		detail += " The home folder limit could not be set yet: " + err.Error() + "."
 	} else if quota != "" {
 		detail += " " + quota
@@ -1389,13 +1390,13 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		AccountID:   accountID(created.UID),
 		Standing:    desired.standingOf(created),
 		Fingerprint: fingerprintSubject(created),
-		Observed:    s.observedFields(desired, created),
+		Observed:    s.observedFields(ctx, desired, created),
 	}, http.StatusOK, nil
 }
 
 // readBack reads one account as the target now holds it.
-func (s *server) readBack(username string) (*Subject, error) {
-	found, _, err := s.subjectWhere("username", username)
+func (s *server) readBack(ctx context.Context, username string) (*Subject, error) {
+	found, _, err := s.subjectWhere(ctx, "username", username)
 	if err != nil {
 		return nil, err
 	}
@@ -1407,20 +1408,20 @@ func (s *server) readBack(username string) (*Subject, error) {
 
 // subjectWhere is accountWhere with the account's groups named (nameGroups), for the apply, which
 // converges them: the one group read a lookup pays for, and only when it found an account.
-func (s *server) subjectWhere(field string, value any) (*Subject, bool, error) {
-	found, cut, err := s.accountWhere(field, value)
+func (s *server) subjectWhere(ctx context.Context, field string, value any) (*Subject, bool, error) {
+	found, cut, err := s.accountWhere(ctx, field, value)
 	if err != nil || found == nil {
 		return found, cut, err
 	}
-	if err := s.nameGroupsOf(found); err != nil {
+	if err := s.nameGroupsOf(ctx, found); err != nil {
 		return nil, cut, err
 	}
 	return found, cut, nil
 }
 
 // nameGroupsOf names one account's groups from a read of the group table.
-func (s *server) nameGroupsOf(account *Subject) error {
-	names, _, builtin, err := s.groupIndex()
+func (s *server) nameGroupsOf(ctx context.Context, account *Subject) error {
+	names, _, builtin, err := s.groupIndex(ctx)
 	if err != nil {
 		return err
 	}
@@ -1437,13 +1438,13 @@ func (s *server) nameGroupsOf(account *Subject) error {
 // A named type rather than an inline one: `users` is not in the recorded read
 // (scripts/lib/record-truenas.py selects four fields), so the shape guard has
 // nothing to check it against.
-func (s *server) emptyGroupNamed(name string) (apiID, int64, bool) {
+func (s *server) emptyGroupNamed(ctx context.Context, name string) (apiID, int64, bool) {
 	type groupMembers struct {
 		nasGroup
 		Users []apiID `json:"users"`
 	}
 	var groups []groupMembers
-	if err := s.nas.call("group.query", []any{
+	if err := s.nas.call(ctx, "group.query", []any{
 		[]any{[]any{"group", "=", name}},
 		map[string]any{"select": []string{"id", "gid", "group", "builtin", "users"}, "limit": 1},
 	}, &groups); err != nil || len(groups) != 1 {
@@ -1522,8 +1523,8 @@ func (s *server) mutate(c caller, write string, do func() error) error {
 
 // send is one NAS write through mutate: the method the intent names is the
 // method sent, one variable for both.
-func (s *server) send(c caller, method string, params, out any) error {
-	return s.mutate(c, method, func() error { return s.nas.sendWrite(method, params, out) })
+func (s *server) send(ctx context.Context, c caller, method string, params, out any) error {
+	return s.mutate(c, method, func() error { return s.nas.sendWrite(ctx, method, params, out) })
 }
 
 // resultOf is what a result record says became of a write.

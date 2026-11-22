@@ -25,7 +25,7 @@ func TestAdoptingTheAddOnsOwnAccountIsRefused(t *testing.T) {
 	s, _ := applyServer(t, `[]`)
 	s.nas.selfName, s.nas.selfUID = "syndra", 3001
 
-	_, status, err := s.adoptAccount(OperationRequest{
+	_, status, err := s.adoptAccount(t.Context(), OperationRequest{
 		Subject: "sub-1", Params: map[string]any{"username": "syndra"},
 	})
 	if err == nil {
@@ -45,7 +45,7 @@ func TestAdoptingTheAddOnsOwnAccountIsRefused(t *testing.T) {
 func TestTheGuardIsCaseInsensitive(t *testing.T) {
 	s, _ := applyServer(t, `[]`)
 	s.nas.selfName, s.nas.selfUID = "syndra", 3001
-	_, status, err := s.adoptAccount(OperationRequest{
+	_, status, err := s.adoptAccount(t.Context(), OperationRequest{
 		Subject: "sub-1", Params: map[string]any{"username": "SYNDRA"},
 	})
 	if err == nil {
@@ -69,7 +69,7 @@ func TestPurgingABindingOntoTheOwnAccountIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, status, err := s.purgeAccount(OperationRequest{
+	_, status, err := s.purgeAccount(t.Context(), OperationRequest{
 		Subject: "sub-1", Params: map[string]any{"elevated_key": "an-elevated-key"},
 	})
 	if err == nil {
@@ -130,7 +130,7 @@ func TestTheServiceAccountIsNeverOfferedAsAdoptable(t *testing.T) {
 			t.Errorf("%s: the words must say whose account it is, not offer it: %q %q", name, out.Detail, out.Consequence)
 		}
 	}
-	if _, status, err := s.adoptAccount(OperationRequest{Subject: "sub-1", Params: map[string]any{"username": "syndra"}}); err == nil || status != http.StatusUnprocessableEntity {
+	if _, status, err := s.adoptAccount(t.Context(), OperationRequest{Subject: "sub-1", Params: map[string]any{"username": "syndra"}}); err == nil || status != http.StatusUnprocessableEntity {
 		t.Fatalf("adopt must refuse it, which is why it is not adoptable: %d %v", status, err)
 	}
 }
@@ -141,7 +141,7 @@ func TestAnEmptyOwnAccountNameKeepsTheLastKnownOne(t *testing.T) {
 	for _, blank := range []string{``, `  `} {
 		s, m := applyServer(t, `[]`)
 		m.fakeRPC.answers = map[string]string{"auth.me": `{"pw_name":"` + blank + `","pw_uid":0}`}
-		s.nas.readSelf()
+		s.nas.readSelf(t.Context())
 		if name, uid, known := s.nas.Self(); !known || name != "syndra" || uid != 3001 {
 			t.Fatalf("%q: want the last known syndra 3001 kept, got %q %d %t", blank, name, uid, known)
 		}

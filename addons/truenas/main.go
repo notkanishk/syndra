@@ -322,7 +322,7 @@ func run() error {
 	// trying to diagnose. Nothing depends on this succeeding — every call
 	// re-probes a fresh connection — which is what stops an add-on that started
 	// first from refusing mutations for the rest of its life.
-	if err := nas.Probe(); err != nil {
+	if err := nas.Probe(context.Background()); err != nil {
 		log.Printf("[STARTUP] could not read the target version yet: %v", err)
 	} else {
 		log.Printf("[STARTUP] target version %s", nas.Version())

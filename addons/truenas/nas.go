@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,32 +24,43 @@ import (
 // performs shares the one session.
 
 const (
-	// callTimeoutSeconds bounds one call on the session. Under the backend's
-	// 30 s per-call timeout (callTimeout, backend/internal/addons/deps.go) with
-	// room for nasDialTimeout beside it: an add-on whose own wait on the NAS
+	// requestWithin is the request path's one budget: a deadline set when a
+	// request arrives (server.routes), shared by every step under it, the wait
+	// for the session, the dial, the idle proof, the wait in line for the
+	// wire and each call, so their sum cannot outlast it. Under the kit's 25 s
+	// for a read and the backend's 30 s per-call timeout (callTimeout,
+	// backend/internal/addons/deps.go): an add-on whose own wait on the NAS
 	// outlasts the backend's wait on the add-on answers to nobody, and the
 	// backend blames the add-on for the NAS (the 8g staging rerun, 22 Nov
 	// 2026: health.get answered addon_unreachable with the NAS blackholed).
-	callTimeoutSeconds = 15
+	requestWithin = 24 * time.Second
+	// callTimeout bounds one call on the request path, inside requestWithin.
+	callTimeout = 15 * time.Second
+	// collectCallTimeout bounds one call of the add-on's own background work
+	// (the statistics collector's audit.query pages and get_quota). No request
+	// waits on it, and a busy NAS may take longer than callTimeout to page an
+	// audit log; it is still answering. Set on the collector's context
+	// (withCallLimit), so there is one call path.
+	collectCallTimeout = 60 * time.Second
 	// nasDialTimeout bounds getting a session: the TCP connect, TLS, the
 	// websocket handshake and the API-key login, together. The client sets
 	// none of its own for the connect and 45 s for the handshake, so a
-	// blackholed NAS held its first caller past the backend's 30 s. Together
-	// with one call it stays under the kit's 25 s for a read
-	// (AUTHORING.md, "The outage checks").
+	// blackholed NAS held its first caller past the backend's 30 s.
 	nasDialTimeout = 8 * time.Second
-	// pingTimeoutSeconds bounds the liveness probe. Short on purpose: it runs
+	// pingTimeout bounds the liveness probe. Short on purpose: it runs
 	// in front of somebody's page load, and a probe that takes as long as the
 	// call it is protecting has cost more than it saved.
-	pingTimeoutSeconds = 5
+	pingTimeout = 5 * time.Second
 	// reconnectCooldown is the floor between login attempts. Well under the
 	// rate limit even if every attempt failed, which is the point: the limit
 	// must be unreachable by this code, not merely usually avoided.
 	//
-	// A call that waited out its timeout arms it too (lost): the next caller would
-	// otherwise dial straight into the same silence, and a read composed of
-	// several calls (health.get) would wait once per call. Within the floor
-	// every call answers ErrNotSent at once.
+	// Silence arms it too (lost): a call that got no answer within its bound
+	// on a session that then answers no core.ping either. The next caller
+	// would otherwise dial straight into the same silence, and a read composed
+	// of several calls (health.get) would wait once per call. Within the floor
+	// every call answers ErrNotSent at once. A call that ran out its time while
+	// the ping answers is a busy NAS, not a lost one, and arms nothing.
 	reconnectCooldown = 15 * time.Second
 	// idleProbeAfter is how long a cached session may sit unused before it is
 	// treated as unproven rather than live.
@@ -123,7 +135,6 @@ var (
 // NAS would be a test nobody runs.
 type rpc interface {
 	Call(method string, timeoutSeconds int64, params any) (json.RawMessage, error)
-	Ping() (string, error)
 	Close() error
 }
 
@@ -146,17 +157,19 @@ type NAS struct {
 	// settling is closed when the caller proving or dialling the session is
 	// done; nil when none is. See offLock.
 	settling chan struct{}
-	// dialWithin and callWithin are nasDialTimeout and callTimeoutSeconds;
-	// fields so a test of a hanging NAS waits milliseconds, not seconds.
-	dialWithin time.Duration
-	callWithin int64
+	// dialWithin, callWithin, pingWithin and floor are nasDialTimeout,
+	// callTimeout, pingTimeout and reconnectCooldown; fields so a test of a
+	// hanging NAS waits a second, not fifteen.
+	dialWithin, callWithin, pingWithin, floor time.Duration
 
-	// callMu serialises the wire. The client writes its request frame with
-	// `conn.WriteJSON` outside its own mutex, and gorilla panics outright on a
-	// concurrent write — so two requests arriving together take down the
-	// process rather than interleaving. One session was always the design; this
-	// is the part that makes it one at a time.
-	callMu sync.Mutex
+	// line serialises the wire: one token, held by the call on it. The client
+	// writes its request frame with `conn.WriteJSON` outside its own mutex, and
+	// gorilla panics outright on a concurrent write — so two requests arriving
+	// together take down the process rather than interleaving. One session was
+	// always the design; this is the part that makes it one at a time. A
+	// channel rather than a mutex so a wait in line ends with the request's
+	// deadline (lineUp).
+	line chan struct{}
 
 	// version is read once per successful connect. Majors break, and an
 	// untested one is refused rather than attempted (§Risks).
@@ -196,15 +209,51 @@ func newNAS(dial dialer, supportedMajors []string) *NAS {
 	for _, v := range supportedMajors {
 		m[v] = true
 	}
-	return &NAS{dial: dial, supportedMajs: m, now: time.Now, dialWithin: nasDialTimeout, callWithin: callTimeoutSeconds}
+	return &NAS{dial: dial, supportedMajs: m, now: time.Now, line: make(chan struct{}, 1),
+		dialWithin: nasDialTimeout, callWithin: callTimeout, pingWithin: pingTimeout, floor: reconnectCooldown}
 }
+
+// callLimitKey carries a per-call bound in place of callTimeout (withCallLimit).
+type callLimitKey struct{}
+
+// withCallLimit gives every call made under ctx the bound d in place of
+// callTimeout: the collector's longer one, the ping's shorter one. The
+// request's deadline, when ctx has one, still caps it (seconds).
+func withCallLimit(ctx context.Context, d time.Duration) context.Context {
+	return context.WithValue(ctx, callLimitKey{}, d)
+}
+
+// seconds is limit, cut to what is left of ctx's deadline, in the whole
+// seconds the client's Call takes. Under 1 there is no time to ask.
+// ponytail: the client's timeout is whole seconds and it takes no context, so
+// a call cannot end mid-second or be cancelled, only not begun.
+func seconds(ctx context.Context, limit time.Duration) int64 {
+	if d, ok := ctx.Deadline(); ok {
+		limit = min(limit, time.Until(d))
+	}
+	return int64(limit / time.Second)
+}
+
+// lineUp waits for the wire, or answers ErrNotSent once ctx ends first:
+// a request waiting behind the collector's long page gives up within its own
+// time. leave gives the wire back.
+func (n *NAS) lineUp(ctx context.Context) error {
+	select {
+	case n.line <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("%w: the session stayed busy for the request's whole time", ErrNotSent)
+	}
+}
+
+func (n *NAS) leave() { <-n.line }
 
 // session returns a live client, connecting if needed.
 //
 // The cooldown is checked before dialling rather than after failing, so a burst
 // of calls during an outage costs one login attempt rather than one each. This
 // is the whole defence against the ten-minute lockout.
-func (n *NAS) session() (rpc, error) {
+func (n *NAS) session(ctx context.Context) (rpc, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	for n.settling != nil {
@@ -212,7 +261,12 @@ func (n *NAS) session() (rpc, error) {
 		// what this one waits for, then decides again with what it left.
 		ch := n.settling
 		n.mu.Unlock()
-		<-ch
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			n.mu.Lock()
+			return nil, fmt.Errorf("%w: no session within the request's time", ErrNotSent)
+		}
 		n.mu.Lock()
 	}
 	if n.client != nil {
@@ -220,7 +274,11 @@ func (n *NAS) session() (rpc, error) {
 			return n.client, nil
 		}
 		c, live := n.client, false
-		n.offLock(func() { live = n.proven(c) })
+		var inLine error
+		n.offLock(func() { live, inLine = n.proven(ctx, c) })
+		if inLine != nil {
+			return nil, inLine
+		}
 		// Re-checked: a call that failed while the lock was off may have
 		// dropped and closed c, and a closed client is not a live one.
 		if live && n.client == c {
@@ -242,14 +300,17 @@ func (n *NAS) session() (rpc, error) {
 		return nil, fmt.Errorf("%w: the circuit is open until %s",
 			ErrNotSent, n.openUntil.UTC().Format(time.RFC3339))
 	}
-	if since := n.now().Sub(n.lastTry); since < reconnectCooldown {
+	if since := n.now().Sub(n.lastTry); since < n.floor {
 		return nil, fmt.Errorf("%w: waiting out the reconnect cooldown", ErrNotSent)
+	}
+	if d, ok := ctx.Deadline(); ok && !time.Now().Before(d) {
+		return nil, fmt.Errorf("%w: no time left to connect", ErrNotSent)
 	}
 	n.lastTry = n.now()
 
 	var c rpc
 	var err error
-	n.offLock(func() { c, err = dialBounded(n.dial, n.dialWithin) })
+	n.offLock(func() { c, err = dialBounded(ctx, n.dial, n.dialWithin) })
 	if err != nil {
 		n.recordFailureLocked(err)
 		return nil, fmt.Errorf("%w: %v", ErrNotSent, err)
@@ -268,11 +329,15 @@ func (n *NAS) session() (rpc, error) {
 	return c, nil
 }
 
-// dialBounded is dial, given up after within. A dial cannot be cancelled,
-// only not waited for: it runs on, and a session it opens late is closed.
+// dialBounded is dial, given up after within or at ctx's deadline, whichever
+// is sooner. A dial cannot be cancelled, only not waited for: it runs on, and
+// a session it opens late is closed.
 // ponytail: the client takes no dialer or context, so the bound sits here
 // rather than in net.Dialer.Timeout and websocket.Dialer.HandshakeTimeout.
-func dialBounded(dial dialer, within time.Duration) (rpc, error) {
+func dialBounded(ctx context.Context, dial dialer, within time.Duration) (rpc, error) {
+	if d, ok := ctx.Deadline(); ok {
+		within = min(within, time.Until(d))
+	}
 	type dialled struct {
 		c   rpc
 		err error
@@ -317,16 +382,34 @@ func (n *NAS) offLock(fn func()) {
 }
 
 // proven asks the target whether the cached session still exists. Called by
-// session() through offLock: only one caller proves at a time.
+// session() through offLock: only one caller proves at a time. Its error is
+// ctx ending before the ping could be asked: nothing was, and the session
+// is kept.
+func (n *NAS) proven(ctx context.Context, c rpc) (bool, error) {
+	if err := n.lineUp(ctx); err != nil {
+		return false, err
+	}
+	defer n.leave()
+	asked, answered := n.ping(ctx, c)
+	if !asked {
+		return false, fmt.Errorf("%w: no time left to prove the session", ErrNotSent)
+	}
+	return answered, nil
+}
+
+// ping asks c for core.ping within the ping bound and what is left of ctx;
+// asked is false when no time was left to. The caller holds the line.
 //
 // Any answer at all counts, including a refusal. What is being established is
 // that the socket is still there, and a target that can refuse a call is a
 // target that received one.
-func (n *NAS) proven(c rpc) bool {
-	n.callMu.Lock()
-	defer n.callMu.Unlock()
-	_, err := c.Call("core.ping", pingTimeoutSeconds, []any{})
-	return err == nil
+func (n *NAS) ping(ctx context.Context, c rpc) (asked, answered bool) {
+	secs := seconds(ctx, n.pingWithin)
+	if secs < 1 {
+		return false, false
+	}
+	_, err := c.Call("core.ping", secs, []any{})
+	return true, err == nil
 }
 
 // ensureProbed reads the version and method list once per connection.
@@ -341,7 +424,7 @@ func (n *NAS) proven(c rpc) bool {
 // which the gate reads as "not tested" and refuses mutations on, and leaves
 // `probed` false so the next call tries again rather than waiting for a
 // reconnect that may never be needed.
-func (n *NAS) ensureProbed() {
+func (n *NAS) ensureProbed(ctx context.Context) {
 	n.mu.Lock()
 	if n.client != nil && n.probed && n.selfName == "" && n.now().Sub(n.lastSelf) >= probeCooldown {
 		// Probed, but `auth.me` failed then: asked again, so one transient
@@ -349,7 +432,7 @@ func (n *NAS) ensureProbed() {
 		// The timestamp is set first for the same reason the flag below is.
 		n.lastSelf = n.now()
 		n.mu.Unlock()
-		n.readSelf()
+		n.readSelf(ctx)
 		return
 	}
 	if n.probed || n.client == nil || n.now().Sub(n.lastProbe) < probeCooldown {
@@ -364,14 +447,14 @@ func (n *NAS) ensureProbed() {
 	n.probed, n.lastProbe, n.lastSelf = true, n.now(), n.now()
 	n.mu.Unlock()
 
-	if _, err := n.SystemVersion(); err != nil {
+	if _, err := n.SystemVersion(ctx); err != nil {
 		n.mu.Lock()
 		n.version, n.probed = "", false
 		n.mu.Unlock()
 		return
 	}
-	n.readSelf()
-	n.loadMethods()
+	n.readSelf(ctx)
+	n.loadMethods(ctx)
 }
 
 // readSelf learns which target account this add-on's own credential belongs to.
@@ -390,12 +473,12 @@ func (n *NAS) ensureProbed() {
 // Non-fatal by design. Not knowing means the guards below refuse to vouch for
 // anything, which is the safe direction: they only ever REMOVE an account from
 // what an operator may act on.
-func (n *NAS) readSelf() {
+func (n *NAS) readSelf(ctx context.Context) {
 	var me struct {
 		Name string `json:"pw_name"`
 		UID  int64  `json:"pw_uid"`
 	}
-	if err := n.call("auth.me", []any{}, &me); err != nil {
+	if err := n.call(ctx, "auth.me", []any{}, &me); err != nil {
 		log.Printf("[NAS] could not read this add-on's own account (auth.me): %v; "+
 			"its TrueNAS account will appear as an ordinary unmanaged one", err)
 		return
@@ -426,11 +509,11 @@ func (n *NAS) Self() (string, int64, bool) {
 // Used at startup so `/capabilities` can answer with a version straight away.
 // Not required for correctness — every call probes what it needs — which is why
 // its failure is not fatal.
-func (n *NAS) Probe() error {
-	if _, err := n.session(); err != nil {
+func (n *NAS) Probe(ctx context.Context) error {
+	if _, err := n.session(ctx); err != nil {
 		return err
 	}
-	n.ensureProbed()
+	n.ensureProbed(ctx)
 	if n.Version() == "" {
 		return fmt.Errorf("%w: the target did not answer system.version", ErrTargetUnreachable)
 	}
@@ -465,14 +548,18 @@ func (n *NAS) CircuitOpen() bool {
 	return n.now().Before(n.openUntil)
 }
 
-// lost is drop for a session that went silent: the next dial waits out
+// lost is drop for a session c that went silent: the next dial waits out
 // the reconnect floor, and every call until then answers ErrNotSent at once
-// (reconnectCooldown).
-func (n *NAS) lost() {
-	n.drop()
+// (reconnectCooldown). One critical section, and only while c is still the
+// session: a session dialled since is not the silent one.
+func (n *NAS) lost(c rpc) {
 	n.mu.Lock()
-	n.lastTry = n.now()
-	n.mu.Unlock()
+	defer n.mu.Unlock()
+	if n.client == c {
+		n.client = nil
+		n.lastTry = n.now()
+	}
+	_ = c.Close()
 }
 
 // drop closes and forgets the session so the next call reconnects.
@@ -490,18 +577,18 @@ func (n *NAS) drop() {
 // log's seam calls (server.send), so no write reaches the NAS without its
 // intent on disk first (5.3b). Listed rather than guessed from a name, so a
 // method nobody listed fails closed instead of going out unlogged.
-func (n *NAS) call(method string, params any, out any) error {
+func (n *NAS) call(ctx context.Context, method string, params any, out any) error {
 	if !readMethods[method] {
 		return fmt.Errorf("%s is not a read this add-on makes; a write goes through the mutation log", method)
 	}
 	n.reads.Add(1)
-	return n.roundTrip(method, params, out)
+	return n.roundTrip(ctx, method, params, out)
 }
 
 // sendWrite issues one write. Only server.send calls it, inside server.mutate
 // (TestEveryNASWriteGoesThroughTheSeam).
-func (n *NAS) sendWrite(method string, params any, out any) error {
-	return n.roundTrip(method, params, out)
+func (n *NAS) sendWrite(ctx context.Context, method string, params any, out any) error {
+	return n.roundTrip(ctx, method, params, out)
 }
 
 // readMethods is every NAS method this add-on reads with.
@@ -518,14 +605,14 @@ var readMethods = map[string]bool{
 // The classification matters more than it looks: the backend's accounting
 // distinguishes "nothing happened" from "it refused" from "we do not know", and
 // collapsing them here would make that distinction a fiction one layer up.
-func (n *NAS) roundTrip(method string, params any, out any) error {
-	c, err := n.session()
+func (n *NAS) roundTrip(ctx context.Context, method string, params any, out any) error {
+	c, err := n.session(ctx)
 	if err != nil {
 		return err
 	}
-	n.ensureProbed()
+	n.ensureProbed(ctx)
 
-	raw, err := n.invoke(c, method, params, n.callWithin)
+	raw, err := n.invoke(ctx, c, method, params)
 	if err != nil {
 		return fmt.Errorf("%s: %w", method, n.classify(err))
 	}
@@ -556,27 +643,58 @@ func (n *NAS) roundTrip(method string, params any, out any) error {
 	return nil
 }
 
-// invoke is the one place a request frame is written.
+// invoke is the one place a request frame is written, in line (lineUp)
+// and within the call's bound: callTimeout, or ctx's own (withCallLimit),
+// cut to what is left of ctx's deadline. With no time left it sends nothing.
 //
-// Serialised, because the client writes outside its own lock and gorilla panics
-// on a concurrent write. The session lock is deliberately not reused for this:
-// that one is held while dialling, and a 30-second call must not block the
-// breaker check every other request makes.
-func (n *NAS) invoke(c rpc, method string, params any, seconds int64) (json.RawMessage, error) {
-	n.callMu.Lock()
-	defer n.callMu.Unlock()
-	began := time.Now()
-	raw, err := c.Call(method, seconds, params)
-	if err != nil && time.Since(began) >= time.Duration(seconds)*time.Second {
-		// Silence, not a reset: the call waited out its whole timeout.
-		n.lost()
+// A call that got no answer within its bound is asked about once: the same
+// session gets a core.ping. An answer is a busy NAS, kept, and arms nothing
+// (errBusy); none is silence, and only silence arms the reconnect floor
+// (lost). A busy NAS is not an outage; only silence is.
+func (n *NAS) invoke(ctx context.Context, c rpc, method string, params any) (json.RawMessage, error) {
+	if err := n.lineUp(ctx); err != nil {
+		return nil, err
 	}
+	defer n.leave()
+	limit := n.callWithin
+	if l, ok := ctx.Value(callLimitKey{}).(time.Duration); ok {
+		limit = l
+	}
+	secs := seconds(ctx, limit)
+	if secs < 1 {
+		return nil, fmt.Errorf("%w: no time left to ask %s", ErrNotSent, method)
+	}
+	began := time.Now()
+	raw, err := c.Call(method, secs, params)
+	if err == nil || time.Since(began) < time.Duration(secs)*time.Second {
+		return raw, err
+	}
+	if method != "core.ping" {
+		switch asked, answered := n.ping(ctx, c); {
+		case answered:
+			return nil, fmt.Errorf("%w: %w", errBusy, err)
+		case !asked:
+			return raw, err // no time to tell busy from silent: dropped, not lost
+		}
+	}
+	n.lost(c)
 	return raw, err
 }
+
+// errBusy is a call that ran out its time on a session that still answers
+// core.ping: unreachable for this call (a write behind it may have landed),
+// and the session is kept.
+var errBusy = errors.New("no answer in time from a NAS that answers core.ping")
 
 // classify is classifyNASError plus the bookkeeping each outcome implies, for
 // a failure on the shared session: a transport error or an answered refusal.
 func (n *NAS) classify(err error) error {
+	switch {
+	case errors.Is(err, ErrNotSent):
+		return err // nothing went out: the session is as it was
+	case errors.Is(err, errBusy):
+		return ErrTargetUnreachable // the session answered its ping: kept
+	}
 	classified := classifyNASError(err)
 	switch classified {
 	case ErrTargetUnreachable:
@@ -692,8 +810,12 @@ func splitEnvelope(raw json.RawMessage) (json.RawMessage, *rpcError, error) {
 // The purge runs on a credential injected for that single call, so it has no
 // NAS to route through — and it is the one operation that cannot be undone,
 // which makes reading its refusal the least optional of all of them.
-func callOnce(c rpc, method string, params any, out any) error {
-	raw, err := c.Call(method, callTimeoutSeconds, params)
+func callOnce(ctx context.Context, c rpc, method string, params any, out any) error {
+	secs := seconds(ctx, callTimeout)
+	if secs < 1 {
+		return fmt.Errorf("%s: %w: no time left to ask", method, ErrNotSent)
+	}
+	raw, err := c.Call(method, secs, params)
 	if err != nil {
 		return fmt.Errorf("%s: %w", method, classifyNASError(err))
 	}
@@ -759,9 +881,9 @@ func rateLimitWording(text string) bool {
 }
 
 // SystemVersion reads and caches the target's version.
-func (n *NAS) SystemVersion() (string, error) {
+func (n *NAS) SystemVersion(ctx context.Context) (string, error) {
 	var v string
-	if err := n.call("system.version", []any{}, &v); err != nil {
+	if err := n.call(ctx, "system.version", []any{}, &v); err != nil {
 		return "", err
 	}
 	n.mu.Lock()
@@ -809,9 +931,9 @@ func (n *NAS) MethodPresent(method string) bool {
 
 // loadMethods reads the target's method list. Best-effort by construction: a
 // failure leaves the cache nil, which reads as "everything present".
-func (n *NAS) loadMethods() {
+func (n *NAS) loadMethods(ctx context.Context) {
 	var listing map[string]json.RawMessage
-	if err := n.call("core.get_methods", []any{}, &listing); err != nil {
+	if err := n.call(ctx, "core.get_methods", []any{}, &listing); err != nil {
 		return
 	}
 	known := make(map[string]bool, len(listing))

@@ -59,7 +59,7 @@ func collectStats(ctx context.Context, s *server, every time.Duration) {
 		return
 	}
 	for {
-		s.collectStatsOnce()
+		s.collectStatsOnce(ctx)
 		select {
 		case <-ctx.Done():
 			return
@@ -69,15 +69,18 @@ func collectStats(ctx context.Context, s *server, every time.Duration) {
 }
 
 // collectStatsOnce is one run of the collector.
-func (s *server) collectStatsOnce() {
+// No request waits on it, so its calls get collectCallTimeout each: a busy
+// NAS paging its audit log is still answering.
+func (s *server) collectStatsOnce(ctx context.Context) {
+	ctx = withCallLimit(ctx, collectCallTimeout)
 	now := s.stats.clock()
-	snap, errAccounts := s.readSubjects()
+	snap, errAccounts := s.readSubjects(ctx)
 	bound, errBound := s.boundUIDs(snap.Subjects) // unread, the run fails like any other
-	shares, errShares := s.enabledShares()
+	shares, errShares := s.enabledShares(ctx)
 	failed := errors.Join(errAccounts, errBound, errShares)
-	s.collectSessions(now, snap, shares, bound, failed)
-	mounts, errMounts := s.datasetMounts()
-	s.collectUsage(now, snap, shares, mounts, bound, errors.Join(failed, errMounts))
+	s.collectSessions(ctx, now, snap, shares, bound, failed)
+	mounts, errMounts := s.datasetMounts(ctx)
+	s.collectUsage(ctx, now, snap, shares, mounts, bound, errors.Join(failed, errMounts))
 }
 
 // oldest is the first day the buffer keeps: the day whose end is
@@ -138,7 +141,7 @@ func (sh shareAudit) narrowed() bool { return len(sh.WatchList) > 0 || len(sh.Ig
 
 // auditConnects reads every successful CONNECT from `from` on, oldest first,
 // and says whether it stopped at the page bound with more to read.
-func (s *server) auditConnects(from time.Time) (rows []auditRow, capped bool, err error) {
+func (s *server) auditConnects(ctx context.Context, from time.Time) (rows []auditRow, capped bool, err error) {
 	for page := range statsAuditPages {
 		var batch []auditRow
 		query := []any{map[string]any{
@@ -150,7 +153,7 @@ func (s *server) auditConnects(from time.Time) (rows []auditRow, capped bool, er
 			"query-options": map[string]any{"order_by": []string{"message_timestamp"},
 				"offset": page * statsAuditPage, "limit": statsAuditPage},
 		}}
-		if err := s.nas.call("audit.query", query, &batch); err != nil {
+		if err := s.nas.call(ctx, "audit.query", query, &batch); err != nil {
 			return nil, false, err
 		}
 		rows = append(rows, batch...)
@@ -163,18 +166,18 @@ func (s *server) auditConnects(from time.Time) (rows []auditRow, capped bool, er
 
 // auditOldest is the day of the oldest SMB row the NAS still keeps, "" when
 // it keeps none.
-func (s *server) auditOldest() (string, error) {
+func (s *server) auditOldest(ctx context.Context) (string, error) {
 	var rows []auditRow
 	query := []any{map[string]any{"services": []string{"SMB"}, "query-filters": []any{},
 		"query-options": map[string]any{"order_by": []string{"message_timestamp"}, "limit": 1}}}
-	if err := s.nas.call("audit.query", query, &rows); err != nil || len(rows) == 0 {
+	if err := s.nas.call(ctx, "audit.query", query, &rows); err != nil || len(rows) == 0 {
 		return "", err
 	}
 	return s.stats.day(time.Unix(rows[0].Timestamp, 0)), nil
 }
 
 // collectSessions recounts every day from the watermark through today.
-func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare, bound map[int64]string, failed error) {
+func (s *server) collectSessions(ctx context.Context, now time.Time, snap Snapshot, shares []smbShare, bound map[int64]string, failed error) {
 	c := s.stats
 	meta, _, err := s.store.StatsMeta(metricSessions)
 	if err != nil {
@@ -196,22 +199,22 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	var rows []auditRow
 	var capped bool
 	if failed == nil {
-		audits, failed = s.readShareAudit()
+		audits, failed = s.readShareAudit(ctx)
 	}
 	var counted map[string]bool
 	if failed == nil { // the settings were seen: the chain is judged now, whatever fails below
-		counted, failed = s.coverSessions(&meta, audits, now)
+		counted, failed = s.coverSessions(ctx, &meta, audits, now)
 	}
 	if failed == nil && from < today { // catching up: is the log still there?
 		var oldest string
-		if oldest, failed = s.auditOldest(); oldest >= from {
+		if oldest, failed = s.auditOldest(ctx); oldest >= from {
 			for ; count <= oldest && count < today; count = nextDayKey(count) {
 				gone[count] = reasonPurged
 			}
 		}
 	}
 	if failed == nil {
-		rows, capped, failed = s.auditConnects(c.midnight(count))
+		rows, capped, failed = s.auditConnects(ctx, c.midnight(count))
 	}
 	if failed != nil {
 		s.failedRun(metricSessions, meta, now, failed)
@@ -331,12 +334,12 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 // seen narrowed or no longer enabled, or when a sighting comes more than
 // 3 x STATS_COLLECT_EVERY (the larger of this run's and the last sighting's,
 // Every) after the last, whatever kept the runs between from seeing it.
-func (s *server) coverSessions(meta *statsMeta, audits []shareAudit, now time.Time) (map[string]bool, error) {
+func (s *server) coverSessions(ctx context.Context, meta *statsMeta, audits []shareAudit, now time.Time) (map[string]bool, error) {
 	counted, unread := map[string]bool{}, map[string]bool{}
 	var smb []map[string]bool
 	var smbErr error
 	if slices.ContainsFunc(audits, func(a shareAudit) bool { return a.Enabled && a.narrowed() }) {
-		smb, smbErr = s.smbMemberships()
+		smb, smbErr = s.smbMemberships(ctx)
 	}
 	for _, a := range audits {
 		if a.Enabled && a.narrowed() && smbErr != nil {
@@ -393,7 +396,7 @@ func (s *server) coverSessions(meta *statsMeta, audits []shareAudit, now time.Ti
 // place's bytes are its datasets' as the live read resolves them (datasetAt
 // on the same mounts), so a folder that is its own dataset counts where
 // storage.status shows it.
-func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, mounts datasetMap, bound map[int64]string, failed error) {
+func (s *server) collectUsage(ctx context.Context, now time.Time, snap Snapshot, shares []smbShare, mounts datasetMap, bound map[int64]string, failed error) {
 	c := s.stats
 	today := c.day(now)
 	metas := map[string]statsMeta{}
@@ -416,7 +419,7 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, m
 	table := func(dataset string) map[int64]PlaceUsage {
 		t, read := tables[dataset]
 		if !read {
-			t = s.userQuotas(dataset) // nil when unreadable
+			t = s.userQuotas(ctx, dataset) // nil when unreadable
 			tables[dataset] = t
 		}
 		return t

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -60,11 +61,11 @@ type homeDecision struct {
 
 // statOwner returns the owner uid of a path, or ErrNoSuchPath. A stat that
 // fails for any other reason is an error, never "free".
-func (s *server) statOwner(p string) (int64, error) {
+func (s *server) statOwner(ctx context.Context, p string) (int64, error) {
 	var st struct {
 		UID int64 `json:"uid"`
 	}
-	if err := s.nas.call("filesystem.stat", []any{p}, &st); err != nil {
+	if err := s.nas.call(ctx, "filesystem.stat", []any{p}, &st); err != nil {
 		if errors.Is(err, ErrNoSuchPath) {
 			return 0, ErrNoSuchPath
 		}
@@ -77,7 +78,7 @@ func (s *server) statOwner(p string) (int64, error) {
 // does not exist yet. live false is a plan from the stored copy, with no NAS to
 // ask: the folder is taken as free, as projected takes it for a create, and the
 // apply, which only ever runs live, makes the read.
-func (s *server) decideHome(desired desiredState, username, current string, uid int64, live bool) (homeDecision, error) {
+func (s *server) decideHome(ctx context.Context, desired desiredState, username, current string, uid int64, live bool) (homeDecision, error) {
 	if !desired.managed[FieldHome] || !desired.wantsHome {
 		return homeDecision{}, nil
 	}
@@ -103,7 +104,7 @@ func (s *server) decideHome(desired desiredState, username, current string, uid 
 	if !live {
 		return homeDecision{path: want}, nil
 	}
-	owner, err := s.statOwner(want)
+	owner, err := s.statOwner(ctx, want)
 	switch {
 	case errors.Is(err, ErrNoSuchPath):
 		return homeDecision{path: want}, nil
@@ -134,12 +135,12 @@ func homeFields(p string) map[string]any {
 // convergeQuota sets the account's limit on the dataset holding its home, when
 // one is wanted and it differs. A limit nobody gives any more is left as it
 // is: removing it would make the folder unlimited, which no one decided.
-func (s *server) convergeQuota(who caller, desired desiredState, home string, uid int64) (string, error) {
-	dataset, want, owed, err := s.quotaOwed(desired, home, uid)
+func (s *server) convergeQuota(ctx context.Context, who caller, desired desiredState, home string, uid int64) (string, error) {
+	dataset, want, owed, err := s.quotaOwed(ctx, desired, home, uid)
 	if err != nil || !owed {
 		return "", err
 	}
-	if err := s.send(who, "pool.dataset.set_quota", []any{dataset, []any{map[string]any{
+	if err := s.send(ctx, who, "pool.dataset.set_quota", []any{dataset, []any{map[string]any{
 		"quota_type": "USER", "id": strconv.FormatInt(uid, 10), "quota_value": want,
 	}}}, nil); err != nil {
 		return "", fmt.Errorf("set the home folder limit: %w", err)
@@ -162,7 +163,7 @@ func quotaWords(want int64) string {
 // Only for a home that sits in one of the home places, a dataset of its own. A
 // user quota is per dataset, so on a home made by hand somewhere else (a share's
 // root, say) it would cap everything the person owns in the whole share.
-func (s *server) quotaOwed(desired desiredState, home string, uid int64) (dataset string, want int64, owed bool, err error) {
+func (s *server) quotaOwed(ctx context.Context, desired desiredState, home string, uid int64) (dataset string, want int64, owed bool, err error) {
 	if !desired.managed[FieldHomeQuota] || home == "" || (desired.homeQuota == 0 && !desired.homeUnlimited) {
 		return "", 0, false, nil
 	}
@@ -170,7 +171,7 @@ func (s *server) quotaOwed(desired desiredState, home string, uid int64) (datase
 	if desired.homeUnlimited {
 		want = 0 // TrueNAS's "no quota"
 	}
-	places, _, err := s.homePlaces()
+	places, _, err := s.homePlaces(ctx)
 	if err != nil {
 		return "", 0, false, fmt.Errorf("read where home folders may go: %w", err)
 	}
@@ -187,7 +188,7 @@ func (s *server) quotaOwed(desired desiredState, home string, uid int64) (datase
 		// quota is set", and the production NAS had none set when recorded.
 		Quota int64 `json:"quota"`
 	}
-	if err := s.nas.call("pool.dataset.get_quota", []any{dataset, "USER", []any{[]any{"id", "=", uid}}}, &rows); err != nil {
+	if err := s.nas.call(ctx, "pool.dataset.get_quota", []any{dataset, "USER", []any{[]any{"id", "=", uid}}}, &rows); err != nil {
 		return "", 0, false, fmt.Errorf("read the home folder limit: %w", err)
 	}
 	for _, r := range rows {
@@ -208,8 +209,8 @@ func (s *server) quotaOwed(desired desiredState, home string, uid int64) (datase
 // way /homes reads usage, one quota table per dataset. An account with no home
 // folder in a share, or whose table could not be read, is left out: its limit
 // is unknown, which is never the same as "no limit".
-func (s *server) homeLimits(subjects []Subject) map[int64]string {
-	shares, err := s.enabledShares()
+func (s *server) homeLimits(ctx context.Context, subjects []Subject) map[int64]string {
+	shares, err := s.enabledShares(ctx)
 	if err != nil {
 		return nil
 	}
@@ -225,7 +226,7 @@ func (s *server) homeLimits(subjects []Subject) map[int64]string {
 		}
 		table, read := tables[dataset]
 		if !read {
-			table = s.userQuotas(dataset)
+			table = s.userQuotas(ctx, dataset)
 			tables[dataset] = table
 		}
 		if table != nil {
@@ -250,8 +251,8 @@ func humanBytes(n int64) string {
 // of their own), and so are hidden folders and plain directories: on the live
 // NAS an application's share has two dozen of each, and none is a place for
 // people's homes. Each is labelled the way people say it, `main › home_dir`.
-func (s *server) homePlaces() (paths []string, labels map[string]string, err error) {
-	read, _, err := s.reach(false)
+func (s *server) homePlaces(ctx context.Context) (paths []string, labels map[string]string, err error) {
+	read, _, err := s.reach(ctx, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -307,7 +308,7 @@ type HomesResponse struct {
 // (fresh.go).
 func (s *server) handleHomes(w http.ResponseWriter, r *http.Request, _ []byte) {
 	val, obs, err := s.fresh.read("homes", wantsFresh(r), func() (any, time.Time, error) {
-		out, err := s.readHomes()
+		out, err := s.readHomes(r.Context())
 		return out, time.Now(), err
 	})
 	if writeCooldown(w, err) {
@@ -330,12 +331,12 @@ func (s *server) handleHomes(w http.ResponseWriter, r *http.Request, _ []byte) {
 
 // readHomes reads every home folder once: one user read, one quota read per
 // dataset that holds homes.
-func (s *server) readHomes() (HomesResponse, error) {
-	snap, err := s.readSubjects()
+func (s *server) readHomes(ctx context.Context) (HomesResponse, error) {
+	snap, err := s.readSubjects(ctx)
 	if err != nil {
 		return HomesResponse{}, err
 	}
-	shares, err := s.enabledShares()
+	shares, err := s.enabledShares(ctx)
 	if err != nil {
 		return HomesResponse{}, err
 	}
@@ -344,7 +345,7 @@ func (s *server) readHomes() (HomesResponse, error) {
 	if err != nil {
 		return HomesResponse{}, unreadable(err)
 	}
-	mounts, err := s.datasetMounts()
+	mounts, err := s.datasetMounts(ctx)
 	if err != nil {
 		return HomesResponse{}, err
 	}
@@ -353,7 +354,7 @@ func (s *server) readHomes() (HomesResponse, error) {
 	tableOf := func(dataset string) map[int64]PlaceUsage {
 		table, read := quotas[dataset]
 		if !read {
-			table = s.userQuotas(dataset)
+			table = s.userQuotas(ctx, dataset)
 			quotas[dataset] = table
 		}
 		return table

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"path"
@@ -86,14 +87,14 @@ type Meter struct {
 }
 
 // storageStatus reads the caller's own account state and usage.
-func (s *server) storageStatus(req OperationRequest) (OperationResult, int, error) {
+func (s *server) storageStatus(ctx context.Context, req OperationRequest) (OperationResult, int, error) {
 	// A read: resolved, never rewritten (operatedAccount). The account comes
 	// from a read of the NAS now, not the subjects mirror: this is the field a
 	// member is about to act on, and that mirror could be six hours old,
 	// telling somebody to set a password they set this morning. Its own copy
 	// (fresh.go) is forgotten by every write, so a password set through this
 	// add-on shows on the next read.
-	r, refused, err := s.operatedAccount(req.Subject, nil)
+	r, refused, err := s.operatedAccount(ctx, req.Subject, nil)
 	if err != nil {
 		return OperationResult{}, refused, err
 	}
@@ -110,14 +111,14 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	status.NeedsNewPassword = subject.needsNewPassword()
 
 	// One count for the places and the meters, so they never disagree.
-	count, countErr := s.countFor(subject.UID, req.Fresh)
+	count, countErr := s.countFor(ctx, subject.UID, req.Fresh)
 	counted := &count
 	if countErr != nil {
 		counted = nil
 	}
 
 	// Best-effort like usage: whether the account works is the urgent half.
-	if places, seen, err := s.memberPlaces(req.Fresh, subject.groupIDs, subject.Home, counted); err == nil {
+	if places, seen, err := s.memberPlaces(ctx, req.Fresh, subject.groupIDs, subject.Home, counted); err == nil {
 		status.Places, status.PlacesReadable, status.placesSeen = places, true, seen
 	}
 
@@ -156,12 +157,12 @@ type memberCount struct {
 
 // countFor makes uid's count. fresh asks for a read of each table now,
 // within its cooldown (fresh.go).
-func (s *server) countFor(uid int64, fresh bool) (memberCount, error) {
-	shares, err := s.enabledShares()
+func (s *server) countFor(ctx context.Context, uid int64, fresh bool) (memberCount, error) {
+	shares, err := s.enabledShares(ctx)
 	if err != nil {
 		return memberCount{}, err
 	}
-	mounts, err := s.datasetMounts()
+	mounts, err := s.datasetMounts(ctx)
 	if err != nil {
 		return memberCount{}, err
 	}
@@ -171,7 +172,7 @@ func (s *server) countFor(uid int64, fresh bool) (memberCount, error) {
 		if t, read := tables[dataset]; read {
 			return t
 		}
-		t, obs := s.quotaTable(dataset, fresh)
+		t, obs := s.quotaTable(ctx, dataset, fresh)
 		tables[dataset] = t
 		if t != nil {
 			if c.seen.TakenAt == "" {
@@ -193,9 +194,9 @@ func (s *server) countFor(uid int64, fresh bool) (memberCount, error) {
 // make one read. Counting every dataset on every load would otherwise be one
 // NAS call per home per card. A write forgets it like every copy. The
 // collector reads its own tables and never this copy.
-func (s *server) quotaTable(dataset string, fresh bool) (map[int64]PlaceUsage, Observed) {
+func (s *server) quotaTable(ctx context.Context, dataset string, fresh bool) (map[int64]PlaceUsage, Observed) {
 	val, obs, err := s.fresh.read("quota:"+dataset, fresh, func() (any, time.Time, error) {
-		t := s.userQuotas(dataset)
+		t := s.userQuotas(ctx, dataset)
 		if t == nil {
 			return nil, time.Time{}, fmt.Errorf("the quota table of %s could not be read", dataset)
 		}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -92,8 +93,8 @@ func (ix accountIndex) uid(u int64) (*Subject, error) {
 // target that ignored the filter cannot hand back the wrong account; the second return is that
 // read's truncation, which is only ever set by such a target (an exact key matches one row) and
 // stops an absence being concluded from a list that was cut short.
-func (s *server) accountWhere(field string, value any) (*Subject, bool, error) {
-	accounts, truncated, err := s.readAccountsWhere([]any{[]any{field, "=", value}})
+func (s *server) accountWhere(ctx context.Context, field string, value any) (*Subject, bool, error) {
+	accounts, truncated, err := s.readAccountsWhere(ctx, []any{[]any{field, "=", value}})
 	if err != nil {
 		return nil, false, err
 	}
@@ -229,7 +230,7 @@ func (s *server) resolveIn(b Binding, ix accountIndex) (resolved, error) {
 // who is the write the binding's rewrite is logged under (store.bind), recorded once so the next
 // pass finds the account by number and is guarded by its uid. nil is a read, which never writes:
 // it runs outside the subject lock and the lifecycle gate, and resolves as well without it.
-func (s *server) resolveLive(subject string, who *caller) (r resolved, bound bool, err error) {
+func (s *server) resolveLive(ctx context.Context, subject string, who *caller) (r resolved, bound bool, err error) {
 	b, bound, err := s.store.GetBinding(subject)
 	if err != nil {
 		return resolved{}, false, unreadable(err)
@@ -242,7 +243,7 @@ func (s *server) resolveLive(subject string, who *caller) (r resolved, bound boo
 		return resolved{}, true, unreadable(err)
 	}
 	rows := map[string]Subject{} // by record key (keyRows)
-	cut, err := s.keyRows(b, rows)
+	cut, err := s.keyRows(ctx, b, rows)
 	if err != nil {
 		return resolved{}, true, err
 	}
@@ -253,7 +254,7 @@ func (s *server) resolveLive(subject string, who *caller) (r resolved, bound boo
 	judged := []Binding{b}
 	for _, other := range bindings {
 		if other.SubjectID != subject && holdsAKeyOf(other, own) {
-			c, err := s.keyRows(other, rows)
+			c, err := s.keyRows(ctx, other, rows)
 			if err != nil {
 				return resolved{}, true, err
 			}
@@ -306,13 +307,13 @@ func recordID(a *Subject) string {
 // side too, so a target that ignored the filter cannot add an account to the verdict; cut is such
 // a read coming back capped. Rows are held by record key: one that comes back with another name or
 // number than an earlier read gave it is errTornRead.
-func (s *server) keyRows(b Binding, into map[string]Subject) (cut bool, err error) {
+func (s *server) keyRows(ctx context.Context, b Binding, into map[string]Subject) (cut bool, err error) {
 	keys := [][]any{{"username", "=", b.Username}}
 	if b.UID != 0 {
 		keys = append(keys, []any{"uid", "=", b.UID})
 	}
 	for _, key := range keys {
-		accounts, c, err := s.readAccountsWhere([]any{key})
+		accounts, c, err := s.readAccountsWhere(ctx, []any{key})
 		if err != nil {
 			return cut, err
 		}
@@ -344,8 +345,8 @@ func holdsAKeyOf(b Binding, accounts []Subject) bool {
 //
 // An operation that could not find its subject must not fall back to derivation: derivation names an
 // account that may not exist, and setting a password on the wrong one is the whole hazard.
-func (s *server) operatedAccount(subject string, who *caller) (resolved, int, error) {
-	r, bound, err := s.resolveLive(subject, who)
+func (s *server) operatedAccount(ctx context.Context, subject string, who *caller) (resolved, int, error) {
+	r, bound, err := s.resolveLive(ctx, subject, who)
 	switch {
 	case err != nil:
 		if who != nil {
