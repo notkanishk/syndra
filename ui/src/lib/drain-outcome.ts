@@ -117,9 +117,9 @@ export function describeDrain(
       case "busy":
         return {
           tone: "warning",
-          sendsItself: true,
           message: `${stalled ?? "The connected system"} ${busy(result)}; nothing was sent.`,
-          detail: BUSY_DETAIL,
+          detail: "Nothing counts against the retry limit.",
+          next: sendsNext(auto, `${stalled ?? "it"} answers`),
         };
       // Design §13.1: who is not answering, the add-on or the system behind it, never one word.
       case "addon_unreachable":
@@ -281,7 +281,7 @@ function haltDetail(reason: string | undefined, system: string | undefined, wait
     case "draining":
       return `${its} still waiting, and nothing counts against the retry limit. ${maintenanceNext(auto)}`;
     case "busy":
-      return `${its} still waiting. ${BUSY_DETAIL}`;
+      return `${its} still waiting, and nothing counts against the retry limit. ${sendsNext(auto, `${system ?? "it"} answers`)}`;
     default:
       return "The rest of the queue went through.";
   }
@@ -307,15 +307,17 @@ function busy(pass: { reason?: string; busy_since?: string }): string | undefine
   return pass.reason === "busy" ? `has been busy since ${formatWhen(pass.busy_since)}` : undefined;
 }
 
-const BUSY_DETAIL = "Syndra keeps trying by itself, and nothing counts against the retry limit.";
-
 const MAINTENANCE_DETAIL = "It refuses every change until it is active again, so Syndra holds them. Nothing counts against the retry limit.";
 /**
- * The step back from maintenance. With the background drain on, revocations
- * go again on their own once it is active, so only the rest are the reader's
- * to send; with it off or unknown, sending again covers everything.
+ * Who sends a held change next, once `when` (one source for maintenance, busy
+ * and the target page). With the background drain on, revocations go again on
+ * their own and the rest are the reader's to send (a halt leaves them
+ * untouched, and a change held for the reader is never sent on its own); with
+ * it off or unknown, every change is.
  */
+export const sendsNext = (auto: AutoRetry, when: string): string =>
+  auto ? `Once ${when}, revocations go on their own; send the rest again.` : `Send it again from Pending changes once ${when}.`;
+
+/** The step back from maintenance: make it active, then who sends next. */
 const maintenanceNext = (auto: AutoRetry): string =>
-  auto
-    ? "Press Make active under Maintenance on its page. Revocations then go on their own; send the rest again."
-    : "Press Make active under Maintenance on its page, then send again.";
+  `Press Make active under Maintenance on its page. ${sendsNext(auto, "it is active")}`;

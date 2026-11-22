@@ -1004,7 +1004,12 @@ func TestABusyTargetHaltsAfterHalfAnHourAndClearsOnAnotherAnswer(t *testing.T) {
 		t.Fatalf("busy from now: want both deferred, no halt, got %+v, deferred %v", res, h.released)
 	}
 	start := now
-	now = now.Add(busyHaltAfter)
+	// Asked again every probe, as the background drain does, so the run holds.
+	for now.Sub(start) < busyHaltAfter-addons.ProbeInterval() {
+		now = now.Add(addons.ProbeInterval())
+		pass()
+	}
+	now = start.Add(busyHaltAfter)
 	if res := pass(); res.Halted {
 		t.Fatalf("busy for exactly the limit: want no halt, got %+v", res)
 	}
@@ -1013,7 +1018,7 @@ func TestABusyTargetHaltsAfterHalfAnHourAndClearsOnAnotherAnswer(t *testing.T) {
 	if !res.Halted || res.Reason != addons.ReasonBusy || res.BusySince == nil || !res.BusySince.Equal(start) || len(h.released) != 1 {
 		t.Fatalf("busy past the limit: want a busy halt since %v after one row, got %+v, deferred %v", start, res, h.released)
 	}
-	if !strings.HasPrefix(why, "TrueNAS has been busy since ") || !strings.HasSuffix(why, "; nothing was sent. Syndra keeps trying by itself.") {
+	if !strings.HasPrefix(why, "TrueNAS has been busy since ") || !strings.HasSuffix(why, "; nothing was sent. Syndra sends it again by itself.") {
 		t.Fatalf("halted last_error %q", why)
 	}
 	if h.attempts != 0 {
@@ -1031,5 +1036,62 @@ func TestABusyTargetHaltsAfterHalfAnHourAndClearsOnAnotherAnswer(t *testing.T) {
 	h.resp = busyResp()
 	if res := pass(); res.Halted {
 		t.Fatalf("a normal answer must clear the busy run, got %+v", res)
+	}
+}
+
+// A busy run ends when nobody asks: a quiet longer than busyGap (the row was
+// settled elsewhere, or the queue emptied) leaves no halt on the target page,
+// and the next busy answer starts the half hour again (PR 261 review P2).
+func TestABusyRunGoesStaleAfterAQuietGap(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	now := time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC)
+	t.Cleanup(swap(&busyClock, func() time.Time { return now }))
+	t.Cleanup(swap(&deferRow, func(context.Context, string, string, time.Duration) error { return nil }))
+	h.resp = busyResp()
+	start := now
+	for now.Sub(start) <= busyHaltAfter {
+		if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+			t.Fatal(err)
+		}
+		now = now.Add(addons.ProbeInterval())
+	}
+	if BusyHalted("truenas") == nil {
+		t.Fatal("a run asked every probe past the half hour must halt")
+	}
+	now = now.Add(busyGap())
+	if got := BusyHalted("truenas"); got != nil {
+		t.Fatalf("a run nobody asked about for %v must not say halted, got %v", busyGap(), got)
+	}
+	res, _ := DrainAddon(context.Background(), "truenas")
+	if res.Halted {
+		t.Fatalf("a busy answer after a quiet gap must start a new run, got %+v", res)
+	}
+	if got := noteBusy("truenas", true); !got.Equal(now) {
+		t.Fatalf("new run since %v, want %v", got, now)
+	}
+}
+
+// Who sends a busy row again is said only when it is true: Syndra by itself
+// when the background drain runs and claims the row, otherwise the operator.
+func TestBusyCopySaysWhoSendsItNext(t *testing.T) {
+	busy := busyResp()
+	if got, want := unreachedWhy("TrueNAS", addonRow("o1"), busy), "TrueNAS was busy; nothing was sent. Syndra sends it again by itself."; got != want {
+		t.Fatalf("auto: %q, want %q", got, want)
+	}
+	const yours = "TrueNAS was busy; nothing was sent. Send it again from Pending changes once TrueNAS answers."
+	for _, reason := range []string{db.WaitReasonRoleWaits, db.WaitReasonManual} {
+		row := addonRow("o1")
+		row.WaitReason = reason
+		if got := unreachedWhy("TrueNAS", row, busy); got != yours {
+			t.Fatalf("%s row: %q, want %q", reason, got, yours)
+		}
+	}
+	SetAutoRetry(false)
+	t.Cleanup(func() { SetAutoRetry(true) })
+	if got := unreachedWhy("TrueNAS", addonRow("o1"), busy); got != yours {
+		t.Fatalf("drain off: %q, want %q", got, yours)
+	}
+	if got := busyHaltWhy("TrueNAS", time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC), addonRow("o1")); !strings.HasSuffix(got, "; nothing was sent. Send it again from Pending changes once TrueNAS answers.") {
+		t.Fatalf("halted, drain off: %q", got)
 	}
 }

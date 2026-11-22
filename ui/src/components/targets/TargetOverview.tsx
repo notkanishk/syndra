@@ -9,7 +9,6 @@ import {
   isUnconfirmed,
   nextStep,
   isNothingSent,
-  NOTHING_TO_DO,
   notDoneWord,
   outcomeFromError,
   sentence,
@@ -23,6 +22,8 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 
 import { ArriveList, Crossfade, FOLD_MS, LeavingRow, TINT_MS, UnfoldOnArrival, Unfold, useExitPhase, useFlashOnChange, useLeavingRows } from "@/lib/motion";
 import { useLongWait } from "@/lib/useLongWait";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
+import { sendsNext } from "@/lib/drain-outcome";
 
 import { ADOPT_STAYS, SERVICE_STOPPED, STORAGE_OPERATION_LABEL, UNAUDITED_LABEL, UnauditedShares, serviceName } from "@/components/kinds/storage/readings";
 
@@ -1023,13 +1024,14 @@ function ConnectionNotices({
 }) {
   const nameOf = useSystemNames();
   const name = nameOf(target);
+  const auto = useAutoRetry();
   const notices: React.ReactNode[] = [];
 
   // Busy is not down: the add-on answers, so it is said whatever the reach.
   if (busySince) {
     notices.push(
       <Reading key="busy" tone="warn" label={`${name} has been busy since ${formatWhen(busySince)}`}>
-        Nothing was sent. Syndra keeps trying by itself. {NOTHING_TO_DO}
+        No change was sent. {sendsNext(auto, `${name} answers`)}
       </Reading>,
     );
   }

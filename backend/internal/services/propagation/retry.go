@@ -31,6 +31,21 @@ func SetAutoRetry(on bool) { autoRetry.Store(on) }
 // AutoRetry reports whether Syndra sends a change again on its own here.
 func AutoRetry() bool { return autoRetry.Load() }
 
+// waitsForYou is a row the background drain never sends again on its own
+// (db.ClaimDueRetries): it waits for the operator's Send.
+func waitsForYou(row models.PendingPropagation) bool {
+	return row.WaitReason == db.WaitReasonRoleWaits || row.WaitReason == db.WaitReasonManual
+}
+
+// sendsNext is who sends row again after nothing went out, the one sentence
+// for it: Syndra by itself only when the background drain runs and claims it.
+func sendsNext(system string, row models.PendingPropagation) string {
+	if AutoRetry() && !waitsForYou(row) {
+		return "Syndra sends it again by itself."
+	}
+	return "Send it again from Pending changes once " + system + " answers."
+}
+
 // RowRetry is where an unresolved row stands, or nil when there is nothing to
 // say beyond its wait reason: never given a next try, being sent now, or held
 // for the operator. A row deferred when nothing went out has a next try and
@@ -42,7 +57,7 @@ func RowRetry(row models.PendingPropagation) *extcall.RetryState {
 	if row.Status != "pending" || row.NotBefore == nil {
 		return nil
 	}
-	if row.WaitReason == db.WaitReasonRoleWaits || row.WaitReason == db.WaitReasonManual {
+	if waitsForYou(row) {
 		return nil
 	}
 	if !AutoRetry() {

@@ -52,7 +52,13 @@ const state = {
   settingsRefetches: 0,
   settingPut: [] as Array<{ name: string; value: string }>,
   homes: { accounts: [] as AccountHome[] } as { read?: WireRead; accounts: AccountHome[] },
+  auto: true as boolean | null,
 };
+
+vi.mock("@/lib/queries/useIndicators", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/queries/useIndicators")>()),
+  useAutoRetry: () => state.auto,
+}));
 
 vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useUsers")>()),
@@ -191,6 +197,7 @@ function renderTarget(view: "basic" | "advanced" = "advanced") {
 }
 
 beforeEach(() => {
+  state.auto = true;
   state.healthLoading = false;
   state.healthError = null;
   state.findingsError = null;
@@ -406,7 +413,22 @@ describe("one target's page", () => {
     renderTarget();
 
     expect(screen.getByText(/TrueNAS has been busy since /)).toBeTruthy();
-    expect(screen.getByText(/Nothing was sent\. Syndra keeps trying by itself\./)).toBeTruthy();
+    expect(
+      screen.getByText("No change was sent. Once TrueNAS answers, revocations go on their own; send the rest again."),
+    ).toBeTruthy();
+  });
+
+  // PR 261 review: with the background drain off, nothing goes on its own,
+  // so the page never promises it does.
+  it("says busy changes wait for Send when nothing sends them on its own", () => {
+    state.auto = false;
+    state.roster = [{ ...summary([]), busy_since: "2026-11-22T10:00:00Z" }];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [] };
+    renderTarget();
+
+    expect(screen.getByText("No change was sent. Send it again from Pending changes once TrueNAS answers.")).toBeTruthy();
+    expect(screen.queryByText(/revocations go on their own|keeps trying/)).toBeNull();
   });
 
   it("does not claim a transport fault when the secret loads", () => {
