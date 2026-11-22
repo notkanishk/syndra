@@ -125,6 +125,9 @@ type NAS struct {
 	dial    dialer
 	client  rpc
 	lastTry time.Time
+	// settling is closed when the caller proving or dialling the session is
+	// done; nil when none is. See offLock.
+	settling chan struct{}
 
 	// callMu serialises the wire. The client writes its request frame with
 	// `conn.WriteJSON` outside its own mutex, and gorilla panics outright on a
@@ -182,15 +185,31 @@ func newNAS(dial dialer, supportedMajors []string) *NAS {
 func (n *NAS) session() (rpc, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	for n.settling != nil {
+		// Another caller is proving or dialling: its answer, not the lock, is
+		// what this one waits for, then decides again with what it left.
+		ch := n.settling
+		n.mu.Unlock()
+		<-ch
+		n.mu.Lock()
+	}
 	if n.client != nil {
-		if n.now().Sub(n.lastRead) < idleProbeAfter || n.provenLocked(n.client) {
+		if n.now().Sub(n.lastRead) < idleProbeAfter {
 			return n.client, nil
+		}
+		c, live := n.client, false
+		n.offLock(func() { live = n.proven(c) })
+		if live {
+			n.lastRead = n.now()
+			return c, nil
 		}
 		// Dead, and dropped here rather than reported. Falling through to a
 		// fresh dial is the whole point: the target is reachable and only this
 		// socket is not.
-		_ = n.client.Close()
-		n.client = nil
+		if n.client == c {
+			_ = c.Close()
+			n.client = nil
+		}
 	}
 	if n.now().Before(n.openUntil) {
 		// Open. Refusing here rather than at the call site is deliberate: the
@@ -204,7 +223,9 @@ func (n *NAS) session() (rpc, error) {
 	}
 	n.lastTry = n.now()
 
-	c, err := n.dial()
+	var c rpc
+	var err error
+	n.offLock(func() { c, err = n.dial() })
 	if err != nil {
 		n.recordFailureLocked(err)
 		return nil, fmt.Errorf("%w: %v", ErrNotSent, err)
@@ -223,25 +244,39 @@ func (n *NAS) session() (rpc, error) {
 	return c, nil
 }
 
-// provenLocked asks the target whether the cached session still exists.
+// offLock runs fn, which talks to the target, with n.mu released. Called and
+// returning with n.mu held.
 //
-// Called with n.mu held, which is the same lock a dial is made under: the probe
-// only runs when the session has been idle, so there is nothing to contend
-// with, and the alternative — probing outside the lock — would let two requests
-// race to replace the same dead client.
+// The lock is never held across the wire. A dial to a blackholed NAS waits
+// out the OS's connect timeout and the 45 s websocket handshake, and held
+// under n.mu that wait was every reader's: /health's version, breaker and
+// last_read_at sat behind it, and the backend's 5 s probe gave up and blamed
+// the add-on (the 8g staging run, 22 Nov 2026). Callers of session() still
+// go one at a time: each waits on n.settling for this one's answer, so there
+// is one dial per attempt and the reconnect cooldown still holds.
+func (n *NAS) offLock(fn func()) {
+	done := make(chan struct{})
+	n.settling = done
+	n.mu.Unlock()
+	defer func() {
+		n.mu.Lock()
+		n.settling = nil
+		close(done)
+	}()
+	fn()
+}
+
+// proven asks the target whether the cached session still exists. Called by
+// session() through offLock: only one caller proves at a time.
 //
 // Any answer at all counts, including a refusal. What is being established is
 // that the socket is still there, and a target that can refuse a call is a
 // target that received one.
-func (n *NAS) provenLocked(c rpc) bool {
+func (n *NAS) proven(c rpc) bool {
 	n.callMu.Lock()
+	defer n.callMu.Unlock()
 	_, err := c.Call("core.ping", pingTimeoutSeconds, []any{})
-	n.callMu.Unlock()
-	if err != nil {
-		return false
-	}
-	n.lastRead = n.now()
-	return true
+	return err == nil
 }
 
 // ensureProbed reads the version and method list once per connection.

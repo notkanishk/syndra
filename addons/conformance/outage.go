@@ -22,7 +22,41 @@ import (
 // about the kit's own account.
 func (k *kit) outage() {
 	k.appDown()
+	k.appHang()
 	k.addonRestart()
+}
+
+// healthWithin is how soon /health must answer while the app hangs: under
+// Syndra's 5 s probe (design §13.2), with a margin for the network. A
+// /health that waits on a hanging app outlasts the probe, and Syndra then
+// blames the add-on for the app (the 8g staging run, 22 Nov 2026).
+const healthWithin = 3 * time.Second
+
+// appHang hangs the app (-hang-app): it answers nothing and refuses nothing,
+// as a blackholed address does. /health answers within healthWithin with
+// reachable false, twice running, so a first /health that left a call or a
+// lock behind it is seen too; with the app back the add-on reads it again.
+func (k *kit) appHang() {
+	c := k.at("outage.hang")
+	if k.cfg.HangApp == nil || k.cfg.StartApp == nil {
+		k.notChecked("-hang-app and -start-app", k.cfg.RequireOutage, "outage.hang")
+		return
+	}
+	live := !k.m.has("freshness") || len(k.at("freshness.unreachable").skips) == 0
+	err := k.cfg.HangApp(k.ctx)
+	defer func() { k.appBack(c, err == nil && k.ctx.Err() == nil, live) }()
+	if !c.expect(err == nil, "-hang-app failed: %v", err) {
+		return
+	}
+	for i := range 2 {
+		began := time.Now()
+		ex := k.send(request{method: http.MethodGet, target: "/health"})
+		took := time.Since(began)
+		if h := k.ok(c, ex, "health.json"); h != nil {
+			c.expect(took < healthWithin, "/health %d with the app hanging answered after %s; it must answer within %s, under Syndra's 5 s probe", i+1, took.Round(time.Millisecond), healthWithin)
+			c.expect(h["reachable"] == false, "/health %d with the app hanging answered reachable %v; a call that got no answer did not succeed", i+1, h["reachable"])
+		}
+	}
 }
 
 // notChecked marks checks whose hooks were not given.

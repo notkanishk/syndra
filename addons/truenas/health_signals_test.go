@@ -97,3 +97,47 @@ func decodeHealth(t *testing.T, s *server, into *Health) {
 		t.Fatal(err)
 	}
 }
+
+// hungRPC is a NAS that answers nothing until released: a blackholed address,
+// where a dial or a call waits out its own timeout rather than failing.
+type hungRPC struct{ release chan struct{} }
+
+func (h hungRPC) Call(string, int64, any) (json.RawMessage, error) {
+	<-h.release
+	return nil, errors.New("read tcp: i/o timeout")
+}
+func (h hungRPC) Ping() (string, error) { _, err := h.Call("core.ping", 0, nil); return "", err }
+func (hungRPC) Close() error            { return nil }
+
+// A NAS that hangs is unreachable, and /health says so within its bound,
+// however long the dial or the call would wait (the 8g staging run, 22 Nov
+// 2026: a blackholed NAS made /health outlast the backend's 5 s probe, which
+// then blamed the add-on). Twice in a row: the second /health must not wait
+// behind the first's dial, still hanging.
+func TestHealthAnswersInTimeWhenTheNASHangs(t *testing.T) {
+	for name, hangDial := range map[string]bool{"the dial hangs": true, "the session's call hangs": false} {
+		t.Run(name, func(t *testing.T) {
+			s := healthServer(t)
+			hung := hungRPC{make(chan struct{})}
+			t.Cleanup(func() { close(hung.release) })
+			s.nas = newNAS(func() (rpc, error) {
+				if hangDial {
+					<-hung.release
+					return nil, errors.New("dial tcp: i/o timeout")
+				}
+				return hung, nil
+			}, []string{"25.04"})
+			for i := range 2 {
+				began := time.Now()
+				var h Health
+				decodeHealth(t, s, &h)
+				if took := time.Since(began); took > healthReachWithin+time.Second {
+					t.Errorf("/health %d took %v with the NAS hanging; want under %v", i+1, took, healthReachWithin+time.Second)
+				}
+				if h.Reachable || h.SharesReadable {
+					t.Errorf("/health %d said reachable %v, shares readable %v with the NAS hanging", i+1, h.Reachable, h.SharesReadable)
+				}
+			}
+		})
+	}
+}

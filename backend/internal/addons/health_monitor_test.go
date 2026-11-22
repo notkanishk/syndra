@@ -208,3 +208,42 @@ func TestAnAnsweredLifecycleSwitchMovesTheMonitorAtOnce(t *testing.T) {
 		t.Fatalf("the Maintenance card would show %q", h.Lifecycle)
 	}
 }
+
+// The two halves of one bound. An add-on's /health answers within 3 s while
+// its app hangs (AUTHORING.md, GET /health; the kit's outage.hang), under
+// probeTimeout, so a hanging app is named app_unreachable; a /health that
+// outlasts the probe is the add-on not answering, addon_unreachable timeout,
+// which is what the 8g staging run saw when the TrueNAS add-on's /health
+// waited on a blackholed NAS (22 Nov 2026).
+func TestAHealthSlowedByTheAppIsTheAppWithinTheBound(t *testing.T) {
+	const addonHealthWithin = 3 * time.Second // AUTHORING.md's bound at the kit
+	for name, tc := range map[string]struct {
+		took  time.Duration
+		state ReachState
+		cause string
+	}{
+		"within the add-on's bound": {addonHealthWithin - 100*time.Millisecond, StateAppUnreachable, ""},
+		"past the probe":            {probeTimeout + time.Second, StateAddonUnreachable, CauseTimeout},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := monitor
+			monitor = newHealthMonitor()
+			t.Cleanup(func() { monitor = m })
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				select {
+				case <-time.After(tc.took):
+				case <-r.Context().Done():
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"reachable":false,"product":"TrueNAS","lifecycle":"active","log_head":"h","credential_expiry":"none"}`))
+			}))
+			t.Cleanup(srv.Close)
+			signedAddon(t, srv.URL, "a-probe-secret")
+			_ = ProbeAll(context.Background())
+			if st := HealthOf("truenas"); st.State != tc.state || st.Cause != tc.cause {
+				t.Fatalf("a /health that took %v: got %s %q, want %s %q (%+v)", tc.took, st.State, st.Cause, tc.state, tc.cause, LastHealth("truenas"))
+			}
+		})
+	}
+}

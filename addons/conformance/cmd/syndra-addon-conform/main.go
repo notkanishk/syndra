@@ -4,7 +4,7 @@
 //
 //	syndra-addon-conform -url https://addon.example.org:8443 -target truenas -secret-file ./secret \
 //	                     [-subject conformance-<run>] [-email conformance-<run>@example.org] [-mutate [-mutate-settings]] [-json report.json]
-//	                     [-stop-app <command> -start-app <command> [-require-outage]] [-stop-addon <command> -start-addon <command>]
+//	                     [-stop-app <command> -start-app <command> [-hang-app <command>] [-require-outage]] [-stop-addon <command> -start-addon <command>]
 //
 // Reads only unless -mutate: GET routes, /plan, and signed POST
 // /operations/{id} for each operation the registry gives effect: read. Exit 0: every MUST holds. 1: a MUST failed.
@@ -43,9 +43,10 @@ func main() {
 	}
 	stopApp := hook("stop-app", "a command that makes the app unreachable from the add-on, for the outage checks")
 	startApp := hook("start-app", "a command that makes the app reachable again")
+	hangApp := hook("hang-app", "a command that makes the app hang: answer nothing, never refuse, as a blackholed address does; -start-app brings it back (outage.hang)")
 	stopAddon := hook("stop-addon", "a command that stops the add-on, its disk kept, for outage.restart")
 	startAddon := hook("start-addon", "a command that starts the add-on again")
-	flag.BoolVar(&cfg.RequireOutage, "require-outage", false, "fail, rather than skip as not checked, the outage checks when -stop-app or -start-app is missing (CI passes it)")
+	flag.BoolVar(&cfg.RequireOutage, "require-outage", false, "fail, rather than skip as not checked, the outage checks when -stop-app, -start-app or -hang-app is missing (CI passes it)")
 	jsonOut := flag.String("json", "", "also write the report as JSON to this file; - writes JSON to stdout instead of text")
 	flag.Parse()
 
@@ -64,6 +65,7 @@ func main() {
 
 	cfg.StopApp, cfg.StartApp, cfg.StopAddon, cfg.StartAddon = shell("-stop-app", *stopApp, hookTimeout), shell("-start-app", *startApp, hookTimeout),
 		shell("-stop-addon", *stopAddon, hookTimeout), shell("-start-addon", *startAddon, hookTimeout)
+	cfg.HangApp = shell("-hang-app", *hangApp, hookTimeout)
 
 	// The first SIGINT or SIGTERM stops the run between requests and lets it
 	// put back what it changed; the second gets the default: exit now.

@@ -373,3 +373,59 @@ func TestARestartThatRedatesTheCopyFails(t *testing.T) {
 		t.Errorf("outage.restart says %s after a restart that dated the copy anew, want fail", got)
 	}
 }
+
+// outage.hang, watched both ways: the reference answers /health within its
+// bound while its app hangs, and passes; a /health that waits on the hanging
+// app past healthWithin, or says reachable while it hangs, fails; without
+// -hang-app under -require-outage it fails as not checked.
+func TestOutageHangFailsAHealthThatWaitsOnTheApp(t *testing.T) {
+	slow := func(r *http.Request, reply []byte, hung bool) []byte {
+		if hung && r.URL.Path == "/health" {
+			time.Sleep(healthWithin)
+		}
+		return reply
+	}
+	says := func(r *http.Request, reply []byte, hung bool) []byte {
+		if hung && r.URL.Path == "/health" {
+			return edit(reply, func(m map[string]any) { m["reachable"] = true })
+		}
+		return reply
+	}
+	for name, tc := range map[string]struct {
+		rewrite func(*http.Request, []byte, bool) []byte
+		noHook  bool
+		want    string
+	}{
+		"the reference":                     {want: "pass"},
+		"a health that waits on the app":    {rewrite: slow, want: "fail"},
+		"reachable while the app hangs":     {rewrite: says, want: "fail"},
+		"no -hang-app under require-outage": {noHook: true, want: "fail"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var down, hang atomic.Bool
+			var rw func(*http.Request, []byte) []byte
+			if tc.rewrite != nil {
+				rw = func(r *http.Request, reply []byte) []byte { return tc.rewrite(r, reply, hang.Load()) }
+			}
+			url, _ := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: down.Load, Hang: hang.Load}, nil, rw, nil)
+			cfg := withHang(config(url, false), &down, &hang)
+			cfg.RequireOutage = true
+			if tc.noHook {
+				cfg.HangApp = nil
+			}
+			r, _ := Run(context.Background(), cfg)
+			if got := r.Status("outage.hang"); got != tc.want {
+				t.Errorf("outage.hang says %s, want %s", got, tc.want)
+			}
+			if tc.want == "pass" {
+				for _, f := range failures(r) {
+					t.Errorf("%s failed: %v", f.ID, f.Detail)
+				}
+			}
+			if hang.Load() || down.Load() {
+				t.Error("the run left the app hanging")
+			}
+		})
+	}
+}

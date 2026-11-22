@@ -122,7 +122,8 @@ jobs:
                         echo "::error::the reference on port $1 did not come up within 10 s"; return 1; }
           kit() { "$RUNNER_TEMP/syndra-addon-conform" -url "https://127.0.0.1:$port" -target reference \
                     -secret-file "$RUNNER_TEMP/addon-secret" -require-outage \
-                    -stop-app "touch '$RUNNER_TEMP/app-down-$port'" -start-app "rm -f '$RUNNER_TEMP/app-down-$port'" "$@"; }
+                    -stop-app "touch '$RUNNER_TEMP/app-down-$port'" -start-app "rm -f '$RUNNER_TEMP/app-down-$port'" \
+                    -hang-app "printf hang > '$RUNNER_TEMP/app-down-$port'" "$@"; }
           port=8443; reference $port
           kit
           # The one run that purges its own account and makes it again (identity.not-reused).

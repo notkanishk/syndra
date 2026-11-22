@@ -16,6 +16,7 @@ package reference
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
@@ -124,6 +125,12 @@ type Config struct {
 	// TARGET_UNREACHABLE, /health reachable: false). The binary switches it by
 	// a file (REFERENCE_APP_DOWN_FILE), so the kit's -stop-app is touch.
 	Down func() bool
+	// Hang is test-only: while it answers true the app answers nothing, as a
+	// blackholed address does, rather than refusing. /health's call to it
+	// waits out its bound (healthReachWithin) and says reachable: false; every
+	// other route finds it down at once. The binary hangs it when the down file
+	// holds "hang", so the kit's -hang-app is printf hang into it.
+	Hang func() bool
 	// LoseReply is test-only: answering true for a stage ("before" or
 	// "after" the loan is written), a checkout answers 500 and leaves its
 	// intent open, so the add-on's own test can hold what a black-box kit
@@ -139,7 +146,18 @@ func (a *Addon) serves(feature string) bool { return slices.Contains(a.cfg.Featu
 // down says whether the app cannot be reached now (Config.Down).
 // ponytail: /values and the member operations still answer while it is down;
 // add the check there when an app's values or operations need it.
-func (a *Addon) down() bool { return a.cfg.Down != nil && a.cfg.Down() }
+func (a *Addon) down() bool { return a.cfg.Down != nil && a.cfg.Down() || a.hung() }
+
+// hung says the app answers nothing now (Config.Hang).
+func (a *Addon) hung() bool { return a.cfg.Hang != nil && a.cfg.Hang() }
+
+// healthReachWithin bounds /health's call to the app. A health endpoint
+// answers fast and bounds each dependency it checks (the Kubernetes probe
+// guidance; the health-check API pattern): Syndra's probe waits 5 s, and a
+// /health that waited longer on a hanging app would read as the add-on down
+// when it is the app. 2 s leaves room for TLS and the network under the
+// guide's 3 s (AUTHORING.md, GET /health).
+const healthReachWithin = 2 * time.Second
 
 // reach is one real call to the app, begun at at: it says whether the app
 // answered and, when it did, records it as last_read_at. /health makes its own,
@@ -289,12 +307,21 @@ func (a *Addon) limits() map[string]any {
 	return l
 }
 
-func (a *Addon) health(*http.Request, []byte) reply {
+func (a *Addon) health(r *http.Request, _ []byte) reply {
+	at := now()
+	if a.hung() {
+		// The call to the app gets no answer: it ends at its bound, not at
+		// Syndra's probe, and reach below says what it found. Waited before
+		// a.mu, which every other route needs meanwhile.
+		ctx, cancel := context.WithTimeout(r.Context(), healthReachWithin)
+		<-ctx.Done()
+		cancel()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	busy := a.busy()
 	h := map[string]any{
-		"reachable": a.reach(now()), "product": "reference", "product_version": "1.0.0", "version_tested": true,
+		"reachable": a.reach(at), "product": "reference", "product_version": "1.0.0", "version_tested": true,
 		"credential_expiry": "none", "circuit_open": false,
 		"lifecycle": a.lifecycle, "lifecycle_note": a.reason, "in_flight": busy, "drained": busy == 0,
 		"log_head": a.logHead, "log_records": a.logCount, "checked_at": now(),

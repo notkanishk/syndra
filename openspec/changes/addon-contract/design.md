@@ -2116,6 +2116,10 @@ observed, so not stated).
 - Probe: `GET /health` every 30 s, targets in parallel, 5 s each. A failed
   probe is `addon_unreachable` with its cause; an answered one with
   `reachable: false` is `app_unreachable`. No longer one "miss".
+- `/health` answers within 3 s even while the app hangs: the add-on's own
+  call to the app has a shorter deadline and answers `reachable: false` when
+  it expires, so a hanging app is never read as the add-on down
+  (`outage.hang`; the 8g staging run, 22 Nov 2026).
 - Hysteresis by a Kubernetes probe's defaults (`failureThreshold: 3`,
   `successThreshold: 1`). From `checking` the first probe decides either way,
   as Envoy's active health checking does for a new host.
