@@ -169,8 +169,7 @@ const recentReadWindow = 10 * time.Second
 // readRecently says the app last answered within recentReadWindow. The caller
 // holds a.mu.
 func (a *Addon) readRecently() bool {
-	t, err := time.Parse(time.RFC3339Nano, a.readAt)
-	return err == nil && time.Since(t) <= recentReadWindow
+	return !a.readTime.IsZero() && time.Since(a.readTime) <= recentReadWindow
 }
 
 // reach is one real call to the app, begun at at: it says whether the app
@@ -180,7 +179,7 @@ func (a *Addon) reach(at string) bool {
 	if a.down() {
 		return false
 	}
-	a.readAt = at
+	a.readAt, a.readTime = at, time.Now() // time.Now carries the monotonic clock readAt's string lacks
 	return true
 }
 
@@ -208,6 +207,7 @@ type Addon struct {
 	setting   map[string]string // the one setting: value, set_by, set_at
 	logHead   string
 	logCount  int
+	readTime  time.Time          // readAt as a monotonic instant, for readRecently
 	readAt    string             // health.last_read_at: when a read of the app last succeeded; "" before the first
 	fresh     freshState         // feature freshness: the mirror and the read in flight
 	loans     map[string]*loan   // feature calls: by item id

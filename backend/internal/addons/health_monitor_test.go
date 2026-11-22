@@ -68,6 +68,9 @@ func TestFromCheckingOneAnswerDecidesAndThreeMissesMakeAnOutage(t *testing.T) {
 	if st := m.state("truenas", t0); st.State != StateChecking || st.MissedSince == nil {
 		t.Fatalf("one miss from checking stays checking, the miss counted: %+v", st)
 	}
+	if st := m.state("truenas", t0); st.LastMiss != StateAddonUnreachable {
+		t.Fatalf("a miss from checking carries its class: %+v", st)
+	}
 	m.observe("truenas", probeOK, t0.Add(30*time.Second))
 	if st := m.state("truenas", t0); st.State != StateAnswering || st.Since != nil {
 		t.Fatalf("an answer after a miss from checking is answering, since not observed: %+v", st)

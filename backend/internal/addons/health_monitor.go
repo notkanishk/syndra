@@ -64,6 +64,9 @@ type HealthState struct {
 	MissedSince *time.Time `json:"missed_since,omitempty"`
 	// StartedAt is when this Syndra process started.
 	StartedAt time.Time `json:"started_at,omitzero"`
+	// LastMiss is the class of the last probe when it missed (missOf), empty
+	// when none has. It is never sent: the drain's halt reason reads it.
+	LastMiss ReachState `json:"-"`
 }
 
 // Answering says the target is reachable: the one test every reader makes.
@@ -201,6 +204,7 @@ func (m *healthMonitor) state(target string, now time.Time) HealthState {
 	if r.misses > 0 {
 		missed := r.firstMissAt
 		st.MissedSince = &missed
+		st.LastMiss, _ = missOf(r.last)
 	}
 	if !st.Answering() && r.retryAt.After(now) {
 		st.RetryAfter = int(math.Ceil(r.retryAt.Sub(now).Seconds()))

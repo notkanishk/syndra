@@ -334,6 +334,15 @@ describe("connected systems", () => {
     expect(screen.getByRole("img", { name: "Last 3 checks: no check yet, no check yet, no check yet" })).toBeTruthy();
   });
 
+  it("says how many checks a restarted Syndra has missed, and when it decides", () => {
+    state.targets = [target({ status: "checking", health: { state: "checking", recent: ["missed", "missed"], started_at: "2026-10-14T09:38:00Z", missed_since: "2026-10-14T09:38:30Z" } })];
+    render(<ConnectedSystemsPage />);
+
+    expect(screen.getByText("Missed 2 checks since restart")).toBeTruthy();
+    expect(screen.queryByText(/No check since restart/)).toBeNull();
+    expect(screen.getByRole("img", { name: "Last 3 checks: missed, missed, no check yet" })).toBeTruthy();
+  });
+
   it("names no clock when the API omits the start time", () => {
     state.targets = [target({ status: "checking", health: { state: "checking", recent: [] } })];
     render(<ConnectedSystemsPage />);

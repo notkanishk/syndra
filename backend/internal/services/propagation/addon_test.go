@@ -930,3 +930,20 @@ func TestARevocationWaitsForItsSystemAndLandsWhenItAnswers(t *testing.T) {
 		t.Fatalf("want landed once, got applied %v", h.applied)
 	}
 }
+
+// While checking, the halt names the class the last probe saw; with no probe
+// yet it is addon_unreachable, Syndra holding no answer.
+func TestACheckingHaltNamesTheLastMissAndNeverAnUnseenCause(t *testing.T) {
+	for _, tc := range []struct {
+		miss addons.ReachState
+		want string
+	}{
+		{"", addons.ReasonAddonUnreachable},
+		{addons.StateAppUnreachable, addons.ReasonAppUnreachable},
+		{addons.StateAddonUnreachable, addons.ReasonAddonUnreachable},
+	} {
+		if got := haltReason(addons.HealthState{State: addons.StateChecking, LastMiss: tc.miss}); got != tc.want {
+			t.Errorf("checking after %q: halt %q, want %q", tc.miss, got, tc.want)
+		}
+	}
+}
