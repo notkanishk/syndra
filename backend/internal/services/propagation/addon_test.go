@@ -1213,3 +1213,36 @@ func TestBusyCopySaysWhoSendsItNext(t *testing.T) {
 		t.Fatalf("halted, drain off: %q", got)
 	}
 }
+
+// A revocation the add-on held for its app's version (503
+// TARGET_VERSION_UNSUPPORTED) sent nothing: the row is pending again with
+// no attempt spent, due after the add-on's Retry-After, across as many
+// passes as the hold lasts, so it never ends "out of retries" and lands by
+// itself once the add-on is updated (design-version-check §7).
+func TestAHeldRevocationSpendsNoAttemptAndWaits(t *testing.T) {
+	row := addonRow("o1")
+	row.Attempts = maxRetries
+	h := stubAddonDrain(t, row)
+	h.intent.WithdrawsOnly = true
+	var why string
+	t.Cleanup(swap(&deferRow, func(_ context.Context, id, w string, after time.Duration) error {
+		h.released, why = append(h.released, id), w
+		h.deferredFor = append(h.deferredFor, after)
+		return nil
+	}))
+	held := addons.CallResponse{Outcome: addons.OutcomeUnreached, Status: 503, Code: addons.CodeTargetVersionUnsupported, RetryAfter: 30,
+		Body: []byte(`{"code":"TARGET_VERSION_UNSUPPORTED","details":{"functions":["user.update"],"verdict":"changed"}}`)}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Status: 503, Code: held.Code, Why: addons.Unread(held)}
+	for range 3 {
+		if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if h.attempts != 0 || len(h.requeued) != 0 || len(h.failed) != 0 || len(h.released) != 3 || h.deferredFor[0] != 30*time.Second {
+		t.Fatalf("a held revocation: attempts %d, requeued %v, failed %v, deferred %v; want pending again, nothing spent, due in 30 s",
+			h.attempts, h.requeued, h.failed, h.deferredFor)
+	}
+	if want := "TrueNAS changed something this needs; nothing was sent. Update the add-on, and Syndra sends it by itself."; why != want {
+		t.Fatalf("last_error %q, want %q", why, want)
+	}
+}

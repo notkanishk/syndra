@@ -861,7 +861,7 @@ func TestNoAccountIsBelievedOnlyWhenEveryWriteWasAnswered(t *testing.T) {
 // addonHealthOnce writes a valid health reply that never drains.
 func addonHealthOnce(w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"reachable": true, "product": "reference", "product_version": "1.0.0",
-		"version_tested": true, "credential_expiry": "none", "circuit_open": false, "lifecycle": "active",
+		"version_check": map[string]any{"state": "unchanged", "functions": []any{}}, "credential_expiry": "none", "circuit_open": false, "lifecycle": "active",
 		"in_flight": 1, "drained": false, "log_head": "", "log_records": 0, "checked_at": "2026-11-10T00:00:00Z"})
 }
 
@@ -1917,18 +1917,25 @@ func TestEveryReadIsHeldToItsResult(t *testing.T) {
 	}
 
 	// Only a read about a subject, refused OPERATION_FAILED, is excused: the
-	// read about the target refused, or any other 422, fails reads-only.
-	for _, tc := range []struct{ path, code string }{
-		{"/operations/health.get", "OPERATION_FAILED"},
-		{"/operations/holdings.list", "TARGET_VERSION_UNSUPPORTED"},
+	// read about the target refused, or any other refusal (a held read, 503
+	// TARGET_VERSION_UNSUPPORTED with Retry-After), fails reads-only.
+	for _, tc := range []struct {
+		path, code, retry string
+		status            int
+	}{
+		{"/operations/health.get", "OPERATION_FAILED", "never", http.StatusUnprocessableEntity},
+		{"/operations/holdings.list", "TARGET_VERSION_UNSUPPORTED", "retry_after", http.StatusServiceUnavailable},
 	} {
 		url, _ := wrapped(t, func(w http.ResponseWriter, r *http.Request, _ http.Handler) bool {
 			if r.URL.Path != tc.path {
 				return false
 			}
 			w.Header().Set("Content-Type", "application/problem+json")
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			_, _ = fmt.Fprintf(w, `{"type":"urn:syndra:addon:error:%s","title":"Refused","status":422,"detail":"Refused.","code":%q,"retry":"never"}`, tc.code, tc.code)
+			if tc.retry == "retry_after" {
+				w.Header().Set("Retry-After", "30")
+			}
+			w.WriteHeader(tc.status)
+			_, _ = fmt.Fprintf(w, `{"type":"urn:syndra:addon:error:%s","title":"Refused","status":%d,"detail":"Refused.","code":%q,"retry":%q}`, tc.code, tc.status, tc.code, tc.retry)
 			return true
 		})
 		r, err := Run(context.Background(), config(url, false))
@@ -1936,7 +1943,7 @@ func TestEveryReadIsHeldToItsResult(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := r.Status("operations.result"); got != "fail" {
-			t.Errorf("reads-only: %s refused 422 %s: operations.result says %s, want fail", tc.path, tc.code, got)
+			t.Errorf("reads-only: %s refused %d %s: operations.result says %s, want fail", tc.path, tc.status, tc.code, got)
 		}
 	}
 
@@ -2444,5 +2451,24 @@ func TestAStandingReadWhereTheAccountIsBackOnIsNotJudged(t *testing.T) {
 	r := run(t, config(url, true))
 	if got := r.Status("standing.off"); got != "skip" {
 		t.Errorf("standing.off is %q, want skip: a standing read of an account that is back on judges nothing", got)
+	}
+}
+
+// A write the manifest offers is never one health says the version check
+// holds: the two come from one source (design-version-check §7), so an
+// add-on naming an available write in a function's holds fails health.
+func TestAWriteOfferedAndHeldFailsHealth(t *testing.T) {
+	url, _ := serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
+		if r.URL.Path != "/health" {
+			return reply
+		}
+		return bytes.Replace(reply, []byte(`"functions":[]`), []byte(`"functions":[{"name":"user.update","effect":"write","verdict":"changed","holds":["password.set"]}]`), 1)
+	}, nil)
+	r, err := Run(context.Background(), config(url, false))
+	if err != nil && !errors.Is(err, ErrReadsFailed) {
+		t.Fatal(err)
+	}
+	if got := r.Status("health"); got != "fail" {
+		t.Errorf("password.set offered and held: health says %s, want fail", got)
 	}
 }

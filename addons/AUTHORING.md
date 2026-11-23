@@ -126,18 +126,24 @@ Four steps, in order. Each ends on something you can check.
    and what each omission cost. *Done when:* the file names the app release
    it was recorded from, and every method your decoders read and every write
    you send is in it.
-2. **Gate on what you recorded.** Read the app's version at start and on
-   every health check. Against a version you have not recorded, the add-on
-   MUST refuse every write that changes the app (an apply, a write
-   operation, a `PUT /settings` whose setting the app holds) with 503
-   `TARGET_VERSION_UNSUPPORTED` and a `Retry-After`, MUST report
-   `version_tested: false` with a `version_note` in `/health`, and MUST go
-   on answering reads, `/plan` included. `/lifecycle` changes only the add-on and is accepted in every
-   state ([`POST /lifecycle`](#post-lifecycle)). An app with no version
-   endpoint is gated on what you can probe, and the probe is recorded like
-   any read (`MajorSupported` in `addons/truenas/nas.go`). *Done when:* a
-   test starts the add-on against an unrecorded version and sees an apply
-   refused and `/subjects` and `/plan` answered.
+2. **Check what you depend on.** On every connection, compare the parts of
+   each app function you use with what you recorded: each is `unchanged`,
+   `changed` or `missing`, on any version, patch or major. A write that
+   changes the app (an apply, a write operation, a `PUT /settings` whose
+   setting the app holds) through a `changed` function MUST be held, nothing
+   sent, with 503 `TARGET_VERSION_UNSUPPORTED`, a `Retry-After` and
+   `details` naming the `functions` and their `verdict`; through a `missing`
+   one it is withdrawn in the manifest. `/health` MUST report the check in
+   `version_check`: `state` (`unread` until the check has answered), and
+   per function its `verdict` and the writes it `holds`, from the same
+   source as the manifest's `available`, so no write offered is one held.
+   The add-on MUST go on answering reads, `/plan` included.
+   `/lifecycle` changes only the add-on and is accepted in every
+   state ([`POST /lifecycle`](#post-lifecycle)). An app with no description
+   of its functions is checked on what you can probe, and the probe is
+   recorded like any read (`unavailable` in `addons/truenas/server.go`).
+   *Done when:* a test starts the add-on against a changed function and
+   sees an apply held and `/subjects` and `/plan` answered.
 3. **Pick the account id.** Find the app's own id for an account. It
    travels as `account_id`, an opaque string
    (`v2/schema/common/field.json#/$defs/AccountId`); an integer id is
@@ -349,7 +355,7 @@ Rules the schema cannot express:
   the system's name until an operator names the system. `product_version` is
   the app's own version string, `""` until the add-on has read it: the
   manifest is served while the app is unreachable, and a version is never
-  invented. `/health` then says `version_tested: false`.
+  invented. `/health` then says `version_check.state: "unread"`.
 - `kind` MUST be one word of `v2/registry/kinds.json` ([chapter 10](#10-kinds)).
 - `features` MUST list only what the add-on serves in full.
 - `entitlement_schema` has one entry per field of desired state, each with
@@ -682,8 +688,28 @@ Schema: `v2/schema/health.json`.
   "reachable": true,
   "product": "TrueNAS",
   "product_version": "TrueNAS-25.10.5",
-  "version_tested": true,
-  "version_note": "25.10 is a tested release.",
+  "version_check": {
+    "state": "changed",
+    "version": "TrueNAS-25.10.5",
+    "note": "TrueNAS changed 1 function Syndra uses.",
+    "functions": [
+      {
+        "name": "user.update",
+        "effect": "write",
+        "verdict": "changed",
+        "detail": "smb: was boolean, now string",
+        "holds": [
+          "apply",
+          "password.set"
+        ]
+      },
+      {
+        "name": "user.query",
+        "effect": "read",
+        "verdict": "unchanged"
+      }
+    ]
+  },
   "last_read_at": "2026-11-10T09:29:41Z",
   "credential_scopes": [
     "account.write",
@@ -804,8 +830,8 @@ Schema: `v2/schema/health.json`.
     record later, keep a record that lacks them digesting as it
     did, so the anchored chain verifies across the upgrade.
 - `lifecycle`, `lifecycle_note`, `in_flight` and `drained` are
-  [chapter 9](#9-lifecycle-and-degradation); `version_tested` and
-  `version_note` are [chapter 2](#2-before-you-write-a-line), step 2;
+  [chapter 9](#9-lifecycle-and-degradation); `version_check` is
+  [chapter 2](#2-before-you-write-a-line), step 2;
   `credential_scopes` is step 4. `credential_expiry` is `set` (with
   `credential_expires_at`), `none` (issued without an expiry) or
   `unrecorded` (nobody told the add-on).

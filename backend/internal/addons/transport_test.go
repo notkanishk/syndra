@@ -948,6 +948,8 @@ func TestALifecycleRefusalIsQueuedAndLeavesTheTargetHealthy(t *testing.T) {
 			"nothing was sent and it is asked again; a busy queue is not an outage"},
 		{"the target changed while it was read", http.StatusServiceUnavailable, "TARGET_CHANGED", OutcomeUnreached, false, false,
 			"nothing was judged or sent; it is asked again, never parked as possibly acted"},
+		{"the add-on behind its app", http.StatusServiceUnavailable, "TARGET_VERSION_UNSUPPORTED", OutcomeUnreached, false, false,
+			"nothing was sent; it waits for the add-on update, never parked as possibly acted, never a shape refusal"},
 		{"an add-on that fell over", http.StatusServiceUnavailable, "APPLY_FAILED", OutcomeIndeterminate, false, false,
 			"a 5xx that is not a refusal by code is a service that may have got halfway"},
 		{"a 503 with no code", http.StatusServiceUnavailable, "", OutcomeIndeterminate, false, false,

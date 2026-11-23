@@ -517,6 +517,13 @@ const (
 // and the breaker does not count it.
 const CodeTargetChanged = "TARGET_CHANGED"
 
+// CodeTargetVersionUnsupported is the add-on behind its app: a function the
+// call needs changed or is missing on this app version, or answered in a form
+// the add-on does not know, so nothing was sent (design-version-check §7).
+// Unreached, never a shape refusal: it spends no attempt, opens no breaker and
+// reads no manifest again; Unread says addon_outdated.
+const CodeTargetVersionUnsupported = "TARGET_VERSION_UNSUPPORTED"
+
 // CodeStoreUnreadable is the add-on's own local store failing to read: the
 // add-on answered, its records failed, and the target may be fine (the drift
 // sweep's read_refused).
@@ -587,9 +594,10 @@ func problemDetail(body []byte) string {
 //     (design §11). A plain BAD_REQUEST — a missing call_id or subject — stays
 //     rejected, or a malformed row would requeue for ever.
 //   - CALL_IN_PROGRESS: the same call is executing now; this copy did nothing.
-//   - TARGET_UNREACHABLE, TARGET_BUSY, TARGET_CHANGED, 429: it did not act and expects to be
-//     asked again (TARGET_CHANGED: the target changed while it was read, so
-//     nothing was judged or sent).
+//   - TARGET_UNREACHABLE, TARGET_BUSY, TARGET_CHANGED, TARGET_VERSION_UNSUPPORTED, 429: it did
+//     not act and expects to be asked again (TARGET_CHANGED: the target changed while it was
+//     read, so nothing was judged or sent; TARGET_VERSION_UNSUPPORTED: the add-on is behind
+//     its app and sent nothing, never a shape refusal, which would read the manifest again).
 //   - 408, 5xx: it may have acted. A 500 raised after a partial mutation looks
 //     exactly like one raised before validation.
 //   - 3xx: a contract violation, surfaced rather than followed (see
@@ -603,7 +611,8 @@ func classifyStatus(status int, code string) (outcome Outcome, lifecycle, shape 
 		return OutcomeUnreached, true, false
 	case code == codeContractVersionMismatch || code == codeUnknownRequestField:
 		return OutcomeUnreached, false, true
-	case code == codeCallInProgress || code == codeTargetUnreachable || code == codeTargetBusy || code == CodeTargetChanged || status == http.StatusTooManyRequests:
+	case code == codeCallInProgress || code == codeTargetUnreachable || code == codeTargetBusy || code == CodeTargetChanged ||
+		code == CodeTargetVersionUnsupported || status == http.StatusTooManyRequests:
 		return OutcomeUnreached, false, false
 	case status == http.StatusRequestTimeout || status >= 500:
 		return OutcomeIndeterminate, false, false
@@ -733,6 +742,10 @@ func (b *breaker) record(now time.Time, resp CallResponse) {
 	// target away from everybody. So is TARGET_BUSY: a busy queue or app is
 	// never an outage.
 	//
+	// So is TARGET_VERSION_UNSUPPORTED: the add-on behind its app, holding a
+	// write on purpose. Counted, five held writes would take the target away
+	// from everybody (design-version-check §7).
+	//
 	// So is the add-on answering that its app is down (Unread's
 	// app_unreachable: TARGET_UNREACHABLE, NO_CURRENT_READ, TARGET_UNREADABLE).
 	// The breaker guards against a dead add-on, and this one answered; the
@@ -742,7 +755,7 @@ func (b *breaker) record(now time.Time, resp CallResponse) {
 	// pages read addon_unreachable/no_answer for the cooldown while the add-on
 	// answered (the 8g staging run, 22 Nov 2026).
 	if resp.LifecycleRefusal || resp.Code == codeFreshReadCooldown || resp.Code == CodeTargetChanged || resp.Code == codeTargetBusy ||
-		Unread(resp).Reason == ReasonAppUnreachable {
+		resp.Code == CodeTargetVersionUnsupported || Unread(resp).Reason == ReasonAppUnreachable {
 		return
 	}
 	b.failures++

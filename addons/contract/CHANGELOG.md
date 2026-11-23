@@ -3,6 +3,29 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## The add-on checks what it depends on: the contract (slice 9c, 23 Nov 2026)
+
+`design-version-check.md` §7. `/health`'s `version_tested` and
+`version_note` are removed; `version_check` is added and required:
+`state` (`unchanged`, `changed`, or `unread` until the check has answered),
+`version`, `note`, and per function its `name`, `effect`, `verdict`
+(`unchanged`, `changed`, `missing`), `detail` and the writes it `holds`
+(operation ids and `apply`). No back-compat inside contract 2: both
+containers deploy together. `TARGET_VERSION_UNSUPPORTED` is reworded to "the
+add-on is behind its app", moves from 422 `never` to 503 `retry_after` with
+`Retry-After`, and may carry `details: {functions, field?, verdict}`.
+Syndra reads it as unreached and `addon_outdated`: it spends no attempt,
+opens no breaker and reads no manifest again, so a held revocation waits
+and lands by itself after the add-on update. `stale.reason` gains
+`unchecked`: a read through a function whose shape changed. The kit fails
+an add-on whose manifest offers a write that `version_check` names in a
+`holds`. Until slice 9d the TrueNAS add-on says its release gate as the
+check (a tested major `unchanged`, an untested one `changed`, no version
+`unread`, no functions named). Schema: `health.json`, `error.json`
+(`details`), `common/stale.json` (`reason`). Registry: `errors.json`
+(`TARGET_VERSION_UNSUPPORTED`). Fixtures: `health.json` changed,
+`error_target_version_unsupported.json` added.
+
 ## A busy add-on queue or app is not an outage (slice 8g, 22 Nov 2026)
 
 Added from the 8g staging run. `TARGET_BUSY` (503, `retry_after`,

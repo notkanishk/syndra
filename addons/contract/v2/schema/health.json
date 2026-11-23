@@ -16,11 +16,8 @@
     "product_version": {
       "type": "string"
     },
-    "version_tested": {
-      "type": "boolean"
-    },
-    "version_note": {
-      "type": "string"
+    "version_check": {
+      "$ref": "#/$defs/VersionCheck"
     },
     "last_read_at": {
       "type": "string",
@@ -104,7 +101,7 @@
     "reachable",
     "product",
     "product_version",
-    "version_tested",
+    "version_check",
     "credential_expiry",
     "circuit_open",
     "lifecycle",
@@ -113,5 +110,80 @@
     "log_head",
     "log_records",
     "checked_at"
-  ]
+  ],
+  "$defs": {
+    "VersionCheck": {
+      "type": "object",
+      "description": "The add-on's check of the functions it uses on its app. unchanged: every function it uses answers as on the version it was tested on, on any version. changed: at least one changed or is missing. unread: it has not finished asking, and functions is empty.",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "unchanged",
+            "changed",
+            "unread"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "description": "The app's version as it names it."
+        },
+        "note": {
+          "type": "string",
+          "description": "A sentence for a person, in the add-on's words."
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionFunction"
+          }
+        }
+      },
+      "required": [
+        "state",
+        "functions"
+      ]
+    },
+    "VersionFunction": {
+      "type": "object",
+      "description": "One app function the add-on uses, by the app's own name.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effect": {
+          "type": "string",
+          "enum": [
+            "read",
+            "write"
+          ]
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "unchanged",
+            "changed",
+            "missing"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "description": "What changed, in the add-on's words."
+        },
+        "holds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The writes held or withdrawn because of this function: operation ids, and apply. An operation named here is not available in the manifest."
+        }
+      },
+      "required": [
+        "name",
+        "effect",
+        "verdict"
+      ]
+    }
+  }
 }

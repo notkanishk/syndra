@@ -80,7 +80,7 @@ describe("how old the add-on's mirror is", () => {
       product: "truenas_scale",
       product_version: "TrueNAS-25.10.5",
       lifecycle: "active",
-      version_tested: true,
+      version_check: { state: "unchanged" },
       last_read_at: new Date().toISOString(),
       snapshot_taken_at: FOUR_HOURS_AGO,
     };

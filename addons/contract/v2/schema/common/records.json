@@ -18,7 +18,7 @@
     },
     "current": {
       "type": "boolean",
-      "description": "This answer comes from a read of the app that began after the request arrived."
+      "description": "This answer comes from a read of the app that began after the request arrived, and whose shape the add-on has checked."
     },
     "stale": {
       "$ref": "stale.json"

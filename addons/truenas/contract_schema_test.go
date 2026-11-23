@@ -231,6 +231,13 @@ func TestRealRefusalsMatchTheRegistryAndTheErrorSchema(t *testing.T) {
 			s.auth.authenticated(s.handleHealth)(rr, httptest.NewRequest(http.MethodGet, "/health", nil))
 		}},
 		{CodeLifecycleRefusal, func(rr *httptest.ResponseRecorder) { writeLifecycleRefusal(rr, LifecycleReadOnly) }},
+		{CodeTargetVersionUnsupported, func(rr *httptest.ResponseRecorder) {
+			s, _ := opServer(t)
+			s.nas.version = "27.10.0"
+			req := httptest.NewRequest(http.MethodPost, "/operations/password.set", nil)
+			req.SetPathValue("name", "password.set")
+			s.handleOperation(rr, req, []byte(`{"contract_version":2,"call_id":"c","operation":"password.set","subject":"sub-1","params":{"password":"x"}}`))
+		}},
 		{CodePlanTooLarge, func(rr *httptest.ResponseRecorder) {
 			subjects := strings.Repeat(`{"subject":"s","email":"","desired":{}},`, perRequestSubjectCap+1)
 			postTo(s.handlePlan, rr, "/plan", `{"contract_version":2,"subjects":[`+strings.TrimSuffix(subjects, ",")+`]}`)

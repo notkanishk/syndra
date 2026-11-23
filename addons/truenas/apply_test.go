@@ -1069,8 +1069,9 @@ func TestAnUntestedMajorRefusesTheApplyWithoutWriting(t *testing.T) {
 	m.fakeRPC.version, s.nas.version = "27.10.0", "27.10.0"
 
 	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"group":["lab_makers"]}}`)
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("want 422, got %d (%s)", rr.Code, rr.Body.String())
+	// 503 with Retry-After: held, nothing sent, asked again (design-version-check §7).
+	if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeTargetVersionUnsupported || rr.Header().Get("Retry-After") == "" {
+		t.Fatalf("want 503 %s with Retry-After, got %d (%s)", CodeTargetVersionUnsupported, rr.Code, rr.Body.String())
 	}
 	if !strings.Contains(rr.Body.String(), "27.10") {
 		t.Errorf("the refusal must name the version it saw: %s", rr.Body.String())

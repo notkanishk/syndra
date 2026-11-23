@@ -222,14 +222,50 @@ func methodsFor(operationID string) []string {
 	return nil
 }
 
+// VersionCheck is health's version_check: unchanged, changed or unread, and
+// per function its verdict and the writes it holds.
+type VersionCheck struct {
+	State     string            `json:"state"`
+	Version   string            `json:"version,omitempty"`
+	Note      string            `json:"note,omitempty"`
+	Functions []VersionFunction `json:"functions"`
+}
+
+// VersionFunction is one TrueNAS function the add-on checked.
+type VersionFunction struct {
+	Name    string   `json:"name"`
+	Effect  string   `json:"effect"`
+	Verdict string   `json:"verdict"`
+	Detail  string   `json:"detail,omitempty"`
+	Holds   []string `json:"holds,omitempty"`
+}
+
+// versionCheck says the release gate as a version check until the add-on
+// checks its functions (slice 9d): a tested major is unchanged, an untested
+// one changed, a version not read yet unread. It names no function.
+//
+// ponytail: whole-version verdict from MajorSupported; 9d replaces it with the
+// per-function report and deletes the gate.
+func (n *NAS) versionCheck() VersionCheck {
+	v := VersionCheck{State: "unchanged", Version: n.Version(), Functions: []VersionFunction{}}
+	if supported, why := n.MajorSupported(); !supported {
+		v.State, v.Note = "changed", why
+		if v.Version == "" {
+			v.State = "unread"
+		}
+	}
+	return v
+}
+
 // Health is what an operator reads and what the backend anchors.
 type Health struct {
-	Reachable      bool    `json:"reachable"`
-	Product        string  `json:"product"`
-	ProductVersion string  `json:"product_version"`
-	VersionTested  bool    `json:"version_tested"`
-	VersionNote    string  `json:"version_note,omitempty"`
-	LastReadAt     *string `json:"last_read_at,omitempty"`
+	Reachable      bool   `json:"reachable"`
+	Product        string `json:"product"`
+	ProductVersion string `json:"product_version"`
+	// VersionCheck is the add-on's check of the TrueNAS functions it uses
+	// (design-version-check §7).
+	VersionCheck VersionCheck `json:"version_check"`
+	LastReadAt   *string      `json:"last_read_at,omitempty"`
 	// CredentialExpiresAt is the API key's expiry (contract 2's name for what
 	// was key_expires_at).
 	CredentialExpiresAt *string `json:"credential_expires_at,omitempty"`
@@ -312,14 +348,12 @@ func within[T any](ctx context.Context, fn func() T) (v T, done bool) {
 // explained it.
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) {
 	state, note := s.life.State()
-	supported, versionNote := s.nas.MajorSupported()
 	head, count := s.log.Head()
 
 	h := Health{
 		Product:        productName,
 		ProductVersion: s.nas.Version(),
-		VersionTested:  supported,
-		VersionNote:    versionNote,
+		VersionCheck:   s.nas.versionCheck(),
 		CircuitOpen:    s.nas.CircuitOpen(),
 		Lifecycle:      state,
 		LifecycleNote:  note,

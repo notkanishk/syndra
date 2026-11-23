@@ -11,9 +11,10 @@
         "busy",
         "cached",
         "cooldown",
+        "unchecked",
         "unreachable"
       ],
-      "description": "busy: the target was busy now (TARGET_BUSY's cases), so this is the last read; not an outage. cached: answered from the add-on's mirror. cooldown: a fresh read was asked for inside the cooldown. unreachable: the target could not be read now, so this is the last read. Nothing read at all is no copy: an error (NO_CURRENT_READ, TARGET_UNREACHABLE or TARGET_BUSY), never a stale reply."
+      "description": "busy: the target was busy now (TARGET_BUSY's cases), so this is the last read; not an outage. cached: answered from the add-on's mirror. cooldown: a fresh read was asked for inside the cooldown. unchecked: read through a function whose shape changed on this app version, so shown but not concluded from. unreachable: the target could not be read now, so this is the last read. Nothing read at all is no copy: an error (NO_CURRENT_READ, TARGET_UNREACHABLE or TARGET_BUSY), never a stale reply."
     },
     "retry_after": {
       "type": "integer",

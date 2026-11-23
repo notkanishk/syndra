@@ -120,8 +120,8 @@ export interface TargetHealth {
   reachable: boolean;
   product?: string;
   product_version?: string;
-  version_tested?: boolean;
-  version_note?: string;
+  /** The add-on's check of the app functions it uses (design-version-check §7). */
+  version_check?: { state: "unchanged" | "changed" | "unread"; note?: string };
   circuit_open?: boolean;
   lifecycle?: string;
   lifecycle_note?: string;

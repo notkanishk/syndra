@@ -145,6 +145,7 @@ var v2Messages = []struct{ fixture, schema string }{
 	{"error_binding_conflict.json", "error.json"},
 	{"error_fresh_read_cooldown.json", "error.json"},
 	{"error_target_unreachable.json", "error.json"},
+	{"error_target_version_unsupported.json", "error.json"},
 	{"error_call_unsettled.json", "error.json"},
 	{"error_unknown_resource.json", "error.json"},
 	{"error_not_entitled.json", "error.json"},
@@ -309,6 +310,8 @@ func TestV2SchemasRefuseWhatTheyShould(t *testing.T) {
 		{"blocked apply problem without an effect", "error.json", "error_apply_blocked.json", v2Edit("effect", nil)},
 		{"blocked apply problem whose effect is applied", "error.json", "error_apply_blocked.json", v2Edit("effect", "applied")},
 		{"blocked apply problem without its subject", "error.json", "error_apply_blocked.json", v2Edit("subject", nil)},
+		{"a held write without the functions it names", "error.json", "error_target_version_unsupported.json", v2Edit("functions", nil, "details")},
+		{"a held write with a verdict outside the set", "error.json", "error_target_version_unsupported.json", v2Edit("verdict", "untested", "details")},
 		{"conflict problem without the conflict", "error.json", "error_binding_conflict.json", v2Edit("conflict", nil)},
 		{"conflict whose account_id is a number", "error.json", "error_binding_conflict.json", v2Edit("account_id", 3077, "conflict")},
 		{"homes entry still carrying uid only", "profiles/storage/homes.json", "homes.json", v2Also(v2Edit("account_id", nil, "homes", 0), v2Edit("uid", 3051, "homes", 0))},
@@ -412,6 +415,10 @@ func TestV2SchemasRefuseWhatTheyShould(t *testing.T) {
 		{"activity without truncated", "common/activity.json", "activity.json", v2Edit("truncated", nil)},
 		{"activity event with the share word", "common/activity.json", "activity.json", v2Edit("share", "makers", "events", 0)},
 		{"health with a negative target_reads", "health.json", "health.json", v2Edit("target_reads", -1)},
+		{"health still carrying version_tested", "health.json", "health.json", v2Also(v2Edit("version_check", nil), v2Edit("version_tested", true))},
+		{"health without version_check", "health.json", "health.json", v2Edit("version_check", nil)},
+		{"version_check with a state outside the set", "health.json", "health.json", v2Edit("state", "tested", "version_check")},
+		{"version_check function with a verdict outside the set", "health.json", "health.json", v2Edit("verdict", "trusted", "version_check", "functions", 0)},
 
 		// calls and stats
 		{"call in doubt carrying a reply", "call.json", "call.json", v2Edit("state", "in_doubt")},
@@ -466,6 +473,10 @@ func TestV2SchemasAcceptWhatTheyShould(t *testing.T) {
 		{"an apply outcome for a subject with no account has neither account_id nor standing", "apply_response.json", "apply_response.json", v2Also(v2Edit("account_id", nil), v2Edit("standing", nil))},
 		{"a stale reply that says only why", "subjects.json", "subjects_stale.json", v2Also(v2Edit("retry_after", nil, "stale"), v2Edit("note", nil, "stale"))},
 		{"a stale reply that says unreachable", "subjects.json", "subjects_stale.json", v2Edit("reason", "unreachable", "stale")},
+		{"a stale reply that says unchecked", "subjects.json", "subjects_stale.json", v2Edit("reason", "unchecked", "stale")},
+		{"an unread version check names no function", "health.json", "health.json", v2Also(
+			v2Edit("state", "unread", "version_check"), v2Edit("version", nil, "version_check"), v2Edit("functions", []any{}, "version_check"))},
+		{"a held write names its field", "error.json", "error_target_version_unsupported.json", v2Edit("field", "smb", "details")},
 		{"standing with only the required keys", "subjects.json", "subjects.json", v2Also(v2Edit("note", nil, "subjects", 0, "standing"), v2Edit("next", nil, "subjects", 0, "standing"))},
 		{"a call that is unknown carries no reply", "call.json", "call.json", v2Also(v2Edit("state", "unknown"), v2Edit("reply", nil))},
 		{"a redacted recorded call carries no reply", "call.json", "call.json", v2Edit("reply", nil)},
