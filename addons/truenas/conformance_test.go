@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -181,15 +182,23 @@ func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 	}
 	// A restart is a new process over the same disk: the store kept, the NAS
 	// session and all it read gone, then main's startup probe, which reads
-	// no version with the NAS off. ponytail: the session swapped, not the
+	// no version with the NAS off. A new server, swapped in whole: the old
+	// one's late NAS calls (within, server.go) read only its own fields, so
+	// nothing they read is written. ponytail: the server swapped, not the
 	// process restarted.
-	restart, routes := filepath.Join(dir, "addon-restart"), s.routes()
+	restart := filepath.Join(dir, "addon-restart")
+	var routes atomic.Pointer[http.Handler]
+	first := s.routes()
+	routes.Store(&first)
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if os.Remove(restart) == nil {
-			s.nas = started()
-			_ = s.nas.Probe(r.Context())
+			again := &server{auth: s.auth, nas: started(), store: s.store, log: s.log, life: newLifecycle(LifecycleActive), stats: s.stats}
+			again.fresh.cooldown = s.fresh.cooldown
+			_ = again.nas.Probe(r.Context())
+			next := again.routes()
+			routes.Store(&next)
 		}
-		routes.ServeHTTP(w, r)
+		(*routes.Load()).ServeHTTP(w, r)
 	}))
 	srv.TLS = &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{cert}}
 	// The kit is one client making one request at a time; the fake is not

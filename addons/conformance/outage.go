@@ -241,7 +241,9 @@ func (k *kit) appDown() {
 	}
 	// An add-on started while its app is down has read nothing from it (the
 	// 8g staging run): restarted now, its reads stay declared and answer.
-	if k.cfg.StopAddon != nil && k.cfg.StartAddon != nil && k.restartAddon(health) {
+	if k.cfg.StopAddon == nil || k.cfg.StartAddon == nil {
+		k.notChecked("-stop-addon and -start-addon", false, "outage.health") // the restart step only
+	} else if k.restartAddon(health) {
 		k.readsStayDeclared(health)
 		k.outageReads(health, "stopped", stoppedNoCopy)
 	}
@@ -352,7 +354,23 @@ func (k *kit) restartAddon(c *check) bool {
 	errStart := k.cfg.StartAddon(context.WithoutCancel(k.ctx))
 	stopOK := c.expect(err == nil, "-stop-addon failed: %v", err)
 	startOK := c.expect(errStart == nil, "-start-addon failed: %v", errStart)
-	return stopOK && startOK
+	return stopOK && startOK && k.addonAnswers(c)
+}
+
+// addonAnswers waits for the add-on to answer /health after -start-addon: a
+// start may return before the add-on listens (docker start), and a read sent
+// then meets a closed port. It polls within HookTimeout, the bound a hook has.
+func (k *kit) addonAnswers(c *check) bool {
+	const every = 250 * time.Millisecond
+	for until := time.Now().Add(HookTimeout); ; {
+		ex := k.send(request{method: http.MethodGet, target: "/health"})
+		if ex.err == nil && ex.status != 0 {
+			return true
+		}
+		if time.Now().Add(every).After(until) || !k.wait(every) {
+			return c.expect(false, "the add-on did not answer /health within %s of -start-addon returning: %v", HookTimeout, ex.err)
+		}
+	}
 }
 
 // ---- noFalseZero ------------------------------------------------------------

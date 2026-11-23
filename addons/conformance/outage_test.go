@@ -262,6 +262,41 @@ func TestTheOutageChecksPassAndARestartThatForgetsFails(t *testing.T) {
 	}
 }
 
+// A -start-addon that returns before the add-on listens (docker start) is
+// waited out: the kit polls /health until it answers, so the reads after the
+// restart meet the add-on, not a closed port.
+func TestAStartAddonThatReturnsBeforeListeningIsWaitedOut(t *testing.T) {
+	var down atomic.Bool
+	var listensAt atomic.Int64 // unix nanos; 0 is listening
+	url, _ := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Features: []string{"calls"}, Down: down.Load},
+		func(*http.Request, []byte, bool) {
+			if at := listensAt.Load(); at != 0 && time.Now().UnixNano() < at {
+				panic(http.ErrAbortHandler) // no reply at all, as a port not yet bound
+			}
+		}, nil, nil)
+	cfg := withApp(config(url, false), &down)
+	cfg.StopAddon = func(context.Context) error { listensAt.Store(time.Now().Add(time.Hour).UnixNano()); return nil }
+	cfg.StartAddon = func(context.Context) error {
+		listensAt.Store(time.Now().Add(600 * time.Millisecond).UnixNano())
+		return nil
+	}
+	r, _ := Run(context.Background(), cfg)
+	for _, id := range []string{"outage.health", "outage.restart"} {
+		if got := r.Status(id); got != "pass" {
+			t.Errorf("%s says %s %v after a start that returned before the add-on listened, want pass", id, got, detailOf(r, id))
+		}
+	}
+}
+
+func detailOf(r *Report, id string) []string {
+	for _, res := range r.Results {
+		if res.ID == id {
+			return res.Detail
+		}
+	}
+	return nil
+}
+
 // Without hooks every outage check is "not checked", a skip, never a pass.
 func TestWithoutHooksTheOutageChecksAreNotChecked(t *testing.T) {
 	url, _ := serve(t, testSecret, nil)
@@ -272,6 +307,18 @@ func TestWithoutHooksTheOutageChecksAreNotChecked(t *testing.T) {
 				t.Errorf("%s says %s %v without hooks, want skip: not checked", res.ID, res.Status, res.Detail)
 			}
 		}
+	}
+}
+
+// With the app hooks but not the add-on's, outage.health says its restart
+// step was not checked: never a silent pass over a step that did not run.
+func TestOutageHealthSaysTheRestartWasNotChecked(t *testing.T) {
+	var down atomic.Bool
+	url, _ := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: down.Load}, nil, nil, nil)
+	r := run(t, withApp(config(url, false), &down))
+	if got, detail := r.Status("outage.health"), detailOf(r, "outage.health"); got != "pass" ||
+		!slices.ContainsFunc(detail, func(d string) bool { return strings.HasPrefix(d, "not checked: -stop-addon and -start-addon") }) {
+		t.Errorf("outage.health says %s %v without the add-on hooks, want pass with its restart step not checked", got, detail)
 	}
 }
 

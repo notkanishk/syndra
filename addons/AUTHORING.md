@@ -2716,7 +2716,10 @@ happened:
   reference's fake app hangs while that file holds `hang`, so its hook is
   `printf hang > …`.
 - `-stop-addon <command>` and `-start-addon <command>` stop your add-on and
-  start it again, its disk kept.
+  start it again, its disk kept. `-start-addon` may return before your
+  add-on listens (`docker start` does): the kit then polls `/health` until
+  it answers, within the same 2 minutes a hook has, and fails the check if
+  it never does.
 
 "Happened" is as your add-on sees it: one that waits between its attempts
 to reach the app needs `-start-app` to wait that out too (the TrueNAS
@@ -2739,7 +2742,8 @@ With them it runs:
   move. With `-stop-addon` and `-start-addon` the kit then restarts the
   add-on, the app still stopped: `/capabilities` still keeps every read, and
   each read answers within 25 s with its kept copy or 503
-  `TARGET_UNREACHABLE` or `NO_CURRENT_READ`. With the app back,
+  `TARGET_UNREACHABLE` or `NO_CURRENT_READ`. Without those hooks the
+  report says that step was not checked. With the app back,
   `reachable: true` and a fresh read is `current: true`.
 - `outage.hang`: with the app hanging for 12 s (past the 10 s a recent
   answer counts), `/health` answers within 3 s with `reachable: false`,

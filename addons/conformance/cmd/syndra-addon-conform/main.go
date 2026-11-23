@@ -104,7 +104,7 @@ func main() {
 
 // hookTimeout bounds each hook: one that hangs fails, and the kit goes on to
 // put back what it stopped.
-const hookTimeout = 2 * time.Minute
+const hookTimeout = conformance.HookTimeout
 
 // shell is the hook flag names: command run by sh -c, said and its output on
 // stderr, killed after timeout; nil when there is no command.

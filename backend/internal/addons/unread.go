@@ -171,9 +171,14 @@ func unsent(r CallResponse) Why {
 	case errors.Is(r.Err, ErrFeatureNotDeclared), errors.Is(r.Err, ErrUnknownOperation):
 		return Why{Reason: ReasonAddonOutdated}
 	case errors.Is(r.Err, ErrNoCallRecord), errors.Is(r.Err, ErrNoFingerprint), errors.Is(r.Err, ErrFreshOutOfScope),
-		errors.Is(r.Err, errNotPrepared), errors.Is(r.Err, ErrNotRegistered):
+		errors.Is(r.Err, errNotPrepared):
 		// Syndra's own refusal before anything left: not an outage.
 		return Why{Reason: ReasonReadRefused}
+	case errors.Is(r.Err, ErrNotRegistered):
+		// No add-on whose log to read: Syndra's own sentence in Detail, so the
+		// next step is its configuration (no new reason, and the UI's whyLine
+		// already shows a read_refused detail first).
+		return Why{Reason: ReasonReadRefused, Detail: "Syndra's configuration names no add-on for this. Check Syndra's add-on configuration."}
 	case errors.Is(r.Err, errNoTransport):
 		return Why{Reason: ReasonAddonUnreachable, Cause: CauseNoKey}
 	case wrongHost(r.Err):

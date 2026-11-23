@@ -69,6 +69,10 @@ type Config struct {
 	RequireOutage bool
 }
 
+// HookTimeout bounds each hook, and the wait for the add-on to answer after
+// -start-addon returns.
+const HookTimeout = 2 * time.Minute
+
 // spansTheRun are the checks judged across several steps or over every reply
 // of the run; an interrupted run never passes them.
 const interruptedNote = "not judged: the run was interrupted"
