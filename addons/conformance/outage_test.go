@@ -587,3 +587,18 @@ func TestOutageHangFailsAHealthThatWaitsOnTheApp(t *testing.T) {
 		})
 	}
 }
+
+// A run interrupted while waiting for the add-on to answer says so, never that
+// the add-on missed the bound it was not given time to meet.
+func TestAnInterruptedWaitForTheAddonSaysInterrupted(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	k := &kit{ctx: ctx, cfg: config("http://127.0.0.1:1", false)}
+	c := &check{}
+	if k.addonAnswers(c) {
+		t.Fatal("an interrupted wait answered")
+	}
+	if len(c.fails) != 1 || !strings.Contains(c.fails[0], "interrupted") || strings.Contains(c.fails[0], "within") {
+		t.Fatalf("an interrupted wait says %q, want interrupted", c.fails)
+	}
+}

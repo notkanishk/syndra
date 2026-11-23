@@ -367,8 +367,11 @@ func (k *kit) addonAnswers(c *check) bool {
 		if ex.err == nil && ex.status != 0 {
 			return true
 		}
-		if time.Now().Add(every).After(until) || !k.wait(every) {
+		if time.Now().Add(every).After(until) {
 			return c.expect(false, "the add-on did not answer /health within %s of -start-addon returning: %v", HookTimeout, ex.err)
+		}
+		if !k.wait(every) {
+			return c.expect(false, "the wait for the add-on to answer /health after -start-addon was interrupted")
 		}
 	}
 }

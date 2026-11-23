@@ -120,6 +120,8 @@ export function whyLine(why: Why, system: string, who: Reader, product = system)
       return `${system}'s add-on is running but can't reach ${product}. Check that ${product} is on.`;
     case REASON.addonOutdated:
       return `${system}'s add-on doesn't offer this. Update the add-on.`;
+    case REASON.readRefused:
+      if (cause === "not_configured") return `Syndra's configuration names no add-on for ${system}. Check Syndra's add-on configuration.`;
   }
   return `${system}'s add-on didn't take this. Read the add-on's log.`;
 }

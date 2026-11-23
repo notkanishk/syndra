@@ -178,7 +178,9 @@ func missOf(h TargetHealth) (ReachState, string) {
 	switch {
 	case h.Outcome == OutcomeSucceeded, h.Why.Reason == ReasonAppUnreachable:
 		return StateAppUnreachable, ""
-	case h.Why.Cause != "":
+	case h.Why.Reason == ReasonAddonUnreachable && h.Why.Cause != "":
+		// Only addon_unreachable's causes are the pipe's; read_refused's
+		// not_configured is not one of the monitor's.
 		return StateAddonUnreachable, h.Why.Cause
 	}
 	return StateAddonUnreachable, CauseFault

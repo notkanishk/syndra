@@ -128,7 +128,25 @@ func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 	fake.answers["pool.dataset.get_quota tank/open"] = `[]`
 	fake.answers["auth.me"] = `{"pw_name":"syndra","pw_uid":3001}` // read anew after a restart
 	m := &mutatingRPC{fakeRPC: *fake, folders: []string{kitHomeRoot}}
-	s := testServer(t, &m.fakeRPC)
+	disk := testServer(t, &m.fakeRPC) // its store and log, kept across a restart
+	key, err := deriveHMACKey([]byte(kitSecret), kitTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth := &authenticator{signingKey: key, now: time.Now}
+	// One collection before the kit runs, and no collector after it
+	// (STATS_COLLECT_EVERY=0): its reads would move target_reads under the
+	// freshness checks. every is the default interval, for the chain of
+	// sightings alone: nothing here runs the timer.
+	stats := statsClock{zone: kolkata, every: time.Hour}
+	// build is the add-on as main.go starts it over the kept disk, at the
+	// start and again on every restart, so the restarted one cannot drop a
+	// field the first one has.
+	build := func(n *NAS) *server {
+		b := &server{auth: auth, nas: n, store: disk.store, log: disk.log, life: newLifecycle(LifecycleActive), stats: stats}
+		b.fresh.cooldown = time.Second // the kit waits the cooldown out before each freshness check
+		return b
+	}
 	dir := t.TempDir()
 	nas := stubNAS{m, filepath.Join(dir, "nas-off")}
 	started := func() *NAS {
@@ -139,7 +157,7 @@ func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 		n.dialWithin, n.callWithin, n.pingWithin, n.floor = time.Second, time.Second, time.Second, kitFloor
 		return n
 	}
-	s.nas = started()
+	s := build(started())
 	s.nas.version, s.nas.probed = "25.04.2", true
 	// The stub exposes every method an operation needs, as a current TrueNAS
 	// does: a restarted add-on enumerates them anew (core.get_methods).
@@ -151,19 +169,7 @@ func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 	}
 	listing, _ := json.Marshal(exposed)
 	m.methods = string(listing)
-	s.nas.selfName, s.nas.selfUID = "syndra", 3001 // auth.me has named the add-on's own account, as after its first probe
-	key, err := deriveHMACKey([]byte(kitSecret), kitTarget)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.auth = &authenticator{signingKey: key, now: time.Now}
-	// The kit waits the cooldown out before each freshness check.
-	s.fresh.cooldown = time.Second
-	// One collection before the kit runs, and no collector after it
-	// (STATS_COLLECT_EVERY=0): its reads would move target_reads under the
-	// freshness checks. every is the default interval, for the chain of
-	// sightings alone: nothing here runs the timer.
-	s.stats = statsClock{zone: kolkata, every: time.Hour}
+	s.nas.selfName, s.nas.selfUID = "syndra", 3001                                   // auth.me has named the add-on's own account, as after its first probe
 	recordingSince(t, s, map[string]time.Time{"main": time.Now().AddDate(0, 0, -2)}) // main seen recording everyone before today
 	s.collectStatsOnce(t.Context())
 	if homeRoot != "" {
@@ -192,8 +198,7 @@ func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 	routes.Store(&first)
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if os.Remove(restart) == nil {
-			again := &server{auth: s.auth, nas: started(), store: s.store, log: s.log, life: newLifecycle(LifecycleActive), stats: s.stats}
-			again.fresh.cooldown = s.fresh.cooldown
+			again := build(started())
 			_ = again.nas.Probe(r.Context())
 			next := again.routes()
 			routes.Store(&next)

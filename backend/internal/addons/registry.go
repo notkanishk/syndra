@@ -900,13 +900,17 @@ func ResolveOperation(target, id string) (EffectiveOperation, error) {
 	if !hasManifest(target) && !refreshForManifest(target) {
 		return EffectiveOperation{}, noManifest(target)
 	}
+	// One read-lock pair: copy the slice header and whether a manifest is held,
+	// then unlock, as noManifest reads the registry. Safe because a.ops is only
+	// ever replaced whole, under the write lock (Refresh), never edited in
+	// place, so the copy is a consistent snapshot.
 	registryMu.RLock()
-	if a.manifest == nil { // dropped since: unlocked first, as WhyNoManifest reads the registry
-		registryMu.RUnlock()
+	ops, dropped := a.ops, a.manifest == nil
+	registryMu.RUnlock()
+	if dropped {
 		return EffectiveOperation{}, noManifest(target)
 	}
-	defer registryMu.RUnlock()
-	for _, op := range a.ops {
+	for _, op := range ops {
 		if op.ID != id {
 			continue
 		}

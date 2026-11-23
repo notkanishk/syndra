@@ -50,6 +50,7 @@ const (
 )
 
 // Causes of addon_unreachable: what the pipe saw (design §13.1's table).
+// read_refused has one, not_configured; every other reason has none.
 const (
 	// CauseNoAnswer: refused, no route, name not found, dial or TLS handshake
 	// timeout. Nothing reached the add-on.
@@ -67,6 +68,12 @@ const (
 	// CauseFault: the add-on answered with an error it did not explain (a 5xx
 	// with no registered code, a redirect, a body that does not read).
 	CauseFault = "fault"
+	// CauseNotConfigured is read_refused's one cause: no deployment
+	// configuration names the target, so there is no add-on to ask and Syndra
+	// refused before sending. Syndra's fault: its next step is Syndra's add-on
+	// configuration (added 23 Nov 2026 from the PR 264 review, so Detail stays
+	// the add-on's words only).
+	CauseNotConfigured = "not_configured"
 )
 
 // Unreachable says the reply is one of the two outages: the reason a queued
@@ -175,10 +182,8 @@ func unsent(r CallResponse) Why {
 		// Syndra's own refusal before anything left: not an outage.
 		return Why{Reason: ReasonReadRefused}
 	case errors.Is(r.Err, ErrNotRegistered):
-		// No add-on whose log to read: Syndra's own sentence in Detail, so the
-		// next step is its configuration (no new reason, and the UI's whyLine
-		// already shows a read_refused detail first).
-		return Why{Reason: ReasonReadRefused, Detail: "Syndra's configuration names no add-on for this. Check Syndra's add-on configuration."}
+		// No add-on whose log to read: the next step is Syndra's configuration.
+		return Why{Reason: ReasonReadRefused, Cause: CauseNotConfigured}
 	case errors.Is(r.Err, errNoTransport):
 		return Why{Reason: ReasonAddonUnreachable, Cause: CauseNoKey}
 	case wrongHost(r.Err):

@@ -136,6 +136,10 @@ func whySentence(system, product string, why addons.Why, member bool) string {
 		return name + " is busy right now. Try again in " + strconv.Itoa(max(1, why.RetryAfter)) + " s."
 	case addons.ReasonAddonOutdated:
 		return system + "'s add-on doesn't offer this. Update the add-on."
+	case addons.ReasonReadRefused:
+		if why.Cause == addons.CauseNotConfigured {
+			return "Syndra's configuration names no add-on for " + system + ". Check Syndra's add-on configuration."
+		}
 	}
 	return system + "'s add-on didn't take this. Read the add-on's log."
 }

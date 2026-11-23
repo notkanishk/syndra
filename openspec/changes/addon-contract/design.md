@@ -2093,7 +2093,7 @@ down". `target_unreachable` (one word for seven causes) is retired, and
 | `TARGET_UNREACHABLE`; `health.reachable: false`; `stale.reason: unreachable` | app | — | the add-on's sentence, else "{system}'s add-on is running but can't reach {product}. Check that {product} is on." |
 | `NO_CURRENT_READ`, `TARGET_UNREADABLE` | app | — | the add-on's sentence, else "{product} didn't give its add-on an answer it could use. Check {product}, then read again." |
 | `TARGET_BUSY`; `stale.reason: busy` | not an outage: `busy` | — | "{product} is busy right now. Try again in {n} s." No breaker opens, and a queued row waits `Retry-After` with no attempt spent; busy without a break for over 30 minutes halts the send for that system (a break is a quiet longer than twice the later of the background drain's tick and the row's deferral, `max(Retry-After, probe interval)`) (`busy`, "{system} has been busy since {time}"). A read or operation answer only: `/health` never answers it, and the monitor counts every non-OK `/health` answer as a miss. |
-| the manifest withdrew the operation (`available: false`); nothing was sent | not an outage: `read_refused` | — | "{system}'s add-on didn't take this. Read the add-on's log." The manifest's `unavailable_reason` is the add-on's raw words, never the sentence. Beside it, refused before sending: an operation the manifest does not declare is `addon_outdated`; no accepted manifest is the monitor's why (`WhyNoManifest`); a target no configuration names is Syndra's own refusal, `read_refused`. |
+| the manifest withdrew the operation (`available: false`); nothing was sent | not an outage: `read_refused` | — | "{system}'s add-on didn't take this. Read the add-on's log." The manifest's `unavailable_reason` is the add-on's raw words, never the sentence. Beside it, refused before sending: an operation the manifest does not declare is `addon_outdated`; no accepted manifest is the monitor's why (`WhyNoManifest`); a target no configuration names is Syndra's own refusal, `read_refused` with cause `not_configured`: "Syndra's configuration names no add-on for {system}. Check Syndra's add-on configuration." |
 
 *`no_key` added 21 Nov 2026 from the 8b review; a secret Syndra cannot load is
 Syndra's fault, not a wrong host.* *`busy` added 22 Nov 2026 from the 8g
@@ -2105,7 +2105,10 @@ withdrawn row added 23 Nov 2026 from the 8g staging run: an add-on started
 with its app down had read no version and withdrew its reads, so Syndra
 refused `health.get` unsent and called the add-on down. A read stays
 declared through an outage and answers it (`outage.health`); only a write is
-withdrawn for a version untested or unread.*
+withdrawn for a version untested or unread.* *`not_configured` added 23 Nov
+2026 from the PR 264 review: a target no configuration names is
+`read_refused`'s one cause, so `detail` stays the add-on's own words and
+Syndra's sentence is the copy guide's.*
 
 A member reads one sentence for both classes, because which box is down is
 not theirs to fix: "{system} can't be read right now. Nothing for you to do."

@@ -54,7 +54,7 @@ func TestUnreadNamesWhoIsDownAndWhy(t *testing.T) {
 		{"coded 503", CallResponse{Outcome: OutcomeIndeterminate, Status: 503, Code: "APPLY_FAILED", Body: problem("APPLY_FAILED")}, ReasonReadRefused, "", true},
 		{"an operation the add-on withdrew", CallResponse{Outcome: OutcomeUnreached, Err: &ErrOperationUnavailable{Target: "truenas", ID: "health.get", Reason: "the target version has not been read yet"}}, ReasonReadRefused, "", false},
 		{"an operation the manifest does not declare", CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: truenas/system.get", ErrUnknownOperation)}, ReasonAddonOutdated, "", false},
-		{"a target no configuration names", CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: truenas", ErrNotRegistered)}, ReasonReadRefused, "", true},
+		{"a target no configuration names", CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: truenas", ErrNotRegistered)}, ReasonReadRefused, CauseNotConfigured, false},
 		{"call record not written", CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %w", errNotPrepared, errors.New("db down"))}, ReasonReadRefused, "", false},
 		{"a 4xx about the request", CallResponse{Outcome: OutcomeRejected, Status: 404, Code: "NO_SUCH_SETTING"}, ReasonReadRefused, "", false},
 	} {
@@ -68,10 +68,6 @@ func TestUnreadNamesWhoIsDownAndWhy(t *testing.T) {
 		if got.Unreachable() != (tc.reason == ReasonAddonUnreachable || tc.reason == ReasonAppUnreachable) {
 			t.Errorf("%s: Unreachable() = %t", tc.name, got.Unreachable())
 		}
-	}
-	// No add-on to read the log of: the next step is Syndra's configuration.
-	if w := Unread(CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: truenas", ErrNotRegistered)}); !strings.Contains(w.Detail, "Syndra's add-on configuration") || strings.Contains(w.Detail, "log") {
-		t.Errorf("a target no configuration names says %q, want Syndra's configuration as the next step", w.Detail)
 	}
 	if w := Unread(CallResponse{Outcome: OutcomeUnreached, Err: &CircuitOpenError{Opener: Why{Reason: ReasonAddonUnreachable, Cause: CauseTimeout}, RetryAfter: 11500 * time.Millisecond}}); w.RetryAfter != 12 {
 		t.Errorf("an open breaker's time left, rounded up: %d", w.RetryAfter)
