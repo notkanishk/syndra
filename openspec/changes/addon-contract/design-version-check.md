@@ -107,7 +107,6 @@ clock. Its whole interface:
 ```go
 // What Syndra relies on, per TrueNAS method. One table, in the add-on.
 type Dep struct {
-    Create  bool      // a create: defaults of unsent properties count (§4.2)
     Replies []any     // zero values of every Go type a call site decodes into
     Sends   []string  // JSON Pointers (RFC 6901) into accepts that Syndra sends
 }
@@ -273,9 +272,15 @@ deployed, the staging stack is not touched, and the staging add-on stays
   at each pointer in `Sends`; and, for every object Syndra sends into, its
   `required` list and `additionalProperties`. A new required field Syndra
   does not send is a change. A new optional one is not.
-- **Defaults**, for a create (`user.create`, `group.create`): the `default`
-  of every property Syndra does not send. TrueNAS fills those in, so a
-  changed default changes the account Syndra makes.
+- **Defaults**, for every write: the `default` of every argument and
+  argument property Syndra does not send, its `required` list, and an unsent
+  argument's `_required_: true` (TrueNAS marks a required argument only
+  there). Where a schema declares a default, an unsent value takes it, so a
+  changed default changes what the write does. An update declares none
+  (fields left out keep their value, RFC 7396 §2), so a default appearing
+  there means updates begin resetting what Syndra omits. Examples: `group.delete`'s `delete_users`, `user.delete`'s
+  `delete_group`, `user.create`'s unsent fields. The subschema kept at a sent
+  pointer drops its `default`: what Syndra sends is never defaulted.
 - **`job`**: whether the call answers a job.
 
 ### 4.3 Canonical form
