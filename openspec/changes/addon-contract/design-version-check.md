@@ -1,7 +1,8 @@
 # The version check: an add-on checks what it depends on
 
-Status: design, round 3, 23 Nov 2026: the owner's rulings, three Opus reviews
-and the owner's addition (§12, pending his yes) folded in. Not built. Slices
+Status: design, round 4, 24 Nov 2026: the owner's rulings, three Opus reviews
+and the owner's addition (§12, his yes 24 Nov 2026, settled for 9j) folded in.
+9b and 9c are built. Slices
 are `tasks.md` §9. Extends `design.md` §13. Source facts:
 `research-core-get-methods.md`.
 
@@ -37,9 +38,9 @@ tolerant reader (Fowler, *Tolerant Reader*) for everything else.
 trust?). A removal through an unchanged function goes ahead, so nobody keeps
 access waiting on a button. The net for "same shape, different behaviour" is
 the read-back: apply reads the account back after its writes
-(`addons/truenas/apply.go:1165`, `readBack`). §12 (the owner's addition,
-pending his yes) makes that read-back hold a function that did not do what it
-was asked.
+(`addons/truenas/apply.go:1166`, `readBack`). §12 (the owner's addition)
+makes that read-back hold a function that twice did not do what it was
+asked.
 
 ## 1. The fact this rests on
 
@@ -659,9 +660,8 @@ and 9e: the strict decode's `details.verdict` needs the report.
 - **9i Staging.** Owner-gated. The add-on there is `read_only`, so: the
   check reads `unchanged` on the real NAS; a test build with an edited
   baseline shows `changed`, the list and the held writes.
-- **9j Held on misbehaviour** (§12). The owner's addition, **pending his
-  yes**. Built last and alone, so dropping it removes one slice and nothing
-  before it.
+- **9j Held on misbehaviour** (§12). The owner's addition; his yes, 24 Nov
+  2026. Built last and alone: nothing in 9a to 9i depends on it.
 
 ## 11. Decided
 
@@ -693,13 +693,31 @@ In round 3, from the third Opus review:
 10. Try again sends its one row through the add-on pass, not `DrainOne`
     (§12.4).
 
-## 12. Held on misbehaviour (slice 9j; the owner's addition, pending his yes)
+By the owner, 24 Nov 2026:
 
-> **Not ready to build (Opus check, 23 Nov 2026).** Open in §12.4: Try again must be tied to one `call_id`, admitted in `s.mutate` (`apply.go:1527`), and cleared only by a closed-field read-back, never by the next write that happens to take the slot (a member's `password.set` has no read-back, `operations.go:348-385`); drop the "no row waiting" fallback. A narrowed hold needs its own trial: that account's re-queued row, since its rows end terminal at plan `blocked` (`propagation/addon.go:599-614`). Settle both, with the owner's yes, before 9j is built.
+11. Yes to §12 (slice 9j).
+12. A closed-field mismatch is answered by one second try in the same call
+    before anything is held (§12.1). Never the purge.
+13. Try again stays, for after a hold.
+
+In round 4, from the Opus check of §12:
+
+14. Try again names one apply by its `call_id`, and only that apply's
+    closed-field read-back clears the hold. Removed: the "no row waiting,
+    the next write takes the slot" fallback (§12.4).
+15. The backend picks the trial row, not the operator. A narrowed hold's
+    trial is that account's own row, queued by `convergeOn` (§12.4).
+16. `functions[].observed` is a list of records, not a boolean (§12.5).
+
+## 12. Held on misbehaviour (slice 9j; the owner's addition, his yes 24 Nov 2026)
 
 Owner, 23 Nov 2026. A schema check cannot see a function that keeps its
 shape and stops doing its job. Today apply's read-back sees it, reports it,
 drift queues the change again, and the loop never ends.
+
+Settled 24 Nov 2026, by the owner: yes to this section; one mismatch is
+answered by a second try before anything is held (§12.1); Try again stays,
+for after a hold, bound to one call (§12.4).
 
 **Rule.** A function that misbehaves in use is held through the same
 verdict, withdrawal and notice as a changed one. There is no second
@@ -707,28 +725,31 @@ mechanism: `Check` takes one more input and everything after it is §6 and
 §7 unchanged.
 
 ```go
-type Observed struct{ Method, Detail string }   // a function seen misbehaving
+type Observed struct{ Method, Detail string }   // a function seen misbehaving twice (§12.1)
 
 func Check(baselines []Baseline, deps map[string]Dep,
     methods map[string]json.RawMessage, observed []Observed) Report
 ```
 
 A function `unchanged` by its schema and named in `observed` comes out
-`changed`, with the hold's sentence as its `Detail`. Its `functions` entry
-carries `"observed": true`, which is the one thing the page needs to offer
+`changed`, with the hold's sentence as its `Detail`. Only a function's own
+record is passed in. A narrowed record (§12.4) is one account's, so it is
+not a verdict on the function. Its `functions` entry lists the stored
+records under `observed` (§12.5), which is what the page needs to offer
 **Try again**.
 
 ### 12.1 What counts
 
-One signal: **a write that did not take.** The write reported success and
-the read-back that follows (`apply.go:1165`, and the create's at
-`apply.go:1344`) shows a closed field Syndra just wrote holding another
-value: `locked: true` asked, `locked: false` read. It is a completed
-exchange in which TrueNAS said yes and did otherwise.
+One signal: **a write that did not take, twice** (the second try, below).
+The write reported success and the read-back that follows
+(`apply.go:1166`, and the create's at `apply.go:1345`) shows a closed field
+Syndra just wrote holding another value: `locked: true` asked,
+`locked: false` read. It is a completed exchange in which TrueNAS said yes
+and did otherwise.
 
 Only closed fields are compared: booleans, enums and consts, such as
 `locked`, `smb` and `password_disabled`. `home` and `groups` are not:
-TrueNAS normalises and resolves them on write (`apply.go:1155-1159`), so a
+TrueNAS normalises and resolves them on write (`apply.go:1158-1160`), so a
 different value there is not a fault. A password is never read, so never
 compared.
 
@@ -738,14 +759,63 @@ was `Unverified`.
 
 A refusal is left out on purpose. TrueNAS has rules across fields that no
 schema shows (`smb: true` is refused unless the same call sets a password,
-`apply.go:968`), and a staff edit between the pre-read and the write trips
+`apply.go:968-972`), and a staff edit between the pre-read and the write trips
 the same refusal, so a refused value the schema allows proves nothing. And a
 refusal does not loop: it is terminal today, `target_refused`
-(`propagation/addon.go:241-262`), and already waits on staff.
+(`propagation/addon.go:241-263`), and already waits on staff.
 
 The reason names what was asked and what was read: "user.update: asked
 `locked: true`, read `locked: false`". Closed fields only, so it can never
 hold a secret or free text.
+
+#### The second try (owner, 24 Nov 2026)
+
+One mismatch holds nothing. The add-on sends the closed fields again at
+once and reads back again. Only a second mismatch is the signal above.
+
+- **Where.** `converge`, in one helper that takes the place of the bare
+  read-back at `apply.go:1166`: `confirm` reads the account back, compares
+  `closed(update)` with what it read and, on a difference, sends
+  `user.update` once more and reads back once more. It returns the account
+  as last read and the difference still left, if any. `converge` is its only
+  caller, so nothing but an apply's update can reach it.
+- **What is resent.** `closed(update)`: the closed fields of the first
+  write, with the same values, and nothing else. One projection serves the
+  comparison and the resend, so the two cannot disagree on what a closed
+  field is. It is idempotent (RFC 9110 §9.2.2): each field is an absolute
+  value of the same desired state, so sending it twice leaves what sending
+  it once should have. `groups` and the home fields are never resent:
+  `home_create` is not idempotent (`home.go:123-133`, a second one nests the
+  home a level down).
+- **Same call.** The same `/apply` call, the same `caller` and so the same
+  `call_id`, through `s.send` (`apply.go:1527`) on the same NAS session. The
+  backend gets one answer: no new row, no attempt spent. The resend is its
+  own `mutate` (`apply.go:1498`), so the mutation log holds a second
+  `user.update` intent and result under that `call_id`. Nothing new records
+  it.
+- **Bound.** One resend. No wait, no loop. Both extra calls run on the
+  request's own `ctx`, whose deadline `withBudget` set when the request
+  began (`server.go:126`; `requestWithin`, `nas.go:36`). No new context, no
+  timer. If the budget ends first, the resend or its read-back fails as any
+  call does. That is not a second mismatch, so nothing is held: the outcome
+  is `applied` and `Unverified`, as a failed read-back is today
+  (`apply.go:1167-1191`), and the next plan reads the account fresh.
+- **Never resent.** `user.create`: a second create is a second account or a
+  refusal, never the same state. A mismatch on its read-back
+  (`apply.go:1345`) holds `user.create` on the first observation. And
+  `user.delete`: `account.purge` sends it on its own session in its own
+  `mutate` (`operations.go:604-605`) and never enters `converge`. It writes
+  no closed field and has no read-back to compare.
+
+| The second read | Outcome | `detail`, then `consequence` |
+|---|---|---|
+| matches | `applied`, fingerprint from the second read. Nothing is held. | {what changed} {product} didn't make this change the first time. It took on the second try. Nothing for you to do. · {what the account holds} |
+| differs again | `blocked`. The function is held (§12.2). | {product} accepted this change twice and didn't make it: asked `locked: true`, read `locked: false`. · {what the account holds} Syndra has stopped using user.update so it can't repeat this. Check the account in {product}, then press Try again on the system's page. |
+| never came (the budget ended, or a call failed) | `applied`, `Unverified`. Nothing is held. | {what changed} {product} accepted this change and didn't show it. There wasn't time to send it again, so it isn't confirmed. Syndra's next check reads the account fresh. Nothing for you to do. |
+
+A row's `last_error` is the add-on's two sentences joined, as for every
+refusal (`addonWords`, `propagation/addon.go:497`): the second line above is
+the held row's, whole.
 
 ### 12.2 Effect
 
@@ -754,7 +824,8 @@ hold a secret or free text.
   attempt, and waiting removals are counted in the notice's first line (§9).
 - **The tripping row stays visible and is not sent again by itself.** Its
   subject answers `blocked` (`apply.go:194`), with the reason as its detail
-  and what the write did as its consequence. While the hold stands, a later
+  and, as its consequence, what the account now holds and the next step
+  (§12.1's table). While the hold stands, a later
   row for the same account waits like every other.
 - **Staff are told three ways,** from one emitter, on the monitor's first
   health answer that shows the hold: a Home attention item, the system
@@ -769,7 +840,7 @@ hold a secret or free text.
 (§12.4) is keyed by function and subject, so a second account's fault is a
 second record: it never overwrites the first, and the two never flip. Each
 record holds the TrueNAS version, the reason, the account, the row's
-`call_id`, when, and whether it is armed.
+`call_id`, when, and the trial while one is armed (§12.4).
 
 It must persist: it is evidence of something that happened, and a restart
 cannot derive it again without making the same bad write. It lives in the
@@ -790,87 +861,193 @@ again is, and after an add-on update it is one press.
 
 - **By itself**, on connect: a hold whose TrueNAS version is no longer the
   current one is deleted. A new version is new evidence either way.
-- **Try again**, by staff, on the held function. It is justified where
+- **Try again**, by staff, on one observed record. It is justified where
   Trust was not: a real failure was observed, and this asks TrueNAS the
   same question once more instead of asking a person to vouch.
-  1. The backend route (operator, audited as `addon.function_retried`)
-     calls one new registered operation, `function.retry {function}`, over
-     the signed call every operation uses. It is declared as
-     `account.release` is (`capabilities.go:194`): `Scope: "admin"`,
-     `Confirm: true`. It is local, nothing goes to TrueNAS, and it writes
-     the store through `s.mutate` (`operations.go:483`), so the add-on's own
-     log has the arming or it did not happen.
-  2. The add-on arms the hold. `sendWrite` then admits **exactly one**
-     write through that function, taken under `n.mu`; every other write
-     still answers the code.
-  3. The route sends the system's oldest waiting row, removals first,
-     through the add-on pass: `DrainAddon`'s lock and row handling
-     (`propagation/addon.go:49`), claiming that one row instead of a batch.
-     For that row alone the armed hold is not a hold on `apply`: the pass
-     skips `haltReason`'s `holds` case (§7), which otherwise halts before
-     any row is claimed (`addon.go:84`). Every other halt still applies, and
-     the scheduled pass stays halted until the hold clears. `DrainOne`
-     cannot do this: it claims Zitadel rows only (`drain.go:367`). With no
-     row waiting, the armed hold admits the next write that reaches the
-     add-on directly, an operation such as `password.set`.
-  4. That write's own exchange decides. It took: the hold is cleared
-     (`addon.function_cleared`). It misbehaved: the function is held again
-     with the new reason. It ended any other way (busy, unreachable, in
-     doubt): nothing was learned and the hold stays armed.
-- **A fault that is one account's own.** The tripping row is `blocked`, so
-  the trial is by construction another account's write. If it takes, the
-  function works and the fault was the first account's: the function's record
-  is replaced by one keyed by function and that account (§12.3). Its writes through the function still answer `blocked`
-  without being sent, others flow, and the notice names the account. It
-  clears the same two ways. Without this,
-  drift would queue that account again, re-hold the function, and staff
-  would press Try again for ever.
 
-Only an observed hold can be tried again. A schema change has no button:
+**Try again is one call.** It names one apply by its `call_id`, and the hold
+is cleared only by that apply's own closed-field read-back (§12.1). Nothing
+else can clear it. A member's `password.set` writes `user.update` and reads
+nothing back (`operations.go:343-386`), so "the next write through the
+function" would let a write nobody checked clear a hold. There is no
+fallback for "no row waiting": step 1 always has a row.
+
+1. **The backend picks the row.** One function in `services`, beside
+   `convergeOn`, under the drain lock `DrainAddon` takes
+   (`propagation/addon.go:49`).
+   - *A function's record:* the first waiting row the pass itself would
+     send (removals first, then intent order: `revocationFirst`,
+     `db/propagations.go:290`), for an account no record of this
+     function names.
+   - *A narrowed record, or a function's record with no such row:* the
+     record's own account. Its rows end terminal at the plan's `blocked`
+     (`propagation/addon.go:606-621`) and the sweep queues nothing for a
+     `blocked` plan (`drift/addon.go:576`), so there is none to find. The backend queues one with
+     `convergeOn` (`services/lifecycle_trigger.go:148`), the call a role
+     change already makes: it resolves the person's set now, so the trial
+     sends what they should hold today, and once it is applied an older
+     waiting row of theirs is overtaken at the claim (`terminateSuperseded`,
+     `db/propagations.go:250`). `convergeOn` returns the row's id, which it
+     drops today. No second way to make a row.
+
+   **Why the backend picks, not the operator.** A picker asks staff which
+   waiting change writes a closed field through this function, which they
+   cannot know, and adds a second control beside one button. The rule is
+   the pass's own order, so there is no second ordering: a removal goes
+   first because its wait costs most (someone holds access they should not),
+   and it is the one row the backend knows writes a closed field and nothing
+   else (`locked`, the lifecycle switch alone: `sendsOnItsOwn`,
+   `db/propagations.go:311`). And it answers the case a picker cannot:
+   nothing waiting.
+2. **It arms the record** with `function.retry {function, call_id}`: the
+   row's id, which is the `call_id` its apply will carry
+   (`propagation/addon.go:204`), with the row's subject as the operation's
+   subject. Declared as `account.release` is, in the three places that
+   declare one: the add-on's manifest (`capabilities.go:194`:
+   `Scope: "admin"`, `Confirm: true`), the backend's policy
+   (`addons/policy.go:163`; `function` and `call_id` required strings) and
+   `registry/operations.json`. Signed like every operation, refused without
+   the confirmation, audited as `addon.function_retried` (system, function,
+   TrueNAS version, the row, who). It is local: `methodsFor` names no
+   method for it, so nothing about the NAS withdraws it
+   (`server.go:165-171`). It writes the record through `s.mutate`, as the
+   release does (`operations.go:483`), so the add-on's own log has the
+   arming or it did not happen. It answers the record keyed by the function
+   and that subject, else the function's; with neither (a schema change, or
+   no hold) it refuses and arms nothing.
+3. **It sends that one row** through the add-on pass: `DrainAddon`'s lock,
+   then `claimOne(ctx, target, id)` (`db.ClaimPropagationByID` already
+   takes the target, `db/propagations.go:449`; `DrainOne` passes Zitadel's,
+   `drain.go:364`), then `dispatchEntitlement` (`propagation/addon.go:109`).
+   No batch. The one-row pass applies every halt but 9g's `holds`. The
+   scheduled pass stays halted on `holds` until the function's record is
+   gone.
+4. **The add-on decides**, in `confirm`, for the armed call alone.
+
+**The arm** is one field on the record: `trial {call_id, subject}`. A new
+Try again overwrites it. While it is set:
+
+- **Admission** is in `server.send` (`apply.go:1527`), the one function
+  every NAS write passes with its caller: a write through a held function
+  goes out only when `caller.callID` is the trial's. `NAS.sendWrite` cannot
+  ask this, having no call. The check runs inside the `mutate`, before
+  `sendWrite`, so a write it stops is in the log as `not_sent`. Every other
+  call still answers as §12.2 says.
+- **The trial's subject plans and applies as any account does.** Without
+  this the pass's re-read before the send (`fingerprintFor`,
+  `propagation/addon.go:573`) meets `blocked` and ends the row before it is
+  sent.
+- **It is spent** in `applyNow` (`apply.go:637`), the one place, two ways.
+  By the trial's own apply, once it answers anything but "nothing was
+  sent": `ErrNotSent` and `errTornRead` keep it (`apply.go:656-665`),
+  because the backend leaves that row queued and it is still the trial. And
+  by any apply for the trial's subject under another `call_id`, before that
+  apply runs, so it is answered as at rest and never reaches `send`. That
+  second way is what bounds a trial row that never arrives (overtaken at the
+  claim): the subject is `blocked` again after one row, instead of planning
+  as `apply` for the sweep to queue again and again. Applies run one at a
+  time per subject (`once`, `calls.go:162`), so the two cannot interleave.
+
+| The trial's apply | The record |
+|---|---|
+| its closed fields read back as asked (first or second try), and its account is the record's own | deleted (`addon.function_cleared`) |
+| the same, another account (a function's record only) | narrowed: replaced by one keyed by the function and the record's account (§12.3) |
+| they differ twice | kept, rewritten from this call: its reason, account and row |
+| it wrote no closed field through the function (nothing to change, or other functions only) | kept; arm spent; nothing was tested |
+| nothing was sent (busy, unreachable, `TARGET_CHANGED`) | kept; arm kept |
+| any other ending (refused, stale plan, in doubt) | kept; arm spent |
+
+- **A fault that is one account's own.** A narrowed record means the
+  function works and not for that account. Its writes through the function
+  answer `blocked` without being sent, others flow, the pass is not halted
+  (its `functions` entry stays `unchanged`, `holds` empty), and the notice
+  names the account. It clears the same two ways, and its trial is that
+  account's own row (step 1). Without narrowing, drift would queue that
+  account again, re-hold the function, and staff would press Try again for
+  ever.
+
+Only an observed record can be tried again. A schema change has no button:
 the add-on does not know the new shape, and one more try would be sending
 it blind.
 
 ### 12.5 Contract and copy
 
-`version_check.functions[]` gains optional `observed` (boolean) and, when
-narrowed, `subject`. `registry/operations.json` gains `function.retry`.
-Three audit events. No new error code, reason or read state.
+`version_check.functions[]` gains optional `observed`: one
+`{subject, detail, narrowed}` per stored record. It is a list because two
+accounts can each hold a narrowed record on one function (§12.3). The
+function's `verdict` is `changed` only while a record that is not narrowed
+stands. `registry/operations.json` gains `function.retry`. Three audit
+events. No new error code, reason or read state.
 
 | Reader, where | Says |
 |---|---|
 | Operator, Home | {product} didn't do what Syndra asked on {system}. {k} people who left still have access. |
 | Operator, system page | {product} accepted a change and didn't make it: {reason}. Syndra has stopped using {function} so it can't repeat this. Other changes that need it wait. **Try again** sends one change to see if it works now. |
 | the same, narrowed | {function} works, but not for {account}: {reason}. Check that account in {product}, then **Try again**. |
+| Operator, the confirmation | Send one change to see if {function} works now? Syndra sends one waiting change and nothing else. · narrowed: Syndra sends {account}'s change and nothing else. |
 | Operator, after Try again, it took | {function} works again. Syndra is sending what waited. Nothing for you to do. |
+| the same, narrowed by it | as "the same, narrowed" above. |
 | Operator, after Try again, it didn't | Still the same: {reason}. Nothing else was sent. Check {product}, or update the add-on. |
+| Operator, after Try again, nothing was tested | That change didn't need {function}, so nothing was tested. Press **Try again** to send the next one. |
+| the same, narrowed, nothing to change | {account} is already as Syndra wants it, so nothing was sent or tested. Press **Try again** when Syndra next has a change for it. |
+| Operator, after Try again, nothing was sent | copy guide §19's sentence for why, then: Nothing was tested. Press **Try again** when {system} answers. |
+| Operator, a change that took on the second try, and the held row | §12.1's table. |
 | Member | as §9's "a write held". |
 
 ### 12.6 Slice 9j
 
-One PR, after 9i. Add-on: the one detector, the store bucket, `observed`
-into `Check`, `function.retry`. Backend: the route, the one-row add-on pass, the three
-events, the Home item. UI: the reason, the button, the narrowed line; board
-first.
+One PR, after 9i, in the order of `tasks.md` 9j. Add-on: `closed` and
+`confirm`, the store bucket, `observed` into `Check`, `function.retry`, the
+admission in `send`. Backend: the policy entry, the pick, `convergeOn`'s
+id, the one-row add-on pass, the three events, the Home item. UI: the
+reason, the button with its confirmation, the narrowed line; board first.
 
-*Tests,* against the fake NAS: a write that succeeds and reads back
-`locked: false` holds `user.update`, answers that subject `blocked`, and a
-later pass sends nothing for it; a second row needing the function waits
-with its attempt count unchanged; a read-back with `home` normalised or
-`groups` in another order holds nothing; a refusal of any kind, busy,
-unreachable, a timeout and an `Unverified` read-back hold nothing; the hold survives a
-restart; it is gone after a connect on another TrueNAS version; **Try again sends
-its one row while the pass is halted on `holds`, and sends no second row**;
-Try again admits one write and a second concurrent write is refused; the trial misbehaving holds again; the trial
-taking for another account narrows the hold, and that account's next write
-is not sent; a second account narrowed after it leaves the first record as
-it was; a busy trial leaves the hold armed; Try again on a
-schema-changed function is refused; the event and the Home item are written
-once per hold, not once per probe. *Mutation:* compare every written field,
-and the `home` case goes red.
+*Tests,* against the fake NAS. Each fails without its step.
 
-**If the owner says no,** 9j is not built, and §12 goes with its
-`observed` argument. Nothing in 9a to 9i changes: the read-back
-keeps reporting, as today.
+- *The second try.* A write whose first read-back shows `locked: false`
+  and whose second shows `true` answers `applied` with the second-try
+  sentence, holds nothing, and leaves two `user.update` records under one
+  `call_id`. Two mismatches hold `user.update`, answer that subject
+  `blocked`, and a later pass sends nothing for it. The resend's params are
+  the closed fields only: an update that also carried `groups` and a new
+  home resends neither. A purge whose `user.delete` fails sends exactly one
+  `user.delete`. A `user.create` mismatch holds at once with one
+  `user.create` sent. With the budget spent before the resend, the outcome
+  is `applied` and `Unverified`, nothing is held and no call outlives the
+  deadline.
+- *What counts.* A read-back with `home` normalised or `groups` in another
+  order holds nothing and resends nothing. A refusal of any kind, busy,
+  unreachable, a timeout and an `Unverified` read-back hold nothing.
+- *The hold.* A second row needing the function waits with its attempt
+  count unchanged. The hold survives a restart. It is gone after a connect
+  on another TrueNAS version. The event and the Home item are written once
+  per hold, not once per probe.
+- *The call binding.* With `user.update` held and row A armed, a
+  `password.set` and another account's apply send nothing, and the hold
+  and the arm stand. Row A then clears it. `function.retry` for a
+  schema-changed function, or with no hold, is refused and arms nothing;
+  without the confirmation it is refused by the backend.
+- *The pick.* With a removal and an older ordinary row waiting, the removal
+  is the trial. **Try again sends its one row while the pass is halted on
+  `holds`, and sends no second row.**
+- *The endings.* The trial mismatching twice holds again with the new
+  reason. The trial taking for another account narrows the hold, and that
+  account's next write is not sent. A second account narrowed after it
+  leaves the first record as it was. A busy trial keeps the arm, and the
+  same row sent again is the trial. A trial that changes nothing spends the
+  arm and leaves the record.
+- *The narrowed trial.* With a narrowed record and no row for that account,
+  Try again queues one through `convergeOn`, arms its id, and the row is
+  sent, not ended at the plan's `blocked`; its read-back matching deletes
+  the record. With the function's record and nothing else waiting, the
+  trial is the record's own account's row and its match deletes the record.
+  An armed subject whose trial row never arrives is `blocked` again after
+  the first other apply for it, and the sweep queues nothing more.
+
+*Mutation:* compare every written field, and the `home` case goes red;
+resend the whole update, and the home case goes red; admit by function
+instead of by `call_id`, and the `password.set` case goes red; let the plan
+stay `blocked` for an armed subject, and the narrowed trial goes red.
 
 **Not in scope: telling staff outside the app.** There is no email or push
 today, only the dead-man URL. A possible later slice: a notification URL
@@ -878,20 +1055,21 @@ the backend calls when a function is held.
 
 ## 13. Still the owner's
 
-1. **Yes or no to §12** (slice 9j).
-2. **9a:** paste the elevated key once (§3.1), and say when.
-3. Inside §12, if yes:
-   - A hold trips on **one** observation, as he wrote it; §12.4's narrowing
-     is what keeps one odd account from holding everybody after the first
-     Try again.
-   - **He named two signals and one is left.** The refused write is dropped
-     (§12.1): a refusal cannot be told from a cross-field rule or a staff
-     edit, and it does not loop today.
-   - **A hold is for the TrueNAS version only** (§12.3). After an add-on
-     update that fixes the fault, staff press Try again once; the hold does
-     not clear by itself. The other way is a build version stamped into the
-     image, which clears every hold on every deploy.
-   - One candidate left out: a reply that fails its strict decode with the
-     schema unchanged (§5) is also a function misbehaving, and holding it
-     would put its waiting removals in the count.
-4. **9i**, the staging run.
+1. **9a:** paste the elevated key once (§3.1), and say when.
+2. **9i**, the staging run.
+3. Inside §12, three points this round settled by the code, for him to
+   overrule:
+   - **The second try resends the closed fields, not the whole write.** His
+     ruling says "the same write". The whole update is not idempotent when
+     it carries a new home (`home.go:123-133`), so the resend is the closed
+     fields of that write with the same values (§12.1).
+   - **A `user.create` mismatch holds on the first observation.** A create
+     cannot be sent twice (§12.1).
+   - **A narrowed hold stays when its trial finds nothing to change.** If
+     staff set the field by hand in TrueNAS, the trial sends nothing, and
+     only a closed-field read-back clears a hold (his ruling). It then
+     clears the next time Syndra has a change for that account. The other
+     way: treat "already as asked" as cleared.
+4. One candidate left out: a reply that fails its strict decode with the
+   schema unchanged (§5) is also a function misbehaving, and holding it
+   would put its waiting removals in the count.
