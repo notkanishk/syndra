@@ -275,8 +275,10 @@ deployed, the staging stack is not touched, and the staging add-on stays
 - **Defaults**, for every write: the `default` of every argument and
   argument property Syndra does not send, its `required` list, and an unsent
   argument's `_required_: true` (TrueNAS marks a required argument only
-  there). TrueNAS fills unsent values in, so a changed default changes what
-  the write does: `group.delete`'s `delete_users`, `user.delete`'s
+  there). Where a schema declares a default, an unsent value takes it, so a
+  changed default changes what the write does. An update declares none
+  (fields left out keep their value, RFC 7396 §2), so a default appearing
+  there means updates begin resetting what Syndra omits. Examples: `group.delete`'s `delete_users`, `user.delete`'s
   `delete_group`, `user.create`'s unsent fields. The subschema kept at a sent
   pointer drops its `default`: what Syndra sends is never defaulted.
 - **`job`**: whether the call answers a job.

@@ -132,6 +132,9 @@ func TestEditsNothingReliesOnAreUnchanged(t *testing.T) {
 		{"a sent field's default", "user.create", func(e map[string]any) {
 			property(e, "accepts", "shell", func(p map[string]any) { p["default"] = "/usr/bin/bash" })
 		}},
+		{"what an unsent argument accepts", "group.delete", func(e map[string]any) {
+			e["accepts"].([]any)[1].(map[string]any)["additionalProperties"] = true
+		}},
 		{"a docstring on a sent field", "user.update", func(e map[string]any) {
 			property(e, "accepts", "locked", func(p map[string]any) { p["description"] = "Lock the account." })
 		}},

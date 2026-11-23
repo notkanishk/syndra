@@ -324,8 +324,10 @@ func sends(p map[string]any, raw, accepts []any, dep Dep) {
 
 // unsent walks the arguments below the pointers Syndra sends. At each object
 // it keeps the required list, and where Syndra sends into it the
-// additionalProperties; at each node Syndra sends nothing to, the default,
-// since TrueNAS fills that in on every write.
+// additionalProperties; at each node Syndra sends nothing to, the default.
+// Where a schema declares a default, an unsent value takes it. An update
+// declares none (fields left out keep their value, RFC 7396 §2), so a default
+// appearing there means updates begin resetting what Syndra omits.
 func unsent(p map[string]any, nodes []any, ptr string, sent []string) {
 	if slices.Contains(sent, ptr) {
 		return
