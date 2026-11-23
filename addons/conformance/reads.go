@@ -242,8 +242,8 @@ func (k *kit) health(c *check) map[string]any {
 	}
 	// The manifest's availability and health's holds come from one source
 	// (design-version-check §7): a write offered is never one held.
-	check, _ := doc["version_check"].(map[string]any)
-	functions, _ := check["functions"].([]any)
+	versionCheck, _ := doc["version_check"].(map[string]any)
+	functions, _ := versionCheck["functions"].([]any)
 	for _, f := range functions {
 		fn, _ := f.(map[string]any)
 		holds, _ := fn["holds"].([]any)

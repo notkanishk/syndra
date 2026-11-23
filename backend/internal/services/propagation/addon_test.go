@@ -1214,6 +1214,30 @@ func TestBusyCopySaysWhoSendsItNext(t *testing.T) {
 	}
 }
 
+// Who sends a held row once the add-on is updated is said only when it is
+// true, by the same ending as busy (sendsAgain): Syndra by itself when the
+// background drain runs and claims the row, otherwise the operator's Send.
+func TestHeldCopySaysWhoSendsItNext(t *testing.T) {
+	held := addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Status: 503, Code: addons.CodeTargetVersionUnsupported}
+	const lede = "TrueNAS changed something this needs; nothing was sent. Update the add-on. "
+	if got, want := unreachedWhy("TrueNAS", addonRow("o1"), held), lede+"Syndra sends it again by itself."; got != want {
+		t.Fatalf("drain on: %q, want %q", got, want)
+	}
+	const yours = lede + "Then press Send on Pending changes."
+	for _, reason := range []string{db.WaitReasonRoleWaits, db.WaitReasonManual} {
+		row := addonRow("o1")
+		row.WaitReason = reason
+		if got := unreachedWhy("TrueNAS", row, held); got != yours {
+			t.Fatalf("%s row: %q, want %q", reason, got, yours)
+		}
+	}
+	SetDrainEvery(0)
+	t.Cleanup(func() { SetDrainEvery(time.Minute) })
+	if got := unreachedWhy("TrueNAS", addonRow("o1"), held); got != yours {
+		t.Fatalf("drain off: %q, want %q", got, yours)
+	}
+}
+
 // A revocation the add-on held for its app's version (503
 // TARGET_VERSION_UNSUPPORTED) sent nothing: the row is pending again with
 // no attempt spent, due after the add-on's Retry-After, across as many
@@ -1242,7 +1266,7 @@ func TestAHeldRevocationSpendsNoAttemptAndWaits(t *testing.T) {
 		t.Fatalf("a held revocation: attempts %d, requeued %v, failed %v, deferred %v; want pending again, nothing spent, due in 30 s",
 			h.attempts, h.requeued, h.failed, h.deferredFor)
 	}
-	if want := "TrueNAS changed something this needs; nothing was sent. Update the add-on, and Syndra sends it by itself."; why != want {
+	if want := "TrueNAS changed something this needs; nothing was sent. Update the add-on. Syndra sends it again by itself."; why != want {
 		t.Fatalf("last_error %q, want %q", why, want)
 	}
 }

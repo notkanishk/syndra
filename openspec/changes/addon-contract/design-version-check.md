@@ -551,7 +551,7 @@ the system's name, `{n}`/`{m}`/`{k}` counts.
 | Operator, the list, per function | Checked fine · Changed: {detail} · Missing |
 | Operator, a read marked `unchecked` | {product} changed how it answers this. Syndra shows it but doesn't act on it or count it. Update the add-on. |
 | Operator, a read that failed its decode | {product} answers {function} differently from what {system}'s add-on expects. Nothing was read. Update the add-on. |
-| Operator, a write held | Nothing went out. {product} {version} changed something this needs. Update the add-on; Syndra sends this by itself after that. |
+| Operator, a write held (the row's `last_error`) | {system} changed something this needs; nothing was sent. Update the add-on. Syndra sends it again by itself. With the background drain off, or a row that waits for you (`role_waits`, `manual`), the last sentence is: Then press Send on Pending changes. (One ending with busy's, `sendsAgain`.) |
 | Member, a read marked `unchecked` | {system} was updated, so this may be incomplete. Makerspace staff know. Nothing for you to do. |
 | Member, a write held | Nothing went out. {system} was updated and makerspace staff need to update Syndra first. Ask makerspace staff. |
 | Usage, not counted | Not counted since {date}: {product} changed how it reports this. Update the add-on. |
@@ -592,11 +592,11 @@ and 9e: the strict decode's `details.verdict` needs the report.
   removed is `changed`.** `user.delete` checked with `elevatedDeps` is
   `unchanged`, and is absent from a report built from `deps`.
 - **9c Contract.** Schemas, registry, fixtures, kit and guide of §7, and
-  its five backend places and two add-on places, with
+  its four backend places and two add-on places, with
   the least code that keeps both sides valid: the add-on emits
   `version_check` (from the old gate, until 9d) and `healthWire` reads it.
-  *Tests:* the schema tests reject a health reply with `version_tested` and
-  one without `version_check`; a 503 `TARGET_VERSION_UNSUPPORTED` is
+  *Tests:* the schema tests reject a health reply without `version_check`
+  (one still on `version_tested` has none); a 503 `TARGET_VERSION_UNSUPPORTED` is
   `unreached`, not `indeterminate`, and not a shape refusal (the manifest is
   not read again); five such answers leave the breaker closed; `Unread`
   answers `addon_outdated` with the functions, never `read_refused` or
@@ -608,7 +608,10 @@ and 9e: the strict decode's `details.verdict` needs the report.
   its own bound, with the one retry branch and its backoff; the report
   `unread` at reconnect; busy while unread; `unavailable` and `sendWrite`
   read the report; the purge's check on its elevated session; `/health`
-  serves the real `version_check`; the old gate and
+  serves the real `version_check`; `details` required for this code in
+  `error.json` (9c left it optional; `AUTHORING.md` already says MUST);
+  `Retry-After` on this code set to the check's next try, replacing
+  `writeError`'s 30 s default; the old gate and
   `TRUENAS_SUPPORTED_MAJORS` deleted. *Tests,* against a fake NAS serving an
   edited capture: a changed `user.update` holds `password.set` and apply and
   leaves reads declared; everything unchanged on an unknown version sends an

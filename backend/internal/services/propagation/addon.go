@@ -443,7 +443,8 @@ func unreachedWhy(system string, row models.PendingPropagation, resp addons.Appl
 	}
 	if resp.Code == addons.CodeTargetVersionUnsupported {
 		// The add-on is behind its app: held, nothing sent, until it is updated.
-		return system + " changed something this needs; nothing was sent. Update the add-on, and Syndra sends it by itself."
+		return system + " changed something this needs; nothing was sent. Update the add-on. " +
+			sendsAgain(row, "Then press Send on Pending changes.")
 	}
 	if resp.Code == addons.CodeTargetChanged {
 		// The add-on read the target and it changed underneath: reached, and still nothing sent.

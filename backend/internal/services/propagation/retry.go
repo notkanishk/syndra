@@ -43,13 +43,20 @@ func waitsForYou(row models.PendingPropagation) bool {
 	return row.WaitReason == db.WaitReasonRoleWaits || row.WaitReason == db.WaitReasonManual
 }
 
-// busyNext is who sends a busy row again (the system answered busy; nothing went out), the one sentence
-// for it: Syndra by itself only when the background drain runs and claims it.
-func busyNext(system string, row models.PendingPropagation) string {
+// sendsAgain is who sends a row again that nothing went out for (busy, or held
+// for the app's version), the one decision for it: Syndra by itself only when
+// the background drain runs and claims the row, otherwise yours, the
+// operator's Send on Pending changes.
+func sendsAgain(row models.PendingPropagation, yours string) string {
 	if AutoRetry() && !waitsForYou(row) {
 		return "Syndra sends it again by itself."
 	}
-	return "Once " + system + " is free, press Send on Pending changes to try again."
+	return yours
+}
+
+// busyNext is who sends a busy row again (the system answered busy; nothing went out).
+func busyNext(system string, row models.PendingPropagation) string {
+	return sendsAgain(row, "Once "+system+" is free, press Send on Pending changes to try again.")
 }
 
 // RowRetry is where an unresolved row stands, or nil when there is nothing to

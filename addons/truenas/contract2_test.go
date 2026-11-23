@@ -415,7 +415,6 @@ func TestV2SchemasRefuseWhatTheyShould(t *testing.T) {
 		{"activity without truncated", "common/activity.json", "activity.json", v2Edit("truncated", nil)},
 		{"activity event with the share word", "common/activity.json", "activity.json", v2Edit("share", "makers", "events", 0)},
 		{"health with a negative target_reads", "health.json", "health.json", v2Edit("target_reads", -1)},
-		{"health still carrying version_tested", "health.json", "health.json", v2Also(v2Edit("version_check", nil), v2Edit("version_tested", true))},
 		{"health without version_check", "health.json", "health.json", v2Edit("version_check", nil)},
 		{"version_check with a state outside the set", "health.json", "health.json", v2Edit("state", "tested", "version_check")},
 		{"version_check function with a verdict outside the set", "health.json", "health.json", v2Edit("verdict", "trusted", "version_check", "functions", 0)},
