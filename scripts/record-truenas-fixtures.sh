@@ -30,7 +30,7 @@ usage: scripts/record-truenas-fixtures.sh [--write | --methods]
   Reads TRUENAS_URL, TRUENAS_API_KEY and TRUENAS_VERIFY_TLS from the env file
   ($RECORD_ENV_FILE, else ./.env), else the environment, and records what that
   target answers into addons/contract/truenas_observed.json. The file is read,
-  never run: only those three lines, NAME=value. A key given only as
+  never run: only those three lines, NAME=value. A key given as
   ADDON_API_KEY_FILE stops the run, and the file is not read.
 
   TRUENAS_VERIFY_TLS is honoured exactly as the add-on honours it, and defaults
@@ -70,17 +70,34 @@ if [ "$METHODS" = yes ] && [ "$WRITE" = yes ]; then
 fi
 
 # The env file is compose's, holding every staging secret: read the three lines
-# this needs as data, never source it. The file's value wins, as it did when it
-# was sourced; one pair of surrounding quotes is dropped, as compose drops them.
+# this needs as data, never source it. The file's value wins, and its last line
+# for a name wins. As compose reads it: a trailing CR and a leading `export ` are
+# dropped; a quoted value is what lies inside its quotes, `#` included; an
+# unquoted value ends at ` #`.
 ENV_FILE="${RECORD_ENV_FILE:-.env}"
 env_value() {
   [ -f "$ENV_FILE" ] || return 1
-  grep "^$1=" "$ENV_FILE" | tail -n 1 | cut -d= -f2- | sed -E 's/^"(.*)"$/\1/; s/^'"'"'(.*)'"'"'$/\1/'
+  local line value found=no
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    line="${line#export }"
+    case "$line" in "$1="*) ;; *) continue ;; esac
+    value="${line#*=}"
+    case "$value" in
+      \"*\"*) value="${value#\"}"; value="${value%%\"*}" ;;
+      \'*\'*) value="${value#\'}"; value="${value%%\'*}" ;;
+      *) value="${value%% #*}" ;;
+    esac
+    found=yes
+  done < "$ENV_FILE"
+  [ "$found" = yes ] && printf '%s' "$value"
 }
 for name in TRUENAS_URL TRUENAS_API_KEY TRUENAS_VERIFY_TLS ADDON_API_KEY_FILE; do
   if value="$(env_value "$name")"; then printf -v "$name" '%s' "$value"; fi
 done
-if [ -z "${TRUENAS_API_KEY:-}" ] && [ -n "${ADDON_API_KEY_FILE:-}" ]; then
+# The add-on reads ADDON_API_KEY_FILE before TRUENAS_API_KEY (main.go,
+# secretValue), so when it is set an inline key is not the add-on's key.
+if [ -n "${ADDON_API_KEY_FILE:-}" ]; then
   echo "error: the add-on's key is given as ADDON_API_KEY_FILE, which this does not read." >&2
   echo "       Stop and report; nothing was read or written." >&2
   exit 1

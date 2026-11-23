@@ -7,7 +7,7 @@ of the files the runbook copies, with a fake `docker` on PATH that runs the
 mounted helper directly against a fake `websockets` serving a core.get_methods
 reply built from the shipped capture, enriched with what the NAS adds.
 """
-import asyncio, copy, hashlib, importlib.util, json, os, pathlib, pty, shutil, subprocess, sys, tempfile, termios, textwrap, time, unittest
+import asyncio, copy, hashlib, importlib.util, json, os, pathlib, pty, select, shutil, subprocess, sys, tempfile, termios, textwrap, time, unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CAPTURE = ROOT / "addons/truenas/compat/baseline/TrueNAS-25.10.7.methods.json"
@@ -92,6 +92,23 @@ class Projection(unittest.TestCase):
         self.addCleanup(setattr, methods, "TIMEOUT", old)
         with self.assertRaises(asyncio.TimeoutError):
             asyncio.run(methods.session(Hang, KEY, []))
+
+    def test_frames_for_other_calls_do_not_extend_the_wait(self):
+        """One deadline per call: a stream of frames with another id never
+        resets it."""
+        class Chatter:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+            async def send(self, raw): pass
+            async def recv(self):
+                await asyncio.sleep(0.01)
+                return json.dumps({"jsonrpc": "2.0", "id": 999, "result": None})
+        old, methods.TIMEOUT = methods.TIMEOUT, 0.1
+        self.addCleanup(setattr, methods, "TIMEOUT", old)
+        start = time.monotonic()
+        with self.assertRaises(asyncio.TimeoutError):
+            asyncio.run(asyncio.wait_for(methods.session(Chatter, KEY, []), 3))
+        self.assertLess(time.monotonic() - start, 1, "the wait was reset by frames for other calls")
 
     def test_services(self):
         self.assertEqual(methods.services(["pool.dataset.query", "pool.query", "user.create", "user.query"]),
@@ -217,15 +234,39 @@ class EndToEnd(unittest.TestCase):
                              stderr=subprocess.PIPE, text=True)
         # Typed once the prompt has turned echo off: bash's `read -s` flushes
         # anything typed before it.
+        deadline = time.monotonic() + 10
         while termios.tcgetattr(slave)[3] & termios.ECHO and p.poll() is None:
+            if time.monotonic() > deadline:
+                p.kill()
+                p.communicate()
+                os.close(slave), os.close(master)
+                self.fail("the prompt never turned echo off")
             time.sleep(0.01)
         os.close(slave)
         try:
             os.write(master, (typed + "\n").encode())
         except OSError:  # it refused before it asked, and the terminal is gone
             pass
-        out, err = p.communicate(timeout=60)
+        try:
+            out, err = p.communicate(timeout=60)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            p.communicate()
+            os.close(master)
+            self.fail("the recorder hung")
+        # What the terminal showed: the paste is never echoed to it.
+        shown = b""
+        while select.select([master], [], [], 0)[0]:
+            try:
+                chunk = os.read(master, 4096)
+            except OSError:  # the terminal is gone
+                break
+            if not chunk:
+                break
+            shown += chunk
         os.close(master)
+        if typed:
+            self.assertNotIn(typed.encode(), shown, "the pasted key was echoed to the terminal")
         return subprocess.CompletedProcess(cmd, p.returncode, out, err)
 
     def assert_nothing_happened(self, r, before):
@@ -334,6 +375,52 @@ class EndToEnd(unittest.TestCase):
         self.assert_nothing_happened(r, before)
         self.assertIn("ADDON_API_KEY_FILE", r.stderr)
         self.assertNotIn(str(secret), r.stderr)
+
+    def test_a_key_file_stops_even_beside_an_inline_key(self):
+        # The add-on reads ADDON_API_KEY_FILE first (main.go secretValue), so
+        # the inline key is not the key it uses.
+        secret = self.tmp / "api.key"
+        secret.write_text(KEY)
+        secret.chmod(0)
+        self.env_file.write_text(f"TRUENAS_URL={URL}\nTRUENAS_API_KEY={KEY}\nADDON_API_KEY_FILE={secret}\n")
+        before = tree(self.work)
+        r = self.run_recorder("--methods", typed=ELEVATED)
+        self.assert_nothing_happened(r, before)
+        self.assertIn("ADDON_API_KEY_FILE", r.stderr)
+
+    def test_a_key_in_the_callers_environment_stays_out_of_docker(self):
+        self.env["TRUENAS_API_KEY"] = KEY
+        r = self.run_recorder("--methods", typed=ELEVATED)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn(KEY, self.docker_log.read_text(), "the key reached docker's argv or environment")
+
+    def parsed(self, text):
+        """Runs a capture with `text` as the env file; returns the URL the
+        container saw. It succeeds only if the key was read exactly."""
+        self.env_file.write_bytes(text.encode())
+        r = self.run_recorder("--methods", typed=ELEVATED)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return json.loads(self.docker_log.read_text())["env"]["TRUENAS_URL"]
+
+    def test_env_file_crlf(self):
+        self.assertEqual(self.parsed(f"TRUENAS_URL={URL}\r\nTRUENAS_API_KEY={KEY}\r\n"), URL)
+
+    def test_env_file_export(self):
+        self.assertEqual(self.parsed(f"export TRUENAS_URL={URL}\nexport TRUENAS_API_KEY={KEY}\n"), URL)
+
+    def test_env_file_unquoted_comment_is_dropped(self):
+        self.assertEqual(self.parsed(f"TRUENAS_URL={URL} # the NAS\nTRUENAS_API_KEY={KEY} # the add-on's\n"), URL)
+
+    def test_env_file_hash_inside_quotes_is_kept(self):
+        self.assertEqual(self.parsed(f"TRUENAS_URL='{URL}#a # b' # note\nTRUENAS_API_KEY=\"{KEY}\"\n"),
+                         URL + "#a # b")
+
+    def test_env_file_value_containing_equals(self):
+        self.assertEqual(self.parsed(f"TRUENAS_URL={URL}?a=b\nTRUENAS_API_KEY={KEY}\n"), URL + "?a=b")
+
+    def test_env_file_last_duplicate_wins(self):
+        self.assertEqual(self.parsed(f"TRUENAS_URL=wss://x.invalid/\nTRUENAS_API_KEY=wrong\n"
+                                     f"TRUENAS_URL={URL}\nTRUENAS_API_KEY={KEY}\n"), URL)
 
 
 if __name__ == "__main__":

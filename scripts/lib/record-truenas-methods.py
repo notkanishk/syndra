@@ -15,7 +15,7 @@ other: auth.login_with_api_key, system.version, core.get_methods.
     required; it opens one more session for one call, `core.get_methods` with
     `service: "user"`, and only `elevatedDeps` is taken from it (design §3.1).
     Neither is stored.
-  - Waits TIMEOUT seconds for any reply, then fails.
+  - Waits TIMEOUT seconds for each call's reply, in all, then fails.
   - Prints no address, no key and no exception text, which can carry either.
 """
 import asyncio, json, os, re, ssl, sys, time
@@ -24,7 +24,7 @@ ENTRY = ("accepts", "returns", "job")
 PROSE = {"description", "examples", "$comment"}
 NAMES = {"properties", "$defs", "patternProperties"}  # keys are names, not keywords
 VALUES = {"default", "enum", "const", "discriminator"}  # values, never walked as schemas
-TIMEOUT = 120  # seconds for one reply; the unfiltered core.get_methods is the slow one
+TIMEOUT = 120  # seconds for one call's reply, in all; the unfiltered core.get_methods is the slow one
 
 
 def wanted(deps_go):
@@ -90,11 +90,12 @@ async def session(connect, key, calls):
             n += 1
             start = time.monotonic()
             await ws.send(json.dumps({"jsonrpc": "2.0", "id": n, "method": method, "params": params}))
-            while True:
-                raw = await asyncio.wait_for(ws.recv(), TIMEOUT)
-                msg = json.loads(raw)
-                if msg.get("id") == n:
-                    break
+            async with asyncio.timeout(TIMEOUT):  # one deadline for the call, however many frames
+                while True:
+                    raw = await ws.recv()
+                    msg = json.loads(raw)
+                    if msg.get("id") == n:
+                        break
             if "error" in msg:
                 raise SystemExit(f"error: {method} refused (code {msg['error'].get('code')})")
             if method == "core.get_methods":
