@@ -191,8 +191,9 @@ func TestAnUnreadMethodListDoesNotWithdrawTheSurface(t *testing.T) {
 }
 
 // The two reasons read differently to an operator — "we will not" and "it
-// cannot" — and the version check comes first, because on an untested major
-// nothing is offered whatever the method list says.
+// cannot" — and the version check comes first for a write, because on an
+// untested major no write is offered whatever the method list says. A read is
+// never withdrawn for the version, but its absent method still withdraws it.
 func TestAnUntestedMajorOutranksTheMethodProbe(t *testing.T) {
 	s, _ := applyServer(t, `[]`)
 	s.nas.version = "27.10.0"
@@ -206,11 +207,40 @@ func TestAnUntestedMajorOutranksTheMethodProbe(t *testing.T) {
 			}
 			continue
 		}
+		if readOperation(op.ID) {
+			if op.Available || !strings.Contains(op.UnavailableReason, "does not expose") {
+				t.Errorf("%s: a read whose method is absent is withdrawn for the method, got available %v %q", op.ID, op.Available, op.UnavailableReason)
+			}
+			continue
+		}
 		if op.Available {
 			t.Errorf("%s must be unavailable on an untested major", op.ID)
 		}
 		if !strings.Contains(op.UnavailableReason, "27.10") {
 			t.Errorf("%s: the version reason must win, got %q", op.ID, op.UnavailableReason)
 		}
+	}
+}
+
+// An add-on that started while its NAS was down has read no version: its
+// reads stay declared (design §13.1, the withdrawn row), and health.get,
+// sent, answers the outage the contract way: 503 TARGET_UNREACHABLE.
+func TestAnUnreadVersionWithdrawsNoRead(t *testing.T) {
+	s, _ := applyServer(t, `[]`)
+	s.nas = newNAS(func() (rpc, error) { return nil, errors.New("dial tcp: i/o timeout") }, []string{"25.04"})
+
+	for _, op := range operationSet(s) {
+		if readOperation(op.ID) && !op.Available {
+			t.Errorf("%s withdrawn before the version was read: %q", op.ID, op.UnavailableReason)
+		}
+		if op.ID == "password.set" && op.Available {
+			t.Error("a write must wait for the version")
+		}
+	}
+	rr := postOperation(t, s, "health.get", `{"call_id":"c1","subject":""}`)
+	var p struct{ Code string }
+	_ = json.Unmarshal(rr.Body.Bytes(), &p)
+	if rr.Code != http.StatusServiceUnavailable || p.Code != CodeTargetUnreachable || rr.Header().Get("Retry-After") == "" {
+		t.Fatalf("health.get with the NAS never reached answered %d %s; want 503 %s with Retry-After: %s", rr.Code, p.Code, CodeTargetUnreachable, rr.Body)
 	}
 }

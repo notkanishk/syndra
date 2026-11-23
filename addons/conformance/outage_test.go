@@ -91,6 +91,14 @@ func TestEachOutageCheckFailsOnABadReply(t *testing.T) {
 				}
 				return reply
 			}},
+		// The NAS down, health.get withdrawn (design §13.1, the withdrawn row).
+		{name: "a read withdrawn while the app is down", want: []string{"outage.health"},
+			rewrite: func(r *http.Request, reply []byte, down bool) []byte {
+				if down && r.URL.Path == "/capabilities" {
+					return withdrawHealth(reply)
+				}
+				return reply
+			}},
 		{name: "an apply refused without Retry-After", mutate: true, want: []string{"outage.write"},
 			header: func(r *http.Request, h http.Header, down bool) {
 				if down && r.URL.Path == "/apply" {
@@ -150,6 +158,39 @@ func TestEachOutageCheckFailsOnABadReply(t *testing.T) {
 				t.Error("the run left the app down")
 			}
 		})
+	}
+}
+
+// withdrawHealth is a /capabilities reply with health.get withdrawn, as an
+// add-on that had read no version of its app withdrew it.
+func withdrawHealth(reply []byte) []byte {
+	return edit(reply, func(m map[string]any) {
+		for _, op := range m["operations"].([]any) {
+			if op := op.(map[string]any); op["id"] == "health.get" {
+				op["available"], op["unavailable_reason"] = false, "the target version has not been read yet"
+			}
+		}
+	})
+}
+
+// The add-on is restarted while its app is down, as on staging: it has read
+// nothing from the app, and its reads stay declared even so. One that
+// withdraws a read only then fails outage.health.
+func TestOutageHealthFailsAReadWithdrawnByARestartWithTheAppDown(t *testing.T) {
+	var down, restarted atomic.Bool
+	withdraw := func(r *http.Request, reply []byte) []byte {
+		if down.Load() && restarted.Load() && r.URL.Path == "/capabilities" {
+			return withdrawHealth(reply)
+		}
+		return reply
+	}
+	url, _ := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: down.Load}, nil, withdraw, nil)
+	cfg := withApp(config(url, false), &down)
+	cfg.StopAddon = func(context.Context) error { return nil }
+	cfg.StartAddon = func(context.Context) error { restarted.Store(true); return nil }
+	r, _ := Run(context.Background(), cfg)
+	if got := r.Status("outage.health"); got != "fail" {
+		t.Errorf("outage.health says %s for a read withdrawn after a restart with the app down, want fail", got)
 	}
 }
 
@@ -221,6 +262,41 @@ func TestTheOutageChecksPassAndARestartThatForgetsFails(t *testing.T) {
 	}
 }
 
+// A -start-addon that returns before the add-on listens (docker start) is
+// waited out: the kit polls /health until it answers, so the reads after the
+// restart meet the add-on, not a closed port.
+func TestAStartAddonThatReturnsBeforeListeningIsWaitedOut(t *testing.T) {
+	var down atomic.Bool
+	var listensAt atomic.Int64 // unix nanos; 0 is listening
+	url, _ := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Features: []string{"calls"}, Down: down.Load},
+		func(*http.Request, []byte, bool) {
+			if at := listensAt.Load(); at != 0 && time.Now().UnixNano() < at {
+				panic(http.ErrAbortHandler) // no reply at all, as a port not yet bound
+			}
+		}, nil, nil)
+	cfg := withApp(config(url, false), &down)
+	cfg.StopAddon = func(context.Context) error { listensAt.Store(time.Now().Add(time.Hour).UnixNano()); return nil }
+	cfg.StartAddon = func(context.Context) error {
+		listensAt.Store(time.Now().Add(600 * time.Millisecond).UnixNano())
+		return nil
+	}
+	r, _ := Run(context.Background(), cfg)
+	for _, id := range []string{"outage.health", "outage.restart"} {
+		if got := r.Status(id); got != "pass" {
+			t.Errorf("%s says %s %v after a start that returned before the add-on listened, want pass", id, got, detailOf(r, id))
+		}
+	}
+}
+
+func detailOf(r *Report, id string) []string {
+	for _, res := range r.Results {
+		if res.ID == id {
+			return res.Detail
+		}
+	}
+	return nil
+}
+
 // Without hooks every outage check is "not checked", a skip, never a pass.
 func TestWithoutHooksTheOutageChecksAreNotChecked(t *testing.T) {
 	url, _ := serve(t, testSecret, nil)
@@ -231,6 +307,18 @@ func TestWithoutHooksTheOutageChecksAreNotChecked(t *testing.T) {
 				t.Errorf("%s says %s %v without hooks, want skip: not checked", res.ID, res.Status, res.Detail)
 			}
 		}
+	}
+}
+
+// With the app hooks but not the add-on's, outage.health says its restart
+// step was not checked: never a silent pass over a step that did not run.
+func TestOutageHealthSaysTheRestartWasNotChecked(t *testing.T) {
+	var down atomic.Bool
+	url, _ := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: down.Load}, nil, nil, nil)
+	r := run(t, withApp(config(url, false), &down))
+	if got, detail := r.Status("outage.health"), detailOf(r, "outage.health"); got != "pass" ||
+		!slices.ContainsFunc(detail, func(d string) bool { return strings.HasPrefix(d, "not checked: -stop-addon and -start-addon") }) {
+		t.Errorf("outage.health says %s %v without the add-on hooks, want pass with its restart step not checked", got, detail)
 	}
 }
 
@@ -497,5 +585,20 @@ func TestOutageHangFailsAHealthThatWaitsOnTheApp(t *testing.T) {
 				t.Error("the run left the app hanging")
 			}
 		})
+	}
+}
+
+// A run interrupted while waiting for the add-on to answer says so, never that
+// the add-on missed the bound it was not given time to meet.
+func TestAnInterruptedWaitForTheAddonSaysInterrupted(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	k := &kit{ctx: ctx, cfg: config("http://127.0.0.1:1", false)}
+	c := &check{}
+	if k.addonAnswers(c) {
+		t.Fatal("an interrupted wait answered")
+	}
+	if len(c.fails) != 1 || !strings.Contains(c.fails[0], "interrupted") || strings.Contains(c.fails[0], "within") {
+		t.Fatalf("an interrupted wait says %q, want interrupted", c.fails)
 	}
 }

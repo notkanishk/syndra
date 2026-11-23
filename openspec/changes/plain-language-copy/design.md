@@ -1035,6 +1035,7 @@ Two outages, never one word: the add-on itself (only Syndra can know it) and the
 | operator | app_unreachable | — | — | {system}'s add-on is running but can't reach {product}. Check that {product} is on. |
 | operator | app_unreachable | unusable | — | {product} didn't give its add-on an answer it could use. Check {product}, then read again. |
 | operator | read_refused | — | — | {system}'s add-on didn't take this. Read the add-on's log. |
+| operator | read_refused | not_configured | — | Syndra's configuration names no add-on for {system}. Check Syndra's add-on configuration. |
 | operator | addon_outdated | — | — | {system}'s add-on doesn't offer this. Update the add-on. |
 | operator | cooldown | — | {n} | {system} was read moments ago. Read it again in {n} s. |
 | operator | busy | — | {n} | {product} is busy right now. Try again in {n} s. |
@@ -1045,7 +1046,7 @@ Two outages, never one word: the add-on itself (only Syndra can know it) and the
 | member write | read_refused, addon_outdated | — | — | Nothing went out. {system} can't do this right now. Ask makerspace staff. |
 | member write | busy | — | {n} | Nothing went out. {system} is busy right now. Try again in {n} s. |
 
-`busy` (added 22 Nov 2026 from the 8g staging run; a busy add-on queue or busy app is not an outage) is the add-on's `TARGET_BUSY`, or a kept copy it served as `busy`: nothing was sent, nothing is down, and the wait is the add-on's `Retry-After`. An operator's `app_unreachable` and `read_refused` say the add-on's own sentence instead, when it gave one. An operator's write where nothing went out is "Nothing went out." before the sentence above, and "Try again when {system} answers." after it for either outage. `unusable` is the add-on's `NO_CURRENT_READ` or `TARGET_UNREADABLE` with no words of its own; it reaches the page only inside a 503's message.
+`busy` (added 22 Nov 2026 from the 8g staging run; a busy add-on queue or busy app is not an outage) is the add-on's `TARGET_BUSY`, or a kept copy it served as `busy`: nothing was sent, nothing is down, and the wait is the add-on's `Retry-After`. An operator's `app_unreachable` and `read_refused` say the add-on's own sentence instead, when it gave one. An operator's write where nothing went out is "Nothing went out." before the sentence above, and "Try again when {system} answers." after it for either outage. `not_configured` (added 23 Nov 2026) is Syndra refusing before it sent anything because no configuration names an add-on for the system; it is `read_refused`'s only cause, and Syndra's own words are never put in `detail`. `unusable` is the add-on's `NO_CURRENT_READ` or `TARGET_UNREADABLE` with no words of its own; it reaches the page only inside a 503's message.
 
 | Where | Says |
 |---|---|

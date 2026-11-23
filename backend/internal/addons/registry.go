@@ -898,14 +898,19 @@ func ResolveOperation(target, id string) (EffectiveOperation, error) {
 	// The one on-demand manifest read. Outside the lock, because the read it
 	// may perform takes the write lock.
 	if !hasManifest(target) && !refreshForManifest(target) {
-		return EffectiveOperation{}, fmt.Errorf("%w: %s", ErrNoManifest, target)
+		return EffectiveOperation{}, noManifest(target)
 	}
+	// One read-lock pair: copy the slice header and whether a manifest is held,
+	// then unlock, as noManifest reads the registry. Safe because a.ops is only
+	// ever replaced whole, under the write lock (Refresh), never edited in
+	// place, so the copy is a consistent snapshot.
 	registryMu.RLock()
-	defer registryMu.RUnlock()
-	if a.manifest == nil {
-		return EffectiveOperation{}, fmt.Errorf("%w: %s", ErrNoManifest, target)
+	ops, dropped := a.ops, a.manifest == nil
+	registryMu.RUnlock()
+	if dropped {
+		return EffectiveOperation{}, noManifest(target)
 	}
-	for _, op := range a.ops {
+	for _, op := range ops {
 		if op.ID != id {
 			continue
 		}
@@ -915,6 +920,14 @@ func ResolveOperation(target, id string) (EffectiveOperation, error) {
 		return op, nil
 	}
 	return EffectiveOperation{}, fmt.Errorf("%w: %s/%s", ErrUnknownOperation, target, id)
+}
+
+// noManifest is ResolveOperation's refusal without a manifest, with the
+// monitor's why (WhyNoManifest), so a reply that never left says the system as
+// the roster does, not "no answer" (unsent). It reads the registry, so never
+// under registryMu.
+func noManifest(target string) error {
+	return fmt.Errorf("%w: %s: %w", ErrNoManifest, target, NotRead{Why: WhyNoManifest(target)})
 }
 
 // httpFetchManifest reads GET {base}/capabilities over the add-on's own

@@ -817,6 +817,9 @@ func (r auditRow) share(shares []smbShare) string {
 // been recorded as read-and-empty, which on the health surface is "no alerts"
 // and "no pools" — the two most reassuring things it can say, arrived at
 // without reading anything.
+//
+// ponytail: a read on an untested major decodes as on a tested one and is said
+// as read; saying it untested is the owner's decision (8g, 23 Nov 2026).
 func decodeAnswer(raw json.RawMessage, into any) error {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || string(trimmed) == "null" {

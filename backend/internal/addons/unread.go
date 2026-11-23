@@ -50,6 +50,7 @@ const (
 )
 
 // Causes of addon_unreachable: what the pipe saw (design §13.1's table).
+// read_refused has one, not_configured; every other reason has none.
 const (
 	// CauseNoAnswer: refused, no route, name not found, dial or TLS handshake
 	// timeout. Nothing reached the add-on.
@@ -67,6 +68,12 @@ const (
 	// CauseFault: the add-on answered with an error it did not explain (a 5xx
 	// with no registered code, a redirect, a body that does not read).
 	CauseFault = "fault"
+	// CauseNotConfigured is read_refused's one cause: no deployment
+	// configuration names the target, so there is no add-on to ask and Syndra
+	// refused before sending. Syndra's fault: its next step is Syndra's add-on
+	// configuration (added 23 Nov 2026 from the PR 264 review, so Detail stays
+	// the add-on's words only).
+	CauseNotConfigured = "not_configured"
 )
 
 // Unreachable says the reply is one of the two outages: the reason a queued
@@ -156,15 +163,27 @@ func Unread(r CallResponse) Why {
 // unsent is a reply with no status: nothing came back.
 func unsent(r CallResponse) Why {
 	var held *HeldError
+	var notRead NotRead
+	var withdrawn *ErrOperationUnavailable
 	switch {
 	case errors.As(r.Err, &held):
 		return held.Why
-	case errors.Is(r.Err, ErrFeatureNotDeclared):
+	case errors.As(r.Err, &notRead):
+		// No manifest (ResolveOperation): the monitor's why.
+		return notRead.Why
+	case errors.As(r.Err, &withdrawn):
+		// The add-on's manifest withdrew it: it answered, so not an outage. Its
+		// reason is the add-on's raw words, kept in the error, never the sentence.
+		return Why{Reason: ReasonReadRefused}
+	case errors.Is(r.Err, ErrFeatureNotDeclared), errors.Is(r.Err, ErrUnknownOperation):
 		return Why{Reason: ReasonAddonOutdated}
 	case errors.Is(r.Err, ErrNoCallRecord), errors.Is(r.Err, ErrNoFingerprint), errors.Is(r.Err, ErrFreshOutOfScope),
 		errors.Is(r.Err, errNotPrepared):
 		// Syndra's own refusal before anything left: not an outage.
 		return Why{Reason: ReasonReadRefused}
+	case errors.Is(r.Err, ErrNotRegistered):
+		// No add-on whose log to read: the next step is Syndra's configuration.
+		return Why{Reason: ReasonReadRefused, Cause: CauseNotConfigured}
 	case errors.Is(r.Err, errNoTransport):
 		return Why{Reason: ReasonAddonUnreachable, Cause: CauseNoKey}
 	case wrongHost(r.Err):

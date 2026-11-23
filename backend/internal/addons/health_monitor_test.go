@@ -268,3 +268,14 @@ func TestAHealthSlowedByTheAppIsTheAppWithinTheBound(t *testing.T) {
 		})
 	}
 }
+
+// read_refused's not_configured is Syndra's configuration, not what the pipe
+// saw: a miss that carries it is the monitor's fault, never a cause it shows.
+func TestAMissNamesOnlyThePipesCause(t *testing.T) {
+	if st, cause := missOf(TargetHealth{Outcome: OutcomeUnreached, Why: Why{Reason: ReasonReadRefused, Cause: CauseNotConfigured}}); st != StateAddonUnreachable || cause != CauseFault {
+		t.Fatalf("missOf = %s/%s, want addon_unreachable/fault", st, cause)
+	}
+	if _, cause := missOf(TargetHealth{Outcome: OutcomeUnreached, Why: Why{Reason: ReasonAddonUnreachable, Cause: CauseNoKey}}); cause != CauseNoKey {
+		t.Fatalf("missOf dropped the pipe's cause: %s", cause)
+	}
+}

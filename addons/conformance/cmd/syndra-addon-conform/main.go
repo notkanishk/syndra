@@ -63,9 +63,9 @@ func main() {
 		cfg.ElevatedKey = strings.TrimSpace(string(key))
 	}
 
-	cfg.StopApp, cfg.StartApp, cfg.StopAddon, cfg.StartAddon = shell("-stop-app", *stopApp, hookTimeout), shell("-start-app", *startApp, hookTimeout),
-		shell("-stop-addon", *stopAddon, hookTimeout), shell("-start-addon", *startAddon, hookTimeout)
-	cfg.HangApp = shell("-hang-app", *hangApp, hookTimeout)
+	cfg.StopApp, cfg.StartApp, cfg.StopAddon, cfg.StartAddon = shell("-stop-app", *stopApp, conformance.HookTimeout), shell("-start-app", *startApp, conformance.HookTimeout),
+		shell("-stop-addon", *stopAddon, conformance.HookTimeout), shell("-start-addon", *startAddon, conformance.HookTimeout)
+	cfg.HangApp = shell("-hang-app", *hangApp, conformance.HookTimeout)
 
 	// The first SIGINT or SIGTERM stops the run between requests and lets it
 	// put back what it changed; the second gets the default: exit now.
@@ -101,10 +101,6 @@ func main() {
 		os.Exit(1)
 	}
 }
-
-// hookTimeout bounds each hook: one that hangs fails, and the kit goes on to
-// put back what it stopped.
-const hookTimeout = 2 * time.Minute
 
 // shell is the hook flag names: command run by sh -c, said and its output on
 // stderr, killed after timeout; nil when there is no command.

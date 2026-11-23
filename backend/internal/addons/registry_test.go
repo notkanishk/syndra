@@ -788,6 +788,26 @@ func TestARefusedManifestReadIsNotRetriedPerCall(t *testing.T) {
 	}
 }
 
+// No manifest is said as the monitor says the system (WhyNoManifest), never
+// as an add-on that did not answer: with its app down, the system-health
+// card reads the app down, not "check that its container is running".
+func TestNoManifestIsSaidAsTheMonitorSaysIt(t *testing.T) {
+	registerTrueNAS(t)
+	withManifest(t, Manifest{}, errors.New("connection refused"))
+	m := monitor
+	monitor = newHealthMonitor()
+	t.Cleanup(func() { monitor = m })
+	observeSeq(monitor, "truenas", timeNow().UTC(), probeAppOff, probeAppOff, probeAppOff)
+
+	_, err := ResolveOperation("truenas", "health.get")
+	if !errors.Is(err, ErrNoManifest) {
+		t.Fatalf("want ErrNoManifest, got %v", err)
+	}
+	if got := Unread(CallResponse{Outcome: OutcomeUnreached, Err: err}); got != WhyNoManifest("truenas") || got.Reason != ReasonAppUnreachable {
+		t.Errorf("no manifest, the app down: said %+v, want %+v", got, WhyNoManifest("truenas"))
+	}
+}
+
 // The cooldown ends. An add-on that comes up a minute later is picked up by the
 // next call rather than by the next tick, which is the whole point.
 func TestTheReadIsTriedAgainOnceTheCooldownHasPassed(t *testing.T) {

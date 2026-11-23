@@ -169,7 +169,10 @@ func (s *server) unavailable(operationID string) (code, why string) {
 		// nothing about the target's version or reachability can withdraw it.
 		return "", ""
 	}
-	if supported, why := s.nas.MajorSupported(); !supported {
+	// Only a write is withdrawn for the version (TARGET_VERSION_UNSUPPORTED
+	// is "a mutation against" an untested major, registry errors.json); a
+	// read answers the outage itself (design §13.1, the withdrawn row).
+	if supported, why := s.nas.MajorSupported(); !supported && !readOperation(operationID) {
 		return CodeTargetVersionUnsupported, why
 	}
 	for _, method := range methods {

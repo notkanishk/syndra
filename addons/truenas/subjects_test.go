@@ -481,6 +481,12 @@ func TestAnUntestedMajorRefusesMutationsAndKeepsReading(t *testing.T) {
 		if op.ID == "account.release" {
 			continue // local only; see capability_test.go
 		}
+		if readOperation(op.ID) {
+			if !op.Available {
+				t.Errorf("%s is a read and must stay available on an untested major: %q", op.ID, op.UnavailableReason)
+			}
+			continue
+		}
 		if op.Available {
 			t.Errorf("%s must be unavailable on an untested major", op.ID)
 		}

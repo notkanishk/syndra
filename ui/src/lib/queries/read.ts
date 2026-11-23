@@ -12,7 +12,7 @@ import { moment } from "@/lib/format";
 export interface Why {
   /** `cached | cooldown | app_unreachable` for a kept copy; `addon_unreachable | app_unreachable | read_refused | addon_outdated | cooldown` for none. */
   reason: string;
-  /** What the pipe saw, for `addon_unreachable` only: `no_answer | wrong_host | no_key | timeout | fault`. */
+  /** What the pipe saw, for `addon_unreachable`: `no_answer | wrong_host | no_key | timeout | fault`; for `read_refused`, only `not_configured` (no add-on is configured for it). */
   cause?: string;
   /** The add-on's own sentence, said first where the add-on is the one that knows. */
   detail?: string;
