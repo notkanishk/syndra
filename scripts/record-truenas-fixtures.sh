@@ -25,10 +25,13 @@ cd "$(dirname "$0")/.."
 
 usage() {
   cat >&2 <<'EOF'
-usage: scripts/record-truenas-fixtures.sh [--write]
+usage: scripts/record-truenas-fixtures.sh [--write | --methods]
 
-  Reads TRUENAS_URL and TRUENAS_API_KEY from ./.env (or the environment) and
-  records what that target answers into addons/contract/truenas_observed.json.
+  Reads TRUENAS_URL, TRUENAS_API_KEY and TRUENAS_VERIFY_TLS from the env file
+  ($RECORD_ENV_FILE, else ./.env), else the environment, and records what that
+  target answers into addons/contract/truenas_observed.json. The file is read,
+  never run: only those three lines, NAME=value. A key given as
+  ADDON_API_KEY_FILE stops the run, and the file is not read.
 
   TRUENAS_VERIFY_TLS is honoured exactly as the add-on honours it, and defaults
   to true here as it does there. This probe authenticates with the API key, so
@@ -38,6 +41,14 @@ usage: scripts/record-truenas-fixtures.sh [--write]
             account (syndra-fixture-probe). Without it only reads are recorded,
             and the write rules keep whatever was recorded last.
 
+  --methods the version check's baseline (design-version-check.md §4.1,
+            slice 9a): reads system.version and core.get_methods only, and
+            writes addons/truenas/compat/baseline/TrueNAS-<version>.methods.json
+            and nothing else. Asks at a silent prompt for the elevated key, for
+            user.delete's entry: required, and read only from a terminal (run
+            it with ssh -t). Both keys reach the container on stdin, never in
+            its environment. Prints no address and no key. Refuses --write.
+
   The output names the release it came from. A fixture from one major says
   nothing about another, and pretending otherwise is how this went wrong twice.
 EOF
@@ -45,15 +56,57 @@ EOF
 }
 
 WRITE=no
-case "${1:-}" in
-  --write) WRITE=yes ;;
-  "") ;;
-  *) usage ;;
-esac
+METHODS=no
+for arg in "$@"; do
+  case "$arg" in
+    --write) WRITE=yes ;;
+    --methods) METHODS=yes ;;
+    *) usage ;;
+  esac
+done
+if [ "$METHODS" = yes ] && [ "$WRITE" = yes ]; then
+  echo "error: --methods refuses --write: no account is created on the way to a schema" >&2
+  exit 2
+fi
 
-[ -f .env ] && set -a && . ./.env && set +a
+# The env file is compose's, holding every staging secret: read the three lines
+# this needs as data, never source it. The file's value wins, and its last line
+# for a name wins. As compose reads it: a trailing CR and a leading `export ` are
+# dropped; a quoted value is what lies inside its quotes, `#` included; an
+# unquoted value ends at ` #`.
+ENV_FILE="${RECORD_ENV_FILE:-.env}"
+env_value() {
+  [ -f "$ENV_FILE" ] || return 1
+  local line value found=no
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    line="${line#export }"
+    case "$line" in "$1="*) ;; *) continue ;; esac
+    value="${line#*=}"
+    case "$value" in
+      \"*\"*) value="${value#\"}"; value="${value%%\"*}" ;;
+      \'*\'*) value="${value#\'}"; value="${value%%\'*}" ;;
+      *) value="${value%% #*}" ;;
+    esac
+    found=yes
+  done < "$ENV_FILE"
+  [ "$found" = yes ] && printf '%s' "$value"
+}
+for name in TRUENAS_URL TRUENAS_API_KEY TRUENAS_VERIFY_TLS ADDON_API_KEY_FILE; do
+  if value="$(env_value "$name")"; then printf -v "$name" '%s' "$value"; fi
+done
+# The add-on reads ADDON_API_KEY_FILE before TRUENAS_API_KEY (main.go,
+# secretValue), so when it is set an inline key is not the add-on's key.
+if [ -n "${ADDON_API_KEY_FILE:-}" ]; then
+  echo "error: the add-on's key is given as ADDON_API_KEY_FILE, which this does not read." >&2
+  echo "       Stop and report; nothing was read or written." >&2
+  exit 1
+fi
 : "${TRUENAS_URL:?TRUENAS_URL is required (wss://host/api/current)}"
 : "${TRUENAS_API_KEY:?TRUENAS_API_KEY is required}"
+TRUENAS_VERIFY_TLS="${TRUENAS_VERIFY_TLS:-true}"
+export TRUENAS_URL TRUENAS_VERIFY_TLS
+export -n TRUENAS_API_KEY  # only --write's container reads it from its environment
 
 case "$TRUENAS_URL" in
   wss://*) ;;
@@ -64,15 +117,56 @@ esac
 
 command -v docker >/dev/null || { echo "error: docker is required (the probe runs in a container)" >&2; exit 1; }
 
+# Pinned, because the container holds a key: the image by digest, websockets by version and hash (any of its files pip may pick).
+IMAGE="python:3.12.10-alpine3.21@sha256:9c51ecce261773a684c8345b2d4673700055c513b4d54bc0719337d3e4ee552e"
+PIP='printf "%s\n" "websockets==15.0.1 --hash=sha256:3be571a8b5afed347da347bfcf27ba12b069d9d7f42cb8c7028b5e98bbb12597 --hash=sha256:d5f6b181bb38171a8ad1d6aa58a67a6aa9d4b38d0f8c5f496b9e42561dfc62fe --hash=sha256:f7a866fbc1e97b5c617ee4116daaa09b722101d4a3c170c787450ba409f9736f --hash=sha256:82544de02076bafba038ce055ee6412d68da13ab47f0c60cab827346de828dee" > /tmp/req.txt && pip -q install --disable-pip-version-check --require-hashes --no-deps -r /tmp/req.txt >/dev/null'
+
+if [ "$METHODS" = yes ]; then
+  # The elevated key: required (owner, 23 Nov 2026), pasted once at a silent
+  # prompt, held in this shell for one run. Both keys go to the container on
+  # stdin, never in its environment (docker inspect, /proc/1/environ), a file,
+  # argv or a log. printf is a builtin, so neither is in any argv either.
+  if [ ! -t 0 ]; then
+    echo "error: --methods reads the elevated key at a silent prompt: run it from a terminal (ssh -t)" >&2
+    exit 2
+  fi
+  ELEVATED=""
+  read -rsp "Elevated key for user.delete: " ELEVATED; echo >&2
+  if [ -z "$ELEVATED" ]; then
+    echo "error: the elevated key is required (for user.delete's entry); nothing was written." >&2
+    exit 1
+  fi
+  echo "==> recording the methods baseline (the address is not printed)" >&2
+  TMP="$(mktemp)"
+  trap 'rm -f "$TMP"' EXIT
+  printf '%s\n%s\n' "$TRUENAS_API_KEY" "$ELEVATED" | docker run --rm -i \
+    -e TRUENAS_URL -e TRUENAS_VERIFY_TLS \
+    -v "$PWD/scripts/lib/record-truenas-methods.py:/r/methods.py:ro" \
+    -v "$PWD/addons/truenas/compat_deps.go:/r/compat_deps.go:ro" \
+    --entrypoint sh "$IMAGE" -c \
+    "$PIP && python /r/methods.py /r/compat_deps.go" > "$TMP" || {
+      echo "error: the capture failed; nothing written" >&2; exit 1; }
+  ELEVATED=""
+  # The version names the file, so it is checked before it is used as a path.
+  VERSION="$(python3 -c 'import json,re,sys; v=json.load(open(sys.argv[1]))["version"]; assert re.fullmatch(r"TrueNAS-[0-9][0-9A-Za-z.-]*", v); print(v)' "$TMP")" || {
+    echo "error: the capture is not valid; nothing written" >&2; exit 1; }
+  OUT="addons/truenas/compat/baseline/$VERSION.methods.json"
+  mkdir -p "$(dirname "$OUT")"
+  mv "$TMP" "$OUT"
+  echo "==> wrote $OUT. Copy back this file only." >&2
+  exit 0
+fi
+
 OUT="addons/contract/truenas_observed.json"
 echo "==> recording from $TRUENAS_URL (write probes: $WRITE)"
 
+export TRUENAS_API_KEY
 docker run --rm -i \
   -e TRUENAS_URL -e TRUENAS_API_KEY -e WRITE="$WRITE" \
   -e PREVIOUS_RECORDING="$(cat "$OUT" 2>/dev/null || echo '{}')" \
-  -e TRUENAS_VERIFY_TLS="${TRUENAS_VERIFY_TLS:-true}" \
-  --entrypoint sh python:3.12-alpine -c \
-  'pip -q install websockets >/dev/null 2>&1 && python - ' < scripts/lib/record-truenas.py > "$OUT.tmp"
+  -e TRUENAS_VERIFY_TLS \
+  --entrypoint sh "$IMAGE" -c \
+  "$PIP && python - " < scripts/lib/record-truenas.py > "$OUT.tmp"
 
 # Only replace the recording if the probe produced a parseable one. A half
 # written fixture is worse than a stale one: the stale one is at least a

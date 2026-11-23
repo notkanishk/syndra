@@ -2,7 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -354,6 +357,114 @@ func TestEveryReadNamesItsReplies(t *testing.T) {
 	for m := range awaiting9e {
 		if len(deps[m].Replies) > 0 {
 			t.Errorf("%s registers its replies: take it off awaiting9e", m)
+		}
+	}
+}
+
+// schemaKeywords are the keys a captured schema may hold outside a
+// `properties` map: JSON Schema 2020-12's Core, Applicator, Validation,
+// Format-annotation and Meta-data vocabularies (json-schema.org/draft/2020-12/
+// json-schema-validation §6, §7, §9), OpenAPI's `discriminator` and `nullable`,
+// which pydantic may emit, and TrueNAS's own `_attrs_order_`, `_name_`,
+// `_required_`. The Meta-data prose, `description` and `examples`, and Core's
+// `$comment` are not here: the recorder drops them (design §4.1, slice 9a).
+var schemaKeywords = map[string]bool{
+	"type": true, "properties": true, "items": true, "prefixItems": true,
+	"additionalProperties": true, "patternProperties": true, "propertyNames": true,
+	"required": true, "anyOf": true, "oneOf": true, "allOf": true, "not": true,
+	"enum": true, "const": true, "default": true, "format": true, "title": true,
+	"minimum": true, "maximum": true, "exclusiveMinimum": true, "exclusiveMaximum": true,
+	"multipleOf": true, "minLength": true, "maxLength": true, "pattern": true,
+	"minItems": true, "maxItems": true, "uniqueItems": true,
+	"minProperties": true, "maxProperties": true, "deprecated": true,
+	"readOnly": true, "writeOnly": true, "discriminator": true, "nullable": true,
+	"$ref": true, "$defs": true,
+	"_attrs_order_": true, "_name_": true, "_required_": true,
+}
+
+// notSchema names each key in s that is not a schema keyword. Keys of a
+// `properties`, `$defs` or `patternProperties` map are names, and default,
+// enum, const and discriminator hold values, so neither is walked as a keyword.
+// The recorder walks the same way (VALUES and NAMES in record-truenas-methods.py).
+func notSchema(at string, s any) []string {
+	var bad []string
+	switch x := s.(type) {
+	case []any:
+		for i, c := range x {
+			bad = append(bad, notSchema(at+"/"+strconv.Itoa(i), c)...)
+		}
+	case map[string]any:
+		for k, v := range x {
+			switch {
+			case !schemaKeywords[k]:
+				bad = append(bad, fmt.Sprintf("%s: %q is not a schema keyword", at, k))
+			case k == "properties" || k == "$defs" || k == "patternProperties":
+				if names, ok := v.(map[string]any); ok {
+					for n, c := range names {
+						bad = append(bad, notSchema(at+"/"+k+"/"+n, c)...)
+					}
+				}
+			case k == "default" || k == "enum" || k == "const" || k == "discriminator":
+			default:
+				bad = append(bad, notSchema(at+"/"+k, v)...)
+			}
+		}
+	}
+	return bad
+}
+
+// A harmless keyword pydantic may emit passes; prose and the entry's other
+// keys never do, at any depth.
+func TestTheSchemaKeywordsAreTheRecordersSet(t *testing.T) {
+	ok := map[string]any{"type": "object", "readOnly": true, "writeOnly": false, "nullable": true,
+		"deprecated": false, "format": "date-time", "pattern": "^x$", "const": map[string]any{"description": 1},
+		"discriminator": map[string]any{"propertyName": "kind", "mapping": map[string]any{"description": "#/$defs/a"}},
+		"properties":    map[string]any{"description": map[string]any{"type": "string", "minLength": 1}}}
+	if bad := notSchema("", ok); len(bad) > 0 {
+		t.Errorf("refused: %v", bad)
+	}
+	for _, k := range []string{"description", "examples", "$comment", "roles", "cli_description"} {
+		nested := map[string]any{"type": "array", "items": map[string]any{"type": "string", k: "The Undertaker"}}
+		if bad := notSchema("", nested); len(bad) != 1 {
+			t.Errorf("%s: got %v, want it refused", k, bad)
+		}
+	}
+}
+
+// Slice 9a: every capture holds exactly the tables' methods, each with
+// accepts, returns and job and nothing else, and its schemas hold schema
+// keywords, property names and types only.
+func TestTheCaptureHoldsOnlyWhatTheCheckReads(t *testing.T) {
+	baselines, err := compat.Baselines()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range baselines {
+		want := slices.Sorted(maps.Keys(deps))
+		want = append(want, slices.Sorted(maps.Keys(elevatedDeps))...)
+		slices.Sort(want)
+		if got := slices.Sorted(maps.Keys(b.Methods)); !slices.Equal(got, want) {
+			t.Errorf("%s methods: %v, want deps and elevatedDeps: %v", b.Version, got, want)
+		}
+		for name, raw := range b.Methods {
+			var entry map[string]any
+			if err := json.Unmarshal(raw, &entry); err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			if got := slices.Sorted(maps.Keys(entry)); !slices.Equal(got, []string{"accepts", "job", "returns"}) {
+				t.Errorf("%s holds %v, want accepts, job, returns", name, got)
+			}
+			if _, ok := entry["job"].(bool); !ok {
+				t.Errorf("%s: job is not a bool", name)
+			}
+			for _, k := range []string{"accepts", "returns"} {
+				if _, ok := entry[k].([]any); !ok {
+					t.Errorf("%s: %s is not a list", name, k)
+				}
+				for _, e := range notSchema(name+"/"+k, entry[k]) {
+					t.Error(e)
+				}
+			}
 		}
 	}
 }
