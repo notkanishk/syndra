@@ -29,12 +29,12 @@ var deps = map[string]compat.Dep{
 
 	// Writes. Sends is every field any call site sends (apply.go, home.go,
 	// identity.go, operations.go).
-	"group.create": {Create: true, Replies: []any{apiID{}}, Sends: []string{"/0/name", "/0/gid", "/0/smb"}},
+	"group.create": {Replies: []any{apiID{}}, Sends: []string{"/0/name", "/0/gid", "/0/smb"}},
 	"group.delete": {Sends: []string{"/0"}},
 	"pool.dataset.set_quota": {Sends: []string{
 		"/0", "/1/0/quota_type", "/1/0/id", "/1/0/quota_value",
 	}},
-	"user.create": {Create: true, Replies: []any{apiID{}}, Sends: []string{
+	"user.create": {Replies: []any{apiID{}}, Sends: []string{
 		"/0/username", "/0/full_name", "/0/shell", "/0/password_disabled", "/0/smb", "/0/locked",
 		"/0/groups", "/0/uid", "/0/group", "/0/group_create", "/0/home", "/0/home_create", "/0/home_mode",
 	}},

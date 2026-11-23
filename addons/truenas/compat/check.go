@@ -10,38 +10,50 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"maps"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
+	"testing"
 )
 
 //go:embed baseline/*.methods.json
 var shipped embed.FS
 
 // Baseline is one tested version's capture: `{version, methods: {name:
-// {accepts, returns, job}}}`, as the NAS answered.
+// {accepts, returns, job}}}`, as the NAS answered. Synthetic marks a stand-in
+// written before the real capture; only tests may load one.
 type Baseline struct {
-	Version string                     `json:"version"`
-	Methods map[string]json.RawMessage `json:"methods"`
+	Synthetic bool                       `json:"_synthetic"`
+	Version   string                     `json:"version"`
+	Methods   map[string]json.RawMessage `json:"methods"`
 }
 
 // Baselines are the captures shipped in the binary. An error is a build fault:
-// the add-on refuses to start (design §8).
-func Baselines() ([]Baseline, error) {
-	names, err := fs.Glob(shipped, "baseline/*.methods.json")
+// the add-on refuses to start (design §8), so a synthetic capture cannot ship.
+// testing.Testing is the standard library's own "is this a test binary".
+func Baselines() ([]Baseline, error) { return load(shipped, testing.Testing()) }
+
+func load(fsys fs.FS, synthetic bool) ([]Baseline, error) {
+	names, err := fs.Glob(fsys, "baseline/*.methods.json")
 	if err != nil {
 		return nil, err
 	}
 	var out []Baseline
 	for _, name := range names {
-		raw, err := shipped.ReadFile(name)
+		raw, err := fs.ReadFile(fsys, name)
 		if err != nil {
 			return nil, err
 		}
 		var b Baseline
-		if err := json.Unmarshal(raw, &b); err != nil || b.Version == "" || len(b.Methods) == 0 {
-			return nil, fmt.Errorf("%s is not a capture: %v", name, err)
+		switch err := json.Unmarshal(raw, &b); {
+		case err != nil:
+			return nil, fmt.Errorf("%s is not a capture: %w", name, err)
+		case b.Version == "" || len(b.Methods) == 0:
+			return nil, fmt.Errorf("%s is not a capture: no version or no methods", name)
+		case b.Synthetic && !synthetic:
+			return nil, fmt.Errorf("%s is synthetic: only tests may load it; ship the real capture (slice 9a)", name)
 		}
 		out = append(out, b)
 	}
@@ -53,7 +65,6 @@ func Baselines() ([]Baseline, error) {
 
 // Dep is what Syndra relies on in one TrueNAS method.
 type Dep struct {
-	Create  bool     // a create: the defaults of unsent properties count (§4.2)
 	Replies []any    // zero values of every Go type a call site decodes into
 	Sends   []string // JSON Pointers (RFC 6901) into the arguments Syndra sends
 }
@@ -170,7 +181,7 @@ func project(entry json.RawMessage, dep Dep) (map[string]any, error) {
 		for i, a := range e.Accepts {
 			accepts[i] = normalise(a)
 		}
-		sends(p, accepts, dep)
+		sends(p, e.Accepts, accepts, dep)
 	}
 	return p, nil
 }
@@ -184,9 +195,7 @@ var (
 // there, then descends the branches that can hold the next step: a slice the
 // array branches, a struct the object branches that declare the field.
 func replies(p map[string]any, path string, nodes []any, t reflect.Type) {
-	for t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
+	t = deref(t)
 	branches := flatten(nodes)
 	if len(branches) == 0 {
 		p[path] = notDeclared
@@ -210,17 +219,27 @@ func replies(p map[string]any, path string, nodes []any, t reflect.Type) {
 	}
 }
 
-// fields descends each json-tagged field of a struct, and the fields of an
-// untagged embedded one, as encoding/json reads them.
+// fields descends a struct's fields as encoding/json reads them: an untagged
+// embedded struct, or pointer to one, promotes its fields; any other field is
+// named by its tag, else by its Go name.
 func fields(p map[string]any, path string, branches []map[string]any, t reflect.Type) {
 	for f := range t.Fields() {
-		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
-		if f.Anonymous && name == "" {
-			fields(p, path, branches, f.Type)
+		tag := f.Tag.Get("json")
+		name, _, _ := strings.Cut(tag, ",")
+		if tag == "-" {
 			continue
 		}
-		if name == "" || name == "-" || !f.IsExported() {
+		if f.Anonymous && name == "" {
+			if et := f.Type; et.Kind() == reflect.Struct || et.Kind() == reflect.Pointer && et.Elem().Kind() == reflect.Struct {
+				fields(p, path, branches, deref(et))
+				continue
+			}
+		}
+		if !f.IsExported() {
 			continue
+		}
+		if name == "" {
+			name = f.Name
 		}
 		var next []any
 		for _, b := range branches {
@@ -230,6 +249,13 @@ func fields(p map[string]any, path string, branches []map[string]any, t reflect.
 		}
 		replies(p, path+"/"+name, next, f.Type)
 	}
+}
+
+func deref(t reflect.Type) reflect.Type {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t
 }
 
 // facts keeps what a node says of its value, over every branch, descended or
@@ -265,41 +291,71 @@ func facts(p map[string]any, path string, branches []map[string]any) {
 	}
 }
 
-// sends keeps the argument count, the schema at each pointer Syndra sends, and
-// of every object it sends into: its required list, its additionalProperties
-// and, on a create, the default of each property it does not send.
-func sends(p map[string]any, accepts []any, dep Dep) {
+// sends keeps the argument count and the schema at each pointer Syndra sends,
+// its default dropped (what is sent is not defaulted), then walks every
+// argument for the rest (§4.2).
+func sends(p map[string]any, raw, accepts []any, dep Dep) {
 	p["accepts"] = len(accepts)
-	sent := map[string][]string{} // object pointer → the properties sent into it
 	for _, ptr := range dep.Sends {
 		nodes := resolve(accepts, ptr)
 		if len(nodes) == 0 {
 			p["accepts"+ptr] = notDeclared
 			continue
 		}
+		for i, n := range nodes {
+			if m, ok := n.(map[string]any); ok {
+				m = maps.Clone(m)
+				delete(m, "default")
+				nodes[i] = m
+			}
+		}
 		p["accepts"+ptr] = nodes
-		if i := strings.LastIndex(ptr, "/"); i > 0 {
-			sent[ptr[:i]] = append(sent[ptr[:i]], unescape(ptr[i+1:]))
+	}
+	for i, a := range accepts {
+		ptr := "/" + strconv.Itoa(i)
+		if r, _ := raw[i].(map[string]any); r["_required_"] == true && !sentInto(dep.Sends, ptr) && !slices.Contains(dep.Sends, ptr) {
+			// TrueNAS marks a required argument only with _required_: kept
+			// where Syndra sends nothing, so an optional made required is seen.
+			p["accepts"+ptr+" _required_"] = true
+		}
+		unsent(p, []any{a}, ptr, dep.Sends)
+	}
+}
+
+// unsent walks the arguments below the pointers Syndra sends. At each object
+// it keeps the required list, and where Syndra sends into it the
+// additionalProperties; at each node Syndra sends nothing to, the default,
+// since TrueNAS fills that in on every write.
+func unsent(p map[string]any, nodes []any, ptr string, sent []string) {
+	if slices.Contains(sent, ptr) {
+		return
+	}
+	into := sentInto(sent, ptr)
+	for _, b := range flatten(nodes) {
+		if !into {
+			add(p, "accepts"+ptr+" default", b["default"])
+		}
+		if hasType(b, "array") && b["items"] != nil {
+			unsent(p, []any{b["items"]}, ptr+"/0", sent)
+		}
+		props, ok := b["properties"].(map[string]any)
+		if !ok {
+			continue
+		}
+		add(p, "accepts"+ptr+" required", b["required"])
+		if into {
+			add(p, "accepts"+ptr+" additionalProperties", b["additionalProperties"])
+		}
+		for _, name := range slices.Sorted(maps.Keys(props)) {
+			step := strings.ReplaceAll(strings.ReplaceAll(name, "~", "~0"), "/", "~1")
+			unsent(p, []any{props[name]}, ptr+"/"+step, sent)
 		}
 	}
-	for obj, names := range sent {
-		for _, b := range flatten(resolve(accepts, obj)) {
-			props, ok := b["properties"].(map[string]any)
-			if !ok {
-				continue
-			}
-			add(p, "accepts"+obj+" required", b["required"])
-			add(p, "accepts"+obj+" additionalProperties", b["additionalProperties"])
-			if !dep.Create {
-				continue
-			}
-			for prop, s := range props {
-				if d, ok := s.(map[string]any)["default"]; ok && !slices.Contains(names, prop) {
-					add(p, "accepts"+obj+"/"+prop+" default", d)
-				}
-			}
-		}
-	}
+}
+
+// sentInto is whether Syndra sends anything below ptr.
+func sentInto(sent []string, ptr string) bool {
+	return slices.ContainsFunc(sent, func(s string) bool { return strings.HasPrefix(s, ptr+"/") })
 }
 
 // add appends one branch's value at key; nothing when the branch has none.
