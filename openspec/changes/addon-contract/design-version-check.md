@@ -508,8 +508,8 @@ fails its decode while the schema is unchanged**, so nothing is in `holds`.
 The fourth place is what makes it wait like the rest instead of being
 refused for good.
 
-`Retry-After` is the cap of the check's backoff (§8): a hold ends on a new
-connection or a new add-on, not sooner.
+`Retry-After` is the cap of the check's backoff (§8): a version hold (§7) ends on a
+new connection or a new add-on, not sooner. A misbehaviour hold (§12) does not.
 
 `addon_outdated`'s sentence (`not_read.go:138`) branches on the detail. With
 functions named: "{product} answers {functions} differently from what
@@ -686,6 +686,8 @@ In round 3, from the third Opus review:
     (§12.4).
 
 ## 12. Held on misbehaviour (slice 9j; the owner's addition, pending his yes)
+
+> **Not ready to build (Opus check, 23 Nov 2026).** Open in §12.4: Try again must be tied to one `call_id`, admitted in `s.mutate` (`apply.go:1527`), and cleared only by a closed-field read-back, never by the next write that happens to take the slot (a member's `password.set` has no read-back, `operations.go:348-385`); drop the "no row waiting" fallback. A narrowed hold needs its own trial: that account's re-queued row, since its rows end terminal at plan `blocked` (`propagation/addon.go:599-614`). Settle both, with the owner's yes, before 9j is built.
 
 Owner, 23 Nov 2026. A schema check cannot see a function that keeps its
 shape and stops doing its job. Today apply's read-back sees it, reports it,
