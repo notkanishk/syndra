@@ -242,7 +242,13 @@ class EndToEnd(unittest.TestCase):
                 os.close(slave), os.close(master)
                 self.fail("the prompt never turned echo off")
             time.sleep(0.01)
-        os.close(slave)
+        # Asked: the prompt turned echo off. A run that refused first never
+        # asked, so what the terminal shows then is the line discipline's own
+        # echo of text nobody would type, not the recorder's.
+        asked = not termios.tcgetattr(slave)[3] & termios.ECHO
+        # The slave end stays open until the master is read: closed early, the
+        # pty discards what the child wrote once it exits, and an echoed key
+        # would never be seen.
         try:
             os.write(master, (typed + "\n").encode())
         except OSError:  # it refused before it asked, and the terminal is gone
@@ -252,7 +258,7 @@ class EndToEnd(unittest.TestCase):
         except subprocess.TimeoutExpired:
             p.kill()
             p.communicate()
-            os.close(master)
+            os.close(slave), os.close(master)
             self.fail("the recorder hung")
         # What the terminal showed: the paste is never echoed to it.
         shown = b""
@@ -264,8 +270,8 @@ class EndToEnd(unittest.TestCase):
             if not chunk:
                 break
             shown += chunk
-        os.close(master)
-        if typed:
+        os.close(slave), os.close(master)
+        if typed and asked:
             self.assertNotIn(typed.encode(), shown, "the pasted key was echoed to the terminal")
         return subprocess.CompletedProcess(cmd, p.returncode, out, err)
 
