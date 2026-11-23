@@ -3,29 +3,6 @@
  "version": "TrueNAS-25.10.7",
  "methods": {
   "alert.list": {
-   "description": "List all types of alerts which the system can issue.",
-   "cli_description": "List all types of alerts which the system can issue",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "ALERT_LIST_READ"
-   ],
    "accepts": [],
    "returns": [
     {
@@ -111,32 +88,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "audit.query": {
-   "description": "Query the audit database.",
-   "cli_description": "Query the audit database",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "SYSTEM_AUDIT_READ"
-   ],
    "accepts": [
     {
      "type": "object",
@@ -240,7 +195,6 @@
         },
         "message_timestamp": {
          "type": "integer",
-         "description": "Seconds since the epoch.",
          "title": "message_timestamp",
          "_name_": "message_timestamp",
          "_required_": true
@@ -248,7 +202,6 @@
         "timestamp": {
          "type": "object",
          "title": "timestamp",
-         "description": "Event time.",
          "_name_": "timestamp",
          "_required_": true
         },
@@ -413,7 +366,6 @@
           },
           "message_timestamp": {
            "type": "integer",
-           "description": "Seconds since the epoch.",
            "title": "message_timestamp",
            "_name_": "message_timestamp",
            "_required_": true
@@ -421,7 +373,6 @@
           "timestamp": {
            "type": "object",
            "title": "timestamp",
-           "description": "Event time.",
            "_name_": "timestamp",
            "_required_": true
           },
@@ -556,32 +507,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "filesystem.getacl": {
-   "description": "Return ACL of a given path.",
-   "cli_description": "Return ACL of a given path",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "FILESYSTEM_ATTRS_READ"
-   ],
    "accepts": [
     {
      "type": "string",
@@ -691,32 +620,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "filesystem.listdir": {
-   "description": "Get the contents of a directory.",
-   "cli_description": "Get the contents of a directory",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": true,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "FILESYSTEM_ATTRS_READ"
-   ],
    "accepts": [
     {
      "type": "string",
@@ -730,7 +637,6 @@
       {}
      ],
      "default": [],
-     "description": "List of filters for query results.",
      "title": "filters",
      "_name_": "filters",
      "_required_": false
@@ -812,7 +718,6 @@
       }
      },
      "default": {},
-     "description": "Query options including pagination, ordering, and additional parameters.",
      "_name_": "options",
      "_required_": false
     }
@@ -931,32 +836,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "filesystem.stat": {
-   "description": "Return filesystem information for a given path.",
-   "cli_description": "Return filesystem information for a given path",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "FILESYSTEM_ATTRS_READ"
-   ],
    "accepts": [
     {
      "type": "string",
@@ -1027,32 +910,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "group.create": {
-   "description": "Create a new group.",
-   "cli_description": "Create a new group",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "ACCOUNT_WRITE"
-   ],
    "accepts": [
     {
      "type": "object",
@@ -1084,9 +945,6 @@
       },
       "name": {
        "type": "string",
-       "examples": [
-        "the_shield"
-       ],
        "title": "name",
        "_name_": "name",
        "_required_": true
@@ -1156,32 +1014,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "group.delete": {
-   "description": "Delete group `id`.",
-   "cli_description": "Delete group `id`",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": true,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "ACCOUNT_WRITE"
-   ],
    "accepts": [
     {
      "type": "integer",
@@ -1216,32 +1052,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "group.query": {
-   "description": "Query groups.",
-   "cli_description": "Query groups",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": true,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "ACCOUNT_READ"
-   ],
    "accepts": [
     {
      "type": "array",
@@ -1249,7 +1063,6 @@
       {}
      ],
      "default": [],
-     "description": "List of filters for query results.",
      "title": "filters",
      "_name_": "filters",
      "_required_": false
@@ -1331,7 +1144,6 @@
       }
      },
      "default": {},
-     "description": "Query options including pagination, ordering, and additional parameters.",
      "_name_": "options",
      "_required_": false
     }
@@ -1378,7 +1190,6 @@
           },
           "group": {
            "type": "string",
-           "description": "Name of the group.",
            "title": "group",
            "_name_": "group",
            "_required_": true
@@ -1419,7 +1230,6 @@
              "type": "integer"
             }
            ],
-           "description": "User record ids.",
            "title": "users",
            "_name_": "users",
            "_required_": true
@@ -1475,7 +1285,6 @@
         },
         "group": {
          "type": "string",
-         "description": "Name of the group.",
          "title": "group",
          "_name_": "group",
          "_required_": true
@@ -1516,7 +1325,6 @@
            "type": "integer"
           }
          ],
-         "description": "User record ids.",
          "title": "users",
          "_name_": "users",
          "_required_": true
@@ -1542,32 +1350,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "pool.dataset.get_quota": {
-   "description": "Return a list of the specified `quota_type` of quotas on the ZFS dataset `ds`.",
-   "cli_description": "Return a list of the specified `quota_type` of quotas on the ZFS dataset `ds`",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "DATASET_READ"
-   ],
    "accepts": [
     {
      "type": "string",
@@ -1661,7 +1447,6 @@
         },
         "quota": {
          "type": "integer",
-         "description": "Absent if no quota is set.",
          "title": "quota",
          "_name_": "quota",
          "_required_": false
@@ -1687,32 +1472,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "pool.dataset.query": {
-   "description": "Query pool datasets.",
-   "cli_description": "Query pool datasets",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": true,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "DATASET_READ"
-   ],
    "accepts": [
     {
      "type": "array",
@@ -1720,7 +1483,6 @@
       {}
      ],
      "default": [],
-     "description": "List of filters for query results.",
      "title": "filters",
      "_name_": "filters",
      "_required_": false
@@ -1802,7 +1564,6 @@
       }
      },
      "default": {},
-     "description": "Query options including pagination, ordering, and additional parameters.",
      "_name_": "options",
      "_required_": false
     }
@@ -1939,32 +1700,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "pool.dataset.set_quota": {
-   "description": "Allow users to set multiple quotas simultaneously.",
-   "cli_description": "Allow users to set multiple quotas simultaneously",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "DATASET_WRITE"
-   ],
    "accepts": [
     {
      "type": "string",
@@ -2038,32 +1777,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "pool.query": {
-   "description": "Query pools.",
-   "cli_description": "Query pools",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": true,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "POOL_READ"
-   ],
    "accepts": [
     {
      "type": "array",
@@ -2071,7 +1788,6 @@
       {}
      ],
      "default": [],
-     "description": "List of filters for query results.",
      "title": "filters",
      "_name_": "filters",
      "_required_": false
@@ -2153,7 +1869,6 @@
       }
      },
      "default": {},
-     "description": "Query options including pagination, ordering, and additional parameters.",
      "_name_": "options",
      "_required_": false
     }
@@ -2366,32 +2081,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "service.query": {
-   "description": "Query services.",
-   "cli_description": "Query services",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": true,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "SERVICE_READ"
-   ],
    "accepts": [
     {
      "type": "array",
@@ -2399,7 +2092,6 @@
       {}
      ],
      "default": [],
-     "description": "List of filters for query results.",
      "title": "filters",
      "_name_": "filters",
      "_required_": false
@@ -2481,7 +2173,6 @@
       }
      },
      "default": {},
-     "description": "Query options including pagination, ordering, and additional parameters.",
      "_name_": "options",
      "_required_": false
     }
@@ -2614,32 +2305,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "sharing.smb.query": {
-   "description": "Query SMB shares.",
-   "cli_description": "Query SMB shares",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": true,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "SHARING_SMB_READ"
-   ],
    "accepts": [
     {
      "type": "array",
@@ -2647,7 +2316,6 @@
       {}
      ],
      "default": [],
-     "description": "List of filters for query results.",
      "title": "filters",
      "_name_": "filters",
      "_required_": false
@@ -2729,7 +2397,6 @@
       }
      },
      "default": {},
-     "description": "Query options including pagination, ordering, and additional parameters.",
      "_name_": "options",
      "_required_": false
     }
@@ -2777,17 +2444,12 @@
           },
           "name": {
            "type": "string",
-           "description": "SMB share name.",
-           "examples": [
-            "ringside"
-           ],
            "title": "name",
            "_name_": "name",
            "_required_": true
           },
           "path": {
            "type": "string",
-           "description": "Local server path to share.",
            "title": "path",
            "_name_": "path",
            "_required_": true
@@ -2937,17 +2599,12 @@
         },
         "name": {
          "type": "string",
-         "description": "SMB share name.",
-         "examples": [
-          "ringside"
-         ],
          "title": "name",
          "_name_": "name",
          "_required_": true
         },
         "path": {
          "type": "string",
-         "description": "Local server path to share.",
          "title": "path",
          "_name_": "path",
          "_required_": true
@@ -3066,32 +2723,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "system.info": {
-   "description": "Returns basic system information.",
-   "cli_description": "Returns basic system information",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "READONLY_ADMIN"
-   ],
    "accepts": [],
    "returns": [
     {
@@ -3139,32 +2774,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "user.create": {
-   "description": "Create a new user.",
-   "cli_description": "Create a new user",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "ACCOUNT_WRITE"
-   ],
    "accepts": [
     {
      "type": "object",
@@ -3203,18 +2816,13 @@
         }
        ],
        "default": null,
-       "description": "Unix user ID. Chosen by the system when null.",
        "title": "uid",
        "_name_": "uid",
        "_required_": false
       },
       "username": {
        "type": "string",
-       "description": "Username of the account.",
        "maxLength": 32,
-       "examples": [
-        "stone_cold"
-       ],
        "title": "username",
        "_name_": "username",
        "_required_": true
@@ -3377,14 +2985,12 @@
         }
        ],
        "default": null,
-       "description": "Password. Required unless password_disabled.",
        "title": "password",
        "_name_": "password",
        "_required_": false
       },
       "random_password": {
        "type": "boolean",
-       "description": "Generate a random password.",
        "default": false,
        "title": "random_password",
        "_name_": "random_password",
@@ -3406,32 +3012,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "user.delete": {
-   "description": "Delete user `id`.",
-   "cli_description": "Delete user `id`",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": true,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "ACCOUNT_WRITE"
-   ],
    "accepts": [
     {
      "type": "integer",
@@ -3466,32 +3050,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "user.query": {
-   "description": "Query users.",
-   "cli_description": "Query users",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": false,
-   "no_auth_required": false,
-   "filterable": true,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "ACCOUNT_READ"
-   ],
    "accepts": [
     {
      "type": "array",
@@ -3499,7 +3061,6 @@
       {}
      ],
      "default": [],
-     "description": "List of filters for query results.",
      "title": "filters",
      "_name_": "filters",
      "_required_": false
@@ -3581,7 +3142,6 @@
       }
      },
      "default": {},
-     "description": "Query options including pagination, ordering, and additional parameters.",
      "_name_": "options",
      "_required_": false
     }
@@ -3622,25 +3182,19 @@
          "properties": {
           "id": {
            "type": "integer",
-           "description": "Unique identifier for the user account.",
            "title": "id",
            "_name_": "id",
            "_required_": true
           },
           "uid": {
            "type": "integer",
-           "description": "Unix user ID.",
            "title": "uid",
            "_name_": "uid",
            "_required_": true
           },
           "username": {
            "type": "string",
-           "description": "Username of the account.",
            "maxLength": 32,
-           "examples": [
-            "the_rock"
-           ],
            "title": "username",
            "_name_": "username",
            "_required_": true
@@ -3654,7 +3208,6 @@
              "type": "null"
             }
            ],
-           "description": "Hashed password for local authentication.",
            "title": "unixhash",
            "_name_": "unixhash",
            "_required_": true
@@ -3668,14 +3221,12 @@
              "type": "null"
             }
            ],
-           "description": "NT hash for SMB authentication.",
            "title": "smbhash",
            "_name_": "smbhash",
            "_required_": true
           },
           "home": {
            "type": "string",
-           "description": "Home directory path.",
            "default": "/var/empty",
            "title": "home",
            "_name_": "home",
@@ -3683,7 +3234,6 @@
           },
           "shell": {
            "type": "string",
-           "description": "Login shell.",
            "default": "/usr/bin/zsh",
            "title": "shell",
            "_name_": "shell",
@@ -3691,21 +3241,18 @@
           },
           "full_name": {
            "type": "string",
-           "description": "Display name.",
            "title": "full_name",
            "_name_": "full_name",
            "_required_": true
           },
           "builtin": {
            "type": "boolean",
-           "description": "Account came with the operating system.",
            "title": "builtin",
            "_name_": "builtin",
            "_required_": true
           },
           "smb": {
            "type": "boolean",
-           "description": "The account may authenticate over SMB.",
            "default": true,
            "title": "smb",
            "_name_": "smb",
@@ -3756,14 +3303,12 @@
             }
            ],
            "default": [],
-           "description": "Group record ids.",
            "title": "groups",
            "_name_": "groups",
            "_required_": true
           },
           "password_disabled": {
            "type": "boolean",
-           "description": "Password authentication is disabled.",
            "default": false,
            "title": "password_disabled",
            "_name_": "password_disabled",
@@ -3771,7 +3316,6 @@
           },
           "locked": {
            "type": "boolean",
-           "description": "The account is locked.",
            "default": false,
            "title": "locked",
            "_name_": "locked",
@@ -3908,25 +3452,19 @@
        "properties": {
         "id": {
          "type": "integer",
-         "description": "Unique identifier for the user account.",
          "title": "id",
          "_name_": "id",
          "_required_": true
         },
         "uid": {
          "type": "integer",
-         "description": "Unix user ID.",
          "title": "uid",
          "_name_": "uid",
          "_required_": true
         },
         "username": {
          "type": "string",
-         "description": "Username of the account.",
          "maxLength": 32,
-         "examples": [
-          "the_rock"
-         ],
          "title": "username",
          "_name_": "username",
          "_required_": true
@@ -3940,7 +3478,6 @@
            "type": "null"
           }
          ],
-         "description": "Hashed password for local authentication.",
          "title": "unixhash",
          "_name_": "unixhash",
          "_required_": true
@@ -3954,14 +3491,12 @@
            "type": "null"
           }
          ],
-         "description": "NT hash for SMB authentication.",
          "title": "smbhash",
          "_name_": "smbhash",
          "_required_": true
         },
         "home": {
          "type": "string",
-         "description": "Home directory path.",
          "default": "/var/empty",
          "title": "home",
          "_name_": "home",
@@ -3969,7 +3504,6 @@
         },
         "shell": {
          "type": "string",
-         "description": "Login shell.",
          "default": "/usr/bin/zsh",
          "title": "shell",
          "_name_": "shell",
@@ -3977,21 +3511,18 @@
         },
         "full_name": {
          "type": "string",
-         "description": "Display name.",
          "title": "full_name",
          "_name_": "full_name",
          "_required_": true
         },
         "builtin": {
          "type": "boolean",
-         "description": "Account came with the operating system.",
          "title": "builtin",
          "_name_": "builtin",
          "_required_": true
         },
         "smb": {
          "type": "boolean",
-         "description": "The account may authenticate over SMB.",
          "default": true,
          "title": "smb",
          "_name_": "smb",
@@ -4042,14 +3573,12 @@
           }
          ],
          "default": [],
-         "description": "Group record ids.",
          "title": "groups",
          "_name_": "groups",
          "_required_": true
         },
         "password_disabled": {
          "type": "boolean",
-         "description": "Password authentication is disabled.",
          "default": false,
          "title": "password_disabled",
          "_name_": "password_disabled",
@@ -4057,7 +3586,6 @@
         },
         "locked": {
          "type": "boolean",
-         "description": "The account is locked.",
          "default": false,
          "title": "locked",
          "_name_": "locked",
@@ -4170,32 +3698,10 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   },
   "user.update": {
-   "description": "Update attributes of an existing user.",
-   "cli_description": "Update attributes of an existing user",
-   "examples": {
-    "__all__": [],
-    "cli": [],
-    "rest": [],
-    "websocket": [
-     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
-    ]
-   },
-   "item_method": true,
-   "no_auth_required": false,
-   "filterable": false,
-   "filterable_schema": null,
-   "pass_application": false,
-   "require_websocket": false,
-   "job": false,
-   "downloadable": false,
-   "uploadable": false,
-   "check_pipes": false,
-   "roles": [
-    "ACCOUNT_WRITE"
-   ],
    "accepts": [
     {
      "type": "integer",
@@ -4363,14 +3869,12 @@
          "type": "null"
         }
        ],
-       "description": "Password. Required unless password_disabled.",
        "title": "password",
        "_name_": "password",
        "_required_": false
       },
       "random_password": {
        "type": "boolean",
-       "description": "Generate a random password.",
        "title": "random_password",
        "_name_": "random_password",
        "_required_": false
@@ -4411,25 +3915,19 @@
      "properties": {
       "id": {
        "type": "integer",
-       "description": "Unique identifier for the user account.",
        "title": "id",
        "_name_": "id",
        "_required_": true
       },
       "uid": {
        "type": "integer",
-       "description": "Unix user ID.",
        "title": "uid",
        "_name_": "uid",
        "_required_": true
       },
       "username": {
        "type": "string",
-       "description": "Username of the account.",
        "maxLength": 32,
-       "examples": [
-        "the_rock"
-       ],
        "title": "username",
        "_name_": "username",
        "_required_": true
@@ -4443,7 +3941,6 @@
          "type": "null"
         }
        ],
-       "description": "Hashed password for local authentication.",
        "title": "unixhash",
        "_name_": "unixhash",
        "_required_": true
@@ -4457,14 +3954,12 @@
          "type": "null"
         }
        ],
-       "description": "NT hash for SMB authentication.",
        "title": "smbhash",
        "_name_": "smbhash",
        "_required_": true
       },
       "home": {
        "type": "string",
-       "description": "Home directory path.",
        "default": "/var/empty",
        "title": "home",
        "_name_": "home",
@@ -4472,7 +3967,6 @@
       },
       "shell": {
        "type": "string",
-       "description": "Login shell.",
        "default": "/usr/bin/zsh",
        "title": "shell",
        "_name_": "shell",
@@ -4480,21 +3974,18 @@
       },
       "full_name": {
        "type": "string",
-       "description": "Display name.",
        "title": "full_name",
        "_name_": "full_name",
        "_required_": true
       },
       "builtin": {
        "type": "boolean",
-       "description": "Account came with the operating system.",
        "title": "builtin",
        "_name_": "builtin",
        "_required_": true
       },
       "smb": {
        "type": "boolean",
-       "description": "The account may authenticate over SMB.",
        "default": true,
        "title": "smb",
        "_name_": "smb",
@@ -4545,14 +4036,12 @@
         }
        ],
        "default": [],
-       "description": "Group record ids.",
        "title": "groups",
        "_name_": "groups",
        "_required_": true
       },
       "password_disabled": {
        "type": "boolean",
-       "description": "Password authentication is disabled.",
        "default": false,
        "title": "password_disabled",
        "_name_": "password_disabled",
@@ -4560,7 +4049,6 @@
       },
       "locked": {
        "type": "boolean",
-       "description": "The account is locked.",
        "default": false,
        "title": "locked",
        "_name_": "locked",
@@ -4667,7 +4155,8 @@
      "_name_": "result",
      "_required_": true
     }
-   ]
+   ],
+   "job": false
   }
  }
 }
