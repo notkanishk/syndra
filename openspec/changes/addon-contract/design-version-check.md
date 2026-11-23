@@ -1,6 +1,6 @@
 # The version check: an add-on checks what it depends on
 
-Status: design, round 2, 23 Nov 2026: the owner's rulings, two Opus reviews
+Status: design, round 3, 23 Nov 2026: the owner's rulings, three Opus reviews
 and the owner's addition (§12, pending his yes) folded in. Not built. Slices
 are `tasks.md` §9. Extends `design.md` §13. Source facts:
 `research-core-get-methods.md`.
@@ -420,7 +420,9 @@ wrong: there is nothing for them to do. It is the add-on not having finished
 asking, which is exactly what a busy line is. So while the report is unread,
 `NAS.roundTrip` answers every method but the check's own (`system.version`,
 `auth.me`, `core.get_methods`) with the error `lineUp` already gives
-(`ErrNotSent` and `ErrBusy`, `nas.go:252`), before anything is sent.
+(`ErrNotSent` and `ErrBusy`, `nas.go:252`), before anything is sent. Its
+`Retry-After` is the time left until the check's next try (§8's backoff), at
+least 1 s, so "Try again in {n} s" stays true as the wait doubles.
 
 Everything after that exists and is unchanged: a read serves its kept copy
 with `stale.reason: busy` or answers `TARGET_BUSY`; a write answers
@@ -444,8 +446,8 @@ fields go in the same change, both containers deploy together.
 | Manifest | unchanged in shape. `available` and `unavailable_reason` now come from §6. |
 | `health.json` | `version_tested` and `version_note` are **removed**. `version_check` is added and required. |
 | `common/stale.json` | `reason` gains `unchecked`. `current`'s description gains "and whose shape the add-on has checked". |
-| `errors.json` | `TARGET_VERSION_UNSUPPORTED` (`errors.json:259`): "The add-on is behind its app: a function this needs is missing or changed on this app version, or answered in a form the add-on does not know. Nothing was sent." `details: {functions: [...], field?, verdict}`. `retry` moves from `never` (`errors.json:264`, `addons/truenas/errors.go:88`) to `retry_after`, and its status from 422 to 503 with `Retry-After` (RFC 9110 §15.6.4, §10.2.3), as `TARGET_BUSY`. A missing method no longer answers `OPERATION_FAILED`, which can mean "may have reached the app". |
-| Kit, `AUTHORING.md` ch. 2 step 2, reference add-on | the gate rule is rewritten to this; the reference answers `state: "unchanged"`. New kit check: no write the manifest declares `available` appears in any `holds`. |
+| `errors.json` | `TARGET_VERSION_UNSUPPORTED` (`errors.json:259`): "The add-on is behind its app: a function this needs is missing or changed on this app version, or answered in a form the add-on does not know. Nothing was sent." `details: {functions: [...], field?, verdict}`. `retry` moves from `never` (`errors.json:259-265`, `addons/truenas/errors.go:88`) to `retry_after`, and its status from 422 to 503 with `Retry-After` (RFC 9110 §15.6.4, §10.2.3), as `TARGET_BUSY`: the two places that write it are `operations.go:155` and `apply.go:641`. A missing method no longer answers `OPERATION_FAILED`, which can mean "may have reached the app". |
+| Kit, `AUTHORING.md` ch. 2 step 2, reference add-on | the gate rule is rewritten to this; the reference answers `state: "unchanged"`. The guide's three mentions of the code already say 503 (round 3); the kit's reads-only fixture (`kit_test.go:1923-1931`) still sends it as 422 and moves in 9c. New kit check: no write the manifest declares `available` appears in any `holds`. |
 | `design.md` §13.1, §13.3 | one table row and the kept-copy reason `unchecked` (done with this revision). |
 
 ```json
@@ -473,30 +475,38 @@ UniFi or inventory add-on fills the same object.
 **The code is `unreached`: it spends no attempt and opens no breaker.**
 Today it is `retry: never`, so `classifyStatus` falls to its `default`,
 `OutcomeRejected` (`transport.go:611`), which is terminal
-(`transport.go:62`): a queued revocation would be refused for good. One
-change in each of four places, each with a test:
+(`transport.go:62`): a queued revocation would be refused for good. The
+backend changes in five places, each with a test:
 
-- `classifyStatus` (`transport.go:598`) answers `OutcomeUnreached` for the
-  code, before its status branch, with `shape` false. It must not be a
-  `ShapeRefusal`: that re-reads the manifest (`pipe.go:117`) and the breaker
-  counts it.
-- `Unread` (`unread.go:128`) maps the code to the existing reason
-  `addon_outdated`, with `details.functions` as the detail. Left alone, an
-  unknown code falls to `read_refused` (`unread.go:143`).
+- `classifyStatus`: the code joins the `OutcomeUnreached` list at
+  `transport.go:606`, above the 5xx branch, with `shape` false. It must not
+  be a `ShapeRefusal`: that re-reads the manifest (`pipe.go:117`) and the
+  breaker counts it.
+- `Unread`: a case before the catch-all at `unread.go:143` maps the code to
+  the existing reason `addon_outdated`, with `details.functions` as the
+  detail and the reply's `Retry-After`. Left alone it is `read_refused`.
 - The breaker's not-counted list (`transport.go:744`) gains the code. It is
   the add-on answering on purpose, and five held writes would otherwise take
   the system away from everybody.
+- The add-on pass's no-attempt case (`propagation/addon.go:282-285`) takes
+  the code beside `Why.Unreachable()`. `addon_outdated` is neither busy nor
+  `Unreachable()` (`unread.go:81-82`), so left alone the row falls to the
+  case below (`addon.go:287`), spends an attempt, and ends "out of retries".
+  With it the row goes through `deferUnsent`, the one path for "nothing went
+  out": pending again, no attempt spent, due after `Retry-After`. The case
+  asks for the code, not the reason, so a shape refusal behaves as today.
 - `haltReason` (`propagation/drain.go:304`) reads `version_check` from the
   monitor's last health answer and halts the pass, as `addon_outdated`, for
   a system whose `holds` name `apply`. The rows wait unsent, as they do for
   a system in maintenance.
 
-A row that meets the code anyway goes through `deferUnsent`
-(`propagation/addon.go`), the one path for "nothing went out": pending
-again, no attempt spent, due after `Retry-After`. That is the case the pass
-halt cannot see: **a write's pre-read fails its decode while the schema is
-unchanged**, so nothing is in `holds`. It waits like the rest instead of
-being refused for good.
+The add-on changes in the two places the table names: the registry entry
+with its Go twin, and the status at `operations.go:155` and `apply.go:641`.
+
+A row meets the code past the pass halt in one case: **a write's pre-read
+fails its decode while the schema is unchanged**, so nothing is in `holds`.
+The fourth place is what makes it wait like the rest instead of being
+refused for good.
 
 `Retry-After` is the cap of the check's backoff (§8): a hold ends on a new
 connection or a new add-on, not sooner.
@@ -514,7 +524,7 @@ never becomes "out of retries".
 
 | Case | What happens |
 |---|---|
-| `core.get_methods` fails | If this process already checked this exact version string, that report is restored: the schemas are that version's code. Otherwise the report stays `unread` and everything answers busy (§6.2). |
+| `core.get_methods` fails | The report stays `unread` and everything answers busy (§6.2). The backoff below asks again. |
 | Retrying the check | `ensureProbed` has one retry branch for an incomplete probe, replacing the `auth.me` early return (`nas.go:451-458`), which today returns before anything else is retried. Connected, and the self-account or the report still unknown: the next call after the wait runs whichever is missing, once. So the check retries while `selfName` is empty, and the two never double the traffic. The wait is a capped exponential backoff, `probeCooldown` (30 s, `nas.go:90`) doubling to 10 min, reset by a new connection. |
 | The check's own cost | It asks per service, with the `service` filter (§1), one short call for each service in the table. One unfiltered call rebuilds every schema on the NAS while holding the shared line for up to its bound. Each call runs on a context detached from the request (`context.WithoutCancel`) with its own bound, `methodsCallLimit`, set from 9a's measurement. A first request's `withBudget` cannot cut it short. Any service failing leaves the whole report `unread`. 9a measures both forms; the single call replaces this only if it is the faster in total. |
 | Add-on restart | The report is in memory only, so a restart checks again on the first connection (`main.go:325`, before any request). **Not persisted**, decided: a stored verdict would be a second copy that also depends on the key's roles and the add-on's own dependency table. (§12's holds are evidence, not verdicts, and are stored.) |
@@ -523,7 +533,6 @@ never becomes "out of retries".
 | A patch, a new line, a downgrade | Compared like anything else. Nothing relied-on changed: everything works, nobody is asked. Something did: those functions are held; the rest carry on. |
 | A reply's shape breaks with the schema unchanged | The strict decode fails that read, every time, with the field named (§5). A write whose pre-read fails is not sent and waits without spending an attempt (§7). |
 | Same shape, different behaviour | Not visible to any schema check. Apply's read-back sees it. Today it shows as drift and is queued again, which can loop; §12 holds the function instead. |
-| The key's roles change, same version | The restored report may list a method the key lost. TrueNAS refuses the call, and that is today's permission refusal. |
 | Add-on updated, NAS not | The new dependency is compared like the rest. |
 | The baseline file is unreadable | The add-on refuses to start. It is embedded and tested, so this is a build fault. |
 
@@ -582,7 +591,8 @@ and 9e: the strict decode's `details.verdict` needs the report.
   `user.query` through the `anyOf`, and the capture with its list branch
   removed is `changed`.** `user.delete` checked with `elevatedDeps` is
   `unchanged`, and is absent from a report built from `deps`.
-- **9c Contract.** Schemas, registry, fixtures, kit and guide of §7, with
+- **9c Contract.** Schemas, registry, fixtures, kit and guide of §7, and
+  its five backend places and two add-on places, with
   the least code that keeps both sides valid: the add-on emits
   `version_check` (from the old gate, until 9d) and `healthWire` reads it.
   *Tests:* the schema tests reject a health reply with `version_tested` and
@@ -591,7 +601,8 @@ and 9e: the strict decode's `details.verdict` needs the report.
   not read again); five such answers leave the breaker closed; `Unread`
   answers `addon_outdated` with the functions, never `read_refused` or
   `app_unreachable`; **a revocation row answered with the code is pending
-  again with its attempt count unchanged**; the kit fails an add-on that
+  again with its attempt count unchanged** (*mutation:* drop the code from
+  `addon.go:282`, red); the kit's reads-only fixture sends the code as 503; the kit fails an add-on that
   declares a write available and names it in `holds`.
 - **9d The add-on decides.** The check in `ensureProbed`, per service, on
   its own bound, with the one retry branch and its backoff; the report
@@ -666,6 +677,14 @@ In round 2, from the second Opus review:
    argument; the `tested`/`checked` split and its notice; `unread` as a
    per-function verdict; the fixed 30 s retry.
 
+In round 3, from the third Opus review:
+
+9. Removed: the per-version report restore (§8; the backoff covers it); the
+   refused-write signal and its closed-schema test (§12.1); the add-on
+   version in a hold's key (§12.3).
+10. Try again sends its one row through the add-on pass, not `DrainOne`
+    (§12.4).
+
 ## 12. Held on misbehaviour (slice 9j; the owner's addition, pending his yes)
 
 Owner, 23 Nov 2026. A schema check cannot see a function that keeps its
@@ -691,37 +710,36 @@ carries `"observed": true`, which is the one thing the page needs to offer
 
 ### 12.1 What counts
 
-Both signals are a completed exchange in which TrueNAS contradicted its own
-schema. Nothing else counts.
+One signal: **a write that did not take.** The write reported success and
+the read-back that follows (`apply.go:1165`, and the create's at
+`apply.go:1344`) shows a closed field Syndra just wrote holding another
+value: `locked: true` asked, `locked: false` read. It is a completed
+exchange in which TrueNAS said yes and did otherwise.
 
-1. **A refused write.** TrueNAS rejects a write with a validation error that
-   names a field Syndra sent, the function's schema is `unchanged`, and that
-   field's schema is closed: a boolean, an `enum` or a `const`. Syndra sent
-   a value the schema itself declares valid, so the input cannot be at
-   fault. Seen in `sendWrite`, from the refusal's field paths
-   (`nas.go:751`); the middleware's message is still never propagated
-   (`nas.go:737`).
-2. **A write that did not take.** The write reported success and the
-   read-back that follows (`apply.go:1165`, and the create's at
-   `apply.go:1344`) shows a field Syndra just wrote holding another value:
-   `locked: true` asked, `locked: false` read. Every written field the
-   read-back reads is compared. A password is never read, so never compared.
+Only closed fields are compared: booleans, enums and consts, such as
+`locked`, `smb` and `password_disabled`. `home` and `groups` are not:
+TrueNAS normalises and resolves them on write (`apply.go:1155-1159`), so a
+different value there is not a fault. A password is never read, so never
+compared.
 
-**Never counts:** busy, unreachable, a timeout, rate limiting, a permission
-refusal, `TARGET_CHANGED`, a missing path, a read-back that failed or was
-`Unverified`, and a validation error on an open-valued field (a name, a
-password, a path, a number, a list of ids). The last is how operator input
-and one account's own data are kept out: only a value the schema declares
-valid can trip a hold.
+**Never counts:** a refusal of any kind, busy, unreachable, a timeout, rate
+limiting, `TARGET_CHANGED`, a missing path, and a read-back that failed or
+was `Unverified`.
 
-The reason names what was asked and what was read, for closed fields only:
-"user.update: asked `locked: true`, read `locked: false`". It can never hold
-a secret or free text.
+A refusal is left out on purpose. TrueNAS has rules across fields that no
+schema shows (`smb: true` is refused unless the same call sets a password,
+`apply.go:968`), and a staff edit between the pre-read and the write trips
+the same refusal, so a refused value the schema allows proves nothing. And a
+refusal does not loop: it is terminal today, `target_refused`
+(`propagation/addon.go:241-262`), and already waits on staff.
+
+The reason names what was asked and what was read: "user.update: asked
+`locked: true`, read `locked: false`". Closed fields only, so it can never
+hold a secret or free text.
 
 ### 12.2 Effect
 
-- **The function is held on this TrueNAS version and this add-on version
-  only.** Through §6: writes needing it answer `TARGET_VERSION_UNSUPPORTED`,
+- **The function is held on this TrueNAS version only.** Through §6: writes needing it answer `TARGET_VERSION_UNSUPPORTED`,
   the pass halts on `holds` (§7), other rows wait without spending an
   attempt, and waiting removals are counted in the notice's first line (§9).
 - **The tripping row stays visible and is not sent again by itself.** Its
@@ -731,48 +749,70 @@ a secret or free text.
 - **Staff are told three ways,** from one emitter, on the monitor's first
   health answer that shows the hold: a Home attention item, the system
   page's notice (§9's `changed` notice, with the reason), and an audit event
-  (`addon.function_held`: system, function, both versions, the reason, the
-  row).
+  (`addon.function_held`: system, function, the TrueNAS version, the reason,
+  the row).
 
 ### 12.3 Persistence
 
 **Stored, in the add-on's own store** (`store.go`, a `holds` bucket beside
-`bindings`), keyed by function: the TrueNAS version, the add-on version, the
-reason, the account, the row's `call_id`, when, and its state. It must
-persist: it is evidence of something that happened, and a restart cannot
-derive it again without making the same bad write. It lives in the add-on
-because the add-on decides (`server.unavailable` is the one gate, and it
-also guards operations that queue no row); the backend learns of it through
-`health`, like every other verdict. §8's "not persisted" stands for
+`bindings`). A function's hold is keyed by the function. A narrowed one
+(§12.4) is keyed by function and subject, so a second account's fault is a
+second record: it never overwrites the first, and the two never flip. Each
+record holds the TrueNAS version, the reason, the account, the row's
+`call_id`, when, and whether it is armed.
+
+It must persist: it is evidence of something that happened, and a restart
+cannot derive it again without making the same bad write. It lives in the
+add-on because the add-on decides (`server.unavailable` is the one gate, and
+it also guards operations that queue no row); the backend learns of it
+through `health`, like every other verdict. §8's "not persisted" stands for
 verdicts, which a connection re-derives.
+
+**The add-on's own version is not in the key.** It has none today:
+`Dockerfile:23` builds with no version flag, and `ContractVersion`
+(`server.go:674`) is the contract's. Stamping the commit in would not help:
+every deploy rebuilds the image (`docker compose build`, `deploy.yml:159`),
+so every unrelated merge would clear every hold and cost one more bad write
+to hold it again. A new build is not evidence that TrueNAS behaves. Try
+again is, and after an add-on update it is one press.
 
 ### 12.4 Clearing
 
-- **By itself**, on connect: a hold whose TrueNAS version or add-on version
-  is no longer the current one is deleted. A new version is new evidence
-  either way.
+- **By itself**, on connect: a hold whose TrueNAS version is no longer the
+  current one is deleted. A new version is new evidence either way.
 - **Try again**, by staff, on the held function. It is justified where
   Trust was not: a real failure was observed, and this asks TrueNAS the
   same question once more instead of asking a person to vouch.
-  1. The backend route (operator, audited as `addon.function_retried`) calls
-     one new registered operation, `function.retry {function}`. It is local,
-     like `account.release` (`server.go:197`): nothing goes to TrueNAS.
+  1. The backend route (operator, audited as `addon.function_retried`)
+     calls one new registered operation, `function.retry {function}`, over
+     the signed call every operation uses. It is declared as
+     `account.release` is (`capabilities.go:194`): `Scope: "admin"`,
+     `Confirm: true`. It is local, nothing goes to TrueNAS, and it writes
+     the store through `s.mutate` (`operations.go:483`), so the add-on's own
+     log has the arming or it did not happen.
   2. The add-on arms the hold. `sendWrite` then admits **exactly one**
      write through that function, taken under `n.mu`; every other write
      still answers the code.
-  3. The backend sends the system's oldest waiting row with `DrainOne`
-     (`propagation/drain.go:351`), removals first. With no row waiting, the
-     armed hold admits the next write whenever it comes.
+  3. The route sends the system's oldest waiting row, removals first,
+     through the add-on pass: `DrainAddon`'s lock and row handling
+     (`propagation/addon.go:49`), claiming that one row instead of a batch.
+     For that row alone the armed hold is not a hold on `apply`: the pass
+     skips `haltReason`'s `holds` case (§7), which otherwise halts before
+     any row is claimed (`addon.go:84`). Every other halt still applies, and
+     the scheduled pass stays halted until the hold clears. `DrainOne`
+     cannot do this: it claims Zitadel rows only (`drain.go:367`). With no
+     row waiting, the armed hold admits the next write that reaches the
+     add-on directly, an operation such as `password.set`.
   4. That write's own exchange decides. It took: the hold is cleared
      (`addon.function_cleared`). It misbehaved: the function is held again
      with the new reason. It ended any other way (busy, unreachable, in
      doubt): nothing was learned and the hold stays armed.
 - **A fault that is one account's own.** The tripping row is `blocked`, so
   the trial is by construction another account's write. If it takes, the
-  function works and the fault was the first account's: the hold narrows to
-  that account. Its writes through the function still answer `blocked`
-  without being sent, others flow, and the notice names the account. The
-  same record, one more state; it clears the same two ways. Without this,
+  function works and the fault was the first account's: the function's record
+  is replaced by one keyed by function and that account (§12.3). Its writes through the function still answer `blocked`
+  without being sent, others flow, and the notice names the account. It
+  clears the same two ways. Without this,
   drift would queue that account again, re-hold the function, and staff
   would press Try again for ever.
 
@@ -797,25 +837,26 @@ Three audit events. No new error code, reason or read state.
 
 ### 12.6 Slice 9j
 
-One PR, after 9i. Add-on: the two detectors, the store bucket, `observed`
-into `Check`, `function.retry`. Backend: the route, `DrainOne`, the three
+One PR, after 9i. Add-on: the one detector, the store bucket, `observed`
+into `Check`, `function.retry`. Backend: the route, the one-row add-on pass, the three
 events, the Home item. UI: the reason, the button, the narrowed line; board
 first.
 
 *Tests,* against the fake NAS: a write that succeeds and reads back
 `locked: false` holds `user.update`, answers that subject `blocked`, and a
 later pass sends nothing for it; a second row needing the function waits
-with its attempt count unchanged; a validation refusal on `smb` holds, and
-one on `username` does not; busy, unreachable, a timeout, a permission
-refusal and an `Unverified` read-back hold nothing; the hold survives a
-restart; it is gone after a connect on another TrueNAS version, and after
-one with another add-on version; Try again admits one write and a second
-concurrent write is refused; the trial misbehaving holds again; the trial
+with its attempt count unchanged; a read-back with `home` normalised or
+`groups` in another order holds nothing; a refusal of any kind, busy,
+unreachable, a timeout and an `Unverified` read-back hold nothing; the hold survives a
+restart; it is gone after a connect on another TrueNAS version; **Try again sends
+its one row while the pass is halted on `holds`, and sends no second row**;
+Try again admits one write and a second concurrent write is refused; the trial misbehaving holds again; the trial
 taking for another account narrows the hold, and that account's next write
-is not sent; a busy trial leaves the hold armed; Try again on a
+is not sent; a second account narrowed after it leaves the first record as
+it was; a busy trial leaves the hold armed; Try again on a
 schema-changed function is refused; the event and the Home item are written
-once per hold, not once per probe. *Mutation:* drop the closed-field test,
-and the `username` case goes red.
+once per hold, not once per probe. *Mutation:* compare every written field,
+and the `home` case goes red.
 
 **If the owner says no,** 9j is not built, and §12 goes with its
 `observed` argument. Nothing in 9a to 9i changes: the read-back
@@ -829,10 +870,18 @@ the backend calls when a function is held.
 
 1. **Yes or no to §12** (slice 9j).
 2. **9a:** paste the elevated key once (§3.1), and say when.
-3. Inside §12, if yes: a hold trips on **one** observation, as he wrote it;
-   §12.4's narrowing is what keeps one odd account from holding everybody
-   after the first Try again. And one candidate left out because he named
-   two signals: a reply that fails its strict decode with the schema
-   unchanged (§5) is also a function misbehaving, and holding it would put
-   its waiting removals in the count.
+3. Inside §12, if yes:
+   - A hold trips on **one** observation, as he wrote it; §12.4's narrowing
+     is what keeps one odd account from holding everybody after the first
+     Try again.
+   - **He named two signals and one is left.** The refused write is dropped
+     (§12.1): a refusal cannot be told from a cross-field rule or a staff
+     edit, and it does not loop today.
+   - **A hold is for the TrueNAS version only** (§12.3). After an add-on
+     update that fixes the fault, staff press Try again once; the hold does
+     not clear by itself. The other way is a build version stamped into the
+     image, which clears every hold on every deploy.
+   - One candidate left out: a reply that fails its strict decode with the
+     schema unchanged (§5) is also a function misbehaving, and holding it
+     would put its waiting removals in the count.
 4. **9i**, the staging run.

@@ -129,10 +129,10 @@ Four steps, in order. Each ends on something you can check.
 2. **Gate on what you recorded.** Read the app's version at start and on
    every health check. Against a version you have not recorded, the add-on
    MUST refuse every write that changes the app (an apply, a write
-   operation, a `PUT /settings` whose setting the app holds) with 422
-   `TARGET_VERSION_UNSUPPORTED`, MUST report `version_tested: false` with a
-   `version_note` in `/health`, and MUST go on answering reads, `/plan`
-   included. `/lifecycle` changes only the add-on and is accepted in every
+   operation, a `PUT /settings` whose setting the app holds) with 503
+   `TARGET_VERSION_UNSUPPORTED` and a `Retry-After`, MUST report
+   `version_tested: false` with a `version_note` in `/health`, and MUST go
+   on answering reads, `/plan` included. `/lifecycle` changes only the add-on and is accepted in every
    state ([`POST /lifecycle`](#post-lifecycle)). An app with no version
    endpoint is gated on what you can probe, and the probe is recorded like
    any read (`MajorSupported` in `addons/truenas/nas.go`). *Done when:* a
@@ -1257,7 +1257,7 @@ The add-on MUST work in this order:
    identity, because a re-plan changes them for the same call.
 3. Refuse while the lifecycle is not `active` (503 `LIFECYCLE_REFUSAL`,
    [chapter 9](#9-lifecycle-and-degradation)) or against an unrecorded app
-   version (422 `TARGET_VERSION_UNSUPPORTED`,
+   version (503 `TARGET_VERSION_UNSUPPORTED`,
    [chapter 2](#2-before-you-write-a-line)).
 4. Find the subject's account: by its binding first.
 5. Read that account on the app now, decide ([chapter 5](#5-plan-and-apply-agree)),
@@ -3009,7 +3009,7 @@ From read-only checks against a live install (5 Nov 2026).
   defer. So the version gate is essential: `/health` reads the
   unauthenticated `GET /api/Info/GetApiInformationalVersion`, and on a
   WebApi build with no recorded contract the add-on refuses every write with
-  422 `TARGET_VERSION_UNSUPPORTED` and goes on answering reads, `/plan`
+  503 `TARGET_VERSION_UNSUPPORTED` and goes on answering reads, `/plan`
   included ([chapter 2](#2-before-you-write-a-line), step 2).
 - The credential is a dedicated Ruby admin account that signs in (personal
   access tokens reach no user route), with the EULA accepted; its password
