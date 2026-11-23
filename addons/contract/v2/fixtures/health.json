@@ -2,8 +2,28 @@
   "reachable": true,
   "product": "TrueNAS",
   "product_version": "TrueNAS-25.10.5",
-  "version_tested": true,
-  "version_note": "25.10 is a tested release.",
+  "version_check": {
+    "state": "changed",
+    "version": "TrueNAS-25.10.5",
+    "note": "TrueNAS changed 1 function Syndra uses.",
+    "functions": [
+      {
+        "name": "user.update",
+        "effect": "write",
+        "verdict": "changed",
+        "detail": "smb: was boolean, now string",
+        "holds": [
+          "apply",
+          "password.set"
+        ]
+      },
+      {
+        "name": "user.query",
+        "effect": "read",
+        "verdict": "unchanged"
+      }
+    ]
+  },
   "last_read_at": "2026-11-10T09:29:41Z",
   "credential_scopes": [
     "account.write",

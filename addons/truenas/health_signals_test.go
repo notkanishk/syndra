@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -183,5 +184,24 @@ func TestHealthCountsARecentAnswerWhileTheSessionIsBusy(t *testing.T) {
 				t.Errorf("reachable %v with the session busy and the last answer %v old; want %v", h.Reachable, tc.age, tc.want)
 			}
 		})
+	}
+}
+
+// Until the add-on checks its functions (slice 9d), /health's version_check
+// says what the release gate says: a tested major is unchanged, an untested
+// one changed with the gate's sentence, a version not yet read unread. It
+// names no function, so it holds nothing by name (design-version-check §7).
+func TestHealthSaysTheVersionCheckFromTheReleaseGate(t *testing.T) {
+	for _, tc := range []struct{ version, state string }{
+		{"TrueNAS-25.04.2", "unchanged"}, {"27.10.0", "changed"}, {"", "unread"},
+	} {
+		s := healthServer(t)
+		s.nas.version = tc.version
+		var h Health
+		decodeHealth(t, s, &h)
+		v := h.VersionCheck
+		if v.State != tc.state || v.Functions == nil || len(v.Functions) != 0 || (tc.state == "changed") != strings.Contains(v.Note, "27.10") {
+			t.Errorf("version %q: version_check %+v, want %s, no functions, the gate's sentence when changed", tc.version, v, tc.state)
+		}
 	}
 }

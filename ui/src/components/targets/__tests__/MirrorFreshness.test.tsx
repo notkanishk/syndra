@@ -80,7 +80,7 @@ describe("how old the add-on's mirror is", () => {
       product: "truenas_scale",
       product_version: "TrueNAS-25.10.5",
       lifecycle: "active",
-      version_tested: true,
+      version_check: { state: "unchanged" },
       last_read_at: new Date().toISOString(),
       snapshot_taken_at: FOUR_HOURS_AGO,
     };
@@ -105,5 +105,29 @@ describe("how old the add-on's mirror is", () => {
     expect(screen.queryByText(/last state seen|no earlier copy/)).toBeNull();
     expect(screen.queryByText(/was read/)).toBeNull();
     expect(screen.getAllByText(/Syndra can't reach Truenas's add-on/i).length).toBeGreaterThan(0);
+  });
+});
+
+// Slice 9c: a write on an untested version is held, not refused (TARGET_VERSION_UNSUPPORTED is
+// 503, the row waits unspent), and the notice ends with the one step that releases it (copy guide §19).
+describe("the untested-version notice", () => {
+  it("says changes are held, and to update the add-on", () => {
+    currentHealth = {
+      read: NOW(),
+      reachable: true,
+      product: "truenas_scale",
+      product_version: "TrueNAS-26.04.0",
+      lifecycle: "active",
+      version_check: { state: "changed" },
+      last_read_at: new Date().toISOString(),
+    };
+    renderTarget();
+
+    expect(
+      screen.getByText(
+        /This version of Truenas has not been tested with Syndra\. Reads keep working; changes are held\. Update the add-on\.$/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/refused/)).toBeNull();
   });
 });

@@ -336,8 +336,8 @@ func (a *Addon) health(r *http.Request, _ []byte) reply {
 	busy := a.busy()
 	reachable := a.reach(at) || a.hung() && a.readRecently()
 	h := map[string]any{
-		"reachable": reachable, "product": "reference", "product_version": "1.0.0", "version_tested": true,
-		"credential_expiry": "none", "circuit_open": false,
+		"reachable": reachable, "product": "reference", "product_version": "1.0.0", "credential_expiry": "none",
+		"circuit_open": false, "version_check": map[string]any{"state": "unchanged", "functions": []any{}},
 		"lifecycle": a.lifecycle, "lifecycle_note": a.reason, "in_flight": busy, "drained": busy == 0,
 		"log_head": a.logHead, "log_records": a.logCount, "checked_at": now(),
 	}

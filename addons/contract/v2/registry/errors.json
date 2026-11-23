@@ -259,10 +259,10 @@
     "TARGET_VERSION_UNSUPPORTED": {
       "title": "Target version unsupported",
       "statuses": [
-        422
+        503
       ],
-      "retry": "never",
-      "meaning": "A mutation against a target major this add-on has not been tested with."
+      "retry": "retry_after",
+      "meaning": "The add-on is behind its app: a function this needs is missing or changed on this app version, or answered in a form the add-on does not know. Nothing was sent."
     },
     "UNAUTHENTICATED": {
       "title": "Unauthenticated",

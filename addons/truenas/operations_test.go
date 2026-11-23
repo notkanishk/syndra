@@ -984,7 +984,7 @@ func TestTheRouteRefusesExactlyWhatTheManifestWithdraws(t *testing.T) {
 				t.Error("release answered 200 and left the binding")
 			}
 			rr = postOperation(t, s, "password.set", `{"call_id":"p1","operation":"password.set","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
-			if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeTargetVersionUnsupported {
+			if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeTargetVersionUnsupported || rr.Header().Get("Retry-After") == "" {
 				t.Fatalf("password.set, withdrawn, answered %d %s", rr.Code, problemCode(t, rr))
 			}
 		})

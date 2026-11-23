@@ -636,9 +636,10 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 // and alone for its subject (once).
 func (s *server) applyNow(ctx context.Context, w http.ResponseWriter, req ApplyRequest) {
 	if supported, why := s.nas.MajorSupported(); !supported {
-		// A mutation against an untested major is refused, not attempted. Reads
-		// continue; this is the half that could break something.
-		writeError(w, http.StatusUnprocessableEntity, CodeTargetVersionUnsupported, why, nil)
+		// A mutation against an untested major is held, not attempted: 503 with
+		// Retry-After, so it waits for the add-on update (design-version-check
+		// §7). Reads continue; this is the half that could break something.
+		writeError(w, http.StatusServiceUnavailable, CodeTargetVersionUnsupported, why, nil)
 		return
 	}
 

@@ -85,7 +85,7 @@ var problems = map[string]problemKind{
 	CodeTargetChanged:            {"Target changed", "retry_after"},
 	CodeTargetUnreachable:        {"Target unreachable", "retry_after"},
 	CodeTargetUnreadable:         {"Target unreadable", "backoff"},
-	CodeTargetVersionUnsupported: {"Target version unsupported", "never"},
+	CodeTargetVersionUnsupported: {"Target version unsupported", "retry_after"},
 	CodeUnauthenticated:          {"Unauthenticated", "never"},
 	CodeUnknownField:             {"Unknown field", "never"},
 	CodeUnknownLifecycleState:    {"Unknown lifecycle state", "never"},

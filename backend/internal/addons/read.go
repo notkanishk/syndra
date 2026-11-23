@@ -693,8 +693,9 @@ type TargetHealth struct {
 	Reachable      bool   `json:"reachable"`
 	Product        string `json:"product"`
 	ProductVersion string `json:"product_version"`
-	VersionTested  bool   `json:"version_tested"`
-	VersionNote    string `json:"version_note,omitempty"`
+	// VersionCheck is the add-on's check of the functions it uses on its app
+	// (design-version-check §7): which changed, and what that holds.
+	VersionCheck VersionCheck `json:"version_check"`
 	// CircuitOpen is the ADD-ON's own breaker against its target, which is a
 	// different thing from the backend's breaker against the add-on. Both exist
 	// and an operator reading only one would look in the wrong place.
@@ -792,34 +793,52 @@ func readHealth(ctx context.Context, target string) TargetHealth {
 	return wire.view(target, resp.Status, resp.Clock)
 }
 
+// VersionCheck is health.json's version_check: unchanged, changed or unread,
+// and per function its verdict and the writes it holds (holds names operation
+// ids and "apply").
+type VersionCheck struct {
+	State     string            `json:"state"`
+	Version   string            `json:"version,omitempty"`
+	Note      string            `json:"note,omitempty"`
+	Functions []VersionFunction `json:"functions"`
+}
+
+// VersionFunction is one app function the add-on checked.
+type VersionFunction struct {
+	Name    string   `json:"name"`
+	Effect  string   `json:"effect"`
+	Verdict string   `json:"verdict"`
+	Detail  string   `json:"detail,omitempty"`
+	Holds   []string `json:"holds,omitempty"`
+}
+
 // healthWire is health.json as it travels. Contract 2 names the credential's
 // expiry credential_expiry and credential_expires_at; the view keeps the
 // names the UI reads (key_expiry, key_expires_at).
 type healthWire struct {
-	Reachable           bool     `json:"reachable"`
-	Product             string   `json:"product"`
-	ProductVersion      string   `json:"product_version"`
-	VersionTested       bool     `json:"version_tested"`
-	VersionNote         string   `json:"version_note"`
-	CircuitOpen         bool     `json:"circuit_open"`
-	Lifecycle           string   `json:"lifecycle"`
-	LifecycleNote       string   `json:"lifecycle_note"`
-	InFlight            int64    `json:"in_flight"`
-	Drained             bool     `json:"drained"`
-	LogHead             string   `json:"log_head"`
-	LogRecords          int64    `json:"log_records"`
-	SnapshotTakenAt     string   `json:"snapshot_taken_at"`
-	LastReadAt          string   `json:"last_read_at"`
-	CredentialExpiresAt string   `json:"credential_expires_at"`
-	CredentialExpiry    string   `json:"credential_expiry"`
-	UnauditedShares     []string `json:"unaudited_shares"`
-	SharesReadable      bool     `json:"shares_readable"`
+	Reachable           bool         `json:"reachable"`
+	Product             string       `json:"product"`
+	ProductVersion      string       `json:"product_version"`
+	VersionCheck        VersionCheck `json:"version_check"`
+	CircuitOpen         bool         `json:"circuit_open"`
+	Lifecycle           string       `json:"lifecycle"`
+	LifecycleNote       string       `json:"lifecycle_note"`
+	InFlight            int64        `json:"in_flight"`
+	Drained             bool         `json:"drained"`
+	LogHead             string       `json:"log_head"`
+	LogRecords          int64        `json:"log_records"`
+	SnapshotTakenAt     string       `json:"snapshot_taken_at"`
+	LastReadAt          string       `json:"last_read_at"`
+	CredentialExpiresAt string       `json:"credential_expires_at"`
+	CredentialExpiry    string       `json:"credential_expiry"`
+	UnauditedShares     []string     `json:"unaudited_shares"`
+	SharesReadable      bool         `json:"shares_readable"`
 }
 
 func (w healthWire) view(target string, status int, c Clock) TargetHealth {
 	return TargetHealth{
 		Reachable: w.Reachable, Product: w.Product, ProductVersion: w.ProductVersion,
-		VersionTested: w.VersionTested, VersionNote: w.VersionNote, CircuitOpen: w.CircuitOpen,
+		VersionCheck: w.VersionCheck, CircuitOpen: w.CircuitOpen,
 		Lifecycle: w.Lifecycle, LifecycleNote: w.LifecycleNote, InFlight: w.InFlight, Drained: w.Drained,
 		LogHead: w.LogHead, LogRecords: w.LogRecords, SnapshotTakenAt: dated(target, w.SnapshotTakenAt, c),
 		LastReadAt: dated(target, w.LastReadAt, c), KeyExpiresAt: w.CredentialExpiresAt, KeyExpiry: w.CredentialExpiry,

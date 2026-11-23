@@ -152,7 +152,7 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 		// version, the one that does is refused for it.
 		switch code, why := s.unavailable(name); code {
 		case CodeTargetVersionUnsupported:
-			writeError(w, http.StatusUnprocessableEntity, CodeTargetVersionUnsupported, why, nil)
+			writeError(w, http.StatusServiceUnavailable, CodeTargetVersionUnsupported, why, nil)
 			return
 		case CodeOperationFailed:
 			writeError(w, http.StatusUnprocessableEntity, CodeOperationFailed, why, nil)

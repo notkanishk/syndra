@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -132,6 +133,10 @@ func Unread(r CallResponse) Why {
 		// TARGET_CHANGED: the app changed while the add-on read it. Answered,
 		// so not an outage: a queued row spends an attempt and backs off.
 		return Why{Reason: ReasonReadRefused, Detail: problemDetail(r.Body), RetryAfter: r.RetryAfter}
+	case r.Code == CodeTargetVersionUnsupported:
+		// The add-on behind its app: the functions it names are the detail, and
+		// it says when to ask again (design-version-check §7).
+		return Why{Reason: ReasonAddonOutdated, Detail: heldFunctions(r.Body), RetryAfter: r.RetryAfter}
 	case r.Code == codeTargetBusy:
 		return Why{Reason: ReasonBusy, Detail: problemDetail(r.Body), RetryAfter: max(1, r.RetryAfter)}
 	case r.Code == codeTargetUnreachable, r.Code == codeNoCurrentRead, r.Code == codeTargetUnreadable:
@@ -158,6 +163,20 @@ func Unread(r CallResponse) Why {
 	}
 	// Any other refusal is the add-on answering about the request.
 	return Why{Reason: ReasonReadRefused, Detail: problemDetail(r.Body)}
+}
+
+// heldFunctions is a TARGET_VERSION_UNSUPPORTED refusal's details.functions,
+// joined: the app functions the add-on is behind on. Empty when it names none.
+func heldFunctions(body []byte) string {
+	var p struct {
+		Details struct {
+			Functions []string `json:"functions"`
+		} `json:"details"`
+	}
+	if DecodeReply(body, &p) != nil {
+		return ""
+	}
+	return strings.Join(p.Details.Functions, ", ")
 }
 
 // unsent is a reply with no status: nothing came back.

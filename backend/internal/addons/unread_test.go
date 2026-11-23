@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -50,6 +51,8 @@ func TestUnreadNamesWhoIsDownAndWhy(t *testing.T) {
 		{"feature not declared", CallResponse{Outcome: OutcomeUnreached, Err: ErrFeatureNotDeclared}, ReasonAddonOutdated, "", false},
 		{"Syndra's own refusal", CallResponse{Outcome: OutcomeUnreached, Err: ErrNoCallRecord}, ReasonReadRefused, "", false},
 		{"TARGET_CHANGED", CallResponse{Outcome: OutcomeUnreached, Status: 503, Code: CodeTargetChanged, Body: problem(CodeTargetChanged), RetryAfter: 5}, ReasonReadRefused, "", true},
+		{"TARGET_VERSION_UNSUPPORTED", CallResponse{Outcome: OutcomeUnreached, Status: 503, Code: CodeTargetVersionUnsupported, RetryAfter: 30,
+			Body: []byte(`{"code":"TARGET_VERSION_UNSUPPORTED","details":{"functions":["user.update","user.query"],"verdict":"changed"}}`)}, ReasonAddonOutdated, "", true},
 		{"TARGET_UNREADABLE as 429", CallResponse{Outcome: OutcomeUnreached, Status: 429, Code: codeTargetUnreadable, Body: problem(codeTargetUnreadable)}, ReasonAppUnreachable, "", true},
 		{"coded 503", CallResponse{Outcome: OutcomeIndeterminate, Status: 503, Code: "APPLY_FAILED", Body: problem("APPLY_FAILED")}, ReasonReadRefused, "", true},
 		{"an operation the add-on withdrew", CallResponse{Outcome: OutcomeUnreached, Err: &ErrOperationUnavailable{Target: "truenas", ID: "health.get", Reason: "the target version has not been read yet"}}, ReasonReadRefused, "", false},
@@ -414,5 +417,40 @@ func TestTLSNamesTheHostWithoutTheDot(t *testing.T) {
 	resp.Body.Close()
 	if got := <-sni; got != "truenas-addon" || asked != "truenas-addon.:"+port {
 		t.Fatalf("SNI %q (want truenas-addon), dial %q (want truenas-addon.:%s)", got, asked, port)
+	}
+}
+
+// TARGET_VERSION_UNSUPPORTED is the add-on behind its app, answering on
+// purpose (version check, design §7): addon_outdated with the functions it
+// names and its Retry-After, never an outage and never a shape refusal, so
+// five held writes neither open the breaker nor read the manifest again.
+func TestAnAddOnBehindItsAppNeverOpensTheBreaker(t *testing.T) {
+	withBreaker(t, 3, breakerCooldown)
+	var reread atomic.Int32
+	saved := rereadAfterShapeRefusal
+	rereadAfterShapeRefusal = func(*Addon) { reread.Add(1) }
+	t.Cleanup(func() { rereadAfterShapeRefusal = saved })
+	held := contractFixture(t, "error_target_version_unsupported.json")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.Header().Set("Retry-After", "30")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write(held)
+	}))
+	t.Cleanup(srv.Close)
+	signedAddon(t, srv.URL, "a-behind-secret")
+	a, _ := Get("truenas")
+	var last CallResponse
+	for range breakerThreshold + 2 {
+		last, _ = a.send(context.Background(), sendSpec{Method: http.MethodPost, Path: "/apply"})
+	}
+	if a.CircuitOpen() {
+		t.Error("TARGET_VERSION_UNSUPPORTED answers opened the breaker")
+	}
+	if reread.Load() != 0 || last.ShapeRefusal {
+		t.Errorf("read as a shape refusal: %d manifest re-reads", reread.Load())
+	}
+	if w := Unread(last); w.Reason != ReasonAddonOutdated || w.Detail != "user.update" || w.RetryAfter != 30 || last.Outcome != OutcomeUnreached {
+		t.Errorf("read as %+v, outcome %s; want addon_outdated naming user.update, 30 s, unreached", w, last.Outcome)
 	}
 }

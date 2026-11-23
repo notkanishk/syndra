@@ -1074,11 +1074,13 @@ function ConnectionNotices({
     );
   }
 
-  if (health.version_tested === false) {
+  // ponytail: the old notice on the new field; slice 9h draws the version check's own.
+  const check = health.version_check;
+  if (check && check.state !== "unchanged") {
     notices.push(
       <Reading key="version" tone="warn" label={`Untested ${name} version`}>
-        {health.version_note || `This version of ${name} has not been tested with Syndra.`} Reads
-        keep working; changes are refused.
+        {check.note || `This version of ${name} has not been tested with Syndra.`} Reads
+        keep working; changes are held. Update the add-on.
       </Reading>,
     );
   }

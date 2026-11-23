@@ -291,8 +291,13 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 			Metrics:    statsMetrics, StatsZone: "Asia/Kolkata",
 		}},
 		{"GET /health", "health.json", "health.json", Health{
-			Reachable: true, Product: productName, ProductVersion: "TrueNAS-25.10.5", VersionTested: true,
-			VersionNote: "25.10 is a tested release.", LastReadAt: strp("2026-11-10T09:29:41Z"),
+			Reachable: true, Product: productName, ProductVersion: "TrueNAS-25.10.5",
+			VersionCheck: VersionCheck{State: "changed", Version: "TrueNAS-25.10.5", Note: "TrueNAS changed 1 function Syndra uses.",
+				Functions: []VersionFunction{
+					{Name: "user.update", Effect: "write", Verdict: "changed", Detail: "smb: was boolean, now string", Holds: []string{"apply", "password.set"}},
+					{Name: "user.query", Effect: "read", Verdict: "unchanged"},
+				}},
+			LastReadAt:          strp("2026-11-10T09:29:41Z"),
 			CredentialExpiresAt: strp("2027-02-01T00:00:00Z"), CredentialExpiry: "set", UnauditedShares: []string{"scratch"},
 			SharesReadable: true, Lifecycle: LifecycleReadOnly, LifecycleNote: "Maintenance window.", Drained: true,
 			LogHead: "sha256:7be1c0a94d2f", LogRecords: 1284, SnapshotAge: strp("2026-11-10T09:25:00Z"),

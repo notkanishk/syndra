@@ -66,6 +66,7 @@ var contractMessages = []struct{ fixture, schema string }{
 	{"error_binding_conflict.json", "error.json"},
 	{"error_fresh_read_cooldown.json", "error.json"},
 	{"error_target_unreachable.json", "error.json"},
+	{"error_target_version_unsupported.json", "error.json"},
 	{"error_call_unsettled.json", "error.json"},
 	{"error_unknown_resource.json", "error.json"},
 	{"error_not_entitled.json", "error.json"},

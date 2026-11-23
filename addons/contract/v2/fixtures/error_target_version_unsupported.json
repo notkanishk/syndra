@@ -1,0 +1,14 @@
+{
+  "type": "urn:syndra:addon:error:TARGET_VERSION_UNSUPPORTED",
+  "title": "Target version unsupported",
+  "status": 503,
+  "detail": "TrueNAS 26.04.0 changed user.update, which this needs. Nothing was sent.",
+  "code": "TARGET_VERSION_UNSUPPORTED",
+  "retry": "retry_after",
+  "details": {
+    "functions": [
+      "user.update"
+    ],
+    "verdict": "changed"
+  }
+}

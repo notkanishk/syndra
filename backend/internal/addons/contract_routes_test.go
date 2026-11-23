@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -162,8 +163,14 @@ func TestHealthReplyLands(t *testing.T) {
 	if got.method != http.MethodGet || got.path != "/health" {
 		t.Fatalf("sent %s %s", got.method, got.path)
 	}
-	if h.Outcome != OutcomeSucceeded || !h.Reachable || h.Product != "TrueNAS" || h.ProductVersion != "TrueNAS-25.10.5" || !h.VersionTested || h.VersionNote == "" {
+	if h.Outcome != OutcomeSucceeded || !h.Reachable || h.Product != "TrueNAS" || h.ProductVersion != "TrueNAS-25.10.5" {
 		t.Errorf("health identity did not land: %+v", h)
+	}
+	// The version check lands whole: what it held, and why (design-version-check §7).
+	if v := h.VersionCheck; v.State != "changed" || v.Note == "" || len(v.Functions) != 2 ||
+		v.Functions[0].Name != "user.update" || v.Functions[0].Verdict != "changed" || v.Functions[0].Detail == "" ||
+		!slices.Equal(v.Functions[0].Holds, []string{"apply", "password.set"}) || v.Functions[1].Effect != "read" {
+		t.Errorf("the version check did not land: %+v", v)
 	}
 	if h.Lifecycle != "read_only" || h.LifecycleNote == "" || h.InFlight != 0 || !h.Drained || h.CircuitOpen {
 		t.Errorf("lifecycle did not land: %+v", h)
