@@ -1,0 +1,4673 @@
+{
+ "_synthetic": true,
+ "version": "TrueNAS-25.10.7",
+ "methods": {
+  "alert.list": {
+   "description": "List all types of alerts which the system can issue.",
+   "cli_description": "List all types of alerts which the system can issue",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "ALERT_LIST_READ"
+   ],
+   "accepts": [],
+   "returns": [
+    {
+     "type": "array",
+     "items": [
+      {
+       "type": "object",
+       "title": "Alert",
+       "additionalProperties": true,
+       "_attrs_order_": [
+        "uuid",
+        "klass",
+        "level",
+        "formatted",
+        "text",
+        "dismissed",
+        "datetime"
+       ],
+       "properties": {
+        "uuid": {
+         "type": "string",
+         "title": "uuid",
+         "_name_": "uuid",
+         "_required_": true
+        },
+        "klass": {
+         "type": "string",
+         "title": "klass",
+         "_name_": "klass",
+         "_required_": true
+        },
+        "level": {
+         "type": "string",
+         "title": "level",
+         "_name_": "level",
+         "_required_": true
+        },
+        "formatted": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "formatted",
+         "_name_": "formatted",
+         "_required_": true
+        },
+        "text": {
+         "type": "string",
+         "title": "text",
+         "_name_": "text",
+         "_required_": true
+        },
+        "dismissed": {
+         "type": "boolean",
+         "title": "dismissed",
+         "_name_": "dismissed",
+         "_required_": true
+        },
+        "datetime": {
+         "type": "string",
+         "format": "date-time",
+         "title": "datetime",
+         "_name_": "datetime",
+         "_required_": true
+        }
+       },
+       "required": [
+        "uuid",
+        "klass",
+        "level",
+        "formatted",
+        "text",
+        "dismissed",
+        "datetime"
+       ]
+      }
+     ],
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "audit.query": {
+   "description": "Query the audit database.",
+   "cli_description": "Query the audit database",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "SYSTEM_AUDIT_READ"
+   ],
+   "accepts": [
+    {
+     "type": "object",
+     "title": "data",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "services",
+      "query-filters",
+      "query-options",
+      "remote_controller"
+     ],
+     "properties": {
+      "services": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string",
+         "enum": [
+          "MIDDLEWARE",
+          "SMB",
+          "SUDO",
+          "SYSTEM"
+         ]
+        }
+       ],
+       "default": [
+        "MIDDLEWARE",
+        "SUDO"
+       ],
+       "title": "services",
+       "_name_": "services",
+       "_required_": false
+      },
+      "query-filters": {
+       "type": "array",
+       "items": [
+        {}
+       ],
+       "default": [],
+       "title": "query-filters",
+       "_name_": "query-filters",
+       "_required_": false
+      },
+      "query-options": {
+       "type": "object",
+       "default": {},
+       "title": "query-options",
+       "_name_": "query-options",
+       "_required_": false
+      },
+      "remote_controller": {
+       "type": "boolean",
+       "default": false,
+       "title": "remote_controller",
+       "_name_": "remote_controller",
+       "_required_": false
+      }
+     },
+     "default": {},
+     "_name_": "data",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "object",
+       "title": "AuditQueryResultItem",
+       "additionalProperties": false,
+       "_attrs_order_": [
+        "audit_id",
+        "message_timestamp",
+        "timestamp",
+        "address",
+        "username",
+        "session",
+        "service",
+        "service_data",
+        "event",
+        "event_data",
+        "success"
+       ],
+       "properties": {
+        "audit_id": {
+         "anyOf": [
+          {
+           "type": "string",
+           "format": "uuid"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "audit_id",
+         "_name_": "audit_id",
+         "_required_": true
+        },
+        "message_timestamp": {
+         "type": "integer",
+         "description": "Seconds since the epoch.",
+         "title": "message_timestamp",
+         "_name_": "message_timestamp",
+         "_required_": true
+        },
+        "timestamp": {
+         "type": "object",
+         "title": "timestamp",
+         "description": "Event time.",
+         "_name_": "timestamp",
+         "_required_": true
+        },
+        "address": {
+         "type": "string",
+         "title": "address",
+         "_name_": "address",
+         "_required_": true
+        },
+        "username": {
+         "type": "string",
+         "title": "username",
+         "_name_": "username",
+         "_required_": true
+        },
+        "session": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "session",
+         "_name_": "session",
+         "_required_": true
+        },
+        "service": {
+         "type": "string",
+         "enum": [
+          "MIDDLEWARE",
+          "SMB",
+          "SUDO",
+          "SYSTEM"
+         ],
+         "title": "service",
+         "_name_": "service",
+         "_required_": true
+        },
+        "service_data": {
+         "anyOf": [
+          {
+           "type": "object",
+           "title": "AuditServiceData",
+           "additionalProperties": true,
+           "_attrs_order_": [
+            "vers",
+            "service",
+            "session_id"
+           ],
+           "properties": {
+            "vers": {
+             "type": "object",
+             "title": "vers",
+             "_name_": "vers",
+             "_required_": false
+            },
+            "service": {
+             "anyOf": [
+              {
+               "type": "string"
+              },
+              {
+               "type": "null"
+              }
+             ],
+             "title": "service",
+             "_name_": "service",
+             "_required_": false
+            },
+            "session_id": {
+             "type": "string",
+             "title": "session_id",
+             "_name_": "session_id",
+             "_required_": false
+            }
+           }
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "service_data",
+         "_name_": "service_data",
+         "_required_": true
+        },
+        "event": {
+         "type": "string",
+         "title": "event",
+         "_name_": "event",
+         "_required_": true
+        },
+        "event_data": {
+         "anyOf": [
+          {
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "event_data",
+         "_name_": "event_data",
+         "_required_": true
+        },
+        "success": {
+         "type": "boolean",
+         "title": "success",
+         "_name_": "success",
+         "_required_": true
+        }
+       },
+       "required": [
+        "audit_id",
+        "message_timestamp",
+        "timestamp",
+        "address",
+        "username",
+        "session",
+        "service",
+        "service_data",
+        "event",
+        "event_data",
+        "success"
+       ]
+      },
+      {
+       "type": "array",
+       "items": [
+        {
+         "type": "object",
+         "title": "AuditQueryResultItem",
+         "additionalProperties": false,
+         "_attrs_order_": [
+          "audit_id",
+          "message_timestamp",
+          "timestamp",
+          "address",
+          "username",
+          "session",
+          "service",
+          "service_data",
+          "event",
+          "event_data",
+          "success"
+         ],
+         "properties": {
+          "audit_id": {
+           "anyOf": [
+            {
+             "type": "string",
+             "format": "uuid"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "title": "audit_id",
+           "_name_": "audit_id",
+           "_required_": true
+          },
+          "message_timestamp": {
+           "type": "integer",
+           "description": "Seconds since the epoch.",
+           "title": "message_timestamp",
+           "_name_": "message_timestamp",
+           "_required_": true
+          },
+          "timestamp": {
+           "type": "object",
+           "title": "timestamp",
+           "description": "Event time.",
+           "_name_": "timestamp",
+           "_required_": true
+          },
+          "address": {
+           "type": "string",
+           "title": "address",
+           "_name_": "address",
+           "_required_": true
+          },
+          "username": {
+           "type": "string",
+           "title": "username",
+           "_name_": "username",
+           "_required_": true
+          },
+          "session": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "title": "session",
+           "_name_": "session",
+           "_required_": true
+          },
+          "service": {
+           "type": "string",
+           "enum": [
+            "MIDDLEWARE",
+            "SMB",
+            "SUDO",
+            "SYSTEM"
+           ],
+           "title": "service",
+           "_name_": "service",
+           "_required_": true
+          },
+          "service_data": {
+           "anyOf": [
+            {
+             "type": "object",
+             "title": "AuditServiceData",
+             "additionalProperties": true,
+             "_attrs_order_": [
+              "vers",
+              "service",
+              "session_id"
+             ],
+             "properties": {
+              "vers": {
+               "type": "object",
+               "title": "vers",
+               "_name_": "vers",
+               "_required_": false
+              },
+              "service": {
+               "anyOf": [
+                {
+                 "type": "string"
+                },
+                {
+                 "type": "null"
+                }
+               ],
+               "title": "service",
+               "_name_": "service",
+               "_required_": false
+              },
+              "session_id": {
+               "type": "string",
+               "title": "session_id",
+               "_name_": "session_id",
+               "_required_": false
+              }
+             }
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "title": "service_data",
+           "_name_": "service_data",
+           "_required_": true
+          },
+          "event": {
+           "type": "string",
+           "title": "event",
+           "_name_": "event",
+           "_required_": true
+          },
+          "event_data": {
+           "anyOf": [
+            {
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "title": "event_data",
+           "_name_": "event_data",
+           "_required_": true
+          },
+          "success": {
+           "type": "boolean",
+           "title": "success",
+           "_name_": "success",
+           "_required_": true
+          }
+         },
+         "required": [
+          "audit_id",
+          "message_timestamp",
+          "timestamp",
+          "address",
+          "username",
+          "session",
+          "service",
+          "service_data",
+          "event",
+          "event_data",
+          "success"
+         ]
+        }
+       ]
+      }
+     ],
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "filesystem.getacl": {
+   "description": "Return ACL of a given path.",
+   "cli_description": "Return ACL of a given path",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "FILESYSTEM_ATTRS_READ"
+   ],
+   "accepts": [
+    {
+     "type": "string",
+     "title": "path",
+     "_name_": "path",
+     "_required_": true
+    },
+    {
+     "type": "boolean",
+     "default": true,
+     "title": "simplified",
+     "_name_": "simplified",
+     "_required_": false
+    },
+    {
+     "type": "boolean",
+     "default": false,
+     "title": "resolve_ids",
+     "_name_": "resolve_ids",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "type": "object",
+     "title": "result",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "path",
+      "uid",
+      "gid",
+      "acltype",
+      "trivial",
+      "acl"
+     ],
+     "properties": {
+      "path": {
+       "type": "string",
+       "title": "path",
+       "_name_": "path",
+       "_required_": true
+      },
+      "uid": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "uid",
+       "_name_": "uid",
+       "_required_": true
+      },
+      "gid": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "gid",
+       "_name_": "gid",
+       "_required_": true
+      },
+      "acltype": {
+       "type": "string",
+       "enum": [
+        "NFS4",
+        "POSIX1E",
+        "DISABLED"
+       ],
+       "title": "acltype",
+       "_name_": "acltype",
+       "_required_": true
+      },
+      "trivial": {
+       "type": "boolean",
+       "title": "trivial",
+       "_name_": "trivial",
+       "_required_": true
+      },
+      "acl": {
+       "type": "array",
+       "items": [
+        {
+         "type": "object",
+         "additionalProperties": true
+        }
+       ],
+       "title": "acl",
+       "_name_": "acl",
+       "_required_": true
+      }
+     },
+     "required": [
+      "path",
+      "uid",
+      "gid",
+      "acltype",
+      "trivial",
+      "acl"
+     ],
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "filesystem.listdir": {
+   "description": "Get the contents of a directory.",
+   "cli_description": "Get the contents of a directory",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": true,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "FILESYSTEM_ATTRS_READ"
+   ],
+   "accepts": [
+    {
+     "type": "string",
+     "title": "path",
+     "_name_": "path",
+     "_required_": true
+    },
+    {
+     "type": "array",
+     "items": [
+      {}
+     ],
+     "default": [],
+     "description": "List of filters for query results.",
+     "title": "filters",
+     "_name_": "filters",
+     "_required_": false
+    },
+    {
+     "type": "object",
+     "title": "options",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "select",
+      "order_by",
+      "offset",
+      "limit",
+      "count",
+      "get"
+     ],
+     "properties": {
+      "select": {
+       "type": "array",
+       "items": [
+        {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "array",
+           "items": [
+            {}
+           ]
+          }
+         ]
+        }
+       ],
+       "default": [],
+       "title": "select",
+       "_name_": "select",
+       "_required_": false
+      },
+      "order_by": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "order_by",
+       "_name_": "order_by",
+       "_required_": false
+      },
+      "offset": {
+       "type": "integer",
+       "default": 0,
+       "title": "offset",
+       "_name_": "offset",
+       "_required_": false
+      },
+      "limit": {
+       "type": "integer",
+       "default": 0,
+       "title": "limit",
+       "_name_": "limit",
+       "_required_": false
+      },
+      "count": {
+       "type": "boolean",
+       "default": false,
+       "title": "count",
+       "_name_": "count",
+       "_required_": false
+      },
+      "get": {
+       "type": "boolean",
+       "default": false,
+       "title": "get",
+       "_name_": "get",
+       "_required_": false
+      }
+     },
+     "default": {},
+     "description": "Query options including pagination, ordering, and additional parameters.",
+     "_name_": "options",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "anyOf": [
+      {
+       "type": "array",
+       "items": [
+        {
+         "type": "object",
+         "title": "FilesystemListdirItem",
+         "additionalProperties": false,
+         "_attrs_order_": [
+          "name",
+          "path",
+          "realpath",
+          "type"
+         ],
+         "properties": {
+          "name": {
+           "type": "string",
+           "title": "name",
+           "_name_": "name",
+           "_required_": true
+          },
+          "path": {
+           "type": "string",
+           "title": "path",
+           "_name_": "path",
+           "_required_": true
+          },
+          "realpath": {
+           "type": "string",
+           "title": "realpath",
+           "_name_": "realpath",
+           "_required_": true
+          },
+          "type": {
+           "type": "string",
+           "enum": [
+            "DIRECTORY",
+            "FILE",
+            "SYMLINK",
+            "OTHER"
+           ],
+           "title": "type",
+           "_name_": "type",
+           "_required_": true
+          }
+         },
+         "required": [
+          "name",
+          "path",
+          "realpath",
+          "type"
+         ]
+        }
+       ]
+      },
+      {
+       "type": "object",
+       "title": "FilesystemListdirItem",
+       "additionalProperties": false,
+       "_attrs_order_": [
+        "name",
+        "path",
+        "realpath",
+        "type"
+       ],
+       "properties": {
+        "name": {
+         "type": "string",
+         "title": "name",
+         "_name_": "name",
+         "_required_": true
+        },
+        "path": {
+         "type": "string",
+         "title": "path",
+         "_name_": "path",
+         "_required_": true
+        },
+        "realpath": {
+         "type": "string",
+         "title": "realpath",
+         "_name_": "realpath",
+         "_required_": true
+        },
+        "type": {
+         "type": "string",
+         "enum": [
+          "DIRECTORY",
+          "FILE",
+          "SYMLINK",
+          "OTHER"
+         ],
+         "title": "type",
+         "_name_": "type",
+         "_required_": true
+        }
+       },
+       "required": [
+        "name",
+        "path",
+        "realpath",
+        "type"
+       ]
+      },
+      {
+       "type": "integer"
+      }
+     ],
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "filesystem.stat": {
+   "description": "Return filesystem information for a given path.",
+   "cli_description": "Return filesystem information for a given path",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "FILESYSTEM_ATTRS_READ"
+   ],
+   "accepts": [
+    {
+     "type": "string",
+     "title": "path",
+     "_name_": "path",
+     "_required_": true
+    }
+   ],
+   "returns": [
+    {
+     "type": "object",
+     "title": "result",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "realpath",
+      "type",
+      "size",
+      "mode",
+      "uid",
+      "gid"
+     ],
+     "properties": {
+      "realpath": {
+       "type": "string",
+       "title": "realpath",
+       "_name_": "realpath",
+       "_required_": true
+      },
+      "type": {
+       "type": "string",
+       "title": "type",
+       "_name_": "type",
+       "_required_": true
+      },
+      "size": {
+       "type": "integer",
+       "title": "size",
+       "_name_": "size",
+       "_required_": true
+      },
+      "mode": {
+       "type": "integer",
+       "title": "mode",
+       "_name_": "mode",
+       "_required_": true
+      },
+      "uid": {
+       "type": "integer",
+       "title": "uid",
+       "_name_": "uid",
+       "_required_": true
+      },
+      "gid": {
+       "type": "integer",
+       "title": "gid",
+       "_name_": "gid",
+       "_required_": true
+      }
+     },
+     "required": [
+      "realpath",
+      "type",
+      "size",
+      "mode",
+      "uid",
+      "gid"
+     ],
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "group.create": {
+   "description": "Create a new group.",
+   "cli_description": "Create a new group",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "ACCOUNT_WRITE"
+   ],
+   "accepts": [
+    {
+     "type": "object",
+     "title": "group_create",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "gid",
+      "name",
+      "smb",
+      "sudo_commands",
+      "sudo_commands_nopasswd",
+      "allow_duplicate_gid",
+      "users"
+     ],
+     "properties": {
+      "gid": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "gid",
+       "_name_": "gid",
+       "_required_": false
+      },
+      "name": {
+       "type": "string",
+       "examples": [
+        "the_shield"
+       ],
+       "title": "name",
+       "_name_": "name",
+       "_required_": true
+      },
+      "smb": {
+       "type": "boolean",
+       "default": true,
+       "title": "smb",
+       "_name_": "smb",
+       "_required_": false
+      },
+      "sudo_commands": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "sudo_commands",
+       "_name_": "sudo_commands",
+       "_required_": false
+      },
+      "sudo_commands_nopasswd": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "sudo_commands_nopasswd",
+       "_name_": "sudo_commands_nopasswd",
+       "_required_": false
+      },
+      "allow_duplicate_gid": {
+       "type": "boolean",
+       "default": false,
+       "title": "allow_duplicate_gid",
+       "_name_": "allow_duplicate_gid",
+       "_required_": false
+      },
+      "users": {
+       "type": "array",
+       "items": [
+        {
+         "type": "integer"
+        }
+       ],
+       "default": [],
+       "title": "users",
+       "_name_": "users",
+       "_required_": false
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "_name_": "group_create",
+     "_required_": true
+    }
+   ],
+   "returns": [
+    {
+     "type": "integer",
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "group.delete": {
+   "description": "Delete group `id`.",
+   "cli_description": "Delete group `id`",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": true,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "ACCOUNT_WRITE"
+   ],
+   "accepts": [
+    {
+     "type": "integer",
+     "title": "id",
+     "_name_": "id",
+     "_required_": true
+    },
+    {
+     "type": "object",
+     "title": "options",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "delete_users"
+     ],
+     "properties": {
+      "delete_users": {
+       "type": "boolean",
+       "default": false,
+       "title": "delete_users",
+       "_name_": "delete_users",
+       "_required_": false
+      }
+     },
+     "_name_": "options",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "type": "integer",
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "group.query": {
+   "description": "Query groups.",
+   "cli_description": "Query groups",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": true,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "ACCOUNT_READ"
+   ],
+   "accepts": [
+    {
+     "type": "array",
+     "items": [
+      {}
+     ],
+     "default": [],
+     "description": "List of filters for query results.",
+     "title": "filters",
+     "_name_": "filters",
+     "_required_": false
+    },
+    {
+     "type": "object",
+     "title": "options",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "select",
+      "order_by",
+      "offset",
+      "limit",
+      "count",
+      "get"
+     ],
+     "properties": {
+      "select": {
+       "type": "array",
+       "items": [
+        {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "array",
+           "items": [
+            {}
+           ]
+          }
+         ]
+        }
+       ],
+       "default": [],
+       "title": "select",
+       "_name_": "select",
+       "_required_": false
+      },
+      "order_by": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "order_by",
+       "_name_": "order_by",
+       "_required_": false
+      },
+      "offset": {
+       "type": "integer",
+       "default": 0,
+       "title": "offset",
+       "_name_": "offset",
+       "_required_": false
+      },
+      "limit": {
+       "type": "integer",
+       "default": 0,
+       "title": "limit",
+       "_name_": "limit",
+       "_required_": false
+      },
+      "count": {
+       "type": "boolean",
+       "default": false,
+       "title": "count",
+       "_name_": "count",
+       "_required_": false
+      },
+      "get": {
+       "type": "boolean",
+       "default": false,
+       "title": "get",
+       "_name_": "get",
+       "_required_": false
+      }
+     },
+     "default": {},
+     "description": "Query options including pagination, ordering, and additional parameters.",
+     "_name_": "options",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "anyOf": [
+      {
+       "type": "array",
+       "items": [
+        {
+         "type": "object",
+         "title": "GroupQueryResultItem",
+         "additionalProperties": false,
+         "_attrs_order_": [
+          "id",
+          "gid",
+          "name",
+          "group",
+          "builtin",
+          "smb",
+          "local",
+          "sudo_commands",
+          "users"
+         ],
+         "properties": {
+          "id": {
+           "type": "integer",
+           "title": "id",
+           "_name_": "id",
+           "_required_": true
+          },
+          "gid": {
+           "type": "integer",
+           "title": "gid",
+           "_name_": "gid",
+           "_required_": true
+          },
+          "name": {
+           "type": "string",
+           "title": "name",
+           "_name_": "name",
+           "_required_": true
+          },
+          "group": {
+           "type": "string",
+           "description": "Name of the group.",
+           "title": "group",
+           "_name_": "group",
+           "_required_": true
+          },
+          "builtin": {
+           "type": "boolean",
+           "title": "builtin",
+           "_name_": "builtin",
+           "_required_": true
+          },
+          "smb": {
+           "type": "boolean",
+           "title": "smb",
+           "_name_": "smb",
+           "_required_": true
+          },
+          "local": {
+           "type": "boolean",
+           "title": "local",
+           "_name_": "local",
+           "_required_": true
+          },
+          "sudo_commands": {
+           "type": "array",
+           "items": [
+            {
+             "type": "string"
+            }
+           ],
+           "title": "sudo_commands",
+           "_name_": "sudo_commands",
+           "_required_": true
+          },
+          "users": {
+           "type": "array",
+           "items": [
+            {
+             "type": "integer"
+            }
+           ],
+           "description": "User record ids.",
+           "title": "users",
+           "_name_": "users",
+           "_required_": true
+          }
+         },
+         "required": [
+          "id",
+          "gid",
+          "name",
+          "group",
+          "builtin",
+          "smb",
+          "local",
+          "sudo_commands",
+          "users"
+         ]
+        }
+       ]
+      },
+      {
+       "type": "object",
+       "title": "GroupQueryResultItem",
+       "additionalProperties": false,
+       "_attrs_order_": [
+        "id",
+        "gid",
+        "name",
+        "group",
+        "builtin",
+        "smb",
+        "local",
+        "sudo_commands",
+        "users"
+       ],
+       "properties": {
+        "id": {
+         "type": "integer",
+         "title": "id",
+         "_name_": "id",
+         "_required_": true
+        },
+        "gid": {
+         "type": "integer",
+         "title": "gid",
+         "_name_": "gid",
+         "_required_": true
+        },
+        "name": {
+         "type": "string",
+         "title": "name",
+         "_name_": "name",
+         "_required_": true
+        },
+        "group": {
+         "type": "string",
+         "description": "Name of the group.",
+         "title": "group",
+         "_name_": "group",
+         "_required_": true
+        },
+        "builtin": {
+         "type": "boolean",
+         "title": "builtin",
+         "_name_": "builtin",
+         "_required_": true
+        },
+        "smb": {
+         "type": "boolean",
+         "title": "smb",
+         "_name_": "smb",
+         "_required_": true
+        },
+        "local": {
+         "type": "boolean",
+         "title": "local",
+         "_name_": "local",
+         "_required_": true
+        },
+        "sudo_commands": {
+         "type": "array",
+         "items": [
+          {
+           "type": "string"
+          }
+         ],
+         "title": "sudo_commands",
+         "_name_": "sudo_commands",
+         "_required_": true
+        },
+        "users": {
+         "type": "array",
+         "items": [
+          {
+           "type": "integer"
+          }
+         ],
+         "description": "User record ids.",
+         "title": "users",
+         "_name_": "users",
+         "_required_": true
+        }
+       },
+       "required": [
+        "id",
+        "gid",
+        "name",
+        "group",
+        "builtin",
+        "smb",
+        "local",
+        "sudo_commands",
+        "users"
+       ]
+      },
+      {
+       "type": "integer"
+      }
+     ],
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "pool.dataset.get_quota": {
+   "description": "Return a list of the specified `quota_type` of quotas on the ZFS dataset `ds`.",
+   "cli_description": "Return a list of the specified `quota_type` of quotas on the ZFS dataset `ds`",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "DATASET_READ"
+   ],
+   "accepts": [
+    {
+     "type": "string",
+     "title": "dataset",
+     "_name_": "dataset",
+     "_required_": true
+    },
+    {
+     "type": "string",
+     "enum": [
+      "USER",
+      "GROUP",
+      "DATASET",
+      "PROJECT"
+     ],
+     "title": "quota_type",
+     "_name_": "quota_type",
+     "_required_": true
+    },
+    {
+     "type": "array",
+     "items": [
+      {}
+     ],
+     "default": [],
+     "title": "filters",
+     "_name_": "filters",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "type": "array",
+     "items": [
+      {
+       "type": "object",
+       "title": "PoolDatasetQuota",
+       "additionalProperties": false,
+       "_attrs_order_": [
+        "quota_type",
+        "id",
+        "name",
+        "obj_quota",
+        "obj_used",
+        "quota",
+        "used_bytes"
+       ],
+       "properties": {
+        "quota_type": {
+         "type": "string",
+         "enum": [
+          "USER",
+          "GROUP",
+          "DATASET",
+          "PROJECT"
+         ],
+         "title": "quota_type",
+         "_name_": "quota_type",
+         "_required_": true
+        },
+        "id": {
+         "type": "integer",
+         "title": "id",
+         "_name_": "id",
+         "_required_": true
+        },
+        "name": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "name",
+         "_name_": "name",
+         "_required_": true
+        },
+        "obj_quota": {
+         "type": "integer",
+         "title": "obj_quota",
+         "_name_": "obj_quota",
+         "_required_": true
+        },
+        "obj_used": {
+         "type": "integer",
+         "title": "obj_used",
+         "_name_": "obj_used",
+         "_required_": true
+        },
+        "quota": {
+         "type": "integer",
+         "description": "Absent if no quota is set.",
+         "title": "quota",
+         "_name_": "quota",
+         "_required_": false
+        },
+        "used_bytes": {
+         "type": "integer",
+         "title": "used_bytes",
+         "_name_": "used_bytes",
+         "_required_": true
+        }
+       },
+       "required": [
+        "quota_type",
+        "id",
+        "name",
+        "obj_quota",
+        "obj_used",
+        "used_bytes"
+       ]
+      }
+     ],
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "pool.dataset.query": {
+   "description": "Query pool datasets.",
+   "cli_description": "Query pool datasets",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": true,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "DATASET_READ"
+   ],
+   "accepts": [
+    {
+     "type": "array",
+     "items": [
+      {}
+     ],
+     "default": [],
+     "description": "List of filters for query results.",
+     "title": "filters",
+     "_name_": "filters",
+     "_required_": false
+    },
+    {
+     "type": "object",
+     "title": "options",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "select",
+      "order_by",
+      "offset",
+      "limit",
+      "count",
+      "get"
+     ],
+     "properties": {
+      "select": {
+       "type": "array",
+       "items": [
+        {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "array",
+           "items": [
+            {}
+           ]
+          }
+         ]
+        }
+       ],
+       "default": [],
+       "title": "select",
+       "_name_": "select",
+       "_required_": false
+      },
+      "order_by": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "order_by",
+       "_name_": "order_by",
+       "_required_": false
+      },
+      "offset": {
+       "type": "integer",
+       "default": 0,
+       "title": "offset",
+       "_name_": "offset",
+       "_required_": false
+      },
+      "limit": {
+       "type": "integer",
+       "default": 0,
+       "title": "limit",
+       "_name_": "limit",
+       "_required_": false
+      },
+      "count": {
+       "type": "boolean",
+       "default": false,
+       "title": "count",
+       "_name_": "count",
+       "_required_": false
+      },
+      "get": {
+       "type": "boolean",
+       "default": false,
+       "title": "get",
+       "_name_": "get",
+       "_required_": false
+      }
+     },
+     "default": {},
+     "description": "Query options including pagination, ordering, and additional parameters.",
+     "_name_": "options",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "anyOf": [
+      {
+       "type": "array",
+       "items": [
+        {
+         "type": "object",
+         "title": "PoolDatasetQueryResultItem",
+         "additionalProperties": true,
+         "_attrs_order_": [
+          "id",
+          "name",
+          "mountpoint",
+          "locked",
+          "encrypted"
+         ],
+         "properties": {
+          "id": {
+           "type": "string",
+           "title": "id",
+           "_name_": "id",
+           "_required_": true
+          },
+          "name": {
+           "type": "string",
+           "title": "name",
+           "_name_": "name",
+           "_required_": true
+          },
+          "mountpoint": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "title": "mountpoint",
+           "_name_": "mountpoint",
+           "_required_": true
+          },
+          "locked": {
+           "type": "boolean",
+           "title": "locked",
+           "_name_": "locked",
+           "_required_": true
+          },
+          "encrypted": {
+           "type": "boolean",
+           "title": "encrypted",
+           "_name_": "encrypted",
+           "_required_": true
+          }
+         },
+         "required": [
+          "id",
+          "name",
+          "mountpoint",
+          "locked",
+          "encrypted"
+         ]
+        }
+       ]
+      },
+      {
+       "type": "object",
+       "title": "PoolDatasetQueryResultItem",
+       "additionalProperties": true,
+       "_attrs_order_": [
+        "id",
+        "name",
+        "mountpoint",
+        "locked",
+        "encrypted"
+       ],
+       "properties": {
+        "id": {
+         "type": "string",
+         "title": "id",
+         "_name_": "id",
+         "_required_": true
+        },
+        "name": {
+         "type": "string",
+         "title": "name",
+         "_name_": "name",
+         "_required_": true
+        },
+        "mountpoint": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "mountpoint",
+         "_name_": "mountpoint",
+         "_required_": true
+        },
+        "locked": {
+         "type": "boolean",
+         "title": "locked",
+         "_name_": "locked",
+         "_required_": true
+        },
+        "encrypted": {
+         "type": "boolean",
+         "title": "encrypted",
+         "_name_": "encrypted",
+         "_required_": true
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "mountpoint",
+        "locked",
+        "encrypted"
+       ]
+      },
+      {
+       "type": "integer"
+      }
+     ],
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "pool.dataset.set_quota": {
+   "description": "Allow users to set multiple quotas simultaneously.",
+   "cli_description": "Allow users to set multiple quotas simultaneously",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "DATASET_WRITE"
+   ],
+   "accepts": [
+    {
+     "type": "string",
+     "title": "dataset",
+     "_name_": "dataset",
+     "_required_": true
+    },
+    {
+     "type": "array",
+     "items": [
+      {
+       "type": "object",
+       "title": "PoolDatasetSetQuota",
+       "additionalProperties": false,
+       "_attrs_order_": [
+        "quota_type",
+        "id",
+        "quota_value"
+       ],
+       "properties": {
+        "quota_type": {
+         "type": "string",
+         "enum": [
+          "DATASET",
+          "USER",
+          "USEROBJ",
+          "GROUP",
+          "GROUPOBJ"
+         ],
+         "title": "quota_type",
+         "_name_": "quota_type",
+         "_required_": true
+        },
+        "id": {
+         "type": "string",
+         "title": "id",
+         "_name_": "id",
+         "_required_": true
+        },
+        "quota_value": {
+         "anyOf": [
+          {
+           "type": "integer"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "quota_value",
+         "_name_": "quota_value",
+         "_required_": true
+        }
+       },
+       "required": [
+        "quota_type",
+        "id",
+        "quota_value"
+       ]
+      }
+     ],
+     "default": [],
+     "title": "quotas",
+     "_name_": "quotas",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "type": "null",
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "pool.query": {
+   "description": "Query pools.",
+   "cli_description": "Query pools",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": true,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "POOL_READ"
+   ],
+   "accepts": [
+    {
+     "type": "array",
+     "items": [
+      {}
+     ],
+     "default": [],
+     "description": "List of filters for query results.",
+     "title": "filters",
+     "_name_": "filters",
+     "_required_": false
+    },
+    {
+     "type": "object",
+     "title": "options",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "select",
+      "order_by",
+      "offset",
+      "limit",
+      "count",
+      "get"
+     ],
+     "properties": {
+      "select": {
+       "type": "array",
+       "items": [
+        {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "array",
+           "items": [
+            {}
+           ]
+          }
+         ]
+        }
+       ],
+       "default": [],
+       "title": "select",
+       "_name_": "select",
+       "_required_": false
+      },
+      "order_by": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "order_by",
+       "_name_": "order_by",
+       "_required_": false
+      },
+      "offset": {
+       "type": "integer",
+       "default": 0,
+       "title": "offset",
+       "_name_": "offset",
+       "_required_": false
+      },
+      "limit": {
+       "type": "integer",
+       "default": 0,
+       "title": "limit",
+       "_name_": "limit",
+       "_required_": false
+      },
+      "count": {
+       "type": "boolean",
+       "default": false,
+       "title": "count",
+       "_name_": "count",
+       "_required_": false
+      },
+      "get": {
+       "type": "boolean",
+       "default": false,
+       "title": "get",
+       "_name_": "get",
+       "_required_": false
+      }
+     },
+     "default": {},
+     "description": "Query options including pagination, ordering, and additional parameters.",
+     "_name_": "options",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "anyOf": [
+      {
+       "type": "array",
+       "items": [
+        {
+         "type": "object",
+         "title": "PoolQueryResultItem",
+         "additionalProperties": false,
+         "_attrs_order_": [
+          "id",
+          "name",
+          "status",
+          "healthy",
+          "warning",
+          "free",
+          "allocated",
+          "size"
+         ],
+         "properties": {
+          "id": {
+           "type": "integer",
+           "title": "id",
+           "_name_": "id",
+           "_required_": true
+          },
+          "name": {
+           "type": "string",
+           "title": "name",
+           "_name_": "name",
+           "_required_": true
+          },
+          "status": {
+           "type": "string",
+           "title": "status",
+           "_name_": "status",
+           "_required_": true
+          },
+          "healthy": {
+           "type": "boolean",
+           "title": "healthy",
+           "_name_": "healthy",
+           "_required_": true
+          },
+          "warning": {
+           "type": "boolean",
+           "title": "warning",
+           "_name_": "warning",
+           "_required_": true
+          },
+          "free": {
+           "anyOf": [
+            {
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "title": "free",
+           "_name_": "free",
+           "_required_": true
+          },
+          "allocated": {
+           "anyOf": [
+            {
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "title": "allocated",
+           "_name_": "allocated",
+           "_required_": true
+          },
+          "size": {
+           "anyOf": [
+            {
+             "type": "integer"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "title": "size",
+           "_name_": "size",
+           "_required_": true
+          }
+         },
+         "required": [
+          "id",
+          "name",
+          "status",
+          "healthy",
+          "warning",
+          "free",
+          "allocated",
+          "size"
+         ]
+        }
+       ]
+      },
+      {
+       "type": "object",
+       "title": "PoolQueryResultItem",
+       "additionalProperties": false,
+       "_attrs_order_": [
+        "id",
+        "name",
+        "status",
+        "healthy",
+        "warning",
+        "free",
+        "allocated",
+        "size"
+       ],
+       "properties": {
+        "id": {
+         "type": "integer",
+         "title": "id",
+         "_name_": "id",
+         "_required_": true
+        },
+        "name": {
+         "type": "string",
+         "title": "name",
+         "_name_": "name",
+         "_required_": true
+        },
+        "status": {
+         "type": "string",
+         "title": "status",
+         "_name_": "status",
+         "_required_": true
+        },
+        "healthy": {
+         "type": "boolean",
+         "title": "healthy",
+         "_name_": "healthy",
+         "_required_": true
+        },
+        "warning": {
+         "type": "boolean",
+         "title": "warning",
+         "_name_": "warning",
+         "_required_": true
+        },
+        "free": {
+         "anyOf": [
+          {
+           "type": "integer"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "free",
+         "_name_": "free",
+         "_required_": true
+        },
+        "allocated": {
+         "anyOf": [
+          {
+           "type": "integer"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "allocated",
+         "_name_": "allocated",
+         "_required_": true
+        },
+        "size": {
+         "anyOf": [
+          {
+           "type": "integer"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "size",
+         "_name_": "size",
+         "_required_": true
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "status",
+        "healthy",
+        "warning",
+        "free",
+        "allocated",
+        "size"
+       ]
+      },
+      {
+       "type": "integer"
+      }
+     ],
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "service.query": {
+   "description": "Query services.",
+   "cli_description": "Query services",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": true,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "SERVICE_READ"
+   ],
+   "accepts": [
+    {
+     "type": "array",
+     "items": [
+      {}
+     ],
+     "default": [],
+     "description": "List of filters for query results.",
+     "title": "filters",
+     "_name_": "filters",
+     "_required_": false
+    },
+    {
+     "type": "object",
+     "title": "options",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "select",
+      "order_by",
+      "offset",
+      "limit",
+      "count",
+      "get"
+     ],
+     "properties": {
+      "select": {
+       "type": "array",
+       "items": [
+        {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "array",
+           "items": [
+            {}
+           ]
+          }
+         ]
+        }
+       ],
+       "default": [],
+       "title": "select",
+       "_name_": "select",
+       "_required_": false
+      },
+      "order_by": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "order_by",
+       "_name_": "order_by",
+       "_required_": false
+      },
+      "offset": {
+       "type": "integer",
+       "default": 0,
+       "title": "offset",
+       "_name_": "offset",
+       "_required_": false
+      },
+      "limit": {
+       "type": "integer",
+       "default": 0,
+       "title": "limit",
+       "_name_": "limit",
+       "_required_": false
+      },
+      "count": {
+       "type": "boolean",
+       "default": false,
+       "title": "count",
+       "_name_": "count",
+       "_required_": false
+      },
+      "get": {
+       "type": "boolean",
+       "default": false,
+       "title": "get",
+       "_name_": "get",
+       "_required_": false
+      }
+     },
+     "default": {},
+     "description": "Query options including pagination, ordering, and additional parameters.",
+     "_name_": "options",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "anyOf": [
+      {
+       "type": "array",
+       "items": [
+        {
+         "type": "object",
+         "title": "ServiceQueryResultItem",
+         "additionalProperties": false,
+         "_attrs_order_": [
+          "id",
+          "service",
+          "enable",
+          "state",
+          "pids"
+         ],
+         "properties": {
+          "id": {
+           "type": "integer",
+           "title": "id",
+           "_name_": "id",
+           "_required_": true
+          },
+          "service": {
+           "type": "string",
+           "title": "service",
+           "_name_": "service",
+           "_required_": true
+          },
+          "enable": {
+           "type": "boolean",
+           "title": "enable",
+           "_name_": "enable",
+           "_required_": true
+          },
+          "state": {
+           "type": "string",
+           "title": "state",
+           "_name_": "state",
+           "_required_": true
+          },
+          "pids": {
+           "type": "array",
+           "items": [
+            {
+             "type": "integer"
+            }
+           ],
+           "title": "pids",
+           "_name_": "pids",
+           "_required_": true
+          }
+         },
+         "required": [
+          "id",
+          "service",
+          "enable",
+          "state",
+          "pids"
+         ]
+        }
+       ]
+      },
+      {
+       "type": "object",
+       "title": "ServiceQueryResultItem",
+       "additionalProperties": false,
+       "_attrs_order_": [
+        "id",
+        "service",
+        "enable",
+        "state",
+        "pids"
+       ],
+       "properties": {
+        "id": {
+         "type": "integer",
+         "title": "id",
+         "_name_": "id",
+         "_required_": true
+        },
+        "service": {
+         "type": "string",
+         "title": "service",
+         "_name_": "service",
+         "_required_": true
+        },
+        "enable": {
+         "type": "boolean",
+         "title": "enable",
+         "_name_": "enable",
+         "_required_": true
+        },
+        "state": {
+         "type": "string",
+         "title": "state",
+         "_name_": "state",
+         "_required_": true
+        },
+        "pids": {
+         "type": "array",
+         "items": [
+          {
+           "type": "integer"
+          }
+         ],
+         "title": "pids",
+         "_name_": "pids",
+         "_required_": true
+        }
+       },
+       "required": [
+        "id",
+        "service",
+        "enable",
+        "state",
+        "pids"
+       ]
+      },
+      {
+       "type": "integer"
+      }
+     ],
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "sharing.smb.query": {
+   "description": "Query SMB shares.",
+   "cli_description": "Query SMB shares",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": true,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "SHARING_SMB_READ"
+   ],
+   "accepts": [
+    {
+     "type": "array",
+     "items": [
+      {}
+     ],
+     "default": [],
+     "description": "List of filters for query results.",
+     "title": "filters",
+     "_name_": "filters",
+     "_required_": false
+    },
+    {
+     "type": "object",
+     "title": "options",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "select",
+      "order_by",
+      "offset",
+      "limit",
+      "count",
+      "get"
+     ],
+     "properties": {
+      "select": {
+       "type": "array",
+       "items": [
+        {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "array",
+           "items": [
+            {}
+           ]
+          }
+         ]
+        }
+       ],
+       "default": [],
+       "title": "select",
+       "_name_": "select",
+       "_required_": false
+      },
+      "order_by": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "order_by",
+       "_name_": "order_by",
+       "_required_": false
+      },
+      "offset": {
+       "type": "integer",
+       "default": 0,
+       "title": "offset",
+       "_name_": "offset",
+       "_required_": false
+      },
+      "limit": {
+       "type": "integer",
+       "default": 0,
+       "title": "limit",
+       "_name_": "limit",
+       "_required_": false
+      },
+      "count": {
+       "type": "boolean",
+       "default": false,
+       "title": "count",
+       "_name_": "count",
+       "_required_": false
+      },
+      "get": {
+       "type": "boolean",
+       "default": false,
+       "title": "get",
+       "_name_": "get",
+       "_required_": false
+      }
+     },
+     "default": {},
+     "description": "Query options including pagination, ordering, and additional parameters.",
+     "_name_": "options",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "anyOf": [
+      {
+       "type": "array",
+       "items": [
+        {
+         "type": "object",
+         "title": "SmbShareQueryResultItem",
+         "additionalProperties": false,
+         "_attrs_order_": [
+          "id",
+          "purpose",
+          "name",
+          "path",
+          "enabled",
+          "comment",
+          "readonly",
+          "browsable",
+          "audit",
+          "hostsallow",
+          "hostsdeny"
+         ],
+         "properties": {
+          "id": {
+           "type": "integer",
+           "title": "id",
+           "_name_": "id",
+           "_required_": true
+          },
+          "purpose": {
+           "type": "string",
+           "enum": [
+            "DEFAULT_SHARE",
+            "TIMEMACHINE_SHARE",
+            "MULTIPROTOCOL_SHARE"
+           ],
+           "title": "purpose",
+           "_name_": "purpose",
+           "_required_": true
+          },
+          "name": {
+           "type": "string",
+           "description": "SMB share name.",
+           "examples": [
+            "ringside"
+           ],
+           "title": "name",
+           "_name_": "name",
+           "_required_": true
+          },
+          "path": {
+           "type": "string",
+           "description": "Local server path to share.",
+           "title": "path",
+           "_name_": "path",
+           "_required_": true
+          },
+          "enabled": {
+           "type": "boolean",
+           "title": "enabled",
+           "_name_": "enabled",
+           "_required_": true
+          },
+          "comment": {
+           "type": "string",
+           "title": "comment",
+           "_name_": "comment",
+           "_required_": true
+          },
+          "readonly": {
+           "type": "boolean",
+           "title": "readonly",
+           "_name_": "readonly",
+           "_required_": true
+          },
+          "browsable": {
+           "type": "boolean",
+           "title": "browsable",
+           "_name_": "browsable",
+           "_required_": true
+          },
+          "audit": {
+           "type": "object",
+           "title": "audit",
+           "additionalProperties": false,
+           "_attrs_order_": [
+            "enable",
+            "watch_list",
+            "ignore_list"
+           ],
+           "properties": {
+            "enable": {
+             "type": "boolean",
+             "default": false,
+             "title": "enable",
+             "_name_": "enable",
+             "_required_": false
+            },
+            "watch_list": {
+             "type": "array",
+             "items": [
+              {
+               "type": "string"
+              }
+             ],
+             "default": [],
+             "title": "watch_list",
+             "_name_": "watch_list",
+             "_required_": false
+            },
+            "ignore_list": {
+             "type": "array",
+             "items": [
+              {
+               "type": "string"
+              }
+             ],
+             "default": [],
+             "title": "ignore_list",
+             "_name_": "ignore_list",
+             "_required_": false
+            }
+           },
+           "_name_": "audit",
+           "_required_": true
+          },
+          "hostsallow": {
+           "type": "array",
+           "items": [
+            {
+             "type": "string"
+            }
+           ],
+           "default": [],
+           "title": "hostsallow",
+           "_name_": "hostsallow",
+           "_required_": false
+          },
+          "hostsdeny": {
+           "type": "array",
+           "items": [
+            {
+             "type": "string"
+            }
+           ],
+           "default": [],
+           "title": "hostsdeny",
+           "_name_": "hostsdeny",
+           "_required_": false
+          }
+         },
+         "required": [
+          "id",
+          "purpose",
+          "name",
+          "path",
+          "enabled",
+          "comment",
+          "readonly",
+          "browsable",
+          "audit"
+         ]
+        }
+       ]
+      },
+      {
+       "type": "object",
+       "title": "SmbShareQueryResultItem",
+       "additionalProperties": false,
+       "_attrs_order_": [
+        "id",
+        "purpose",
+        "name",
+        "path",
+        "enabled",
+        "comment",
+        "readonly",
+        "browsable",
+        "audit",
+        "hostsallow",
+        "hostsdeny"
+       ],
+       "properties": {
+        "id": {
+         "type": "integer",
+         "title": "id",
+         "_name_": "id",
+         "_required_": true
+        },
+        "purpose": {
+         "type": "string",
+         "enum": [
+          "DEFAULT_SHARE",
+          "TIMEMACHINE_SHARE",
+          "MULTIPROTOCOL_SHARE"
+         ],
+         "title": "purpose",
+         "_name_": "purpose",
+         "_required_": true
+        },
+        "name": {
+         "type": "string",
+         "description": "SMB share name.",
+         "examples": [
+          "ringside"
+         ],
+         "title": "name",
+         "_name_": "name",
+         "_required_": true
+        },
+        "path": {
+         "type": "string",
+         "description": "Local server path to share.",
+         "title": "path",
+         "_name_": "path",
+         "_required_": true
+        },
+        "enabled": {
+         "type": "boolean",
+         "title": "enabled",
+         "_name_": "enabled",
+         "_required_": true
+        },
+        "comment": {
+         "type": "string",
+         "title": "comment",
+         "_name_": "comment",
+         "_required_": true
+        },
+        "readonly": {
+         "type": "boolean",
+         "title": "readonly",
+         "_name_": "readonly",
+         "_required_": true
+        },
+        "browsable": {
+         "type": "boolean",
+         "title": "browsable",
+         "_name_": "browsable",
+         "_required_": true
+        },
+        "audit": {
+         "type": "object",
+         "title": "audit",
+         "additionalProperties": false,
+         "_attrs_order_": [
+          "enable",
+          "watch_list",
+          "ignore_list"
+         ],
+         "properties": {
+          "enable": {
+           "type": "boolean",
+           "default": false,
+           "title": "enable",
+           "_name_": "enable",
+           "_required_": false
+          },
+          "watch_list": {
+           "type": "array",
+           "items": [
+            {
+             "type": "string"
+            }
+           ],
+           "default": [],
+           "title": "watch_list",
+           "_name_": "watch_list",
+           "_required_": false
+          },
+          "ignore_list": {
+           "type": "array",
+           "items": [
+            {
+             "type": "string"
+            }
+           ],
+           "default": [],
+           "title": "ignore_list",
+           "_name_": "ignore_list",
+           "_required_": false
+          }
+         },
+         "_name_": "audit",
+         "_required_": true
+        },
+        "hostsallow": {
+         "type": "array",
+         "items": [
+          {
+           "type": "string"
+          }
+         ],
+         "default": [],
+         "title": "hostsallow",
+         "_name_": "hostsallow",
+         "_required_": false
+        },
+        "hostsdeny": {
+         "type": "array",
+         "items": [
+          {
+           "type": "string"
+          }
+         ],
+         "default": [],
+         "title": "hostsdeny",
+         "_name_": "hostsdeny",
+         "_required_": false
+        }
+       },
+       "required": [
+        "id",
+        "purpose",
+        "name",
+        "path",
+        "enabled",
+        "comment",
+        "readonly",
+        "browsable",
+        "audit"
+       ]
+      },
+      {
+       "type": "integer"
+      }
+     ],
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "system.info": {
+   "description": "Returns basic system information.",
+   "cli_description": "Returns basic system information",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "READONLY_ADMIN"
+   ],
+   "accepts": [],
+   "returns": [
+    {
+     "type": "object",
+     "title": "result",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "version",
+      "hostname",
+      "uptime_seconds",
+      "physmem"
+     ],
+     "properties": {
+      "version": {
+       "type": "string",
+       "title": "version",
+       "_name_": "version",
+       "_required_": true
+      },
+      "hostname": {
+       "type": "string",
+       "title": "hostname",
+       "_name_": "hostname",
+       "_required_": true
+      },
+      "uptime_seconds": {
+       "type": "number",
+       "title": "uptime_seconds",
+       "_name_": "uptime_seconds",
+       "_required_": true
+      },
+      "physmem": {
+       "type": "integer",
+       "title": "physmem",
+       "_name_": "physmem",
+       "_required_": true
+      }
+     },
+     "required": [
+      "version",
+      "hostname",
+      "uptime_seconds",
+      "physmem"
+     ],
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "user.create": {
+   "description": "Create a new user.",
+   "cli_description": "Create a new user",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "ACCOUNT_WRITE"
+   ],
+   "accepts": [
+    {
+     "type": "object",
+     "title": "user_create",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "uid",
+      "username",
+      "home",
+      "shell",
+      "full_name",
+      "smb",
+      "group",
+      "groups",
+      "password_disabled",
+      "ssh_password_enabled",
+      "sshpubkey",
+      "locked",
+      "sudo_commands",
+      "sudo_commands_nopasswd",
+      "email",
+      "group_create",
+      "home_create",
+      "home_mode",
+      "password",
+      "random_password"
+     ],
+     "properties": {
+      "uid": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Unix user ID. Chosen by the system when null.",
+       "title": "uid",
+       "_name_": "uid",
+       "_required_": false
+      },
+      "username": {
+       "type": "string",
+       "description": "Username of the account.",
+       "maxLength": 32,
+       "examples": [
+        "stone_cold"
+       ],
+       "title": "username",
+       "_name_": "username",
+       "_required_": true
+      },
+      "home": {
+       "type": "string",
+       "default": "/var/empty",
+       "title": "home",
+       "_name_": "home",
+       "_required_": false
+      },
+      "shell": {
+       "type": "string",
+       "default": "/usr/bin/zsh",
+       "title": "shell",
+       "_name_": "shell",
+       "_required_": false
+      },
+      "full_name": {
+       "type": "string",
+       "title": "full_name",
+       "_name_": "full_name",
+       "_required_": true
+      },
+      "smb": {
+       "type": "boolean",
+       "default": true,
+       "title": "smb",
+       "_name_": "smb",
+       "_required_": false
+      },
+      "group": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "group",
+       "_name_": "group",
+       "_required_": false
+      },
+      "groups": {
+       "type": "array",
+       "items": [
+        {
+         "type": "integer"
+        }
+       ],
+       "default": [],
+       "title": "groups",
+       "_name_": "groups",
+       "_required_": false
+      },
+      "password_disabled": {
+       "type": "boolean",
+       "default": false,
+       "title": "password_disabled",
+       "_name_": "password_disabled",
+       "_required_": false
+      },
+      "ssh_password_enabled": {
+       "type": "boolean",
+       "default": false,
+       "title": "ssh_password_enabled",
+       "_name_": "ssh_password_enabled",
+       "_required_": false
+      },
+      "sshpubkey": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "sshpubkey",
+       "_name_": "sshpubkey",
+       "_required_": false
+      },
+      "locked": {
+       "type": "boolean",
+       "default": false,
+       "title": "locked",
+       "_name_": "locked",
+       "_required_": false
+      },
+      "sudo_commands": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "sudo_commands",
+       "_name_": "sudo_commands",
+       "_required_": false
+      },
+      "sudo_commands_nopasswd": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "sudo_commands_nopasswd",
+       "_name_": "sudo_commands_nopasswd",
+       "_required_": false
+      },
+      "email": {
+       "anyOf": [
+        {
+         "type": "string",
+         "format": "email"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "email",
+       "_name_": "email",
+       "_required_": false
+      },
+      "group_create": {
+       "type": "boolean",
+       "default": false,
+       "title": "group_create",
+       "_name_": "group_create",
+       "_required_": false
+      },
+      "home_create": {
+       "type": "boolean",
+       "default": false,
+       "title": "home_create",
+       "_name_": "home_create",
+       "_required_": false
+      },
+      "home_mode": {
+       "type": "string",
+       "default": "700",
+       "title": "home_mode",
+       "_name_": "home_mode",
+       "_required_": false
+      },
+      "password": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Password. Required unless password_disabled.",
+       "title": "password",
+       "_name_": "password",
+       "_required_": false
+      },
+      "random_password": {
+       "type": "boolean",
+       "description": "Generate a random password.",
+       "default": false,
+       "title": "random_password",
+       "_name_": "random_password",
+       "_required_": false
+      }
+     },
+     "required": [
+      "username",
+      "full_name"
+     ],
+     "_name_": "user_create",
+     "_required_": true
+    }
+   ],
+   "returns": [
+    {
+     "type": "integer",
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "user.delete": {
+   "description": "Delete user `id`.",
+   "cli_description": "Delete user `id`",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": true,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "ACCOUNT_WRITE"
+   ],
+   "accepts": [
+    {
+     "type": "integer",
+     "title": "id",
+     "_name_": "id",
+     "_required_": true
+    },
+    {
+     "type": "object",
+     "title": "options",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "delete_group"
+     ],
+     "properties": {
+      "delete_group": {
+       "type": "boolean",
+       "default": true,
+       "title": "delete_group",
+       "_name_": "delete_group",
+       "_required_": false
+      }
+     },
+     "_name_": "options",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "type": "integer",
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "user.query": {
+   "description": "Query users.",
+   "cli_description": "Query users",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": false,
+   "no_auth_required": false,
+   "filterable": true,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "ACCOUNT_READ"
+   ],
+   "accepts": [
+    {
+     "type": "array",
+     "items": [
+      {}
+     ],
+     "default": [],
+     "description": "List of filters for query results.",
+     "title": "filters",
+     "_name_": "filters",
+     "_required_": false
+    },
+    {
+     "type": "object",
+     "title": "options",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "select",
+      "order_by",
+      "offset",
+      "limit",
+      "count",
+      "get"
+     ],
+     "properties": {
+      "select": {
+       "type": "array",
+       "items": [
+        {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "array",
+           "items": [
+            {}
+           ]
+          }
+         ]
+        }
+       ],
+       "default": [],
+       "title": "select",
+       "_name_": "select",
+       "_required_": false
+      },
+      "order_by": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "order_by",
+       "_name_": "order_by",
+       "_required_": false
+      },
+      "offset": {
+       "type": "integer",
+       "default": 0,
+       "title": "offset",
+       "_name_": "offset",
+       "_required_": false
+      },
+      "limit": {
+       "type": "integer",
+       "default": 0,
+       "title": "limit",
+       "_name_": "limit",
+       "_required_": false
+      },
+      "count": {
+       "type": "boolean",
+       "default": false,
+       "title": "count",
+       "_name_": "count",
+       "_required_": false
+      },
+      "get": {
+       "type": "boolean",
+       "default": false,
+       "title": "get",
+       "_name_": "get",
+       "_required_": false
+      }
+     },
+     "default": {},
+     "description": "Query options including pagination, ordering, and additional parameters.",
+     "_name_": "options",
+     "_required_": false
+    }
+   ],
+   "returns": [
+    {
+     "anyOf": [
+      {
+       "type": "array",
+       "items": [
+        {
+         "type": "object",
+         "title": "UserQueryResultItem",
+         "additionalProperties": false,
+         "_attrs_order_": [
+          "id",
+          "uid",
+          "username",
+          "unixhash",
+          "smbhash",
+          "home",
+          "shell",
+          "full_name",
+          "builtin",
+          "smb",
+          "group",
+          "groups",
+          "password_disabled",
+          "locked",
+          "sshpubkey",
+          "sudo_commands",
+          "email",
+          "local",
+          "immutable",
+          "sid",
+          "roles"
+         ],
+         "properties": {
+          "id": {
+           "type": "integer",
+           "description": "Unique identifier for the user account.",
+           "title": "id",
+           "_name_": "id",
+           "_required_": true
+          },
+          "uid": {
+           "type": "integer",
+           "description": "Unix user ID.",
+           "title": "uid",
+           "_name_": "uid",
+           "_required_": true
+          },
+          "username": {
+           "type": "string",
+           "description": "Username of the account.",
+           "maxLength": 32,
+           "examples": [
+            "the_rock"
+           ],
+           "title": "username",
+           "_name_": "username",
+           "_required_": true
+          },
+          "unixhash": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "Hashed password for local authentication.",
+           "title": "unixhash",
+           "_name_": "unixhash",
+           "_required_": true
+          },
+          "smbhash": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "description": "NT hash for SMB authentication.",
+           "title": "smbhash",
+           "_name_": "smbhash",
+           "_required_": true
+          },
+          "home": {
+           "type": "string",
+           "description": "Home directory path.",
+           "default": "/var/empty",
+           "title": "home",
+           "_name_": "home",
+           "_required_": true
+          },
+          "shell": {
+           "type": "string",
+           "description": "Login shell.",
+           "default": "/usr/bin/zsh",
+           "title": "shell",
+           "_name_": "shell",
+           "_required_": true
+          },
+          "full_name": {
+           "type": "string",
+           "description": "Display name.",
+           "title": "full_name",
+           "_name_": "full_name",
+           "_required_": true
+          },
+          "builtin": {
+           "type": "boolean",
+           "description": "Account came with the operating system.",
+           "title": "builtin",
+           "_name_": "builtin",
+           "_required_": true
+          },
+          "smb": {
+           "type": "boolean",
+           "description": "The account may authenticate over SMB.",
+           "default": true,
+           "title": "smb",
+           "_name_": "smb",
+           "_required_": true
+          },
+          "group": {
+           "type": "object",
+           "title": "group",
+           "additionalProperties": false,
+           "_attrs_order_": [
+            "id",
+            "bsdgrp_gid",
+            "bsdgrp_group"
+           ],
+           "properties": {
+            "id": {
+             "type": "integer",
+             "title": "id",
+             "_name_": "id",
+             "_required_": true
+            },
+            "bsdgrp_gid": {
+             "type": "integer",
+             "title": "bsdgrp_gid",
+             "_name_": "bsdgrp_gid",
+             "_required_": true
+            },
+            "bsdgrp_group": {
+             "type": "string",
+             "title": "bsdgrp_group",
+             "_name_": "bsdgrp_group",
+             "_required_": true
+            }
+           },
+           "required": [
+            "id",
+            "bsdgrp_gid",
+            "bsdgrp_group"
+           ],
+           "_name_": "group",
+           "_required_": true
+          },
+          "groups": {
+           "type": "array",
+           "items": [
+            {
+             "type": "integer"
+            }
+           ],
+           "default": [],
+           "description": "Group record ids.",
+           "title": "groups",
+           "_name_": "groups",
+           "_required_": true
+          },
+          "password_disabled": {
+           "type": "boolean",
+           "description": "Password authentication is disabled.",
+           "default": false,
+           "title": "password_disabled",
+           "_name_": "password_disabled",
+           "_required_": true
+          },
+          "locked": {
+           "type": "boolean",
+           "description": "The account is locked.",
+           "default": false,
+           "title": "locked",
+           "_name_": "locked",
+           "_required_": true
+          },
+          "sshpubkey": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "title": "sshpubkey",
+           "_name_": "sshpubkey",
+           "_required_": false
+          },
+          "sudo_commands": {
+           "type": "array",
+           "items": [
+            {
+             "type": "string"
+            }
+           ],
+           "default": [],
+           "title": "sudo_commands",
+           "_name_": "sudo_commands",
+           "_required_": false
+          },
+          "email": {
+           "anyOf": [
+            {
+             "type": "string",
+             "format": "email"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "title": "email",
+           "_name_": "email",
+           "_required_": false
+          },
+          "local": {
+           "type": "boolean",
+           "title": "local",
+           "_name_": "local",
+           "_required_": true
+          },
+          "immutable": {
+           "type": "boolean",
+           "title": "immutable",
+           "_name_": "immutable",
+           "_required_": true
+          },
+          "sid": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "title": "sid",
+           "_name_": "sid",
+           "_required_": true
+          },
+          "roles": {
+           "type": "array",
+           "items": [
+            {
+             "type": "string"
+            }
+           ],
+           "title": "roles",
+           "_name_": "roles",
+           "_required_": true
+          }
+         },
+         "required": [
+          "id",
+          "uid",
+          "username",
+          "unixhash",
+          "smbhash",
+          "home",
+          "shell",
+          "full_name",
+          "builtin",
+          "smb",
+          "group",
+          "groups",
+          "password_disabled",
+          "locked",
+          "local",
+          "immutable",
+          "sid",
+          "roles"
+         ]
+        }
+       ]
+      },
+      {
+       "type": "object",
+       "title": "UserQueryResultItem",
+       "additionalProperties": false,
+       "_attrs_order_": [
+        "id",
+        "uid",
+        "username",
+        "unixhash",
+        "smbhash",
+        "home",
+        "shell",
+        "full_name",
+        "builtin",
+        "smb",
+        "group",
+        "groups",
+        "password_disabled",
+        "locked",
+        "sshpubkey",
+        "sudo_commands",
+        "email",
+        "local",
+        "immutable",
+        "sid",
+        "roles"
+       ],
+       "properties": {
+        "id": {
+         "type": "integer",
+         "description": "Unique identifier for the user account.",
+         "title": "id",
+         "_name_": "id",
+         "_required_": true
+        },
+        "uid": {
+         "type": "integer",
+         "description": "Unix user ID.",
+         "title": "uid",
+         "_name_": "uid",
+         "_required_": true
+        },
+        "username": {
+         "type": "string",
+         "description": "Username of the account.",
+         "maxLength": 32,
+         "examples": [
+          "the_rock"
+         ],
+         "title": "username",
+         "_name_": "username",
+         "_required_": true
+        },
+        "unixhash": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Hashed password for local authentication.",
+         "title": "unixhash",
+         "_name_": "unixhash",
+         "_required_": true
+        },
+        "smbhash": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "NT hash for SMB authentication.",
+         "title": "smbhash",
+         "_name_": "smbhash",
+         "_required_": true
+        },
+        "home": {
+         "type": "string",
+         "description": "Home directory path.",
+         "default": "/var/empty",
+         "title": "home",
+         "_name_": "home",
+         "_required_": true
+        },
+        "shell": {
+         "type": "string",
+         "description": "Login shell.",
+         "default": "/usr/bin/zsh",
+         "title": "shell",
+         "_name_": "shell",
+         "_required_": true
+        },
+        "full_name": {
+         "type": "string",
+         "description": "Display name.",
+         "title": "full_name",
+         "_name_": "full_name",
+         "_required_": true
+        },
+        "builtin": {
+         "type": "boolean",
+         "description": "Account came with the operating system.",
+         "title": "builtin",
+         "_name_": "builtin",
+         "_required_": true
+        },
+        "smb": {
+         "type": "boolean",
+         "description": "The account may authenticate over SMB.",
+         "default": true,
+         "title": "smb",
+         "_name_": "smb",
+         "_required_": true
+        },
+        "group": {
+         "type": "object",
+         "title": "group",
+         "additionalProperties": false,
+         "_attrs_order_": [
+          "id",
+          "bsdgrp_gid",
+          "bsdgrp_group"
+         ],
+         "properties": {
+          "id": {
+           "type": "integer",
+           "title": "id",
+           "_name_": "id",
+           "_required_": true
+          },
+          "bsdgrp_gid": {
+           "type": "integer",
+           "title": "bsdgrp_gid",
+           "_name_": "bsdgrp_gid",
+           "_required_": true
+          },
+          "bsdgrp_group": {
+           "type": "string",
+           "title": "bsdgrp_group",
+           "_name_": "bsdgrp_group",
+           "_required_": true
+          }
+         },
+         "required": [
+          "id",
+          "bsdgrp_gid",
+          "bsdgrp_group"
+         ],
+         "_name_": "group",
+         "_required_": true
+        },
+        "groups": {
+         "type": "array",
+         "items": [
+          {
+           "type": "integer"
+          }
+         ],
+         "default": [],
+         "description": "Group record ids.",
+         "title": "groups",
+         "_name_": "groups",
+         "_required_": true
+        },
+        "password_disabled": {
+         "type": "boolean",
+         "description": "Password authentication is disabled.",
+         "default": false,
+         "title": "password_disabled",
+         "_name_": "password_disabled",
+         "_required_": true
+        },
+        "locked": {
+         "type": "boolean",
+         "description": "The account is locked.",
+         "default": false,
+         "title": "locked",
+         "_name_": "locked",
+         "_required_": true
+        },
+        "sshpubkey": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "title": "sshpubkey",
+         "_name_": "sshpubkey",
+         "_required_": false
+        },
+        "sudo_commands": {
+         "type": "array",
+         "items": [
+          {
+           "type": "string"
+          }
+         ],
+         "default": [],
+         "title": "sudo_commands",
+         "_name_": "sudo_commands",
+         "_required_": false
+        },
+        "email": {
+         "anyOf": [
+          {
+           "type": "string",
+           "format": "email"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "title": "email",
+         "_name_": "email",
+         "_required_": false
+        },
+        "local": {
+         "type": "boolean",
+         "title": "local",
+         "_name_": "local",
+         "_required_": true
+        },
+        "immutable": {
+         "type": "boolean",
+         "title": "immutable",
+         "_name_": "immutable",
+         "_required_": true
+        },
+        "sid": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "sid",
+         "_name_": "sid",
+         "_required_": true
+        },
+        "roles": {
+         "type": "array",
+         "items": [
+          {
+           "type": "string"
+          }
+         ],
+         "title": "roles",
+         "_name_": "roles",
+         "_required_": true
+        }
+       },
+       "required": [
+        "id",
+        "uid",
+        "username",
+        "unixhash",
+        "smbhash",
+        "home",
+        "shell",
+        "full_name",
+        "builtin",
+        "smb",
+        "group",
+        "groups",
+        "password_disabled",
+        "locked",
+        "local",
+        "immutable",
+        "sid",
+        "roles"
+       ]
+      },
+      {
+       "type": "integer"
+      }
+     ],
+     "title": "result",
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  },
+  "user.update": {
+   "description": "Update attributes of an existing user.",
+   "cli_description": "Update attributes of an existing user",
+   "examples": {
+    "__all__": [],
+    "cli": [],
+    "rest": [],
+    "websocket": [
+     "{\"jsonrpc\": \"2.0\", \"method\": \"...\"}"
+    ]
+   },
+   "item_method": true,
+   "no_auth_required": false,
+   "filterable": false,
+   "filterable_schema": null,
+   "pass_application": false,
+   "require_websocket": false,
+   "job": false,
+   "downloadable": false,
+   "uploadable": false,
+   "check_pipes": false,
+   "roles": [
+    "ACCOUNT_WRITE"
+   ],
+   "accepts": [
+    {
+     "type": "integer",
+     "title": "id",
+     "_name_": "id",
+     "_required_": true
+    },
+    {
+     "type": "object",
+     "title": "user_update",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "home",
+      "shell",
+      "full_name",
+      "smb",
+      "group",
+      "groups",
+      "password_disabled",
+      "ssh_password_enabled",
+      "sshpubkey",
+      "locked",
+      "sudo_commands",
+      "sudo_commands_nopasswd",
+      "email",
+      "home_create",
+      "home_mode",
+      "password",
+      "random_password"
+     ],
+     "properties": {
+      "home": {
+       "type": "string",
+       "title": "home",
+       "_name_": "home",
+       "_required_": false
+      },
+      "shell": {
+       "type": "string",
+       "title": "shell",
+       "_name_": "shell",
+       "_required_": false
+      },
+      "full_name": {
+       "type": "string",
+       "title": "full_name",
+       "_name_": "full_name",
+       "_required_": false
+      },
+      "smb": {
+       "type": "boolean",
+       "title": "smb",
+       "_name_": "smb",
+       "_required_": false
+      },
+      "group": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "group",
+       "_name_": "group",
+       "_required_": false
+      },
+      "groups": {
+       "type": "array",
+       "items": [
+        {
+         "type": "integer"
+        }
+       ],
+       "title": "groups",
+       "_name_": "groups",
+       "_required_": false
+      },
+      "password_disabled": {
+       "type": "boolean",
+       "title": "password_disabled",
+       "_name_": "password_disabled",
+       "_required_": false
+      },
+      "ssh_password_enabled": {
+       "type": "boolean",
+       "title": "ssh_password_enabled",
+       "_name_": "ssh_password_enabled",
+       "_required_": false
+      },
+      "sshpubkey": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "sshpubkey",
+       "_name_": "sshpubkey",
+       "_required_": false
+      },
+      "locked": {
+       "type": "boolean",
+       "title": "locked",
+       "_name_": "locked",
+       "_required_": false
+      },
+      "sudo_commands": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "title": "sudo_commands",
+       "_name_": "sudo_commands",
+       "_required_": false
+      },
+      "sudo_commands_nopasswd": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "title": "sudo_commands_nopasswd",
+       "_name_": "sudo_commands_nopasswd",
+       "_required_": false
+      },
+      "email": {
+       "anyOf": [
+        {
+         "type": "string",
+         "format": "email"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "email",
+       "_name_": "email",
+       "_required_": false
+      },
+      "home_create": {
+       "type": "boolean",
+       "title": "home_create",
+       "_name_": "home_create",
+       "_required_": false
+      },
+      "home_mode": {
+       "type": "string",
+       "title": "home_mode",
+       "_name_": "home_mode",
+       "_required_": false
+      },
+      "password": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Password. Required unless password_disabled.",
+       "title": "password",
+       "_name_": "password",
+       "_required_": false
+      },
+      "random_password": {
+       "type": "boolean",
+       "description": "Generate a random password.",
+       "title": "random_password",
+       "_name_": "random_password",
+       "_required_": false
+      }
+     },
+     "_name_": "user_update",
+     "_required_": true
+    }
+   ],
+   "returns": [
+    {
+     "type": "object",
+     "title": "result",
+     "additionalProperties": false,
+     "_attrs_order_": [
+      "id",
+      "uid",
+      "username",
+      "unixhash",
+      "smbhash",
+      "home",
+      "shell",
+      "full_name",
+      "builtin",
+      "smb",
+      "group",
+      "groups",
+      "password_disabled",
+      "locked",
+      "sshpubkey",
+      "sudo_commands",
+      "email",
+      "local",
+      "immutable",
+      "sid",
+      "roles"
+     ],
+     "properties": {
+      "id": {
+       "type": "integer",
+       "description": "Unique identifier for the user account.",
+       "title": "id",
+       "_name_": "id",
+       "_required_": true
+      },
+      "uid": {
+       "type": "integer",
+       "description": "Unix user ID.",
+       "title": "uid",
+       "_name_": "uid",
+       "_required_": true
+      },
+      "username": {
+       "type": "string",
+       "description": "Username of the account.",
+       "maxLength": 32,
+       "examples": [
+        "the_rock"
+       ],
+       "title": "username",
+       "_name_": "username",
+       "_required_": true
+      },
+      "unixhash": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Hashed password for local authentication.",
+       "title": "unixhash",
+       "_name_": "unixhash",
+       "_required_": true
+      },
+      "smbhash": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "NT hash for SMB authentication.",
+       "title": "smbhash",
+       "_name_": "smbhash",
+       "_required_": true
+      },
+      "home": {
+       "type": "string",
+       "description": "Home directory path.",
+       "default": "/var/empty",
+       "title": "home",
+       "_name_": "home",
+       "_required_": true
+      },
+      "shell": {
+       "type": "string",
+       "description": "Login shell.",
+       "default": "/usr/bin/zsh",
+       "title": "shell",
+       "_name_": "shell",
+       "_required_": true
+      },
+      "full_name": {
+       "type": "string",
+       "description": "Display name.",
+       "title": "full_name",
+       "_name_": "full_name",
+       "_required_": true
+      },
+      "builtin": {
+       "type": "boolean",
+       "description": "Account came with the operating system.",
+       "title": "builtin",
+       "_name_": "builtin",
+       "_required_": true
+      },
+      "smb": {
+       "type": "boolean",
+       "description": "The account may authenticate over SMB.",
+       "default": true,
+       "title": "smb",
+       "_name_": "smb",
+       "_required_": true
+      },
+      "group": {
+       "type": "object",
+       "title": "group",
+       "additionalProperties": false,
+       "_attrs_order_": [
+        "id",
+        "bsdgrp_gid",
+        "bsdgrp_group"
+       ],
+       "properties": {
+        "id": {
+         "type": "integer",
+         "title": "id",
+         "_name_": "id",
+         "_required_": true
+        },
+        "bsdgrp_gid": {
+         "type": "integer",
+         "title": "bsdgrp_gid",
+         "_name_": "bsdgrp_gid",
+         "_required_": true
+        },
+        "bsdgrp_group": {
+         "type": "string",
+         "title": "bsdgrp_group",
+         "_name_": "bsdgrp_group",
+         "_required_": true
+        }
+       },
+       "required": [
+        "id",
+        "bsdgrp_gid",
+        "bsdgrp_group"
+       ],
+       "_name_": "group",
+       "_required_": true
+      },
+      "groups": {
+       "type": "array",
+       "items": [
+        {
+         "type": "integer"
+        }
+       ],
+       "default": [],
+       "description": "Group record ids.",
+       "title": "groups",
+       "_name_": "groups",
+       "_required_": true
+      },
+      "password_disabled": {
+       "type": "boolean",
+       "description": "Password authentication is disabled.",
+       "default": false,
+       "title": "password_disabled",
+       "_name_": "password_disabled",
+       "_required_": true
+      },
+      "locked": {
+       "type": "boolean",
+       "description": "The account is locked.",
+       "default": false,
+       "title": "locked",
+       "_name_": "locked",
+       "_required_": true
+      },
+      "sshpubkey": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "sshpubkey",
+       "_name_": "sshpubkey",
+       "_required_": false
+      },
+      "sudo_commands": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "default": [],
+       "title": "sudo_commands",
+       "_name_": "sudo_commands",
+       "_required_": false
+      },
+      "email": {
+       "anyOf": [
+        {
+         "type": "string",
+         "format": "email"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "email",
+       "_name_": "email",
+       "_required_": false
+      },
+      "local": {
+       "type": "boolean",
+       "title": "local",
+       "_name_": "local",
+       "_required_": true
+      },
+      "immutable": {
+       "type": "boolean",
+       "title": "immutable",
+       "_name_": "immutable",
+       "_required_": true
+      },
+      "sid": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "sid",
+       "_name_": "sid",
+       "_required_": true
+      },
+      "roles": {
+       "type": "array",
+       "items": [
+        {
+         "type": "string"
+        }
+       ],
+       "title": "roles",
+       "_name_": "roles",
+       "_required_": true
+      }
+     },
+     "required": [
+      "id",
+      "uid",
+      "username",
+      "unixhash",
+      "smbhash",
+      "home",
+      "shell",
+      "full_name",
+      "builtin",
+      "smb",
+      "group",
+      "groups",
+      "password_disabled",
+      "locked",
+      "local",
+      "immutable",
+      "sid",
+      "roles"
+     ],
+     "_name_": "result",
+     "_required_": true
+    }
+   ]
+  }
+ }
+}
