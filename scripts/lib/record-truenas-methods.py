@@ -7,20 +7,24 @@ stderr. Its own file so the calls it can make are the three below and no
 other: auth.login_with_api_key, system.version, core.get_methods.
 
   - Keeps only the methods in `deps` and `elevatedDeps` and only `accepts`,
-    `returns`, `job`, with `description` and `examples` dropped at every depth.
+    `returns`, `job`, with `description`, `examples` and `$comment` dropped at every depth.
   - Asks per service (the `service` filter, as the add-on will) and once
     unfiltered, and prints each reply's size and time: 9a's measurement.
-  - The elevated key, if the first line of stdin holds one, opens one more
-    session for one call, `core.get_methods` with `service: "user"`, and only
-    `elevatedDeps` is taken from it (design §3.1). It is never stored.
+  - Reads both keys from stdin, the add-on's then the elevated, one per line,
+    so neither is in the container's environment. The elevated key is
+    required; it opens one more session for one call, `core.get_methods` with
+    `service: "user"`, and only `elevatedDeps` is taken from it (design §3.1).
+    Neither is stored.
+  - Waits TIMEOUT seconds for any reply, then fails.
   - Prints no address, no key and no exception text, which can carry either.
 """
 import asyncio, json, os, re, ssl, sys, time
 
 ENTRY = ("accepts", "returns", "job")
-PROSE = {"description", "examples"}
+PROSE = {"description", "examples", "$comment"}
 NAMES = {"properties", "$defs", "patternProperties"}  # keys are names, not keywords
-VALUES = {"default", "enum", "const"}  # values, never walked as schemas
+VALUES = {"default", "enum", "const", "discriminator"}  # values, never walked as schemas
+TIMEOUT = 120  # seconds for one reply; the unfiltered core.get_methods is the slow one
 
 
 def wanted(deps_go):
@@ -87,7 +91,7 @@ async def session(connect, key, calls):
             start = time.monotonic()
             await ws.send(json.dumps({"jsonrpc": "2.0", "id": n, "method": method, "params": params}))
             while True:
-                raw = await ws.recv()
+                raw = await asyncio.wait_for(ws.recv(), TIMEOUT)
                 msg = json.loads(raw)
                 if msg.get("id") == n:
                     break
@@ -120,12 +124,11 @@ async def capture(connect, key, elevated_key, deps, elevated):
         say("    note: the unfiltered reply differs from the per-service replies; kept per service")
     say(f"    lists: {' '.join(sorted(methods)) or '(none)'}")
     say(f"    does not list: {' '.join(sorted(set(deps) - set(methods))) or '(none)'}")
-    if elevated_key:
-        say("==> the elevated key: one session, one call")
-        (reply,) = await session(connect, elevated_key, [("core.get_methods", ["user"])])
-        got = project(reply, elevated)
-        say(f"    lists: {' '.join(sorted(got)) or '(none)'}")
-        methods.update(got)
+    say("==> the elevated key: one session, one call")
+    (reply,) = await session(connect, elevated_key, [("core.get_methods", ["user"])])
+    got = project(reply, elevated)
+    say(f"    lists: {' '.join(sorted(got)) or '(none)'}")
+    methods.update(got)
     missing = sorted(set(deps + elevated) - set(methods))
     if missing:
         say(f"    absent from the capture: {' '.join(missing)}")
@@ -137,8 +140,10 @@ async def capture(connect, key, elevated_key, deps, elevated):
 def main():
     import websockets
 
-    url, key = os.environ["TRUENAS_URL"], os.environ["TRUENAS_API_KEY"]
-    elevated_key = sys.stdin.readline().strip()
+    url = os.environ["TRUENAS_URL"]
+    key, elevated_key = sys.stdin.readline().strip(), sys.stdin.readline().strip()
+    if not (key and elevated_key):
+        raise SystemExit("error: both keys are required on stdin, the add-on's then the elevated")
     deps, elevated = wanted(open(sys.argv[1]).read())
     # Verified unless turned off, as the add-on reads it (main.go).
     if os.environ.get("TRUENAS_VERIFY_TLS", "").strip().lower() in ("0", "f", "false"):

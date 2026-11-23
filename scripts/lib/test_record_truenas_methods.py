@@ -7,7 +7,7 @@ of the files the runbook copies, with a fake `docker` on PATH that runs the
 mounted helper directly against a fake `websockets` serving a core.get_methods
 reply built from the shipped capture, enriched with what the NAS adds.
 """
-import copy, hashlib, importlib.util, json, os, pathlib, shutil, subprocess, sys, tempfile, textwrap, unittest
+import asyncio, copy, hashlib, importlib.util, json, os, pathlib, pty, shutil, subprocess, sys, tempfile, termios, textwrap, time, unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CAPTURE = ROOT / "addons/truenas/compat/baseline/TrueNAS-25.10.7.methods.json"
@@ -36,6 +36,7 @@ def rich_reply():
                  roles=["READONLY_ADMIN"], filterable=False, item_method=False)
         for s in e["accepts"] + e["returns"]:
             s["description"] = "prose naming The Undertaker"
+            s["$comment"] = "a note naming Stone Cold"
             s["examples"] = [{"home": "/mnt/tank/hulk-hogan", "host": "nas.example.invalid"}]
         out[name] = e
     out["vm.query"] = {"accepts": [], "returns": [{"type": "array"}], "job": False, "description": "vm"}
@@ -60,7 +61,7 @@ class Projection(unittest.TestCase):
         for entry in got.values():
             self.assertEqual(sorted(entry), ["accepts", "job", "returns"])
         text = json.dumps(got)
-        for word in ("description", "examples", "Undertaker", "Hogan", "example.invalid", "READONLY_ADMIN"):
+        for word in ("description", "examples", "$comment", "Stone Cold", "Undertaker", "Hogan", "example.invalid", "READONLY_ADMIN"):
             self.assertNotIn(word, text)
 
     def test_a_property_named_description_survives(self):
@@ -76,6 +77,22 @@ class Projection(unittest.TestCase):
             with self.assertRaises(SystemExit, msg=repr(bad)):
                 methods.project(bad, ["user.query"])
 
+    def test_a_discriminator_is_kept_whole(self):
+        disc = {"propertyName": "kind", "mapping": {"description": "#/$defs/a"}}
+        reply = {"user.query": {"accepts": [{"discriminator": disc, "description": "x"}], "returns": [{}], "job": False}}
+        self.assertEqual(methods.project(reply, ["user.query"])["user.query"]["accepts"], [{"discriminator": disc}])
+
+    def test_a_reply_that_never_comes_times_out(self):
+        class Hang:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+            async def send(self, raw): pass
+            async def recv(self): await asyncio.sleep(60)
+        old, methods.TIMEOUT = methods.TIMEOUT, 0.05
+        self.addCleanup(setattr, methods, "TIMEOUT", old)
+        with self.assertRaises(asyncio.TimeoutError):
+            asyncio.run(methods.session(Hang, KEY, []))
+
     def test_services(self):
         self.assertEqual(methods.services(["pool.dataset.query", "pool.query", "user.create", "user.query"]),
                          ["pool", "pool.dataset", "user"])
@@ -86,6 +103,7 @@ FAKE_WEBSOCKETS = textwrap.dedent('''
     import json, os
 
     REPLY = json.load(open(os.environ["FAKE_REPLY"]))
+    KEY, ELEVATED = json.load(open(os.environ["FAKE_KEYS"]))  # a file, so no key is in any environment
     LOG = os.environ["FAKE_CALLS"]
 
     class _WS:
@@ -100,14 +118,14 @@ FAKE_WEBSOCKETS = textwrap.dedent('''
             r = None
             if m["method"] == "auth.login_with_api_key":
                 self.key = m["params"][0]
-                r = self.key in (os.environ["FAKE_KEY"], os.environ["FAKE_ELEVATED"])
+                r = self.key in (KEY, ELEVATED)
             elif m["method"] == "system.version":
                 r = "TrueNAS-25.10.7"
             elif m["method"] == "core.get_methods":
                 svc = m["params"][0] if m["params"] else None
                 r = {n: e for n, e in REPLY.items()
                      if (svc is None or n.rsplit(".", 1)[0] == svc)
-                     and (n != "user.delete" or self.key == os.environ["FAKE_ELEVATED"])}
+                     and (n != "user.delete" or self.key == ELEVATED)}
             self.out.append(json.dumps({"jsonrpc": "2.0", "id": m["id"], "result": r}))
         async def recv(self):
             return self.out.pop(0)
@@ -119,19 +137,39 @@ FAKE_WEBSOCKETS = textwrap.dedent('''
 ''')
 
 # The fake docker runs the helper the real command line mounts, with the mounts
-# resolved, the same environment and stdin: everything but the container.
+# resolved and stdin passed through, in an environment built as docker builds a
+# container's: only the `-e` names, plus what the fake itself needs. It logs its
+# own argv and environment, which is what `ps` and `docker inspect` would show.
 FAKE_DOCKER = textwrap.dedent('''
     #!/usr/bin/env python3
-    import os, subprocess, sys
-    args, mounts, i = sys.argv[1:], {}, 0
+    import json, os, sys
+    args, mounts, env, i = sys.argv[1:], {}, {}, 0
+    with open(os.environ["FAKE_DOCKER_LOG"], "w") as f:
+        json.dump({"argv": sys.argv, "env": dict(os.environ)}, f)
     while i < len(args):
         if args[i] == "-v":
             src, dst = args[i + 1].split(":")[:2]
             mounts[dst] = src
             i += 1
+        elif args[i] == "-e":
+            name, eq, value = args[i + 1].partition("=")
+            if eq or name in os.environ:
+                env[name] = value if eq else os.environ[name]
+            i += 1
         i += 1
+    env.update({k: v for k, v in os.environ.items() if k in ("PATH", "PYTHONPATH") or k.startswith("FAKE_")})
     cmd = args[-1].split("&&")[-1].split()
-    os.execvp(sys.executable, [sys.executable] + [mounts.get(a, a) for a in cmd[1:]])
+    os.execvpe(sys.executable, [sys.executable] + [mounts.get(a, a) for a in cmd[1:]], env)
+''').lstrip()
+
+# The staging `.env`: the three names the recorder reads, among others it must
+# not read, and a line that would run if the file were sourced.
+ENV_FILE = textwrap.dedent(f'''
+    SESSION_SECRET=undertaker-session-secret
+    TRUENAS_URL="{URL}"
+    TRUENAS_API_KEY={KEY}
+    touch sourced
+    PWNED=$(touch sourced)
 ''').lstrip()
 
 
@@ -157,13 +195,44 @@ class EndToEnd(unittest.TestCase):
         (fakes / "docker").chmod(0o755)
         (self.tmp / "reply.json").write_text(json.dumps(rich_reply()))
         self.calls = self.tmp / "calls.log"
-        self.env = dict(os.environ, PATH=f"{fakes}:{os.environ['PATH']}", PYTHONPATH=str(fakes),
-                        TRUENAS_URL=URL, TRUENAS_API_KEY=KEY, FAKE_KEY=KEY, FAKE_ELEVATED=ELEVATED,
+        (self.tmp / "keys.json").write_text(json.dumps([KEY, ELEVATED]))
+        self.docker_log = self.tmp / "docker.json"
+        self.env_file = self.tmp / "staging.env"
+        self.env_file.write_text(ENV_FILE)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("TRUENAS_")}
+        self.env = dict(env, PATH=f"{fakes}:{os.environ['PATH']}", PYTHONPATH=str(fakes),
+                        RECORD_ENV_FILE=str(self.env_file), FAKE_KEYS=str(self.tmp / "keys.json"),
+                        FAKE_DOCKER_LOG=str(self.docker_log),
                         FAKE_REPLY=str(self.tmp / "reply.json"), FAKE_CALLS=str(self.calls))
 
-    def run_recorder(self, *args, stdin=""):
-        return subprocess.run(["bash", "scripts/record-truenas-fixtures.sh", *args], cwd=self.work,
-                              env=self.env, input=stdin, capture_output=True, text=True, timeout=60)
+    def run_recorder(self, *args, typed=None, stdin=""):
+        """Runs the recorder; `typed` is what the owner types at a terminal,
+        otherwise stdin is a pipe holding `stdin`."""
+        cmd = ["bash", "scripts/record-truenas-fixtures.sh", *args]
+        if typed is None:
+            return subprocess.run(cmd, cwd=self.work, env=self.env, input=stdin,
+                                  capture_output=True, text=True, timeout=60)
+        master, slave = pty.openpty()
+        p = subprocess.Popen(cmd, cwd=self.work, env=self.env, stdin=slave, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, text=True)
+        # Typed once the prompt has turned echo off: bash's `read -s` flushes
+        # anything typed before it.
+        while termios.tcgetattr(slave)[3] & termios.ECHO and p.poll() is None:
+            time.sleep(0.01)
+        os.close(slave)
+        try:
+            os.write(master, (typed + "\n").encode())
+        except OSError:  # it refused before it asked, and the terminal is gone
+            pass
+        out, err = p.communicate(timeout=60)
+        os.close(master)
+        return subprocess.CompletedProcess(cmd, p.returncode, out, err)
+
+    def assert_nothing_happened(self, r, before):
+        self.assertNotEqual(r.returncode, 0)
+        self.assertFalse(self.calls.exists(), "it connected")
+        self.assertFalse(self.docker_log.exists(), "it ran docker")
+        self.assertEqual(tree(self.work), before)
 
     def out(self):
         return self.work / "addons/truenas/compat/baseline/TrueNAS-25.10.7.methods.json"
@@ -171,7 +240,7 @@ class EndToEnd(unittest.TestCase):
     def test_write_is_refused_before_connecting(self):
         for args in (["--methods", "--write"], ["--write", "--methods"]):
             before = tree(self.work)
-            r = self.run_recorder(*args, stdin=ELEVATED + "\n")
+            r = self.run_recorder(*args, typed=ELEVATED)
             self.assertNotEqual(r.returncode, 0)
             self.assertIn("--write", r.stderr)
             self.assertFalse(self.calls.exists(), "it connected")
@@ -179,7 +248,7 @@ class EndToEnd(unittest.TestCase):
 
     def test_capture_with_the_elevated_key(self):
         before = tree(self.work)
-        r = self.run_recorder("--methods", stdin=ELEVATED + "\n")
+        r = self.run_recorder("--methods", typed=ELEVATED)
         self.assertEqual(r.returncode, 0, r.stderr)
         after = tree(self.work)
         rel = str(self.out().relative_to(self.work))
@@ -214,21 +283,57 @@ class EndToEnd(unittest.TestCase):
     def test_a_failure_names_no_address_and_writes_nothing(self):
         before = tree(self.work)
         self.env["FAKE_FAIL"] = "1"
-        r = self.run_recorder("--methods", stdin=ELEVATED + "\n")
+        r = self.run_recorder("--methods", typed=ELEVATED)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("OSError", r.stderr)
         for secret in (KEY, ELEVATED, URL, "nas.example.invalid"):
             self.assertNotIn(secret, r.stdout + r.stderr)
         self.assertEqual(tree(self.work), before)
 
-    def test_capture_without_the_elevated_key_leaves_user_delete_out(self):
-        r = self.run_recorder("--methods", stdin="\n")
+    def test_neither_key_reaches_argv_or_an_environment(self):
+        r = self.run_recorder("--methods", typed=ELEVATED)
         self.assertEqual(r.returncode, 0, r.stderr)
-        doc = json.loads(self.out().read_text())
-        self.assertNotIn("user.delete", doc["methods"])
-        self.assertIn("user.delete", r.stderr)
-        calls = self.calls.read_text().splitlines()
-        self.assertEqual(sum('"auth.login_with_api_key"' in l for l in calls), 1)
+        seen = json.loads(self.docker_log.read_text())
+        text = json.dumps(seen)
+        for secret in (KEY, ELEVATED, "undertaker-session-secret"):
+            self.assertFalse(secret in text, f"{secret} reached docker's argv or environment")
+        argv = seen["argv"]
+        names = {argv[i + 1].split("=")[0] for i, a in enumerate(argv) if a == "-e"}
+        self.assertEqual(names, {"TRUENAS_URL", "TRUENAS_VERIFY_TLS"})
+        self.assertFalse((self.work / "sourced").exists(), "the .env file was run as shell")
+
+    def test_an_empty_paste_writes_nothing(self):
+        before = tree(self.work)
+        r = self.run_recorder("--methods", typed="")
+        self.assert_nothing_happened(r, before)
+        self.assertIn("elevated key is required", r.stderr)
+        self.assertTrue(CAPTURE.exists())
+
+    def test_the_helper_refuses_without_both_keys(self):
+        for stdin in ("", KEY + "\n", KEY + "\n\n", "\n" + ELEVATED + "\n"):
+            r = subprocess.run([sys.executable, str(ROOT / "scripts/lib/record-truenas-methods.py"), str(DEPS)],
+                               env=dict(self.env, TRUENAS_URL=URL), input=stdin,
+                               capture_output=True, text=True, timeout=60)
+            self.assertNotEqual(r.returncode, 0, repr(stdin))
+            self.assertIn("both keys", r.stderr)
+            self.assertFalse(self.calls.exists(), "it connected")
+
+    def test_without_a_terminal_no_key_is_read(self):
+        before = tree(self.work)
+        r = self.run_recorder("--methods", stdin=ELEVATED + "\n")
+        self.assert_nothing_happened(r, before)
+        self.assertIn("terminal", r.stderr)
+
+    def test_a_key_given_as_a_file_stops_without_reading_it(self):
+        secret = self.tmp / "api.key"
+        secret.write_text(KEY)
+        secret.chmod(0)
+        self.env_file.write_text(f"TRUENAS_URL={URL}\nTRUENAS_API_KEY=\nADDON_API_KEY_FILE={secret}\n")
+        before = tree(self.work)
+        r = self.run_recorder("--methods", typed=ELEVATED)
+        self.assert_nothing_happened(r, before)
+        self.assertIn("ADDON_API_KEY_FILE", r.stderr)
+        self.assertNotIn(str(secret), r.stderr)
 
 
 if __name__ == "__main__":
