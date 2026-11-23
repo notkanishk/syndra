@@ -156,18 +156,22 @@ func Unread(r CallResponse) Why {
 // unsent is a reply with no status: nothing came back.
 func unsent(r CallResponse) Why {
 	var held *HeldError
+	var notRead NotRead
 	var withdrawn *ErrOperationUnavailable
 	switch {
 	case errors.As(r.Err, &held):
 		return held.Why
+	case errors.As(r.Err, &notRead):
+		// No manifest (ResolveOperation): the monitor's why.
+		return notRead.Why
 	case errors.As(r.Err, &withdrawn):
-		// The add-on's manifest withdrew it, with its reason: it answered, so
-		// not an outage (health.get on staging, 22 Nov 2026, read as one).
-		return Why{Reason: ReasonReadRefused, Detail: withdrawn.Reason}
-	case errors.Is(r.Err, ErrFeatureNotDeclared):
+		// The add-on's manifest withdrew it: it answered, so not an outage. Its
+		// reason is the add-on's raw words, kept in the error, never the sentence.
+		return Why{Reason: ReasonReadRefused}
+	case errors.Is(r.Err, ErrFeatureNotDeclared), errors.Is(r.Err, ErrUnknownOperation):
 		return Why{Reason: ReasonAddonOutdated}
 	case errors.Is(r.Err, ErrNoCallRecord), errors.Is(r.Err, ErrNoFingerprint), errors.Is(r.Err, ErrFreshOutOfScope),
-		errors.Is(r.Err, errNotPrepared):
+		errors.Is(r.Err, errNotPrepared), errors.Is(r.Err, ErrNotRegistered):
 		// Syndra's own refusal before anything left: not an outage.
 		return Why{Reason: ReasonReadRefused}
 	case errors.Is(r.Err, errNoTransport):

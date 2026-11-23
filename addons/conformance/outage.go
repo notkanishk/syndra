@@ -86,37 +86,44 @@ func (k *kit) appHang() {
 			c.expect(h["reachable"] == false, "/health %d with the app hanging answered reachable %v; a call that got no answer did not succeed", i+1, h["reachable"])
 		}
 	}
+	k.outageReads(c, "hanging", noCopy)
+}
+
+// outageReads sends each read operation with the app out (how: "hanging",
+// "stopped"): each answers within readWithin, its kept copy, current false,
+// or a no-copy code from codes.
+func (k *kit) outageReads(c *check, how string, codes []string) {
 	for _, id := range k.readOps() {
 		began := time.Now()
 		ex := k.send(request{method: http.MethodPost, target: "/operations/" + id,
 			body: k.operationBody(id, k.callID(), map[string]any{}), schema: "operation_request.json"})
 		took := time.Since(began)
-		if !c.expect(ex.err == nil && took < readWithin, "%s with the app hanging answered after %s (%v); a read answers within %s, under Syndra's 30 s call timeout", id, took.Round(time.Millisecond), ex.err, readWithin) {
+		if !c.expect(ex.err == nil && took < readWithin, "%s with the app %s answered after %s (%v); a read answers within %s, under Syndra's 30 s call timeout", id, how, took.Round(time.Millisecond), ex.err, readWithin) {
 			continue
 		}
 		result, _ := ex.doc()["result"].(map[string]any)
 		switch {
 		case ex.status == http.StatusOK:
-			c.expect(result["current"] == false, "%s with the app hanging answered 200 with current %v; with the app hanging a read answers its kept copy, current false, or a no-copy code", id, result["current"])
+			c.expect(result["current"] == false, "%s with the app %s answered 200 with current %v; with the app %s a read answers its kept copy, current false, or a no-copy code", id, how, result["current"], how)
 		case ex.status == http.StatusUnprocessableEntity && ex.code() == "OPERATION_FAILED" && *k.c.operations[id].Subject:
 			// No account for the kit's subject: answered about the request, in time (results).
 		default:
-			c.expect(ex.status == http.StatusServiceUnavailable && slices.Contains(noCopy, ex.code()),
-				"%s with the app hanging answered %d %s; with no copy, want 503 %s", id, ex.status, ex.code(), strings.Join(noCopy, ", "))
+			c.expect(ex.status == http.StatusServiceUnavailable && slices.Contains(codes, ex.code()),
+				"%s with the app %s answered %d %s; with no copy, want 503 %s", id, how, ex.status, ex.code(), strings.Join(codes, ", "))
 		}
 	}
 }
 
-// readsStayDeclared holds an outage to the manifest: every read declared
-// available stays available. A read answers the outage itself (a copy or a
-// no-copy code); withdrawn, Syndra refuses it unsent and blames the add-on
-// for the app (health.get on the 8g staging run, 22 Nov 2026: the add-on
-// started with the NAS down, read no version, and withdrew its reads).
-func (k *kit) readsStayDeclared(c *check, caps *exchange, when string) {
+// readsStayDeclared reads /capabilities with the app stopped: it answers, and
+// every read declared available stays available, answering the outage itself
+// (outageReads), never withdrawn for it (design §13.1, the withdrawn row).
+func (k *kit) readsStayDeclared(c *check) {
+	caps := k.send(request{method: http.MethodGet, target: "/capabilities"})
+	c.expect(caps.err == nil && caps.status == http.StatusOK, "GET /capabilities with the app stopped answered %d (%v); it still answers", caps.status, caps.err)
 	for _, op := range objects(caps.doc()["operations"]) {
 		id := str(op, "id")
 		if available, _ := op["available"].(bool); slices.Contains(k.readOps(), id) && !available {
-			c.fail("GET /capabilities %s withdrew the read %s (%s); a read stays available and answers the outage itself", when, id, str(op, "unavailable_reason"))
+			c.fail("GET /capabilities with the app stopped withdrew the read %s (%s); a read stays available and answers the outage itself", id, str(op, "unavailable_reason"))
 		}
 	}
 }
@@ -209,9 +216,7 @@ func (k *kit) appDown() {
 		}
 	}
 	h0 := k.ok(health, k.send(request{method: http.MethodGet, target: "/health"}), "health.json")
-	caps := k.send(request{method: http.MethodGet, target: "/capabilities"})
-	health.expect(caps.err == nil && caps.status == http.StatusOK, "GET /capabilities with the app stopped answered %d (%v); it still answers", caps.status, caps.err)
-	k.readsStayDeclared(health, caps, "with the app stopped")
+	k.readsStayDeclared(health)
 
 	during := k.readNow(live)
 	k.outageRead(kept, none, during, copyAt, live)
@@ -233,6 +238,12 @@ func (k *kit) appDown() {
 		if at := str(h0, "last_read_at"); at != "" {
 			health.expect(str(h1, "last_read_at") == at, "last_read_at moved from %s to %q while the app was stopped", at, str(h1, "last_read_at"))
 		}
+	}
+	// An add-on started while its app is down has read nothing from it (the
+	// 8g staging run): restarted now, its reads stay declared and answer.
+	if k.cfg.StopAddon != nil && k.cfg.StartAddon != nil && k.restartAddon(health) {
+		k.readsStayDeclared(health)
+		k.outageReads(health, "stopped", stoppedNoCopy)
 	}
 	for c, why := range map[*check]string{kept: "every read with the app stopped answered no copy (see outage.none)",
 		none: "every read with the app stopped answered its copy (see outage.kept)"} {
@@ -315,12 +326,8 @@ func (k *kit) addonRestart() {
 		return
 	}
 	before := k.ok(c, k.subjectsRead(false), "subjects.json")
-	// Once a stop is tried the add-on is started again, failed or not.
-	err := k.cfg.StopAddon(k.ctx)
-	errStart := k.cfg.StartAddon(context.WithoutCancel(k.ctx))
-	stopOK := c.expect(err == nil, "-stop-addon failed: %v", err)
-	if startOK := c.expect(errStart == nil, "-start-addon failed: %v", errStart); !stopOK || !startOK {
-		return // both said: a failed stop never hides a failed start
+	if !k.restartAddon(c) {
+		return
 	}
 	if after := k.ok(c, k.subjectsRead(false), "subjects.json"); after != nil && after["current"] == false {
 		stale, _ := after["stale"].(map[string]any)
@@ -335,6 +342,17 @@ func (k *kit) addonRestart() {
 		return
 	}
 	k.callAnswers(c, k.passwordCall, k.passwordReply)
+}
+
+// restartAddon stops the add-on and starts it, its disk kept. Once a stop is
+// tried the add-on is started again, failed or not, and a failed stop never
+// hides a failed start: both are said.
+func (k *kit) restartAddon(c *check) bool {
+	err := k.cfg.StopAddon(k.ctx)
+	errStart := k.cfg.StartAddon(context.WithoutCancel(k.ctx))
+	stopOK := c.expect(err == nil, "-stop-addon failed: %v", err)
+	startOK := c.expect(errStart == nil, "-start-addon failed: %v", errStart)
+	return stopOK && startOK
 }
 
 // ---- noFalseZero ------------------------------------------------------------

@@ -1938,8 +1938,13 @@ The manifest entry is a ceiling:
 - `confirm`: Syndra asks the person to confirm when either side says so.
 - `secret_params`: Syndra treats as secret the union of yours and its
   policy's.
-- An operation the app cannot do right now MUST be declared
-  `available: false` with an `unavailable_reason`, and kept in the list.
+- A write the app cannot do right now (an untested version, a missing
+  method) MUST be declared `available: false` with an `unavailable_reason`,
+  and kept in the list. A read stays declared through an outage, and while
+  the app's version is unread, and answers the outage itself with its kept
+  copy or 503 `TARGET_UNREACHABLE` or `NO_CURRENT_READ`: Syndra refuses a
+  withdrawn read unsent and cannot tell the app down from the add-on. A
+  read is withdrawn only when the app lacks what it needs (a method).
 - `params`: a JSON Schema for the UI's labels and pickers, never used for a
   decision; Syndra validates parameters against its policy alone.
 
@@ -2729,9 +2734,13 @@ and on any other system the kit refuses them.
 With them it runs:
 
 - `outage.health`: with the app stopped, `/health` and `/capabilities`
-  still answer, `reachable` is `false` after one fresh read and
-  `last_read_at` does not move; with it back, `reachable: true` and a fresh
-  read is `current: true`.
+  still answer, `/capabilities` keeps every read available,
+  `reachable` is `false` after one fresh read and `last_read_at` does not
+  move. With `-stop-addon` and `-start-addon` the kit then restarts the
+  add-on, the app still stopped: `/capabilities` still keeps every read, and
+  each read answers within 25 s with its kept copy or 503
+  `TARGET_UNREACHABLE` or `NO_CURRENT_READ`. With the app back,
+  `reachable: true` and a fresh read is `current: true`.
 - `outage.hang`: with the app hanging for 12 s (past the 10 s a recent
   answer counts), `/health` answers within 3 s with `reachable: false`,
   twice running, never `TARGET_BUSY`, and each read operation you declare

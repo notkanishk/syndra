@@ -898,7 +898,9 @@ func ResolveOperation(target, id string) (EffectiveOperation, error) {
 	// The one on-demand manifest read. Outside the lock, because the read it
 	// may perform takes the write lock.
 	if !hasManifest(target) && !refreshForManifest(target) {
-		return EffectiveOperation{}, fmt.Errorf("%w: %s", ErrNoManifest, target)
+		// With the monitor's why (WhyNoManifest), so a reply that never left
+		// says the system as the roster does, not "no answer" (unsent).
+		return EffectiveOperation{}, fmt.Errorf("%w: %s: %w", ErrNoManifest, target, NotRead{Why: WhyNoManifest(target)})
 	}
 	registryMu.RLock()
 	defer registryMu.RUnlock()

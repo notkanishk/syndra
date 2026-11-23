@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -46,10 +47,10 @@ func conformanceKit(t *testing.T) string {
 	return bin
 }
 
-// kitAddon is one add-on the kit runs against, and the file whose presence
-// switches its stub NAS off: the app hooks are touch and rm, as the
-// reference's are.
-type kitAddon struct{ url, nasOff string }
+// kitAddon is one add-on the kit runs against, the file whose presence
+// switches its stub NAS off (the app hooks are touch and rm, as the
+// reference's are), and the file whose presence restarts it (-start-addon).
+type kitAddon struct{ url, nasOff, restart string }
 
 // stubNAS is the NAS fake behind the add-on's own dialer seam (rpc in nas.go),
 // switched off by a file. Off, a dial is refused and a call on a session
@@ -124,15 +125,31 @@ func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 		"service_data":{"service":"main"}}]`, time.Now().Unix())
 	fake.answers["pool.dataset.get_quota tank/main"] = `[{"id":3051,"used_bytes":1234}]`
 	fake.answers["pool.dataset.get_quota tank/open"] = `[]`
+	fake.answers["auth.me"] = `{"pw_name":"syndra","pw_uid":3001}` // read anew after a restart
 	m := &mutatingRPC{fakeRPC: *fake, folders: []string{kitHomeRoot}}
 	s := testServer(t, &m.fakeRPC)
-	nas := stubNAS{m, filepath.Join(t.TempDir(), "nas-off")}
-	s.nas = newNAS(nas.dial, []string{"25.04"})
-	// Short bounds, so a hang costs the run a second, not nasDialTimeout,
-	// callTimeout and pingTimeout (TestNASBoundsFitUnderTheBackendsCallTimeout
-	// holds those), and the floor after it kitFloor, not reconnectCooldown.
-	s.nas.dialWithin, s.nas.callWithin, s.nas.pingWithin, s.nas.floor = time.Second, time.Second, time.Second, kitFloor
+	dir := t.TempDir()
+	nas := stubNAS{m, filepath.Join(dir, "nas-off")}
+	started := func() *NAS {
+		n := newNAS(nas.dial, []string{"25.04"})
+		// Short bounds, so a hang costs the run a second, not nasDialTimeout,
+		// callTimeout and pingTimeout (TestNASBoundsFitUnderTheBackendsCallTimeout
+		// holds those), and the floor after it kitFloor, not reconnectCooldown.
+		n.dialWithin, n.callWithin, n.pingWithin, n.floor = time.Second, time.Second, time.Second, kitFloor
+		return n
+	}
+	s.nas = started()
 	s.nas.version, s.nas.probed = "25.04.2", true
+	// The stub exposes every method an operation needs, as a current TrueNAS
+	// does: a restarted add-on enumerates them anew (core.get_methods).
+	exposed := map[string]struct{}{}
+	for _, op := range operationSet(s) {
+		for _, method := range methodsFor(op.ID) {
+			exposed[method] = struct{}{}
+		}
+	}
+	listing, _ := json.Marshal(exposed)
+	m.methods = string(listing)
 	s.nas.selfName, s.nas.selfUID = "syndra", 3001 // auth.me has named the add-on's own account, as after its first probe
 	key, err := deriveHMACKey([]byte(kitSecret), kitTarget)
 	if err != nil {
@@ -162,13 +179,24 @@ func kitAddOn(t *testing.T, homeRoot string) kitAddon {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewUnstartedServer(s.routes())
+	// A restart is a new process over the same disk: the store kept, the NAS
+	// session and all it read gone, then main's startup probe, which reads
+	// no version with the NAS off. ponytail: the session swapped, not the
+	// process restarted.
+	restart, routes := filepath.Join(dir, "addon-restart"), s.routes()
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if os.Remove(restart) == nil {
+			s.nas = started()
+			_ = s.nas.Probe(r.Context())
+		}
+		routes.ServeHTTP(w, r)
+	}))
 	srv.TLS = &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{cert}}
 	// The kit is one client making one request at a time; the fake is not
 	// safe for more, and nothing here needs more.
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
-	return kitAddon{srv.URL, nas.off}
+	return kitAddon{srv.URL, nas.off, restart}
 }
 
 // kitFloor is the add-on's reconnect floor in the kit runs (kitAddOn).
@@ -197,7 +225,8 @@ func runKit(t *testing.T, bin string, a kitAddon, args ...string) kitReport {
 	}
 	cmd := exec.Command(bin, append([]string{"-url", a.url, "-target", kitTarget, "-secret-file", secret, "-json", "-",
 		"-require-outage", "-stop-app", "touch '" + a.nasOff + "'", "-hang-app", "printf hang > '" + a.nasOff + "'",
-		"-start-app", fmt.Sprintf("rm -f '%s' && sleep %d", a.nasOff, int(kitFloor/time.Second)+1)}, args...)...)
+		"-start-app", fmt.Sprintf("rm -f '%s' && sleep %d", a.nasOff, int(kitFloor/time.Second)+1),
+		"-stop-addon", "true", "-start-addon", "touch '" + a.restart + "'"}, args...)...)
 	out, err := cmd.Output()
 	var r kitReport
 	if jerr := json.Unmarshal(out, &r); jerr != nil {

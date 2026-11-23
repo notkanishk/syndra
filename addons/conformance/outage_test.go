@@ -91,17 +91,11 @@ func TestEachOutageCheckFailsOnABadReply(t *testing.T) {
 				}
 				return reply
 			}},
-		// The 8g staging rerun (22 Nov 2026): the NAS down, health.get withdrawn.
+		// The NAS down, health.get withdrawn (design §13.1, the withdrawn row).
 		{name: "a read withdrawn while the app is down", want: []string{"outage.health"},
 			rewrite: func(r *http.Request, reply []byte, down bool) []byte {
 				if down && r.URL.Path == "/capabilities" {
-					return edit(reply, func(m map[string]any) {
-						for _, op := range m["operations"].([]any) {
-							if op := op.(map[string]any); op["id"] == "health.get" {
-								op["available"], op["unavailable_reason"] = false, "the target version has not been read yet"
-							}
-						}
-					})
+					return withdrawHealth(reply)
 				}
 				return reply
 			}},
@@ -164,6 +158,39 @@ func TestEachOutageCheckFailsOnABadReply(t *testing.T) {
 				t.Error("the run left the app down")
 			}
 		})
+	}
+}
+
+// withdrawHealth is a /capabilities reply with health.get withdrawn, as an
+// add-on that had read no version of its app withdrew it.
+func withdrawHealth(reply []byte) []byte {
+	return edit(reply, func(m map[string]any) {
+		for _, op := range m["operations"].([]any) {
+			if op := op.(map[string]any); op["id"] == "health.get" {
+				op["available"], op["unavailable_reason"] = false, "the target version has not been read yet"
+			}
+		}
+	})
+}
+
+// The add-on is restarted while its app is down, as on staging: it has read
+// nothing from the app, and its reads stay declared even so. One that
+// withdraws a read only then fails outage.health.
+func TestOutageHealthFailsAReadWithdrawnByARestartWithTheAppDown(t *testing.T) {
+	var down, restarted atomic.Bool
+	withdraw := func(r *http.Request, reply []byte) []byte {
+		if down.Load() && restarted.Load() && r.URL.Path == "/capabilities" {
+			return withdrawHealth(reply)
+		}
+		return reply
+	}
+	url, _ := serveAddon(t, reference.Config{Target: "reference", Secret: []byte(testSecret), Down: down.Load}, nil, withdraw, nil)
+	cfg := withApp(config(url, false), &down)
+	cfg.StopAddon = func(context.Context) error { return nil }
+	cfg.StartAddon = func(context.Context) error { restarted.Store(true); return nil }
+	r, _ := Run(context.Background(), cfg)
+	if got := r.Status("outage.health"); got != "fail" {
+		t.Errorf("outage.health says %s for a read withdrawn after a restart with the app down, want fail", got)
 	}
 }
 

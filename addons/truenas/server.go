@@ -169,11 +169,9 @@ func (s *server) unavailable(operationID string) (code, why string) {
 		// nothing about the target's version or reachability can withdraw it.
 		return "", ""
 	}
-	// A read is never withdrawn for the version (TARGET_VERSION_UNSUPPORTED
-	// is "a mutation against" an untested major, registry errors.json): an
-	// add-on started while its NAS was down has read none, and a withdrawn
-	// read is one the backend refuses unsent and blames the add-on for (the
-	// staging run, 22 Nov 2026). Sent, it answers the outage itself.
+	// Only a write is withdrawn for the version (TARGET_VERSION_UNSUPPORTED
+	// is "a mutation against" an untested major, registry errors.json); a
+	// read answers the outage itself (design §13.1, the withdrawn row).
 	if supported, why := s.nas.MajorSupported(); !supported && !readOperation(operationID) {
 		return CodeTargetVersionUnsupported, why
 	}

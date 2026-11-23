@@ -191,8 +191,9 @@ func TestAnUnreadMethodListDoesNotWithdrawTheSurface(t *testing.T) {
 }
 
 // The two reasons read differently to an operator — "we will not" and "it
-// cannot" — and the version check comes first, because on an untested major
-// nothing is offered whatever the method list says.
+// cannot" — and the version check comes first for a write, because on an
+// untested major no write is offered whatever the method list says. A read is
+// never withdrawn for the version, but its absent method still withdraws it.
 func TestAnUntestedMajorOutranksTheMethodProbe(t *testing.T) {
 	s, _ := applyServer(t, `[]`)
 	s.nas.version = "27.10.0"
@@ -207,7 +208,10 @@ func TestAnUntestedMajorOutranksTheMethodProbe(t *testing.T) {
 			continue
 		}
 		if readOperation(op.ID) {
-			continue // a read is never withdrawn for the version; its absent method still withdraws it
+			if op.Available || !strings.Contains(op.UnavailableReason, "does not expose") {
+				t.Errorf("%s: a read whose method is absent is withdrawn for the method, got available %v %q", op.ID, op.Available, op.UnavailableReason)
+			}
+			continue
 		}
 		if op.Available {
 			t.Errorf("%s must be unavailable on an untested major", op.ID)
@@ -218,12 +222,9 @@ func TestAnUntestedMajorOutranksTheMethodProbe(t *testing.T) {
 	}
 }
 
-// An add-on that started while its NAS was down has read no version, and a
-// read is never withdrawn for a version (registry errors.json:
-// TARGET_VERSION_UNSUPPORTED is "a mutation against" one). Withdrawn, the
-// backend refuses health.get before sending it and calls the add-on
-// unreachable for the NAS (the staging run, 22 Nov 2026 19:12Z). Sent, it
-// answers the outage the contract way: 503 TARGET_UNREACHABLE.
+// An add-on that started while its NAS was down has read no version: its
+// reads stay declared (design §13.1, the withdrawn row), and health.get,
+// sent, answers the outage the contract way: 503 TARGET_UNREACHABLE.
 func TestAnUnreadVersionWithdrawsNoRead(t *testing.T) {
 	s, _ := applyServer(t, `[]`)
 	s.nas = newNAS(func() (rpc, error) { return nil, errors.New("dial tcp: i/o timeout") }, []string{"25.04"})
