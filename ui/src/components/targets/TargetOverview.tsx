@@ -1080,7 +1080,7 @@ function ConnectionNotices({
     notices.push(
       <Reading key="version" tone="warn" label={`Untested ${name} version`}>
         {check.note || `This version of ${name} has not been tested with Syndra.`} Reads
-        keep working; changes are held and sent once the add-on is updated. Update the add-on.
+        keep working; changes are held. Update the add-on.
       </Reading>,
     );
   }

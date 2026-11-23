@@ -111,7 +111,7 @@ describe("how old the add-on's mirror is", () => {
 // Slice 9c: a write on an untested version is held, not refused (TARGET_VERSION_UNSUPPORTED is
 // 503, the row waits unspent), and the notice ends with the one step that releases it (copy guide §19).
 describe("the untested-version notice", () => {
-  it("says changes are held until the add-on is updated, and to update it", () => {
+  it("says changes are held, and to update the add-on", () => {
     currentHealth = {
       read: NOW(),
       reachable: true,
@@ -125,7 +125,7 @@ describe("the untested-version notice", () => {
 
     expect(
       screen.getByText(
-        /This version of Truenas has not been tested with Syndra\. Reads keep working; changes are held and sent once the add-on is updated\. Update the add-on\.$/,
+        /This version of Truenas has not been tested with Syndra\. Reads keep working; changes are held\. Update the add-on\.$/,
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/refused/)).toBeNull();
