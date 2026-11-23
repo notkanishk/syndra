@@ -832,7 +832,7 @@ once and reads back again. Only a second mismatch is the signal above.
 | The second read | Outcome | `detail`, then `consequence` |
 |---|---|---|
 | matches | `applied`, fingerprint from the second read. Nothing is held. | {what changed} {product} didn't make this change the first time. It took on the second try. Nothing for you to do. · {what the account holds} |
-| differs again | `blocked`. The function is held (§12.2); after a create, narrowed to the account (§12.4). | {product} accepted this change twice and didn't make it: asked `locked: true`, read `locked: false`. · {what the account holds} Syndra has stopped using user.update so it can't repeat this. Check the account in {product}, then press Try again on the system's page. |
+| differs again | `blocked`. The function is held (§12.2); after a create, narrowed to the account (§12.4). | {product} accepted this change twice and didn't make it: asked `locked: true`, read `locked: false`. · {what the account holds} Syndra has stopped using user.update so it can't repeat this (for {account} only, after a create). Check the account in {product}, then press Try again on the system's page. |
 | never came (the budget ended, or the resend or its read-back failed) | `applied`, `Unverified`. Nothing is held. | {what changed} {product} accepted this change and didn't show it, and Syndra couldn't check it a second time, so it isn't confirmed. Syndra's next check reads the account fresh. Nothing for you to do. |
 
 A row's `last_error` is the add-on's two sentences joined, as for every
@@ -905,9 +905,10 @@ fallback for "no row waiting": step 1 always has a row.
    - *A narrowed record, or a function's record with no such row:* the
      record's own account. Its rows end terminal at the plan's `blocked`
      (`propagation/addon.go:606-621`) and the sweep queues nothing for a
-     `blocked` plan (`drift/addon.go:576`), so there is none to find. The backend queues one with
-     `convergeOn` (`services/lifecycle_trigger.go:148`), the call a role
-     change already makes: it resolves the person's set now, so the trial
+     `blocked` plan (`drift/addon.go:576`), so there is none to find. The backend queues one through
+     `ConvergeSubjectOn` (`services/lifecycle_trigger.go:227-229`), which takes
+     the access lock and commits before `claimOne`, around `convergeOn`
+     (`:148`), the call a role change already makes: it resolves the person's set now, so the trial
      sends what they should hold today, and once it is applied an older
      waiting row of theirs is overtaken at the claim (`terminateSuperseded`,
      `db/propagations.go:250`). No second way to make a row. What changes
@@ -916,7 +917,9 @@ fallback for "no row waiting": step 1 always has a row.
        answers, `db/system_convergence.go:113`), which it drops today.
      - It takes the row's reason. Today the reason is fixed, "Their roles
        changed." (`lifecycle_trigger.go:167`), which a trial row would
-       carry falsely. The role-change caller passes that sentence; Try
+       carry falsely. Both existing callers keep that sentence: the role-change caller and
+       `ConvergeSubjectOn`'s (holds made or lifted, directory deactivations,
+       project changes; `grant_convergence.go:15`, `:216-221`). Try
        again passes "Sent to see if {function} works now (Try again)."
      - **No row.** With no accepted manifest, `convergeOn` logs, queues
        nothing and returns no error (`lifecycle_trigger.go:156-163`), so
@@ -1035,8 +1038,8 @@ events. No new error code, reason or read state.
 | the same, narrowed by it | as "the same, narrowed" above. |
 | Operator, after Try again, it didn't | Still the same: {reason}. Nothing else was sent. Check {product}, or update the add-on. |
 | Operator, after Try again, nothing was tested | That change didn't need {function}, so nothing was tested. Press **Try again** to send the next one. |
-| the same, narrowed, nothing to change | Nothing to prove yet; still held. {account} is already as Syndra wants it, so nothing was sent. When their access next changes, that change stops here as held: press **Try again** then and it is sent. |
-| Operator, after Try again, no row could be made (no accepted manifest, §12.4 step 1) | Still held, and nothing was sent: Syndra hasn't read {system}'s add-on yet, so it can't make a change for {account}. Press **Try again** once {system} answers. |
+| the same, narrowed, nothing to change | Still held; nothing was tested. {account} is already as Syndra wants it, so nothing was sent. When their access next changes, that change stops here as held: press **Try again** then and it is sent. |
+| Operator, after Try again, no row could be made (no accepted manifest, §12.4 step 1) | Still held, and nothing was sent: copy guide §19's `WhyNoManifest` sentence for why. Press **Try again** once {system} answers. |
 | Operator, after Try again, nothing was sent | copy guide §19's sentence for why, then: Nothing was tested. Press **Try again** when {system} answers. |
 | Operator, a change that took on the second try, and the held row | §12.1's table. |
 | Member | as §9's "a write held". |
@@ -1076,6 +1079,9 @@ narrowed account's removal in the count.
   count unchanged. The hold survives a restart. It is gone after a connect
   on another TrueNAS version. The event and the Home item are written once
   per hold, not once per probe.
+- *A narrowed record never stops other accounts.* With a narrowed record
+  standing, armed or not, another account's removal through the same
+  function is sent and applied.
 - *The call binding.* With `user.update` held and row A armed, a
   `password.set` and another account's apply send nothing, and the hold
   and the arm stand. An operation other than `apply` carrying row A's
