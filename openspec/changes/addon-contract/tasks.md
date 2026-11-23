@@ -3842,3 +3842,24 @@ one path; mutation-check every guard; Opus review after.
   - [x] Layout check against staging in both outage states. *Done (23 Nov 2026):* 420 page runs, 0 findings, 0 reads off the tape, in each state; tapes deleted.
 - [x] 8h (owner's, after 8g) Open questions of the 21 Nov grill round, recorded here with their answers; any "no" reopens the slice it names. `ready-for-human`
   - *Owner, 23 Nov 2026:* yes to all. Every recommendation of the 21 Nov reachability round stands as built in 8a–8g; no slice reopens.
+
+## 9. The version check (owner, 23 Nov 2026) `needs-triage`
+
+Verbatim: "make it robust, elegant and be careful". Design:
+`design-version-check.md`. Source facts: `research-core-get-methods.md`.
+The add-on compares the TrueNAS method schemas it relies on with the ones
+recorded on the tested version, decodes every reply strictly, and decides
+each operation. All on `feat/addon-contract`; nothing merges to main alone.
+Each PR: elegant, standard, careful; one source, one path; mutation-check;
+Opus review. Not triaged: the design's four owner questions (§12) come first.
+
+- [ ] 9a Capture `core.get_methods` from the tested NAS (read-only), commit `addons/truenas/compat/baseline/TrueNAS-25.10.7.methods.json`, settle the research's unverified points (§9 of the research note). Test: every method in the dependency table has an entry with `accepts`, `returns`, `job`. [needs-triage] (owner-gated: reads the real NAS)
+- [ ] 9b Strict decode: `compat.Require` at `NAS.roundTrip` and `decodeAnswer`; reply types named and registered; `nas:"optional"`. Closes the `ponytail:` note at `operations.go:821`. Test: a reply with a relied-on key renamed fails the read and names the key. Mutation: back to `json.Unmarshal`, red. [needs-triage]
+- [ ] 9c `compat.Check`, pure: canonical form (RFC 8785), projection, verdicts, ID. Tests from the capture with one edit each: docstring, unrelated new property and removed FIXME keys are `unchanged`; a relied-on type and a new required argument are `changed` with the path; a removed entry is `missing`; no methods is `unread`. [needs-triage]
+- [ ] 9d Contract, schemas alone: `health.version_check` replaces `version_tested`/`version_note`; `stale.reason: unchecked`; `TARGET_VERSION_UNSUPPORTED` reworded with `details`; setting code `NOT_OFFERED`; fixtures, kit, `AUTHORING.md` ch. 2 step 2, reference add-on. Test: a health reply with `version_tested`, or without `version_check`, is rejected. [needs-triage]
+- [ ] 9e The add-on decides: the check in `ensureProbed`; `unavailable` and `sendWrite` read it; the probe pass; `/health`; delete `loadMethods`, `MethodPresent`, `MajorSupported`, `TRUENAS_SUPPORTED_MAJORS`. Tests against a fake NAS serving an edited capture: changed `user.update` holds `password.set`, reads stay declared; missing `audit.query` withdraws `activity.get`; a failed `core.get_methods` on a new version holds every write; a reconnect onto a new version does not send a queued write. [needs-triage]
+- [ ] 9f `unchecked` reads: the fresher's stamp, `/plan`, the collector's `failedRun`. Tests: a read through a changed method is `current: false`, `stale.reason: unchecked`; a collector run over it writes no point and holds the watermark. [needs-triage]
+- [ ] 9g Trust: the `trusted_version` setting. Tests: a new line, all unchanged, holds an apply until the setting is written, then sends it; a value not offered is refused; trust never unlocks a `changed` function; it survives a restart; a new ID ends it. [needs-triage]
+- [ ] 9h Backend: `healthWire`, `ReadOf` state `unchecked`, the drain claims no held row and spends no attempt, audit events `target.version_trusted` and `target.version_trust_withdrawn`. Tests: the reachability table gains an `unchecked` stub on every route of design §13.3; a revocation queued while held lands on the first pass after trust with no attempt spent. [needs-triage]
+- [ ] 9i UI and copy: board first; the notice, the function list, the Trust dialog, `unchecked` through `readOf`; copy guide §19 rows with their guard. The health read changes shape, so the layout gate is the staging run after deploy. [needs-triage]
+- [ ] 9j Staging (owner-gated; the add-on there is `read_only`): `tested` on the real NAS; a test build with an edited baseline shows `new`, the list and the held writes. [needs-triage]

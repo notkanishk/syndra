@@ -2065,6 +2065,8 @@ filled the gap nine ways. This section is the one rule. It serves three
 standing rules: a value not read is absent, never zero; every number shown is
 observed; every outcome ends with a next step or "nothing for you to do".
 
+A new app version is not an outage: what the add-on does when its app changes under it is [`design-version-check.md`](design-version-check.md) (design only, 23 Nov 2026; tasks §9).
+
 ### 13.1 Vocabulary: who is not answering
 
 Two outages, never one word:
