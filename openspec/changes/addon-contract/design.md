@@ -2095,6 +2095,7 @@ down". `target_unreachable` (one word for seven causes) is retired, and
 | `TARGET_UNREACHABLE`; `health.reachable: false`; `stale.reason: unreachable` | app | — | the add-on's sentence, else "{system}'s add-on is running but can't reach {product}. Check that {product} is on." |
 | `NO_CURRENT_READ`, `TARGET_UNREADABLE` | app | — | the add-on's sentence, else "{product} didn't give its add-on an answer it could use. Check {product}, then read again." |
 | `TARGET_BUSY`; `stale.reason: busy` | not an outage: `busy` | — | "{product} is busy right now. Try again in {n} s." No breaker opens, and a queued row waits `Retry-After` with no attempt spent; busy without a break for over 30 minutes halts the send for that system (a break is a quiet longer than twice the later of the background drain's tick and the row's deferral, `max(Retry-After, probe interval)`) (`busy`, "{system} has been busy since {time}"). A read or operation answer only: `/health` never answers it, and the monitor counts every non-OK `/health` answer as a miss. |
+| `TARGET_VERSION_UNSUPPORTED`; `stale.reason: unchecked` | not an outage: `addon_outdated` | — | "{product} answers {functions} differently from what {system}'s add-on expects. Nothing was read. Update the add-on." The add-on is behind its app: a function is missing or changed on this app version, or answered in a form the add-on does not know. Nothing was sent. No breaker opens, and a queued row waits with no attempt spent until the add-on is updated or the app's version changes. A read through a changed function is still shown, as a kept copy with reason `unchecked`, and nothing plans from it or counts it. |
 | the manifest withdrew the operation (`available: false`); nothing was sent | not an outage: `read_refused` | — | "{system}'s add-on didn't take this. Read the add-on's log." The manifest's `unavailable_reason` is the add-on's raw words, never the sentence. Beside it, refused before sending: an operation the manifest does not declare is `addon_outdated`; no accepted manifest is the monitor's why (`WhyNoManifest`); a target no configuration names is Syndra's own refusal, `read_refused` with cause `not_configured`: "Syndra's configuration names no add-on for {system}. Check Syndra's add-on configuration." |
 
 *`no_key` added 21 Nov 2026 from the 8b review; a secret Syndra cannot load is
@@ -2106,8 +2107,13 @@ ask in full, or ran out on an app that still answers its ping.* *The
 withdrawn row added 23 Nov 2026 from the 8g staging run: an add-on started
 with its app down had read no version and withdrew its reads, so Syndra
 refused `health.get` unsent and called the add-on down. A read stays
-declared through an outage and answers it (`outage.health`); only a write is
-withdrawn for a version untested or unread.* *`not_configured` added 23 Nov
+declared through an outage and answers it (`outage.health`).* *The version
+row and `unchecked` added 23 Nov 2026 with the version check
+([`design-version-check.md`](design-version-check.md), tasks §9; design
+only): a write is held for a function that changed and withdrawn for one
+that is missing, a read through a changed function is a kept copy marked
+`unchecked`, and before the add-on has checked its app every call answers
+`TARGET_BUSY`. Nothing is withdrawn for a version unread.* *`not_configured` added 23 Nov
 2026 from the PR 264 review: a target no configuration names is
 `read_refused`'s one cause, so `detail` stays the add-on's own words and
 Syndra's sentence is the copy guide's.*
@@ -2194,7 +2200,8 @@ Every backend route that answers from an add-on (`research/reachability-survey.m
 - The statuses are HTTP's own: a stale answer served while the origin cannot
   be reached is a 200 (RFC 9111 §4.2.4; RFC 5861 `stale-if-error`); nothing to
   serve is 503 with `Retry-After` (RFC 9110 §15.6.4, §10.2.3).
-- `reason` ∈ `cached | cooldown | app_unreachable` for a kept copy;
+- `reason` ∈ `cached | cooldown | app_unreachable | unchecked` for a kept
+  copy (`unchecked`: read now, through a function the add-on's app changed);
   `addon_unreachable | app_unreachable | read_refused | addon_outdated` for no
   copy. `message` is §13.1's sentence, next step included.
 - **One code.** `TARGET_NOT_READ` replaces `ADDON_UNREACHABLE`,
